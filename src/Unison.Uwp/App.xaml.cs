@@ -638,6 +638,7 @@ namespace Unison.Uwp
                 sp.GetRequiredService<ISelfMarkerNaming>(),
                 sp.GetRequiredService<IStringResources>(),
                 sp.GetRequiredService<IHistoryMessageStore>(),
+                sp.GetRequiredService<IHistoryChatPreviewStore>(),
                 sp.GetRequiredService<IDialogService>(),
                 sp.GetRequiredService<IRuntimeDiagnostics>()));
             // After IChatService: the projection persists resolved strip rows so cold start keeps names.

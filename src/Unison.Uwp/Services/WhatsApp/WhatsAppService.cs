@@ -2245,13 +2245,6 @@ namespace Unison.Uwp.Services.WhatsApp
             }
         }
 
-        private bool IsMeaningfulChatLabel(string label, string contextJid, bool isGroup) =>
-            MeaningfulChatLabel.IsMeaningful(
-                label,
-                contextJid,
-                isGroup,
-                IsSelfMarkerLabel(label));
-
         /// <summary>
         /// Loads only the initial messages for a chat from the RAM overlay.
         /// SQLite history is merged by <c>MessageFacade</c>.
@@ -3958,25 +3951,24 @@ namespace Unison.Uwp.Services.WhatsApp
             bridge.ChatSettingsChanged = update =>
                 ChatFacade != null
                     ? ChatFacade.ApplyRemoteChatSettingsAsync(update)
-                    : ApplyChatUpdateAsync(update);
+                    : Task.CompletedTask;
             bridge.ContactChanged = contact =>
                 Contacts != null
                     ? Contacts.ApplyRemoteContactUpdatesAsync(MapAccountContacts(contact))
-                    : ApplyContactUpdateAsync(contact);
+                    : Task.CompletedTask;
             bridge.ContactsChanged = updates =>
                 Contacts != null
                     ? Contacts.ApplyRemoteContactUpdatesAsync(MapAccountContacts(updates))
-                    : ApplyContactUpdatesAsync(updates);
+                    : Task.CompletedTask;
             bridge.SelfPushNameChanged = name =>
                 Contacts != null
                     ? Contacts.ApplyRemoteSelfPushNameAsync(name)
-                    : ApplyAppStateSelfPushNameAsync(name);
+                    : Task.CompletedTask;
             bridge.GroupSubjectChanged = (jid, subject) =>
                 Contacts != null
                     ? Contacts.ApplyRemoteGroupSubjectsAsync(
                         new[] { new KeyValuePair<string, string>(jid, subject) })
-                    : ApplyGroupSubjectsAsync(
-                        new[] { new KeyValuePair<string, string>(jid, subject) });
+                    : Task.CompletedTask;
             bridge.ChatDeleted = jid => ApplyAppStateDeleteChatAsync(jid);
             bridge.MessageDeleted = key => ApplyAppStateDeleteMessageAsync(key.RemoteJid, key.Id);
             bridge.ResolveSentMessage = ResolveSentMessageForRetryAsync;
@@ -4028,43 +4020,6 @@ namespace Unison.Uwp.Services.WhatsApp
             {
                 Debug.WriteLine("[WhatsAppService] Retry lookup failed for " + messageId + ": " + ex.Message);
                 return null;
-            }
-        }
-
-        /// <summary>
-        /// Applies one app state chat change. Everything is nullable on purpose: a mutation names
-        /// only the field it moved, and treating an absent field as a cleared one would unarchive
-        /// a chat every time it was muted.
-        /// </summary>
-        private async Task ApplyChatUpdateAsync(Unison.Socket.Models.ChatUpdate update)
-        {
-            if (update == null || string.IsNullOrEmpty(update.Id))
-            {
-                return;
-            }
-
-            AppStateMuteMapping.Result mute = AppStateMuteMapping.FromChatUpdate(
-                update.AppliesMute,
-                update.MuteEndTime);
-            AppStatePinMapping.Result pin = AppStatePinMapping.FromChatUpdate(
-                update.AppliesPin,
-                update.Pinned,
-                DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
-
-            if (update.Archived.HasValue || pin.AppliesPin || mute.AppliesMute)
-            {
-                await ApplyAppStateChatFlagsAsync(
-                    update.Id,
-                    archived: update.Archived,
-                    pinned: pin.AppliesPin ? pin.IsPinned : (bool?)null,
-                    muteEndTimestamp: mute.MutedUntilUnixSeconds,
-                    pinnedTimestamp: pin.AppliesPin ? pin.PinnedTimestampUnixSeconds : (long?)null,
-                    applyMute: mute.AppliesMute);
-            }
-
-            if (update.UnreadCount.HasValue)
-            {
-                await ApplyAppStateReadStateAsync(update.Id, update.UnreadCount.Value == 0);
             }
         }
 
@@ -4429,21 +4384,6 @@ namespace Unison.Uwp.Services.WhatsApp
             OnChatMessagesChanged?.Invoke(this, chatJid);
             _chatState.NotifyMessagesChanged(chatJid);
         }
-
-        /// <summary>
-        /// Fallback when ContactFacade is not attached: alias pairs then names (same order).
-        /// </summary>
-        internal Task ApplyContactUpdateAsync(Unison.Socket.Models.ContactUpdate contact)
-        {
-            return contact == null
-                ? Task.CompletedTask
-                : ApplyContactUpdatesAsync(new[] { contact });
-        }
-
-        internal Task ApplyContactUpdatesAsync(IReadOnlyList<Unison.Socket.Models.ContactUpdate> contacts) =>
-            Contacts != null
-                ? Contacts.ApplyRemoteContactUpdatesAsync(MapAccountContacts(contacts))
-                : Task.CompletedTask;
 
         private static IReadOnlyList<AccountContactUpdate> MapAccountContacts(
             Unison.Socket.Models.ContactUpdate contact)

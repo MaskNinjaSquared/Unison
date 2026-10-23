@@ -40,19 +40,6 @@ namespace Unison.Uwp.Services.WhatsApp
     public partial class WhatsAppService
     {
 
-        /// <summary>
-        /// Group subjects (one or a listing batch) into the same cache a resolved contact name would.
-        /// </summary>
-        internal Task ApplyGroupSubjectsAsync(IEnumerable<KeyValuePair<string, string>> subjectsByJid) =>
-            Contacts != null
-                ? Contacts.ApplyRemoteGroupSubjectsAsync(subjectsByJid)
-                : Task.CompletedTask;
-
-        internal Task ApplyAppStateContactNameAsync(string jid, string name) =>
-            Contacts != null
-                ? Contacts.ApplyRemoteContactNameAsync(jid, name)
-                : Task.CompletedTask;
-
         internal async Task ApplyAppStateSelfPushNameAsync(string name)
         {
             if (_authState?.Me == null)
@@ -69,53 +56,10 @@ namespace Unison.Uwp.Services.WhatsApp
 
             CaptureSelfPushName(sanitized, SelfPushNameAppStateSource);
             await PersistAuthStateAsync(null, "apply-self-contact-name");
-            await ApplyAppStateContactNameAsync(selfJid, sanitized);
-        }
-
-        internal async Task ApplyAppStateReadStateAsync(string jid, bool read)
-        {
-            string canonical = GetCanonicalJid(jid);
-            if (string.IsNullOrWhiteSpace(canonical))
+            if (Contacts != null)
             {
-                return;
+                await Contacts.ApplyRemoteContactNameAsync(selfJid, sanitized).ConfigureAwait(false);
             }
-
-            List<ChatItem> dirty = null;
-            int resolved = 0;
-            await _ui.RunAsync(() =>
-            {
-                var rows = AppStateChatRows.GetOrAdd(
-                    Chats,
-                    GetChatRowsForCanonicalJid(canonical),
-                    canonical,
-                    jid => ResolveDisplayName(jid),
-                    ResolveChatKind,
-                    out ChatItem created);
-                if (created != null)
-                {
-                    dirty = new List<ChatItem> { created };
-                }
-
-                resolved = AppStateChatMutation.StampUnread(rows, read, ref dirty);
-            });
-
-            if (dirty == null || dirty.Count == 0)
-            {
-                return;
-            }
-
-            // Badge + shortcut + slice: same policy as ChatFacade.ClearUnreadForChatAsync.
-            // A slice, not a full persist — rewriting every preview plus three JSON maps
-            // costs seconds on Mobile eMMC.
-            ChatUnreadSideEffects.AfterConversationUnreadChanged(
-                ChatUnreadTally.TotalAcrossConversations(Chats, GetCanonicalJid),
-                canonical,
-                resolved,
-                dirty,
-                total => NotificationService.Instance.UpdateBadge(total),
-                (shortcutJid, unread) =>
-                    App.Services?.GetService<IShortcutService>()?.UpdateChatUnread(shortcutJid, unread),
-                rows => _ = PersistChatCatalogSliceAsync(rows));
         }
 
         /// <summary>
@@ -293,143 +237,5 @@ namespace Unison.Uwp.Services.WhatsApp
             return removed;
         }
 
-        Task IAppStateLocalHost.ApplyChatPinAsync(string jid, bool pinned)
-        {
-            return ApplyAppStateChatFlagsAsync(
-                jid,
-                pinned: pinned,
-                pinnedTimestamp: pinned ? (long?)DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() : null);
-        }
-
-        Task IAppStateLocalHost.ApplyChatFlagsAsync(
-            string jid,
-            bool? archived,
-            bool? pinned,
-            long? muteEndTimestamp,
-            long? pinnedTimestamp,
-            bool applyMute) =>
-            ApplyAppStateChatFlagsAsync(
-                jid,
-                archived,
-                pinned,
-                muteEndTimestamp,
-                pinnedTimestamp,
-                applyMute);
-
-        Task IAppStateLocalHost.ApplyChatReadStateAsync(string jid, bool read) =>
-            ApplyAppStateReadStateAsync(jid, read);
-
-        internal async Task ApplyAppStateChatFlagsAsync(
-            string jid,
-            bool? archived = null,
-            bool? pinned = null,
-            long? muteEndTimestamp = null,
-            long? pinnedTimestamp = null,
-            bool applyMute = false)
-        {
-            string canonical = GetCanonicalJid(jid);
-            if (string.IsNullOrWhiteSpace(canonical))
-            {
-                return;
-            }
-
-            var change = new ChatFlagChange
-            {
-                Archived = archived,
-                Pinned = pinned,
-                PinnedTimestamp = pinnedTimestamp,
-                MuteEndTimestamp = muteEndTimestamp,
-                AppliesMute = applyMute
-            };
-
-            List<ChatItem> touched = null;
-            await _ui.RunAsync(() =>
-            {
-                var rows = AppStateChatRows.GetOrAdd(
-                    Chats,
-                    GetChatRowsForCanonicalJid(canonical),
-                    canonical,
-                    jid => ResolveDisplayName(jid),
-                    ResolveChatKind,
-                    out _);
-
-                long nowUnixMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-
-                touched = new List<ChatItem>();
-                foreach (var chat in rows)
-                {
-                    AppStateChatMutation.ApplyFlags(chat, change, nowUnixMs);
-                    touched.Add(chat);
-                }
-
-                ChatDisplayOrder.SortInPlace(Chats);
-            });
-
-            if (touched != null && change.TouchesAnything)
-            {
-                foreach (var chat in touched)
-                {
-                    try
-                    {
-                        // Only what the mutation spoke about. A mute arriving for a pinned chat
-                        // used to carry the rest of the row with it, and whichever field the row
-                        // happened to be stale on was overwritten.
-                        if (change.Pinned.HasValue)
-                        {
-                            // pin_v1 indexes one address; history/list rows often use the other.
-                            string alias = null;
-                            string normalizedRow = JidHelper.Normalize(chat.JID);
-                            if (!string.IsNullOrWhiteSpace(normalizedRow))
-                            {
-                                JidAlias.TryGetValue(normalizedRow, out alias);
-                            }
-                            IReadOnlyList<string> pinKeys = ChatPinStoreKeys.Merge(
-                                ChatPinStoreKeys.For(chat.JID, GetCanonicalJid(chat.JID), alias),
-                                ChatPinStoreKeys.For(jid, GetCanonicalJid(jid), null));
-                            for (int i = 0; i < pinKeys.Count; i++)
-                            {
-                                await _chatStore.SetChatPinnedAsync(pinKeys[i], change.Pinned.Value)
-                                    .ConfigureAwait(false);
-                            }
-                        }
-
-                        if (change.AppliesMute)
-                        {
-                            await _chatStore.SetMutedUntilAsync(chat.JID, change.MuteEndTimestamp)
-                                .ConfigureAwait(false);
-                        }
-
-                        if (change.Archived.HasValue)
-                        {
-                            await _chatStore.SetStatusAsync(chat.JID, chat.Status)
-                                .ConfigureAwait(false);
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        Debug.WriteLine("[WhatsAppService] ChatStore upsert from app-state failed: " + ex.Message);
-                    }
-                }
-            }
-
-            if (archived.HasValue && touched != null && touched.Count > 0)
-            {
-                ChatStatus status = archived.Value ? ChatStatus.Archived : ChatStatus.Active;
-                try
-                {
-                    await _chatPreviews.SetStatusAsync(
-                            new List<string>(ChatPinStoreKeys.For(canonical, _jids)),
-                            status)
-                        .ConfigureAwait(false);
-                    await PersistChatCatalogAsync(touched).ConfigureAwait(false);
-                }
-                catch (Exception ex)
-                {
-                    Debug.WriteLine("[WhatsAppService] Archive status persist failed: " + ex.Message);
-                }
-            }
-
-            SchedulePersist();
-        }
     }
 }

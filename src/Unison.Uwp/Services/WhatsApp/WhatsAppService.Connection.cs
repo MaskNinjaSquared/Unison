@@ -1725,14 +1725,7 @@ namespace Unison.Uwp.Services.WhatsApp
                         if (!string.IsNullOrEmpty(sanitizedNotify) &&
                             IsSelfLinkedJid(normalizedNotifyTarget))
                         {
-                            if (Contacts != null)
-                            {
-                                Contacts.CaptureSelfPushName(sanitizedNotify, "stanza-notify");
-                            }
-                            else
-                            {
-                                CaptureSelfPushName(sanitizedNotify, "stanza-notify");
-                            }
+                            Contacts?.CaptureSelfPushName(sanitizedNotify, "stanza-notify");
                         }
 
                         // Proactively update any matching chat on the captured UI

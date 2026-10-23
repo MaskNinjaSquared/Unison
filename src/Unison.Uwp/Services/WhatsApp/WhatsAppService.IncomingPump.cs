@@ -1236,14 +1236,7 @@ namespace Unison.Uwp.Services.WhatsApp
                         NormalizeJid(e.FromJid));
                     if (e.IsFromMe)
                     {
-                        if (Contacts != null)
-                        {
-                            Contacts.CaptureSelfPushName(nameFromMsg, "message-echo");
-                        }
-                        else
-                        {
-                            CaptureSelfPushName(nameFromMsg, "message-echo");
-                        }
+                        Contacts?.CaptureSelfPushName(nameFromMsg, "message-echo");
                     }
 
                     if (string.IsNullOrEmpty(senderJid))
