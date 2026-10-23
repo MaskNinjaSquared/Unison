@@ -306,6 +306,24 @@ namespace Unison.Uwp.Services.WhatsApp
                 pinnedTimestamp: pinned ? (long?)DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() : null);
         }
 
+        Task IAppStateLocalHost.ApplyChatFlagsAsync(
+            string jid,
+            bool? archived,
+            bool? pinned,
+            long? muteEndTimestamp,
+            long? pinnedTimestamp,
+            bool applyMute) =>
+            ApplyAppStateChatFlagsAsync(
+                jid,
+                archived,
+                pinned,
+                muteEndTimestamp,
+                pinnedTimestamp,
+                applyMute);
+
+        Task IAppStateLocalHost.ApplyChatReadStateAsync(string jid, bool read) =>
+            ApplyAppStateReadStateAsync(jid, read);
+
         internal async Task ApplyAppStateChatFlagsAsync(
             string jid,
             bool? archived = null,

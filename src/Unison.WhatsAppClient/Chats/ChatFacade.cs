@@ -30,6 +30,7 @@ using Unison.Core.Mappers;
 using Unison.Core.Models;
 using Unison.Core.State;
 using Unison.Socket.AppState;
+using Unison.Socket.Models;
 using Unison.Socket.UseCases.Messages;
 using Unison.WhatsAppClient.Abstractions;
 using Unison.WhatsAppClient.Helpers;
@@ -139,6 +140,44 @@ namespace Unison.WhatsAppClient.Chats
         public Task FlushOfflineReplayTipsAsync(string reason)
         {
             return _offlineReplayTips.FlushAsync(reason);
+        }
+
+        /// <summary>
+        /// Account-side chat settings from socket app-state (archive / pin / mute / unread).
+        /// Mapping stays here; row + store surgery stays on <see cref="IAppStateLocalHost"/>.
+        /// </summary>
+        public async Task ApplyRemoteChatSettingsAsync(ChatUpdate update)
+        {
+            if (update == null || string.IsNullOrEmpty(update.Id))
+            {
+                return;
+            }
+
+            AppStateMuteMapping.Result mute = AppStateMuteMapping.FromChatUpdate(
+                update.AppliesMute,
+                update.MuteEndTime);
+            AppStatePinMapping.Result pin = AppStatePinMapping.FromChatUpdate(
+                update.AppliesPin,
+                update.Pinned,
+                DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
+
+            if (update.Archived.HasValue || pin.AppliesPin || mute.AppliesMute)
+            {
+                await _localAppState.ApplyChatFlagsAsync(
+                    update.Id,
+                    archived: update.Archived,
+                    pinned: pin.AppliesPin ? pin.IsPinned : (bool?)null,
+                    muteEndTimestamp: mute.MutedUntilUnixSeconds,
+                    pinnedTimestamp: pin.AppliesPin ? pin.PinnedTimestampUnixSeconds : (long?)null,
+                    applyMute: mute.AppliesMute).ConfigureAwait(false);
+            }
+
+            if (update.UnreadCount.HasValue)
+            {
+                await _localAppState.ApplyChatReadStateAsync(
+                    update.Id,
+                    read: update.UnreadCount.Value == 0).ConfigureAwait(false);
+            }
         }
 
         public async Task SetPinnedAsync(ChatItem chat, bool pinned)

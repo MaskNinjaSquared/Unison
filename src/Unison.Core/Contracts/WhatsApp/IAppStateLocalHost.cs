@@ -19,6 +19,23 @@ namespace Unison.Core.Contracts.WhatsApp
         Task ApplyChatPinAsync(string jid, bool pinned);
 
         /// <summary>
+        /// Account-side archive / pin / mute onto rows and durable mirrors.
+        /// Null fields are left alone — an absent mute must not clear an archive.
+        /// </summary>
+        Task ApplyChatFlagsAsync(
+            string jid,
+            bool? archived = null,
+            bool? pinned = null,
+            long? muteEndTimestamp = null,
+            long? pinnedTimestamp = null,
+            bool applyMute = false);
+
+        /// <summary>
+        /// Account-side read/unread onto every alias row of the conversation, then badge / slice.
+        /// </summary>
+        Task ApplyChatReadStateAsync(string jid, bool read);
+
+        /// <summary>
         /// Removes the conversation from the list, the in-memory timeline and local storage.
         /// </summary>
         Task ApplyChatDeletionAsync(string jid);
