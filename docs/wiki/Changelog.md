@@ -2,6 +2,11 @@
 
 Newest first.
 
+## Phase 4 — ConnectAsync transport open + handler wiring
+
+`ConnectionConnectOpen` builds/wires/opens the transport after prepare.
+Handlers live in `WireSocketEventHandlers`. Three Core tests.
+
 ## Phase 4 — ConnectAsync prepare + close disposition
 
 `ConnectionConnectPrepare` drops the previous socket / loads auth / applies
