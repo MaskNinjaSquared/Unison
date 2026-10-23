@@ -168,6 +168,8 @@ namespace Unison.Core.Tests.Helpers
 
             public Task NormalizePersistedChatNamesAsync() => Task.CompletedTask;
 
+            public Task ApplyResolvedNamesToChatListAsync() => Task.CompletedTask;
+
             public Task<string> SearchContactAsync(string phoneNumber) => Task.FromResult<string>(null);
 
             public string TryResolvePhone(string jid, string phoneDigits = null) => null;

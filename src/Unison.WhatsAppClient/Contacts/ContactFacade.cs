@@ -70,6 +70,7 @@ namespace Unison.WhatsAppClient.Contacts
         private readonly SyncStatusChannel _syncStatus;
         private readonly SyncWorkGate _syncWork;
         private readonly IDeferredAvatarResolution _deferredAvatars;
+        private readonly IRuntimeDiagnostics _diagnostics;
         private DateTime _lastWindowsPublishUtc = DateTime.MinValue;
         private int _lastWindowsPublishCount;
         private int _windowsPublishBusy;
@@ -125,6 +126,7 @@ namespace Unison.WhatsAppClient.Contacts
             _syncStatus = syncStatus ?? throw new ArgumentNullException(nameof(syncStatus));
             _syncWork = syncWork ?? throw new ArgumentNullException(nameof(syncWork));
             _deferredAvatars = deferredAvatars ?? throw new ArgumentNullException(nameof(deferredAvatars));
+            _diagnostics = diagnostics;
             _ui = ui ?? throw new ArgumentNullException(nameof(ui));
             _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
             if (sessions == null) throw new ArgumentNullException(nameof(sessions));
@@ -198,6 +200,7 @@ namespace Unison.WhatsAppClient.Contacts
             _roster = new GroupRosterPolicy(groups, this, jids, ui, catalog, chats, syncWork, sessions, workload);
 
             // Both live as long as the app does, so there is nothing to unhook from.
+            _nameRefresh.Applied += OnChatNamesApplied;
             _whatsAppService.OnDisplayNamesUpdated += (s, e) =>
             {
                 try
@@ -212,6 +215,17 @@ namespace Unison.WhatsAppClient.Contacts
             _whatsAppService.OnAvatarCached += Client_OnAvatarCached;
             _whatsAppService.OnJidAliasResolved += Client_OnJidAliasResolved;
             _whatsAppService.OnAvatarRetryDue += Client_OnAvatarRetryDue;
+        }
+
+        private void OnChatNamesApplied(object sender, int updated)
+        {
+            Debug.WriteLine("[ContactFacade] Applied resolved display names to " + updated + " chats");
+            if (_diagnostics != null)
+            {
+                _diagnostics.Write("names", "list-names-applied", "count=" + updated);
+            }
+
+            NotifyDisplayNamesUpdated();
         }
 
         /// <summary>
@@ -395,6 +409,9 @@ namespace Unison.WhatsAppClient.Contacts
                 _catalog.Schedule();
             }
         }
+
+        /// <inheritdoc />
+        public Task ApplyResolvedNamesToChatListAsync() => _nameRefresh.ApplyAsync();
 
         /// <summary>
         /// Fills push / subject caches and relabels matching list rows once on the UI thread.

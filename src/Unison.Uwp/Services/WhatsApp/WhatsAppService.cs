@@ -505,7 +505,10 @@ namespace Unison.Uwp.Services.WhatsApp
 
             // The post-sync enrichment that would rename the list gives up when the window is
             // hidden or the socket dropped; names learned from the sync itself need neither.
-            _ = _nameRefresh.ApplyAsync();
+            if (Contacts != null)
+            {
+                _ = Contacts.ApplyResolvedNamesToChatListAsync();
+            }
         }
 
         /// <summary>
@@ -663,7 +666,6 @@ namespace Unison.Uwp.Services.WhatsApp
         public ChatMessageCache MessagesByChat => _chatState.MessagesByChat;
 
         private readonly ChatRowIndex _chatRows;
-        private readonly ChatNameRefresh _nameRefresh;
         private readonly StoredChatPreviewRefresh _storedPreviews;
         private readonly UsyncAliasFiling _usyncAliases;
 
@@ -1015,7 +1017,6 @@ namespace Unison.Uwp.Services.WhatsApp
             IChatStore chatStore,
             ISystemInfoProvider systemInfo,
             AttachedUiDispatcher ui,
-            ChatNameRefresh nameRefresh,
             StoredChatPreviewRefresh storedPreviews,
             UsyncAliasFiling usyncAliases,
             ChatListInitialPaintGate listPaintGate = null,
@@ -1048,8 +1049,6 @@ namespace Unison.Uwp.Services.WhatsApp
             _resolveChats = resolveChats;
             _resolveGroups = resolveGroups;
             _ui = ui ?? throw new ArgumentNullException(nameof(ui));
-            _nameRefresh = nameRefresh ?? throw new ArgumentNullException(nameof(nameRefresh));
-            _nameRefresh.Applied += OnChatNamesApplied;
             _storedPreviews = storedPreviews ?? throw new ArgumentNullException(nameof(storedPreviews));
             _usyncAliases = usyncAliases ?? throw new ArgumentNullException(nameof(usyncAliases));
             _listPaintGate = listPaintGate ?? new ChatListInitialPaintGate();
@@ -1129,7 +1128,6 @@ namespace Unison.Uwp.Services.WhatsApp
             IChatStore chatStore,
             ISystemInfoProvider systemInfo,
             AttachedUiDispatcher ui,
-            ChatNameRefresh nameRefresh,
             StoredChatPreviewRefresh storedPreviews,
             UsyncAliasFiling usyncAliases,
             ChatListInitialPaintGate listPaintGate = null,
@@ -1142,7 +1140,7 @@ namespace Unison.Uwp.Services.WhatsApp
         {
             return _instance ?? (_instance = new WhatsAppService(
                 chatState, chatRows, activeChat, syncStatus, syncWork, historyMessages, chatPreviews, usyncGate, avatarFetcher, mediaCache, jidAlias, displayNames, historyRequests,
-                initialSync, syncBudget, workload, selfProfile, personStore, groupRosterStore, chatStore, systemInfo, ui, nameRefresh, storedPreviews, usyncAliases, listPaintGate, appMemory, localSettings, resolveContacts, resolveMessages, resolveChats, resolveGroups));
+                initialSync, syncBudget, workload, selfProfile, personStore, groupRosterStore, chatStore, systemInfo, ui, storedPreviews, usyncAliases, listPaintGate, appMemory, localSettings, resolveContacts, resolveMessages, resolveChats, resolveGroups));
         }
 
         /// <summary>
@@ -4608,7 +4606,10 @@ namespace Unison.Uwp.Services.WhatsApp
 
             // The personal chat is built from the resolved name, and it was built before this
             // arrived - it is the row reading "(You)" with nothing in front of it.
-            _ = _nameRefresh.ApplyAsync();
+            if (Contacts != null)
+            {
+                _ = Contacts.ApplyResolvedNamesToChatListAsync();
+            }
         }
 
         /// <summary>
@@ -4714,13 +4715,6 @@ namespace Unison.Uwp.Services.WhatsApp
                     }
                     break;
             }
-        }
-
-        private void OnChatNamesApplied(object sender, int updated)
-                    {
-                        Debug.WriteLine($"[WhatsAppService] Applied resolved display names to {updated} chats");
-            RuntimeDiagnosticsService.Instance.Write("names", "list-names-applied", "count=" + updated);
-                        OnDisplayNamesUpdated?.Invoke(this, EventArgs.Empty);
         }
 
         /// <summary>Delegates to <see cref="IContactService"/>; this class only supplies the client primitives.</summary>

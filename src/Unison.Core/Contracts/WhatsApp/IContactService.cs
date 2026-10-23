@@ -181,6 +181,12 @@ namespace Unison.Core.Contracts.WhatsApp
         Task NormalizePersistedChatNamesAsync();
 
         /// <summary>
+        /// Relabel chat rows (and members) from the name tables already in memory.
+        /// Call after catch-up or self-name capture learns labels without a full directory refresh.
+        /// </summary>
+        Task ApplyResolvedNamesToChatListAsync();
+
+        /// <summary>
         /// User action: resolve a phone number to a WhatsApp JID (new-chat search).
         /// Prefer this over calling WhatsAppService from ViewModels.
         /// </summary>

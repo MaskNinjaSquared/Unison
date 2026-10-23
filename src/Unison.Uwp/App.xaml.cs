@@ -394,7 +394,6 @@ namespace Unison.Uwp
                     sp.GetRequiredService<IChatStore>(),
                     sp.GetRequiredService<ISystemInfoProvider>(),
                     sp.GetRequiredService<AttachedUiDispatcher>(),
-                    sp.GetRequiredService<ChatNameRefresh>(),
                     sp.GetRequiredService<StoredChatPreviewRefresh>(),
                     sp.GetRequiredService<UsyncAliasFiling>(),
                     sp.GetRequiredService<ChatListInitialPaintGate>(),
