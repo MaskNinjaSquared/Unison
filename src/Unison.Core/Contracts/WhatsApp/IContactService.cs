@@ -133,8 +133,9 @@ namespace Unison.Core.Contracts.WhatsApp
         Task ResolveMissingNamesAsync(bool force = false);
 
         /// <summary>
-        /// Background names then pictures (or schedules a deferred retry). The connection client
-        /// still owns quiet-wait / handshake / catch-up gates and raises group listing after this.
+        /// Background names then pictures (or schedules a deferred retry). Quiet-wait /
+        /// handshake / catch-up gates run in <see cref="TriggerBackgroundResolution"/> before
+        /// this body; group listing is raised after this.
         /// </summary>
         Task RunBackgroundResolutionAsync(CancellationToken cancellationToken = default(CancellationToken));
 
@@ -143,6 +144,15 @@ namespace Unison.Core.Contracts.WhatsApp
         /// then <see cref="IGroupService.NotifyGroupListingDue"/>.
         /// </summary>
         Task NotifyBackgroundResolutionDueAsync(CancellationToken cancellationToken = default(CancellationToken));
+
+        /// <summary>
+        /// Starts the gated background enrichment pass (quiet → handshake → replay/catch-up →
+        /// names/pictures). Replaces any in-flight pass.
+        /// </summary>
+        void TriggerBackgroundResolution();
+
+        /// <summary>Cancels an in-flight <see cref="TriggerBackgroundResolution"/> pass.</summary>
+        void CancelBackgroundResolution();
 
         /// <summary>
         /// Deferred-startup contact pass after the catalog is normalized: disk avatar hydrate,

@@ -498,6 +498,8 @@ namespace Unison.Uwp
                 sp => (WhatsAppService)sp.GetRequiredService<IWhatsAppService>());
             services.AddSingleton<IDeferredAvatarResolution>(
                 sp => (WhatsAppService)sp.GetRequiredService<IWhatsAppService>());
+            services.AddSingleton<IBackgroundResolutionGate>(
+                sp => (WhatsAppService)sp.GetRequiredService<IWhatsAppService>());
             services.AddSingleton<IUsyncAliasHost>(
                 sp => (WhatsAppService)sp.GetRequiredService<IWhatsAppService>());
             services.AddSingleton<IStartupUiHost>(
@@ -635,6 +637,7 @@ namespace Unison.Uwp
                 sp.GetRequiredService<ChatNameRefresh>(),
                 sp.GetRequiredService<ChatListAliasMerge>(),
                 sp.GetRequiredService<IDeferredAvatarResolution>(),
+                sp.GetRequiredService<IBackgroundResolutionGate>(),
                 sp.GetRequiredService<IUsyncAliasHost>(),
                 sp.GetRequiredService<IAppLifecycle>(),
                 sp.GetRequiredService<ChatListDeduper>(),

@@ -2100,7 +2100,7 @@ namespace Unison.Uwp.Services.WhatsApp
             Interlocked.Exchange(ref _forceFreshConnectOnResume, 1);
             _suppressReconnect = true;
             StopConnectionHealthMonitor("shutdown");
-            _resolutionCts?.Cancel();
+            Contacts?.CancelBackgroundResolution();
             _postReplayMaintenanceCts?.Cancel();
             _postReplayMaintenanceCts?.Dispose();
             _postReplayMaintenanceCts = null;

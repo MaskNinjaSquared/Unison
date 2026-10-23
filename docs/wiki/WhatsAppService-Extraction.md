@@ -211,7 +211,7 @@ client `OnAvatarRetryDue` event.
 
 `AttachGroupService` is gone: its only use was the last step of the background resolution pass.
 The client calls `NotifyGroupListingDue` there, and `GroupFacade` shows the Groups status, runs the
-listing and clears the status itself. Quiet-wait / handshake gates for `TriggerBackgroundResolution`
+listing and clears the status itself. Quiet-wait / handshake gates for the enrichment pass
 and post-message enrichment still sit on the client (`ShutdownAsync` cancels the CTS).
 
 That is the wrong direction: live ingest (status, names) **starts** in `WhatsAppService` and calls up. Phase 2 inverted the reportable half of it (client publishes; façade subscribes); the rest is blocked on phase 3 and is described below.
@@ -1464,10 +1464,14 @@ capture policy is `ContactFacade.CaptureSelfPushName`. The client no longer hold
 `IChatService.ReconcileChatListFromStoredAsync` / `RefreshAllChatPreviewsFromStoredAsync`).
 `StartupPhaseTrace` lives beside `StartupQuietGate` in WhatsAppClient.
 
-**Deferred avatar enrichment is a narrow port.** `IDeferredAvatarResolution` is what
-`ChatAvatarPolicy` needs to ask for another background pass without naming the whole client.
-The timer and `TriggerBackgroundResolution` stay on the client (`ShutdownAsync` cancels them).
-`ScheduleDeferredAvatarResolution` left `IWhatsAppService`.
+**Background enrichment orchestration left the client.** `BackgroundResolutionPass`
+(WhatsAppClient) owns quiet → handshake → replay/catch-up → avatar-defer →
+`NotifyBackgroundResolutionDueAsync`. The client implements `IBackgroundResolutionGate`
+(quiet wait, handshake, replay, catch-up, avatar defer, status/diagnostics) and
+`ContactFacade.TriggerBackgroundResolution` / `CancelBackgroundResolution` run the pass.
+`ShutdownAsync` cancels via the contact façade. **Deferred avatar enrichment is still a
+narrow port:** `IDeferredAvatarResolution` schedules a retry; the timer itself still lives
+on the client until the next slice. `ScheduleDeferredAvatarResolution` left `IWhatsAppService`.
 
 **Chat-delete durable I/O is `IAppStateLocalHost.ForgetChatStorageAsync`.** RAM delete,
 badge, missing-message / on-demand forget live on `IChatService.ApplyAppStateDeleteChatAsync`.

@@ -43,7 +43,7 @@ using Unison.WhatsAppClient.Helpers;
 
 namespace Unison.Uwp.Services.WhatsApp
 {
-    public partial class WhatsAppService : INotifyPropertyChanged, IWhatsAppService, IMediaDownloadHost, IOfflineReplayHost, IPlaceholderResendSocket, IHistoryOnDemandSocket, IRuntimeSnapshotSource, IDeferredAvatarResolution, IAppStateLocalHost, IConversationResyncHost, IHistorySyncHost, IUsyncAliasHost, IStartupUiHost, IJidAliasPersistence, IIncomingMessageEnqueueHost, Unison.WhatsAppClient.Abstractions.IResolvedNameApplyHost
+    public partial class WhatsAppService : INotifyPropertyChanged, IWhatsAppService, IMediaDownloadHost, IOfflineReplayHost, IPlaceholderResendSocket, IHistoryOnDemandSocket, IRuntimeSnapshotSource, IDeferredAvatarResolution, IBackgroundResolutionGate, IAppStateLocalHost, IConversationResyncHost, IHistorySyncHost, IUsyncAliasHost, IStartupUiHost, IJidAliasPersistence, IIncomingMessageEnqueueHost, Unison.WhatsAppClient.Abstractions.IResolvedNameApplyHost
     {
         public event PropertyChangedEventHandler PropertyChanged;
         protected void OnPropertyChanged([CallerMemberName] string propertyName = null)
@@ -381,7 +381,6 @@ namespace Unison.Uwp.Services.WhatsApp
         private volatile bool _qrDeliveredThisConnection = false;
         private readonly SyncWorkGate _syncWork;
         private int _offlineReplayReleased;
-        private CancellationTokenSource _resolutionCts;
         private CancellationTokenSource _deferredProfilePictureResolutionCts;
         private DateTime _lastFreshnessReconnectFallbackUtc = DateTime.MinValue;
         private volatile bool _freshnessReconnectFallbackInProgress = false;
@@ -1682,7 +1681,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 }
                 else
                 {
-                        TriggerBackgroundResolution();
+                        Contacts?.TriggerBackgroundResolution();
                     }
 
                     RuntimeDiagnosticsService.Instance.Write(
@@ -1714,8 +1713,8 @@ namespace Unison.Uwp.Services.WhatsApp
 
         /// <summary>
         /// Low-memory path: one avatar pass, then group listing, each behind its own quiet gap.
-        /// Does not call <see cref="TriggerBackgroundResolution"/>, which would re-run names and
-        /// cascade another avatar schedule.
+        /// Does not call <see cref="IContactService.TriggerBackgroundResolution"/>, which would
+        /// re-run names and cascade another avatar schedule.
         /// </summary>
         private async Task RunSerializedPostSyncEnrichmentAsync(TimeSpan quiet, CancellationToken token)
         {
@@ -2221,84 +2220,36 @@ namespace Unison.Uwp.Services.WhatsApp
         }
 
 
-        private void TriggerBackgroundResolution()
-        {
-            _resolutionCts?.Cancel();
-            _resolutionCts = new CancellationTokenSource();
-            var token = _resolutionCts.Token;
+        Task<bool> IBackgroundResolutionGate.WaitForQuietAsync(
+            TimeSpan budget,
+            string reason,
+            CancellationToken token) =>
+            WaitForStartupQuietAsync(budget, reason, token);
 
-            Task.Run(async () =>
-            {
-                try
-                {
-                    // Wait for the list to settle before competing with it for the socket.
-                    if (!await WaitForStartupQuietAsync(
-                            TimeSpan.FromSeconds(3),
-                            "background-resolution",
-                            token))
-                    {
-                        RaiseSyncStatus(null);
-                        return;
-                    }
+        bool IBackgroundResolutionGate.IsHandshakeReady =>
+            _socket != null && _socket.IsHandshakeComplete;
 
-                    if (_socket == null || !_socket.IsHandshakeComplete)
-                    {
-                        Debug.WriteLine("[WhatsAppService] TriggerBackgroundResolution: Socket not ready, skipping.");
-                        RaiseSyncStatus(null);
-                        return;
-                    }
+        bool IBackgroundResolutionGate.ShouldDeferReplay => ShouldDeferReconnectReplayWork();
 
-                    if (ShouldDeferReconnectReplayWork())
-                    {
-                        Debug.WriteLine("[WhatsAppService] TriggerBackgroundResolution: Replay drain still active, skipping.");
-                        RaiseSyncStatus(null);
-                        return;
-                    }
+        bool IBackgroundResolutionGate.IsHistoryCatchUpActive => IsHistoryCatchUpActive();
 
-                    string catchUpDeferReason = HistoryCatchUpLocalWorkPolicy.DeferReason(
-                        IsHistoryCatchUpActive());
-                    if (catchUpDeferReason != null)
-                    {
-                        Interlocked.Exchange(ref _enrichmentAwaitingHeavyHistory, 1);
-                        Debug.WriteLine(
-                            "[WhatsAppService] TriggerBackgroundResolution deferred (" +
-                            catchUpDeferReason + ")");
-                        RuntimeDiagnosticsService.Instance.Write(
-                            "startup",
-                            "background-resolution-deferred",
-                            "reason=" + catchUpDeferReason);
-                        return;
-                    }
+        bool IBackgroundResolutionGate.ShouldDeferAvatarFetch(out string reason) =>
+            _syncWork.ShouldDeferAvatarFetch(out reason);
 
-                    string profilePictureDeferReason;
-                    if (_syncWork.ShouldDeferAvatarFetch(out profilePictureDeferReason))
-                    {
-                        Debug.WriteLine(
-                            "[WhatsAppService] TriggerBackgroundResolution deferred until sync traffic settles: " +
-                            profilePictureDeferReason);
-                        ScheduleDeferredProfilePictureResolution(profilePictureDeferReason);
-                        RaiseSyncStatus(null);
-                        return;
-                    }
+        void IBackgroundResolutionGate.MarkEnrichmentAwaitingHeavyHistory() =>
+            Interlocked.Exchange(ref _enrichmentAwaitingHeavyHistory, 1);
 
-                    IContactService contacts = Contacts;
-                    if (contacts != null)
-                    {
-                        using (TraceStartupPhase("background-names"))
-                        {
-                            await contacts.NotifyBackgroundResolutionDueAsync(token)
-                                .ConfigureAwait(false);
-                        }
-                    }
-                }
-                catch (TaskCanceledException) { }
-                catch (Exception ex)
-                {
-                    Debug.WriteLine($"[WhatsAppService] Background resolution error: {ex.Message}");
-                    PublishSyncStatus(null);
-                }
-            }, token);
-        }
+        void IBackgroundResolutionGate.ClearSyncStatus() => RaiseSyncStatus(null);
+
+        void IBackgroundResolutionGate.PublishClearedSyncStatus() => PublishSyncStatus(null);
+
+        IDisposable IBackgroundResolutionGate.TracePhase(string phase) => TraceStartupPhase(phase);
+
+        void IBackgroundResolutionGate.WriteDeferredCatchUp(string reason) =>
+            RuntimeDiagnosticsService.Instance.Write(
+                "startup",
+                "background-resolution-deferred",
+                "reason=" + (reason ?? string.Empty));
 
         private void CancelDeferredProfilePictureResolution()
         {
@@ -2339,7 +2290,7 @@ namespace Unison.Uwp.Services.WhatsApp
                     }
 
                     Debug.WriteLine($"[WhatsAppService] Retrying deferred profile picture fetch after {(int)effectiveDelay.TotalSeconds}s: previousReason={reason ?? "unspecified"}");
-                    TriggerBackgroundResolution();
+                    Contacts?.TriggerBackgroundResolution();
                 }
                 catch (TaskCanceledException)
                 {

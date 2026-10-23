@@ -2,6 +2,12 @@
 
 Newest first.
 
+## Phase 3 — BackgroundResolutionPass + IBackgroundResolutionGate
+
+Enrichment orchestration (quiet / handshake / replay / catch-up / avatar defer)
+moved to `BackgroundResolutionPass` on `ContactFacade`. Client keeps
+`IBackgroundResolutionGate` and the deferred-avatar timer. Six Core tests.
+
 ## Phase B — post-replay, deferred startup, offline release, receipt metadata, self name
 
 `NotifyPostReplayMaintenanceAsync` / `NotifyDeferredStartupListRepairAsync` on

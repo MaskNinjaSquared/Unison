@@ -70,6 +70,7 @@ namespace Unison.WhatsAppClient.Contacts
         private readonly SyncStatusChannel _syncStatus;
         private readonly SyncWorkGate _syncWork;
         private readonly IDeferredAvatarResolution _deferredAvatars;
+        private readonly BackgroundResolutionPass _backgroundResolution;
         private readonly IRuntimeDiagnostics _diagnostics;
         private DateTime _lastWindowsPublishUtc = DateTime.MinValue;
         private int _lastWindowsPublishCount;
@@ -104,6 +105,7 @@ namespace Unison.WhatsAppClient.Contacts
             ChatNameRefresh nameRefresh,
             ChatListAliasMerge aliasMerge,
             IDeferredAvatarResolution deferredAvatars,
+            IBackgroundResolutionGate backgroundResolutionGate,
             IUsyncAliasHost usyncAliases,
             IAppLifecycle lifecycle,
             ChatListDeduper deduper,
@@ -197,6 +199,10 @@ namespace Unison.WhatsAppClient.Contacts
                 diagnostics);
             _groups = groups;
             _roster = new GroupRosterPolicy(groups, this, jids, ui, catalog, chats, syncWork, sessions, workload);
+            _backgroundResolution = new BackgroundResolutionPass(
+                backgroundResolutionGate ?? throw new ArgumentNullException(nameof(backgroundResolutionGate)),
+                _deferredAvatars,
+                NotifyBackgroundResolutionDueAsync);
 
             // Lives as long as the app does, so there is nothing to unhook from.
             _nameRefresh.Applied += OnChatNamesApplied;
@@ -1244,6 +1250,12 @@ namespace Unison.WhatsAppClient.Contacts
                     "[ContactFacade] NotifyGroupListingDue failed: " + ex.Message);
             }
         }
+
+        /// <inheritdoc />
+        public void TriggerBackgroundResolution() => _backgroundResolution.Trigger();
+
+        /// <inheritdoc />
+        public void CancelBackgroundResolution() => _backgroundResolution.Cancel();
 
         /// <inheritdoc />
         public async Task RunDeferredStartupContactPassAsync(bool resolveMissingNames = false)

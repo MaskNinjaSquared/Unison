@@ -163,6 +163,10 @@ namespace Unison.Core.Tests.State
 
             public void NoteCatchUpProgress(string reason) => Progress.Add(reason);
 
+            public void CompleteFirstOfflineRelease(string reason)
+            {
+            }
+
             public void SchedulePersist() => Persists++;
 
 

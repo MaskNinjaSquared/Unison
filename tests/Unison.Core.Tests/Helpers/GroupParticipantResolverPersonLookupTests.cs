@@ -146,6 +146,14 @@ namespace Unison.Core.Tests.Helpers
             public Task NotifyBackgroundResolutionDueAsync(CancellationToken cancellationToken = default) =>
                 Task.CompletedTask;
 
+            public void TriggerBackgroundResolution()
+            {
+            }
+
+            public void CancelBackgroundResolution()
+            {
+            }
+
             public Task RunDeferredStartupContactPassAsync(bool resolveMissingNames = false) =>
                 Task.CompletedTask;
 
