@@ -181,6 +181,12 @@ namespace Unison.Core.Contracts.WhatsApp
             bool isOffline);
 
         /// <summary>
+        /// Stanza <c>notify</c> attribute: file the push name, capture self when linked,
+        /// and relabel placeholder chat rows on the UI thread.
+        /// </summary>
+        void ApplyStanzaNotifyPushName(string fromJid, string notify, string participantJid);
+
+        /// <summary>
         /// Files PN/LID pairs carried on an inbound envelope (before usync). Source labels
         /// stay on each pair for diagnostics.
         /// </summary>

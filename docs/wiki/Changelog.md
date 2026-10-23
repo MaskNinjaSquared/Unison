@@ -2,6 +2,11 @@
 
 Newest first.
 
+## Phase B — stanza notify push-name on ContactFacade
+
+`IContactService.ApplyStanzaNotifyPushName` owns notify sanitize, remember,
+self-capture, and placeholder row relabel. Connection only forwards stanza attrs.
+
 ## Phase B — placeholder ack + socket missing-message on MessageFacade
 
 `HandlePlaceholderResendAck` and `NoteMissingMessageAndRequestResendAsync` own

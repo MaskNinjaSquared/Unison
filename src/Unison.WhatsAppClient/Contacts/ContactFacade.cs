@@ -517,6 +517,65 @@ namespace Unison.WhatsAppClient.Contacts
             }
         }
 
+        /// <inheritdoc />
+        public void ApplyStanzaNotifyPushName(string fromJid, string notify, string participantJid)
+        {
+            if (string.IsNullOrEmpty(fromJid) || string.IsNullOrEmpty(notify))
+            {
+                return;
+            }
+
+            string targetNotifyJid = fromJid;
+            if (!string.IsNullOrEmpty(participantJid) &&
+                JidHelper.IsGroupJid(fromJid))
+            {
+                targetNotifyJid = participantJid;
+            }
+
+            string normalizedNotifyTarget = JidHelper.Normalize(targetNotifyJid);
+            string sanitizedNotify = SanitizeForResolvedName(notify, normalizedNotifyTarget);
+            if (string.IsNullOrEmpty(sanitizedNotify))
+            {
+                Debug.WriteLine(
+                    "[ContactFacade] Ignored notify pushname '" + notify +
+                    "' for " + normalizedNotifyTarget);
+                return;
+            }
+
+            string existingNotifyName;
+            bool changed = !_pushNames.TryGetValue(normalizedNotifyTarget, out existingNotifyName) ||
+                           !string.Equals(existingNotifyName, sanitizedNotify, StringComparison.Ordinal);
+            if (changed)
+            {
+                RememberPersonName(normalizedNotifyTarget, sanitizedNotify);
+                Debug.WriteLine(
+                    "[ContactFacade] Captured pushname from notify: " +
+                    targetNotifyJid + " -> " + sanitizedNotify);
+            }
+
+            if (_jids.IsSelfLinked(normalizedNotifyTarget))
+            {
+                CaptureSelfPushName(sanitizedNotify, "stanza-notify");
+            }
+
+            string canonical = _jids.GetCanonicalJid(normalizedNotifyTarget);
+            _ = _ui.RunAsync(() =>
+            {
+                foreach (ChatItem chat in _chatRows.FindConversation(canonical))
+                {
+                    if (chat != null &&
+                        PlaceholderChatLabel.IsPlaceholder(
+                            chat.Name,
+                            chat.JID,
+                            SelfChatNaming.IsSelfMarkerLabel(chat.Name) ||
+                            (_selfMarkers != null && _selfMarkers.IsMarkerLabel(chat.Name))))
+                    {
+                        chat.Name = sanitizedNotify;
+                    }
+                }
+            });
+        }
+
         private async Task PersistObservedPersonNameAsync(string jid, string displayName)
         {
             try

@@ -1683,70 +1683,14 @@ namespace Unison.Uwp.Services.WhatsApp
                 }
 
                 // Collect pushname from notify attribute on incoming messages
-                if (node != null && node.Attrs.TryGetValue("from", out var from) && node.Attrs.TryGetValue("notify", out var notify))
+                if (node != null &&
+                    node.Attrs.TryGetValue("from", out var from) &&
+                    node.Attrs.TryGetValue("notify", out var notify) &&
+                    !string.IsNullOrEmpty(from) &&
+                    !string.IsNullOrEmpty(notify))
                 {
-                    if (!string.IsNullOrEmpty(from) && !string.IsNullOrEmpty(notify))
-                    {
-                        node.Attrs.TryGetValue("participant", out var participantFromNode);
-                        string targetNotifyJid = from;
-                        if (!string.IsNullOrEmpty(participantFromNode) &&
-                            from.EndsWith("@g.us", StringComparison.OrdinalIgnoreCase))
-                        {
-                            // For group traffic, notify usually belongs to participant, not the group chat JID.
-                            targetNotifyJid = participantFromNode;
-                        }
-
-                        string normalizedNotifyTarget = NormalizeJid(targetNotifyJid);
-                        string sanitizedNotify = SanitizeContactLabel(notify, normalizedNotifyTarget);
-                        if (!string.IsNullOrEmpty(sanitizedNotify))
-                        {
-                            bool changed = !ContactNames.TryGetValue(normalizedNotifyTarget, out var existingNotifyName) ||
-                                           !string.Equals(existingNotifyName, sanitizedNotify, StringComparison.Ordinal);
-                            if (changed)
-                            {
-                                if (Contacts != null)
-                                {
-                                    Contacts.RememberPersonName(normalizedNotifyTarget, sanitizedNotify);
-                                }
-
-                                Debug.WriteLine($"[WhatsAppService] Captured pushname from notify: {targetNotifyJid} -> {sanitizedNotify}");
-                            }
-                        }
-                        else
-                        {
-                            Debug.WriteLine($"[WhatsAppService] Ignored notify pushname '{notify}' for {normalizedNotifyTarget}");
-                        }
-
-                        // Our own name, when the stanza is one of ours. The test used to be an
-                        // exact match against Me.Id, which is the account's phone-number JID -
-                        // and the server now addresses us by LID as often as not, so the one
-                        // stanza that carries the user's own name was the one it turned away.
-                        // IsSelfLinkedJid knows about both addresses and the aliases between them.
-                        if (!string.IsNullOrEmpty(sanitizedNotify) &&
-                            IsSelfLinkedJid(normalizedNotifyTarget))
-                        {
-                            Contacts?.CaptureSelfPushName(sanitizedNotify, "stanza-notify");
-                        }
-
-                        // Proactively update any matching chat on the captured UI
-                        // dispatcher. Enumerating and mutating bound chat rows from the
-                        // socket thread caused RPC_E_WRONG_THREAD after reconnect.
-                        _ = _ui.RunAsync(() =>
-                        {
-                            // Matched on the normalized address and stopped at the first hit.
-                            // A contact is listed under both PN and LID, so a notify arriving
-                            // by one address never reached the row filed under the other --
-                            // which went on showing the phone number with the name in hand.
-                            foreach (var chat in GetChatRowsForCanonicalJid(GetCanonicalJid(normalizedNotifyTarget)))
-                            {
-                                if (chat != null &&
-                                    PlaceholderChatLabel.IsPlaceholder(chat.Name, chat.JID, IsSelfMarkerLabel(chat.Name)))
-                                {
-                                    chat.Name = sanitizedNotify;
-                                }
-                            }
-                        });
-                    }
+                    node.Attrs.TryGetValue("participant", out var participantFromNode);
+                    Contacts?.ApplyStanzaNotifyPushName(from, notify, participantFromNode);
                 }
 
                 OnMessage?.Invoke(this, node);
