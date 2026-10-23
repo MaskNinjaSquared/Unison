@@ -2,6 +2,11 @@
 
 Newest first.
 
+## Phase B — drop message-control queue; peer-data awaits on pump
+
+Peer-data responses await on the ingest pump like placeholders. Serial
+`QueueMessageControlWork` and its tail fields are gone.
+
 ## Phase B — stanza notify push-name on ContactFacade
 
 `IContactService.ApplyStanzaNotifyPushName` owns notify sanitize, remember,

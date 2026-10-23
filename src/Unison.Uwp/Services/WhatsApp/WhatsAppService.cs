@@ -356,8 +356,6 @@ namespace Unison.Uwp.Services.WhatsApp
             new IncomingMessageQueue<Client.DecryptedMessageEventArgs>(
                 message => message.IsOffline,
                 message => message.MessageId);
-        private readonly object _messageControlQueueLock = new object();
-        private Task _messageControlQueueTail = Task.CompletedTask;
         private const int LiveIncomingMessageTimeoutMs = 12000;
         private readonly AttachedUiDispatcher _ui;
         private readonly ChatStateStore _chatState;

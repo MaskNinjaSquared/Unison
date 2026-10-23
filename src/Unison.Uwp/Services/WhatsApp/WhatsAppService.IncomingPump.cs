@@ -649,46 +649,6 @@ namespace Unison.Uwp.Services.WhatsApp
             await Task.WhenAny(pump, Task.Delay(timeoutMs));
         }
 
-        private void QueueMessageControlWork(string reason, Func<Task> work)
-        {
-            if (work == null)
-            {
-                return;
-            }
-
-            lock (_messageControlQueueLock)
-            {
-                Task previous = _messageControlQueueTail ?? Task.CompletedTask;
-                _messageControlQueueTail = previous.ContinueWith(
-                    async completedPrevious =>
-                    {
-                        // Observe a previous failure so the serial control queue is not
-                        // torn down by one malformed App State or placeholder event.
-                        if (completedPrevious.IsFaulted)
-                        {
-                            var ignored = completedPrevious.Exception;
-                        }
-
-                        try
-                        {
-                            await work();
-                        }
-                        catch (Exception ex)
-                        {
-                            Debug.WriteLine($"[WhatsAppService] Background control message failed ({reason}): {ex.Message}");
-                            RuntimeDiagnosticsService.Instance.RecordException(
-                                "messages",
-                                "control-work-failed",
-                                ex,
-                                "reason=" + reason);
-                        }
-                    },
-                    CancellationToken.None,
-                    TaskContinuationOptions.ExecuteSynchronously,
-                    TaskScheduler.Default).Unwrap();
-            }
-        }
-
         /// <summary>
         /// Handles real-time decrypted messages from SocketClient
         /// </summary>
@@ -709,7 +669,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 if (sessionKind == IncomingEnvelopeKind.PeerDataOperationResponse)
                 {
                     var response = e.Message.ProtocolMessage.PeerDataOperationRequestResponseMessage;
-                    QueueMessageControlWork($"peer-response:{e.MessageId}", () => ProcessPeerDataOperationResponseAsync(response));
+                    await ProcessPeerDataOperationResponseAsync(response).ConfigureAwait(false);
                     return;
                 }
 
