@@ -439,5 +439,11 @@ namespace Unison.Core.Contracts.WhatsApp
             string participantJid,
             string selfDisplayName,
             DateTime timestampUtc);
+
+        /// <summary>
+        /// After session/placeholder handling: status broadcast, offline fast-path, DM routing,
+        /// self-collapse, envelope controls, then <see cref="ProcessIncomingChatContentAsync"/>.
+        /// </summary>
+        Task RouteIncomingChatEnvelopeAsync(IncomingRoutedEnvelopeRequest request);
     }
 }

@@ -2,6 +2,18 @@
 
 Newest first.
 
+## Phase B — RouteIncomingChatEnvelope owns post-session inbound path
+
+`IMessageService.RouteIncomingChatEnvelopeAsync` covers status, offline fast-path,
+DM routing, self-collapse, envelope controls, and content. Pump keeps session /
+placeholder / alias-hint / drain only.
+
+## Phase B — receipts host, alias hints, envelope control, AppStateSync, journal tips
+
+`IOutgoingReceiptHost` no longer forwards status. Envelope alias hints and
+revoke/pin/reaction dispatch live on Contact/Message façades. AppStateSync
+calls façades directly; journal recovery previews on `ChatFacade`.
+
 ## Phase B — ProcessIncomingChatContent on MessageFacade
 
 Render → push-name → sender/attention → bubble → AcceptIncomingTimeline →

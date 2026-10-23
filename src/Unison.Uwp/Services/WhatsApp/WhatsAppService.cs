@@ -4128,29 +4128,6 @@ namespace Unison.Uwp.Services.WhatsApp
                 });
         }
 
-        private string ResolveLiveDirectChatJid(Client.DecryptedMessageEventArgs e, out string routingReason)
-        {
-            if (e == null)
-            {
-                routingReason = "fallback-from";
-                return null;
-            }
-
-            IncomingLiveDirectChatRoute route = IncomingLiveDirectChatRouting.Resolve(
-                e.IsFromMe,
-                e.FromJid,
-                e.RecipientJid,
-                e.PeerRecipientPn,
-                e.PeerRecipientLid,
-                e.SenderLid,
-                NormalizeJid,
-                IsSelfLinkedJid,
-                JidAlias.GetCanonicalSelfPnJid,
-                GetCanonicalJid);
-            routingReason = route.Reason;
-            return route.ChatJid;
-        }
-
         private void QueueChatMessagesChanged(string chatJid)
         {
             if (string.IsNullOrWhiteSpace(chatJid))

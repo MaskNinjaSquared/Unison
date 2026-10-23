@@ -787,96 +787,6 @@ namespace Unison.Uwp.Services.WhatsApp
                     e.Participant,
                     e.ParticipantAlt);
 
-                string normalizedFromJid = NormalizeJid(e.FromJid);
-                if (IncomingEnvelopeDisposition.ClassifyAddress(normalizedFromJid) == IncomingEnvelopeKind.StatusBroadcast ||
-                    IncomingEnvelopeDisposition.ClassifyAddress(e.FromJid) == IncomingEnvelopeKind.StatusBroadcast)
-                {
-                    if (Status != null)
-                    {
-                        await Status.IngestLiveFromDecryptedAsync(new IncomingLiveStatusRequest
-                        {
-                            ParticipantJid = e.Participant,
-                            SelfJid = _authState?.Me?.Id,
-                            IsFromMe = e.IsFromMe,
-                            MessageId = e.MessageId,
-                            PushName = e.PushName,
-                            Timestamp = e.Timestamp,
-                            Message = e.Message
-                        }).ConfigureAwait(false);
-                    }
-                    return;
-                }
-
-                bool isGroup = JidHelper.IsGroupJid(normalizedFromJid);
-
-                // -- FAST PATH: offline replay duplicate detection --
-                if (e.IsOffline && !string.IsNullOrEmpty(e.MessageId) && Messages != null)
-                {
-                    string fastJid = GetCanonicalJid(normalizedFromJid);
-                    if (Messages.TryHandleOfflineDuplicateFast(
-                        fastJid,
-                        e.MessageId,
-                        isGroup,
-                        e.IsFromMe,
-                        e.Participant,
-                        e.VerifiedName,
-                        e.PushName))
-                    {
-                        return;
-                    }
-                }
-
-                string routingReason = isGroup ? "group-from" : null;
-                string jid = isGroup ? GetCanonicalJid(normalizedFromJid) : ResolveLiveDirectChatJid(e, out routingReason);
-                if (string.IsNullOrWhiteSpace(jid))
-                {
-                    jid = GetCanonicalJid(e.FromJid);
-                    routingReason = routingReason ?? "fallback-from";
-                }
-                isGroup = JidHelper.IsGroupJid(jid);
-
-                if (!isGroup)
-                {
-                    string normalizedRecipient = NormalizeJid(e.RecipientJid);
-                    string normalizedPeerRecipientPn = NormalizeJid(e.PeerRecipientPn);
-                    string normalizedPeerRecipientLid = NormalizeJid(e.PeerRecipientLid);
-                    string normalizedSenderLid = NormalizeJid(e.SenderLid);
-                    Debug.WriteLine(
-                        $"[WhatsAppService] Direct live routing: id={e.MessageId}, from={normalizedFromJid} (self={IsSelfJid(normalizedFromJid)}), recipient={normalizedRecipient} (self={IsSelfJid(normalizedRecipient)}), peerRecipientPn={normalizedPeerRecipientPn} (self={IsSelfJid(normalizedPeerRecipientPn)}), peerRecipientLid={normalizedPeerRecipientLid} (self={IsSelfJid(normalizedPeerRecipientLid)}), senderLid={normalizedSenderLid} (self={IsSelfJid(normalizedSenderLid)}), isFromMe={e.IsFromMe}, finalChat={jid}, reason={routingReason}");
-
-                    if (IncomingSelfChatCollapseGate.ShouldCollapse(
-                            routingReason,
-                            normalizedPeerRecipientLid,
-                            jid))
-                    {
-                        if (ChatFacade != null)
-                        {
-                            QueueMessageControlWork(
-                                "live-self-chat-collapse:" + e.MessageId,
-                                () => ChatFacade.CollapseTransientDirectChatAsync(
-                                    normalizedPeerRecipientLid,
-                                    jid,
-                                    "live-self-chat-collapse"));
-                        }
-                    }
-                }
-
-                if (Messages != null &&
-                    await Messages.TryApplyIncomingEnvelopeControlAsync(
-                            e.Message,
-                            jid,
-                            e.MessageId,
-                            isGroup,
-                            e.IsFromMe,
-                            e.Participant,
-                            _authState?.Me?.Name,
-                            e.Timestamp)
-                        .ConfigureAwait(false))
-                {
-                    SetIncomingMessagePumpStage("control", e);
-                    return;
-                }
-
                 if (Messages == null)
                 {
                     Debug.WriteLine("[WhatsAppService] Dropping inbound message: MessageFacade is not attached.");
@@ -887,28 +797,30 @@ namespace Unison.Uwp.Services.WhatsApp
                     return;
                 }
 
-                SetIncomingMessagePumpStage("content", e);
+                SetIncomingMessagePumpStage("route", e);
                 bool quietForSync =
                     (_initialSync != null && _initialSync.IsActive) ||
                     (_socket != null && _socket.IsAwaitingInitialSync);
-                await Messages.ProcessIncomingChatContentAsync(new IncomingChatContentProcessRequest
+                await Messages.RouteIncomingChatEnvelopeAsync(new IncomingRoutedEnvelopeRequest
                 {
                     Message = e.Message,
                     MessageId = e.MessageId,
-                    ChatJid = jid,
                     FromJid = e.FromJid,
+                    RecipientJid = e.RecipientJid,
+                    PeerRecipientPn = e.PeerRecipientPn,
+                    PeerRecipientLid = e.PeerRecipientLid,
+                    SenderLid = e.SenderLid,
                     ParticipantJid = e.Participant,
                     ParticipantAltJid = e.ParticipantAlt,
                     VerifiedName = e.VerifiedName,
                     PushName = e.PushName,
                     Timestamp = e.Timestamp,
                     IsOffline = e.IsOffline,
-                    IsGroup = isGroup,
-                    EnvelopeIsFromMe = e.IsFromMe,
+                    IsFromMe = e.IsFromMe,
                     SelfDisplayName = _authState?.Me?.Name,
                     QuietForSync = quietForSync,
-                    IsActiveChat = IsActiveChatJid(jid),
-                    IsWindowVisible = Unison.Uwp.App.IsWindowVisible
+                    IsWindowVisible = Unison.Uwp.App.IsWindowVisible,
+                    IsActiveChat = IsActiveChatJid
                 }).ConfigureAwait(false);
             }
             catch (Exception ex)

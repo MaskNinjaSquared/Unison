@@ -54,6 +54,7 @@ namespace Unison.WhatsAppClient.Messages
         private readonly IMissingMessageChatHost _missingMessages;
         private readonly Func<IChatService> _resolveChats;
         private readonly Func<IContactService> _resolveContacts;
+        private readonly Func<IStatusService> _resolveStatus;
         private readonly ReceiptReader _receipts;
         private readonly GroupReceiptTally _groupReceipts = new GroupReceiptTally();
         private readonly IRuntimeDiagnostics _diagnostics;
@@ -87,6 +88,7 @@ namespace Unison.WhatsAppClient.Messages
             IMissingMessageChatHost missingMessages,
             Func<IChatService> resolveChats = null,
             Func<IContactService> resolveContacts = null,
+            Func<IStatusService> resolveStatus = null,
             IChatStore chatStore = null,
             IStringResources strings = null,
             ISystemInfoProvider systemInfo = null,
@@ -121,6 +123,7 @@ namespace Unison.WhatsAppClient.Messages
                 ?? throw new ArgumentNullException(nameof(missingMessages));
             _resolveChats = resolveChats;
             _resolveContacts = resolveContacts;
+            _resolveStatus = resolveStatus;
             _strings = strings;
             _receipts = new ReceiptReader(jids);
 
@@ -1683,6 +1686,139 @@ namespace Unison.WhatsAppClient.Messages
         }
 
         /// <inheritdoc />
+        /// <inheritdoc />
+        public async Task RouteIncomingChatEnvelopeAsync(IncomingRoutedEnvelopeRequest request)
+        {
+            if (request?.Message == null)
+            {
+                return;
+            }
+
+            string normalizedFromJid = JidHelper.Normalize(request.FromJid);
+            if (IncomingEnvelopeDisposition.ClassifyAddress(normalizedFromJid) == IncomingEnvelopeKind.StatusBroadcast ||
+                IncomingEnvelopeDisposition.ClassifyAddress(request.FromJid) == IncomingEnvelopeKind.StatusBroadcast)
+            {
+                IStatusService status = _resolveStatus != null ? _resolveStatus() : null;
+                if (status != null)
+                {
+                    await status.IngestLiveFromDecryptedAsync(new IncomingLiveStatusRequest
+                    {
+                        ParticipantJid = request.ParticipantJid,
+                        SelfJid = _jids.Self != null ? _jids.Self.Id : null,
+                        IsFromMe = request.IsFromMe,
+                        MessageId = request.MessageId,
+                        PushName = request.PushName,
+                        Timestamp = request.Timestamp,
+                        Message = request.Message
+                    }).ConfigureAwait(false);
+                }
+
+                return;
+            }
+
+            bool isGroup = JidHelper.IsGroupJid(normalizedFromJid);
+            if (request.IsOffline && !string.IsNullOrEmpty(request.MessageId))
+            {
+                string fastJid = _jids.GetCanonicalJid(normalizedFromJid);
+                if (TryHandleOfflineDuplicateFast(
+                    fastJid,
+                    request.MessageId,
+                    isGroup,
+                    request.IsFromMe,
+                    request.ParticipantJid,
+                    request.VerifiedName,
+                    request.PushName))
+                {
+                    return;
+                }
+            }
+
+            string routingReason = isGroup ? "group-from" : null;
+            string jid;
+            if (isGroup)
+            {
+                jid = _jids.GetCanonicalJid(normalizedFromJid);
+            }
+            else
+            {
+                IncomingLiveDirectChatRoute route = IncomingLiveDirectChatRouting.Resolve(
+                    request.IsFromMe,
+                    request.FromJid,
+                    request.RecipientJid,
+                    request.PeerRecipientPn,
+                    request.PeerRecipientLid,
+                    request.SenderLid,
+                    JidHelper.Normalize,
+                    _jids.IsSelfLinked,
+                    () => _jids.GetCanonicalJid(_jids.Self != null ? _jids.Self.Id : null),
+                    _jids.GetCanonicalJid);
+                routingReason = route.Reason;
+                jid = route.ChatJid;
+            }
+
+            if (string.IsNullOrWhiteSpace(jid))
+            {
+                jid = _jids.GetCanonicalJid(request.FromJid);
+                routingReason = routingReason ?? "fallback-from";
+            }
+
+            isGroup = JidHelper.IsGroupJid(jid);
+
+            if (!isGroup)
+            {
+                string normalizedPeerRecipientLid = JidHelper.Normalize(request.PeerRecipientLid);
+                if (IncomingSelfChatCollapseGate.ShouldCollapse(
+                        routingReason,
+                        normalizedPeerRecipientLid,
+                        jid))
+                {
+                    IChatService chats = _resolveChats != null ? _resolveChats() : null;
+                    if (chats != null)
+                    {
+                        _ = chats.CollapseTransientDirectChatAsync(
+                            normalizedPeerRecipientLid,
+                            jid,
+                            "live-self-chat-collapse");
+                    }
+                }
+            }
+
+            if (await TryApplyIncomingEnvelopeControlAsync(
+                    request.Message,
+                    jid,
+                    request.MessageId,
+                    isGroup,
+                    request.IsFromMe,
+                    request.ParticipantJid,
+                    request.SelfDisplayName,
+                    request.Timestamp)
+                .ConfigureAwait(false))
+            {
+                return;
+            }
+
+            bool isActive = request.IsActiveChat != null && request.IsActiveChat(jid);
+            await ProcessIncomingChatContentAsync(new IncomingChatContentProcessRequest
+            {
+                Message = request.Message,
+                MessageId = request.MessageId,
+                ChatJid = jid,
+                FromJid = request.FromJid,
+                ParticipantJid = request.ParticipantJid,
+                ParticipantAltJid = request.ParticipantAltJid,
+                VerifiedName = request.VerifiedName,
+                PushName = request.PushName,
+                Timestamp = request.Timestamp,
+                IsOffline = request.IsOffline,
+                IsGroup = isGroup,
+                EnvelopeIsFromMe = request.IsFromMe,
+                SelfDisplayName = request.SelfDisplayName,
+                QuietForSync = request.QuietForSync,
+                IsActiveChat = isActive,
+                IsWindowVisible = request.IsWindowVisible
+            }).ConfigureAwait(false);
+        }
+
         /// <inheritdoc />
         public async Task<bool> TryApplyIncomingEnvelopeControlAsync(
             Message message,
