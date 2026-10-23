@@ -154,17 +154,18 @@ namespace Unison.Uwp.Services.WhatsApp
         /// <summary>The alias table as the Core rules read it. Built after <see cref="JidAlias"/>.</summary>
         private readonly IJidResolver _jids;
 
-        /// <summary>Puts listing and metadata replies onto the rows for this client's own query passes.</summary>
-        private readonly GroupMetadataApply _groupApply;
         private readonly Func<IMessageService> _resolveMessages;
         private readonly Func<IChatService> _resolveChats;
         private readonly Func<IContactService> _resolveContacts;
+        private readonly Func<IGroupService> _resolveGroups;
 
         private IMessageService Messages => _resolveMessages != null ? _resolveMessages() : null;
 
         private IChatService ChatFacade => _resolveChats != null ? _resolveChats() : null;
 
         private IContactService Contacts => _resolveContacts != null ? _resolveContacts() : null;
+
+        private IGroupService Groups => _resolveGroups != null ? _resolveGroups() : null;
         private readonly IPersonStore _personStore;
         private readonly IGroupRosterStore _groupRosterStore;
         private readonly IChatStore _chatStore;
@@ -1137,7 +1138,8 @@ namespace Unison.Uwp.Services.WhatsApp
             ILocalSettings localSettings = null,
             Func<IContactService> resolveContacts = null,
             Func<IMessageService> resolveMessages = null,
-            Func<IChatService> resolveChats = null)
+            Func<IChatService> resolveChats = null,
+            Func<IGroupService> resolveGroups = null)
         {
             if (chatState == null)
             {
@@ -1159,6 +1161,7 @@ namespace Unison.Uwp.Services.WhatsApp
             _resolveContacts = resolveContacts;
             _resolveMessages = resolveMessages;
             _resolveChats = resolveChats;
+            _resolveGroups = resolveGroups;
             _ui = ui ?? throw new ArgumentNullException(nameof(ui));
             _previewReconciler = previewReconciler ?? throw new ArgumentNullException(nameof(previewReconciler));
             _nameRefresh = nameRefresh ?? throw new ArgumentNullException(nameof(nameRefresh));
@@ -1204,8 +1207,6 @@ namespace Unison.Uwp.Services.WhatsApp
             var jidResolver = new JidResolver(JidAlias);
             _jids = jidResolver;
             _groupMetadata = new GroupMetadataReader(jidResolver);
-            var groupNaming = new GroupNaming(displayNames, jidResolver, _selfMarkers, new StringResourcesService(), _chatState.GroupSubjects);
-            _groupApply = new GroupMetadataApply(groupNaming, _ui, this, new GroupRosterWriter(_groupRosterStore, _personStore), jidResolver, _chatState, _chatRows, _chatState.GroupSubjects);
             _receipts = new ReceiptReader(jidResolver);
             _chatState.Chats.CollectionChanged += (s, e) => InvalidateChatRowIndex();
 
@@ -1255,11 +1256,12 @@ namespace Unison.Uwp.Services.WhatsApp
             ILocalSettings localSettings = null,
             Func<IContactService> resolveContacts = null,
             Func<IMessageService> resolveMessages = null,
-            Func<IChatService> resolveChats = null)
+            Func<IChatService> resolveChats = null,
+            Func<IGroupService> resolveGroups = null)
         {
             return _instance ?? (_instance = new WhatsAppService(
                 chatState, chatRows, activeChat, syncStatus, syncWork, historyMessages, chatPreviews, usyncGate, avatarFetcher, mediaCache, jidAlias, displayNames, historyRequests,
-                initialSync, syncBudget, workload, selfProfile, personStore, groupRosterStore, chatStore, systemInfo, ui, previewReconciler, nameRefresh, storedPreviews, deduper, usyncAliases, listPaintGate, appMemory, localSettings, resolveContacts, resolveMessages, resolveChats));
+                initialSync, syncBudget, workload, selfProfile, personStore, groupRosterStore, chatStore, systemInfo, ui, previewReconciler, nameRefresh, storedPreviews, deduper, usyncAliases, listPaintGate, appMemory, localSettings, resolveContacts, resolveMessages, resolveChats, resolveGroups));
         }
 
         /// <summary>

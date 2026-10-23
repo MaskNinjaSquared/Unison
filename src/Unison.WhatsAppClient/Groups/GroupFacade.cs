@@ -210,6 +210,12 @@ namespace Unison.WhatsAppClient.Groups
             return _rosterRestore.EnsureLoadedAsync(groupJid);
         }
 
+        /// <inheritdoc />
+        public Task ApplyGroupMetadataAsync(string groupJid, GroupMetadataSnapshot metadata)
+        {
+            return _apply.ApplyMetadataAsync(groupJid, metadata);
+        }
+
         public async Task EnsureHighQualityGroupAvatarAsync(ChatItem chat)
         {
             if (chat == null || !GroupHighAvatar.ShouldFetch(chat.IsGroup, chat.JID, chat.AvatarHighUrl))

@@ -112,5 +112,11 @@ namespace Unison.Core.Contracts.WhatsApp
             string participantJid,
             ChatItem groupChat,
             string nameHint = null);
+
+        /// <summary>
+        /// Applies an already-fetched metadata snapshot (receipt path / host-owned IQ).
+        /// Does not query the network.
+        /// </summary>
+        Task ApplyGroupMetadataAsync(string groupJid, GroupMetadataSnapshot metadata);
     }
 }

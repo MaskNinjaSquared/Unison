@@ -404,7 +404,8 @@ namespace Unison.Uwp
                     sp.GetRequiredService<ILocalSettings>(),
                     () => sp.GetRequiredService<IContactService>(),
                     () => sp.GetRequiredService<IMessageService>(),
-                    () => sp.GetRequiredService<IChatService>()));
+                    () => sp.GetRequiredService<IChatService>(),
+                    () => sp.GetRequiredService<IGroupService>()));
             // The send flow lives on MessageFacade; the timeline caches and the socket it writes
             // through are still the client's, reached only through this narrow port.
             services.AddSingleton<IOutgoingMessageHost>(
@@ -650,6 +651,18 @@ namespace Unison.Uwp
                 sp.GetRequiredService<UwpSessionProvider>()));
             services.AddSingleton<IGroupAvatarActions>(sp => new BridgeGroupAvatarActions(
                 sp.GetRequiredService<AvatarFetcher>()));
+            // One applier for GroupFacade and the receipt path (lazy Func on WhatsAppService).
+            services.AddSingleton(sp => new GroupMetadataApply(
+                sp.GetRequiredService<IGroupNaming>(),
+                sp.GetRequiredService<AttachedUiDispatcher>(),
+                sp.GetRequiredService<IChatCatalogPersistence>(),
+                new GroupRosterWriter(
+                    sp.GetRequiredService<IGroupRosterStore>(),
+                    sp.GetRequiredService<IPersonStore>()),
+                sp.GetRequiredService<IJidResolver>(),
+                sp.GetRequiredService<IChatStateStore>(),
+                sp.GetRequiredService<ChatRowIndex>(),
+                sp.GetRequiredService<ChatStateStore>().GroupSubjects));
             services.AddSingleton<IGroupService>(sp => new GroupFacade(
                 sp.GetRequiredService<IWhatsAppService>(),
                 sp.GetRequiredService<IGroupWireActions>(),
@@ -658,17 +671,7 @@ namespace Unison.Uwp
                 sp.GetRequiredService<IJidResolver>(),
                 () => sp.GetRequiredService<IContactService>(),
                 sp.GetRequiredService<IPersonStore>(),
-                new GroupMetadataApply(
-                    sp.GetRequiredService<IGroupNaming>(),
-                    sp.GetRequiredService<AttachedUiDispatcher>(),
-                    sp.GetRequiredService<IChatCatalogPersistence>(),
-                    new GroupRosterWriter(
-                        sp.GetRequiredService<IGroupRosterStore>(),
-                        sp.GetRequiredService<IPersonStore>()),
-                    sp.GetRequiredService<IJidResolver>(),
-                    sp.GetRequiredService<IChatStateStore>(),
-                    sp.GetRequiredService<ChatRowIndex>(),
-                    sp.GetRequiredService<ChatStateStore>().GroupSubjects),
+                sp.GetRequiredService<GroupMetadataApply>(),
                 new GroupRosterRestore(
                     sp.GetRequiredService<IGroupNaming>(),
                     sp.GetRequiredService<AttachedUiDispatcher>(),
