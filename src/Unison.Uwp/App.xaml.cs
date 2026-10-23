@@ -511,6 +511,8 @@ namespace Unison.Uwp
                 sp.GetRequiredService<IChatCatalogPersistence>()));
             services.AddSingleton<IMessageWireActions>(sp => new BridgeMessageWireActions(
                 sp.GetRequiredService<UwpSessionProvider>()));
+            services.AddSingleton<IOutgoingReceiptHost>(
+                sp => (IOutgoingReceiptHost)sp.GetRequiredService<IWhatsAppService>());
             services.AddSingleton<IMessageService>(sp => new MessageFacade(
                 sp.GetRequiredService<IPersonStore>(),
                 sp.GetRequiredService<IWhatsAppService>(),
@@ -526,6 +528,7 @@ namespace Unison.Uwp
                 sp.GetRequiredService<IMediaAvailability>(),
                 sp.GetRequiredService<IChatCatalogPersistence>(),
                 sp.GetRequiredService<IMessageWireActions>(),
+                sp.GetRequiredService<IOutgoingReceiptHost>(),
                 sp.GetRequiredService<IChatStore>(),
                 sp.GetRequiredService<IChatStateStore>(),
                 sp.GetRequiredService<ISystemInfoProvider>(),

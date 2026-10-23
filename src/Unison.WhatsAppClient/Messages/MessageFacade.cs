@@ -37,6 +37,9 @@ namespace Unison.WhatsAppClient.Messages
         private readonly IChatCatalogPersistence _catalog;
         private readonly IMessageWireActions _wire;
         private readonly IOutgoingMessageHost _outgoingHost;
+        private readonly IOutgoingReceiptHost _receiptHost;
+        private readonly ReceiptReader _receipts;
+        private readonly GroupReceiptTally _groupReceipts = new GroupReceiptTally();
         private readonly IRuntimeDiagnostics _diagnostics;
         private readonly int _sqlOpenPageSize;
         private readonly int _sqlLoadMorePageSize;
@@ -57,6 +60,7 @@ namespace Unison.WhatsAppClient.Messages
             IMediaAvailability availability,
             IChatCatalogPersistence catalog,
             IMessageWireActions wire,
+            IOutgoingReceiptHost receiptHost,
             IChatStore chatStore = null,
             IChatStateStore chatState = null,
             ISystemInfoProvider systemInfo = null,
@@ -79,6 +83,8 @@ namespace Unison.WhatsAppClient.Messages
             _chatStore = chatStore;
             _chatState = chatState;
             _outgoingHost = outgoingHost ?? throw new ArgumentNullException(nameof(outgoingHost));
+            _receiptHost = receiptHost ?? throw new ArgumentNullException(nameof(receiptHost));
+            _receipts = new ReceiptReader(jids);
 
             _textSend = new OutgoingTextSend(_outgoingHost, _jids);
             _mediaSend = new OutgoingMediaSend(
@@ -101,6 +107,59 @@ namespace Unison.WhatsAppClient.Messages
         public event EventHandler<string> ChatMessagesChanged;
 
         public event EventHandler<PresenceUpdateEventArgs> PresenceUpdated;
+
+        /// <summary>
+        /// Account receipt for an outgoing bubble: direct status or group tally, then host apply.
+        /// </summary>
+        public async Task HandleReceiptAsync(Unison.Baileys.Protocol.BinaryNode node)
+        {
+            ReceiptFacts receipt = _receipts.Read(node);
+            if (receipt == null)
+            {
+                return;
+            }
+
+            // A "sender" receipt is our own echo — whole-message status, not per-participant.
+            if (!receipt.IsGroup ||
+                string.Equals(receipt.Status, ChatMessage.StatusSent, StringComparison.OrdinalIgnoreCase))
+            {
+                foreach (string id in receipt.MessageIds)
+                {
+                    await _receiptHost.ApplyOutgoingStatusAsync(id, receipt.Status).ConfigureAwait(false);
+                }
+
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(receipt.Participant) ||
+                _receiptHost.IsSelfLinked(receipt.Participant))
+            {
+                return;
+            }
+
+            int expectedRecipients = await _receiptHost
+                .GetExpectedGroupRecipientCountAsync(receipt.ChatJid)
+                .ConfigureAwait(false);
+            if (expectedRecipients <= 0)
+            {
+                return;
+            }
+
+            foreach (string id in receipt.MessageIds)
+            {
+                string aggregateStatus = _groupReceipts.Register(
+                    id,
+                    receipt.Participant,
+                    receipt.Status,
+                    expectedRecipients,
+                    DateTime.UtcNow);
+                if (!string.IsNullOrWhiteSpace(aggregateStatus))
+                {
+                    await _receiptHost.ApplyOutgoingStatusAsync(id, aggregateStatus)
+                        .ConfigureAwait(false);
+                }
+            }
+        }
 
         public Task SubscribeToPresenceAsync(string jid)
         {

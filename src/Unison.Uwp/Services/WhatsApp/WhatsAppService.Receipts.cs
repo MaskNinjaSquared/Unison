@@ -1,45 +1,18 @@
 using System;
-using System.Collections.Generic;
-using System.Collections.ObjectModel;
 using System.Diagnostics;
-using System.IO;
-using System.Linq;
-using System.Reflection;
 using System.Threading.Tasks;
-using Unison.Uwp.Client;
-using Unison.Core.Helpers;
-using Unison.Core.Mappers;
-using Unison.Core.Models;
 using Unison.Baileys.Protocol;
-using Unison.Uwp.Data;
-using Unison.Baileys.Crypto;
-using Unison.Uwp.Transport;
-using Proto;
-using Google.Protobuf;
-using System.Threading;
-using System.Runtime.InteropServices.WindowsRuntime;
-
-using System.ComponentModel;
-using System.Runtime.CompilerServices;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
-using Unison.Background;
-using Unison.Baileys.Diagnostics;
-using Unison.Baileys.Client;
-using Unison.Core.Constants;
-using Unison.Core.Contracts;
 using Unison.Core.Contracts.WhatsApp;
+using Unison.Core.Helpers;
+using Unison.Core.Models;
 using Unison.Core.State;
-using Unison.Socket.UseCases.Contacts;
-using Unison.Uwp.Helpers;
+using Unison.WhatsAppClient.Abstractions;
 using Unison.WhatsAppClient.Messages;
-using Microsoft.Extensions.DependencyInjection;
 
 namespace Unison.Uwp.Services.WhatsApp
 {
-    public partial class WhatsAppService
+    public partial class WhatsAppService : IOutgoingReceiptHost
     {
-
         private async Task HandleMessageReceiptSafelyAsync(BinaryNode node)
         {
             try
@@ -54,11 +27,19 @@ namespace Unison.Uwp.Services.WhatsApp
 
         private async Task HandleMessageReceiptAsync(BinaryNode node)
         {
-            ReceiptFacts receipt = _receipts.Read(node);
-            if (receipt == null) return;
+            if (Messages is MessageFacade facade)
+            {
+                await facade.HandleReceiptAsync(node).ConfigureAwait(false);
+                return;
+            }
 
-            // A "sender" receipt is our own echo, so it applies to the message as a whole and
-            // never needs the per-participant tally a group read does.
+            // Fallback if MessageFacade is not the attached IMessageService (tests / stubs).
+            ReceiptFacts receipt = _receipts.Read(node);
+            if (receipt == null)
+            {
+                return;
+            }
+
             if (!receipt.IsGroup ||
                 string.Equals(receipt.Status, ChatMessage.StatusSent, StringComparison.OrdinalIgnoreCase))
             {
@@ -66,13 +47,20 @@ namespace Unison.Uwp.Services.WhatsApp
                 {
                     await UpdateOutgoingMessageStatusAsync(id, receipt.Status);
                 }
+
                 return;
             }
 
-            if (string.IsNullOrWhiteSpace(receipt.Participant) || IsSelfLinkedJid(receipt.Participant)) return;
+            if (string.IsNullOrWhiteSpace(receipt.Participant) || IsSelfLinkedJid(receipt.Participant))
+            {
+                return;
+            }
 
             int expectedRecipients = await GetExpectedGroupRecipientCountAsync(receipt.ChatJid);
-            if (expectedRecipients <= 0) return;
+            if (expectedRecipients <= 0)
+            {
+                return;
+            }
 
             foreach (var id in receipt.MessageIds)
             {
@@ -89,10 +77,21 @@ namespace Unison.Uwp.Services.WhatsApp
             }
         }
 
+        Task IOutgoingReceiptHost.ApplyOutgoingStatusAsync(string messageId, string status, string error) =>
+            UpdateOutgoingMessageStatusAsync(messageId, status, error);
+
+        bool IOutgoingReceiptHost.IsSelfLinked(string jid) => IsSelfLinkedJid(jid);
+
+        Task<int> IOutgoingReceiptHost.GetExpectedGroupRecipientCountAsync(string groupJid) =>
+            GetExpectedGroupRecipientCountAsync(groupJid);
+
         private async Task<int> GetExpectedGroupRecipientCountAsync(string groupJid)
         {
             string canonical = GetCanonicalJid(groupJid);
-            if (string.IsNullOrWhiteSpace(canonical) || _socket == null) return 0;
+            if (string.IsNullOrWhiteSpace(canonical) || _socket == null)
+            {
+                return 0;
+            }
 
             if (_groupRecipientCounts.TryGetFresh(canonical, DateTime.UtcNow, out int cachedCount))
             {
@@ -105,7 +104,10 @@ namespace Unison.Uwp.Services.WhatsApp
                 ApplyGroupSendPermissionsFromMetadata(response, canonical);
 
                 int? counted = _receipts.CountRecipients(response);
-                if (counted == null) return 0;
+                if (counted == null)
+                {
+                    return 0;
+                }
 
                 int recipientCount = counted.Value;
                 _groupRecipientCounts.Store(canonical, recipientCount, DateTime.UtcNow);
@@ -113,7 +115,8 @@ namespace Unison.Uwp.Services.WhatsApp
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"[WhatsAppService] Group receipt aggregation metadata failed for {canonical}: {ex.Message}");
+                Debug.WriteLine(
+                    $"[WhatsAppService] Group receipt aggregation metadata failed for {canonical}: {ex.Message}");
                 return 0;
             }
         }
