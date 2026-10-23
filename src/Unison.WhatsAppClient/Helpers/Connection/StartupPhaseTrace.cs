@@ -1,29 +1,37 @@
+// =============================================================================
+// StartupPhaseTrace
+//
+// Brackets a startup phase in the runtime journal with duration and memory
+// level at both ends.
+// =============================================================================
 using System;
 using System.Diagnostics;
 using Unison.Core.Contracts;
 
-namespace Unison.Uwp.Services.WhatsApp
+namespace Unison.WhatsAppClient.Helpers
 {
     /// <summary>
     /// Brackets a startup phase in the runtime journal with its duration and the memory level
     /// at both ends, so an exported report shows where the seconds went.
     /// </summary>
-    internal sealed class StartupPhaseTrace : IDisposable
+    public sealed class StartupPhaseTrace : IDisposable
     {
         private readonly string _phase;
         private readonly Stopwatch _elapsed;
         private readonly string _entryLevel;
         private readonly IAppMemoryInfo _memory;
+        private readonly IRuntimeDiagnostics _diagnostics;
         private bool _closed;
 
-        internal StartupPhaseTrace(string phase, IAppMemoryInfo memory)
+        public StartupPhaseTrace(string phase, IAppMemoryInfo memory, IRuntimeDiagnostics diagnostics)
         {
             _phase = phase ?? string.Empty;
             _memory = memory;
+            _diagnostics = diagnostics;
             _entryLevel = memory?.UsageLevel ?? string.Empty;
             _elapsed = Stopwatch.StartNew();
 
-            RuntimeDiagnosticsService.Instance.Write(
+            _diagnostics?.Write(
                 "startup-phase",
                 _phase + ":begin",
                 "memory=" + _entryLevel +
@@ -39,7 +47,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
             _closed = true;
             _elapsed.Stop();
-            RuntimeDiagnosticsService.Instance.Write(
+            _diagnostics?.Write(
                 "startup-phase",
                 _phase + ":end",
                 "elapsedMs=" + _elapsed.ElapsedMilliseconds +
