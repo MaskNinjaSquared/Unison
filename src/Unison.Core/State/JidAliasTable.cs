@@ -8,10 +8,10 @@
 // rules are the only reason the map exists, and every caller that reached for
 // the dictionary directly was one reimplementing a rule badly.
 //
-// The long-term home for LID/PN pairs is LidMappingStore, which is SQLite-backed
-// and async. This table stays synchronous on purpose, because canonicalization
-// sits on the incoming-message path and behind XAML bindings, where there is no
-// thread to await on. Converging the two is a storage swap behind this seam.
+// The durable home for LID/PN pairs is LidMappingStore (SQLite + memory cache).
+// This table stays the synchronous seam for canonicalization (incoming path /
+// XAML), reading the store via ILidMappingMemory and dual-writing LID↔PN pairs
+// back (phase 3.7b). Self-poisoning and LID-like rules stay here.
 // =============================================================================
 using System;
 using System.Collections.Generic;

@@ -2,6 +2,13 @@
 
 Newest first.
 
+## Phase 3.7b done — LidMappingStore behind JidAliasTable seam
+
+Key shapes reconciled (`TryGetCachedPairedJid` re-attaches device/hosted). Shared
+`LidMapping.TryFromAliasPair`. Durable warm on init (`GetAllAsync` /
+`WarmCacheFromStorageAsync`). Dual-write + bulk restore already in. Table stays
+the sync owner (self-poison / lid-like rules); retiring it is a later phase.
+
 ## Extract — SentMessageRetryRebuild (text-only retry bytes)
 
 Rule for rebuilding a peer-requested resend from the persisted row lives in Core;
@@ -16,7 +23,7 @@ table once, then one store batch (not N fire-and-forgets / N `Changed`).
 
 `ILidMappingMemory.RememberPair` + `LidMappingMemoryAdapter` fire-and-forget
 `StoreMappingsAsync`. `JidAliasTable` indexer/`Add` dual-write LID↔PN pairs so
-the store stays warm with the sync map. Full async swap still pending.
+the store stays warm with the sync map.
 
 ## Phase 3.7b started — LidMappingStore shared + sync peek
 
