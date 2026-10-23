@@ -140,25 +140,7 @@ namespace Unison.Uwp.Services.WhatsApp
                     dirty = new List<ChatItem> { created };
                 }
 
-                resolved = AppStateChatMutation.ResolveUnreadCount(rows, read);
-                foreach (var row in rows)
-                {
-                    if (row.UnreadCount == resolved)
-                    {
-                        continue;
-                    }
-
-                    row.UnreadCount = resolved;
-                    if (dirty == null)
-                    {
-                        dirty = new List<ChatItem>();
-                    }
-
-                    if (!dirty.Contains(row))
-                    {
-                        dirty.Add(row);
-                    }
-                }
+                resolved = AppStateChatMutation.StampUnread(rows, read, ref dirty);
             });
 
             if (dirty == null || dirty.Count == 0)
@@ -166,7 +148,8 @@ namespace Unison.Uwp.Services.WhatsApp
                 return;
             }
 
-            NotificationService.Instance.UpdateBadge(GetTotalUnreadCount());
+            NotificationService.Instance.UpdateBadge(
+                ChatUnreadTally.TotalAcrossConversations(Chats, GetCanonicalJid));
 
             // Reading on the phone left the pinned tile showing the old count: only the
             // local read path told the shortcut service, and this one is the same event
@@ -229,7 +212,8 @@ namespace Unison.Uwp.Services.WhatsApp
 
             await ForgetChatInStorageAsync(canonical, keys).ConfigureAwait(false);
 
-            NotificationService.Instance.UpdateBadge(GetTotalUnreadCount());
+            NotificationService.Instance.UpdateBadge(
+                ChatUnreadTally.TotalAcrossConversations(Chats, GetCanonicalJid));
             SchedulePersist();
         }
 
@@ -330,7 +314,14 @@ namespace Unison.Uwp.Services.WhatsApp
                     if (latest != null)
                     {
                         bool isGroup = JidHelper.IsGroupJid(canonical) || chat.IsGroup;
-                        ApplyMessageAsChatTip(chat, latest, isGroup, force: true);
+                        ChatMessageTipApply.Apply(
+                            chat,
+                            latest,
+                            isGroup,
+                            force: true,
+                            SelfListDisplayName(),
+                            GetCanonicalJid(latest.ParticipantJid),
+                            LocalizedStrings.Get("Common_Yesterday", "Yesterday"));
                     }
                     else
                     {

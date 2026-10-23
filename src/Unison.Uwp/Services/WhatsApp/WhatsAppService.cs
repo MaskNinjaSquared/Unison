@@ -274,19 +274,6 @@ namespace Unison.Uwp.Services.WhatsApp
 
         private bool IsActiveChatJid(string jid) => _activeChat.IsOpen(jid);
 
-        private int GetTotalUnreadCount()
-        {
-            try
-            {
-                return ChatUnreadTally.TotalAcrossConversations(Chats, GetCanonicalJid);
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine("[WhatsAppService] Unread total failed: " + ex.Message);
-                return 0;
-            }
-        }
-
         private void UnloadMessageCacheIfInactive(string jid)
         {
             if (string.IsNullOrWhiteSpace(jid) || IsActiveChatJid(jid))
@@ -405,12 +392,6 @@ namespace Unison.Uwp.Services.WhatsApp
         private static readonly TimeSpan AvatarFetchNextBatchDelay = TimeSpan.FromSeconds(20);
         private DateTime _replayDrainCompletedUtc = DateTime.MinValue;
         private DateTime _lastPostReplayLiveActivityUtc = DateTime.MinValue;
-        private static readonly TimeSpan[] PostReplayAppStateFollowUpDelays =
-        {
-            TimeSpan.FromSeconds(45),
-            TimeSpan.FromSeconds(120),
-            TimeSpan.FromSeconds(240)
-        };
         
         // Debounce timer for persisting data (5 seconds)
         private System.Threading.Timer _persistTimer;
@@ -792,22 +773,6 @@ namespace Unison.Uwp.Services.WhatsApp
                 LocalizedStrings.Get("Common_Yesterday", "Yesterday"),
                 participantJid,
                 senderName);
-        }
-
-        /// <summary>
-        /// Shows <paramref name="message"/> as the chat's list strip when it is newer than the
-        /// tip already there, or regardless when <paramref name="force"/>.
-        /// </summary>
-        private bool ApplyMessageAsChatTip(ChatItem chat, ChatMessage message, bool isGroup, bool force)
-        {
-            return ChatMessageTipApply.Apply(
-                chat,
-                message,
-                isGroup,
-                force,
-                SelfListDisplayName(),
-                message == null ? null : GetCanonicalJid(message.ParticipantJid),
-                LocalizedStrings.Get("Common_Yesterday", "Yesterday"));
         }
 
         private void RepositionChatForDisplay(ChatItem chat) =>
@@ -2331,20 +2296,10 @@ namespace Unison.Uwp.Services.WhatsApp
         }
 
         /// <summary>
-        /// PN + LID (+ canonical) keys for SQLite history reads and avatar lookups. The same
-        /// expansion <see cref="ChatPinStoreKeys"/> does for pins.
+        /// PN + LID (+ canonical) keys for SQLite history reads and avatar lookups.
         /// </summary>
-        private List<string> ExpandHistoryChatKeys(string jid)
-        {
-            string alias = null;
-            string normalized = JidHelper.Normalize(jid);
-            if (!string.IsNullOrWhiteSpace(normalized) && JidAlias != null)
-            {
-                JidAlias.TryGetValue(normalized, out alias);
-            }
-
-            return new List<string>(ChatPinStoreKeys.For(jid, GetCanonicalJid(jid), alias));
-        }
+        private List<string> ExpandHistoryChatKeys(string jid) =>
+            new List<string>(ChatPinStoreKeys.For(jid, _jids));
 
         public void StartDeferredStartupMaintenance()
         {
