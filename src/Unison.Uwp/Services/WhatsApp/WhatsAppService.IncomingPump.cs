@@ -459,50 +459,6 @@ namespace Unison.Uwp.Services.WhatsApp
             }
         }
 
-        private async Task ProcessPeerDataOperationResponseAsync(Proto.Message.Types.PeerDataOperationRequestResponseMessage response)
-        {
-            if (response == null)
-            {
-                return;
-            }
-
-            Debug.WriteLine($"[WhatsAppService] PeerDataOperationResponse received: stanzaId={response.StanzaId}, requestType={response.PeerDataOperationRequestType}, resultCount={response.PeerDataOperationResult?.Count ?? 0}");
-
-            HistoryOnDemandRequest historyRequestState = _historyRequests.Find(response.StanzaId);
-
-            foreach (var result in response.PeerDataOperationResult ?? Enumerable.Empty<Proto.Message.Types.PeerDataOperationRequestResponseMessage.Types.PeerDataOperationResult>())
-            {
-                if (result.FullHistorySyncOnDemandRequestResponse != null)
-                {
-                    Debug.WriteLine($"[WhatsAppService] FullHistorySyncOnDemand response observed: stanzaId={response.StanzaId}, responseCode={result.FullHistorySyncOnDemandRequestResponse.ResponseCode}, requestMetadataId={result.FullHistorySyncOnDemandRequestResponse.RequestMetadata?.RequestId}");
-                }
-
-                if (result.HistorySyncChunkRetryResponse != null)
-                {
-                    Debug.WriteLine($"[WhatsAppService] HistorySyncChunkRetry response observed: stanzaId={response.StanzaId}, responseCode={result.HistorySyncChunkRetryResponse.ResponseCode}, canRecover={result.HistorySyncChunkRetryResponse.CanRecover}, requestId={result.HistorySyncChunkRetryResponse.RequestId}");
-                }
-
-                if (result.SyncdSnapshotFatalRecoveryResponse != null)
-                {
-                    Debug.WriteLine($"[WhatsAppService] SyncD fatal recovery response observed: stanzaId={response.StanzaId}, compressed={result.SyncdSnapshotFatalRecoveryResponse.IsCompressed}, bytes={result.SyncdSnapshotFatalRecoveryResponse.CollectionSnapshot?.Length ?? 0}");
-                }
-            }
-
-            if (Messages != null)
-            {
-                await Messages.ApplyPeerDataPlaceholderResendsAsync(
-                    response.StanzaId,
-                    response.PeerDataOperationResult).ConfigureAwait(false);
-            }
-
-            if (historyRequestState != null &&
-                (response.PeerDataOperationRequestType == Proto.Message.Types.PeerDataOperationRequestType.FullHistorySyncOnDemand ||
-                 response.PeerDataOperationRequestType == Proto.Message.Types.PeerDataOperationRequestType.HistorySyncOnDemand))
-            {
-                Debug.WriteLine($"[WhatsAppService] PeerDataOperationResponse completed without immediate history payload: requestType={historyRequestState.TypeName}, stanzaId={response.StanzaId}, chat={historyRequestState.ChatJid ?? "<full-history>"}, baseline={historyRequestState.BaselineMessageCount}, trigger={historyRequestState.TriggerReason ?? "unspecified"}");
-            }
-        }
-
         private void HandlePlaceholderResendAckNode(BinaryNode node)
         {
             if (node?.Attrs == null || Messages == null)
@@ -668,8 +624,14 @@ namespace Unison.Uwp.Services.WhatsApp
                 IncomingEnvelopeKind sessionKind = IncomingEnvelopeDisposition.ClassifySessionControl(e.Message);
                 if (sessionKind == IncomingEnvelopeKind.PeerDataOperationResponse)
                 {
+                    if (Messages == null)
+                    {
+                        Debug.WriteLine("[WhatsAppService] Dropping peer-data response: MessageFacade is not attached.");
+                        return;
+                    }
+
                     var response = e.Message.ProtocolMessage.PeerDataOperationRequestResponseMessage;
-                    await ProcessPeerDataOperationResponseAsync(response).ConfigureAwait(false);
+                    await Messages.HandlePeerDataOperationResponseAsync(response).ConfigureAwait(false);
                     return;
                 }
 
@@ -700,15 +662,6 @@ namespace Unison.Uwp.Services.WhatsApp
                         placeholderType).ConfigureAwait(false);
                     return;
                 }
-
-                Contacts?.RegisterIncomingEnvelopeAliasHints(
-                    e.SenderLid,
-                    e.FromJid,
-                    e.PeerRecipientPn,
-                    e.PeerRecipientLid,
-                    e.RecipientJid,
-                    e.Participant,
-                    e.ParticipantAlt);
 
                 if (Messages == null)
                 {

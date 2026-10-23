@@ -27,9 +27,9 @@ namespace Unison.Uwp.Services.WhatsApp
 
         private async Task HandleMessageReceiptAsync(BinaryNode node)
         {
-            if (Messages is MessageFacade facade)
+            if (Messages != null)
             {
-                await facade.HandleReceiptAsync(node).ConfigureAwait(false);
+                await Messages.HandleReceiptAsync(node).ConfigureAwait(false);
             }
         }
 

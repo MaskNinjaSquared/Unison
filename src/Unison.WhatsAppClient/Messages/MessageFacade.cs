@@ -53,6 +53,7 @@ namespace Unison.WhatsAppClient.Messages
         private readonly PendingMessageState _pendingMessageState;
         private readonly IMissingMessageChatHost _missingMessages;
         private readonly IIncomingMessageEnqueueHost _incomingEnqueue;
+        private readonly HistoryOnDemandRegistry _historyOnDemand;
         private readonly Func<IChatService> _resolveChats;
         private readonly Func<IContactService> _resolveContacts;
         private readonly Func<IStatusService> _resolveStatus;
@@ -89,6 +90,7 @@ namespace Unison.WhatsAppClient.Messages
             PendingMessageState pendingMessageState,
             IMissingMessageChatHost missingMessages,
             IIncomingMessageEnqueueHost incomingEnqueue = null,
+            HistoryOnDemandRegistry historyOnDemand = null,
             Func<IChatService> resolveChats = null,
             Func<IContactService> resolveContacts = null,
             Func<IStatusService> resolveStatus = null,
@@ -126,6 +128,7 @@ namespace Unison.WhatsAppClient.Messages
             _missingMessages = missingMessages
                 ?? throw new ArgumentNullException(nameof(missingMessages));
             _incomingEnqueue = incomingEnqueue;
+            _historyOnDemand = historyOnDemand;
             _resolveChats = resolveChats;
             _resolveContacts = resolveContacts;
             _resolveStatus = resolveStatus;
@@ -155,9 +158,7 @@ namespace Unison.WhatsAppClient.Messages
 
         public event EventHandler<PresenceUpdateEventArgs> PresenceUpdated;
 
-        /// <summary>
-        /// Account receipt for an outgoing bubble: direct status or group tally, then host apply.
-        /// </summary>
+        /// <inheritdoc />
         public async Task HandleReceiptAsync(Unison.Baileys.Protocol.BinaryNode node)
         {
             ReceiptFacts receipt = _receipts.Read(node);
@@ -1846,12 +1847,94 @@ namespace Unison.WhatsAppClient.Messages
         }
 
         /// <inheritdoc />
+        public async Task HandlePeerDataOperationResponseAsync(
+            Message.Types.PeerDataOperationRequestResponseMessage response)
+        {
+            if (response == null)
+            {
+                return;
+            }
+
+            Debug.WriteLine(
+                "[MessageFacade] PeerDataOperationResponse received: stanzaId=" + response.StanzaId +
+                ", requestType=" + response.PeerDataOperationRequestType +
+                ", resultCount=" + (response.PeerDataOperationResult?.Count ?? 0));
+
+            HistoryOnDemandRequest historyRequestState = _historyOnDemand != null
+                ? _historyOnDemand.Find(response.StanzaId)
+                : null;
+
+            foreach (var result in response.PeerDataOperationResult
+                     ?? Enumerable.Empty<Message.Types.PeerDataOperationRequestResponseMessage.Types.PeerDataOperationResult>())
+            {
+                if (result.FullHistorySyncOnDemandRequestResponse != null)
+                {
+                    Debug.WriteLine(
+                        "[MessageFacade] FullHistorySyncOnDemand response observed: stanzaId=" +
+                        response.StanzaId +
+                        ", responseCode=" + result.FullHistorySyncOnDemandRequestResponse.ResponseCode +
+                        ", requestMetadataId=" +
+                        result.FullHistorySyncOnDemandRequestResponse.RequestMetadata?.RequestId);
+                }
+
+                if (result.HistorySyncChunkRetryResponse != null)
+                {
+                    Debug.WriteLine(
+                        "[MessageFacade] HistorySyncChunkRetry response observed: stanzaId=" +
+                        response.StanzaId +
+                        ", responseCode=" + result.HistorySyncChunkRetryResponse.ResponseCode +
+                        ", canRecover=" + result.HistorySyncChunkRetryResponse.CanRecover +
+                        ", requestId=" + result.HistorySyncChunkRetryResponse.RequestId);
+                }
+
+                if (result.SyncdSnapshotFatalRecoveryResponse != null)
+                {
+                    Debug.WriteLine(
+                        "[MessageFacade] SyncD fatal recovery response observed: stanzaId=" +
+                        response.StanzaId +
+                        ", compressed=" + result.SyncdSnapshotFatalRecoveryResponse.IsCompressed +
+                        ", bytes=" +
+                        (result.SyncdSnapshotFatalRecoveryResponse.CollectionSnapshot?.Length ?? 0));
+                }
+            }
+
+            await ApplyPeerDataPlaceholderResendsAsync(
+                response.StanzaId,
+                response.PeerDataOperationResult).ConfigureAwait(false);
+
+            if (historyRequestState != null &&
+                (response.PeerDataOperationRequestType ==
+                     Message.Types.PeerDataOperationRequestType.FullHistorySyncOnDemand ||
+                 response.PeerDataOperationRequestType ==
+                     Message.Types.PeerDataOperationRequestType.HistorySyncOnDemand))
+            {
+                Debug.WriteLine(
+                    "[MessageFacade] PeerDataOperationResponse completed without immediate history payload: requestType=" +
+                    historyRequestState.TypeName +
+                    ", stanzaId=" + response.StanzaId +
+                    ", chat=" + (historyRequestState.ChatJid ?? "<full-history>") +
+                    ", baseline=" + historyRequestState.BaselineMessageCount +
+                    ", trigger=" + (historyRequestState.TriggerReason ?? "unspecified"));
+            }
+        }
+
+        /// <inheritdoc />
         public async Task RouteIncomingChatEnvelopeAsync(IncomingRoutedEnvelopeRequest request)
         {
             if (request?.Message == null)
             {
                 return;
             }
+
+            IContactService contacts = _resolveContacts != null ? _resolveContacts() : null;
+            contacts?.RegisterIncomingEnvelopeAliasHints(
+                request.SenderLid,
+                request.FromJid,
+                request.PeerRecipientPn,
+                request.PeerRecipientLid,
+                request.RecipientJid,
+                request.ParticipantJid,
+                request.ParticipantAltJid);
 
             string normalizedFromJid = JidHelper.Normalize(request.FromJid);
             if (IncomingEnvelopeDisposition.ClassifyAddress(normalizedFromJid) == IncomingEnvelopeKind.StatusBroadcast ||

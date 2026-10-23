@@ -2,6 +2,12 @@
 
 Newest first.
 
+## Phase B — alias hints in Route; peer-data + receipts on MessageFacade
+
+`RouteIncomingChatEnvelopeAsync` registers envelope alias hints. Peer-data
+responses are `HandlePeerDataOperationResponseAsync` (history observe logs +
+placeholder recovery). `HandleReceiptAsync` is on `IMessageService`.
+
 ## Phase B — drop message-control queue; peer-data awaits on pump
 
 Peer-data responses await on the ingest pump like placeholders. Serial

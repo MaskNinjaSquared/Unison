@@ -4062,20 +4062,22 @@ namespace Unison.Uwp.Services.WhatsApp
         }
 
 
-        private async Task UpdateOutgoingMessageStatusSafelyAsync(string messageId, string status, string error = null)
+        private Task UpdateOutgoingMessageStatusSafelyAsync(string messageId, string status, string error = null)
         {
-            try
+            if (Messages == null)
             {
-                if (Messages != null)
+                return Task.CompletedTask;
+            }
+
+            return Messages.ApplyOutgoingStatusAsync(messageId, status, error).ContinueWith(t =>
+            {
+                if (t.IsFaulted && t.Exception != null)
                 {
-                    await Messages.ApplyOutgoingStatusAsync(messageId, status, error)
-                        .ConfigureAwait(false);
+                    Debug.WriteLine(
+                        "[WhatsAppService] Outgoing status update failed for " + messageId + ": " +
+                        t.Exception.GetBaseException().Message);
                 }
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"[WhatsAppService] Outgoing status update failed for {messageId}: {ex.Message}");
-            }
+            }, TaskScheduler.Default);
         }
 
         private void InvalidateCurrentSocket(IWhatsAppSocket socket, string reason)

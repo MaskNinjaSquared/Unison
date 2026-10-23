@@ -359,6 +359,12 @@ namespace Unison.Core.Contracts.WhatsApp
         Task ApplyOutgoingStatusAsync(string messageId, string status, string error = null);
 
         /// <summary>
+        /// Wire <c>receipt</c> node: direct status or group tally, then
+        /// <see cref="ApplyOutgoingStatusAsync"/>.
+        /// </summary>
+        Task HandleReceiptAsync(Unison.Baileys.Protocol.BinaryNode node);
+
+        /// <summary>
         /// Files an outgoing bubble in the in-memory timeline (held receipt/pin applied first).
         /// </summary>
         void AcceptOutgoingTimeline(string chatJid, ChatMessage message);
@@ -482,5 +488,12 @@ namespace Unison.Core.Contracts.WhatsApp
         Task ApplyPeerDataPlaceholderResendsAsync(
             string stanzaId,
             System.Collections.Generic.IEnumerable<Message.Types.PeerDataOperationRequestResponseMessage.Types.PeerDataOperationResult> results);
+
+        /// <summary>
+        /// Full peer-data operation response: history-on-demand observe logs plus
+        /// <see cref="ApplyPeerDataPlaceholderResendsAsync"/>.
+        /// </summary>
+        Task HandlePeerDataOperationResponseAsync(
+            Message.Types.PeerDataOperationRequestResponseMessage response);
     }
 }
