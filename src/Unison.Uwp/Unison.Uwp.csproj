@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="15.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
   <PropertyGroup>
@@ -270,7 +270,6 @@
     <Compile Include="Services\WhatsApp\WhatsAppService.cs" />
     <Compile Include="Services\WhatsApp\WhatsAppService.Connection.cs" />
     <Compile Include="Services\WhatsApp\WhatsAppService.Media.cs" />
-    <Compile Include="Services\WhatsApp\WhatsAppService.Groups.cs" />
     <Compile Include="Services\WhatsApp\WhatsAppService.StartupPhases.cs" />
     <Compile Include="Services\WhatsApp\StartupPhaseTrace.cs" />
     <Compile Include="Services\WhatsApp\WhatsAppService.Identity.cs" />
@@ -627,7 +626,7 @@
     <Content Include="Assets\Sounds\voice_note_error.wav" />
     <Content Include="Properties\Default.rd.xml" />
   </ItemGroup>
-  <!-- libwebp for W10M (ARM) only — must land at package root for DllImport("libwebp.dll"). -->
+  <!-- libwebp for W10M (ARM) only â€” must land at package root for DllImport("libwebp.dll"). -->
   <ItemGroup Condition="'$(Platform)' == 'ARM'">
     <Content Include="Native\WebP\ARM\libwebp.dll">
       <Link>libwebp.dll</Link>

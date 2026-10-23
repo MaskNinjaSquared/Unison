@@ -130,5 +130,21 @@ namespace Unison.Uwp.Services.WhatsApp
                 return 0;
             }
         }
+
+        /// <summary>
+        /// Receipt path: apply a metadata IQ the client already fetched (no second query).
+        /// </summary>
+        private void ApplyGroupSendPermissionsFromMetadata(BinaryNode response, string groupJid)
+        {
+            GroupMetadataSnapshot snapshot = _groupMetadata.ReadMetadata(response, groupJid);
+            IGroupService groups = Groups;
+            if (groups == null)
+            {
+                Debug.WriteLine("[WhatsAppService] Group metadata apply skipped: IGroupService missing");
+                return;
+            }
+
+            _ = groups.ApplyGroupMetadataAsync(groupJid, snapshot);
+        }
     }
 }

@@ -132,6 +132,12 @@ namespace Unison.Core.Tests.Helpers
 
             public Task ResolveMissingNamesAsync(bool force = false) => Task.CompletedTask;
 
+            public Task RunBackgroundResolutionAsync(CancellationToken cancellationToken = default) =>
+                Task.CompletedTask;
+
+            public Task RunDeferredStartupContactPassAsync(bool resolveMissingNames = false) =>
+                Task.CompletedTask;
+
             public void RequestAvatarRefresh(ChatItem chat, bool force = false)
             {
             }
