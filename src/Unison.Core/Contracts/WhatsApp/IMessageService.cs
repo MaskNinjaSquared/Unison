@@ -425,5 +425,19 @@ namespace Unison.Core.Contracts.WhatsApp
         /// <see cref="AcceptIncomingTimeline"/> → alias/duplicate/insert follow-up.
         /// </summary>
         Task ProcessIncomingChatContentAsync(IncomingChatContentProcessRequest request);
+
+        /// <summary>
+        /// Revoke, pin-in-chat, or reaction: returns true when the envelope was one of those
+        /// and was applied (caller should stop). False means fall through to content.
+        /// </summary>
+        Task<bool> TryApplyIncomingEnvelopeControlAsync(
+            Message message,
+            string chatJid,
+            string messageId,
+            bool isGroup,
+            bool isFromMe,
+            string participantJid,
+            string selfDisplayName,
+            DateTime timestampUtc);
     }
 }

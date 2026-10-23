@@ -396,6 +396,53 @@ namespace Unison.WhatsAppClient.Contacts
         }
 
         /// <inheritdoc />
+        public void RegisterIncomingEnvelopeAliasHints(
+            string senderLid,
+            string fromJid,
+            string peerRecipientPn,
+            string peerRecipientLid,
+            string recipientJid,
+            string participant,
+            string participantAlt)
+        {
+            IReadOnlyList<IncomingAliasHint> hints = IncomingEnvelopeAliasHints.Collect(
+                senderLid,
+                fromJid,
+                peerRecipientPn,
+                peerRecipientLid,
+                recipientJid,
+                participant,
+                participantAlt,
+                JidHelper.Normalize);
+            if (hints == null || hints.Count == 0)
+            {
+                return;
+            }
+
+            // RegisterAliasMappings takes one source for the batch; keep the first hint's
+            // label (pairs are independent identity facts from the same envelope).
+            var pairs = new List<KeyValuePair<string, string>>(hints.Count);
+            string source = hints[0].Source;
+            for (int i = 0; i < hints.Count; i++)
+            {
+                IncomingAliasHint hint = hints[i];
+                if (hint == null ||
+                    string.IsNullOrWhiteSpace(hint.LidJid) ||
+                    string.IsNullOrWhiteSpace(hint.PnJid))
+                {
+                    continue;
+                }
+
+                pairs.Add(new KeyValuePair<string, string>(hint.LidJid, hint.PnJid));
+            }
+
+            if (pairs.Count > 0)
+            {
+                _aliasPersist.RegisterAliasMappings(pairs, source ?? "envelope");
+            }
+        }
+
+        /// <inheritdoc />
         public void AcceptIncomingPushName(
             string rawName,
             bool isFromMe,

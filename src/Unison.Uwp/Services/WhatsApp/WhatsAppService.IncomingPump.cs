@@ -385,42 +385,10 @@ namespace Unison.Uwp.Services.WhatsApp
                     {
                         await FlushOfflineReplayMessagesAsync("incoming-journal-recovery");
 
-                        // Update only affected rows; never scan all 300+ chat files.
-                        foreach (var item in latestByChat)
+                        if (ChatFacade != null)
                         {
-                            var message = item.Value;
-                            ChatPreviewKind kind = ChatPreviewNormalizer.InferKindFromMessage(message);
-                            string preview = message?.Content;
-                            if (string.IsNullOrWhiteSpace(preview) && kind != ChatPreviewKind.Revoked)
-                            {
-                                // The kind already knows what arrived. Deciding it again from
-                                // IsImage alone labelled every video, sticker and voice note
-                                // "[Message]".
-                                preview = MediaPreviewTag.ForKind(kind) ?? "[Message]";
-                            }
-
-                            bool isGroupMsg = JidHelper.IsGroupJid(item.Key);
-                            string stripParticipant = isGroupMsg
-                                ? ParticipantStripIdentity.PreferForDisplay(
-                                    message?.ParticipantJid,
-                                    GetCanonicalJid(message?.ParticipantJid))
-                                : null;
-                            if (ChatFacade != null)
-                            {
-                                await ChatFacade.RefreshChatPreviewAsync(
-                                    item.Key,
-                                    preview,
-                                    message?.Timestamp ?? DateTime.MinValue,
-                                    message?.IsFromMe == true,
-                                    kind,
-                                    ChatPreviewNormalizer.FormatListAuthorPrefix(
-                                        message,
-                                        isGroupMsg,
-                                        LocalizedChatStripLabels.SelfFallbackName(),
-                                        stripParticipant),
-                                    stripParticipant,
-                                    isGroupMsg && message?.IsFromMe != true ? message?.SenderName : null);
-                            }
+                            await ChatFacade.ApplyIncomingJournalRecoveryPreviewsAsync(latestByChat)
+                                .ConfigureAwait(false);
                         }
 
                         RuntimeDiagnosticsService.Instance.Write(
@@ -810,19 +778,14 @@ namespace Unison.Uwp.Services.WhatsApp
                     return;
                 }
 
-                // Build PN/LID alias from message metadata immediately (works even when usync times out).
-                foreach (IncomingAliasHint hint in IncomingEnvelopeAliasHints.Collect(
+                Contacts?.RegisterIncomingEnvelopeAliasHints(
                     e.SenderLid,
                     e.FromJid,
                     e.PeerRecipientPn,
                     e.PeerRecipientLid,
                     e.RecipientJid,
                     e.Participant,
-                    e.ParticipantAlt,
-                    NormalizeJid))
-                {
-                    RegisterAliasMapping(hint.LidJid, hint.PnJid, hint.Source);
-                }
+                    e.ParticipantAlt);
 
                 string normalizedFromJid = NormalizeJid(e.FromJid);
                 if (IncomingEnvelopeDisposition.ClassifyAddress(normalizedFromJid) == IncomingEnvelopeKind.StatusBroadcast ||
@@ -898,41 +861,8 @@ namespace Unison.Uwp.Services.WhatsApp
                     }
                 }
 
-                IncomingEnvelopeKind chatControl = IncomingEnvelopeDisposition.ClassifyChatControl(e.Message);
-                if (chatControl == IncomingEnvelopeKind.Revoke)
-                {
-                    QueueMessageControlWork(
-                        "message-revoke:" + e.MessageId,
-                        () => Messages != null
-                            ? Messages.ApplyIncomingRevocationAsync(
-                                jid, e.Message.ProtocolMessage.Key?.Id, e.MessageId)
-                            : Task.CompletedTask);
-                    return;
-                }
-
-                if (chatControl == IncomingEnvelopeKind.PinInChat)
-                {
-                    var pinMessage = e.Message.PinInChatMessage;
-                    string pinTargetId = pinMessage?.Key?.Id;
-                    bool pin = pinMessage != null &&
-                        pinMessage.Type == Proto.Message.Types.PinInChatMessage.Types.Type.PinForAll;
-                    uint duration = e.Message.MessageContextInfo?.MessageAddOnDurationInSecs ?? 0;
-                    long senderTs = pinMessage?.SenderTimestampMs ?? 0;
-                    QueueMessageControlWork(
-                        "message-pin:" + e.MessageId,
-                        () => Messages != null
-                            ? Messages.ApplyIncomingPinInChatAsync(
-                                jid,
-                                pinTargetId,
-                                pin,
-                                senderTs,
-                                duration)
-                            : Task.CompletedTask);
-                    return;
-                }
-
                 if (Messages != null &&
-                    await Messages.ApplyIncomingReactionFromEnvelopeAsync(
+                    await Messages.TryApplyIncomingEnvelopeControlAsync(
                             e.Message,
                             jid,
                             e.MessageId,
@@ -943,7 +873,7 @@ namespace Unison.Uwp.Services.WhatsApp
                             e.Timestamp)
                         .ConfigureAwait(false))
                 {
-                    SetIncomingMessagePumpStage("reaction", e);
+                    SetIncomingMessagePumpStage("control", e);
                     return;
                 }
 

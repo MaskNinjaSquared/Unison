@@ -181,6 +181,19 @@ namespace Unison.Core.Contracts.WhatsApp
             bool isOffline);
 
         /// <summary>
+        /// Files PN/LID pairs carried on an inbound envelope (before usync). Source labels
+        /// stay on each pair for diagnostics.
+        /// </summary>
+        void RegisterIncomingEnvelopeAliasHints(
+            string senderLid,
+            string fromJid,
+            string peerRecipientPn,
+            string peerRecipientLid,
+            string recipientJid,
+            string participant,
+            string participantAlt);
+
+        /// <summary>
         /// Account contact table slice: alias pairs first, then names under every address.
         /// Pairing before naming so LID rows can borrow the PN label.
         /// </summary>

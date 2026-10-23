@@ -1683,6 +1683,59 @@ namespace Unison.WhatsAppClient.Messages
         }
 
         /// <inheritdoc />
+        /// <inheritdoc />
+        public async Task<bool> TryApplyIncomingEnvelopeControlAsync(
+            Message message,
+            string chatJid,
+            string messageId,
+            bool isGroup,
+            bool isFromMe,
+            string participantJid,
+            string selfDisplayName,
+            DateTime timestampUtc)
+        {
+            if (message == null || string.IsNullOrWhiteSpace(chatJid))
+            {
+                return false;
+            }
+
+            IncomingEnvelopeKind chatControl = IncomingEnvelopeDisposition.ClassifyChatControl(message);
+            if (chatControl == IncomingEnvelopeKind.Revoke)
+            {
+                await ApplyIncomingRevocationAsync(
+                        chatJid,
+                        message.ProtocolMessage?.Key?.Id,
+                        messageId)
+                    .ConfigureAwait(false);
+                return true;
+            }
+
+            if (chatControl == IncomingEnvelopeKind.PinInChat)
+            {
+                var pinMessage = message.PinInChatMessage;
+                string pinTargetId = pinMessage?.Key?.Id;
+                bool pin = pinMessage != null &&
+                    pinMessage.Type == Message.Types.PinInChatMessage.Types.Type.PinForAll;
+                uint duration = message.MessageContextInfo?.MessageAddOnDurationInSecs ?? 0;
+                long senderTs = pinMessage?.SenderTimestampMs ?? 0;
+                await ApplyIncomingPinInChatAsync(chatJid, pinTargetId, pin, senderTs, duration)
+                    .ConfigureAwait(false);
+                return true;
+            }
+
+            return await ApplyIncomingReactionFromEnvelopeAsync(
+                    message,
+                    chatJid,
+                    messageId,
+                    isGroup,
+                    isFromMe,
+                    participantJid,
+                    selfDisplayName,
+                    timestampUtc)
+                .ConfigureAwait(false);
+        }
+
+        /// <inheritdoc />
         public async Task ProcessIncomingChatContentAsync(IncomingChatContentProcessRequest request)
         {
             if (request?.Message == null || string.IsNullOrWhiteSpace(request.ChatJid))
