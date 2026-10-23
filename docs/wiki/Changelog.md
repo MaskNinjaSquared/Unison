@@ -2,6 +2,14 @@
 
 Newest first.
 
+## Phase D — Init(IWaTransport) shape on connect open
+
+Host builds transports (`WaTransportConnectAttempt` + factory) and calls
+`SocketBridge.ConnectWithTransportsAsync`. Bridge no longer chooses/news WinRT.
+Remote façade hooks left `BuildSocketBridge` (`SocketBridgeRemoteHooks`). Memory
+diagnostics go through `IAppMemoryInfo.LimitBytes`. Self PN/LID filing is
+`SelfIdentityAliasPair`.
+
 ## Host owns transport construction — IWhatsAppTransportFactory
 
 `SocketBridge` no longer `new`s StreamSocket/MessageWebSocket or reads DeviceFamily.

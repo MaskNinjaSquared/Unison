@@ -216,12 +216,19 @@ Further shrinking those rows is **State/contract seams** (or Phase E), not anoth
 - Prefer deleting the compatibility client once ConnectionFacade + SocketBridge cover lifecycle.
 - Done when: solution layout matches the target diagram; Background still references **only** `Unison.Baileys`.
 
-**Started (transport factory):** `IWhatsAppTransportFactory` / `UwpWhatsAppTransportFactory` —
-`SocketBridge.ConnectAsync` asks the host factory for StreamSocket vs MessageWebSocket and takes
-`isMobile` from `ISystemInfoProvider` (via `WhatsAppService`) instead of `AnalyticsInfo`. Connect
-order rule is `WaTransportConnectOrder`. Session attach for façades remains `IWhatsAppSessionProvider`
-(`BridgeSessionProvider` + `Func` over `WhatsAppService.Socket`). Full `Init(IWaTransport)` on a
-portable connection host still waits on extraction residuals (`BuildSocketBridge` wiring / pump).
+**In progress (Init shape on the live path):**
+
+| Piece | Status |
+|---|---|
+| `IWhatsAppTransportFactory` / `UwpWhatsAppTransportFactory` | Done — only UWP news StreamSocket / MessageWebSocket |
+| `WaTransportConnectOrder` + `WaTransportConnectAttempt` | Done — host picks primary/fallback |
+| `SocketBridge.ConnectWithTransportsAsync` | Done — bridge receives transports; parameterless `ConnectAsync` throws |
+| `IConnectionConnectOpenHost.ConnectAssignedTransportAsync` | Done — builds attempt and calls the bridge |
+| `SocketBridgeRemoteHooks` | Done — façade app-state callbacks out of `BuildSocketBridge` |
+| `IAppMemoryInfo.LimitBytes` | Done — client diagnostics no longer call `MemoryManager` |
+| `IWhatsAppSessionProvider` | Unchanged — live lookup via `BridgeSessionProvider` |
+| `WireSocketEventHandlers` / incoming pump | Still on the client until residuals close |
+| Portable connection host owning open end-to-end | Still future (delete/move `WhatsAppService`) |
 
 ### Phase E (future) — client-owned public I/O
 
