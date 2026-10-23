@@ -150,7 +150,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 return;
             }
 
-            List<string> keys = PinStoreKeysFor(canonical);
+            List<string> keys = new List<string>(ChatPinStoreKeys.For(canonical, _jids));
 
             await _ui.RunAsync(() =>
             {
@@ -280,9 +280,9 @@ namespace Unison.Uwp.Services.WhatsApp
                             latest,
                             isGroup,
                             force: true,
-                            SelfListDisplayName(),
+                            LocalizedChatStripLabels.SelfFallbackName(),
                             GetCanonicalJid(latest.ParticipantJid),
-                            LocalizedStrings.Get("Common_Yesterday", "Yesterday"));
+                            LocalizedChatStripLabels.Yesterday());
                     }
                     else
                     {
@@ -367,7 +367,7 @@ namespace Unison.Uwp.Services.WhatsApp
                     touched.Add(chat);
                 }
 
-                SortChatsForDisplay();
+                ChatDisplayOrder.SortInPlace(Chats);
             });
 
             if (touched != null && change.TouchesAnything)
@@ -423,7 +423,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 try
                 {
                     await _chatPreviews.SetStatusAsync(
-                            PinStoreKeysFor(canonical),
+                            new List<string>(ChatPinStoreKeys.For(canonical, _jids)),
                             status)
                         .ConfigureAwait(false);
                     await PersistChatCatalogAsync(touched).ConfigureAwait(false);

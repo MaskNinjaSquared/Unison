@@ -76,30 +76,17 @@ namespace Unison.Uwp.Services.WhatsApp
 
             foreach (var id in receipt.MessageIds)
             {
-                string aggregateStatus = RegisterGroupReceipt(
+                string aggregateStatus = _groupReceipts.Register(
                     id,
                     receipt.Participant,
                     receipt.Status,
-                    expectedRecipients);
+                    expectedRecipients,
+                    DateTime.UtcNow);
                 if (!string.IsNullOrWhiteSpace(aggregateStatus))
                 {
                     await UpdateOutgoingMessageStatusAsync(id, aggregateStatus);
                 }
             }
-        }
-
-        private string RegisterGroupReceipt(
-            string messageId,
-            string participant,
-            string status,
-            int expectedRecipients)
-        {
-            return _groupReceipts.Register(
-                messageId,
-                participant,
-                status,
-                expectedRecipients,
-                DateTime.UtcNow);
         }
 
         private async Task<int> GetExpectedGroupRecipientCountAsync(string groupJid)

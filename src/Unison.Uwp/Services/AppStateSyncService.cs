@@ -1436,7 +1436,7 @@ namespace Unison.Uwp.Services
                 string name = FirstNonEmpty(value.ContactAction.FullName, value.ContactAction.FirstName, value.ContactAction.Username);
                 if (!string.IsNullOrWhiteSpace(value.ContactAction.LidJid) && !string.IsNullOrWhiteSpace(value.ContactAction.PnJid))
                 {
-                    _owner.RegisterAliasFromAppState(value.ContactAction.LidJid, value.ContactAction.PnJid, "app-state-contact");
+                    _owner.RegisterAliasMapping(value.ContactAction.LidJid, value.ContactAction.PnJid, "app-state-contact");
                 }
 
                 if (!string.IsNullOrWhiteSpace(preferredJid) && !string.IsNullOrWhiteSpace(name))
@@ -1513,7 +1513,7 @@ namespace Unison.Uwp.Services
 
             if (value.PnForLidChatAction != null && !string.IsNullOrWhiteSpace(chatJid) && !string.IsNullOrWhiteSpace(value.PnForLidChatAction.PnJid))
             {
-                _owner.RegisterAliasFromAppState(chatJid, value.PnForLidChatAction.PnJid, "app-state-pnforlid");
+                _owner.RegisterAliasMapping(chatJid, value.PnForLidChatAction.PnJid, "app-state-pnforlid");
                 return true;
             }
 

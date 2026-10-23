@@ -215,8 +215,6 @@ namespace Unison.Uwp.Services.WhatsApp
             await PersistChatIdentityStateAsync(reason);
         }
 
-        internal void RegisterAliasFromAppState(string lidJid, string pnJid, string source) => RegisterAliasMapping(lidJid, pnJid, source);
-
         /// <summary>
         /// Records a LID/phone pair and schedules the work that follows from it.
         /// </summary>
@@ -228,7 +226,7 @@ namespace Unison.Uwp.Services.WhatsApp
         /// on a first sync meant thousands of dispatches to the UI thread and thousands of writes
         /// of the whole alias map - during the one minute the app has the least to spare.
         /// </remarks>
-        private void RegisterAliasMapping(string lidJid, string pnJid, string source)
+        internal void RegisterAliasMapping(string lidJid, string pnJid, string source)
         {
             if (TryRecordAliasMapping(lidJid, pnJid, source))
             {

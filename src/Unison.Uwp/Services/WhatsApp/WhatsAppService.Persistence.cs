@@ -141,8 +141,16 @@ namespace Unison.Uwp.Services.WhatsApp
                 // or enrichment so the list shows faces while tips/names settle.
                 try
                 {
-                    await HydrateCachedAvatarsFromContactAsync("persisted-ui-loaded")
-                        .ConfigureAwait(false);
+                    if (Contacts == null)
+                    {
+                        Debug.WriteLine(
+                            "[WhatsAppService] Avatar hydrate skipped (persisted-ui-loaded): contact facade missing");
+                    }
+                    else
+                    {
+                        await Contacts.HydrateCachedAvatarUrisAsync("persisted-ui-loaded")
+                            .ConfigureAwait(false);
+                    }
                 }
                 catch (Exception exHydrate)
                 {
@@ -555,7 +563,7 @@ namespace Unison.Uwp.Services.WhatsApp
                     }
 
                     ApplyChatKindsToAll();
-                    SortChatsForDisplay();
+                    ChatDisplayOrder.SortInPlace(Chats);
                 });
 
                 Debug.WriteLine("[WhatsAppService] Fast startup loaded " + stored.Count + " chat preview rows");

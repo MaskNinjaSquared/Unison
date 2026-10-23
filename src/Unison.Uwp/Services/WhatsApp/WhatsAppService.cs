@@ -549,18 +549,6 @@ namespace Unison.Uwp.Services.WhatsApp
 
         void IDeferredAvatarResolution.Cancel() => CancelDeferredProfilePictureResolution();
 
-        private Task HydrateCachedAvatarsFromContactAsync(string reason)
-        {
-            IContactService contacts = Contacts;
-            if (contacts == null)
-            {
-                Debug.WriteLine("[WhatsAppService] Avatar hydrate skipped (" + reason + "): contact facade missing");
-                return Task.CompletedTask;
-            }
-
-            return contacts.HydrateCachedAvatarUrisAsync(reason);
-        }
-
         RuntimeDiagnosticsSnapshot IRuntimeSnapshotSource.CaptureRuntimeSnapshot()
         {
             var snapshot = new RuntimeDiagnosticsSnapshot
@@ -718,11 +706,6 @@ namespace Unison.Uwp.Services.WhatsApp
 
         private bool ShouldDeferReconnectReplayWork() => _syncWork.IsReplayDrainActive;
 
-        private bool ShouldPrioritizeHistoryFreshness(out string reason)
-        {
-            return TryGetHistoryFreshnessStaleReason(DateTime.UtcNow, out reason);
-        }
-
         /// <summary>
         /// Every row that stands for the same conversation - a chat addressed by LID and the same
         /// chat addressed by phone number are two rows until they are merged.
@@ -767,20 +750,10 @@ namespace Unison.Uwp.Services.WhatsApp
                 isFromMe,
                 sendState,
                 messageId,
-                LocalizedStrings.Get("Common_Yesterday", "Yesterday"),
+                LocalizedChatStripLabels.Yesterday(),
                 participantJid,
                 senderName);
         }
-
-        private void RepositionChatForDisplay(ChatItem chat) =>
-            ChatDisplayOrder.Reposition(Chats, chat);
-
-        private void SortChatsForDisplay() =>
-            ChatDisplayOrder.SortInPlace(Chats);
-
-        /// <summary>PN + LID + canonical keys for pin / history / avatar store lookups.</summary>
-        private List<string> PinStoreKeysFor(string jid) =>
-            new List<string>(ChatPinStoreKeys.For(jid, _jids));
 
         private DateTime GetNewestStoredMessageUtc()
         {
@@ -2235,7 +2208,7 @@ namespace Unison.Uwp.Services.WhatsApp
                                     ChatPreviewNormalizer.FormatListAuthorPrefix(
                                         replacement,
                                         isGroup,
-                                        SelfListDisplayName(),
+                                        LocalizedChatStripLabels.SelfFallbackName(),
                                         GetCanonicalJid(replacement.ParticipantJid)),
                                     replacement.MentionedJids,
                                     replacement.IsFromMe,
@@ -2253,7 +2226,7 @@ namespace Unison.Uwp.Services.WhatsApp
                                 ChatPreviewTip.Clear(row);
                             }
                         }
-                        SortChatsForDisplay();
+                        ChatDisplayOrder.SortInPlace(Chats);
                     });
                     changed = true;
                 }
@@ -2320,8 +2293,16 @@ namespace Unison.Uwp.Services.WhatsApp
                 // should show faces before we wait for sync or ask the server for history.
                 try
                 {
-                    await HydrateCachedAvatarsFromContactAsync("deferred-startup-early")
-                        .ConfigureAwait(false);
+                    if (Contacts == null)
+                    {
+                        Debug.WriteLine(
+                            "[WhatsAppService] Avatar hydrate skipped (deferred-startup-early): contact facade missing");
+                    }
+                    else
+                    {
+                        await Contacts.HydrateCachedAvatarUrisAsync("deferred-startup-early")
+                            .ConfigureAwait(false);
+                    }
                 }
                 catch (Exception exHydrate)
                 {
@@ -2410,29 +2391,12 @@ namespace Unison.Uwp.Services.WhatsApp
             }
         }
 
-        private bool IsMeaningfulChatLabel(string label, string contextJid, bool isGroup)
-        {
-            return MeaningfulChatLabel.IsMeaningful(
+        private bool IsMeaningfulChatLabel(string label, string contextJid, bool isGroup) =>
+            MeaningfulChatLabel.IsMeaningful(
                 label,
                 contextJid,
                 isGroup,
                 IsSelfMarkerLabel(label));
-        }
-
-        /// <summary>
-        /// Usable group label on the row or in the name cache (same rule as listing apply).
-        /// </summary>
-        private bool HasMeaningfulGroupLabel(string groupJid, string rowName)
-        {
-            string cached;
-            if (ContactNames.TryGetValue(groupJid, out cached) &&
-                IsMeaningfulChatLabel(cached, groupJid, true))
-            {
-                return true;
-            }
-
-            return IsMeaningfulChatLabel(rowName, groupJid, true);
-        }
 
         /// <summary>
         /// Loads only the initial messages for a chat from the RAM overlay.
@@ -2498,7 +2462,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 return null;
             }
 
-            List<string> keys = PinStoreKeysFor(chatJid);
+            List<string> keys = new List<string>(ChatPinStoreKeys.For(chatJid, _jids));
             for (int i = 0; i < keys.Count; i++)
             {
                 HistoryMessage row = await _historyMessages.GetAsync(keys[i], messageId).ConfigureAwait(false);
@@ -4328,7 +4292,10 @@ namespace Unison.Uwp.Services.WhatsApp
                 foreach (var change in changedMessages)
                 {
                     changedChats.Add(change.Key);
-                    ApplyListPreviewSendState(change.Key, change.Value, change.Value.Status);
+                    ListPreviewOutgoingSendState.Apply(
+                        GetChatRowsForCanonicalJid(GetCanonicalJid(NormalizeJid(change.Key))),
+                        change.Value,
+                        change.Value.Status);
                 }
             });
 
@@ -4353,30 +4320,6 @@ namespace Unison.Uwp.Services.WhatsApp
             if (!string.IsNullOrWhiteSpace(error))
             {
                 Debug.WriteLine($"[WhatsAppService] Outgoing message {messageId} status={status}, error={error}");
-            }
-        }
-
-        // Only reached for rows an older schema left without a message id; the id answers it
-        // otherwise. See ChatPreviewTip.ShowsOutgoingMessage.
-        private static readonly TimeSpan ListPreviewClockFallbackWindow = TimeSpan.FromSeconds(2);
-
-        private void ApplyListPreviewSendState(string chatJid, ChatMessage message, string status)
-        {
-            if (message == null || !message.IsFromMe)
-            {
-                return;
-            }
-
-            var rows = GetChatRowsForCanonicalJid(GetCanonicalJid(NormalizeJid(chatJid)));
-            for (int i = 0; i < rows.Count; i++)
-            {
-                ChatItem chat = rows[i];
-                if (!ChatPreviewTip.ShowsOutgoingMessage(chat, message, ListPreviewClockFallbackWindow))
-                {
-                    continue;
-                }
-
-                chat.LastMessageSendState = HistoryLiveMessageMapper.FromStatus(status, true);
             }
         }
 
@@ -4469,7 +4412,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
             try
             {
-                List<string> keys = PinStoreKeysFor(canonical);
+                List<string> keys = new List<string>(ChatPinStoreKeys.For(canonical, _jids));
                 var pins = new List<HistoryMessagePinUpdate>(keys.Count);
                 for (int i = 0; i < keys.Count; i++)
                 {
@@ -4591,7 +4534,9 @@ namespace Unison.Uwp.Services.WhatsApp
                         true, HistoryLiveMessageMapper.FromStatus(status ?? ChatMessage.StatusPending, true), messageId);
                 }
 
-                RepositionChatForDisplay(DuplicateChatRowPick.PreferredForPreview(matchingRows));
+                ChatDisplayOrder.Reposition(
+                    Chats,
+                    DuplicateChatRowPick.PreferredForPreview(matchingRows));
             });
 
             _ = DeduplicateChatsAsync("local-send-preview");
@@ -4769,7 +4714,14 @@ namespace Unison.Uwp.Services.WhatsApp
 
                 foreach (string address in reading.NameAddresses)
                 {
-                    AddResolvedName(entries, address, reading.Name, isSubject: false);
+                    ResolvedNameBatchPrep.Add(
+                        entries,
+                        address,
+                        reading.Name,
+                        isSubject: false,
+                        NormalizeJid,
+                        GetCanonicalJid,
+                        SanitizeContactLabel);
                 }
             }
 
@@ -4784,20 +4736,6 @@ namespace Unison.Uwp.Services.WhatsApp
 
             await ApplyResolvedNameBatchAsync(entries);
         }
-
-        /// <summary>
-        /// Resolves an address and validates a name, without touching anything shared. Every part
-        /// of the work that does not need the UI thread happens here.
-        /// </summary>
-        private void AddResolvedName(List<ResolvedNameEntry> entries, string jid, string name, bool isSubject) =>
-            ResolvedNameBatchPrep.Add(
-                entries,
-                jid,
-                name,
-                isSubject,
-                NormalizeJid,
-                GetCanonicalJid,
-                SanitizeContactLabel);
 
         /// <summary>
         /// Applies a set of resolved names: the cache is filled, the rows that carry any of those
@@ -4826,10 +4764,16 @@ namespace Unison.Uwp.Services.WhatsApp
                     {
                         if (!GroupNameSyncBlacklist.ShouldCacheSyncedSubject(
                                 entry.Name,
-                                HasMeaningfulGroupLabel(
+                                GroupMeaningfulLabel.Has(
                                     entry.Canonical,
                                     DuplicateChatRowPick.FirstNonBlankName(
-                                        _chatRows.FindConversation(entry.Canonical)))))
+                                        _chatRows.FindConversation(entry.Canonical)),
+                                    jid =>
+                                    {
+                                        string cached;
+                                        return ContactNames.TryGetValue(jid, out cached) ? cached : null;
+                                    },
+                                    IsMeaningfulChatLabel)))
                         {
                             continue;
                         }
@@ -4992,8 +4936,6 @@ namespace Unison.Uwp.Services.WhatsApp
         private string ResolveEstablishedSelfName() =>
             SelfDisplayNameResolution.Established(CurrentUserName, _authState?.Me?.Name, IsOwnPhoneEchoLabel);
 
-        private bool IsLidLikeJid(string jid) => JidAlias.IsLidLike(jid);
-
         /// <summary>
         /// Proactively merges duplicate chats when a new identity mapping is found.
         /// </summary>
@@ -5011,54 +4953,27 @@ namespace Unison.Uwp.Services.WhatsApp
         private bool IsSelfJid(string jid) => JidAlias.IsSelfJid(jid);
 
         /// <summary>Direct / Group / Personal (self PN or LID, including aliases).</summary>
-        private ChatKind ResolveChatKind(string jid)
-        {
-            return JidHelper.ResolveKind(jid, IsSelfLinkedJid(jid));
-        }
+        private ChatKind ResolveChatKind(string jid) =>
+            JidHelper.ResolveKind(jid, IsSelfLinkedJid(jid));
 
         private void ApplyChatKind(ChatItem chat)
         {
-            if (chat == null) return;
-            chat.ApplyKind(chat.JID, IsSelfLinkedJid(chat.JID));
+            chat?.ApplyKind(chat.JID, IsSelfLinkedJid(chat.JID));
         }
 
         private void ApplyChatKindsToAll()
         {
-            foreach (var chat in Chats)
+            foreach (ChatItem chat in Chats)
             {
                 ApplyChatKind(chat);
             }
         }
 
         /// <summary>
-        /// Where an outgoing message settles once the server has taken it.
-        /// </summary>
-        /// <remarks>
-        /// A note to yourself has nobody to deliver it to and nobody else to open it, so the
-        /// receipts that would carry it past "sent" are never sent and the bubble would keep a
-        /// single tick forever. Every WhatsApp client shows these as read, so we do too.
-        /// </remarks>
-        private string ResolveSentStatus(string chatJid)
-        {
-            return ApplyChatStatusPolicy(chatJid, ChatMessage.StatusSent);
-        }
-
-        /// <summary>
         /// Corrects a status the wire reported against what the conversation makes possible.
         /// </summary>
-        /// <remarks>
-        /// Deciding this only at send time was not enough: the transport reports "sent" the
-        /// moment the server acks, and the echo of our own message arrives claiming the same, so
-        /// a note to yourself was promoted past the one place that knew better and then had
-        /// nothing left to promote it further. Every path that writes an outgoing status comes
-        /// through here instead.
-        ///
-        /// A failure is left alone - it says something the chat cannot override.
-        /// </remarks>
-        private string ApplyChatStatusPolicy(string chatJid, string status)
-        {
-            return SelfChatStatusPolicy.Resolve(status, IsSelfLinkedJid(chatJid));
-        }
+        private string ApplyChatStatusPolicy(string chatJid, string status) =>
+            SelfChatStatusPolicy.Resolve(status, IsSelfLinkedJid(chatJid));
 
         private bool IsSelfLinkedJid(string jid) => JidAlias.IsSelfLinked(jid);
 
@@ -5135,11 +5050,6 @@ namespace Unison.Uwp.Services.WhatsApp
                         {
                 _ = PersistChatIdentityStateAsync("dedupe:" + reason);
                         }
-        }
-
-        private static string SelfListDisplayName()
-        {
-            return LocalizedStrings.Get("Chat_SelfFallbackName", "You");
         }
 
         private void OnChatNamesApplied(object sender, int updated)

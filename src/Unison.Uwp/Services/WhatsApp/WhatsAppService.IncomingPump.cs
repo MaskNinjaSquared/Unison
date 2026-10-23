@@ -454,7 +454,7 @@ namespace Unison.Uwp.Services.WhatsApp
                                 ChatPreviewNormalizer.FormatListAuthorPrefix(
                                     message,
                                     isGroupMsg,
-                                    SelfListDisplayName(),
+                                    LocalizedChatStripLabels.SelfFallbackName(),
                                     stripParticipant),
                                 stripParticipant,
                                 isGroupMsg && message?.IsFromMe != true ? message?.SenderName : null);
@@ -530,7 +530,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
             if (IsSelfJid(participant) || IsSelfLinkedJid(participant))
             {
-                return SelfListDisplayName();
+                return LocalizedChatStripLabels.SelfFallbackName();
             }
 
             string name = ResolveDisplayName(participant, "quote");
@@ -641,7 +641,7 @@ namespace Unison.Uwp.Services.WhatsApp
                     ChatPreviewNormalizer.FormatListAuthorPrefix(
                         target,
                         JidHelper.IsGroupJid(canonical),
-                        SelfListDisplayName(),
+                        LocalizedChatStripLabels.SelfFallbackName(),
                         GetCanonicalJid(target.ParticipantJid)),
                     ParticipantStripIdentity.PreferForDisplay(
                         target.ParticipantJid,
@@ -1244,7 +1244,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 {
                     string reactionParticipant = NormalizeJid(e.Participant);
                     string reactionSenderName = e.IsFromMe
-                        ? (_authState?.Me?.Name ?? SelfListDisplayName())
+                        ? (_authState?.Me?.Name ?? LocalizedChatStripLabels.SelfFallbackName())
                         : (isGroup
                             ? GetResolvedName(!string.IsNullOrEmpty(reactionParticipant) ? reactionParticipant : jid)
                             : GetResolvedName(jid));
@@ -1412,7 +1412,7 @@ namespace Unison.Uwp.Services.WhatsApp
                     isGroup,
                     e.IsFromMe,
                     _authState?.Me?.Name,
-                    SelfListDisplayName(),
+                    LocalizedChatStripLabels.SelfFallbackName(),
                     resolvedParticipantName,
                     GetResolvedName(jid),
                     !string.IsNullOrEmpty(participantJid) || !string.IsNullOrEmpty(stripParticipantJid));
@@ -1444,7 +1444,7 @@ namespace Unison.Uwp.Services.WhatsApp
                             ParticipantJid = participantJid
                         },
                         true,
-                        SelfListDisplayName(),
+                        LocalizedChatStripLabels.SelfFallbackName(),
                         stripParticipantJid)
                     : string.Empty;
 
