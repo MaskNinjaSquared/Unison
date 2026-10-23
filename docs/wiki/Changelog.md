@@ -2,6 +2,12 @@
 
 Newest first.
 
+## Extract — connection wire pure rules → WhatsAppClient
+
+`SocketTransportFailure`, `FatalStreamCodeFromException`, `PairingRestartStreamCode`,
+`ConnectionUpdateRoute`, `StaleSocketEventGate` — OnError / OnStreamError /
+OnConnectionUpdate decisions leave the client; hosts only apply side effects.
+
 ## Phase D — Init(IWaTransport) shape on connect open
 
 Host builds transports (`WaTransportConnectAttempt` + factory) and calls

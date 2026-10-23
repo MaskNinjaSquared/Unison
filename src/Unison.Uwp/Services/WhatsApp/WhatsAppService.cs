@@ -3719,28 +3719,10 @@ namespace Unison.Uwp.Services.WhatsApp
             ExplicitLogoutStreamCode.Matches(code);
 
         /// <summary>
-        /// Recovers the stream code behind a socket error, so disconnect policy can be applied to
-        /// failures that surface as exceptions instead of as a close.
+        /// Recovers the stream code behind a socket error (typed reason, else message text).
         /// </summary>
-        /// <remarks>
-        /// The typed reason is asked for first and trusted absolutely. What follows it is a
-        /// reading of the exception's text, kept only for the errors that carry no reason at all -
-        /// and worth being suspicious of, since a message that happens to mention being logged out
-        /// is enough to convince it. Anything the socket raises itself should never get that far.
-        /// </remarks>
-        private static string TryExtractFatalStreamCodeFromException(Exception ex)
-        {
-            for (var current = ex; current != null; current = current.InnerException)
-            {
-                var connectionError = current as Unison.Socket.Session.WaConnectionException;
-                if (connectionError != null)
-                {
-                    return ((int)connectionError.Reason).ToString();
-                }
-            }
-
-            return FatalStreamCodeText.Read(ex?.Message);
-        }
+        private static string TryExtractFatalStreamCodeFromException(Exception ex) =>
+            FatalStreamCodeFromException.TryRead(ex);
 
 
         private void InvalidateCurrentSocket(IWhatsAppSocket socket, string reason)
