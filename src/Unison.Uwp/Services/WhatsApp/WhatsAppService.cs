@@ -4081,12 +4081,12 @@ namespace Unison.Uwp.Services.WhatsApp
         }
 
         /// <summary>
-        /// Announces a message change to the message façade and the chat-state store.
+        /// UI-thread marshal into <see cref="IMessageService.NotifyChatMessagesChanged"/>
+        /// (event + chat-state nudge live on the façade).
         /// </summary>
         private void RaiseChatMessagesChanged(string chatJid)
         {
             Messages?.NotifyChatMessagesChanged(chatJid);
-            _chatState.NotifyMessagesChanged(chatJid);
         }
 
         bool Unison.WhatsAppClient.Abstractions.IResolvedNameApplyHost.HasSelfCredentials =>

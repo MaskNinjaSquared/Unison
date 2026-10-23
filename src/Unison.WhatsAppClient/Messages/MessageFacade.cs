@@ -165,7 +165,13 @@ namespace Unison.WhatsAppClient.Messages
                 return;
             }
 
-            Relay(() => ChatMessagesChanged?.Invoke(this, chatJid), "ChatMessagesChanged");
+            Relay(
+                () =>
+                {
+                    ChatMessagesChanged?.Invoke(this, chatJid);
+                    _chatState.NotifyMessagesChanged(chatJid);
+                },
+                "ChatMessagesChanged");
         }
 
         /// <inheritdoc />
@@ -1934,6 +1940,37 @@ namespace Unison.WhatsAppClient.Messages
         {
             if (request?.Message == null)
             {
+                return;
+            }
+
+            // Session-control arms before alias registration / chat routing (same order the
+            // pump used to branch on). App-state key share stays session-only here.
+            IncomingEnvelopeKind sessionKind =
+                IncomingEnvelopeDisposition.ClassifySessionControl(request.Message);
+            if (sessionKind == IncomingEnvelopeKind.PeerDataOperationResponse)
+            {
+                var response = request.Message.ProtocolMessage.PeerDataOperationRequestResponseMessage;
+                await HandlePeerDataOperationResponseAsync(response).ConfigureAwait(false);
+                return;
+            }
+
+            if (sessionKind == IncomingEnvelopeKind.AppStateSessionOnly)
+            {
+                return;
+            }
+
+            if (sessionKind == IncomingEnvelopeKind.Placeholder)
+            {
+                string placeholderType = request.Message.PlaceholderMessage != null
+                    ? request.Message.PlaceholderMessage.Type.ToString()
+                    : null;
+                await HandleIncomingPlaceholderAsync(
+                    request.FromJid,
+                    request.ParticipantJid,
+                    request.MessageId,
+                    request.IsFromMe,
+                    request.Timestamp,
+                    placeholderType).ConfigureAwait(false);
                 return;
             }
 

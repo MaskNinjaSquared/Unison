@@ -608,48 +608,6 @@ namespace Unison.Uwp.Services.WhatsApp
                     Log($"[WhatsAppService] HandleDecryptedMessageAsync from {e.FromJid}, participant={e.Participant}, id={e.MessageId}");
                 }
 
-                IncomingEnvelopeKind sessionKind = IncomingEnvelopeDisposition.ClassifySessionControl(e.Message);
-                if (sessionKind == IncomingEnvelopeKind.PeerDataOperationResponse)
-                {
-                    if (Messages == null)
-                    {
-                        Debug.WriteLine("[WhatsAppService] Dropping peer-data response: MessageFacade is not attached.");
-                        return;
-                    }
-
-                    var response = e.Message.ProtocolMessage.PeerDataOperationRequestResponseMessage;
-                    await Messages.HandlePeerDataOperationResponseAsync(response).ConfigureAwait(false);
-                    return;
-                }
-
-                // Both of these are the session's business now: the app state module inside
-                // Unison.Socket takes the key share and recovers from a fatal sync itself.
-                if (sessionKind == IncomingEnvelopeKind.AppStateSessionOnly)
-                {
-                    return;
-                }
-
-                if (sessionKind == IncomingEnvelopeKind.Placeholder)
-                {
-                    if (Messages == null)
-                    {
-                        Debug.WriteLine("[WhatsAppService] Dropping placeholder: MessageFacade is not attached.");
-                        return;
-                    }
-
-                    string placeholderType = e.Message?.PlaceholderMessage != null
-                        ? e.Message.PlaceholderMessage.Type.ToString()
-                        : null;
-                    await Messages.HandleIncomingPlaceholderAsync(
-                        e.FromJid,
-                        e.Participant,
-                        e.MessageId,
-                        e.IsFromMe,
-                        e.Timestamp,
-                        placeholderType).ConfigureAwait(false);
-                    return;
-                }
-
                 if (Messages == null)
                 {
                     Debug.WriteLine("[WhatsAppService] Dropping inbound message: MessageFacade is not attached.");
@@ -664,6 +622,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 bool quietForSync =
                     (_initialSync != null && _initialSync.IsActive) ||
                     (_socket != null && _socket.IsAwaitingInitialSync);
+                // Peer-data / placeholder / app-state session-only branch inside Route.
                 await Messages.RouteIncomingChatEnvelopeAsync(new IncomingRoutedEnvelopeRequest
                 {
                     Message = e.Message,

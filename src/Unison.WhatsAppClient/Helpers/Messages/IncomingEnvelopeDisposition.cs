@@ -1,9 +1,9 @@
 // =============================================================================
 // IncomingEnvelopeDisposition
 //
-// Early exits on an inbound envelope before (or instead of) a chat row. The
-// pump still queues the work; this only names which arm applies so the order
-// of those exits cannot drift when the method is split further.
+// Early exits on an inbound envelope before (or instead of) a chat row.
+// MessageFacade.RouteIncomingChatEnvelopeAsync branches on these kinds; the
+// pump only queues and builds the request.
 // =============================================================================
 using Proto;
 using Unison.Core.Helpers;

@@ -2,6 +2,12 @@
 
 Newest first.
 
+## Phase B — Route owns session-control early exits; NotifyChatMessagesChanged nudges store
+
+`RouteIncomingChatEnvelopeAsync` classifies peer-data / placeholder / app-state
+session-only (pump only builds the request). `NotifyChatMessagesChanged` also
+calls `ChatStateStore.NotifyMessagesChanged`; host Raise is marshal-only.
+
 ## Phase B — ProfileFacade via IConnectionService
 
 `ProfileFacade` uses `SessionEstablished` + `EnsureConnectedAsync` on
