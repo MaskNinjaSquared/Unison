@@ -578,12 +578,12 @@ namespace Unison.Uwp.Services.WhatsApp
                 SendAttemptCount = Interlocked.Read(ref _diagnosticsSendAttemptCount),
                 SendSuccessCount = Interlocked.Read(ref _diagnosticsSendSuccessCount),
                 SendFailureCount = Interlocked.Read(ref _diagnosticsSendFailureCount),
-                LastConnectionEventUtc = DiagnosticsDateTime(Interlocked.Read(ref _diagnosticsLastConnectionEventUtcTicks)),
-                LastDecryptedEventUtc = DiagnosticsDateTime(Interlocked.Read(ref _diagnosticsLastDecryptedEventUtcTicks)),
-                LastAppliedMessageUtc = DiagnosticsDateTime(Interlocked.Read(ref _diagnosticsLastAppliedMessageUtcTicks)),
-                LastSendAttemptUtc = DiagnosticsDateTime(Interlocked.Read(ref _diagnosticsLastSendAttemptUtcTicks)),
-                LastSendSuccessUtc = DiagnosticsDateTime(Interlocked.Read(ref _diagnosticsLastSendSuccessUtcTicks)),
-                LastSendFailureUtc = DiagnosticsDateTime(Interlocked.Read(ref _diagnosticsLastSendFailureUtcTicks)),
+                LastConnectionEventUtc = DiagnosticUtcTicks.ToDateTime(Interlocked.Read(ref _diagnosticsLastConnectionEventUtcTicks)),
+                LastDecryptedEventUtc = DiagnosticUtcTicks.ToDateTime(Interlocked.Read(ref _diagnosticsLastDecryptedEventUtcTicks)),
+                LastAppliedMessageUtc = DiagnosticUtcTicks.ToDateTime(Interlocked.Read(ref _diagnosticsLastAppliedMessageUtcTicks)),
+                LastSendAttemptUtc = DiagnosticUtcTicks.ToDateTime(Interlocked.Read(ref _diagnosticsLastSendAttemptUtcTicks)),
+                LastSendSuccessUtc = DiagnosticUtcTicks.ToDateTime(Interlocked.Read(ref _diagnosticsLastSendSuccessUtcTicks)),
+                LastSendFailureUtc = DiagnosticUtcTicks.ToDateTime(Interlocked.Read(ref _diagnosticsLastSendFailureUtcTicks)),
                 MemoryUsageBytes = Windows.System.MemoryManager.AppMemoryUsage,
                 MemoryLimitBytes = Windows.System.MemoryManager.AppMemoryUsageLimit,
                 MemoryUsageLevel = Windows.System.MemoryManager.AppMemoryUsageLevel.ToString(),
@@ -607,7 +607,7 @@ namespace Unison.Uwp.Services.WhatsApp
             snapshot.IncomingPumpGeneration = incoming.Generation;
             snapshot.IncomingPumpStage = incoming.Stage;
             snapshot.IncomingPumpMessageId = incoming.CurrentMessageId;
-            snapshot.IncomingPumpStageUtc = DiagnosticsDateTime(incoming.StageUtcTicks);
+            snapshot.IncomingPumpStageUtc = DiagnosticUtcTicks.ToDateTime(incoming.StageUtcTicks);
 
             snapshot.PersistPending = _persistScheduler.IsPending;
 
@@ -655,10 +655,6 @@ namespace Unison.Uwp.Services.WhatsApp
             return snapshot;
         }
 
-        private static DateTime DiagnosticsDateTime(long ticks)
-        {
-            return DiagnosticUtcTicks.ToDateTime(ticks);
-        }
 
         // The chat list and the per-chat messages now live in ChatStateStore. These properties
         // hand out the very same instances, so existing code keeps working unchanged while new
@@ -755,10 +751,6 @@ namespace Unison.Uwp.Services.WhatsApp
         private DateTime GetNewestStoredMessageUtc(Func<string, bool> includeChat) =>
             NewestStoredMessage.FindUtc(MessagesByChat.Snapshot(), Chats, includeChat);
 
-        private static string FormatFreshnessTimestamp(DateTime timestamp)
-        {
-            return timestamp == DateTime.MinValue ? "<none>" : timestamp.ToString("O");
-        }
 
         private bool TryGetHistoryFreshnessStaleReason(DateTime nowUtc, out string reason)
         {
@@ -1822,7 +1814,7 @@ namespace Unison.Uwp.Services.WhatsApp
             }
 
             string deferReason;
-            if (ShouldDeferProfilePictureFetch(out deferReason))
+            if (_syncWork.ShouldDeferAvatarFetch(out deferReason))
             {
                 ScheduleDeferredProfilePictureResolution(deferReason);
             }
@@ -2528,7 +2520,7 @@ namespace Unison.Uwp.Services.WhatsApp
                     }
 
                     string profilePictureDeferReason;
-                    if (ShouldDeferProfilePictureFetch(out profilePictureDeferReason))
+                    if (_syncWork.ShouldDeferAvatarFetch(out profilePictureDeferReason))
                     {
                         Debug.WriteLine(
                             "[WhatsAppService] TriggerBackgroundResolution deferred until sync traffic settles: " +
@@ -2615,7 +2607,6 @@ namespace Unison.Uwp.Services.WhatsApp
             });
         }
 
-        private bool ShouldDeferProfilePictureFetch(out string reason) => _syncWork.ShouldDeferAvatarFetch(out reason);
 
         /// <summary>
         /// Watches an accepted FULL_HISTORY request and aborts only after a stretch with
@@ -2816,8 +2807,8 @@ namespace Unison.Uwp.Services.WhatsApp
                 "; stillStale=" + stillStale +
                 "; tipAdvanced=" + decision.TipAdvanced +
                 "; madeProgress=" + decision.MadeProgress +
-                "; newest=" + FormatFreshnessTimestamp(newestUtc) +
-                "; watermark=" + FormatFreshnessTimestamp(before.WatermarkUtc) +
+                "; newest=" + FreshnessTimestampFormat.ForLog(newestUtc) +
+                "; watermark=" + FreshnessTimestampFormat.ForLog(before.WatermarkUtc) +
                 "; round=" + before.Round +
                 "; stagnant=" + before.StagnantCycles +
                 "; stagnantStop=" + stagnantStop +
@@ -2831,8 +2822,8 @@ namespace Unison.Uwp.Services.WhatsApp
                 ", tipAdvanced=" + decision.TipAdvanced +
                 ", madeProgress=" + decision.MadeProgress +
                 ", signals=" + progressSignals +
-                ", newest=" + FormatFreshnessTimestamp(newestUtc) +
-                ", watermark=" + FormatFreshnessTimestamp(before.WatermarkUtc) +
+                ", newest=" + FreshnessTimestampFormat.ForLog(newestUtc) +
+                ", watermark=" + FreshnessTimestampFormat.ForLog(before.WatermarkUtc) +
                 ", round=" + before.Round +
                 ", stagnant=" + before.StagnantCycles +
                 "/" + stagnantStop +
@@ -2883,7 +2874,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 ":round=" + decision.NextContinueRound +
                 ":stagnant=" + decision.NextStagnantCycles +
                 ":signals=" + progressSignals +
-                ":newest=" + FormatFreshnessTimestamp(newestUtc));
+                ":newest=" + FreshnessTimestampFormat.ForLog(newestUtc));
         }
 
         /// <summary>
@@ -2963,7 +2954,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 "reason=" + (reason ?? string.Empty) +
                 "; rounds=" + last.Round +
                 "; stagnant=" + last.StagnantCycles +
-                "; watermark=" + FormatFreshnessTimestamp(last.WatermarkUtc));
+                "; watermark=" + FreshnessTimestampFormat.ForLog(last.WatermarkUtc));
 
             EndHistoryCatchUpBanner(reason ?? "catch-up-finish");
             if (!releaseEnrichment)
@@ -3574,7 +3565,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 DateTime newestGroupUtc = Chats.Any(c => c != null && (c.IsGroup || JidHelper.IsGroupJid(c.JID)))
                     ? GetNewestStoredMessageUtc(JidHelper.IsGroupJid)
                     : DateTime.MinValue;
-                Debug.WriteLine($"[WhatsAppService] Post-offline freshness check passed: message freshness scopes are fresh (any={FormatFreshnessTimestamp(newestAnyUtc)}, nonSelf={FormatFreshnessTimestamp(newestNonSelfUtc)}, group={FormatFreshnessTimestamp(newestGroupUtc)}, offlineCount={offlineCount}, catchUpActive={catchUpActive})");
+                Debug.WriteLine($"[WhatsAppService] Post-offline freshness check passed: message freshness scopes are fresh (any={FreshnessTimestampFormat.ForLog(newestAnyUtc)}, nonSelf={FreshnessTimestampFormat.ForLog(newestNonSelfUtc)}, group={FreshnessTimestampFormat.ForLog(newestGroupUtc)}, offlineCount={offlineCount}, catchUpActive={catchUpActive})");
 
                 // Mid paginated catch-up: tip can look fresh after the first lot while older
                 // history is still owed. Keep insisting with another FULL_HISTORY unless several
@@ -3614,7 +3605,7 @@ namespace Unison.Uwp.Services.WhatsApp
             }
 
             DateTime newestStoredMessageUtc = GetNewestStoredMessageUtc();
-            string newestText = FormatFreshnessTimestamp(newestStoredMessageUtc);
+            string newestText = FreshnessTimestampFormat.ForLog(newestStoredMessageUtc);
             TimeSpan? tipAge = newestStoredMessageUtc == DateTime.MinValue
                 ? (TimeSpan?)null
                 : nowUtc - newestStoredMessageUtc;
@@ -4513,31 +4504,22 @@ namespace Unison.Uwp.Services.WhatsApp
                 // contato. Atualizar apenas FirstOrDefault deixava a linha visivel com
                 // preview antigo. Atualizamos todas as linhas canonicas e depois movemos
                 // a melhor representante para o topo.
-                var matchingRows = GetChatRowsForCanonicalJid(canonicalJid);
-                if (matchingRows.Count == 0)
-                {
-                    var created = new ChatItem
-                    {
-                        JID = canonicalJid,
-                        Name = ResolveDisplayName(canonicalJid, "local-send"),
-                        Kind = ResolveChatKind(canonicalJid)
-                    };
-                    Chats.Insert(0, created);
-                    matchingRows.Add(created);
-                }
-
-                foreach (var row in matchingRows)
-                {
-                    // The bubble's own status, not an assumed one: media is already sent by
-                    // the time it gets here, and in a self chat it is read on arrival with
-                    // no receipt ever coming to correct a wrong guess.
-                    ApplyChatPreviewIfNewer(row, preview, timestamp, true, kindHint, null, mentionedJids,
-                        true, HistoryLiveMessageMapper.FromStatus(status ?? ChatMessage.StatusPending, true), messageId);
-                }
-
-                ChatDisplayOrder.Reposition(
+                // The bubble's own status, not an assumed one: media is already sent by
+                // the time it gets here, and in a self chat it is read on arrival with
+                // no receipt ever coming to correct a wrong guess.
+                LocalSendChatPreview.ApplyToAliasRows(
                     Chats,
-                    DuplicateChatRowPick.PreferredForPreview(matchingRows));
+                    GetChatRowsForCanonicalJid(canonicalJid),
+                    canonicalJid,
+                    () => ResolveDisplayName(canonicalJid, "local-send"),
+                    () => ResolveChatKind(canonicalJid),
+                    preview,
+                    timestamp,
+                    kindHint,
+                    mentionedJids,
+                    messageId,
+                    HistoryLiveMessageMapper.FromStatus(status ?? ChatMessage.StatusPending, true),
+                    LocalizedChatStripLabels.Yesterday());
             });
 
             _ = DeduplicateChatsAsync("local-send-preview");
@@ -4567,13 +4549,7 @@ namespace Unison.Uwp.Services.WhatsApp
             // repeat used to start its own database task. A group with five hundred messages from
             // ten people produced five hundred writes to learn ten names, all in flight at once.
             // The store's own cache already knows the answer without touching the disk.
-            var cached = _personStore.TryGetCached(norm);
-            if (cached != null && string.Equals(cached.Name, sanitized, StringComparison.Ordinal))
-            {
-                return;
-            }
-
-            if (cached != null && cached.Source == PersonSource.AddressBook)
+            if (!PersonNamePersistGate.ShouldPersist(_personStore.TryGetCached(norm), sanitized))
             {
                 return;
             }
@@ -4588,16 +4564,6 @@ namespace Unison.Uwp.Services.WhatsApp
         {
             var me = _authState?.Me;
             return me != null && SelfNameCandidate.IsOwnPhoneEcho(label, me.Id, me.Lid, _selfMarkers);
-        }
-
-        private string GetResolvedName(string jid)
-        {
-            return ResolveDisplayName(jid, "sender");
-        }
-
-        private string GetNamesFromCache(string jid)
-        {
-            return _displayNames.FindBestPushName(GetCanonicalJid(jid), NormalizeJid(jid));
         }
 
         private IEnumerable<string> ExpandNameLookupCandidates(params string[] jids)
