@@ -36,17 +36,18 @@ No behaviour change for users. Prep so later diffs are one cluster, not a 16k-li
 
 | File | Cluster |
 |---|---|
-| `WhatsAppService.cs` | Fields, properties, ctor/`Create`/`Attach*`, pin-in-chat send, history SQLite notify, leftovers |
+| `WhatsAppService.cs` | Fields, properties, ctor/`Create`/`Func<>` façades, pin-in-chat send, history SQLite notify, leftovers |
 | `WhatsAppService.Connection.cs` | Connect / resume / pairing / reconnect / suspend / broker transfer |
 | `WhatsAppService.Media.cs` | On-demand decrypt + cache (`Ensure*AvailableAsync`) |
-| `WhatsAppService.Groups.cs` | w:g2 metadata, members, send permissions |
-| `WhatsAppService.Avatars.cs` | Fetch/apply/cache, group HQ + fallbacks |
+| `WhatsAppService.StartupPhases.cs` | Quiet-wait / memory-headroom host wiring (`StartupQuietGate`) |
 | `WhatsAppService.Identity.cs` | Canonical JID, alias LID/PN, `ResolveDisplayName`, usync |
 | `WhatsAppService.AppState.cs` | App-state appliers (pin, mute, delete, names) |
 | `WhatsAppService.Persistence.cs` | chats.json debounce, load persisted UI, suspend tail |
-| `WhatsAppService.Receipts.cs` | Receipt nodes → send state |
+| `WhatsAppService.Receipts.cs` | Receipt nodes → send state; receipt-path group metadata apply via `IGroupService` |
 | `WhatsAppService.IncomingPump.cs` | Decrypted-message queue, placeholders, offline replay summaries |
 | `WhatsAppService.OutgoingHost.cs` | Explicit `IOutgoingMessageHost`: the caches and socket the send flows on `MessageFacade` reach (3.4) |
+
+`WhatsAppService.Groups.cs` and `WhatsAppService.Avatars.cs` are gone: group apply lives on `GroupFacade` / `GroupMetadataApply`; avatar fetch/apply moved earlier in phase 3.
 
 `IWhatsAppService` is unchanged as the façade-facing surface (minus the deleted history body). Do not grow it for UI; add members on the façade that owns the subject ([Coding standards](Coding-Standards) §6).
 
@@ -176,10 +177,10 @@ Primitives that already left the contract (façade / Netstandard Phase A):
 
 ### DI still injects façades *into* the client
 
-The stores (`IPersonStore`, `IChatStore`, `IGroupRosterStore`) are constructor parameters of the client now. After `BuildServiceProvider`, façade `Attach*` into the client is gone for Message/Chat/Contact:
-`WhatsAppService.Create` takes `Func<IMessageService>` / `Func<IChatService>` / `Func<IContactService>` (lazy, breaks the DI cycle). The pump and history sync still *call* those façades; moving that ownership is the remaining Attach* inversion work.
+The stores (`IPersonStore`, `IChatStore`, `IGroupRosterStore`) are constructor parameters of the client now. After `BuildServiceProvider`, façade `Attach*` into the client is gone for Message/Chat/Contact/Group:
+`WhatsAppService.Create` takes `Func<IMessageService>` / `Func<IChatService>` / `Func<IContactService>` / `Func<IGroupService>` (lazy, breaks the DI cycle). One shared `GroupMetadataApply` is registered in `App` and injected into `GroupFacade`; the receipt path reaches it through `IGroupService.ApplyGroupMetadataAsync`. The pump and history sync still *call* those façades; moving that ownership is the remaining Attach* inversion work.
 
-`AttachContactService` body work: background names/pictures on `IContactService.RunBackgroundResolutionAsync`; deferred-startup overlay/hydrate/relabel on `RunDeferredStartupContactPassAsync`. The client keeps quiet-wait / handshake / catch-up gates and still raises `OnGroupListingDue` after background resolution.
+`AttachContactService` body work: background names/pictures on `IContactService.RunBackgroundResolutionAsync`; deferred-startup overlay/hydrate/relabel on `RunDeferredStartupContactPassAsync`. Quiet-wait / memory-headroom rules are `StartupQuietGate` (WhatsAppClient); the client still owns handshake / catch-up gates and raises `OnGroupListingDue` after background resolution.
 
 `AttachDebugSendService` is gone (phase 4): `App` starts `IDebugSendService` once in Debug builds.
 The watcher already skipped requests while the transport was not ready, so the five start/stop
@@ -510,13 +511,14 @@ what the user sees is a handful of predicates over `ChatItem` and `ChatMessage`.
 snapshot the live collections on the UI thread, await a store, write a diagnostic. There is no rule
 left to lift that would not amount to moving I/O into Core.
 
-**The appliers from 3.8 have started.** `AppStateChatMutation` took the first two: the unread count
-when the account marks a conversation read or unread, and the archive / pin / mute flags. Note where
-the difficulty actually lives — not in the flags themselves but in the fact that one mutation lands on
-every row sharing a canonical identity. "Mark as unread" carries no number, so it reads the highest
-count across the alias rows before falling back to 1; an unpin writes `0` rather than null, so a row
-that has not received the mutation yet cannot resurrect the pin through dedupe. Both are now tests
-rather than comments.
+**The appliers from 3.8 have started.** `AppStateChatMutation` took the unread count when the account
+marks a conversation read or unread (`ResolveUnreadCount` + `StampUnread` onto every alias row), and
+the archive / pin / mute flags. Note where the difficulty actually lives — not in the flags themselves
+but in the fact that one mutation lands on every row sharing a canonical identity. "Mark as unread"
+carries no number, so it reads the highest count across the alias rows before falling back to 1; an
+unpin writes `0` rather than null, so a row that has not received the mutation yet cannot resurrect
+the pin through dedupe. Both are now tests rather than comments. App-state badge totals call
+`ChatUnreadTally` directly (no client `GetTotalUnreadCount` wrapper).
 
 **3.9b is closed.** The delete appliers gave up two rules — `ChatPreviewTip.PickLatest` and `.Clear`,
 the "what does the row show now" half — and kept the rest. `ApplyAppStateDeleteChatAsync` and
@@ -651,7 +653,7 @@ the client and is now `GroupNaming` (Core) over `ContactDisplayNames`, `ISelfMar
 `IStringResources`. The UI hop, the saves, the row and avatar lookups and the subject cache left
 the port one at a time; see phase 4 below.
 
-**Owners.** `GroupMetadataApply` is stateless. `GroupFacade` holds the one that serves the listing, the send-permission refresh and the unresolved pass, plus `GroupQueryWindow` so those callers share the two minutes. The client keeps a second applier for the receipt path, which still applies a metadata reply it fetched itself. The full-size group picture is fetched by the façade.
+**Owners.** `GroupMetadataApply` is stateless. `App` registers one instance; `GroupFacade` holds it for the listing, the send-permission refresh and the unresolved pass, plus `GroupQueryWindow` so those callers share the two minutes. The receipt path applies a metadata reply it already fetched through `IGroupService.ApplyGroupMetadataAsync` (same applier — no second construction on the client). The full-size group picture is fetched by the façade.
 
 **What stays:** the usync gate. Member pictures ask through it the same way a 1:1 picture does, and `GroupFacade` takes that lease itself. A miss is still remembered and a transient failure still returns the member to the queue (`GroupMemberAvatarAttempt`).
 
@@ -1105,12 +1107,12 @@ as it was, not endorsed: with fewer than two rows the client rewrites the lone r
 canonical form, which a list of two or more never does for its non-duplicate rows.
 
 Writing resolved names onto the list is `ResolvedNameApply` (10 tests). `ChatNameReplacement` had
-already taken the "should this title change" question; the loop that asked it was still written out
-in `ApplyResolvedNamesToChatsAsync` and `NormalizePersistedChatNamesAsync`. The pass takes the name
+already taken the "should this title change" question; both the live pass (`ChatNameRefresh.ApplyAsync`)
+and the startup titles-only pass (`NormalizePersistedTitlesAsync`) call it. The pass takes the name
 lookup and the meaningful-label check as functions, renames members only when asked, and returns how
-many labels changed. The startup pass still logs each title and saves; the live pass still raises
-the names-changed event. A member keeps the weaker rule it had: any non-blank name that differs is
-written, with no check that it is recognisable.
+many labels changed. The startup pass still schedules persist when titles changed; both raise
+`Applied` so the client can fire the names-changed event. A member keeps the weaker rule it had: any
+non-blank name that differs is written, with no check that it is recognisable.
 
 **Another sweep of the main file.** Reading a partial `ChatUpdate` (does it speak about pin or mute,
 and the legacy shape that carried only a sort key or a deadline) is `AppStatePinMapping.FromChatUpdate`
