@@ -65,14 +65,33 @@ namespace Unison.Uwp.Services.WhatsApp
 
         public void RememberPair(string jidA, string jidB)
         {
-            LidMapping mapping = ToMapping(jidA, jidB);
-            if (mapping == null)
+            RememberPairs(new[] { new KeyValuePair<string, string>(jidA, jidB) });
+        }
+
+        public void RememberPairs(IEnumerable<KeyValuePair<string, string>> pairs)
+        {
+            if (pairs == null)
+            {
+                return;
+            }
+
+            var mappings = new List<LidMapping>();
+            foreach (KeyValuePair<string, string> pair in pairs)
+            {
+                LidMapping mapping = ToMapping(pair.Key, pair.Value);
+                if (mapping != null)
+                {
+                    mappings.Add(mapping);
+                }
+            }
+
+            if (mappings.Count == 0)
             {
                 return;
             }
 
             // Same posture as SocketBridge.Store: announce from sync paths, do not await.
-            _ = ObserveStoreAsync(_store.StoreMappingsAsync(new List<LidMapping> { mapping }));
+            _ = ObserveStoreAsync(_store.StoreMappingsAsync(mappings));
         }
 
         private static LidMapping ToMapping(string jidA, string jidB)

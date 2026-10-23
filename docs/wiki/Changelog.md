@@ -2,6 +2,11 @@
 
 Newest first.
 
+## Phase 3.7b — bulk import + dual-write coalesce on restore
+
+`JidAliasTable.BeginBulkImport` + `RememberPairs`: persistence restore writes the
+table once, then one store batch (not N fire-and-forgets / N `Changed`).
+
 ## Phase 3.7b — dual-write table → LidMappingStore
 
 `ILidMappingMemory.RememberPair` + `LidMappingMemoryAdapter` fire-and-forget

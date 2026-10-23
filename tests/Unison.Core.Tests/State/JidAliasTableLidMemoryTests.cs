@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.State;
 using Xunit;
@@ -46,6 +47,32 @@ namespace Unison.Core.Tests.State
 
             Assert.Equal("199999999999@lid", memory.RememberedA);
             Assert.Equal("5511999990000@s.whatsapp.net", memory.RememberedB);
+            Assert.Equal(1, memory.RememberPairCalls);
+            Assert.Equal(0, memory.RememberPairsCalls);
+        }
+
+        [Fact]
+        public void BeginBulkImport_coalesces_remember_into_one_pairs_call()
+        {
+            var memory = new FakeMemory();
+            var table = new JidAliasTable();
+            table.AttachLidMappingMemory(memory);
+            int changed = 0;
+            table.Changed += (_, __) => changed++;
+
+            using (table.BeginBulkImport())
+            {
+                table["199999999999@lid"] = "5511999990000@s.whatsapp.net";
+                table["288888888888@lid"] = "5511888880000@s.whatsapp.net";
+                Assert.Equal(0, memory.RememberPairCalls);
+                Assert.Equal(0, memory.RememberPairsCalls);
+                Assert.Equal(0, changed);
+            }
+
+            Assert.Equal(0, memory.RememberPairCalls);
+            Assert.Equal(1, memory.RememberPairsCalls);
+            Assert.Equal(2, memory.LastPairs.Count);
+            Assert.Equal(1, changed);
         }
 
         private sealed class FakeMemory : ILidMappingMemory
@@ -53,6 +80,10 @@ namespace Unison.Core.Tests.State
             public string Paired { get; set; }
             public string RememberedA { get; private set; }
             public string RememberedB { get; private set; }
+            public int RememberPairCalls { get; private set; }
+            public int RememberPairsCalls { get; private set; }
+            public List<KeyValuePair<string, string>> LastPairs { get; } =
+                new List<KeyValuePair<string, string>>();
 
             public bool TryGetPairedJid(string normalizedJid, out string pairedJid)
             {
@@ -62,8 +93,21 @@ namespace Unison.Core.Tests.State
 
             public void RememberPair(string jidA, string jidB)
             {
+                RememberPairCalls++;
                 RememberedA = jidA;
                 RememberedB = jidB;
+            }
+
+            public void RememberPairs(IEnumerable<KeyValuePair<string, string>> pairs)
+            {
+                RememberPairsCalls++;
+                LastPairs.Clear();
+                if (pairs == null)
+                {
+                    return;
+                }
+
+                LastPairs.AddRange(pairs);
             }
         }
     }

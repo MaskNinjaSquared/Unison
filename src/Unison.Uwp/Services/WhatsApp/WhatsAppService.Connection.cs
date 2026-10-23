@@ -985,28 +985,44 @@ namespace Unison.Uwp.Services.WhatsApp
 
                 // PN/LID aliases are compact protocol state, not optional UI data. Load
                 // them before ConnectAsync snapshots the alias map for SocketClient.
+                // Bulk import: one RememberPairs + one Changed (not N dual-writes).
                 var storedAliases = await _messageStore.LoadJidAliasesAsync();
                 int poisonedAliases = 0;
-                foreach (var kvp in storedAliases)
+                using (JidAlias.BeginBulkImport())
                 {
-                    string aliasKey = NormalizeJid(kvp.Key);
-                    string aliasValue = NormalizeJid(kvp.Value);
-                    if (string.IsNullOrWhiteSpace(aliasKey) || string.IsNullOrWhiteSpace(aliasValue))
+                    foreach (var kvp in storedAliases)
                     {
-                        continue;
+                        string aliasKey = NormalizeJid(kvp.Key);
+                        string aliasValue = NormalizeJid(kvp.Value);
+                        if (string.IsNullOrWhiteSpace(aliasKey) || string.IsNullOrWhiteSpace(aliasValue))
+                        {
+                            continue;
+                        }
+
+                        // Only the identity checks, not the full live validation: the table is
+                        // also written by paths that predate that validation, and rejecting their
+                        // entries here would drop identities that are merely unusual, not wrong.
+                        if (AliasPairPolicy.IsUnsafeToRestore(aliasKey, aliasValue, JidAlias))
+                        {
+                            Debug.WriteLine($"[WhatsAppService] Dropping persisted alias that confuses our own identity: {aliasKey} -> {aliasValue}");
+                            poisonedAliases++;
+                            continue;
+                        }
+
+                        JidAlias[aliasKey] = aliasValue;
                     }
 
-                    // Only the identity checks, not the full live validation: the table is
-                    // also written by paths that predate that validation, and rejecting their
-                    // entries here would drop identities that are merely unusual, not wrong.
-                    if (AliasPairPolicy.IsUnsafeToRestore(aliasKey, aliasValue, JidAlias))
+                    // The own PN/LID pair is tiny and required before the socket starts.
+                    if (_authState?.Me != null && !string.IsNullOrEmpty(_authState.Me.Id) && !string.IsNullOrEmpty(_authState.Me.Lid))
                     {
-                        Debug.WriteLine($"[WhatsAppService] Dropping persisted alias that confuses our own identity: {aliasKey} -> {aliasValue}");
-                        poisonedAliases++;
-                        continue;
+                        string id = NormalizeJid(_authState.Me.Id);
+                        string lid = NormalizeJid(_authState.Me.Lid);
+                        if (id != lid)
+                        {
+                            JidAlias[id] = lid;
+                            JidAlias[lid] = id;
+                        }
                     }
-
-                    JidAlias[aliasKey] = aliasValue;
                 }
 
                 if (poisonedAliases > 0)
@@ -1014,15 +1030,12 @@ namespace Unison.Uwp.Services.WhatsApp
                     Debug.WriteLine($"[WhatsAppService] Dropped {poisonedAliases} poisoned alias entr(ies) while restoring");
                 }
 
-                // The own PN/LID pair is tiny and required before the socket starts.
                 if (_authState?.Me != null && !string.IsNullOrEmpty(_authState.Me.Id) && !string.IsNullOrEmpty(_authState.Me.Lid))
                 {
                     string id = NormalizeJid(_authState.Me.Id);
                     string lid = NormalizeJid(_authState.Me.Lid);
                     if (id != lid)
                     {
-                        JidAlias[id] = lid;
-                        JidAlias[lid] = id;
                         RegisterSocketAlias(id, lid, "initialize-identity");
                     }
                 }

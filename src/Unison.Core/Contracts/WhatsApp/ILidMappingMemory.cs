@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+
 namespace Unison.Core.Contracts.WhatsApp
 {
     /// <summary>
@@ -19,5 +21,11 @@ namespace Unison.Core.Contracts.WhatsApp
         /// Fire-and-forget into durable storage is fine — callers stay sync.
         /// </summary>
         void RememberPair(string jidA, string jidB);
+
+        /// <summary>
+        /// Same as <see cref="RememberPair"/> for many entries in one store write
+        /// (persistence restore / bulk import).
+        /// </summary>
+        void RememberPairs(IEnumerable<KeyValuePair<string, string>> pairs);
     }
 }

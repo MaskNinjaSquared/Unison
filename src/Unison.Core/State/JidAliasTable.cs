@@ -40,6 +40,8 @@ namespace Unison.Core.State
         private Func<string> _selfLid;
         private Func<string> _selfPhone;
         private ILidMappingMemory _lidMemory;
+        private int _bulkImportDepth;
+        private bool _bulkImportDirty;
 
         /// <summary>
         /// Raised when the map changed, which is what lets caches keyed by canonical address
@@ -73,6 +75,20 @@ namespace Unison.Core.State
         public void AttachLidMappingMemory(ILidMappingMemory memory)
         {
             _lidMemory = memory;
+        }
+
+        /// <summary>
+        /// Coalesces dual-write + <see cref="Changed"/> across many sets (persistence restore).
+        /// Dispose flushes one <c>RememberPairs</c> of the snapshot and one change notify.
+        /// </summary>
+        public IDisposable BeginBulkImport()
+        {
+            lock (_sync)
+            {
+                _bulkImportDepth++;
+            }
+
+            return new BulkImportScope(this);
         }
 
         /// <summary>
@@ -402,8 +418,7 @@ namespace Unison.Core.State
 
                 if (notify)
                 {
-                    RememberLidPnPair(key, value);
-                    RaiseChanged();
+                    AfterMutation(key, value);
                 }
             }
         }
@@ -500,8 +515,7 @@ namespace Unison.Core.State
                 _inner.Add(key, value);
             }
 
-            RememberLidPnPair(key, value);
-            RaiseChanged();
+            AfterMutation(key, value);
         }
 
         public void Add(KeyValuePair<string, string> item) => Add(item.Key, item.Value);
@@ -558,6 +572,50 @@ namespace Unison.Core.State
             }
         }
 
+        private void AfterMutation(string key, string value)
+        {
+            lock (_sync)
+            {
+                if (_bulkImportDepth > 0)
+                {
+                    _bulkImportDirty = true;
+                    return;
+                }
+            }
+
+            RememberLidPnPair(key, value);
+            RaiseChanged();
+        }
+
+        private void EndBulkImport()
+        {
+            bool flush;
+            Dictionary<string, string> snapshot = null;
+            lock (_sync)
+            {
+                if (_bulkImportDepth > 0)
+                {
+                    _bulkImportDepth--;
+                }
+
+                flush = _bulkImportDepth == 0 && _bulkImportDirty;
+                if (flush)
+                {
+                    _bulkImportDirty = false;
+                    snapshot = new Dictionary<string, string>(_inner, StringComparer.OrdinalIgnoreCase);
+                }
+            }
+
+            if (!flush)
+            {
+                return;
+            }
+
+            ILidMappingMemory memory = _lidMemory;
+            memory?.RememberPairs(snapshot);
+            RaiseChanged();
+        }
+
         private void RememberLidPnPair(string key, string value)
         {
             ILidMappingMemory memory = _lidMemory;
@@ -565,5 +623,27 @@ namespace Unison.Core.State
         }
 
         private void RaiseChanged() => Changed?.Invoke(this, EventArgs.Empty);
+
+        private sealed class BulkImportScope : IDisposable
+        {
+            private JidAliasTable _table;
+
+            public BulkImportScope(JidAliasTable table)
+            {
+                _table = table;
+            }
+
+            public void Dispose()
+            {
+                JidAliasTable table = _table;
+                if (table == null)
+                {
+                    return;
+                }
+
+                _table = null;
+                table.EndBulkImport();
+            }
+        }
     }
 }
