@@ -456,5 +456,13 @@ namespace Unison.Core.Contracts.WhatsApp
             bool isFromMe,
             DateTime timestampUtc,
             string placeholderType);
+
+        /// <summary>
+        /// Peer-data placeholder-resend payloads: decode WebMessageInfo bytes and re-enqueue
+        /// onto the host ingest queue (never recursive into the pump lock).
+        /// </summary>
+        Task ApplyPeerDataPlaceholderResendsAsync(
+            string stanzaId,
+            System.Collections.Generic.IEnumerable<Message.Types.PeerDataOperationRequestResponseMessage.Types.PeerDataOperationResult> results);
     }
 }

@@ -1,5 +1,6 @@
 using System;
 using System.Threading.Tasks;
+using Unison.Core.State;
 
 namespace Unison.Core.Contracts.WhatsApp
 {
@@ -32,5 +33,10 @@ namespace Unison.Core.Contracts.WhatsApp
         /// and reconnect / sync deferral allows it.
         /// </summary>
         Task<bool> RequestPlaceholderResendAsync(string chatJid, string messageId, string trigger);
+
+        /// <summary>
+        /// Claims the outstanding placeholder-resend request for a peer-data stanza, if any.
+        /// </summary>
+        PlaceholderResendRequestState TakePlaceholderPeerResponse(string stanzaId);
     }
 }

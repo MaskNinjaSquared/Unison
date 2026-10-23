@@ -547,9 +547,11 @@ namespace Unison.Uwp
                 sp.GetRequiredService<ChatRowIndex>(),
                 sp.GetRequiredService<PendingMessageState>(),
                 sp.GetRequiredService<IMissingMessageChatHost>(),
+                sp.GetRequiredService<IIncomingMessageEnqueueHost>(),
                 () => sp.GetRequiredService<IChatService>(),
                 () => sp.GetRequiredService<IContactService>(),
                 () => sp.GetRequiredService<IStatusService>(),
+                () => sp.GetRequiredService<IConnectionService>(),
                 sp.GetRequiredService<IChatStore>(),
                 sp.GetService<IStringResources>(),
                 sp.GetRequiredService<ISystemInfoProvider>(),
@@ -641,6 +643,8 @@ namespace Unison.Uwp
                 sp => (WhatsAppService)sp.GetRequiredService<IWhatsAppService>());
             services.AddSingleton<IMissingMessageChatHost>(
                 sp => (IMissingMessageChatHost)sp.GetRequiredService<IWhatsAppService>());
+            services.AddSingleton<IIncomingMessageEnqueueHost>(
+                sp => (IIncomingMessageEnqueueHost)sp.GetRequiredService<IWhatsAppService>());
             services.AddSingleton<IChatAccountActions>(sp => new BridgeChatAccountActions(
                 sp.GetRequiredService<UwpSessionProvider>()));
             services.AddSingleton<IChatService>(sp => new ChatFacade(

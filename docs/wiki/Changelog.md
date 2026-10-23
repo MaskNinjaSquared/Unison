@@ -2,6 +2,12 @@
 
 Newest first.
 
+## Phase B — peer-data placeholder recovery + pin connect via façade
+
+`ApplyPeerDataPlaceholderResendsAsync` decodes resend payloads and re-enqueues
+through `IIncomingMessageEnqueueHost` (no recursive pump). Message pin
+`EnsureConnected` goes through `IConnectionService`.
+
 ## Phase B — placeholder envelopes on MessageFacade
 
 `IMessageService.HandleIncomingPlaceholderAsync` notes the id and requests a

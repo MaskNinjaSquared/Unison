@@ -52,9 +52,11 @@ namespace Unison.WhatsAppClient.Messages
         private readonly ChatRowIndex _chatRows;
         private readonly PendingMessageState _pendingMessageState;
         private readonly IMissingMessageChatHost _missingMessages;
+        private readonly IIncomingMessageEnqueueHost _incomingEnqueue;
         private readonly Func<IChatService> _resolveChats;
         private readonly Func<IContactService> _resolveContacts;
         private readonly Func<IStatusService> _resolveStatus;
+        private readonly Func<IConnectionService> _resolveConnection;
         private readonly ReceiptReader _receipts;
         private readonly GroupReceiptTally _groupReceipts = new GroupReceiptTally();
         private readonly IRuntimeDiagnostics _diagnostics;
@@ -86,9 +88,11 @@ namespace Unison.WhatsAppClient.Messages
             ChatRowIndex chatRows,
             PendingMessageState pendingMessageState,
             IMissingMessageChatHost missingMessages,
+            IIncomingMessageEnqueueHost incomingEnqueue = null,
             Func<IChatService> resolveChats = null,
             Func<IContactService> resolveContacts = null,
             Func<IStatusService> resolveStatus = null,
+            Func<IConnectionService> resolveConnection = null,
             IChatStore chatStore = null,
             IStringResources strings = null,
             ISystemInfoProvider systemInfo = null,
@@ -121,9 +125,11 @@ namespace Unison.WhatsAppClient.Messages
                 ?? throw new ArgumentNullException(nameof(pendingMessageState));
             _missingMessages = missingMessages
                 ?? throw new ArgumentNullException(nameof(missingMessages));
+            _incomingEnqueue = incomingEnqueue;
             _resolveChats = resolveChats;
             _resolveContacts = resolveContacts;
             _resolveStatus = resolveStatus;
+            _resolveConnection = resolveConnection;
             _strings = strings;
             _receipts = new ReceiptReader(jids);
 
@@ -1033,7 +1039,16 @@ namespace Unison.WhatsAppClient.Messages
 
         public async Task SetMessagePinnedAsync(string chatJid, ChatMessage message, bool pin, uint durationSeconds = 604800)
         {
-            await _whatsAppService.EnsureConnectedAsync();
+            IConnectionService connection = _resolveConnection != null ? _resolveConnection() : null;
+            if (connection != null)
+            {
+                await connection.EnsureConnectedAsync().ConfigureAwait(false);
+            }
+            else
+            {
+                await _whatsAppService.EnsureConnectedAsync().ConfigureAwait(false);
+            }
+
             if (message == null || string.IsNullOrWhiteSpace(message.Id))
             {
                 throw new ArgumentException("A valid message is required", nameof(message));
@@ -1706,6 +1721,77 @@ namespace Unison.WhatsAppClient.Messages
                 chatJid,
                 messageId,
                 "placeholder-message");
+        }
+
+        /// <inheritdoc />
+        public async Task ApplyPeerDataPlaceholderResendsAsync(
+            string stanzaId,
+            IEnumerable<Message.Types.PeerDataOperationRequestResponseMessage.Types.PeerDataOperationResult> results)
+        {
+            if (_incomingEnqueue == null || results == null)
+            {
+                return;
+            }
+
+            PlaceholderResendRequestState requestState =
+                _missingMessages.TakePlaceholderPeerResponse(stanzaId);
+
+            foreach (var result in results)
+            {
+                var retryResponse = result?.PlaceholderMessageResendResponse;
+                if (retryResponse == null ||
+                    !retryResponse.HasWebMessageInfoBytes ||
+                    retryResponse.WebMessageInfoBytes == null)
+                {
+                    continue;
+                }
+
+                try
+                {
+                    var webMessage = WebMessageInfo.Parser.ParseFrom(retryResponse.WebMessageInfoBytes);
+                    if (webMessage?.Message == null)
+                    {
+                        continue;
+                    }
+
+                    string remoteJid = webMessage.Key?.RemoteJid;
+                    if (string.IsNullOrWhiteSpace(remoteJid))
+                    {
+                        remoteJid = requestState?.ChatJid;
+                    }
+
+                    if (string.IsNullOrWhiteSpace(remoteJid) ||
+                        string.IsNullOrWhiteSpace(webMessage.Key?.Id))
+                    {
+                        continue;
+                    }
+
+                    await Task.Delay(500).ConfigureAwait(false);
+
+                    DateTime timestampUtc = webMessage.MessageTimestamp > 0
+                        ? DateTimeOffset.FromUnixTimeSeconds((long)webMessage.MessageTimestamp).UtcDateTime
+                        : DateTime.MinValue;
+
+                    _incomingEnqueue.EnqueueRecoveredDecryptedMessage(
+                        remoteJid,
+                        WebMessageParticipant.Resolve(webMessage),
+                        webMessage.Key.Id,
+                        webMessage.Message,
+                        timestampUtc,
+                        webMessage.Key?.FromMe ?? false,
+                        webMessage.PushName);
+
+                    Debug.WriteLine(
+                        "[MessageFacade] Queued recovered message " + webMessage.Key.Id +
+                        " from placeholder-resend-response");
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine(
+                        "[MessageFacade] Failed to decode placeholder resend response for stanza " +
+                        (stanzaId ?? string.Empty) + ": " + ex.Message);
+                }
+            }
         }
 
         /// <inheritdoc />

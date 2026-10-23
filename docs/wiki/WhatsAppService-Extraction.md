@@ -162,9 +162,17 @@ What is left on `_contactService` is awaited and ordered by the client, so it is
 
 ## Current coupling (start here next session)
 
+### Phase B (inbound ownership) — in progress on `docs/netstandard-whatsapp-client`
+
+Post-session chat envelopes route on `MessageFacade` (`RouteIncomingChatEnvelopeAsync`,
+controls, content, placeholder note/resend, peer-data placeholder recovery enqueue).
+Pump keeps queue lanes, peer-data control work + history-on-demand log lines, alias
+hints, and session-only App State. Persistence flush timer / `ForgetChatStorage` /
+Connection lifecycle stay on the host (not this phase).
+
 ### Facades still depend on the client
 
-`ContactFacade`, `MessageFacade`, `GroupFacade`, `HistoryFacade`, `ProfileFacade`, `StatusFacade`, `ConnectionFacade` take `IWhatsAppService` (or `AttachWhatsAppService`). **`ChatFacade` no longer does** — it reaches local pin/delete through `IAppStateLocalHost` and tip reconcile through `ChatPreviewReconciler` / `IOfflineReplayHost`. Policy is already on the façades; **primitives** (fetch a chat avatar, send bytes, persist, canonical JID) still run inside the client for the others. Group send-permission refresh and roster restore are the exception: they run in Core, and nothing in them calls back into the client. The full-size group picture and member pictures are fetched by `GroupFacade`.
+`ContactFacade`, `MessageFacade`, `GroupFacade`, `HistoryFacade`, `ProfileFacade`, `StatusFacade`, `ConnectionFacade` take `IWhatsAppService` (or `AttachWhatsAppService`). **`ChatFacade` no longer does** — it reaches local pin/delete through `IAppStateLocalHost` and tip reconcile through `ChatPreviewReconciler` / `IOfflineReplayHost`. Policy is already on the façades; **primitives** (fetch a chat avatar, send bytes, persist, canonical JID) still run inside the client for the others. Group send-permission refresh and roster restore are the exception: they run in Core, and nothing in them calls back into the client. The full-size group picture and member pictures are fetched by `GroupFacade`. `MessageFacade` pin connect uses `IConnectionService` (lazy); it still relays `OnChatMessagesChanged` / `OnPresenceUpdate` from the client.
 
 Helpers under `Contacts/` (`ContactNameResolver`, `ChatAvatarPolicy`, `GroupRosterPolicy`, `AddressBookOverlay`) are the largest non-UI consumers of client members (`RaiseSyncStatus`, `FetchAndApplyAvatarAsync`, `IsTransportReady`, …). Extracting avatars/names is mostly moving those primitives so the helpers stop needing the god client.
 

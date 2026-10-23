@@ -75,6 +75,31 @@ namespace Unison.Uwp.Services.WhatsApp
             string trigger) =>
             TryRequestPlaceholderResendAsync(chatJid, messageId, trigger);
 
+        PlaceholderResendRequestState IMissingMessageChatHost.TakePlaceholderPeerResponse(string stanzaId) =>
+            _missing.TakePeerResponse(stanzaId);
+
+        void IIncomingMessageEnqueueHost.EnqueueRecoveredDecryptedMessage(
+            string fromJid,
+            string participant,
+            string messageId,
+            Message message,
+            DateTime timestampUtc,
+            bool isFromMe,
+            string pushName)
+        {
+            EnqueueDecryptedMessage(new DecryptedMessageEventArgs
+            {
+                FromJid = fromJid,
+                Participant = participant,
+                MessageId = messageId,
+                Message = message,
+                Timestamp = timestampUtc,
+                IsFromMe = isFromMe,
+                PushName = pushName,
+                VerifiedName = null
+            });
+        }
+
         private void ResolveMissingMessage(string chatJid, string messageId, string source)
         {
             string normJid = NormalizeJid(chatJid);
@@ -437,8 +462,6 @@ namespace Unison.Uwp.Services.WhatsApp
 
             Debug.WriteLine($"[WhatsAppService] PeerDataOperationResponse received: stanzaId={response.StanzaId}, requestType={response.PeerDataOperationRequestType}, resultCount={response.PeerDataOperationResult?.Count ?? 0}");
 
-            PlaceholderResendRequestState requestState = _missing.TakePeerResponse(response.StanzaId);
-
             HistoryOnDemandRequest historyRequestState = _historyRequests.Find(response.StanzaId);
 
             foreach (var result in response.PeerDataOperationResult ?? Enumerable.Empty<Proto.Message.Types.PeerDataOperationRequestResponseMessage.Types.PeerDataOperationResult>())
@@ -457,21 +480,13 @@ namespace Unison.Uwp.Services.WhatsApp
                 {
                     Debug.WriteLine($"[WhatsAppService] SyncD fatal recovery response observed: stanzaId={response.StanzaId}, compressed={result.SyncdSnapshotFatalRecoveryResponse.IsCompressed}, bytes={result.SyncdSnapshotFatalRecoveryResponse.CollectionSnapshot?.Length ?? 0}");
                 }
+            }
 
-                var retryResponse = result.PlaceholderMessageResendResponse;
-                if (retryResponse?.HasWebMessageInfoBytes == true && retryResponse.WebMessageInfoBytes != null)
-                {
-                    try
-                    {
-                        var webMessage = Proto.WebMessageInfo.Parser.ParseFrom(retryResponse.WebMessageInfoBytes);
-                        await Task.Delay(500);
-                        await UpsertRecoveredWebMessageInfoAsync(webMessage, requestState, "placeholder-resend-response");
-                    }
-                    catch (Exception ex)
-                    {
-                        Debug.WriteLine($"[WhatsAppService] Failed to decode placeholder resend response for stanza {response.StanzaId}: {ex.Message}");
-                    }
-                }
+            if (Messages != null)
+            {
+                await Messages.ApplyPeerDataPlaceholderResendsAsync(
+                    response.StanzaId,
+                    response.PeerDataOperationResult).ConfigureAwait(false);
             }
 
             if (historyRequestState != null &&
@@ -518,48 +533,6 @@ namespace Unison.Uwp.Services.WhatsApp
             {
                 Debug.WriteLine($"[WhatsAppService] placeholder resend ack accepted for {requestState.MessageId} in {requestState.ChatJid}: stanzaId={ackId}");
             }
-        }
-
-        private Task UpsertRecoveredWebMessageInfoAsync(Proto.WebMessageInfo webMessage, PlaceholderResendRequestState requestState, string source)
-        {
-            if (webMessage?.Message == null)
-            {
-                return Task.CompletedTask;
-            }
-
-            string remoteJid = webMessage.Key?.RemoteJid;
-            if (string.IsNullOrWhiteSpace(remoteJid))
-            {
-                remoteJid = requestState?.ChatJid;
-            }
-
-            if (string.IsNullOrWhiteSpace(remoteJid) || string.IsNullOrWhiteSpace(webMessage.Key?.Id))
-            {
-                return Task.CompletedTask;
-            }
-
-            // Never call HandleDecryptedMessageAsync recursively here. This method is
-            // reached from ProcessPeerDataOperationResponseAsync while the single
-            // _messageIngestLock is already held. The old recursive await permanently
-            // deadlocked the ingest pump as soon as a placeholder-resend response was
-            // received; from that moment the socket still looked connected, but no
-            // person or group message could update the UI.
-            EnqueueDecryptedMessage(new DecryptedMessageEventArgs
-            {
-                FromJid = remoteJid,
-                Participant = WebMessageParticipant.Resolve(webMessage),
-                MessageId = webMessage.Key?.Id,
-                Message = webMessage.Message,
-                Timestamp = webMessage.MessageTimestamp > 0
-                    ? DateTimeOffset.FromUnixTimeSeconds((long)webMessage.MessageTimestamp).UtcDateTime
-                    : DateTime.MinValue,
-                IsFromMe = webMessage.Key?.FromMe ?? false,
-                PushName = webMessage.PushName,
-                VerifiedName = null
-            });
-
-            Debug.WriteLine($"[WhatsAppService] Queued recovered message {webMessage.Key.Id} from {source}");
-            return Task.CompletedTask;
         }
 
         private void EnqueueDecryptedMessage(Client.DecryptedMessageEventArgs message)
