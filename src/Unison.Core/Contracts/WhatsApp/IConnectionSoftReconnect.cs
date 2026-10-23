@@ -4,9 +4,8 @@ namespace Unison.Core.Contracts.WhatsApp
     /// Soft reconnect seams the history catch-up path needs without naming the whole client.
     /// </summary>
     /// <remarks>
-    /// Implemented by the connection client. Generic auto-reconnect and the catch-up continue
-    /// path (banner stays up, short delay, then drop socket + reconnect) stay behind this port
-    /// until ownership moves with Phase 4 wave 2.
+    /// Implemented by <c>ConnectionFacade</c>. The connection client runs the loops behind
+    /// <see cref="IConnectionSoftReconnectHost"/>.
     /// </remarks>
     public interface IConnectionSoftReconnect
     {

@@ -43,7 +43,7 @@ using Unison.WhatsAppClient.Helpers;
 
 namespace Unison.Uwp.Services.WhatsApp
 {
-    public partial class WhatsAppService : INotifyPropertyChanged, IWhatsAppService, IMediaDownloadHost, IOfflineReplayHost, IPlaceholderResendSocket, IHistoryOnDemandSocket, IRuntimeSnapshotSource, IBackgroundResolutionGate, IAppStateLocalHost, IConversationResyncHost, IHistorySyncHost, IHistoryCatchUpHost, IConnectionEnsureHost, IConnectionResumeHost, IConnectionPairingStage2Host, IConnectionBrokerTransferHost, ISocketAliasRegistrar, IConnectionSoftReconnect, IStartupUiHost, IJidAliasPersistence, IIncomingMessageEnqueueHost, Unison.WhatsAppClient.Abstractions.IResolvedNameApplyHost
+    public partial class WhatsAppService : INotifyPropertyChanged, IWhatsAppService, IMediaDownloadHost, IOfflineReplayHost, IPlaceholderResendSocket, IHistoryOnDemandSocket, IRuntimeSnapshotSource, IBackgroundResolutionGate, IAppStateLocalHost, IConversationResyncHost, IHistorySyncHost, IHistoryCatchUpHost, IConnectionEnsureHost, IConnectionResumeHost, IConnectionPairingStage2Host, IConnectionBrokerTransferHost, IConnectionSoftReconnectHost, IConnectionLifecycleHost, IConnectionConnectGateSource, ISocketAliasRegistrar, IStartupUiHost, IJidAliasPersistence, IIncomingMessageEnqueueHost, Unison.WhatsAppClient.Abstractions.IResolvedNameApplyHost
     {
         public event PropertyChangedEventHandler PropertyChanged;
         protected void OnPropertyChanged([CallerMemberName] string propertyName = null)
@@ -2510,10 +2510,10 @@ namespace Unison.Uwp.Services.WhatsApp
             TrySchedulePostMessageEnrichment("catch-up-finish:" + (reason ?? string.Empty));
         }
 
-        void IConnectionSoftReconnect.RequestSoftReconnect(string reason) =>
+        void IConnectionSoftReconnectHost.ScheduleSoftReconnect(string reason) =>
             ScheduleAutoReconnect(reason);
 
-        void IConnectionSoftReconnect.RequestCatchUpContinueReconnect(string reason) =>
+        void IConnectionSoftReconnectHost.ScheduleCatchUpContinueReconnect(string reason) =>
             ScheduleCatchUpContinueReconnect(reason);
 
         /// <summary>

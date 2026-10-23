@@ -1278,12 +1278,13 @@ auto-reconnect and catch-up-continue. Idle-lot decide and adjacent FULL_HISTORY 
 `HistoryFacade.NotifyCatchUpIdleBatch` over shared `HistoryCatchUpContinuation` and
 `IHistoryCatchUpHost`.
 
-**Wave 2 closed for orchestration slices.** `ConnectionEnsure` /
-`ConnectionResume` / `ConnectionPairingStage2` / `ConnectionBrokerTransfer` (+
-matching hosts) own those budgets; `ConnectionFacade` calls ensure, resume and
-broker transfer. Remaining on the client: health-monitor *loop* (policy already
-in `ConnectionHealthPolicy`), `ConnectAsync` body (not one monolith), and thin
-suspend/shutdown forwards.
+**Wave 2 closed; Phase 4 remainder in progress.** Ensure / resume / pairing
+stage-2 / broker transfer helpers remain. Soft-reconnect entry is on
+`ConnectionFacade` (`IConnectionSoftReconnect` → `IConnectionSoftReconnectHost`).
+Suspend/shutdown orchestration is `ConnectionLifecycle`. `ConnectAsync` early
+gates are `ConnectionConnectGates`. Remaining on the client: health-monitor
+*loop* (policy already in `ConnectionHealthPolicy`), the rest of `ConnectAsync`
+(transport open / handlers), and pump/socket ownership until connection-only.
 
 **The open conversation is shared state.** `ActiveChat` (`Unison.Core/State`, DI singleton over
 `JidAliasTable.GetCanonicalJid`) holds the conversation the user has open by its canonical

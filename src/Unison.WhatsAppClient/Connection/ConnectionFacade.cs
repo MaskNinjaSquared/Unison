@@ -16,7 +16,7 @@ namespace Unison.WhatsAppClient.Connection
     /// Facade: disconnect policy (settings + network) and session wipe / toast.
     /// WhatsAppService reports socket facts; this layer decides and executes.
     /// </summary>
-    public sealed class ConnectionFacade : IConnectionService
+    public sealed class ConnectionFacade : IConnectionService, IConnectionSoftReconnect
     {
         private readonly ILocalSettings _localSettings;
         private readonly INotificationService _notificationService;
@@ -32,6 +32,8 @@ namespace Unison.WhatsAppClient.Connection
         private readonly IConnectionEnsureHost _ensureHost;
         private readonly IConnectionResumeHost _resumeHost;
         private readonly IConnectionBrokerTransferHost _brokerTransferHost;
+        private readonly IConnectionSoftReconnectHost _softReconnectHost;
+        private readonly IConnectionLifecycleHost _lifecycleHost;
         private IWhatsAppService _whatsApp;
         private int _handlingRelink;
 
@@ -49,6 +51,8 @@ namespace Unison.WhatsAppClient.Connection
             IConnectionEnsureHost ensureHost,
             IConnectionResumeHost resumeHost,
             IConnectionBrokerTransferHost brokerTransferHost,
+            IConnectionSoftReconnectHost softReconnectHost,
+            IConnectionLifecycleHost lifecycleHost,
             IRuntimeDiagnostics diagnostics = null)
         {
             _localSettings = localSettings ?? throw new ArgumentNullException(nameof(localSettings));
@@ -65,8 +69,17 @@ namespace Unison.WhatsAppClient.Connection
             _resumeHost = resumeHost ?? throw new ArgumentNullException(nameof(resumeHost));
             _brokerTransferHost = brokerTransferHost
                 ?? throw new ArgumentNullException(nameof(brokerTransferHost));
+            _softReconnectHost = softReconnectHost
+                ?? throw new ArgumentNullException(nameof(softReconnectHost));
+            _lifecycleHost = lifecycleHost ?? throw new ArgumentNullException(nameof(lifecycleHost));
             _diagnostics = diagnostics;
         }
+
+        public void RequestSoftReconnect(string reason) =>
+            _softReconnectHost.ScheduleSoftReconnect(reason);
+
+        public void RequestCatchUpContinueReconnect(string reason) =>
+            _softReconnectHost.ScheduleCatchUpContinueReconnect(reason);
 
         public event EventHandler<ConnectionEndedEventArgs> ConnectionEnded;
 
@@ -160,14 +173,22 @@ namespace Unison.WhatsAppClient.Connection
 
         public Task PrepareForSuspendAsync()
         {
-            var whatsApp = _whatsApp;
-            return whatsApp == null ? Task.CompletedTask : whatsApp.PrepareForSuspendAsync();
+            if (_whatsApp == null)
+            {
+                return Task.CompletedTask;
+            }
+
+            return ConnectionLifecycle.PrepareForSuspendAsync(_lifecycleHost);
         }
 
         public Task ShutdownAsync(bool persist = true)
         {
-            var whatsApp = _whatsApp;
-            return whatsApp == null ? Task.CompletedTask : whatsApp.ShutdownAsync(persist);
+            if (_whatsApp == null)
+            {
+                return Task.CompletedTask;
+            }
+
+            return ConnectionLifecycle.ShutdownAsync(_lifecycleHost, persist);
         }
 
         public void AttachWhatsAppService(IWhatsAppService whatsApp)

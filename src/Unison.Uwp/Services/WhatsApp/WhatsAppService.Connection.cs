@@ -1260,15 +1260,10 @@ namespace Unison.Uwp.Services.WhatsApp
             await _connectLock.WaitAsync();
             try
             {
-                var current = _socket;
-                // Sessao registrada: reutiliza socket saudavel.
-                // Sem registro (tela de QR): NAO pular ? pair-device/QR so chega em
-                // conexao nova; Reload QR precisa forcar reconnect.
-                if (current != null &&
-                    current.IsConnected &&
-                    current.IsHandshakeComplete &&
-                    _authState != null &&
-                    _authState.Registered)
+                // Early gates (healthy skip / fatal abort / QR force-fresh journal) live in
+                // ConnectionConnectGates — opening the transport stays below.
+                ConnectionConnectGate gate = ConnectionConnectGates.Decide(this);
+                if (gate == ConnectionConnectGate.SkipAlreadyHealthy)
                 {
                     RuntimeDiagnosticsService.Instance.Write(
                         "connection",
@@ -1277,10 +1272,16 @@ namespace Unison.Uwp.Services.WhatsApp
                     return;
                 }
 
-                if (current != null &&
-                    current.IsConnected &&
-                    current.IsHandshakeComplete &&
-                    (_authState == null || !_authState.Registered))
+                if (gate == ConnectionConnectGate.AbortFatalSession)
+                {
+                    RuntimeDiagnosticsService.Instance.Write(
+                        "connection",
+                        "connect-aborted",
+                        "reason=fatal-session-ended");
+                    return;
+                }
+
+                if (ConnectionConnectGates.ShouldJournalForceFreshForQr(this))
                 {
                     RuntimeDiagnosticsService.Instance.Write(
                         "connection",
@@ -1291,24 +1292,15 @@ namespace Unison.Uwp.Services.WhatsApp
                         SessionLogger.Instance.WriteAlways(
                             "[Pairing] ConnectAsync forcing fresh socket for QR refresh");
                     }
-                    catch { }
-                }
-
-                // Registered session marked dead (401/revoked), or a wipe already dropped auth:
-                // do not clear suppress or open another socket. Unregistered QR after wipe
-                // clears the latch before pairing starts, so that path still gets through.
-                if (ShouldRefuseConnectBecauseSessionDied())
-                {
-                    RuntimeDiagnosticsService.Instance.Write(
-                        "connection",
-                        "connect-aborted",
-                        "reason=fatal-session-ended");
-                    return;
+                    catch
+                    {
+                    }
                 }
 
                 // Only reset per-connection gates when a new transport will actually
                 // be created. Resetting them before waiting on the lock allowed a second
                 // caller to invalidate the first caller's successful session gate.
+                // (Early Skip/Abort already returned above via ConnectionConnectGates.)
                 if (!_fatalSessionEnded)
                 {
                     _suppressReconnect = false;
@@ -2100,41 +2092,87 @@ namespace Unison.Uwp.Services.WhatsApp
             }
         }
 
-        public async Task PrepareForSuspendAsync()
+        bool IConnectionConnectGateSource.HasHealthyRegisteredSocket
         {
-            try
+            get
             {
-                await _messageStore.FlushPendingIncomingJournalAsync();
-                RuntimeDiagnosticsService.Instance.Write(
-                    "lifecycle",
-                    "suspend-incoming-journal-flushed");
-            }
-            catch (Exception ex)
-            {
-                RuntimeDiagnosticsService.Instance.RecordException(
-                    "lifecycle",
-                    "suspend-incoming-journal-failed",
-                    ex);
+                var current = _socket;
+                return current != null &&
+                       current.IsConnected &&
+                       current.IsHandshakeComplete &&
+                       _authState != null &&
+                       _authState.Registered;
             }
         }
 
+        bool IConnectionConnectGateSource.HasHealthyUnregisteredSocket
+        {
+            get
+            {
+                var current = _socket;
+                return current != null &&
+                       current.IsConnected &&
+                       current.IsHandshakeComplete &&
+                       (_authState == null || !_authState.Registered);
+            }
+        }
+
+        bool IConnectionConnectGateSource.ShouldRefuseConnectBecauseSessionDied =>
+            ShouldRefuseConnectBecauseSessionDied();
+
+        /// <summary>
+        /// Orchestration lives in <see cref="ConnectionLifecycle"/>.
+        /// </summary>
+        public Task PrepareForSuspendAsync() =>
+            ConnectionLifecycle.PrepareForSuspendAsync(this);
+
         /// <summary>
         /// Stops reconnect loops, disconnects socket traffic, and optionally persists state.
-        /// Intended for app suspend/close so the process can terminate cleanly.
+        /// Orchestration lives in <see cref="ConnectionLifecycle"/>.
         /// </summary>
+        public Task ShutdownAsync(bool persist = true) =>
+            ConnectionLifecycle.ShutdownAsync(this, persist);
 
-        public async Task ShutdownAsync(bool persist = true)
+        Task IConnectionLifecycleHost.FlushIncomingJournalForSuspendAsync() =>
+            _messageStore.FlushPendingIncomingJournalAsync();
+
+        void IConnectionLifecycleHost.WriteLifecycleJournal(string eventName, string detail) =>
+            RuntimeDiagnosticsService.Instance.Write("lifecycle", eventName, detail);
+
+        void IConnectionLifecycleHost.RecordLifecycleException(string eventName, Exception error)
+        {
+            if (string.Equals(eventName, "shutdown-disconnect-failed", StringComparison.Ordinal))
+            {
+                Debug.WriteLine(
+                    "[WhatsAppService] Shutdown disconnect failed: " +
+                    (error != null ? error.Message : string.Empty));
+                return;
+            }
+
+            RuntimeDiagnosticsService.Instance.RecordException("lifecycle", eventName, error);
+        }
+
+        void IConnectionLifecycleHost.BeginShutdownLatch()
         {
             Interlocked.Exchange(ref _forceFreshConnectOnResume, 1);
             _suppressReconnect = true;
-            StopConnectionHealthMonitor("shutdown");
+        }
+
+        void IConnectionLifecycleHost.StopHealthMonitor(string reason) =>
+            StopConnectionHealthMonitor(reason);
+
+        void IConnectionLifecycleHost.CancelBackgroundWorkForShutdown()
+        {
             Contacts?.CancelBackgroundResolution();
             _postReplayMaintenanceCts?.Cancel();
             _postReplayMaintenanceCts?.Dispose();
             _postReplayMaintenanceCts = null;
             DeferredAvatars?.Cancel();
             Contacts?.CancelAliasFollowUp();
+        }
 
+        void IConnectionLifecycleHost.ResetPersistScheduler()
+        {
             lock (_persistLock)
             {
                 _persistTimer?.Dispose();
@@ -2142,43 +2180,35 @@ namespace Unison.Uwp.Services.WhatsApp
             }
 
             _persistScheduler.Reset();
+        }
 
-            // This tiny append-only write is the only mandatory suspend operation.
-            await PrepareForSuspendAsync();
-            await WaitForIncomingMessageQueueDrainAsync(250);
-            await PrepareForSuspendAsync();
+        Task IConnectionLifecycleHost.WaitForIncomingQueueDrainAsync(int timeoutMs) =>
+            WaitForIncomingMessageQueueDrainAsync(timeoutMs);
 
-            try
+        void IConnectionLifecycleHost.DisconnectAndDisposeSocket()
+        {
+            var socket = _socket;
+            _socket = null;
+            if (socket != null)
             {
-                var socket = _socket;
-                _socket = null;
-                if (socket != null)
-                {
-                    socket.Disconnect();
-                    socket.Dispose();
-                }
-
-                PublishConnectionUpdate("suspended");
-                ResetIncomingMessagePump("suspend", requeueCurrent: true);
+                socket.Disconnect();
+                socket.Dispose();
             }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"[WhatsAppService] Shutdown disconnect failed: {ex.Message}");
-            }
+        }
 
-            if (!persist)
-            {
-                return;
-            }
+        void IConnectionLifecycleHost.PublishSuspended() =>
+            PublishConnectionUpdate("suspended");
 
-            // Only the compact chat-list/alias snapshot is best effort. The incoming
-            // journal already protects recent messages, so suspension never waits for
-            // a large per-chat JSON rewrite or a HistorySync storage lock.
+        void IConnectionLifecycleHost.ResetIncomingPumpForSuspend() =>
+            ResetIncomingMessagePump("suspend", requeueCurrent: true);
+
+        async Task IConnectionLifecycleHost.PersistSuspendTailWithBudgetAsync(int budgetMs)
+        {
             var persistTail = PersistSuspendTailAsync();
-            var completed = await Task.WhenAny(persistTail, Task.Delay(1600));
+            var completed = await Task.WhenAny(persistTail, Task.Delay(budgetMs)).ConfigureAwait(false);
             if (completed == persistTail)
             {
-                await persistTail;
+                await persistTail.ConfigureAwait(false);
                 RuntimeDiagnosticsService.Instance.Write(
                     "lifecycle",
                     "suspend-persist-tail-complete");
@@ -2188,7 +2218,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 RuntimeDiagnosticsService.Instance.Write(
                     "lifecycle",
                     "suspend-persist-tail-deferred",
-                    "milliseconds=1600; journal=durable");
+                    "milliseconds=" + budgetMs + "; journal=durable");
             }
         }
     }
