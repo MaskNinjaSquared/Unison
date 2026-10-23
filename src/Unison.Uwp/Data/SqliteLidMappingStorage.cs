@@ -75,6 +75,38 @@ namespace Unison.Uwp.Data
             return found;
         }
 
+        public async Task<IDictionary<string, string>> GetAllAsync()
+        {
+            IDictionary<string, string> found = new Dictionary<string, string>(StringComparer.Ordinal);
+            await EnsureInitializedAsync().ConfigureAwait(false);
+
+            try
+            {
+                List<LidMappingRow> rows = await _connection.Table<LidMappingRow>().ToListAsync()
+                    .ConfigureAwait(false);
+                if (rows == null)
+                {
+                    return found;
+                }
+
+                foreach (LidMappingRow row in rows)
+                {
+                    if (row == null || string.IsNullOrEmpty(row.Key) || string.IsNullOrEmpty(row.Value))
+                    {
+                        continue;
+                    }
+
+                    found[row.Key] = row.Value;
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[SqliteLidMappingStorage] GetAll failed: " + ex.Message);
+            }
+
+            return found;
+        }
+
         public async Task SetAsync(IDictionary<string, string> values)
         {
             if (values == null || values.Count == 0)

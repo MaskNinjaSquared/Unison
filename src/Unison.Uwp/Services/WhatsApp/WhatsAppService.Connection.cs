@@ -983,6 +983,19 @@ namespace Unison.Uwp.Services.WhatsApp
                     !string.IsNullOrWhiteSpace(_authState.Me.Id);
                 SetSuppressReconnectToast(!hasActiveAccount);
 
+                // Durable LID↔PN pairs first so sync peeks work before alias restore.
+                if (_lidMappings != null)
+                {
+                    try
+                    {
+                        await _lidMappings.WarmCacheFromStorageAsync().ConfigureAwait(false);
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.WriteLine("[WhatsAppService] LidMapping warm failed: " + ex.Message);
+                    }
+                }
+
                 // PN/LID aliases are compact protocol state, not optional UI data. Load
                 // them before ConnectAsync snapshots the alias map for SocketClient.
                 // Bulk import: one RememberPairs + one Changed (not N dual-writes).

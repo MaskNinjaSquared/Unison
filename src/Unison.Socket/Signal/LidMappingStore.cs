@@ -191,6 +191,38 @@ namespace Unison.Socket.Signal
         }
 
         /// <summary>
+        /// Loads durable pairs into the memory cache so sync peeks work before any async
+        /// resolve. Forward keys only (skips the <c>_reverse</c> index rows).
+        /// </summary>
+        public async Task WarmCacheFromStorageAsync()
+        {
+            IDictionary<string, string> all = await _storage.GetAllAsync().ConfigureAwait(false);
+            if (all == null || all.Count == 0)
+            {
+                return;
+            }
+
+            int warmed = 0;
+            foreach (KeyValuePair<string, string> entry in all)
+            {
+                if (string.IsNullOrEmpty(entry.Key) ||
+                    string.IsNullOrEmpty(entry.Value) ||
+                    entry.Key.EndsWith(ReverseKeySuffix, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                CachePair(entry.Key, entry.Value);
+                warmed++;
+            }
+
+            if (warmed > 0)
+            {
+                _log.Trace("[LidMapping] Warmed " + warmed + " pair(s) from storage");
+            }
+        }
+
+        /// <summary>
         /// Sync peek of the memory cache for a PN user part. Used by
         /// <c>JidAliasTable</c> so canonicalization can stay synchronous.
         /// </summary>

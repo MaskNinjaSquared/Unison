@@ -29,6 +29,12 @@ namespace Unison.Socket.Abstractions
         /// </summary>
         Task<IDictionary<string, string>> GetAsync(IEnumerable<string> keys);
 
+        /// <summary>
+        /// Every stored key/value. Used to warm the mapping store's memory cache at session
+        /// start so sync peeks see pairs written on a previous run.
+        /// </summary>
+        Task<IDictionary<string, string>> GetAllAsync();
+
         /// <summary>Writes every pair, overwriting existing keys. Should be atomic if the host can be.</summary>
         Task SetAsync(IDictionary<string, string> values);
     }
@@ -67,6 +73,20 @@ namespace Unison.Socket.Abstractions
             }
 
             return Task.FromResult(found);
+        }
+
+        public Task<IDictionary<string, string>> GetAllAsync()
+        {
+            IDictionary<string, string> copy = new Dictionary<string, string>(StringComparer.Ordinal);
+            lock (_gate)
+            {
+                foreach (var pair in _values)
+                {
+                    copy[pair.Key] = pair.Value;
+                }
+            }
+
+            return Task.FromResult(copy);
         }
 
         public Task SetAsync(IDictionary<string, string> values)
