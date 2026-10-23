@@ -1431,7 +1431,9 @@ list rows; remote subject / contact / account-contact paths call it. Startup
 `ApplyResolvedNamesToChatListAsync` are on `IContactService` over `ChatNameRefresh`.
 `ContactFacade` owns the `Applied` subscription (`DisplayNamesUpdated` + diagnostics).
 `IResolvedNameApplyHost` keeps only self push-name (auth + sidebar). The client no longer
-holds `ChatNameRefresh`.
+holds `ChatNameRefresh` or `StoredChatPreviewRefresh` (post-replay memory tip repair goes
+through `IChatService.ReconcileChatListFromStoredAsync` /
+`RefreshAllChatPreviewsFromStoredAsync`).
 
 **Deferred avatar enrichment is a narrow port.** `IDeferredAvatarResolution` is what
 `ChatAvatarPolicy` needs to ask for another background pass without naming the whole client.

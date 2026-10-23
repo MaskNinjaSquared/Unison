@@ -2,6 +2,13 @@
 
 Newest first.
 
+## Phase B — stored preview repair via ChatFacade
+
+Post-replay large-drain in-memory tip repair calls
+`IChatService.ReconcileChatListFromStoredAsync` /
+`RefreshAllChatPreviewsFromStoredAsync`. `WhatsAppService` no longer holds
+`StoredChatPreviewRefresh`.
+
 ## Phase B — ChatNameRefresh leaves WhatsAppService
 
 `IContactService.ApplyResolvedNamesToChatListAsync` is the catch-up / self-name list

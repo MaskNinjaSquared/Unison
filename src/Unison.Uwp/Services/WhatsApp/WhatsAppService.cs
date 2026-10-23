@@ -666,7 +666,6 @@ namespace Unison.Uwp.Services.WhatsApp
         public ChatMessageCache MessagesByChat => _chatState.MessagesByChat;
 
         private readonly ChatRowIndex _chatRows;
-        private readonly StoredChatPreviewRefresh _storedPreviews;
         private readonly UsyncAliasFiling _usyncAliases;
 
         public DisplayNameTable ContactNames => _chatState.PushNames;
@@ -1017,7 +1016,6 @@ namespace Unison.Uwp.Services.WhatsApp
             IChatStore chatStore,
             ISystemInfoProvider systemInfo,
             AttachedUiDispatcher ui,
-            StoredChatPreviewRefresh storedPreviews,
             UsyncAliasFiling usyncAliases,
             ChatListInitialPaintGate listPaintGate = null,
             IAppMemoryInfo appMemory = null,
@@ -1049,7 +1047,6 @@ namespace Unison.Uwp.Services.WhatsApp
             _resolveChats = resolveChats;
             _resolveGroups = resolveGroups;
             _ui = ui ?? throw new ArgumentNullException(nameof(ui));
-            _storedPreviews = storedPreviews ?? throw new ArgumentNullException(nameof(storedPreviews));
             _usyncAliases = usyncAliases ?? throw new ArgumentNullException(nameof(usyncAliases));
             _listPaintGate = listPaintGate ?? new ChatListInitialPaintGate();
             _listPaintGate.Released += OnChatListInitialPaintReleased;
@@ -1128,7 +1125,6 @@ namespace Unison.Uwp.Services.WhatsApp
             IChatStore chatStore,
             ISystemInfoProvider systemInfo,
             AttachedUiDispatcher ui,
-            StoredChatPreviewRefresh storedPreviews,
             UsyncAliasFiling usyncAliases,
             ChatListInitialPaintGate listPaintGate = null,
             IAppMemoryInfo appMemory = null,
@@ -1140,7 +1136,7 @@ namespace Unison.Uwp.Services.WhatsApp
         {
             return _instance ?? (_instance = new WhatsAppService(
                 chatState, chatRows, activeChat, syncStatus, syncWork, historyMessages, chatPreviews, usyncGate, avatarFetcher, mediaCache, jidAlias, displayNames, historyRequests,
-                initialSync, syncBudget, workload, selfProfile, personStore, groupRosterStore, chatStore, systemInfo, ui, storedPreviews, usyncAliases, listPaintGate, appMemory, localSettings, resolveContacts, resolveMessages, resolveChats, resolveGroups));
+                initialSync, syncBudget, workload, selfProfile, personStore, groupRosterStore, chatStore, systemInfo, ui, usyncAliases, listPaintGate, appMemory, localSettings, resolveContacts, resolveMessages, resolveChats, resolveGroups));
         }
 
         /// <summary>
@@ -1557,12 +1553,12 @@ namespace Unison.Uwp.Services.WhatsApp
                     }
 
                     // Extra in-memory repair only for large desktop drains (already warmed timelines).
-                    if (offlineCount >= 50 && !UseFrugalSyncBudget)
+                    if (offlineCount >= 50 && !UseFrugalSyncBudget && ChatFacade != null)
                     {
-                        await _storedPreviews.ReconcileAsync(
+                        await ChatFacade.ReconcileChatListFromStoredAsync(
                             "delayed-offline-repair:" + offlineCount).ConfigureAwait(false);
                         await Task.Delay(400, token);
-                        await _storedPreviews.RefreshAsync(
+                        await ChatFacade.RefreshAllChatPreviewsFromStoredAsync(
                             "delayed-post-offline-drain").ConfigureAwait(false);
                     }
 
