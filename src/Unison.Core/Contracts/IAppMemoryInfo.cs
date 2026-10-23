@@ -12,6 +12,9 @@ namespace Unison.Core.Contracts
         /// <summary>Current process working-set estimate in bytes.</summary>
         ulong UsageBytes { get; }
 
+        /// <summary>Host-reported memory budget for the process in bytes.</summary>
+        ulong LimitBytes { get; }
+
         /// <summary>True when the host reports the lowest usable memory band.</summary>
         bool IsLow { get; }
     }

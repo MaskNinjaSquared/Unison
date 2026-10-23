@@ -591,9 +591,9 @@ namespace Unison.Uwp.Services.WhatsApp
                 LastSendAttemptUtc = DiagnosticUtcTicks.ToDateTime(Interlocked.Read(ref _diagnosticsLastSendAttemptUtcTicks)),
                 LastSendSuccessUtc = DiagnosticUtcTicks.ToDateTime(Interlocked.Read(ref _diagnosticsLastSendSuccessUtcTicks)),
                 LastSendFailureUtc = DiagnosticUtcTicks.ToDateTime(Interlocked.Read(ref _diagnosticsLastSendFailureUtcTicks)),
-                MemoryUsageBytes = Windows.System.MemoryManager.AppMemoryUsage,
-                MemoryLimitBytes = Windows.System.MemoryManager.AppMemoryUsageLimit,
-                MemoryUsageLevel = Windows.System.MemoryManager.AppMemoryUsageLevel.ToString(),
+                MemoryUsageBytes = _appMemory.UsageBytes,
+                MemoryLimitBytes = _appMemory.LimitBytes,
+                MemoryUsageLevel = _appMemory.UsageLevel,
                 WebPSupportEnabled = Unison.Uwp.Helpers.WebPHelpers.HasWebPCodec,
                 WebPApiContract7 = Unison.Uwp.Helpers.WebPHelpers.HasApiContract7,
                 WebPDecoderIdListed = Unison.Uwp.Helpers.WebPHelpers.WebPDecoderIdListed,
@@ -1070,7 +1070,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
             Debug.WriteLine(
                 "[WhatsAppService] mobile=" + _isWindowsMobile +
-                ", memory=" + Windows.System.MemoryManager.AppMemoryUsageLevel);
+                ", memory=" + _appMemory.UsageLevel);
 
             _ = WarmPersonStoreAsync();
             _ = WarmGroupRosterStoreAsync();
@@ -1480,7 +1480,7 @@ namespace Unison.Uwp.Services.WhatsApp
                             "startup",
                             "post-replay-maintenance-skipped",
                             "reason=memory; level=" +
-                            Windows.System.MemoryManager.AppMemoryUsageLevel);
+                            _appMemory.UsageLevel);
                         RaiseSyncStatus(null);
                         return;
                     }
@@ -2126,7 +2126,7 @@ namespace Unison.Uwp.Services.WhatsApp
                             "startup",
                             "deferred-maintenance-skipped",
                             "reason=memory; level=" +
-                        Windows.System.MemoryManager.AppMemoryUsageLevel);
+                        _appMemory.UsageLevel);
                         RaiseSyncStatus(null);
                     return;
                     }

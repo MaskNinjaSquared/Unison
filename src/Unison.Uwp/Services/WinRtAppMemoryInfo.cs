@@ -10,6 +10,8 @@ namespace Unison.Uwp.Services
 
         public ulong UsageBytes => MemoryManager.AppMemoryUsage;
 
+        public ulong LimitBytes => MemoryManager.AppMemoryUsageLimit;
+
         public bool IsLow => MemoryManager.AppMemoryUsageLevel == AppMemoryUsageLevel.Low;
     }
 }
