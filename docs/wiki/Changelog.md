@@ -2,6 +2,11 @@
 
 Newest first.
 
+## Phase 4 — MediaAvailability EnsureConnected via IConnectionService
+
+On-demand media no longer names `IWhatsAppService` for connect; it uses the
+connection façade like App/shell.
+
 ## Phase 3 — UsyncAliasHost + ISocketAliasRegistrar
 
 `TryFileUsyncAlias` left the client: `UsyncAliasHost` files via `UsyncAliasFiling` then

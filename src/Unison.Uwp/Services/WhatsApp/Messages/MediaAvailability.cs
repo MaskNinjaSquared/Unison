@@ -21,7 +21,7 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
     /// </summary>
     internal sealed class MediaAvailability : IMediaAvailability
     {
-        private readonly IWhatsAppService _client;
+        private readonly IConnectionService _connection;
         private readonly IMediaDownloadHost _host;
         private readonly IWhatsAppSessionProvider _sessions;
         private readonly Func<IMessageService> _messages;
@@ -33,7 +33,7 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
         private readonly IChatCatalogPersistence _catalog;
 
         public MediaAvailability(
-            IWhatsAppService client,
+            IConnectionService connection,
             IMediaDownloadHost host,
             IWhatsAppSessionProvider sessions,
             Func<IMessageService> messages,
@@ -44,7 +44,7 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
             MediaDownloadGate gate,
             IChatCatalogPersistence catalog)
         {
-            _client = client ?? throw new ArgumentNullException(nameof(client));
+            _connection = connection ?? throw new ArgumentNullException(nameof(connection));
             _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
             _host = host ?? throw new ArgumentNullException(nameof(host));
             _sessions = sessions ?? throw new ArgumentNullException(nameof(sessions));
@@ -73,7 +73,7 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
                 return await EnsurePlayableAudioUriAsync(message, message.AudioUri);
             }
 
-            await _client.EnsureConnectedAsync();
+            await _connection.EnsureConnectedAsync();
 
             MediaDownloadPlan plan = MediaDownloadPlan.For(message, MediaDownloadKind.Audio);
             if (!plan.HasKey) throw new InvalidOperationException("A chave do áudio não está disponível.");
@@ -173,7 +173,7 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
                 return await EnsureWebPDisplayUriAsync(message);
             }
 
-            await _client.EnsureConnectedAsync();
+            await _connection.EnsureConnectedAsync();
 
             MediaDownloadPlan plan = MediaDownloadPlan.For(
                 message,
@@ -264,7 +264,7 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
                 return await EnsureVideoPosterAsync(message);
             }
 
-            await _client.EnsureConnectedAsync();
+            await _connection.EnsureConnectedAsync();
 
             MediaDownloadPlan plan = MediaDownloadPlan.For(message, MediaDownloadKind.Video);
             if (!plan.HasKey)
@@ -338,7 +338,7 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
                 return message.DocumentUri;
             }
 
-            await _client.EnsureConnectedAsync();
+            await _connection.EnsureConnectedAsync();
 
             MediaDownloadPlan plan = MediaDownloadPlan.For(message, MediaDownloadKind.Document);
             if (!plan.HasKey)
