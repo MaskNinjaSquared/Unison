@@ -323,5 +323,11 @@ namespace Unison.Core.Contracts.WhatsApp
         /// under <paramref name="chatJid"/> (and, for DMs, alias buckets).
         /// </summary>
         bool HasCachedMessageId(string chatJid, string messageId, bool isGroup);
+
+        /// <summary>
+        /// Outgoing receipt / send-ack status onto resident bubbles (and list tip ticks).
+        /// When the id is not in RAM, holds the status until the chat is opened.
+        /// </summary>
+        Task ApplyOutgoingStatusAsync(string messageId, string status, string error = null);
     }
 }

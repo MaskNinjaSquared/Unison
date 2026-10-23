@@ -49,6 +49,8 @@ namespace Unison.WhatsAppClient.Messages
         private readonly PendingMessageQueue _pendingMessages;
         private readonly IMessageStore _messageStore;
         private readonly ActiveChat _activeChat;
+        private readonly ChatRowIndex _chatRows;
+        private readonly PendingMessageState _pendingMessageState;
         private readonly Func<IChatService> _resolveChats;
         private readonly ReceiptReader _receipts;
         private readonly GroupReceiptTally _groupReceipts = new GroupReceiptTally();
@@ -79,6 +81,8 @@ namespace Unison.WhatsAppClient.Messages
             IMessageStore messageStore,
             ActiveChat activeChat,
             ChatStateStore chatState,
+            ChatRowIndex chatRows,
+            PendingMessageState pendingMessageState,
             Func<IChatService> resolveChats = null,
             IChatStore chatStore = null,
             ISystemInfoProvider systemInfo = null,
@@ -107,6 +111,9 @@ namespace Unison.WhatsAppClient.Messages
             _pendingMessages = pendingMessages ?? throw new ArgumentNullException(nameof(pendingMessages));
             _messageStore = messageStore ?? throw new ArgumentNullException(nameof(messageStore));
             _activeChat = activeChat ?? throw new ArgumentNullException(nameof(activeChat));
+            _chatRows = chatRows ?? throw new ArgumentNullException(nameof(chatRows));
+            _pendingMessageState = pendingMessageState
+                ?? throw new ArgumentNullException(nameof(pendingMessageState));
             _resolveChats = resolveChats;
             _receipts = new ReceiptReader(jids);
 
@@ -149,7 +156,7 @@ namespace Unison.WhatsAppClient.Messages
             {
                 foreach (string id in receipt.MessageIds)
                 {
-                    await _receiptHost.ApplyOutgoingStatusAsync(id, receipt.Status).ConfigureAwait(false);
+                    await ApplyOutgoingStatusAsync(id, receipt.Status).ConfigureAwait(false);
                 }
 
                 return;
@@ -179,9 +186,66 @@ namespace Unison.WhatsAppClient.Messages
                     DateTime.UtcNow);
                 if (!string.IsNullOrWhiteSpace(aggregateStatus))
                 {
-                    await _receiptHost.ApplyOutgoingStatusAsync(id, aggregateStatus)
-                        .ConfigureAwait(false);
+                    await ApplyOutgoingStatusAsync(id, aggregateStatus).ConfigureAwait(false);
                 }
+            }
+        }
+
+        /// <inheritdoc />
+        public async Task ApplyOutgoingStatusAsync(string messageId, string status, string error = null)
+        {
+            if (string.IsNullOrWhiteSpace(messageId) || string.IsNullOrWhiteSpace(status))
+            {
+                return;
+            }
+
+            var changedChats = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var changedMessages = new List<KeyValuePair<string, ChatMessage>>();
+
+            await _revocationHost.RunBoundMutationAsync(() =>
+            {
+                changedMessages = _chatState.MessagesByChat.ApplyOutgoingStatus(
+                    messageId,
+                    status,
+                    (chatJid, wireStatus) => SelfChatStatusPolicy.Resolve(
+                        wireStatus,
+                        _jids.IsSelfLinked(chatJid)));
+                for (int i = 0; i < changedMessages.Count; i++)
+                {
+                    KeyValuePair<string, ChatMessage> change = changedMessages[i];
+                    changedChats.Add(change.Key);
+                    string canonical = _jids.GetCanonicalJid(JidHelper.Normalize(change.Key));
+                    ListPreviewOutgoingSendState.Apply(
+                        _chatRows.FindConversation(canonical),
+                        change.Value,
+                        change.Value.Status);
+                }
+            }).ConfigureAwait(false);
+
+            if (changedMessages.Count == 0)
+            {
+                _pendingMessageState.HoldStatus(messageId, status);
+            }
+            else
+            {
+                _pendingMessageState.ForgetStatus(messageId);
+            }
+
+            for (int i = 0; i < changedMessages.Count; i++)
+            {
+                QueueIncomingPersist(changedMessages[i].Key, changedMessages[i].Value);
+            }
+
+            foreach (string chat in changedChats)
+            {
+                _outgoingHost.NotifyChatChanged(chat);
+            }
+
+            if (!string.IsNullOrWhiteSpace(error))
+            {
+                Debug.WriteLine(
+                    "[MessageFacade] Outgoing message " + messageId +
+                    " status=" + status + ", error=" + error);
             }
         }
 

@@ -30,55 +30,13 @@ namespace Unison.Uwp.Services.WhatsApp
             if (Messages is MessageFacade facade)
             {
                 await facade.HandleReceiptAsync(node).ConfigureAwait(false);
-                return;
-            }
-
-            // Fallback if MessageFacade is not the attached IMessageService (tests / stubs).
-            ReceiptFacts receipt = _receipts.Read(node);
-            if (receipt == null)
-            {
-                return;
-            }
-
-            if (!receipt.IsGroup ||
-                string.Equals(receipt.Status, ChatMessage.StatusSent, StringComparison.OrdinalIgnoreCase))
-            {
-                foreach (var id in receipt.MessageIds)
-                {
-                    await UpdateOutgoingMessageStatusAsync(id, receipt.Status);
-                }
-
-                return;
-            }
-
-            if (string.IsNullOrWhiteSpace(receipt.Participant) || IsSelfLinkedJid(receipt.Participant))
-            {
-                return;
-            }
-
-            int expectedRecipients = await GetExpectedGroupRecipientCountAsync(receipt.ChatJid);
-            if (expectedRecipients <= 0)
-            {
-                return;
-            }
-
-            foreach (var id in receipt.MessageIds)
-            {
-                string aggregateStatus = _groupReceipts.Register(
-                    id,
-                    receipt.Participant,
-                    receipt.Status,
-                    expectedRecipients,
-                    DateTime.UtcNow);
-                if (!string.IsNullOrWhiteSpace(aggregateStatus))
-                {
-                    await UpdateOutgoingMessageStatusAsync(id, aggregateStatus);
-                }
             }
         }
 
         Task IOutgoingReceiptHost.ApplyOutgoingStatusAsync(string messageId, string status, string error) =>
-            UpdateOutgoingMessageStatusAsync(messageId, status, error);
+            Messages != null
+                ? Messages.ApplyOutgoingStatusAsync(messageId, status, error)
+                : Task.CompletedTask;
 
         bool IOutgoingReceiptHost.IsSelfLinked(string jid) => IsSelfLinkedJid(jid);
 

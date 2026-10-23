@@ -683,7 +683,7 @@ namespace Unison.Uwp.Services.WhatsApp
         private DateTime _lastFullHistoryRepairCompletedUtc = DateTime.MinValue;
         private TaskCompletionSource<bool> _userResyncHistoryTcs;
         private static readonly TimeSpan UserResyncHistoryWaitTimeout = TimeSpan.FromMinutes(3);
-        private readonly PendingMessageState _pendingMessageState = new PendingMessageState();
+        private readonly PendingMessageState _pendingMessageState;
         private readonly GroupReceiptTally _groupReceipts = new GroupReceiptTally();
         private readonly GroupRecipientCountCache _groupRecipientCounts = new GroupRecipientCountCache();
         // Field initializers run in declaration order, so _selfMarkers is set before it is read below.
@@ -1018,6 +1018,7 @@ namespace Unison.Uwp.Services.WhatsApp
             AttachedUiDispatcher ui,
             UsyncAliasFiling usyncAliases,
             PendingMessageQueue pendingMessages,
+            PendingMessageState pendingMessageState,
             ChatListInitialPaintGate listPaintGate = null,
             IAppMemoryInfo appMemory = null,
             ILocalSettings localSettings = null,
@@ -1038,6 +1039,8 @@ namespace Unison.Uwp.Services.WhatsApp
 
             _pendingMessages = pendingMessages
                 ?? throw new ArgumentNullException(nameof(pendingMessages));
+            _pendingMessageState = pendingMessageState
+                ?? throw new ArgumentNullException(nameof(pendingMessageState));
             _chatState = chatState;
             _personStore = personStore ?? throw new ArgumentNullException(nameof(personStore));
             _groupRosterStore = groupRosterStore ?? throw new ArgumentNullException(nameof(groupRosterStore));
@@ -1130,6 +1133,7 @@ namespace Unison.Uwp.Services.WhatsApp
             AttachedUiDispatcher ui,
             UsyncAliasFiling usyncAliases,
             PendingMessageQueue pendingMessages,
+            PendingMessageState pendingMessageState,
             ChatListInitialPaintGate listPaintGate = null,
             IAppMemoryInfo appMemory = null,
             ILocalSettings localSettings = null,
@@ -1140,7 +1144,7 @@ namespace Unison.Uwp.Services.WhatsApp
         {
             return _instance ?? (_instance = new WhatsAppService(
                 chatState, chatRows, activeChat, syncStatus, syncWork, historyMessages, chatPreviews, usyncGate, avatarFetcher, mediaCache, jidAlias, displayNames, historyRequests,
-                initialSync, syncBudget, workload, selfProfile, personStore, groupRosterStore, chatStore, systemInfo, ui, usyncAliases, pendingMessages, listPaintGate, appMemory, localSettings, resolveContacts, resolveMessages, resolveChats, resolveGroups));
+                initialSync, syncBudget, workload, selfProfile, personStore, groupRosterStore, chatStore, systemInfo, ui, usyncAliases, pendingMessages, pendingMessageState, listPaintGate, appMemory, localSettings, resolveContacts, resolveMessages, resolveChats, resolveGroups));
         }
 
         /// <summary>
@@ -4102,55 +4106,15 @@ namespace Unison.Uwp.Services.WhatsApp
         {
             try
             {
-                await UpdateOutgoingMessageStatusAsync(messageId, status, error);
+                if (Messages != null)
+                {
+                    await Messages.ApplyOutgoingStatusAsync(messageId, status, error)
+                        .ConfigureAwait(false);
+                }
             }
             catch (Exception ex)
             {
                 Debug.WriteLine($"[WhatsAppService] Outgoing status update failed for {messageId}: {ex.Message}");
-            }
-        }
-
-        private async Task UpdateOutgoingMessageStatusAsync(string messageId, string status, string error = null)
-        {
-            if (string.IsNullOrWhiteSpace(messageId) || string.IsNullOrWhiteSpace(status)) return;
-
-            var changedChats = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            var changedMessages = new List<KeyValuePair<string, ChatMessage>>();
-
-            await _ui.RunAsync(() =>
-            {
-                changedMessages = MessagesByChat.ApplyOutgoingStatus(messageId, status, ApplyChatStatusPolicy);
-                foreach (var change in changedMessages)
-                {
-                    changedChats.Add(change.Key);
-                    ListPreviewOutgoingSendState.Apply(
-                        GetChatRowsForCanonicalJid(GetCanonicalJid(NormalizeJid(change.Key))),
-                        change.Value,
-                        change.Value.Status);
-                }
-            });
-
-            if (changedMessages.Count == 0)
-            {
-                // Receipt bursts must not force disk I/O on a 512 MB phone. Keep the
-                // compact state in memory and merge/persist it when that chat is opened.
-                _pendingMessageState.HoldStatus(messageId, status);
-            }
-            else
-            {
-                _pendingMessageState.ForgetStatus(messageId);
-            }
-
-            foreach (var item in changedMessages)
-            {
-                QueueOfflineReplayMessageForPersist(item.Key, item.Value);
-            }
-            if (changedMessages.Count > 0) SchedulePersist();
-            foreach (var chat in changedChats) QueueChatMessagesChanged(chat);
-
-            if (!string.IsNullOrWhiteSpace(error))
-            {
-                Debug.WriteLine($"[WhatsAppService] Outgoing message {messageId} status={status}, error={error}");
             }
         }
 

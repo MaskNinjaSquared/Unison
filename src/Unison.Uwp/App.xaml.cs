@@ -377,6 +377,8 @@ namespace Unison.Uwp
                 flushMessageThreshold: 12,
                 flushInterval: TimeSpan.FromMilliseconds(750),
                 maxMessagesPerChatBatch: 1500));
+            // Shared by send/receipt/pin/open — one hold table for statuses and pins.
+            services.AddSingleton(_ => new PendingMessageState());
             services.AddSingleton<IWhatsAppService>(
                 sp => WhatsAppService.Create(
                     sp.GetRequiredService<ChatStateStore>(),
@@ -403,6 +405,7 @@ namespace Unison.Uwp
                     sp.GetRequiredService<AttachedUiDispatcher>(),
                     sp.GetRequiredService<UsyncAliasFiling>(),
                     sp.GetRequiredService<PendingMessageQueue>(),
+                    sp.GetRequiredService<PendingMessageState>(),
                     sp.GetRequiredService<ChatListInitialPaintGate>(),
                     sp.GetRequiredService<IAppMemoryInfo>(),
                     sp.GetRequiredService<ILocalSettings>(),
@@ -543,6 +546,8 @@ namespace Unison.Uwp
                 sp.GetRequiredService<IMessageStore>(),
                 sp.GetRequiredService<ActiveChat>(),
                 sp.GetRequiredService<ChatStateStore>(),
+                sp.GetRequiredService<ChatRowIndex>(),
+                sp.GetRequiredService<PendingMessageState>(),
                 () => sp.GetRequiredService<IChatService>(),
                 sp.GetRequiredService<IChatStore>(),
                 sp.GetRequiredService<ISystemInfoProvider>(),

@@ -2,6 +2,14 @@
 
 Newest first.
 
+## Phase B — outgoing status on MessageFacade + PendingMessageState DI
+
+`IMessageService.ApplyOutgoingStatusAsync` owns receipt/send-ack status on
+`MessagesByChat`, list-tip ticks, hold/forget via shared `PendingMessageState`
+singleton, and persist enqueue. `HandleReceiptAsync` applies through that path;
+`IOutgoingReceiptHost.ApplyOutgoingStatusAsync` forwards. Pin hold still uses the
+same `PendingMessageState` instance on the client.
+
 ## Phase B — reaction, push-name, alias finalize, cached-id probe
 
 `IMessageService.ApplyIncomingReactionAsync` owns reaction map/persist/notify.
