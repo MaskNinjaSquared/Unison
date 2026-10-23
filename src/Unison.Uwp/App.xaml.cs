@@ -606,9 +606,12 @@ namespace Unison.Uwp
                 sp.GetRequiredService<ChatRowIndex>(),
                 (IJidAliasPersistence)sp.GetRequiredService<IWhatsAppService>(),
                 sp.GetRequiredService<IChatIdentityPersistence>(),
+                (IResolvedNameApplyHost)sp.GetRequiredService<IWhatsAppService>(),
                 sp.GetRequiredService<IRuntimeDiagnostics>()));
             services.AddSingleton<IJidAliasPersistence>(
                 sp => (IJidAliasPersistence)sp.GetRequiredService<IWhatsAppService>());
+            services.AddSingleton<IResolvedNameApplyHost>(
+                sp => (IResolvedNameApplyHost)sp.GetRequiredService<IWhatsAppService>());
             services.AddSingleton<IOfflineReplayHost>(
                 sp => (WhatsAppService)sp.GetRequiredService<IWhatsAppService>());
             services.AddSingleton<IChatAccountActions>(sp => new BridgeChatAccountActions(

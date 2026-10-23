@@ -149,6 +149,15 @@ namespace Unison.Core.Contracts.WhatsApp
         /// </summary>
         void CancelAliasFollowUp();
 
+        /// <summary>Group subjects from account app-state / listing into the shared name cache.</summary>
+        Task ApplyRemoteGroupSubjectsAsync(IEnumerable<KeyValuePair<string, string>> subjectsByJid);
+
+        /// <summary>One contact name from account app-state.</summary>
+        Task ApplyRemoteContactNameAsync(string jid, string name);
+
+        /// <summary>Self push-name from account app-state.</summary>
+        Task ApplyRemoteSelfPushNameAsync(string name);
+
         /// <summary>
         /// User action: resolve a phone number to a WhatsApp JID (new-chat search).
         /// Prefer this over calling WhatsAppService from ViewModels.

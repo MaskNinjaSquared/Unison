@@ -52,6 +52,8 @@ namespace Unison.WhatsAppClient.Contacts
         private readonly ChatRowIndex _chatRows;
         private readonly IJidAliasPersistence _aliasPersist;
         private readonly IChatIdentityPersistence _identity;
+        private readonly IResolvedNameApplyHost _resolvedNames;
+        private readonly ContactLabelSanitizer _labels;
         private readonly AliasFollowUpQueue _aliasFollowUps = new AliasFollowUpQueue();
         private readonly CoalescedDebounceScheduler _aliasFollowUpDebounce =
             new CoalescedDebounceScheduler(TimeSpan.FromMilliseconds(750));
@@ -105,6 +107,7 @@ namespace Unison.WhatsAppClient.Contacts
             ChatRowIndex chatRows,
             IJidAliasPersistence aliasPersist,
             IChatIdentityPersistence identity,
+            IResolvedNameApplyHost resolvedNames,
             IRuntimeDiagnostics diagnostics = null)
         {
             _displayNames = displayNames ?? throw new ArgumentNullException(nameof(displayNames));
@@ -113,6 +116,7 @@ namespace Unison.WhatsAppClient.Contacts
             _chatRows = chatRows ?? throw new ArgumentNullException(nameof(chatRows));
             _aliasPersist = aliasPersist ?? throw new ArgumentNullException(nameof(aliasPersist));
             _identity = identity ?? throw new ArgumentNullException(nameof(identity));
+            _resolvedNames = resolvedNames ?? throw new ArgumentNullException(nameof(resolvedNames));
             _lifecycle = lifecycle ?? throw new ArgumentNullException(nameof(lifecycle));
             if (selfMarkers == null) throw new ArgumentNullException(nameof(selfMarkers));
             _syncStatus = syncStatus ?? throw new ArgumentNullException(nameof(syncStatus));
@@ -140,7 +144,7 @@ namespace Unison.WhatsAppClient.Contacts
             _pushNames = pushNames ?? throw new ArgumentNullException(nameof(pushNames));
             _addressBookNames = addressBookNames ?? throw new ArgumentNullException(nameof(addressBookNames));
 
-            var labels = new ContactLabelSanitizer(selfMarkers);
+            _labels = new ContactLabelSanitizer(selfMarkers);
             _directory = new ContactDirectory(sessions, lidMappings);
             _addressBook = new AddressBookOverlay(localContacts, personStore, jids, ui, addressBookNames, chats);
             _usync = new ContactUsyncResolver(
@@ -149,7 +153,7 @@ namespace Unison.WhatsAppClient.Contacts
                 usyncGate,
                 jids,
                 pushNames,
-                labels,
+                _labels,
                 chats,
                 avatarFetch,
                 ui,
@@ -163,7 +167,7 @@ namespace Unison.WhatsAppClient.Contacts
                 _directory,
                 _usync,
                 jids,
-                new PushNameLookup(pushNames, aliases, labels),
+                new PushNameLookup(pushNames, aliases, _labels),
                 groups,
                 ui,
                 catalog,
@@ -244,6 +248,39 @@ namespace Unison.WhatsAppClient.Contacts
 
         /// <inheritdoc />
         public void CancelAliasFollowUp() => _aliasFollowUpDebounce.Cancel();
+
+        /// <summary>Group subjects from account app-state / listing into the shared name cache.</summary>
+        public Task ApplyRemoteGroupSubjectsAsync(IEnumerable<KeyValuePair<string, string>> subjectsByJid)
+        {
+            List<ResolvedNameEntry> entries = AppStateResolvedNameEntries.ForGroupSubjects(
+                subjectsByJid,
+                JidHelper.Normalize,
+                _jids.GetCanonicalJid,
+                SanitizeForResolvedName);
+            return _resolvedNames.ApplyResolvedNameBatchAsync(entries);
+        }
+
+        /// <summary>One contact name from account app-state.</summary>
+        public Task ApplyRemoteContactNameAsync(string jid, string name)
+        {
+            List<ResolvedNameEntry> entries = AppStateResolvedNameEntries.ForContact(
+                jid,
+                name,
+                JidHelper.Normalize,
+                _jids.GetCanonicalJid,
+                SanitizeForResolvedName);
+            return _resolvedNames.ApplyResolvedNameBatchAsync(entries);
+        }
+
+        private string SanitizeForResolvedName(string label, string contextJid)
+        {
+            ContactLabelResult result = _labels.Sanitize(label, contextJid);
+            return result.IsUsable ? result.Label : null;
+        }
+
+        /// <summary>Self push-name from account app-state.</summary>
+        public Task ApplyRemoteSelfPushNameAsync(string name) =>
+            _resolvedNames.ApplySelfPushNameFromAppStateAsync(name);
 
         private void ScheduleAliasFollowUp(string source)
         {

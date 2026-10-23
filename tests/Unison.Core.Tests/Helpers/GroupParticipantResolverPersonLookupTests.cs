@@ -146,6 +146,14 @@ namespace Unison.Core.Tests.Helpers
             {
             }
 
+            public Task ApplyRemoteGroupSubjectsAsync(
+                IEnumerable<KeyValuePair<string, string>> subjectsByJid) =>
+                Task.CompletedTask;
+
+            public Task ApplyRemoteContactNameAsync(string jid, string name) => Task.CompletedTask;
+
+            public Task ApplyRemoteSelfPushNameAsync(string name) => Task.CompletedTask;
+
             public Task<string> SearchContactAsync(string phoneNumber) => Task.FromResult<string>(null);
 
             public string TryResolvePhone(string jid, string phoneDigits = null) => null;
