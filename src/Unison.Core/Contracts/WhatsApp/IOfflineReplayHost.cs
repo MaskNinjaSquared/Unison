@@ -17,5 +17,11 @@ namespace Unison.Core.Contracts.WhatsApp
         void SchedulePersist();
 
         void ReportFlushFailure(string reason, Exception error);
+
+        /// <summary>
+        /// After a catalogue repair that rewrote tips: clear the message RAM cache and nudge
+        /// listeners that history-shaped surfaces may have changed.
+        /// </summary>
+        void NotifyHistorySurfaceRefresh();
     }
 }
