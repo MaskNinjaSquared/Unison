@@ -167,7 +167,8 @@ What is left on `_contactService` is awaited and ordered by the client, so it is
 Post-session chat envelopes route on `MessageFacade` (`RouteIncomingChatEnvelopeAsync`
 incl. alias hints, controls, content, placeholder note/resend, full peer-data
 response, placeholder ack, socket missing-message, receipts). Stanza `notify`
-push-name is `ContactFacade.ApplyStanzaNotifyPushName`. Pump keeps queue lanes and
+push-name is `ContactFacade.ApplyStanzaNotifyPushName`. History-on-demand wire
+acks are `HistoryFacade.HandleOnDemandAck`. Pump keeps queue lanes and
 session-only App State. Persistence flush timer / `ForgetChatStorage` / Connection
 lifecycle stay on the host (not this phase).
 
