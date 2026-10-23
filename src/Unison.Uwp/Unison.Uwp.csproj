@@ -134,6 +134,7 @@
       <DependentUpon>App.xaml</DependentUpon>
     </Compile>
     <Compile Include="Helpers\LocalizedStrings.cs" />
+    <Compile Include="Helpers\LocalizedChatStripLabels.cs" />
     <Compile Include="Helpers\SelfChatDisplayHelper.cs" />
     <Compile Include="Helpers\SelfMarkerNaming.cs" />
     <Compile Include="Helpers\LocalSettingsAccess.cs" />
