@@ -66,6 +66,7 @@ namespace Unison.WhatsAppClient.Contacts
         private readonly ChatAvatarPolicy _avatars;
         private readonly IAvatarCache _avatarCache;
         private readonly GroupRosterPolicy _roster;
+        private readonly IGroupService _groups;
         private readonly SyncStatusChannel _syncStatus;
         private readonly SyncWorkGate _syncWork;
         private readonly IDeferredAvatarResolution _deferredAvatars;
@@ -194,6 +195,7 @@ namespace Unison.WhatsAppClient.Contacts
                 workload ?? throw new ArgumentNullException(nameof(workload)),
                 initialSync,
                 diagnostics);
+            _groups = groups;
             _roster = new GroupRosterPolicy(groups, this, jids, ui, catalog, chats, syncWork, sessions, workload);
 
             // Lives as long as the app does, so there is nothing to unhook from.
@@ -1224,6 +1226,22 @@ namespace Unison.WhatsAppClient.Contacts
             finally
             {
                 _syncStatus.Raise(null);
+            }
+        }
+
+        /// <inheritdoc />
+        public async Task NotifyBackgroundResolutionDueAsync(
+            CancellationToken cancellationToken = default(CancellationToken))
+        {
+            await RunBackgroundResolutionAsync(cancellationToken).ConfigureAwait(false);
+            try
+            {
+                _groups.NotifyGroupListingDue();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine(
+                    "[ContactFacade] NotifyGroupListingDue failed: " + ex.Message);
             }
         }
 

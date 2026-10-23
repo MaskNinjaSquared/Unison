@@ -2,6 +2,14 @@
 
 Newest first.
 
+## Phase B — post-replay, deferred startup, offline release, receipt metadata, self name
+
+`NotifyPostReplayMaintenanceAsync` / `NotifyDeferredStartupListRepairAsync` on
+`ChatFacade`. `NotifyBackgroundResolutionDueAsync` (names + group listing) on
+`ContactFacade`. `NotifyOfflineReplayReleasedAsync` + `CompleteFirstOfflineRelease`.
+Receipt path: façade applies group metadata then counts; host is IQ + cache.
+`SelfDisplayName` blank filled from `SelfProfileState` on `MessageFacade`.
+
 ## Phase B — dead host Func/event, inbound stanza Notify*, history landed
 
 Dropped unused `ExpandNameLookupCandidates`, host `IStatusService` Func, and orphan

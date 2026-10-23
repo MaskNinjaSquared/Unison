@@ -264,7 +264,8 @@ namespace Unison.Uwp.Services.WhatsApp
                     Timestamp = e.Timestamp,
                     IsOffline = e.IsOffline,
                     IsFromMe = e.IsFromMe,
-                    SelfDisplayName = _authState?.Me?.Name
+                    // MessageFacade fills blank SelfDisplayName from SelfProfileState.
+                    SelfDisplayName = null
                 }).ConfigureAwait(false);
             }
             catch (Exception ex)
@@ -309,6 +310,13 @@ namespace Unison.Uwp.Services.WhatsApp
                 "offline-summary-apply-failed",
                 error,
                 "reason=" + reason);
+        }
+
+        void IOfflineReplayHost.CompleteFirstOfflineRelease(string reason)
+        {
+            PublishConnectionUpdate("synced");
+            EnableScheduledPersist("offline completion (" + reason + ")");
+            _ = TryConsumeMessageStoreForceHistoryRepairAsync(reason);
         }
 
     }

@@ -345,6 +345,10 @@ namespace Unison.Core.Tests.ViewModels
                 string reason,
                 bool schedulePlaceholderDrain,
                 int maxDrainRequests = 8) => Task.CompletedTask;
+            public Task NotifyOfflineReplayReleasedAsync(
+                int offlineCount,
+                bool firstRelease,
+                bool transportReady) => Task.CompletedTask;
             public Task NotifyIncomingDecryptedAsync(IncomingDecryptedNotifyRequest request) =>
                 Task.CompletedTask;
             public Task ApplyPeerDataPlaceholderResendsAsync(

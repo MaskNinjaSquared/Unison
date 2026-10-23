@@ -17,5 +17,11 @@ namespace Unison.Core.Contracts.WhatsApp
         void SchedulePersist();
 
         void ReportFlushFailure(string reason, Exception error);
+
+        /// <summary>
+        /// First offline-replay release of the process while transport is ready: mark synced,
+        /// enable catalogue persist, and consume a forced history-repair flag when set.
+        /// </summary>
+        void CompleteFirstOfflineRelease(string reason);
     }
 }

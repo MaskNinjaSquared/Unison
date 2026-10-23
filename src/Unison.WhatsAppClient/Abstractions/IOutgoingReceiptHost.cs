@@ -2,9 +2,11 @@
 // IOutgoingReceiptHost
 //
 // Group-count half of receipt handling. MessageFacade owns receipt read, group
-// tally, and ApplyOutgoingStatusAsync; the client still answers peer counts.
+// tally, metadata apply, and ApplyOutgoingStatusAsync; the client answers the
+// wire IQ and the recipient-count cache.
 // =============================================================================
 using System.Threading.Tasks;
+using Unison.Baileys.Protocol;
 
 namespace Unison.WhatsAppClient.Abstractions
 {
@@ -12,9 +14,13 @@ namespace Unison.WhatsAppClient.Abstractions
     {
         bool IsSelfLinked(string jid);
 
-        /// <summary>
-        /// How many peers a group send must reach before the tick fills in (cached metadata).
-        /// </summary>
-        Task<int> GetExpectedGroupRecipientCountAsync(string groupJid);
+        /// <summary>Cached peer count when still fresh; otherwise false.</summary>
+        bool TryGetFreshGroupRecipientCount(string groupJid, out int recipientCount);
+
+        /// <summary>Remembers a counted peer total after a fresh metadata IQ.</summary>
+        void RememberGroupRecipientCount(string groupJid, int recipientCount);
+
+        /// <summary>Wire group metadata IQ. Null when the socket is gone.</summary>
+        Task<BinaryNode> QueryGroupMetadataAsync(string groupJid);
     }
 }

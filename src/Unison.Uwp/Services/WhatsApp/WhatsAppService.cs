@@ -1503,38 +1503,23 @@ namespace Unison.Uwp.Services.WhatsApp
                             "reconcile-deferred-list-paint",
                             "reason=post-replay");
                     }
-                    else
+                    else if (ChatFacade != null)
                     {
                         try
                         {
                             token.ThrowIfCancellationRequested();
-                            if (ChatFacade != null)
-                            {
-                                await ChatFacade.ReconcileChatPreviewsFromSqliteAsync(null, "post-replay")
-                                    .ConfigureAwait(false);
-                            }
+                            bool runDelayedBulk =
+                                offlineCount >= 50 && !UseFrugalSyncBudget;
+                            await ChatFacade.NotifyPostReplayMaintenanceAsync(
+                                offlineCount,
+                                runDelayedBulk,
+                                token).ConfigureAwait(false);
                         }
                         catch (OperationCanceledException)
                         {
                             RaiseSyncStatus(null);
-                        return;
+                            return;
                         }
-                        catch (Exception exReconcile)
-                        {
-                            Debug.WriteLine(
-                                "[WhatsAppService] Post-replay preview reconcile failed: " +
-                                exReconcile.Message);
-                        }
-                    }
-
-                    // Extra in-memory repair only for large desktop drains (already warmed timelines).
-                    if (offlineCount >= 50 && !UseFrugalSyncBudget && ChatFacade != null)
-                    {
-                        await ChatFacade.ReconcileChatListFromStoredAsync(
-                            "delayed-offline-repair:" + offlineCount).ConfigureAwait(false);
-                        await Task.Delay(400, token);
-                        await ChatFacade.RefreshAllChatPreviewsFromStoredAsync(
-                            "delayed-post-offline-drain").ConfigureAwait(false);
                     }
 
                     RuntimeDiagnosticsService.Instance.Write(
@@ -2173,12 +2158,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 }
                 else
                 {
-                    await chats.DeduplicateChatListAsync("deferred-startup")
-                        .ConfigureAwait(false);
-                    await chats.RepairLegacyDeletedPreviewsAsync()
-                        .ConfigureAwait(false);
-                    await chats.ReconcileChatPreviewsFromSqliteAsync(null, "deferred-startup")
-                        .ConfigureAwait(false);
+                    await chats.NotifyDeferredStartupListRepairAsync().ConfigureAwait(false);
                 }
 
                 if (Contacts != null)
@@ -2306,14 +2286,10 @@ namespace Unison.Uwp.Services.WhatsApp
                     {
                         using (TraceStartupPhase("background-names"))
                         {
-                            await contacts.RunBackgroundResolutionAsync(token).ConfigureAwait(false);
+                            await contacts.NotifyBackgroundResolutionDueAsync(token)
+                                .ConfigureAwait(false);
                         }
                     }
-
-                    // Last step: the group façade shows the status, runs the listing and clears it.
-                    RaiseReport(
-                        () => Groups?.NotifyGroupListingDue(),
-                        nameof(IGroupService.NotifyGroupListingDue));
                 }
                 catch (TaskCanceledException) { }
                 catch (Exception ex)

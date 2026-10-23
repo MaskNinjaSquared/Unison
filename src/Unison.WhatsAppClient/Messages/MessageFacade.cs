@@ -61,7 +61,10 @@ namespace Unison.WhatsAppClient.Messages
         private readonly Func<IChatService> _resolveChats;
         private readonly Func<IContactService> _resolveContacts;
         private readonly Func<IStatusService> _resolveStatus;
+        private readonly Func<IGroupService> _resolveGroups;
         private readonly Func<IConnectionService> _resolveConnection;
+        private readonly IOfflineReplayHost _offlineReplay;
+        private readonly SelfProfileState _selfProfile;
         private readonly IDispatcher _ui;
         private readonly SyncWorkGate _syncWork;
         private readonly InitialSyncProgressState _initialSync;
@@ -102,7 +105,10 @@ namespace Unison.WhatsAppClient.Messages
             Func<IChatService> resolveChats,
             Func<IContactService> resolveContacts,
             Func<IStatusService> resolveStatus,
+            Func<IGroupService> resolveGroups,
             Func<IConnectionService> resolveConnection,
+            IOfflineReplayHost offlineReplay,
+            SelfProfileState selfProfile,
             IDispatcher ui,
             SyncWorkGate syncWork,
             InitialSyncProgressState initialSync,
@@ -155,8 +161,14 @@ namespace Unison.WhatsAppClient.Messages
                 ?? throw new ArgumentNullException(nameof(resolveContacts));
             _resolveStatus = resolveStatus
                 ?? throw new ArgumentNullException(nameof(resolveStatus));
+            _resolveGroups = resolveGroups
+                ?? throw new ArgumentNullException(nameof(resolveGroups));
             _resolveConnection = resolveConnection
                 ?? throw new ArgumentNullException(nameof(resolveConnection));
+            _offlineReplay = offlineReplay
+                ?? throw new ArgumentNullException(nameof(offlineReplay));
+            _selfProfile = selfProfile
+                ?? throw new ArgumentNullException(nameof(selfProfile));
             _strings = strings;
             _receipts = new ReceiptReader(jids);
 
@@ -249,6 +261,26 @@ namespace Unison.WhatsAppClient.Messages
         }
 
         /// <inheritdoc />
+        public Task NotifyOfflineReplayReleasedAsync(
+            int offlineCount,
+            bool firstRelease,
+            bool transportReady)
+        {
+            string settleReason = "offline-complete:" + offlineCount;
+            bool drainPlaceholders = false;
+            if (firstRelease && transportReady)
+            {
+                _offlineReplay.CompleteFirstOfflineRelease(settleReason);
+                drainPlaceholders = true;
+            }
+
+            return NotifyOfflineReplaySettledAsync(
+                settleReason,
+                schedulePlaceholderDrain: drainPlaceholders,
+                maxDrainRequests: 8);
+        }
+
+        /// <inheritdoc />
         public Task NotifyIncomingDecryptedAsync(IncomingDecryptedNotifyRequest request)
         {
             if (request?.Message == null)
@@ -259,6 +291,11 @@ namespace Unison.WhatsAppClient.Messages
             bool quietForSync =
                 _initialSync.IsActive ||
                 _isAwaitingInitialSync();
+
+            if (string.IsNullOrWhiteSpace(request.SelfDisplayName))
+            {
+                request.SelfDisplayName = _selfProfile.Name;
+            }
 
             return RouteIncomingChatEnvelopeAsync(new IncomingRoutedEnvelopeRequest
             {
@@ -350,8 +387,7 @@ namespace Unison.WhatsAppClient.Messages
                 return;
             }
 
-            int expectedRecipients = await _receiptHost
-                .GetExpectedGroupRecipientCountAsync(receipt.ChatJid)
+            int expectedRecipients = await ResolveExpectedGroupRecipientCountAsync(receipt.ChatJid)
                 .ConfigureAwait(false);
             if (expectedRecipients <= 0)
             {
@@ -371,6 +407,64 @@ namespace Unison.WhatsAppClient.Messages
                     await ApplyOutgoingStatusAsync(id, aggregateStatus).ConfigureAwait(false);
                 }
             }
+        }
+
+        private async Task<int> ResolveExpectedGroupRecipientCountAsync(string groupJid)
+        {
+            string canonical = _jids.GetCanonicalJid(JidHelper.Normalize(groupJid));
+            if (string.IsNullOrWhiteSpace(canonical))
+            {
+                return 0;
+            }
+
+            int cached;
+            if (_receiptHost.TryGetFreshGroupRecipientCount(canonical, out cached))
+            {
+                return cached;
+            }
+
+            Unison.Baileys.Protocol.BinaryNode response;
+            try
+            {
+                response = await _receiptHost.QueryGroupMetadataAsync(canonical).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine(
+                    "[MessageFacade] Group receipt metadata query failed for " +
+                    canonical + ": " + ex.Message);
+                return 0;
+            }
+
+            if (response == null)
+            {
+                return 0;
+            }
+
+            IGroupService groups = _resolveGroups();
+            if (groups != null)
+            {
+                try
+                {
+                    await groups.ApplyGroupMetadataFromResponseAsync(canonical, response)
+                        .ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine(
+                        "[MessageFacade] Group metadata apply failed for " +
+                        canonical + ": " + ex.Message);
+                }
+            }
+
+            int? counted = _receipts.CountRecipients(response);
+            if (counted == null)
+            {
+                return 0;
+            }
+
+            _receiptHost.RememberGroupRecipientCount(canonical, counted.Value);
+            return counted.Value;
         }
 
         /// <inheritdoc />

@@ -170,6 +170,21 @@ namespace Unison.Core.Contracts.WhatsApp
         Task RepairLegacyDeletedPreviewsAsync();
 
         /// <summary>
+        /// After offline replay gates: reconcile list tips from SQLite, and for large desktop
+        /// drains also repair/refresh from the in-memory cache. Host owns quiet/memory/catch-up.
+        /// </summary>
+        Task NotifyPostReplayMaintenanceAsync(
+            int offlineCount,
+            bool runDelayedBulkRepair,
+            System.Threading.CancellationToken cancellationToken);
+
+        /// <summary>
+        /// Deferred-startup list pass: dedupe, legacy deleted-preview repair, SQLite tip reconcile.
+        /// Host owns quiet/memory gates and contact-name hydrate before this.
+        /// </summary>
+        Task NotifyDeferredStartupListRepairAsync();
+
+        /// <summary>
         /// Applies one history-sync preview slice onto the in-memory list: create missing rows,
         /// update tips when newer, apply pin/mute flags into the row and durable store.
         /// Must run on the UI thread (list mutations). Presentation batching stays with the caller.

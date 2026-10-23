@@ -22,6 +22,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using Unison.Core.Contracts;
 using Unison.Core.Contracts.WhatsApp;
@@ -945,6 +946,51 @@ namespace Unison.WhatsAppClient.Chats
                 $"[ChatFacade] Reconciled {result.Refreshed} chat previews from cached messages " +
                 $"(created={result.Created}, reason={reason})");
         }
+
+        /// <inheritdoc />
+        public async Task NotifyPostReplayMaintenanceAsync(
+            int offlineCount,
+            bool runDelayedBulkRepair,
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            try
+            {
+                await ReconcileChatPreviewsFromSqliteAsync(null, "post-replay")
+                    .ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine(
+                    "[ChatFacade] Post-replay preview reconcile failed: " + ex.Message);
+            }
+
+            if (!runDelayedBulkRepair)
+            {
+                return;
+            }
+
+            cancellationToken.ThrowIfCancellationRequested();
+            await ReconcileChatListFromStoredAsync(
+                "delayed-offline-repair:" + offlineCount).ConfigureAwait(false);
+            await Task.Delay(400, cancellationToken).ConfigureAwait(false);
+            await RefreshAllChatPreviewsFromStoredAsync("delayed-post-offline-drain")
+                .ConfigureAwait(false);
+        }
+
+        /// <inheritdoc />
+        public async Task NotifyDeferredStartupListRepairAsync()
+        {
+            await DeduplicateChatListAsync("deferred-startup").ConfigureAwait(false);
+            await RepairLegacyDeletedPreviewsAsync().ConfigureAwait(false);
+            await ReconcileChatPreviewsFromSqliteAsync(null, "deferred-startup")
+                .ConfigureAwait(false);
+        }
+
         public Task MergeDuplicateChatsAsync(string lidJid, string pnJid)
         {
             return _aliasMerge.MergeAsync(lidJid, pnJid);

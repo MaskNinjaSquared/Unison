@@ -139,6 +139,12 @@ namespace Unison.Core.Contracts.WhatsApp
         Task RunBackgroundResolutionAsync(CancellationToken cancellationToken = default(CancellationToken));
 
         /// <summary>
+        /// Host path after quiet/handshake/catch-up/avatar gates: run background names/pictures
+        /// then <see cref="IGroupService.NotifyGroupListingDue"/>.
+        /// </summary>
+        Task NotifyBackgroundResolutionDueAsync(CancellationToken cancellationToken = default(CancellationToken));
+
+        /// <summary>
         /// Deferred-startup contact pass after the catalog is normalized: disk avatar hydrate,
         /// address-book overlay, list relabel, catalog schedule. Optionally starts
         /// <see cref="ResolveMissingNamesAsync"/> (fire-and-forget) when the list is warm.

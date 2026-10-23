@@ -1815,38 +1815,28 @@ namespace Unison.Uwp.Services.WhatsApp
                 {
                     Debug.WriteLine($"[WhatsAppService] Non-fatal offline replay message flush failure after offline drain: {ex.Message}");
                 }
-                string settleReason = "offline-complete:" + offlineCount;
-                bool drainPlaceholders = false;
-                if (firstRelease)
+
+                bool transportReady = socket.IsConnected && socket.IsHandshakeComplete;
+                if (firstRelease && !transportReady)
                 {
                     // Safety-timeout release can race a hung ConnectAsync; never mark synced
                     // until Noise finished on the live socket.
-                    if (socket.IsConnected && socket.IsHandshakeComplete)
-                    {
-                        PublishConnectionUpdate("synced");
-                        EnableScheduledPersist("offline completion (" + offlineCount + " messages)");
-                        _ = TryConsumeMessageStoreForceHistoryRepairAsync(settleReason);
-                        drainPlaceholders = true;
-                    }
-                    else
-                    {
-                        RuntimeDiagnosticsService.Instance.Write(
-                            "connection",
-                            "offline-replay-synced-skipped",
-                            "reason=not-connected; count=" + offlineCount +
-                            "; socketConnected=" + socket.IsConnected +
-                            "; handshake=" + socket.IsHandshakeComplete);
-                    }
+                    RuntimeDiagnosticsService.Instance.Write(
+                        "connection",
+                        "offline-replay-synced-skipped",
+                        "reason=not-connected; count=" + offlineCount +
+                        "; socketConnected=" + socket.IsConnected +
+                        "; handshake=" + socket.IsHandshakeComplete);
                 }
 
                 try
                 {
                     if (Messages != null)
                     {
-                        await Messages.NotifyOfflineReplaySettledAsync(
-                            settleReason,
-                            schedulePlaceholderDrain: drainPlaceholders,
-                            maxDrainRequests: 8).ConfigureAwait(false);
+                        await Messages.NotifyOfflineReplayReleasedAsync(
+                            offlineCount,
+                            firstRelease,
+                            transportReady).ConfigureAwait(false);
                     }
                     else
                     {

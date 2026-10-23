@@ -533,6 +533,15 @@ namespace Unison.Core.Contracts.WhatsApp
             int maxDrainRequests = 8);
 
         /// <summary>
+        /// Host socket path after pending-notification release: first-release synced/persist
+        /// (via <see cref="IOfflineReplayHost"/>) then tips + optional placeholder drain.
+        /// </summary>
+        Task NotifyOfflineReplayReleasedAsync(
+            int offlineCount,
+            bool firstRelease,
+            bool transportReady);
+
+        /// <summary>
         /// Pump entry: assemble quiet/visibility/active-chat context and route the envelope.
         /// </summary>
         Task NotifyIncomingDecryptedAsync(IncomingDecryptedNotifyRequest request);
