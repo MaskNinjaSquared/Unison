@@ -33,11 +33,6 @@ namespace Unison.Uwp.Services.WhatsApp
             }
         }
 
-        Task IOutgoingReceiptHost.ApplyOutgoingStatusAsync(string messageId, string status, string error) =>
-            Messages != null
-                ? Messages.ApplyOutgoingStatusAsync(messageId, status, error)
-                : Task.CompletedTask;
-
         bool IOutgoingReceiptHost.IsSelfLinked(string jid) => IsSelfLinkedJid(jid);
 
         Task<int> IOutgoingReceiptHost.GetExpectedGroupRecipientCountAsync(string groupJid) =>

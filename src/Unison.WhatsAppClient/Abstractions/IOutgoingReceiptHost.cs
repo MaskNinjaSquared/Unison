@@ -1,8 +1,8 @@
 // =============================================================================
 // IOutgoingReceiptHost
 //
-// Timeline / pending-status / group-count half of receipt handling. MessageFacade
-// owns the receipt read + group tally; the client still mutates MessagesByChat.
+// Group-count half of receipt handling. MessageFacade owns receipt read, group
+// tally, and ApplyOutgoingStatusAsync; the client still answers peer counts.
 // =============================================================================
 using System.Threading.Tasks;
 
@@ -10,8 +10,6 @@ namespace Unison.WhatsAppClient.Abstractions
 {
     public interface IOutgoingReceiptHost
     {
-        Task ApplyOutgoingStatusAsync(string messageId, string status, string error = null);
-
         bool IsSelfLinked(string jid);
 
         /// <summary>
