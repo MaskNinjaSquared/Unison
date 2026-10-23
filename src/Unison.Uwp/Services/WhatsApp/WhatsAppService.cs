@@ -3948,9 +3948,12 @@ namespace Unison.Uwp.Services.WhatsApp
         {
             var bridge = new SocketBridge(_authState, _sharedKeyStore, reuseLoadedKeyState);
 
+            // ChatUpdate lives in Socket; Core's IChatService cannot name it. The concrete
+            // ChatFacade owns the apply — same pattern as other socket→façade bridges that
+            // still carry Socket model types.
             bridge.ChatSettingsChanged = update =>
-                ChatFacade != null
-                    ? ChatFacade.ApplyRemoteChatSettingsAsync(update)
+                ChatFacade is Unison.WhatsAppClient.Chats.ChatFacade chats
+                    ? chats.ApplyRemoteChatSettingsAsync(update)
                     : Task.CompletedTask;
             bridge.ContactChanged = contact =>
                 Contacts != null
@@ -4263,24 +4266,6 @@ namespace Unison.Uwp.Services.WhatsApp
             {
                 Debug.WriteLine("[WhatsAppService] SQLite pin persist failed: " + ex.Message);
             }
-        }
-
-        private async Task ApplyIncomingPinInChatAsync(
-            string chatJid,
-            string targetMessageId,
-            bool pin,
-            long senderTimestampMs,
-            uint durationSeconds = 0)
-        {
-            if (string.IsNullOrWhiteSpace(chatJid) || string.IsNullOrWhiteSpace(targetMessageId))
-            {
-                return;
-            }
-
-            MessagePinWindow window = MessagePinWindow.FromIncoming(
-                pin, senderTimestampMs, durationSeconds, DateTime.UtcNow);
-            await ApplyPinnedMessageStateAsync(
-                chatJid, targetMessageId, pin, window.PinnedAtUtc, window.ExpiresAtUtc);
         }
 
         Task IAppStateLocalHost.ApplyMessagePinAsync(

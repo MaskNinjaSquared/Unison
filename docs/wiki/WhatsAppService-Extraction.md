@@ -947,9 +947,10 @@ list strip (create row, preview, unread, reposition/sort) is `ChatFacade` (`Appl
 / `ApplyOfflineReplayChatSummariesAsync`, shared `UnreadDelta`). Timeline insert/dedupe is
 `IMessageService.AcceptIncomingTimeline` (host still holds `MessagesByChat` + id index);
 persist enqueue is `QueueIncomingPersist`. Revoke is `IMessageService.ApplyIncomingRevocationAsync`
-(`MessageRevocationContent` tombstone; host still finds the row in `MessagesByChat` / SQLite).
-Inbound pin-in-chat is `IMessageService.ApplyIncomingPinInChatAsync` (host still owns pin state /
-SQLite). Tip refresh / bulk re-tip / in-memory list reconcile is `IChatService.RefreshChatPreviewAsync` /
+(`MessageRevocationContent` tombstone; `IIncomingRevocationHost` finds/removes in `MessagesByChat`
+and refreshes the tip; façade persists via `IOutgoingMessageHost` / SQLite). Inbound pin-in-chat is
+`IMessageService.ApplyIncomingPinInChatAsync` (`MessagePinWindow` then `IAppStateLocalHost`
+message-pin write). Tip refresh / bulk re-tip / in-memory list reconcile is `IChatService.RefreshChatPreviewAsync` /
 `RefreshAllChatPreviewsFromStoredAsync` / `ReconcileChatListFromStoredAsync` (bulk paths still walk
 host `MessagesByChat`). Pump still owns the drain loop and the go/no-go before a resend; the wait, send and
 answer window are `PlaceholderResendDispatch`. Which way an

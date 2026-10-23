@@ -38,6 +38,9 @@ namespace Unison.WhatsAppClient.Messages
         private readonly IMessageWireActions _wire;
         private readonly IOutgoingMessageHost _outgoingHost;
         private readonly IOutgoingReceiptHost _receiptHost;
+        private readonly IIncomingRevocationHost _revocationHost;
+        private readonly IMessageStore _messageStore;
+        private readonly ActiveChat _activeChat;
         private readonly ReceiptReader _receipts;
         private readonly GroupReceiptTally _groupReceipts = new GroupReceiptTally();
         private readonly IRuntimeDiagnostics _diagnostics;
@@ -61,6 +64,9 @@ namespace Unison.WhatsAppClient.Messages
             IChatCatalogPersistence catalog,
             IMessageWireActions wire,
             IOutgoingReceiptHost receiptHost,
+            IIncomingRevocationHost revocationHost,
+            IMessageStore messageStore,
+            ActiveChat activeChat,
             IChatStore chatStore = null,
             IChatStateStore chatState = null,
             ISystemInfoProvider systemInfo = null,
@@ -84,6 +90,9 @@ namespace Unison.WhatsAppClient.Messages
             _chatState = chatState;
             _outgoingHost = outgoingHost ?? throw new ArgumentNullException(nameof(outgoingHost));
             _receiptHost = receiptHost ?? throw new ArgumentNullException(nameof(receiptHost));
+            _revocationHost = revocationHost ?? throw new ArgumentNullException(nameof(revocationHost));
+            _messageStore = messageStore ?? throw new ArgumentNullException(nameof(messageStore));
+            _activeChat = activeChat ?? throw new ArgumentNullException(nameof(activeChat));
             _receipts = new ReceiptReader(jids);
 
             _textSend = new OutgoingTextSend(_outgoingHost, _jids);
@@ -1221,6 +1230,128 @@ namespace Unison.WhatsAppClient.Messages
                 totalUnread,
                 chat != null ? chat.GetAvatarUrl(preferHigh: false) : null,
                 chat != null ? Math.Max(0, chat.UnreadCount) : 0);
+        }
+
+        /// <inheritdoc />
+        public async Task ApplyIncomingRevocationAsync(
+            string chatJid,
+            string targetMessageId,
+            string envelopeMessageId = null)
+        {
+            string targetId = targetMessageId;
+            if (string.IsNullOrWhiteSpace(chatJid) || string.IsNullOrWhiteSpace(targetId))
+            {
+                return;
+            }
+
+            string canonical = _jids.GetCanonicalJid(chatJid);
+            IReadOnlyList<string> aliasKeys = _revocationHost.GetAliasCacheKeys(canonical);
+
+            // Older builds stored the revoke envelope itself as a fresh
+            // "[Message Deleted]" item. Remove that synthetic row when the same
+            // event is replayed; the real target below keeps its original timestamp.
+            if (!string.IsNullOrWhiteSpace(envelopeMessageId) &&
+                !string.Equals(envelopeMessageId, targetId, StringComparison.Ordinal))
+            {
+                for (int i = 0; i < aliasKeys.Count; i++)
+                {
+                    _revocationHost.RemoveCachedMessage(aliasKeys[i], envelopeMessageId);
+                }
+
+                try
+                {
+                    await _messageStore.DeleteMessageAsync(canonical, envelopeMessageId)
+                        .ConfigureAwait(false);
+                }
+                catch
+                {
+                }
+            }
+
+            ChatMessage target;
+            _revocationHost.TryFindCachedMessage(aliasKeys, targetId, out target);
+
+            // If the chat is not resident, read the retained local window once. A revoke is
+            // an update to an existing message; it must never be inserted as a new "current" item.
+            if (target == null)
+            {
+                target = await FindPersistedMessageAsync(canonical, targetId).ConfigureAwait(false);
+            }
+
+            if (target == null)
+            {
+                return;
+            }
+
+            // Tombstone sets IsRevoked (post-1.8.3). That PropertyChanged fans into XAML bindings;
+            // apply on the UI thread when a dispatcher is attached so Mobile does not hit 0x8001010E.
+            await _revocationHost.RunBoundMutationAsync(
+                () => MessageRevocationContent.ApplyTombstone(target)).ConfigureAwait(false);
+
+            try
+            {
+                await _outgoingHost.PersistLiveAsync(canonical, target).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[MessageFacade] Failed to persist revoked message: " + ex.Message);
+            }
+
+            if (_activeChat.IsOpen(canonical))
+            {
+                // Host posts OnChatMessagesChanged; this façade already relays that event.
+                _outgoingHost.NotifyChatChanged(canonical);
+            }
+
+            ChatMessage latest = _revocationHost.TryPickLatestCachedTip(canonical);
+            if (latest != null && string.Equals(latest.Id, target.Id, StringComparison.Ordinal))
+            {
+                await _revocationHost.RefreshChatPreviewFromMessageAsync(canonical, target)
+                    .ConfigureAwait(false);
+            }
+        }
+
+        /// <inheritdoc />
+        public Task ApplyIncomingPinInChatAsync(
+            string chatJid,
+            string targetMessageId,
+            bool pin,
+            long senderTimestampMs,
+            uint durationSeconds = 0)
+        {
+            if (string.IsNullOrWhiteSpace(chatJid) || string.IsNullOrWhiteSpace(targetMessageId))
+            {
+                return Task.CompletedTask;
+            }
+
+            MessagePinWindow window = MessagePinWindow.FromIncoming(
+                pin, senderTimestampMs, durationSeconds, DateTime.UtcNow);
+            return _localAppState.ApplyMessagePinAsync(
+                chatJid, targetMessageId, pin, window.PinnedAtUtc, window.ExpiresAtUtc);
+        }
+
+        private async Task<ChatMessage> FindPersistedMessageAsync(string chatJid, string messageId)
+        {
+            if (_historyMessageStore == null ||
+                string.IsNullOrWhiteSpace(chatJid) ||
+                string.IsNullOrWhiteSpace(messageId))
+            {
+                return null;
+            }
+
+            List<string> keys = ResolveChatKeys(chatJid);
+            for (int i = 0; i < keys.Count; i++)
+            {
+                HistoryMessage row = await _historyMessageStore.GetAsync(keys[i], messageId)
+                    .ConfigureAwait(false);
+                ChatMessage mapped = HistoryMessageMapper.ToChatMessage(row);
+                if (mapped != null)
+                {
+                    return mapped;
+                }
+            }
+
+            return null;
         }
     }
 }

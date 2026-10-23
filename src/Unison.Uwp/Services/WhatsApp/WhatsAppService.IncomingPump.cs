@@ -33,11 +33,12 @@ using Unison.Core.State;
 using Unison.Socket.UseCases.Contacts;
 using Unison.Uwp.Helpers;
 using Microsoft.Extensions.DependencyInjection;
+using Unison.WhatsAppClient.Abstractions;
 using Unison.WhatsAppClient.Helpers;
 
 namespace Unison.Uwp.Services.WhatsApp
 {
-    public partial class WhatsAppService
+    public partial class WhatsAppService : IIncomingRevocationHost
     {
 
         private HashSet<string> GetOrBuildMessageIdIndex(string chatJid) =>
@@ -454,91 +455,89 @@ namespace Unison.Uwp.Services.WhatsApp
             }
         }
 
-        private async Task ApplyIncomingRevocationAsync(string chatJid, string targetMessageId, string envelopeMessageId = null)
+        IReadOnlyList<string> IIncomingRevocationHost.GetAliasCacheKeys(string canonical)
         {
-            string targetId = targetMessageId;
-            if (string.IsNullOrWhiteSpace(chatJid) || string.IsNullOrWhiteSpace(targetId)) return;
+            if (string.IsNullOrWhiteSpace(canonical))
+            {
+                return Array.Empty<string>();
+            }
 
-            string canonical = GetCanonicalJid(chatJid);
-            List<string> aliasKeys = MessagesByChat.ChatJids()
+            return MessagesByChat.ChatJids()
                 .Where(key => string.Equals(GetCanonicalJid(key), canonical, StringComparison.OrdinalIgnoreCase))
                 .ToList();
+        }
 
-            // Older builds stored the revoke envelope itself as a fresh
-            // "[Message Deleted]" item. Remove that synthetic row when the same
-            // event is replayed; the real target below keeps its original timestamp.
-            if (!string.IsNullOrWhiteSpace(envelopeMessageId) &&
-                !string.Equals(envelopeMessageId, targetId, StringComparison.Ordinal))
+        void IIncomingRevocationHost.RemoveCachedMessage(string chatKey, string messageId)
+        {
+            if (string.IsNullOrWhiteSpace(chatKey) || string.IsNullOrWhiteSpace(messageId))
             {
-                foreach (string key in aliasKeys)
-                {
-                    MessagesByChat.RemoveMessage(key, envelopeMessageId);
-                }
-                if (_messageStore != null)
-                {
-                    try { await _messageStore.DeleteMessageAsync(canonical, envelopeMessageId); } catch { }
-                }
+                return;
             }
 
-            AliasLinkedMessageFind.TryFind(MessagesByChat, aliasKeys, targetId, out _, out ChatMessage target);
+            MessagesByChat.RemoveMessage(chatKey, messageId);
+        }
 
-            // If the chat is not resident, read the retained local window once. A revoke is
-            // an update to an existing message; it must never be inserted as a new "current" item.
-            if (target == null)
+        bool IIncomingRevocationHost.TryFindCachedMessage(
+            IReadOnlyList<string> aliasKeys,
+            string messageId,
+            out ChatMessage message)
+        {
+            return AliasLinkedMessageFind.TryFind(
+                MessagesByChat, aliasKeys, messageId, out _, out message);
+        }
+
+        async Task IIncomingRevocationHost.RunBoundMutationAsync(Action action)
+        {
+            if (action == null)
             {
-                ChatMessage persisted = null;
-                try
-                {
-                    HistoryMessage row = await _historyMessages.GetAsync(canonical, targetId).ConfigureAwait(false);
-                    persisted = HistoryMessageMapper.ToChatMessage(row);
-                }
-                catch
-                {
-                }
-
-                target = persisted;
+                return;
             }
 
-            if (target == null) return;
-
-            // Tombstone sets IsRevoked (post-1.8.3). That PropertyChanged fans into XAML bindings;
-            // apply on the UI thread when a dispatcher is attached so Mobile does not hit 0x8001010E.
             if (_ui.Current != null)
             {
-                await _ui.RunAsync(() => MessageRevocationContent.ApplyTombstone(target));
+                await _ui.RunAsync(action).ConfigureAwait(false);
             }
             else
             {
-                MessageRevocationContent.ApplyTombstone(target);
+                action();
             }
+        }
 
-            await SaveMessageAsync(canonical, target);
-
-            if (IsActiveChatJid(canonical)) QueueChatMessagesChanged(canonical);
-            var latest = MessagesByChat.TryGet(canonical, out var canonicalMessages)
-                ? ChatPreviewTip.PickLatest(canonicalMessages)
-                : null;
-            if (latest != null && string.Equals(latest.Id, target.Id, StringComparison.Ordinal))
+        ChatMessage IIncomingRevocationHost.TryPickLatestCachedTip(string canonical)
+        {
+            if (string.IsNullOrWhiteSpace(canonical) ||
+                !MessagesByChat.TryGet(canonical, out var canonicalMessages))
             {
-                if (ChatFacade != null)
-                {
-                    await ChatFacade.RefreshChatPreviewAsync(
-                        canonical,
-                        target.Content,
-                        target.Timestamp,
-                        target.IsFromMe,
-                        ChatPreviewNormalizer.InferKindFromMessage(target),
-                        ChatPreviewNormalizer.FormatListAuthorPrefix(
-                            target,
-                            JidHelper.IsGroupJid(canonical),
-                            LocalizedChatStripLabels.SelfFallbackName(),
-                            GetCanonicalJid(target.ParticipantJid)),
-                        ParticipantStripIdentity.PreferForDisplay(
-                            target.ParticipantJid,
-                            GetCanonicalJid(target.ParticipantJid)),
-                        target.IsFromMe ? null : target.SenderName);
-                }
+                return null;
             }
+
+            return ChatPreviewTip.PickLatest(canonicalMessages);
+        }
+
+        async Task IIncomingRevocationHost.RefreshChatPreviewFromMessageAsync(
+            string canonical,
+            ChatMessage message)
+        {
+            if (ChatFacade == null || message == null || string.IsNullOrWhiteSpace(canonical))
+            {
+                return;
+            }
+
+            await ChatFacade.RefreshChatPreviewAsync(
+                canonical,
+                message.Content,
+                message.Timestamp,
+                message.IsFromMe,
+                ChatPreviewNormalizer.InferKindFromMessage(message),
+                ChatPreviewNormalizer.FormatListAuthorPrefix(
+                    message,
+                    JidHelper.IsGroupJid(canonical),
+                    LocalizedChatStripLabels.SelfFallbackName(),
+                    GetCanonicalJid(message.ParticipantJid)),
+                ParticipantStripIdentity.PreferForDisplay(
+                    message.ParticipantJid,
+                    GetCanonicalJid(message.ParticipantJid)),
+                message.IsFromMe ? null : message.SenderName).ConfigureAwait(false);
         }
 
         private async Task ProcessPeerDataOperationResponseAsync(Proto.Message.Types.PeerDataOperationRequestResponseMessage response)
@@ -1100,7 +1099,10 @@ namespace Unison.Uwp.Services.WhatsApp
                 {
                     QueueMessageControlWork(
                         "message-revoke:" + e.MessageId,
-                        () => ApplyIncomingRevocationAsync(jid, e.Message.ProtocolMessage.Key?.Id, e.MessageId));
+                        () => Messages != null
+                            ? Messages.ApplyIncomingRevocationAsync(
+                                jid, e.Message.ProtocolMessage.Key?.Id, e.MessageId)
+                            : Task.CompletedTask);
                     return;
                 }
 
@@ -1114,12 +1116,14 @@ namespace Unison.Uwp.Services.WhatsApp
                     long senderTs = pinMessage?.SenderTimestampMs ?? 0;
                     QueueMessageControlWork(
                         "message-pin:" + e.MessageId,
-                        () => ApplyIncomingPinInChatAsync(
-                            jid,
-                            pinTargetId,
-                            pin,
-                            senderTs,
-                            duration));
+                        () => Messages != null
+                            ? Messages.ApplyIncomingPinInChatAsync(
+                                jid,
+                                pinTargetId,
+                                pin,
+                                senderTs,
+                                duration)
+                            : Task.CompletedTask);
                     return;
                 }
 

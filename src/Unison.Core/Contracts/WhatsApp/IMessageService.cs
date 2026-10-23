@@ -247,5 +247,26 @@ namespace Unison.Core.Contracts.WhatsApp
             bool suppressToast,
             int totalUnread,
             ChatItem chat);
+
+        /// <summary>
+        /// Inbound revoke: tombstone the target (never insert a synthetic deleted row),
+        /// drop a leftover envelope row from older builds, persist, notify the open chat,
+        /// and refresh the list tip when the revoked message was the preview.
+        /// </summary>
+        Task ApplyIncomingRevocationAsync(
+            string chatJid,
+            string targetMessageId,
+            string envelopeMessageId = null);
+
+        /// <summary>
+        /// Inbound pin-in-chat / unpin: computes the pin window then writes through the
+        /// local app-state host (timeline + SQLite).
+        /// </summary>
+        Task ApplyIncomingPinInChatAsync(
+            string chatJid,
+            string targetMessageId,
+            bool pin,
+            long senderTimestampMs,
+            uint durationSeconds = 0);
     }
 }

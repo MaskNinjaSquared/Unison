@@ -2,6 +2,15 @@
 
 Newest first.
 
+## Phase B — inbound revoke + pin-in-chat on MessageFacade
+
+`IMessageService.ApplyIncomingRevocationAsync` owns revoke apply (envelope cleanup,
+`MessageRevocationContent` tombstone, persist, active-chat notify, tip refresh when
+the revoked row was the list preview). Host port `IIncomingRevocationHost` keeps
+`MessagesByChat` find/remove and LocalizedChatStripLabels tip refresh.
+`IMessageService.ApplyIncomingPinInChatAsync` computes `MessagePinWindow` and writes
+through `IAppStateLocalHost.ApplyMessagePinAsync`. Pump only queues/dispatches.
+
 ## Phase B — self push-name capture on ContactFacade
 
 `ContactFacade.CaptureSelfPushName` owns dash/PreferEstablished/RememberPersonName/
