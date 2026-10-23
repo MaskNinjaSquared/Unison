@@ -1045,53 +1045,80 @@ namespace Unison.Uwp.Services.WhatsApp
             }
         }
 
-        public async Task<bool> TransferActiveSocketToBrokerAsync(string reason)
+        /// <summary>
+        /// Orchestration lives in <see cref="ConnectionBrokerTransfer"/>. Answers true
+        /// only when ownership moved — never a fake handoff.
+        /// </summary>
+        public Task<bool> TransferActiveSocketToBrokerAsync(string reason) =>
+            ConnectionBrokerTransfer.RunAsync(this, reason);
+
+        bool IConnectionBrokerTransferHost.HasReadyForegroundSocket
+        {
+            get
+            {
+                var socket = _socket;
+                return socket != null && socket.IsConnected && socket.IsHandshakeComplete;
+            }
+        }
+
+        bool IConnectionBrokerTransferHost.IsAlreadyBrokerOwned
+        {
+            get
+            {
+                var socket = _socket;
+                return socket != null && socket.IsSocketOwnedByBroker;
+            }
+        }
+
+        void IConnectionBrokerTransferHost.StopHealthMonitor(string reason) =>
+            StopConnectionHealthMonitor(reason);
+
+        void IConnectionBrokerTransferHost.RestartHealthMonitor()
         {
             var socket = _socket;
-            if (socket == null || !socket.IsConnected || !socket.IsHandshakeComplete)
+            if (socket != null)
             {
-                RuntimeDiagnosticsService.Instance.Write(
-                    "socket-broker",
-                    "transfer-skipped",
-                    "reason=no-ready-socket; trigger=" + (reason ?? string.Empty));
-                return false;
+                StartConnectionHealthMonitor(socket);
             }
-
-            if (socket.IsSocketOwnedByBroker)
-            {
-                return true;
-            }
-
-            StopConnectionHealthMonitor("socket-broker-transfer");
-            try
-            {
-                Task displayNameSnapshotTask =
-                    PersistBackgroundDisplayNamesAsync();
-                await PrepareForSuspendAsync();
-                await displayNameSnapshotTask;
-
-                bool transferred = await socket.TransferSocketToBrokerAsync(reason);
-                if (transferred)
-                {
-                    PublishConnectionUpdate("background");
-                    RuntimeDiagnosticsService.Instance.Write(
-                        "socket-broker",
-                        "service-transfer-complete",
-                        "transport=" + socket.TransportName + "; reason=" + reason);
-                    return true;
-                }
-            }
-            catch (Exception ex)
-            {
-                RuntimeDiagnosticsService.Instance.RecordException(
-                    "socket-broker",
-                    "service-transfer-failed",
-                    ex);
-            }
-
-            StartConnectionHealthMonitor(socket);
-            return false;
         }
+
+        Task IConnectionBrokerTransferHost.PersistBackgroundDisplayNamesAsync() =>
+            PersistBackgroundDisplayNamesAsync();
+
+        Task IConnectionBrokerTransferHost.PrepareForSuspendAsync() =>
+            PrepareForSuspendAsync();
+
+        Task<bool> IConnectionBrokerTransferHost.TransferSocketToBrokerAsync(string reason)
+        {
+            var socket = _socket;
+            if (socket == null)
+            {
+                return Task.FromResult(false);
+            }
+
+            return socket.TransferSocketToBrokerAsync(reason);
+        }
+
+        void IConnectionBrokerTransferHost.PublishBackgroundConnection() =>
+            PublishConnectionUpdate("background");
+
+        void IConnectionBrokerTransferHost.WriteBrokerJournal(string eventName, string detail)
+        {
+            string enriched = detail;
+            if (string.Equals(eventName, "service-transfer-complete", StringComparison.Ordinal))
+            {
+                var socket = _socket;
+                enriched = "transport=" +
+                    (socket != null ? socket.TransportName : string.Empty) +
+                    "; " +
+                    detail;
+            }
+
+            RuntimeDiagnosticsService.Instance.Write("socket-broker", eventName, enriched);
+        }
+
+        void IConnectionBrokerTransferHost.RecordBrokerException(string eventName, Exception error) =>
+            RuntimeDiagnosticsService.Instance.RecordException("socket-broker", eventName, error);
 
         private async Task<bool> IsCurrentSocketHealthyAsync()
         {

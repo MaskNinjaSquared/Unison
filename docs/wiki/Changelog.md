@@ -2,6 +2,12 @@
 
 Newest first.
 
+## Phase 4 wave 2 — ConnectionBrokerTransfer policy extracted
+
+Warm broker handoff (ready check, suspend prep, transfer, health restart on
+failure) is `ConnectionBrokerTransfer` + `IConnectionBrokerTransferHost`. Answers
+true only when ownership moved. Five Core tests.
+
 ## Phase 4 wave 2 — ConnectionPairingStage2 policy extracted
 
 Close-515 stage-2 reconnect (wait, ConnectAsync, soft-reconnect on registered

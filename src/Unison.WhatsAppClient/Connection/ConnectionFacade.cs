@@ -31,6 +31,7 @@ namespace Unison.WhatsAppClient.Connection
         private readonly IRuntimeDiagnostics _diagnostics;
         private readonly IConnectionEnsureHost _ensureHost;
         private readonly IConnectionResumeHost _resumeHost;
+        private readonly IConnectionBrokerTransferHost _brokerTransferHost;
         private IWhatsAppService _whatsApp;
         private int _handlingRelink;
 
@@ -47,6 +48,7 @@ namespace Unison.WhatsAppClient.Connection
             INetworkAccess network,
             IConnectionEnsureHost ensureHost,
             IConnectionResumeHost resumeHost,
+            IConnectionBrokerTransferHost brokerTransferHost,
             IRuntimeDiagnostics diagnostics = null)
         {
             _localSettings = localSettings ?? throw new ArgumentNullException(nameof(localSettings));
@@ -61,6 +63,8 @@ namespace Unison.WhatsAppClient.Connection
             _network = network ?? throw new ArgumentNullException(nameof(network));
             _ensureHost = ensureHost ?? throw new ArgumentNullException(nameof(ensureHost));
             _resumeHost = resumeHost ?? throw new ArgumentNullException(nameof(resumeHost));
+            _brokerTransferHost = brokerTransferHost
+                ?? throw new ArgumentNullException(nameof(brokerTransferHost));
             _diagnostics = diagnostics;
         }
 
@@ -145,10 +149,13 @@ namespace Unison.WhatsAppClient.Connection
 
         public Task<bool> TransferActiveSocketToBrokerAsync(string reason)
         {
-            var whatsApp = _whatsApp;
-            return whatsApp == null
-                ? Task.FromResult(false)
-                : whatsApp.TransferActiveSocketToBrokerAsync(reason);
+            if (_whatsApp == null)
+            {
+                return Task.FromResult(false);
+            }
+
+            // Policy is ConnectionBrokerTransfer; answers true only when ownership moved.
+            return ConnectionBrokerTransfer.RunAsync(_brokerTransferHost, reason);
         }
 
         public Task PrepareForSuspendAsync()
