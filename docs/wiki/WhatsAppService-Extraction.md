@@ -180,7 +180,7 @@ Primitives that already left the contract (façade / Netstandard Phase A):
 The stores (`IPersonStore`, `IChatStore`, `IGroupRosterStore`) are constructor parameters of the client now. After `BuildServiceProvider`, façade `Attach*` into the client is gone for Message/Chat/Contact/Group:
 `WhatsAppService.Create` takes `Func<IMessageService>` / `Func<IChatService>` / `Func<IContactService>` / `Func<IGroupService>` (lazy, breaks the DI cycle). One shared `GroupMetadataApply` is registered in `App` and injected into `GroupFacade`; the receipt path reaches it through `IGroupService.ApplyGroupMetadataAsync`. The pump and history sync still *call* those façades; moving that ownership is the remaining Attach* inversion work.
 
-`AttachContactService` body work: background names/pictures on `IContactService.RunBackgroundResolutionAsync`; deferred-startup overlay/hydrate/relabel on `RunDeferredStartupContactPassAsync`. Quiet-wait / memory-headroom rules are `StartupQuietGate` (WhatsAppClient); alias follow-up debounce is `CoalescedDebounceScheduler` (Core) — the host still runs `RunAliasFollowUpAsync`, and blank-avatar row selection for the retry event is `AliasFollowUpAvatarRows`. Unread badge + shortcut + catalogue slice after a conversation unread change is `ChatUnreadSideEffects` (shared by app-state read and `ChatFacade.ClearUnreadForChatAsync`). Name-entry prep before the UI walk is `ResolvedNameBatchPrep`; app-state subject/contact lists are `AppStateResolvedNameEntries`. Group title cache gate is `GroupMeaningfulLabel`; list-strip outgoing ticks are `ListPreviewOutgoingSendState`. Localized strip labels (`You` / `Yesterday`) are `LocalizedChatStripLabels` in UWP. The client still owns handshake / catch-up gates and raises `OnGroupListingDue` after background resolution.
+`AttachContactService` body work: background names/pictures on `IContactService.RunBackgroundResolutionAsync`; deferred-startup overlay/hydrate/relabel on `RunDeferredStartupContactPassAsync`. Quiet-wait / memory-headroom rules are `StartupQuietGate` (WhatsAppClient). Alias follow-up (queue + `CoalescedDebounceScheduler` + persist / avatar retry / dedupe) runs on `ContactFacade`; the client only implements `IJidAliasPersistence` and cancels via `IContactService.CancelAliasFollowUp` on shutdown. Blank-avatar row selection is `AliasFollowUpAvatarRows`. Unread badge + shortcut + catalogue slice after a conversation unread change is `ChatUnreadSideEffects` (shared by app-state read and `ChatFacade.ClearUnreadForChatAsync`). Name-entry prep before the UI walk is `ResolvedNameBatchPrep`; app-state subject/contact lists are `AppStateResolvedNameEntries`; post-delete tip refresh across alias rows is `AppStateDeleteMessagePreview`. Group title cache gate is `GroupMeaningfulLabel`; list-strip outgoing ticks are `ListPreviewOutgoingSendState`. Localized strip labels (`You` / `Yesterday`) are `LocalizedChatStripLabels` in UWP. Incoming-pump preview / offline-tip wrappers are gone — pump calls `ChatFacade.RefreshChatPreviewAsync` / `RecordOfflineReplayTip` directly. The client still owns handshake / catch-up gates and raises `OnGroupListingDue` after background resolution.
 
 `AttachDebugSendService` is gone (phase 4): `App` starts `IDebugSendService` once in Debug builds.
 The watcher already skipped requests while the transport was not ready, so the five start/stop
@@ -689,10 +689,11 @@ number-as-name but not for a self-marker, so a contact pushing "(You)" could be 
 canonical row during a merge even though the sanitizer blocks that everywhere else. The orchestration
 stays; only the decision left.
 
-What remains in `.Identity.cs` is the larger half and is not this shape: the alias follow-up
-pass itself (its bookkeeping is `AliasFollowUpQueue`, see the pure-rule nibble below) and what `ResolveContactsViaSocketAsync` does with an answer (alias, identity heal,
-duplicate-chat merge, avatar fetch). Those are 3.6's move onto `ContactFacade`, not a rule to lift
-out of a method.
+The alias follow-up pass itself now lives on `ContactFacade` (`AliasFollowUpQueue` + debounce +
+`RunAliasFollowUpAsync`). What remains in `.Identity.cs` that is not this shape is what
+`ResolveContactsViaSocketAsync` does with an answer (alias, identity heal, duplicate-chat merge,
+avatar fetch) beyond the usync path already on the façade — still 3.6's remaining move, not a rule
+to lift out of a method.
 
 **The apply decision left the method.** `ResolvedContactApplyPlan` answers, for one usync
 contact, whether to file the alias, merge the two chats (only the first time that LID is seen),
