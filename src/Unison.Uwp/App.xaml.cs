@@ -34,6 +34,7 @@ using Unison.Uwp.Data;
 using Unison.Uwp.Services;
 using Unison.Uwp.Services.Network;
 using Unison.Uwp.Services.Socket;
+using Unison.Uwp.Services.Themes;
 using Unison.Uwp.Services.WhatsApp;
 using Unison.Uwp.Services.WhatsApp.Chats;
 using Unison.WhatsAppClient.Chats;
@@ -509,7 +510,9 @@ namespace Unison.Uwp
                 sp => (WhatsAppService)sp.GetRequiredService<IWhatsAppService>());
             services.AddSingleton<ISocketAliasRegistrar>(
                 sp => (WhatsAppService)sp.GetRequiredService<IWhatsAppService>());
-            services.AddSingleton<IConnectionSoftReconnect>(
+            services.AddSingleton<IConnectionSoftReconnectHost>(
+                sp => (WhatsAppService)sp.GetRequiredService<IWhatsAppService>());
+            services.AddSingleton<IConnectionLifecycleHost>(
                 sp => (WhatsAppService)sp.GetRequiredService<IWhatsAppService>());
             services.AddSingleton<IConnectionEnsureHost>(
                 sp => (WhatsAppService)sp.GetRequiredService<IWhatsAppService>());
@@ -793,7 +796,7 @@ namespace Unison.Uwp
             services.AddSingleton<IChatMessageMapper, ChatMessageMapper>();
             services.AddSingleton<IStringResources, StringResourcesService>();
             services.AddSingleton<INetworkAccess, WinRtNetworkAccess>();
-            services.AddSingleton<IConnectionService>(sp => new ConnectionFacade(
+            services.AddSingleton<ConnectionFacade>(sp => new ConnectionFacade(
                 sp.GetRequiredService<ILocalSettings>(),
                 sp.GetRequiredService<INotificationService>(),
                 sp.GetRequiredService<IStringResources>(),
@@ -807,7 +810,11 @@ namespace Unison.Uwp
                 sp.GetRequiredService<IConnectionEnsureHost>(),
                 sp.GetRequiredService<IConnectionResumeHost>(),
                 sp.GetRequiredService<IConnectionBrokerTransferHost>(),
+                sp.GetRequiredService<IConnectionSoftReconnectHost>(),
+                sp.GetRequiredService<IConnectionLifecycleHost>(),
                 sp.GetRequiredService<IRuntimeDiagnostics>()));
+            services.AddSingleton<IConnectionService>(sp => sp.GetRequiredService<ConnectionFacade>());
+            services.AddSingleton<IConnectionSoftReconnect>(sp => sp.GetRequiredService<ConnectionFacade>());
             services.AddSingleton<ISystemInfoProvider, SystemInfoProvider>();
             services.AddSingleton<IStatusBarService, StatusBarService>();
             services.AddSingleton<ILocationKeepAliveService, LocationKeepAliveService>();
@@ -1106,12 +1113,43 @@ namespace Unison.Uwp
             }
         }
 
-        private static bool IsKnownRootContent(object content)
+        /// <summary>
+        /// True when the root frame already hosts a normal entry surface. Toast / People
+        /// activation must not remount Boot over a live shell — that replayed the intro
+        /// and left WhatsApp Legacy on a black screen (Legacy AppShell is
+        /// <c>ShellView</c>, not <see cref="MainView"/>).
+        /// </summary>
+        private bool IsKnownRootContent(object content)
         {
-            return content is MainView
+            if (content == null)
+            {
+                return false;
+            }
+
+            if (content is MainView
                 || content is UI.Views.BootView
                 || content is UI.Views.StartView
-                || content is UI.Views.LoginView;
+                || content is UI.Views.LoginView
+                || content is Shell.WhatsAppLegacy.Views.ShellView)
+            {
+                return true;
+            }
+
+            // Future shells: whatever the active strategy maps AppShell to.
+            try
+            {
+                IShellNavigationStrategy nav = Services?.GetService<IShellNavigationStrategy>();
+                Type appShellPage = nav?.ResolveRootPage(NavigationDestination.AppShell);
+                if (appShellPage != null && appShellPage.IsInstanceOfType(content))
+                {
+                    return true;
+                }
+            }
+            catch
+            {
+            }
+
+            return false;
         }
 
         private void EnsureWindowVisibilityTracking()

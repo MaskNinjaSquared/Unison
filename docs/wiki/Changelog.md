@@ -2,6 +2,20 @@
 
 Newest first.
 
+## Fix — toast activation remounted Boot on WhatsApp Legacy
+
+`IsKnownRootContent` only knew `MainView`. Legacy AppShell is `ShellView`, so a
+toast while the app was open remounted Boot (intro again → black screen). Now
+recognizes Legacy `ShellView` and any strategy `AppShell` page. Unison /
+WhatsApp (non-legacy) already used `MainView` and were fine.
+
+## Phase 4 — soft-reconnect + lifecycle + Connect gates on façade/helpers
+
+`ConnectionFacade` implements `IConnectionSoftReconnect` over
+`IConnectionSoftReconnectHost`. Suspend/shutdown is `ConnectionLifecycle` +
+`IConnectionLifecycleHost`. `ConnectAsync` early gates are
+`ConnectionConnectGates`. Health-monitor *loop* still on the client.
+
 ## Phase 4 wave 2 — ConnectionBrokerTransfer policy extracted
 
 Warm broker handoff (ready check, suspend prep, transfer, health restart on
