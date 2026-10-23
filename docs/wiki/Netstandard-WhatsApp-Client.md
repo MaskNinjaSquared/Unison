@@ -198,7 +198,15 @@ Do in order. Each phase has a done check.
 | Open-chat participant lookup | `IGroupParticipantLookup`; `IGroupService.CreateOpenChatParticipantLookup` / `InvalidateParticipantDirectChatIndex` / context-free `EnrichMember` | Implementation `GroupParticipantLookup` still in Core (State/Info factory still build `ParticipantResolutionContext`); presentation `MessageRunLayout` takes the interface |
 | Utility policy (no Core inbound) | `FirstNonBlankText`, `UserJidShape`, `MediaCacheCleanPlan` | — |
 
-**Inventory note (Phase C remainder):** a Core-helpers scan that tagged ~15 as MOVE_NOW (VM/State/Models = 0) over-counted. Several were freed by extracting `ProtoMessageUnwrap` so Core mappers no longer import the history filter; orphan utilities (`FirstNonBlankText`, `UserJidShape`, `MediaCacheCleanPlan`) moved. Still blocked / stay in Core: `NameLookupCandidates` ← `PushNameLookup`; `GroupIdPlaceholder` ← `CommunityHubPresentation`; `MessageTimestampValidity` / `LegacyDeletedPreview` ← State + preview normalizer; `OutgoingFailureClassification` / `ConnectionStabilityExperiment` with `OutgoingSendAttemptOutcome` on contracts; `SyncPhaseStatus` / `ListEnrichmentPhase` / `SelfIdentity` / `GroupParticipantLookup` implementation (State + open-chat seam). Open-chat participant **NEEDS_CUT** is done (`IGroupParticipantLookup` + façade factory). Remaining Phase C is mostly **KEEP_STATE_COUPLED** plus presentation helpers VMs may call directly; further cuts need a State/façade seam, not a blind move.
+**Inventory note (Phase C — movable domain closed on this branch):** orphan utilities (`FirstNonBlankText`, `UserJidShape`, `MediaCacheCleanPlan`) and VM→façade **NEEDS_CUT**s (incl. open-chat `IGroupParticipantLookup`) are done. WhatsAppClient has **zero** `Windows.*`. What remains under `Core/Helpers` is intentional:
+
+| Stay | Why |
+|---|---|
+| Presentation (`ReactionsBuilder`, `MessageRunLayout`, `ChatListVisibleReconcile`, `ComposerMentionDraft`, `CommunityHubPresentation`, camera/UI math, …) | VMs / UWP code-behind may call directly |
+| KEEP_STATE (`PushNameLookup` ← `ContactDisplayNames`; `OfflineReplaySummaryMerge`; `ChatMessageOrder`; `GroupParticipantResolver` ← `ChatAuthorProjection`; `SyncPhaseStatus` / `ListEnrichmentPhase` / `SelfIdentity` / `FirstSyncUiAvatarPolicy`; …) | Core State imports them; Core must not reference WhatsAppClient |
+| KEEP_CONTRACT (`OutgoingFailureClassification` / `ConnectionStabilityExperiment`) | Shared with `IOutgoingMessageHost` / send settlement |
+
+Further shrinking those rows is **State/contract seams** (or Phase E), not another MOVE_NOW batch. Phase C’s closed-batch work is done; continue with [WhatsAppService extraction](WhatsAppService-Extraction) Phase B (clusters 3→4).
 
 ### Phase D — UWP as host only
 
