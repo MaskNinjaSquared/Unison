@@ -45,6 +45,7 @@ namespace Unison.WhatsAppClient.Contacts
         private readonly JidAliasTable _aliases;
         private readonly DisplayNameTable _pushNames;
         private readonly DisplayNameTable _addressBookNames;
+        private readonly DisplayNameTable _groupSubjects;
         private readonly IChatStateStore _chatState;
         private readonly ContactDisplayNames _displayNames;
         private readonly ChatNameRefresh _nameRefresh;
@@ -53,6 +54,7 @@ namespace Unison.WhatsAppClient.Contacts
         private readonly IJidAliasPersistence _aliasPersist;
         private readonly IChatIdentityPersistence _identity;
         private readonly IResolvedNameApplyHost _resolvedNames;
+        private readonly ISelfMarkerNaming _selfMarkers;
         private readonly ContactLabelSanitizer _labels;
         private readonly AliasFollowUpQueue _aliasFollowUps = new AliasFollowUpQueue();
         private readonly CoalescedDebounceScheduler _aliasFollowUpDebounce =
@@ -89,6 +91,7 @@ namespace Unison.WhatsAppClient.Contacts
             JidAliasTable aliases,
             DisplayNameTable pushNames,
             DisplayNameTable addressBookNames,
+            DisplayNameTable groupSubjects,
             ISelfMarkerNaming selfMarkers,
             IDispatcher ui,
             IChatCatalogPersistence catalog,
@@ -118,7 +121,7 @@ namespace Unison.WhatsAppClient.Contacts
             _identity = identity ?? throw new ArgumentNullException(nameof(identity));
             _resolvedNames = resolvedNames ?? throw new ArgumentNullException(nameof(resolvedNames));
             _lifecycle = lifecycle ?? throw new ArgumentNullException(nameof(lifecycle));
-            if (selfMarkers == null) throw new ArgumentNullException(nameof(selfMarkers));
+            _selfMarkers = selfMarkers ?? throw new ArgumentNullException(nameof(selfMarkers));
             _syncStatus = syncStatus ?? throw new ArgumentNullException(nameof(syncStatus));
             _syncWork = syncWork ?? throw new ArgumentNullException(nameof(syncWork));
             _deferredAvatars = deferredAvatars ?? throw new ArgumentNullException(nameof(deferredAvatars));
@@ -143,6 +146,7 @@ namespace Unison.WhatsAppClient.Contacts
             _aliases = aliases ?? throw new ArgumentNullException(nameof(aliases));
             _pushNames = pushNames ?? throw new ArgumentNullException(nameof(pushNames));
             _addressBookNames = addressBookNames ?? throw new ArgumentNullException(nameof(addressBookNames));
+            _groupSubjects = groupSubjects ?? throw new ArgumentNullException(nameof(groupSubjects));
 
             _labels = new ContactLabelSanitizer(selfMarkers);
             _directory = new ContactDirectory(sessions, lidMappings);
@@ -257,7 +261,7 @@ namespace Unison.WhatsAppClient.Contacts
                 JidHelper.Normalize,
                 _jids.GetCanonicalJid,
                 SanitizeForResolvedName);
-            return _resolvedNames.ApplyResolvedNameBatchAsync(entries);
+            return ApplyResolvedNameBatchAsync(entries);
         }
 
         /// <summary>One contact name from account app-state.</summary>
@@ -269,7 +273,7 @@ namespace Unison.WhatsAppClient.Contacts
                 JidHelper.Normalize,
                 _jids.GetCanonicalJid,
                 SanitizeForResolvedName);
-            return _resolvedNames.ApplyResolvedNameBatchAsync(entries);
+            return ApplyResolvedNameBatchAsync(entries);
         }
 
         private string SanitizeForResolvedName(string label, string contextJid)
@@ -379,8 +383,127 @@ namespace Unison.WhatsAppClient.Contacts
                 _aliasPersist.RegisterAliasMappings(aliasPairs, "app-state-contact");
             }
 
-            await _resolvedNames.ApplyResolvedNameBatchAsync(entries).ConfigureAwait(false);
+            await ApplyResolvedNameBatchAsync(entries).ConfigureAwait(false);
         }
+
+        /// <inheritdoc />
+        public async Task NormalizePersistedChatNamesAsync()
+        {
+            int updated = await _nameRefresh.NormalizePersistedTitlesAsync().ConfigureAwait(false);
+            if (updated > 0)
+            {
+                _catalog.Schedule();
+            }
+        }
+
+        /// <summary>
+        /// Fills push / subject caches and relabels matching list rows once on the UI thread.
+        /// </summary>
+        public async Task ApplyResolvedNameBatchAsync(IList<ResolvedNameEntry> entries)
+        {
+            if (entries == null || entries.Count == 0)
+            {
+                return;
+            }
+
+            var byCanonical = new Dictionary<string, ResolvedNameEntry>(StringComparer.OrdinalIgnoreCase);
+            foreach (ResolvedNameEntry entry in entries)
+            {
+                if (entry == null || string.IsNullOrWhiteSpace(entry.Canonical))
+                {
+                    continue;
+                }
+
+                byCanonical[entry.Canonical] = entry;
+            }
+
+            await _ui.RunAsync(() =>
+            {
+                foreach (ResolvedNameEntry entry in entries)
+                {
+                    if (entry == null)
+                    {
+                        continue;
+                    }
+
+                    if (entry.IsSubject)
+                    {
+                        if (!GroupNameSyncBlacklist.ShouldCacheSyncedSubject(
+                                entry.Name,
+                                GroupMeaningfulLabel.Has(
+                                    entry.Canonical,
+                                    DuplicateChatRowPick.FirstNonBlankName(
+                                        _chatRows.FindConversation(entry.Canonical)),
+                                    jid =>
+                                    {
+                                        string cached;
+                                        return _pushNames.TryGetValue(jid, out cached) ? cached : null;
+                                    },
+                                    IsMeaningfulChatLabel)))
+                        {
+                            continue;
+                        }
+
+                        _groupSubjects.Set(entry.Canonical, entry.Name);
+                        if (!string.IsNullOrEmpty(entry.Normalized) &&
+                            !string.Equals(entry.Normalized, entry.Canonical, StringComparison.OrdinalIgnoreCase))
+                        {
+                            _groupSubjects.Set(entry.Normalized, entry.Name);
+                        }
+
+                        continue;
+                    }
+
+                    _pushNames.Set(entry.Canonical, entry.Name);
+                    if (!string.IsNullOrEmpty(entry.Normalized) &&
+                        !string.Equals(entry.Normalized, entry.Canonical, StringComparison.OrdinalIgnoreCase))
+                    {
+                        _pushNames.Set(entry.Normalized, entry.Name);
+                    }
+                }
+
+                foreach (ChatItem chat in _chatState.Chats)
+                {
+                    if (chat == null)
+                    {
+                        continue;
+                    }
+
+                    ResolvedNameEntry entry;
+                    if (!byCanonical.TryGetValue(_jids.GetCanonicalJid(chat.JID), out entry))
+                    {
+                        continue;
+                    }
+
+                    if (entry.IsSubject)
+                    {
+                        bool incomingMeaningful = IsMeaningfulChatLabel(entry.Name, chat.JID, true);
+                        bool existingMeaningful = IsMeaningfulChatLabel(chat.Name, chat.JID, true);
+                        if (GroupNameSyncBlacklist.ShouldApplySyncedSubject(
+                                entry.Name,
+                                incomingMeaningful,
+                                existingMeaningful))
+                        {
+                            chat.Name = entry.Name;
+                        }
+                    }
+                    else if (!chat.IsGroup)
+                    {
+                        chat.Name = ResolveDisplayName(chat.JID, "chat");
+                    }
+                }
+            }).ConfigureAwait(false);
+
+            NotifyDisplayNamesUpdated();
+            _chatState.NotifyDisplayNamesChanged();
+        }
+
+        private bool IsMeaningfulChatLabel(string label, string contextJid, bool isGroup) =>
+            MeaningfulChatLabel.IsMeaningful(
+                label,
+                contextJid,
+                isGroup,
+                _selfMarkers.IsMarkerLabel(label));
 
         private void ScheduleAliasFollowUp(string source)
         {

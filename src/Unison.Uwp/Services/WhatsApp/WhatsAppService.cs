@@ -663,7 +663,6 @@ namespace Unison.Uwp.Services.WhatsApp
         public ChatMessageCache MessagesByChat => _chatState.MessagesByChat;
 
         private readonly ChatRowIndex _chatRows;
-        private readonly ChatPreviewReconciler _previewReconciler;
         private readonly ChatNameRefresh _nameRefresh;
         private readonly StoredChatPreviewRefresh _storedPreviews;
         private readonly UsyncAliasFiling _usyncAliases;
@@ -1016,7 +1015,6 @@ namespace Unison.Uwp.Services.WhatsApp
             IChatStore chatStore,
             ISystemInfoProvider systemInfo,
             AttachedUiDispatcher ui,
-            ChatPreviewReconciler previewReconciler,
             ChatNameRefresh nameRefresh,
             StoredChatPreviewRefresh storedPreviews,
             UsyncAliasFiling usyncAliases,
@@ -1050,7 +1048,6 @@ namespace Unison.Uwp.Services.WhatsApp
             _resolveChats = resolveChats;
             _resolveGroups = resolveGroups;
             _ui = ui ?? throw new ArgumentNullException(nameof(ui));
-            _previewReconciler = previewReconciler ?? throw new ArgumentNullException(nameof(previewReconciler));
             _nameRefresh = nameRefresh ?? throw new ArgumentNullException(nameof(nameRefresh));
             _nameRefresh.Applied += OnChatNamesApplied;
             _storedPreviews = storedPreviews ?? throw new ArgumentNullException(nameof(storedPreviews));
@@ -1132,7 +1129,6 @@ namespace Unison.Uwp.Services.WhatsApp
             IChatStore chatStore,
             ISystemInfoProvider systemInfo,
             AttachedUiDispatcher ui,
-            ChatPreviewReconciler previewReconciler,
             ChatNameRefresh nameRefresh,
             StoredChatPreviewRefresh storedPreviews,
             UsyncAliasFiling usyncAliases,
@@ -1146,7 +1142,7 @@ namespace Unison.Uwp.Services.WhatsApp
         {
             return _instance ?? (_instance = new WhatsAppService(
                 chatState, chatRows, activeChat, syncStatus, syncWork, historyMessages, chatPreviews, usyncGate, avatarFetcher, mediaCache, jidAlias, displayNames, historyRequests,
-                initialSync, syncBudget, workload, selfProfile, personStore, groupRosterStore, chatStore, systemInfo, ui, previewReconciler, nameRefresh, storedPreviews, usyncAliases, listPaintGate, appMemory, localSettings, resolveContacts, resolveMessages, resolveChats, resolveGroups));
+                initialSync, syncBudget, workload, selfProfile, personStore, groupRosterStore, chatStore, systemInfo, ui, nameRefresh, storedPreviews, usyncAliases, listPaintGate, appMemory, localSettings, resolveContacts, resolveMessages, resolveChats, resolveGroups));
         }
 
         /// <summary>
@@ -1543,8 +1539,11 @@ namespace Unison.Uwp.Services.WhatsApp
                         try
                         {
                             token.ThrowIfCancellationRequested();
-                            await ReconcileChatPreviewsFromSqliteAsync(null, "post-replay")
-                                .ConfigureAwait(false);
+                            if (ChatFacade != null)
+                            {
+                                await ChatFacade.ReconcileChatPreviewsFromSqliteAsync(null, "post-replay")
+                                    .ConfigureAwait(false);
+                            }
                         }
                         catch (OperationCanceledException)
                         {
@@ -2099,8 +2098,11 @@ namespace Unison.Uwp.Services.WhatsApp
                 {
                     try
                     {
-                        await ReconcileChatPreviewsFromSqliteAsync(null, "history-quiet")
-                            .ConfigureAwait(false);
+                        if (ChatFacade != null)
+                        {
+                            await ChatFacade.ReconcileChatPreviewsFromSqliteAsync(null, "history-quiet")
+                                .ConfigureAwait(false);
+                        }
                     }
                     catch (Exception exReconcile)
                     {
@@ -2112,22 +2114,6 @@ namespace Unison.Uwp.Services.WhatsApp
             catch (Exception ex)
             {
                 Debug.WriteLine("[WhatsAppService] FinalizeSqliteHistoryProgress failed: " + ex.Message);
-            }
-        }
-
-        /// <summary>
-        /// Client-owned tip pass after startup / catch-up / quiet history. UI goes through
-        /// <see cref="IChatService.ReconcileChatPreviewsFromSqliteAsync"/>.
-        /// </summary>
-        private async Task ReconcileChatPreviewsFromSqliteAsync(
-            IReadOnlyList<string> chatJids = null,
-            string reason = null)
-        {
-            int updated = await _previewReconciler.ReconcileAsync(chatJids, reason).ConfigureAwait(false);
-            if (updated > 0)
-            {
-                // tip-swapped is local — NoteFullHistoryCatchUpProgress ignores it; skip the call.
-                SchedulePersist();
             }
         }
 
@@ -2242,7 +2228,10 @@ namespace Unison.Uwp.Services.WhatsApp
                         .ConfigureAwait(false);
                 }
 
-                await NormalizePersistedChatNamesAsync();
+                if (Contacts != null)
+                {
+                    await Contacts.NormalizePersistedChatNamesAsync().ConfigureAwait(false);
+                }
 
                 // Disk hydrate + address-book overlay + relabel — ContactFacade owns the awaits.
                 IContactService contacts = Contacts;
@@ -4458,7 +4447,9 @@ namespace Unison.Uwp.Services.WhatsApp
         }
 
         internal Task ApplyContactUpdatesAsync(IReadOnlyList<Unison.Socket.Models.ContactUpdate> contacts) =>
-            ApplyRemoteContactUpdatesCoreAsync(MapAccountContacts(contacts));
+            Contacts != null
+                ? Contacts.ApplyRemoteContactUpdatesAsync(MapAccountContacts(contacts))
+                : Task.CompletedTask;
 
         private static IReadOnlyList<AccountContactUpdate> MapAccountContacts(
             Unison.Socket.Models.ContactUpdate contact)
@@ -4511,60 +4502,6 @@ namespace Unison.Uwp.Services.WhatsApp
             return mapped;
         }
 
-        private async Task ApplyRemoteContactUpdatesCoreAsync(IReadOnlyList<AccountContactUpdate> contacts)
-        {
-            if (contacts == null || contacts.Count == 0)
-            {
-                return;
-            }
-
-            var aliasPairs = new List<KeyValuePair<string, string>>();
-            var entries = new List<ResolvedNameEntry>();
-
-            foreach (AccountContactUpdate contact in contacts)
-            {
-                if (contact == null)
-                {
-                    continue;
-                }
-
-                ContactUpdateReading reading = ContactUpdateFiling.Read(
-                    contact.Id, contact.Lid, contact.PhoneNumber, contact.Name, contact.Notify);
-
-                if (reading.HasAliasPair)
-                {
-                    aliasPairs.Add(new KeyValuePair<string, string>(reading.Lid, reading.Phone));
-                }
-
-                foreach (string address in reading.NameAddresses)
-                {
-                    ResolvedNameBatchPrep.Add(
-                        entries,
-                        address,
-                        reading.Name,
-                        isSubject: false,
-                        NormalizeJid,
-                        GetCanonicalJid,
-                        SanitizeContactLabel);
-                }
-            }
-
-            if (aliasPairs.Count > 0)
-            {
-                RegisterAliasMappings(aliasPairs, "app-state-contact");
-            }
-
-            await ApplyResolvedNameBatchAsync(entries);
-        }
-
-        /// <summary>
-        /// Applies a set of resolved names: the cache is filled, the rows that carry any of those
-        /// addresses are relabelled, and the list is told once that names changed.
-        /// </summary>
-        Task Unison.WhatsAppClient.Abstractions.IResolvedNameApplyHost.ApplyResolvedNameBatchAsync(
-            IList<ResolvedNameEntry> entries) =>
-            ApplyResolvedNameBatchAsync(entries);
-
         Task Unison.WhatsAppClient.Abstractions.IResolvedNameApplyHost.ApplySelfPushNameFromAppStateAsync(
             string name) =>
             ApplyAppStateSelfPushNameAsync(name);
@@ -4573,96 +4510,6 @@ namespace Unison.Uwp.Services.WhatsApp
             string pushName,
             string source) =>
             CaptureSelfPushName(pushName, source);
-
-        private async Task ApplyResolvedNameBatchAsync(IList<ResolvedNameEntry> entries)
-        {
-            if (entries == null || entries.Count == 0)
-            {
-                return;
-            }
-
-            // Keyed for the single walk below, so matching a row costs a lookup rather than a
-            // comparison against every name in the batch.
-            var byCanonical = new Dictionary<string, ResolvedNameEntry>(StringComparer.OrdinalIgnoreCase);
-            foreach (var entry in entries)
-            {
-                byCanonical[entry.Canonical] = entry;
-            }
-
-            await _ui.RunAsync(() =>
-            {
-                foreach (var entry in entries)
-                {
-                    if (entry.IsSubject)
-                    {
-                        if (!GroupNameSyncBlacklist.ShouldCacheSyncedSubject(
-                                entry.Name,
-                                GroupMeaningfulLabel.Has(
-                                    entry.Canonical,
-                                    DuplicateChatRowPick.FirstNonBlankName(
-                                        _chatRows.FindConversation(entry.Canonical)),
-                                    jid =>
-                                    {
-                                        string cached;
-                                        return ContactNames.TryGetValue(jid, out cached) ? cached : null;
-                                    },
-                                    IsMeaningfulChatLabel)))
-                        {
-                            continue;
-                        }
-
-                        _chatState.GroupSubjects.Set(entry.Canonical, entry.Name);
-                        if (!string.IsNullOrEmpty(entry.Normalized) &&
-                            !string.Equals(entry.Normalized, entry.Canonical, StringComparison.OrdinalIgnoreCase))
-                        {
-                            _chatState.GroupSubjects.Set(entry.Normalized, entry.Name);
-                        }
-
-                        continue;
-                    }
-
-                    ContactNames.Set(entry.Canonical, entry.Name);
-                    if (!string.IsNullOrEmpty(entry.Normalized) &&
-                        !string.Equals(entry.Normalized, entry.Canonical, StringComparison.OrdinalIgnoreCase))
-                    {
-                        ContactNames.Set(entry.Normalized, entry.Name);
-                    }
-                }
-
-                foreach (var chat in Chats)
-                {
-                    if (chat == null)
-                    {
-                        continue;
-                    }
-
-                    ResolvedNameEntry entry;
-                    if (!byCanonical.TryGetValue(GetCanonicalJid(chat.JID), out entry))
-                    {
-                        continue;
-                    }
-
-                    if (entry.IsSubject)
-                    {
-                        bool incomingMeaningful = IsMeaningfulChatLabel(entry.Name, chat.JID, true);
-                        bool existingMeaningful = IsMeaningfulChatLabel(chat.Name, chat.JID, true);
-                        if (GroupNameSyncBlacklist.ShouldApplySyncedSubject(
-                                entry.Name,
-                                incomingMeaningful,
-                                existingMeaningful))
-                        {
-                            chat.Name = entry.Name;
-                        }
-                    }
-                    else if (!chat.IsGroup)
-                    {
-                        chat.Name = ResolveDisplayName(chat.JID);
-                    }
-                }
-            });
-
-            OnDisplayNamesUpdated?.Invoke(this, EventArgs.Empty);
-        }
 
         /// <summary>
         /// The one source allowed to replace a self name already on file: the app-state

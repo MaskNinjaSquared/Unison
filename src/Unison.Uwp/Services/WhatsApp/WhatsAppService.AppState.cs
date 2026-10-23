@@ -44,19 +44,14 @@ namespace Unison.Uwp.Services.WhatsApp
         /// Group subjects (one or a listing batch) into the same cache a resolved contact name would.
         /// </summary>
         internal Task ApplyGroupSubjectsAsync(IEnumerable<KeyValuePair<string, string>> subjectsByJid) =>
-            ApplyResolvedNameBatchAsync(AppStateResolvedNameEntries.ForGroupSubjects(
-                subjectsByJid,
-                NormalizeJid,
-                GetCanonicalJid,
-                SanitizeContactLabel));
+            Contacts != null
+                ? Contacts.ApplyRemoteGroupSubjectsAsync(subjectsByJid)
+                : Task.CompletedTask;
 
         internal Task ApplyAppStateContactNameAsync(string jid, string name) =>
-            ApplyResolvedNameBatchAsync(AppStateResolvedNameEntries.ForContact(
-                jid,
-                name,
-                NormalizeJid,
-                GetCanonicalJid,
-                SanitizeContactLabel));
+            Contacts != null
+                ? Contacts.ApplyRemoteContactNameAsync(jid, name)
+                : Task.CompletedTask;
 
         internal async Task ApplyAppStateSelfPushNameAsync(string name)
         {

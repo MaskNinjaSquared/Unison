@@ -175,6 +175,12 @@ namespace Unison.Core.Contracts.WhatsApp
         Task ApplyRemoteContactUpdatesAsync(IReadOnlyList<AccountContactUpdate> contacts);
 
         /// <summary>
+        /// Startup pass: rewrite list titles from the resolved-name tables when the persisted
+        /// catalogue still shows a number or stale label.
+        /// </summary>
+        Task NormalizePersistedChatNamesAsync();
+
+        /// <summary>
         /// User action: resolve a phone number to a WhatsApp JID (new-chat search).
         /// Prefer this over calling WhatsAppService from ViewModels.
         /// </summary>

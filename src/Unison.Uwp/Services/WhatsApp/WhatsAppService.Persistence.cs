@@ -162,8 +162,11 @@ namespace Unison.Uwp.Services.WhatsApp
                 // when the preview row is stale (deferred maintenance may have run with empty Chats).
                 try
                 {
-                    await ReconcileChatPreviewsFromSqliteAsync(null, "persisted-ui-loaded")
-                        .ConfigureAwait(false);
+                    if (ChatFacade != null)
+                    {
+                        await ChatFacade.ReconcileChatPreviewsFromSqliteAsync(null, "persisted-ui-loaded")
+                            .ConfigureAwait(false);
+                    }
                 }
                 catch (Exception exReconcile)
                 {
@@ -578,17 +581,6 @@ namespace Unison.Uwp.Services.WhatsApp
 
 
 
-
-        private async Task NormalizePersistedChatNamesAsync()
-        {
-            int updated = await _nameRefresh.NormalizePersistedTitlesAsync().ConfigureAwait(false);
-            if (updated > 0)
-            {
-                // Applied already raised OnDisplayNamesUpdated; only the startup pass
-                // also rewrites the catalog so the next cold start keeps the titles.
-                SchedulePersist();
-            }
-        }
 
         private async Task PersistCriticalSuspendStateAsync()
         {

@@ -166,6 +166,8 @@ namespace Unison.Core.Tests.Helpers
                 IReadOnlyList<AccountContactUpdate> contacts) =>
                 Task.CompletedTask;
 
+            public Task NormalizePersistedChatNamesAsync() => Task.CompletedTask;
+
             public Task<string> SearchContactAsync(string phoneNumber) => Task.FromResult<string>(null);
 
             public string TryResolvePhone(string jid, string phoneDigits = null) => null;
