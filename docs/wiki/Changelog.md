@@ -2,11 +2,17 @@
 
 Newest first.
 
+## Phase B — placeholder envelopes on MessageFacade
+
+`IMessageService.HandleIncomingPlaceholderAsync` notes the id and requests a
+resend via `IMissingMessageChatHost`. Pump no longer registers or queues that
+path; dead alias-linked helpers removed from `IncomingPump`.
+
 ## Phase B — RouteIncomingChatEnvelope owns post-session inbound path
 
 `IMessageService.RouteIncomingChatEnvelopeAsync` covers status, offline fast-path,
 DM routing, self-collapse, envelope controls, and content. Pump keeps session /
-placeholder / alias-hint / drain only.
+peer-data / alias-hint / drain only.
 
 ## Phase B — receipts host, alias hints, envelope control, AppStateSync, journal tips
 

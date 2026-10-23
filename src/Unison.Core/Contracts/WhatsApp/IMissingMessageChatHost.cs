@@ -1,9 +1,11 @@
+using System;
+using System.Threading.Tasks;
+
 namespace Unison.Core.Contracts.WhatsApp
 {
     /// <summary>
-    /// Placeholder-resend ledger half that still lives on the client: drop a conversation's
-    /// pending candidates and cancel their timers when the chat row is collapsed away,
-    /// and clear a single id when the real envelope arrives.
+    /// Placeholder-resend ledger half that still lives on the client: note / resolve candidates,
+    /// ask the socket for a resend, and drop a conversation's pending repairs when the row goes away.
     /// </summary>
     public interface IMissingMessageChatHost
     {
@@ -13,5 +15,22 @@ namespace Unison.Core.Contracts.WhatsApp
         /// Clears one pending repair when the message arrives (live, duplicate, or empty skip).
         /// </summary>
         void ResolveMissingMessage(string chatJid, string messageId, string source);
+
+        /// <summary>
+        /// Records a placeholder / missing-message candidate for later resend.
+        /// </summary>
+        void RegisterMissingMessage(
+            string chatJid,
+            string participant,
+            string messageId,
+            bool isFromMe,
+            DateTime timestamp,
+            string reason);
+
+        /// <summary>
+        /// Asks the live socket for a placeholder resend when the ledger still holds the id
+        /// and reconnect / sync deferral allows it.
+        /// </summary>
+        Task<bool> RequestPlaceholderResendAsync(string chatJid, string messageId, string trigger);
     }
 }

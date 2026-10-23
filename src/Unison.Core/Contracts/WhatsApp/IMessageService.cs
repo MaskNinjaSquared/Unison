@@ -445,5 +445,16 @@ namespace Unison.Core.Contracts.WhatsApp
         /// self-collapse, envelope controls, then <see cref="ProcessIncomingChatContentAsync"/>.
         /// </summary>
         Task RouteIncomingChatEnvelopeAsync(IncomingRoutedEnvelopeRequest request);
+
+        /// <summary>
+        /// Placeholder envelope: note the missing id on the host ledger and request a resend.
+        /// </summary>
+        Task HandleIncomingPlaceholderAsync(
+            string chatJid,
+            string participantJid,
+            string messageId,
+            bool isFromMe,
+            DateTime timestampUtc,
+            string placeholderType);
     }
 }

@@ -1686,6 +1686,28 @@ namespace Unison.WhatsAppClient.Messages
         }
 
         /// <inheritdoc />
+        public Task HandleIncomingPlaceholderAsync(
+            string chatJid,
+            string participantJid,
+            string messageId,
+            bool isFromMe,
+            DateTime timestampUtc,
+            string placeholderType)
+        {
+            string reason = "placeholder:" + (placeholderType ?? string.Empty);
+            _missingMessages.RegisterMissingMessage(
+                chatJid,
+                participantJid,
+                messageId,
+                isFromMe,
+                timestampUtc,
+                reason);
+            return _missingMessages.RequestPlaceholderResendAsync(
+                chatJid,
+                messageId,
+                "placeholder-message");
+        }
+
         /// <inheritdoc />
         public async Task RouteIncomingChatEnvelopeAsync(IncomingRoutedEnvelopeRequest request)
         {

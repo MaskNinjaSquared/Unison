@@ -41,24 +41,6 @@ namespace Unison.Uwp.Services.WhatsApp
     public partial class WhatsAppService : IBoundMutationGate, IPendingMessageFlushHost
     {
 
-        private IReadOnlyList<string> GetAliasLinkedDirectChatJids(string chatJid)
-        {
-            return AliasLinkedDirectChats.Collect(
-                ExpandNameLookupCandidates(chatJid),
-                NormalizeJid,
-                GetCanonicalJid);
-        }
-
-        private bool TryFindAliasLinkedMessage(string chatJid, string messageId, out string existingChatJid, out ChatMessage existingMessage)
-        {
-            return AliasLinkedMessageFind.TryFind(
-                MessagesByChat,
-                GetAliasLinkedDirectChatJids(chatJid),
-                messageId,
-                out existingChatJid,
-                out existingMessage);
-        }
-
         private void RegisterMissingMessage(string chatJid, string participant, string messageId, bool isFromMe, DateTime timestamp, string reason)
         {
             string normJid = NormalizeJid(chatJid);
@@ -77,6 +59,21 @@ namespace Unison.Uwp.Services.WhatsApp
 
         void IMissingMessageChatHost.ResolveMissingMessage(string chatJid, string messageId, string source) =>
             ResolveMissingMessage(chatJid, messageId, source);
+
+        void IMissingMessageChatHost.RegisterMissingMessage(
+            string chatJid,
+            string participant,
+            string messageId,
+            bool isFromMe,
+            DateTime timestamp,
+            string reason) =>
+            RegisterMissingMessage(chatJid, participant, messageId, isFromMe, timestamp, reason);
+
+        Task<bool> IMissingMessageChatHost.RequestPlaceholderResendAsync(
+            string chatJid,
+            string messageId,
+            string trigger) =>
+            TryRequestPlaceholderResendAsync(chatJid, messageId, trigger);
 
         private void ResolveMissingMessage(string chatJid, string messageId, string source)
         {
@@ -771,10 +768,22 @@ namespace Unison.Uwp.Services.WhatsApp
 
                 if (sessionKind == IncomingEnvelopeKind.Placeholder)
                 {
-                    RegisterMissingMessage(e.FromJid, e.Participant, e.MessageId, e.IsFromMe, e.Timestamp, $"placeholder:{e.Message.PlaceholderMessage.Type}");
-                    QueueMessageControlWork(
-                        $"placeholder-resend:{e.MessageId}",
-                        () => TryRequestPlaceholderResendAsync(e.FromJid, e.MessageId, "placeholder-message"));
+                    if (Messages == null)
+                    {
+                        Debug.WriteLine("[WhatsAppService] Dropping placeholder: MessageFacade is not attached.");
+                        return;
+                    }
+
+                    string placeholderType = e.Message?.PlaceholderMessage != null
+                        ? e.Message.PlaceholderMessage.Type.ToString()
+                        : null;
+                    await Messages.HandleIncomingPlaceholderAsync(
+                        e.FromJid,
+                        e.Participant,
+                        e.MessageId,
+                        e.IsFromMe,
+                        e.Timestamp,
+                        placeholderType).ConfigureAwait(false);
                     return;
                 }
 
