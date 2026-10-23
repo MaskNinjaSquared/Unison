@@ -2,6 +2,12 @@
 
 Newest first.
 
+## Phase B — ChatNameRefresh leaves WhatsAppService
+
+`IContactService.ApplyResolvedNamesToChatListAsync` is the catch-up / self-name list
+relabel. `ContactFacade` owns `ChatNameRefresh.Applied` (diagnostics + `DisplayNamesUpdated`);
+`WhatsAppService` no longer holds the helper.
+
 ## Phase B — resolved-name batch + tip reconcile on façades
 
 `ContactFacade` owns `ApplyResolvedNameBatchAsync` and `NormalizePersistedChatNamesAsync`
