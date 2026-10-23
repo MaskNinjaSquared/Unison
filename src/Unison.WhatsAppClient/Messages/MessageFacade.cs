@@ -45,6 +45,8 @@ namespace Unison.WhatsAppClient.Messages
         private readonly IOutgoingMessageHost _outgoingHost;
         private readonly IOutgoingReceiptHost _receiptHost;
         private readonly IIncomingRevocationHost _revocationHost;
+        private readonly IPendingMessageFlushHost _pendingFlush;
+        private readonly PendingMessageQueue _pendingMessages;
         private readonly IMessageStore _messageStore;
         private readonly ActiveChat _activeChat;
         private readonly ReceiptReader _receipts;
@@ -71,6 +73,8 @@ namespace Unison.WhatsAppClient.Messages
             IMessageWireActions wire,
             IOutgoingReceiptHost receiptHost,
             IIncomingRevocationHost revocationHost,
+            IPendingMessageFlushHost pendingFlush,
+            PendingMessageQueue pendingMessages,
             IMessageStore messageStore,
             ActiveChat activeChat,
             ChatStateStore chatState,
@@ -97,6 +101,8 @@ namespace Unison.WhatsAppClient.Messages
             _outgoingHost = outgoingHost ?? throw new ArgumentNullException(nameof(outgoingHost));
             _receiptHost = receiptHost ?? throw new ArgumentNullException(nameof(receiptHost));
             _revocationHost = revocationHost ?? throw new ArgumentNullException(nameof(revocationHost));
+            _pendingFlush = pendingFlush ?? throw new ArgumentNullException(nameof(pendingFlush));
+            _pendingMessages = pendingMessages ?? throw new ArgumentNullException(nameof(pendingMessages));
             _messageStore = messageStore ?? throw new ArgumentNullException(nameof(messageStore));
             _activeChat = activeChat ?? throw new ArgumentNullException(nameof(activeChat));
             _receipts = new ReceiptReader(jids);
@@ -1383,7 +1389,73 @@ namespace Unison.WhatsAppClient.Messages
                 return;
             }
 
-            _outgoingHost.QueueForPersist(chatJid, message);
+            PendingFlushAction action = _pendingMessages.Add(
+                chatJid,
+                new[] { message },
+                DateTime.UtcNow,
+                scheduleFlush: true);
+            _pendingFlush.ApplyFlushAction(action);
+            _catalog.Schedule();
+        }
+
+        /// <inheritdoc />
+        public bool EnrichOfflineDuplicateFast(
+            string chatJid,
+            string messageId,
+            bool isFromMe,
+            string participantJid,
+            string verifiedName,
+            string pushName)
+        {
+            if (string.IsNullOrWhiteSpace(chatJid) || string.IsNullOrEmpty(messageId))
+            {
+                return false;
+            }
+
+            ChatMessage existing = null;
+            string persistJid = chatJid;
+            ChatMessageCache cache = _chatState.MessagesByChat;
+
+            List<ChatMessage> list;
+            if (cache.TryGet(chatJid, out list) && list != null)
+            {
+                existing = list.FirstOrDefault(
+                    m => m != null && string.Equals(m.Id, messageId, StringComparison.Ordinal));
+            }
+
+            if (existing == null &&
+                AliasLinkedMessageFind.TryFind(
+                    cache,
+                    GetAliasLinkedDirectChatJids(chatJid),
+                    messageId,
+                    out string aliasChat,
+                    out ChatMessage aliasMsg) &&
+                aliasMsg != null)
+            {
+                existing = aliasMsg;
+                persistJid = aliasChat;
+            }
+
+            if (existing == null)
+            {
+                return false;
+            }
+
+            DuplicateArrivalPatch patch = DuplicateArrivalEnrichment.Compute(
+                existing.Status,
+                null,
+                isFromMe,
+                existing.ParticipantJid,
+                JidHelper.Normalize(participantJid),
+                existing.SenderName,
+                FirstNonBlankText.Pick(verifiedName, pushName));
+            if (!DuplicateArrivalEnrichment.Apply(existing, patch))
+            {
+                return false;
+            }
+
+            QueueIncomingPersist(persistJid, existing);
+            return true;
         }
 
         private void TrimInMemoryMessageWindow(string jid) =>

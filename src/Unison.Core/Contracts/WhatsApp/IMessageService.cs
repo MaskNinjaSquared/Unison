@@ -284,5 +284,18 @@ namespace Unison.Core.Contracts.WhatsApp
         /// chat-catalogue persist. Same path as an outgoing <c>QueueForPersist</c>.
         /// </summary>
         void QueueIncomingPersist(string chatJid, ChatMessage message);
+
+        /// <summary>
+        /// Offline fast-path: when the id is already in RAM, fill blank participant /
+        /// sender name from the envelope without re-running render / UI work. Returns
+        /// true when the bubble changed and was re-queued for persist.
+        /// </summary>
+        bool EnrichOfflineDuplicateFast(
+            string chatJid,
+            string messageId,
+            bool isFromMe,
+            string participantJid,
+            string verifiedName,
+            string pushName);
     }
 }

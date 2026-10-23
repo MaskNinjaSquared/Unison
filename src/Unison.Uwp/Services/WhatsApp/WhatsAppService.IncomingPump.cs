@@ -38,7 +38,7 @@ using Unison.WhatsAppClient.Helpers;
 
 namespace Unison.Uwp.Services.WhatsApp
 {
-    public partial class WhatsAppService : IIncomingRevocationHost
+    public partial class WhatsAppService : IIncomingRevocationHost, IPendingMessageFlushHost
     {
 
         private HashSet<string> GetOrBuildMessageIdIndex(string chatJid) =>
@@ -1036,7 +1036,13 @@ namespace Unison.Uwp.Services.WhatsApp
                         string fastGroupJid = GetCanonicalJid(normalizedFromJid);
                         if (HasMessageId(fastGroupJid, e.MessageId))
                         {
-                            EnrichOfflineDuplicateFast(fastGroupJid, e);
+                            Messages?.EnrichOfflineDuplicateFast(
+                                fastGroupJid,
+                                e.MessageId,
+                                e.IsFromMe,
+                                e.Participant,
+                                e.VerifiedName,
+                                e.PushName);
                             ResolveMissingMessage(fastGroupJid, e.MessageId, "offline-duplicate-fast");
                             return;
                         }
@@ -1051,7 +1057,13 @@ namespace Unison.Uwp.Services.WhatsApp
                                 GetAliasLinkedDirectChatJids(normalizedFromJid),
                                 e.MessageId))
                         {
-                            EnrichOfflineDuplicateFast(fastDmJid, e);
+                            Messages?.EnrichOfflineDuplicateFast(
+                                fastDmJid,
+                                e.MessageId,
+                                e.IsFromMe,
+                                e.Participant,
+                                e.VerifiedName,
+                                e.PushName);
                             ResolveMissingMessage(fastDmJid, e.MessageId, "offline-duplicate-fast");
                             return;
                         }
@@ -1660,52 +1672,15 @@ namespace Unison.Uwp.Services.WhatsApp
             }
         }
 
-        /// <summary>
-        /// Offline fast-path counterpart of the full duplicate enrichment: fill in a blank
-        /// participant or sender name from the envelope without re-running render / UI work.
-        /// Status upgrades need a mapped ChatMessage and stay on the full path.
-        /// </summary>
-        private void EnrichOfflineDuplicateFast(string chatJid, Client.DecryptedMessageEventArgs e)
+        void IPendingMessageFlushHost.ApplyFlushAction(PendingFlushAction action)
         {
-            if (string.IsNullOrWhiteSpace(chatJid) || e == null || string.IsNullOrEmpty(e.MessageId))
+            if (action == PendingFlushAction.FlushNow)
             {
-                return;
+                _ = FlushOfflineReplayMessagesAsync("message-batch-threshold");
             }
-
-            ChatMessage existing = null;
-            string persistJid = chatJid;
-
-            if (MessagesByChat.TryGet(chatJid, out var list) && list != null)
+            else if (action == PendingFlushAction.ScheduleTimer)
             {
-                existing = list.FirstOrDefault(
-                    m => m != null && string.Equals(m.Id, e.MessageId, StringComparison.Ordinal));
-            }
-
-            if (existing == null &&
-                TryFindAliasLinkedMessage(chatJid, e.MessageId, out string aliasChat, out ChatMessage aliasMsg) &&
-                aliasMsg != null)
-            {
-                existing = aliasMsg;
-                persistJid = aliasChat;
-            }
-
-            if (existing == null)
-            {
-                return;
-            }
-
-            DuplicateArrivalPatch patch = DuplicateArrivalEnrichment.Compute(
-                existing.Status,
-                null,
-                e.IsFromMe,
-                existing.ParticipantJid,
-                NormalizeJid(e.Participant),
-                existing.SenderName,
-                FirstNonBlankText.Pick(e.VerifiedName, e.PushName));
-            if (DuplicateArrivalEnrichment.Apply(existing, patch))
-            {
-                QueueOfflineReplayMessageForPersist(persistJid, existing);
-                SchedulePersist();
+                ScheduleOfflineReplayFlushTimer();
             }
         }
 

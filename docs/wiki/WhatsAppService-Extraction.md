@@ -231,7 +231,7 @@ Self-contained first. List/persist last.
 | 3.8 | `.AppState.cs` | **Rewritten — the premise was stale.** See below |
 | 3.9a | List display order (done) | `ChatDisplayOrder` (Core) |
 | 3.9b | `.Persistence.cs` + preview reconcile + the appliers from 3.8 | `ChatFacade` + `ChatStateStore` + `IChatStore` / `IMessageStore`. Close the transitional public dictionaries on `ChatStateStore`. **Persistence rules out; appliers remain — see below.** **Name maps closed (`DisplayNameTable`). `MessagesByChat` is `ChatMessageCache` (conversation set locked) and owns every edit to the per-chat lists — merge, key canonicalization, insert, trim, add-missing (with a limit), insert-if-absent, window rebuild, upsert, remove, id index; the client only reads them. `NotifyChangedExternally` closed; `MessagesByChat` has one reader left (the client).** **Repeated list-strip assembly is `ChatListStrip`. Phone-digit lookup is `KnownJidByPhoneDigits`. Delete/persist I/O stays** |
-| 3.10 | `.IncomingPump.cs` | Decode/dispatch stays with connection. **Rules closed.** **Notify + timeline accept + persist enqueue + revoke + pin-in-chat on MessageFacade.** **Live + offline list apply + tip refresh/reconcile on ChatFacade.** **Resend row transitions on `MissingMessageLedger`.** **Queue lanes, generation and stage on `IncomingMessageQueue<T>`.** **Offline replay tips on ChatFacade.** **Timeline accept (alias move / duplicate / insert) on `IncomingTimeline`.** **Resend wait / send / answer window on `PlaceholderResendDispatch`.** Pump keeps the drain loop and the go/no-go before a resend |
+| 3.10 | `.IncomingPump.cs` | Decode/dispatch stays with connection. **Rules closed.** **Notify + timeline accept + persist enqueue + offline-duplicate enrich + revoke + pin-in-chat on MessageFacade** (shared `PendingMessageQueue` DI). **Live + offline list apply + tip refresh/reconcile on ChatFacade.** **Resend row transitions on `MissingMessageLedger`.** **Queue lanes, generation and stage on `IncomingMessageQueue<T>`.** **Offline replay tips on ChatFacade.** **Timeline accept (alias move / duplicate / insert) on `IncomingTimeline`.** **Resend wait / send / answer window on `PlaceholderResendDispatch`.** Pump keeps the drain loop and the go/no-go before a resend |
 
 **3.1a is done.** The avatar half of `MediaCache` is `IAvatarCache` / `AvatarCacheService`: `TryGet`,
 `SaveAsync`, `DeleteIfCached`. It took `BuildSafeAvatarFileName`, `TryGetCachedAvatarUri`,
@@ -946,8 +946,10 @@ the live DM resolver it called) are in Core under tests.
 list strip (create row, preview, unread, reposition/sort) is `ChatFacade` (`ApplyLiveIncomingChatListAsync`
 / `ApplyOfflineReplayChatSummariesAsync`, shared `UnreadDelta`). Timeline insert/dedupe is
 `IMessageService.AcceptIncomingTimeline` over `ChatStateStore.MessagesByChat` (not a bounce into
-the client). Persist enqueue is `IMessageService.QueueIncomingPersist`
-(`IOutgoingMessageHost.QueueForPersist`). Revoke is `IMessageService.ApplyIncomingRevocationAsync`
+the client). Persist enqueue is `IMessageService.QueueIncomingPersist` over the shared DI
+`PendingMessageQueue` (`IPendingMessageFlushHost` for flush-now / idle timer;
+`IChatCatalogPersistence.Schedule` for the catalogue). Offline duplicate name patch is
+`IMessageService.EnrichOfflineDuplicateFast`. Revoke is `IMessageService.ApplyIncomingRevocationAsync`
 (`MessageRevocationContent` tombstone; `IIncomingRevocationHost` finds/removes in `MessagesByChat`
 and refreshes the tip; façade persists via `IOutgoingMessageHost` / SQLite). Inbound pin-in-chat is
 `IMessageService.ApplyIncomingPinInChatAsync` (`MessagePinWindow` then `IAppStateLocalHost`

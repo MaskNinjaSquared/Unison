@@ -372,6 +372,11 @@ namespace Unison.Uwp
                 sp.GetRequiredService<ISelfMarkerNaming>()));
             services.AddSingleton(sp => new UsyncAliasFiling(
                 sp.GetRequiredService<JidAliasTable>()));
+            // Shared with MessageFacade.QueueIncomingPersist and Persistence flush.
+            services.AddSingleton(_ => new PendingMessageQueue(
+                flushMessageThreshold: 12,
+                flushInterval: TimeSpan.FromMilliseconds(750),
+                maxMessagesPerChatBatch: 1500));
             services.AddSingleton<IWhatsAppService>(
                 sp => WhatsAppService.Create(
                     sp.GetRequiredService<ChatStateStore>(),
@@ -397,6 +402,7 @@ namespace Unison.Uwp
                     sp.GetRequiredService<ISystemInfoProvider>(),
                     sp.GetRequiredService<AttachedUiDispatcher>(),
                     sp.GetRequiredService<UsyncAliasFiling>(),
+                    sp.GetRequiredService<PendingMessageQueue>(),
                     sp.GetRequiredService<ChatListInitialPaintGate>(),
                     sp.GetRequiredService<IAppMemoryInfo>(),
                     sp.GetRequiredService<ILocalSettings>(),
@@ -513,6 +519,8 @@ namespace Unison.Uwp
                 sp => (IOutgoingReceiptHost)sp.GetRequiredService<IWhatsAppService>());
             services.AddSingleton<IIncomingRevocationHost>(
                 sp => (IIncomingRevocationHost)sp.GetRequiredService<IWhatsAppService>());
+            services.AddSingleton<IPendingMessageFlushHost>(
+                sp => (IPendingMessageFlushHost)sp.GetRequiredService<IWhatsAppService>());
             services.AddSingleton<IMessageService>(sp => new MessageFacade(
                 sp.GetRequiredService<IPersonStore>(),
                 sp.GetRequiredService<IWhatsAppService>(),
@@ -530,6 +538,8 @@ namespace Unison.Uwp
                 sp.GetRequiredService<IMessageWireActions>(),
                 sp.GetRequiredService<IOutgoingReceiptHost>(),
                 sp.GetRequiredService<IIncomingRevocationHost>(),
+                sp.GetRequiredService<IPendingMessageFlushHost>(),
+                sp.GetRequiredService<PendingMessageQueue>(),
                 sp.GetRequiredService<IMessageStore>(),
                 sp.GetRequiredService<ActiveChat>(),
                 sp.GetRequiredService<ChatStateStore>(),

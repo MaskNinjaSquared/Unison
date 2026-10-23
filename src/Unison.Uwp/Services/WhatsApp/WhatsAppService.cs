@@ -407,11 +407,11 @@ namespace Unison.Uwp.Services.WhatsApp
         private const int MaxPersistMessagesPerChatBatch = 1500;
         private static readonly TimeSpan OfflineReplayFlushInterval = TimeSpan.FromMilliseconds(750);
 
-        /// <summary>Messages accepted but not yet written, and the rule for when to write them.</summary>
-        private readonly PendingMessageQueue _pendingMessages = new PendingMessageQueue(
-            OfflineReplayFlushMessageThreshold,
-            OfflineReplayFlushInterval,
-            MaxPersistMessagesPerChatBatch);
+        /// <summary>
+        /// Messages accepted but not yet written. Shared DI singleton with
+        /// <c>MessageFacade.QueueIncomingPersist</c> so enqueue and flush see one queue.
+        /// </summary>
+        private readonly PendingMessageQueue _pendingMessages;
         private CancellationTokenSource _postReplayMaintenanceCts;
         private CancellationTokenSource _postMessageEnrichmentCts;
         private int _postMessageEnrichmentStarted;
@@ -1017,6 +1017,7 @@ namespace Unison.Uwp.Services.WhatsApp
             ISystemInfoProvider systemInfo,
             AttachedUiDispatcher ui,
             UsyncAliasFiling usyncAliases,
+            PendingMessageQueue pendingMessages,
             ChatListInitialPaintGate listPaintGate = null,
             IAppMemoryInfo appMemory = null,
             ILocalSettings localSettings = null,
@@ -1035,6 +1036,8 @@ namespace Unison.Uwp.Services.WhatsApp
                 throw new ArgumentNullException(nameof(systemInfo));
             }
 
+            _pendingMessages = pendingMessages
+                ?? throw new ArgumentNullException(nameof(pendingMessages));
             _chatState = chatState;
             _personStore = personStore ?? throw new ArgumentNullException(nameof(personStore));
             _groupRosterStore = groupRosterStore ?? throw new ArgumentNullException(nameof(groupRosterStore));
@@ -1126,6 +1129,7 @@ namespace Unison.Uwp.Services.WhatsApp
             ISystemInfoProvider systemInfo,
             AttachedUiDispatcher ui,
             UsyncAliasFiling usyncAliases,
+            PendingMessageQueue pendingMessages,
             ChatListInitialPaintGate listPaintGate = null,
             IAppMemoryInfo appMemory = null,
             ILocalSettings localSettings = null,
@@ -1136,7 +1140,7 @@ namespace Unison.Uwp.Services.WhatsApp
         {
             return _instance ?? (_instance = new WhatsAppService(
                 chatState, chatRows, activeChat, syncStatus, syncWork, historyMessages, chatPreviews, usyncGate, avatarFetcher, mediaCache, jidAlias, displayNames, historyRequests,
-                initialSync, syncBudget, workload, selfProfile, personStore, groupRosterStore, chatStore, systemInfo, ui, usyncAliases, listPaintGate, appMemory, localSettings, resolveContacts, resolveMessages, resolveChats, resolveGroups));
+                initialSync, syncBudget, workload, selfProfile, personStore, groupRosterStore, chatStore, systemInfo, ui, usyncAliases, pendingMessages, listPaintGate, appMemory, localSettings, resolveContacts, resolveMessages, resolveChats, resolveGroups));
         }
 
         /// <summary>

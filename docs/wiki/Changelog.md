@@ -2,6 +2,13 @@
 
 Newest first.
 
+## Phase B — offline duplicate enrich + shared PendingMessageQueue
+
+`IMessageService.EnrichOfflineDuplicateFast` owns the offline fast-path name/participant
+patch (no render/UI). `PendingMessageQueue` is a DI singleton shared by
+`MessageFacade.QueueIncomingPersist` and Persistence flush; flush-now / idle timer stay
+on `IPendingMessageFlushHost` (client timer + SQLite drain).
+
 ## Phase B — AcceptIncomingTimeline + QueueIncomingPersist on MessageFacade
 
 `IMessageService.AcceptIncomingTimeline` runs `IncomingTimeline` over
