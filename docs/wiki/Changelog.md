@@ -2,6 +2,12 @@
 
 Newest first.
 
+## Phase B — usync alias merge uses TransientChatMerge
+
+`ChatListAliasMerge.MergeAsync` applies `TransientChatMerge` before dropping the
+LID row (same preview/unread/avatar/name policy as live collapse). App-state
+self push-name capture goes through `IContactService.CaptureSelfPushName`.
+
 ## Phase B — transient direct-chat collapse on ChatFacade
 
 Live self-chat LID collapse is `IChatService.CollapseTransientDirectChatAsync`
