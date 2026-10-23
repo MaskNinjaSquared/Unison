@@ -136,6 +136,8 @@ namespace Unison.Core.Tests.State
             public int Sends { get; private set; }
             public Proto.MessageKey LastKey { get; private set; }
 
+            public bool IsHandshakeComplete => true;
+
             public string GenerateMessageId() => "stanza-" + Interlocked.Increment(ref _ids);
 
             public Task<string> RequestPlaceholderResendAsync(Proto.MessageKey key, string stanzaId)

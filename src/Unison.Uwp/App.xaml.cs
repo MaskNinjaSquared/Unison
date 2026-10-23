@@ -548,7 +548,7 @@ namespace Unison.Uwp
                 sp.GetRequiredService<ChatStateStore>(),
                 sp.GetRequiredService<ChatRowIndex>(),
                 sp.GetRequiredService<PendingMessageState>(),
-                sp.GetRequiredService<IMissingMessageChatHost>(),
+                sp.GetRequiredService<IPlaceholderResendSocket>(),
                 sp.GetRequiredService<IIncomingMessageEnqueueHost>(),
                 sp.GetRequiredService<HistoryOnDemandRegistry>(),
                 () => sp.GetRequiredService<IChatService>(),
@@ -648,8 +648,11 @@ namespace Unison.Uwp
                 sp => (IResolvedNameApplyHost)sp.GetRequiredService<IWhatsAppService>());
             services.AddSingleton<IOfflineReplayHost>(
                 sp => (WhatsAppService)sp.GetRequiredService<IWhatsAppService>());
+            services.AddSingleton<IPlaceholderResendSocket>(
+                sp => (IPlaceholderResendSocket)sp.GetRequiredService<IWhatsAppService>());
+            // After IMessageService: ChatFacade forgets repairs when a row is deleted/collapsed.
             services.AddSingleton<IMissingMessageChatHost>(
-                sp => (IMissingMessageChatHost)sp.GetRequiredService<IWhatsAppService>());
+                sp => (IMissingMessageChatHost)sp.GetRequiredService<IMessageService>());
             services.AddSingleton<IIncomingMessageEnqueueHost>(
                 sp => (IIncomingMessageEnqueueHost)sp.GetRequiredService<IWhatsAppService>());
             services.AddSingleton<IChatAccountActions>(sp => new BridgeChatAccountActions(

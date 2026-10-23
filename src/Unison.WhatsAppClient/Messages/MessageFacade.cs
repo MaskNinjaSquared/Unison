@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using Proto;
 using Unison.Core.Contracts;
@@ -17,8 +18,10 @@ namespace Unison.WhatsAppClient.Messages
     /// <summary>
     /// Message facade: Person upsert, domain <see cref="ChatMessage"/> construction, then WA transport.
     /// Prefer growing APIs here (e.g. <see cref="GetChatMessage"/>) instead of in WhatsAppService.
+    /// Owns the missing-message ledger and placeholder-resend dispatch; the host only exposes
+    /// <see cref="IPlaceholderResendSocket"/>.
     /// </summary>
-    public sealed class MessageFacade : IMessageService
+    public sealed class MessageFacade : IMessageService, IMissingMessageChatHost
     {
         private readonly IPersonStore _personStore;
         private readonly IChatMessageMapper _chatMessageMapper;
@@ -50,7 +53,9 @@ namespace Unison.WhatsAppClient.Messages
         private readonly ActiveChat _activeChat;
         private readonly ChatRowIndex _chatRows;
         private readonly PendingMessageState _pendingMessageState;
-        private readonly IMissingMessageChatHost _missingMessages;
+        private readonly MissingMessageLedger _missing = new MissingMessageLedger();
+        private readonly IPlaceholderResendSocket _placeholderSocket;
+        private PlaceholderResendDispatch _placeholderResends;
         private readonly IIncomingMessageEnqueueHost _incomingEnqueue;
         private readonly HistoryOnDemandRegistry _historyOnDemand;
         private readonly Func<IChatService> _resolveChats;
@@ -91,7 +96,7 @@ namespace Unison.WhatsAppClient.Messages
             ChatStateStore chatState,
             ChatRowIndex chatRows,
             PendingMessageState pendingMessageState,
-            IMissingMessageChatHost missingMessages,
+            IPlaceholderResendSocket placeholderSocket,
             IIncomingMessageEnqueueHost incomingEnqueue,
             HistoryOnDemandRegistry historyOnDemand,
             Func<IChatService> resolveChats,
@@ -138,8 +143,8 @@ namespace Unison.WhatsAppClient.Messages
             _chatRows = chatRows ?? throw new ArgumentNullException(nameof(chatRows));
             _pendingMessageState = pendingMessageState
                 ?? throw new ArgumentNullException(nameof(pendingMessageState));
-            _missingMessages = missingMessages
-                ?? throw new ArgumentNullException(nameof(missingMessages));
+            _placeholderSocket = placeholderSocket
+                ?? throw new ArgumentNullException(nameof(placeholderSocket));
             _incomingEnqueue = incomingEnqueue
                 ?? throw new ArgumentNullException(nameof(incomingEnqueue));
             _historyOnDemand = historyOnDemand
@@ -171,6 +176,26 @@ namespace Unison.WhatsAppClient.Messages
 
         private static readonly TimeSpan PlaceholderResendDrainDelay = TimeSpan.FromSeconds(4);
         private static readonly TimeSpan PlaceholderResendFollowUpDrainDelay = TimeSpan.FromSeconds(18);
+        private static readonly TimeSpan PlaceholderResendDispatchDelay = TimeSpan.FromSeconds(5);
+        private static readonly TimeSpan PlaceholderResendResponseTimeout = TimeSpan.FromSeconds(15);
+
+        private PlaceholderResendDispatch PlaceholderResends
+        {
+            get
+            {
+                if (_placeholderResends == null)
+                {
+                    _placeholderResends = new PlaceholderResendDispatch(
+                        _missing,
+                        _placeholderSocket,
+                        line => Debug.WriteLine("[MessageFacade] " + line),
+                        PlaceholderResendDispatchDelay,
+                        PlaceholderResendResponseTimeout);
+                }
+
+                return _placeholderResends;
+            }
+        }
 
         public event EventHandler<string> ChatMessagesChanged;
 
@@ -1824,14 +1849,14 @@ namespace Unison.WhatsAppClient.Messages
             string reason,
             string resendTrigger)
         {
-            _missingMessages.RegisterMissingMessage(
+            RegisterMissingMessage(
                 chatJid,
                 participantJid,
                 messageId,
                 isFromMe,
                 timestampUtc,
                 reason);
-            return _missingMessages.RequestPlaceholderResendAsync(
+            return TryRequestPlaceholderResendAsync(
                 chatJid,
                 messageId,
                 resendTrigger ?? "placeholder-message");
@@ -1847,7 +1872,7 @@ namespace Unison.WhatsAppClient.Messages
             }
 
             PlaceholderResendRequestState requestState;
-            if (!_missingMessages.TryApplyPlaceholderResendAck(ackId, rejected, out requestState) ||
+            if (!_missing.TryApplyAck(ackId, rejected, DateTime.UtcNow, out requestState) ||
                 requestState == null)
             {
                 return;
@@ -1867,6 +1892,168 @@ namespace Unison.WhatsAppClient.Messages
                     requestState.MessageId + " in " + requestState.ChatJid +
                     ": stanzaId=" + ackId);
             }
+        }
+
+        void IMissingMessageChatHost.ForgetMissingMessagesForChat(string chatJid) =>
+            ForgetMissingMessagesForChat(chatJid);
+
+        private void RegisterMissingMessage(
+            string chatJid,
+            string participant,
+            string messageId,
+            bool isFromMe,
+            DateTime timestamp,
+            string reason)
+        {
+            string normJid = JidHelper.Normalize(chatJid);
+            _missing.Note(normJid, messageId, participant, isFromMe, timestamp, reason, DateTime.UtcNow);
+
+            if (string.IsNullOrWhiteSpace(normJid) || string.IsNullOrWhiteSpace(messageId))
+            {
+                return;
+            }
+
+            if (!_syncWork.IsReplayDrainActive)
+            {
+                Debug.WriteLine(
+                    "[MessageFacade] Queued missing-message recovery for " + messageId +
+                    " in " + normJid + " (reason=" + reason + ")");
+            }
+        }
+
+        private void ResolveMissingMessage(string chatJid, string messageId, string source)
+        {
+            string normJid = JidHelper.Normalize(chatJid);
+            MissingMessageRemoval removal = _missing.Resolve(normJid, messageId);
+            if (string.IsNullOrWhiteSpace(normJid) || string.IsNullOrWhiteSpace(messageId))
+            {
+                return;
+            }
+
+            if (removal.ScheduledResend != null)
+            {
+                try
+                {
+                    removal.ScheduledResend.Cancel();
+                    removal.ScheduledResend.Dispose();
+                    if (!_syncWork.IsReplayDrainActive)
+                    {
+                        Debug.WriteLine(
+                            "[MessageFacade] placeholder resend cancelled for " + messageId +
+                            " in " + normJid + " (" + source + ")");
+                    }
+                }
+                catch
+                {
+                }
+            }
+
+            if (!_syncWork.IsReplayDrainActive)
+            {
+                Debug.WriteLine(
+                    "[MessageFacade] Resolved missing-message recovery for " + messageId +
+                    " in " + normJid + " via " + source);
+            }
+        }
+
+        private void ForgetMissingMessagesForChat(string chatJid)
+        {
+            string normJid = JidHelper.Normalize(chatJid);
+            if (string.IsNullOrWhiteSpace(normJid))
+            {
+                return;
+            }
+
+            _missing.Cooldowns.Remove(normJid);
+            List<MissingMessageCandidate> dropped =
+                new List<MissingMessageCandidate>(_missing.ForgetChat(normJid));
+            if (dropped.Count == 0)
+            {
+                return;
+            }
+
+            foreach (MissingMessageCandidate candidate in dropped)
+            {
+                CancellationTokenSource cts = candidate?.PlaceholderScheduleCts;
+                if (cts == null)
+                {
+                    continue;
+                }
+
+                try
+                {
+                    cts.Cancel();
+                    cts.Dispose();
+                }
+                catch
+                {
+                }
+            }
+        }
+
+        private bool TryGetMissingMessage(
+            string chatJid,
+            string messageId,
+            out MissingMessageCandidate candidate)
+        {
+            candidate = null;
+            string normJid = JidHelper.Normalize(chatJid);
+            if (string.IsNullOrWhiteSpace(normJid) || string.IsNullOrWhiteSpace(messageId))
+            {
+                return false;
+            }
+
+            lock (_missing.Gate)
+            {
+                return _missing.TryGet(normJid, messageId, out candidate);
+            }
+        }
+
+        private Task<bool> TryRequestPlaceholderResendAsync(
+            string chatJid,
+            string messageId,
+            string trigger)
+        {
+            if (!_placeholderSocket.IsHandshakeComplete)
+            {
+                return Task.FromResult(false);
+            }
+
+            if (!TryGetMissingMessage(chatJid, messageId, out MissingMessageCandidate candidate))
+            {
+                return Task.FromResult(false);
+            }
+
+            if (ShouldDeferPlaceholderResend(out string deferReason))
+            {
+                if (!_syncWork.IsReplayDrainActive)
+                {
+                    Debug.WriteLine(
+                        "[MessageFacade] Deferring placeholder resend for " +
+                        candidate.MessageId + " in " + candidate.ChatJid +
+                        " (trigger=" + trigger + ", reason=" + deferReason + ")");
+                }
+
+                return Task.FromResult(false);
+            }
+
+            Task dispatched = PlaceholderResends.TryDispatch(candidate, chatJid, messageId, trigger);
+            return Task.FromResult(dispatched != null);
+        }
+
+        private bool ShouldDeferPlaceholderResend(out string reason)
+        {
+            if (!_placeholderSocket.IsHandshakeComplete)
+            {
+                reason = null;
+                return false;
+            }
+
+            return PlaceholderResendDeferral.IsDeferred(
+                _syncWork.IsReplayDrainActive,
+                _isAwaitingInitialSync(),
+                _historyOnDemand.ChatsInFlight > 0,
+                out reason);
         }
 
         /// <inheritdoc />
@@ -1915,7 +2102,7 @@ namespace Unison.WhatsAppClient.Messages
 
             int totalEligible;
             List<MissingMessageCandidate> pending =
-                _missingMessages.SelectPlaceholderResendDrain(maxRequests, out totalEligible);
+                _missing.SelectForDrain(maxRequests, out totalEligible);
 
             if (pending == null || pending.Count == 0)
             {
@@ -1941,7 +2128,7 @@ namespace Unison.WhatsAppClient.Messages
                     break;
                 }
 
-                if (await _missingMessages.RequestPlaceholderResendAsync(
+                if (await TryRequestPlaceholderResendAsync(
                         candidate.ChatJid,
                         candidate.MessageId,
                         "deferred-drain:" + trigger)
@@ -2057,7 +2244,7 @@ namespace Unison.WhatsAppClient.Messages
             }
 
             PlaceholderResendRequestState requestState =
-                _missingMessages.TakePlaceholderPeerResponse(stanzaId);
+                _missing.TakePeerResponse(stanzaId);
 
             foreach (var result in results)
             {
@@ -2438,7 +2625,7 @@ namespace Unison.WhatsAppClient.Messages
             {
                 if (emptySkip.ClearMissingLedger && !string.IsNullOrEmpty(request.MessageId))
                 {
-                    _missingMessages.ResolveMissingMessage(
+                    ResolveMissingMessage(
                         jid,
                         request.MessageId,
                         "empty-content");
@@ -2631,7 +2818,7 @@ namespace Unison.WhatsAppClient.Messages
                 participantJid,
                 verifiedName,
                 pushName);
-            _missingMessages.ResolveMissingMessage(chatJid, messageId, "offline-duplicate-fast");
+            ResolveMissingMessage(chatJid, messageId, "offline-duplicate-fast");
             return true;
         }
 
@@ -2759,7 +2946,7 @@ namespace Unison.WhatsAppClient.Messages
                     ": existingChat=" + timeline.AliasSourceChatJid + ", finalChat=" + jid);
             }
 
-            _missingMessages.ResolveMissingMessage(jid, request.IncomingMessage.Id, "duplicate-arrival");
+            ResolveMissingMessage(jid, request.IncomingMessage.Id, "duplicate-arrival");
 
             IChatService chats = _resolveChats();
             if (chats != null)
@@ -2796,7 +2983,7 @@ namespace Unison.WhatsAppClient.Messages
             string jid = request.ChatJid;
             ChatMessage chatMessage = request.Message;
 
-            _missingMessages.ResolveMissingMessage(jid, chatMessage.Id, "live-arrival");
+            ResolveMissingMessage(jid, chatMessage.Id, "live-arrival");
 
             ScheduleIncomingMediaHydration(
                 chatMessage,

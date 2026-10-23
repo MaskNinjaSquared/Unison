@@ -2,6 +2,12 @@
 
 Newest first.
 
+## Phase B — MissingMessageLedger + PlaceholderResendDispatch on MessageFacade
+
+Ledger, schedule, drain, ack apply, and peer-data claim live on `MessageFacade`.
+Host keeps only `IPlaceholderResendSocket` (handshake + generate id + wire send).
+`IMissingMessageChatHost` is forget-only; ChatFacade resolves it to the message façade.
+
 ## Phase B — UI marshal, offline settle, sqlite notify, decrypted notify, drain deferral
 
 `NotifyChatMessagesChanged` marshals via `IDispatcher`. `NotifyOfflineReplaySettledAsync`

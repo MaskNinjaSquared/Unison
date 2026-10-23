@@ -43,7 +43,7 @@ using Unison.WhatsAppClient.Helpers;
 
 namespace Unison.Uwp.Services.WhatsApp
 {
-    public partial class WhatsAppService : INotifyPropertyChanged, IWhatsAppService, IMediaDownloadHost, IAvatarReport, IOfflineReplayHost, IPlaceholderResendSocket, IHistoryOnDemandSocket, IRuntimeSnapshotSource, IDeferredAvatarResolution, IAppStateLocalHost, IConversationResyncHost, IHistorySyncHost, IUsyncAliasHost, IStartupUiHost, IJidAliasPersistence, IMissingMessageChatHost, IIncomingMessageEnqueueHost, Unison.WhatsAppClient.Abstractions.IResolvedNameApplyHost
+    public partial class WhatsAppService : INotifyPropertyChanged, IWhatsAppService, IMediaDownloadHost, IAvatarReport, IOfflineReplayHost, IPlaceholderResendSocket, IHistoryOnDemandSocket, IRuntimeSnapshotSource, IDeferredAvatarResolution, IAppStateLocalHost, IConversationResyncHost, IHistorySyncHost, IUsyncAliasHost, IStartupUiHost, IJidAliasPersistence, IIncomingMessageEnqueueHost, Unison.WhatsAppClient.Abstractions.IResolvedNameApplyHost
     {
         public event PropertyChangedEventHandler PropertyChanged;
         protected void OnPropertyChanged([CallerMemberName] string propertyName = null)
@@ -746,8 +746,6 @@ namespace Unison.Uwp.Services.WhatsApp
 
         private int GetStoredMessageCount() => MessagesByChat.TotalMessageCount();
 
-        private readonly MissingMessageLedger _missing = new MissingMessageLedger();
-        private PlaceholderResendDispatch _placeholderResends;
         private static readonly TimeSpan HistoryBackfillStaleThreshold = TimeSpan.FromHours(8);
         private static readonly TimeSpan HistoryFreshnessStaleThreshold = TimeSpan.FromMinutes(30);
         private static readonly TimeSpan FullHistoryRepairCooldown = TimeSpan.FromHours(6);
@@ -757,8 +755,6 @@ namespace Unison.Uwp.Services.WhatsApp
         private const int HistoryHydrationBatchSize = 10;
         private const int HistoryHydrationPageSize = 50;
         private const int HistoryHydrationMaxPagesPerChat = 5;
-        private static readonly TimeSpan PlaceholderResendDispatchDelay = TimeSpan.FromSeconds(5);
-        private static readonly TimeSpan PlaceholderResendResponseTimeout = TimeSpan.FromSeconds(15);
         private static readonly TimeSpan HistoryOnDemandResponseTimeout = TimeSpan.FromSeconds(20);
         private static readonly TimeSpan FullHistoryOnDemandResponseTimeout = TimeSpan.FromMinutes(15);
         // --- FULL_HISTORY catch-up continue (next offline lot via soft-reconnect) ---
