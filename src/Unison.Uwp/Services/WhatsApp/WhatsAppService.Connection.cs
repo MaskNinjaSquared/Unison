@@ -1780,34 +1780,45 @@ namespace Unison.Uwp.Services.WhatsApp
 
             socket.OnMissingMessageDetected += (s, e) =>
             {
-                if (!IsCurrentSocket(s)) return;
-                if (Messages != null)
-                {
-                    _ = Messages.NoteMissingMessageAndRequestResendAsync(
-                        e.ChatJid,
-                        e.Participant,
-                        e.MessageId,
-                        e.IsFromMe,
-                        e.Timestamp,
-                        e.Reason,
-                        "socket:" + (e.Reason ?? string.Empty));
-                    return;
-                }
-
-                RegisterMissingMessage(e.ChatJid, e.Participant, e.MessageId, e.IsFromMe, e.Timestamp, e.Reason);
-                _ = TryRequestPlaceholderResendAsync(e.ChatJid, e.MessageId, $"socket:{e.Reason}");
+                if (!IsCurrentSocket(s) || Messages == null) return;
+                _ = Messages.NoteMissingMessageAndRequestResendAsync(
+                    e.ChatJid,
+                    e.Participant,
+                    e.MessageId,
+                    e.IsFromMe,
+                    e.Timestamp,
+                    e.Reason,
+                    "socket:" + (e.Reason ?? string.Empty));
             };
 
             socket.OnOutgoingMessageStatusChanged += (s, e) =>
             {
-                if (!IsCurrentSocket(s)) return;
-                _ = UpdateOutgoingMessageStatusSafelyAsync(e?.MessageId, e?.Status, e?.Error);
+                if (!IsCurrentSocket(s) || Messages == null) return;
+                _ = Messages.ApplyOutgoingStatusAsync(e?.MessageId, e?.Status, e?.Error)
+                    .ContinueWith(t =>
+                    {
+                        if (t.IsFaulted && t.Exception != null)
+                        {
+                            Debug.WriteLine(
+                                "[WhatsAppService] Outgoing status update failed for " +
+                                (e?.MessageId ?? "?") + ": " +
+                                t.Exception.GetBaseException().Message);
+                        }
+                    }, TaskScheduler.Default);
             };
 
             socket.OnReceiptReceived += (s, node) =>
             {
-                if (!IsCurrentSocket(s)) return;
-                _ = HandleMessageReceiptSafelyAsync(node);
+                if (!IsCurrentSocket(s) || Messages == null) return;
+                _ = Messages.HandleReceiptAsync(node).ContinueWith(t =>
+                {
+                    if (t.IsFaulted && t.Exception != null)
+                    {
+                        Debug.WriteLine(
+                            "[WhatsAppService] Receipt processing failed: " +
+                            t.Exception.GetBaseException().Message);
+                    }
+                }, TaskScheduler.Default);
             };
 
             socket.OnLinkCodeCompanionReg += (s, node) =>

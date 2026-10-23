@@ -4055,24 +4055,6 @@ namespace Unison.Uwp.Services.WhatsApp
         }
 
 
-        private Task UpdateOutgoingMessageStatusSafelyAsync(string messageId, string status, string error = null)
-        {
-            if (Messages == null)
-            {
-                return Task.CompletedTask;
-            }
-
-            return Messages.ApplyOutgoingStatusAsync(messageId, status, error).ContinueWith(t =>
-            {
-                if (t.IsFaulted && t.Exception != null)
-                {
-                    Debug.WriteLine(
-                        "[WhatsAppService] Outgoing status update failed for " + messageId + ": " +
-                        t.Exception.GetBaseException().Message);
-                }
-            }, TaskScheduler.Default);
-        }
-
         private void InvalidateCurrentSocket(IWhatsAppSocket socket, string reason)
         {
             if (socket == null)

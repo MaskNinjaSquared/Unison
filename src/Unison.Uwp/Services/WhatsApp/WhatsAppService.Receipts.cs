@@ -12,26 +12,6 @@ namespace Unison.Uwp.Services.WhatsApp
 {
     public partial class WhatsAppService : IOutgoingReceiptHost
     {
-        private async Task HandleMessageReceiptSafelyAsync(BinaryNode node)
-        {
-            try
-            {
-                await HandleMessageReceiptAsync(node);
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"[WhatsAppService] Receipt processing failed: {ex.Message}");
-            }
-        }
-
-        private async Task HandleMessageReceiptAsync(BinaryNode node)
-        {
-            if (Messages != null)
-            {
-                await Messages.HandleReceiptAsync(node).ConfigureAwait(false);
-            }
-        }
-
         bool IOutgoingReceiptHost.IsSelfLinked(string jid) => IsSelfLinkedJid(jid);
 
         Task<int> IOutgoingReceiptHost.GetExpectedGroupRecipientCountAsync(string groupJid) =>

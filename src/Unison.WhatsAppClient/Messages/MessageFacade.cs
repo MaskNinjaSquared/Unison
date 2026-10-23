@@ -89,12 +89,12 @@ namespace Unison.WhatsAppClient.Messages
             ChatRowIndex chatRows,
             PendingMessageState pendingMessageState,
             IMissingMessageChatHost missingMessages,
-            IIncomingMessageEnqueueHost incomingEnqueue = null,
-            HistoryOnDemandRegistry historyOnDemand = null,
-            Func<IChatService> resolveChats = null,
-            Func<IContactService> resolveContacts = null,
-            Func<IStatusService> resolveStatus = null,
-            Func<IConnectionService> resolveConnection = null,
+            IIncomingMessageEnqueueHost incomingEnqueue,
+            HistoryOnDemandRegistry historyOnDemand,
+            Func<IChatService> resolveChats,
+            Func<IContactService> resolveContacts,
+            Func<IStatusService> resolveStatus,
+            Func<IConnectionService> resolveConnection,
             IChatStore chatStore = null,
             IStringResources strings = null,
             ISystemInfoProvider systemInfo = null,
@@ -127,12 +127,18 @@ namespace Unison.WhatsAppClient.Messages
                 ?? throw new ArgumentNullException(nameof(pendingMessageState));
             _missingMessages = missingMessages
                 ?? throw new ArgumentNullException(nameof(missingMessages));
-            _incomingEnqueue = incomingEnqueue;
-            _historyOnDemand = historyOnDemand;
-            _resolveChats = resolveChats;
-            _resolveContacts = resolveContacts;
-            _resolveStatus = resolveStatus;
-            _resolveConnection = resolveConnection;
+            _incomingEnqueue = incomingEnqueue
+                ?? throw new ArgumentNullException(nameof(incomingEnqueue));
+            _historyOnDemand = historyOnDemand
+                ?? throw new ArgumentNullException(nameof(historyOnDemand));
+            _resolveChats = resolveChats
+                ?? throw new ArgumentNullException(nameof(resolveChats));
+            _resolveContacts = resolveContacts
+                ?? throw new ArgumentNullException(nameof(resolveContacts));
+            _resolveStatus = resolveStatus
+                ?? throw new ArgumentNullException(nameof(resolveStatus));
+            _resolveConnection = resolveConnection
+                ?? throw new ArgumentNullException(nameof(resolveConnection));
             _strings = strings;
             _receipts = new ReceiptReader(jids);
 
@@ -1051,15 +1057,7 @@ namespace Unison.WhatsAppClient.Messages
 
         public async Task SetMessagePinnedAsync(string chatJid, ChatMessage message, bool pin, uint durationSeconds = 604800)
         {
-            IConnectionService connection = _resolveConnection != null ? _resolveConnection() : null;
-            if (connection != null)
-            {
-                await connection.EnsureConnectedAsync().ConfigureAwait(false);
-            }
-            else
-            {
-                await _whatsAppService.EnsureConnectedAsync().ConfigureAwait(false);
-            }
+            await _resolveConnection().EnsureConnectedAsync().ConfigureAwait(false);
 
             if (message == null || string.IsNullOrWhiteSpace(message.Id))
             {
@@ -1791,7 +1789,7 @@ namespace Unison.WhatsAppClient.Messages
             string stanzaId,
             IEnumerable<Message.Types.PeerDataOperationRequestResponseMessage.Types.PeerDataOperationResult> results)
         {
-            if (_incomingEnqueue == null || results == null)
+            if (results == null)
             {
                 return;
             }
@@ -1871,9 +1869,7 @@ namespace Unison.WhatsAppClient.Messages
                 ", requestType=" + response.PeerDataOperationRequestType +
                 ", resultCount=" + (response.PeerDataOperationResult?.Count ?? 0));
 
-            HistoryOnDemandRequest historyRequestState = _historyOnDemand != null
-                ? _historyOnDemand.Find(response.StanzaId)
-                : null;
+            HistoryOnDemandRequest historyRequestState = _historyOnDemand.Find(response.StanzaId);
 
             foreach (var result in response.PeerDataOperationResult
                      ?? Enumerable.Empty<Message.Types.PeerDataOperationRequestResponseMessage.Types.PeerDataOperationResult>())
@@ -1937,7 +1933,7 @@ namespace Unison.WhatsAppClient.Messages
                 return;
             }
 
-            IContactService contacts = _resolveContacts != null ? _resolveContacts() : null;
+            IContactService contacts = _resolveContacts();
             contacts?.RegisterIncomingEnvelopeAliasHints(
                 request.SenderLid,
                 request.FromJid,
@@ -1951,7 +1947,7 @@ namespace Unison.WhatsAppClient.Messages
             if (IncomingEnvelopeDisposition.ClassifyAddress(normalizedFromJid) == IncomingEnvelopeKind.StatusBroadcast ||
                 IncomingEnvelopeDisposition.ClassifyAddress(request.FromJid) == IncomingEnvelopeKind.StatusBroadcast)
             {
-                IStatusService status = _resolveStatus != null ? _resolveStatus() : null;
+                IStatusService status = _resolveStatus();
                 if (status != null)
                 {
                     await status.IngestLiveFromDecryptedAsync(new IncomingLiveStatusRequest
@@ -2025,7 +2021,7 @@ namespace Unison.WhatsAppClient.Messages
                         normalizedPeerRecipientLid,
                         jid))
                 {
-                    IChatService chats = _resolveChats != null ? _resolveChats() : null;
+                    IChatService chats = _resolveChats();
                     if (chats != null)
                     {
                         _ = chats.CollapseTransientDirectChatAsync(
@@ -2162,7 +2158,7 @@ namespace Unison.WhatsAppClient.Messages
             string nameFromMsg = request.VerifiedName ?? request.PushName;
             if (!string.IsNullOrEmpty(nameFromMsg))
             {
-                IContactService contacts = _resolveContacts != null ? _resolveContacts() : null;
+                IContactService contacts = _resolveContacts();
                 contacts?.AcceptIncomingPushName(
                     nameFromMsg,
                     request.EnvelopeIsFromMe,
@@ -2421,7 +2417,7 @@ namespace Unison.WhatsAppClient.Messages
                     timeline.ConsolidatedMessage)
                 .ConfigureAwait(false);
 
-            IChatService chats = _resolveChats != null ? _resolveChats() : null;
+            IChatService chats = _resolveChats();
             if (chats != null)
             {
                 await chats.ApplyIncomingEnvelopePreviewAsync(new IncomingEnvelopePreviewRequest
@@ -2472,7 +2468,7 @@ namespace Unison.WhatsAppClient.Messages
 
             _missingMessages.ResolveMissingMessage(jid, request.IncomingMessage.Id, "duplicate-arrival");
 
-            IChatService chats = _resolveChats != null ? _resolveChats() : null;
+            IChatService chats = _resolveChats();
             if (chats != null)
             {
                 await chats.ApplyIncomingEnvelopePreviewAsync(new IncomingEnvelopePreviewRequest
@@ -2516,7 +2512,7 @@ namespace Unison.WhatsAppClient.Messages
                 chatMessage.Id,
                 jid);
 
-            IChatService chats = _resolveChats != null ? _resolveChats() : null;
+            IChatService chats = _resolveChats();
 
             if (request.IsOffline)
             {
@@ -2911,7 +2907,7 @@ namespace Unison.WhatsAppClient.Messages
                 }
             }
 
-            IChatService chats = _resolveChats != null ? _resolveChats() : null;
+            IChatService chats = _resolveChats();
             if (chats != null)
             {
                 await chats.DeduplicateChatListAsync("live-direct-alias-duplicate")
@@ -2943,7 +2939,7 @@ namespace Unison.WhatsAppClient.Messages
 
         private async Task RefreshChatPreviewFromMessageAsync(string canonical, ChatMessage message)
         {
-            IChatService chats = _resolveChats != null ? _resolveChats() : null;
+            IChatService chats = _resolveChats();
             if (chats == null || message == null || string.IsNullOrWhiteSpace(canonical))
             {
                 return;

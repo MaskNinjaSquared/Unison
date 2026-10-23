@@ -2,6 +2,12 @@
 
 Newest first.
 
+## Phase B — require connection/enqueue/history deps; thin Connection socket hooks
+
+`MessageFacade` requires `Func<IConnectionService>`, `IIncomingMessageEnqueueHost`,
+and `HistoryOnDemandRegistry` (pin connect has no WA fallback). Connection
+forwards missing-message / outgoing status / receipts straight to the façade.
+
 ## Phase B — ChatMessagesChanged owned by MessageFacade
 
 `IMessageService.NotifyChatMessagesChanged` replaces client
