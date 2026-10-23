@@ -55,6 +55,7 @@ namespace Unison.WhatsAppClient.History
         private readonly IWhatsAppSessionProvider _sessions;
         private readonly IHistoryOnDemandSocket _onDemandSocket;
         private readonly IWhatsAppService _appState;
+        private readonly Func<IConnectionService> _resolveConnection;
         private readonly IConversationResyncHost _resync;
         private readonly IHistorySyncHost _historySync;
         private readonly IJidAliasPersistence _aliasPersist;
@@ -97,6 +98,7 @@ namespace Unison.WhatsAppClient.History
         public HistoryFacade(
             IWhatsAppSessionProvider sessions,
             IWhatsAppService appState,
+            Func<IConnectionService> resolveConnection,
             IConversationResyncHost resync,
             IHistorySyncHost historySync,
             IJidAliasPersistence aliasPersist,
@@ -131,6 +133,11 @@ namespace Unison.WhatsAppClient.History
                 throw new ArgumentNullException(nameof(appState));
             }
 
+            if (resolveConnection == null)
+            {
+                throw new ArgumentNullException(nameof(resolveConnection));
+            }
+
             if (store == null)
             {
                 throw new ArgumentNullException(nameof(store));
@@ -144,6 +151,7 @@ namespace Unison.WhatsAppClient.History
             _sessions = sessions;
             _onDemandSocket = onDemandSocket ?? throw new ArgumentNullException(nameof(onDemandSocket));
             _appState = appState;
+            _resolveConnection = resolveConnection;
             _resync = resync ?? throw new ArgumentNullException(nameof(resync));
             _historySync = historySync ?? throw new ArgumentNullException(nameof(historySync));
             _aliasPersist = aliasPersist ?? throw new ArgumentNullException(nameof(aliasPersist));
@@ -877,7 +885,7 @@ namespace Unison.WhatsAppClient.History
 
             try
             {
-                await _appState.EnsureConnectedAsync().ConfigureAwait(false);
+                await _resolveConnection().EnsureConnectedAsync().ConfigureAwait(false);
             }
             catch (Exception ex)
             {
@@ -1114,6 +1122,7 @@ namespace Unison.WhatsAppClient.History
 
                 if (state.Kind == HistoryOnDemandKind.FullHistory)
                 {
+                    _syncStatus.Raise("History download rejected. Try again or re-link.");
                     _historySync.CompleteUserResyncOnFullHistoryAckRejected();
                 }
 

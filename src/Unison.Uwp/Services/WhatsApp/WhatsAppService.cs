@@ -3028,7 +3028,6 @@ namespace Unison.Uwp.Services.WhatsApp
             }
 
             EndHistoryCatchUpBanner("full-history-ack-rejected");
-            RaiseSyncStatus("History download rejected. Try again or re-link.");
             var failed = Interlocked.Exchange(ref _userResyncHistoryTcs, null);
             failed?.TrySetResult(false);
         }

@@ -2,6 +2,11 @@
 
 Newest first.
 
+## Phase B — history ack status + EnsureConnected via IConnectionService
+
+Rejected FULL_HISTORY ack raises sync status on `HistoryFacade`; host only ends
+the catch-up banner / resync wait. Resync connect uses `IConnectionService`.
+
 ## Phase B — PresenceUpdated owned by MessageFacade; drop IWhatsAppService
 
 `NotifyPresenceUpdated` replaces client `OnPresenceUpdate`. `MessageFacade` no
