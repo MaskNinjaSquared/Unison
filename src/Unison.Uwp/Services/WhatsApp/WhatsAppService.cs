@@ -507,7 +507,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
             // The post-sync enrichment that would rename the list gives up when the window is
             // hidden or the socket dropped; names learned from the sync itself need neither.
-            _ = ApplyResolvedNamesToChatsAsync();
+            _ = _nameRefresh.ApplyAsync();
         }
 
         /// <summary>
@@ -692,15 +692,14 @@ namespace Unison.Uwp.Services.WhatsApp
 
         public JidAliasTable JidAlias { get; }
 
+        private readonly AliasFollowUpQueue _aliasFollowUps = new AliasFollowUpQueue();
+
         /// <summary>
         /// Long enough to swallow a history chunk's worth of pairs, short enough that a single
         /// pair discovered from a live message still settles before the user notices.
         /// </summary>
-        private static readonly TimeSpan AliasFollowUpDebounce = TimeSpan.FromMilliseconds(750);
-
-        private readonly AliasFollowUpQueue _aliasFollowUps = new AliasFollowUpQueue();
-        private readonly object _aliasFollowUpTimerGate = new object();
-        private CancellationTokenSource _aliasFollowUpCts;
+        private readonly CoalescedDebounceScheduler _aliasFollowUpDebounce =
+            new CoalescedDebounceScheduler(TimeSpan.FromMilliseconds(750));
         /// <summary>Per-chat and full-history requests sent and still owed. Shared with <c>HistoryFacade</c>.</summary>
         private readonly HistoryOnDemandRegistry _historyRequests;
         private HistoryOnDemandDispatch _historyDispatch;
@@ -2298,9 +2297,6 @@ namespace Unison.Uwp.Services.WhatsApp
         /// <summary>
         /// PN + LID (+ canonical) keys for SQLite history reads and avatar lookups.
         /// </summary>
-        private List<string> ExpandHistoryChatKeys(string jid) =>
-            new List<string>(ChatPinStoreKeys.For(jid, _jids));
-
         public void StartDeferredStartupMaintenance()
         {
             if (Interlocked.Exchange(ref _deferredStartupMaintenanceStarted, 1) != 0)
@@ -2497,7 +2493,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 return null;
             }
 
-            List<string> keys = ExpandHistoryChatKeys(chatJid);
+            List<string> keys = new List<string>(ChatPinStoreKeys.For(chatJid, _jids));
             for (int i = 0; i < keys.Count; i++)
             {
                 HistoryMessage row = await _historyMessages.GetAsync(keys[i], messageId).ConfigureAwait(false);
@@ -4467,7 +4463,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
             try
             {
-                List<string> keys = ExpandHistoryChatKeys(canonical);
+                List<string> keys = new List<string>(ChatPinStoreKeys.For(canonical, _jids));
                 var pins = new List<HistoryMessagePinUpdate>(keys.Count);
                 for (int i = 0; i < keys.Count; i++)
                 {
@@ -4794,35 +4790,15 @@ namespace Unison.Uwp.Services.WhatsApp
         /// Resolves an address and validates a name, without touching anything shared. Every part
         /// of the work that does not need the UI thread happens here.
         /// </summary>
-        private void AddResolvedName(List<ResolvedNameEntry> entries, string jid, string name, bool isSubject)
-        {
-            string normalized = NormalizeJid(jid);
-            string canonical = GetCanonicalJid(normalized);
-            if (string.IsNullOrWhiteSpace(canonical) || string.IsNullOrWhiteSpace(name))
-            {
-                return;
-            }
-
-            // A subject is the group's own name; there is no number for it to be confused with.
-            string resolved = isSubject ? name : SanitizeContactLabel(name, canonical);
-            if (string.IsNullOrWhiteSpace(resolved))
-            {
-                return;
-            }
-
-            if (isSubject && GroupIdPlaceholder.IsIdPlaceholder(resolved, canonical))
-            {
-                return;
-            }
-
-            entries.Add(new ResolvedNameEntry
-            {
-                Canonical = canonical,
-                Normalized = normalized,
-                Name = resolved,
-                IsSubject = isSubject
-            });
-        }
+        private void AddResolvedName(List<ResolvedNameEntry> entries, string jid, string name, bool isSubject) =>
+            ResolvedNameBatchPrep.Add(
+                entries,
+                jid,
+                name,
+                isSubject,
+                NormalizeJid,
+                GetCanonicalJid,
+                SanitizeContactLabel);
 
         /// <summary>
         /// Applies a set of resolved names: the cache is filled, the rows that carry any of those
@@ -5006,7 +4982,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
             // The personal chat is built from the resolved name, and it was built before this
             // arrived - it is the row reading "(You)" with nothing in front of it.
-            _ = ApplyResolvedNamesToChatsAsync();
+            _ = _nameRefresh.ApplyAsync();
         }
 
         /// <summary>
@@ -5162,19 +5138,10 @@ namespace Unison.Uwp.Services.WhatsApp
                         }
         }
 
-        private static string FormatTimestamp(DateTime msgTime)
-        {
-            return WhatsAppMapper.FormatTimestamp(
-                msgTime,
-                LocalizedStrings.Get("Common_Yesterday", "Yesterday"));
-        }
-
         private static string SelfListDisplayName()
         {
             return LocalizedStrings.Get("Chat_SelfFallbackName", "You");
         }
-
-        private Task ApplyResolvedNamesToChatsAsync() => _nameRefresh.ApplyAsync();
 
         private void OnChatNamesApplied(object sender, int updated)
                     {

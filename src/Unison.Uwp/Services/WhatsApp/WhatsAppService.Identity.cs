@@ -217,23 +217,7 @@ namespace Unison.Uwp.Services.WhatsApp
             await PersistChatIdentityStateAsync(reason);
         }
 
-        internal string GetCanonicalChatJid(string jid) => GetCanonicalJid(jid);
-
         internal void RegisterAliasFromAppState(string lidJid, string pnJid, string source) => RegisterAliasMapping(lidJid, pnJid, source);
-
-        /// <summary>A name that has been resolved to an address, ready to be applied.</summary>
-        private sealed class ResolvedNameEntry
-        {
-            public string Canonical;
-            public string Normalized;
-            public string Name;
-
-            /// <summary>
-            /// A group's subject, which is the group's name outright, as opposed to a contact's
-            /// name, which is one input to a display name that is composed elsewhere.
-            /// </summary>
-            public bool IsSubject;
-        }
 
         /// <summary>
         /// Records a LID/phone pair and schedules the work that follows from it.
@@ -342,33 +326,7 @@ namespace Unison.Uwp.Services.WhatsApp
         private void ScheduleAliasFollowUp(string source)
         {
             _aliasFollowUps.Request(source);
-
-            CancellationToken token;
-            lock (_aliasFollowUpTimerGate)
-            {
-                if (_aliasFollowUpCts != null)
-                {
-                    _aliasFollowUpCts.Cancel();
-                    _aliasFollowUpCts.Dispose();
-                }
-
-                _aliasFollowUpCts = new CancellationTokenSource();
-                token = _aliasFollowUpCts.Token;
-            }
-
-            Task.Delay(AliasFollowUpDebounce, token).ContinueWith(
-                t =>
-                {
-                    if (t.IsCanceled)
-                    {
-                        return;
-                    }
-
-                    _ = RunAliasFollowUpAsync();
-                },
-                CancellationToken.None,
-                TaskContinuationOptions.ExecuteSynchronously,
-                TaskScheduler.Default);
+            _aliasFollowUpDebounce.Schedule(() => _ = RunAliasFollowUpAsync());
         }
 
         /// <summary>

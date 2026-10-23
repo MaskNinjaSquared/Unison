@@ -2153,6 +2153,7 @@ namespace Unison.Uwp.Services.WhatsApp
             _postReplayMaintenanceCts?.Dispose();
             _postReplayMaintenanceCts = null;
             CancelDeferredProfilePictureResolution();
+            _aliasFollowUpDebounce.Cancel();
 
             lock (_persistLock)
             {
