@@ -1985,22 +1985,6 @@ namespace Unison.Uwp.Services.WhatsApp
             }
         }
 
-        /// <summary>
-        /// Completes resync/progress after a history chunk. SQLite apply lives on HistoryFacade;
-        /// this leftover notify is the live-message fallback if MessageFacade is unset.
-        /// </summary>
-        private Task ProcessHistorySyncCoreAsync(HistorySync sync)
-        {
-            if (sync != null)
-            {
-                NotifyHistorySqliteChunkApplied(
-                    sync.SyncType.ToString(),
-                    sync.Conversations?.Count ?? 0);
-            }
-
-            return Task.CompletedTask;
-        }
-
         /// <inheritdoc />
         public void ApplyHistoryLidMappings(IEnumerable<KeyValuePair<string, string>> lidToPn, string source)
         {
