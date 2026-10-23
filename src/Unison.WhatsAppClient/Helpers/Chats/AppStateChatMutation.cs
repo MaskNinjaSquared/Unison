@@ -59,6 +59,44 @@ namespace Unison.WhatsAppClient.Helpers
         }
 
         /// <summary>
+        /// Stamps <see cref="ResolveUnreadCount"/> onto every row and collects the ones
+        /// whose count actually changed (for a catalog slice persist).
+        /// </summary>
+        public static int StampUnread(
+            IReadOnlyList<ChatItem> rows,
+            bool read,
+            ref List<ChatItem> dirty)
+        {
+            int resolved = ResolveUnreadCount(rows, read);
+            if (rows == null)
+            {
+                return resolved;
+            }
+
+            for (int i = 0; i < rows.Count; i++)
+            {
+                ChatItem row = rows[i];
+                if (row == null || row.UnreadCount == resolved)
+                {
+                    continue;
+                }
+
+                row.UnreadCount = resolved;
+                if (dirty == null)
+                {
+                    dirty = new List<ChatItem>();
+                }
+
+                if (!dirty.Contains(row))
+                {
+                    dirty.Add(row);
+                }
+            }
+
+            return resolved;
+        }
+
+        /// <summary>
         /// Writes the flags the mutation carries onto one row, leaving the ones it did
         /// not mention alone.
         /// </summary>

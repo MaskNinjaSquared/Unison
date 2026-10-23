@@ -70,6 +70,54 @@ namespace Unison.Core.Tests.Helpers
             Assert.Equal(1, AppStateChatMutation.ResolveUnreadCount(null, read: false));
         }
 
+        // --- StampUnread ------------------------------------------------------
+
+        [Fact]
+        public void Stamp_read_clears_every_row_and_lists_the_ones_that_changed()
+        {
+            List<ChatItem> rows = Rows(7, 0, 3);
+            List<ChatItem> dirty = null;
+
+            int resolved = AppStateChatMutation.StampUnread(rows, read: true, ref dirty);
+
+            Assert.Equal(0, resolved);
+            Assert.Equal(0, rows[0].UnreadCount);
+            Assert.Equal(0, rows[1].UnreadCount);
+            Assert.Equal(0, rows[2].UnreadCount);
+            Assert.Equal(2, dirty.Count);
+            Assert.Contains(rows[0], dirty);
+            Assert.Contains(rows[2], dirty);
+        }
+
+        [Fact]
+        public void Stamp_unread_keeps_an_existing_dirty_seed_and_adds_changed_rows()
+        {
+            List<ChatItem> rows = Rows(0, 0);
+            ChatItem seed = rows[0];
+            List<ChatItem> dirty = new List<ChatItem> { seed };
+
+            int resolved = AppStateChatMutation.StampUnread(rows, read: false, ref dirty);
+
+            Assert.Equal(1, resolved);
+            Assert.Equal(1, rows[0].UnreadCount);
+            Assert.Equal(1, rows[1].UnreadCount);
+            Assert.Equal(2, dirty.Count);
+            Assert.Contains(seed, dirty);
+            Assert.Contains(rows[1], dirty);
+        }
+
+        [Fact]
+        public void Stamp_with_nothing_to_change_leaves_dirty_untouched()
+        {
+            List<ChatItem> rows = Rows(0, 0);
+            List<ChatItem> dirty = null;
+
+            int resolved = AppStateChatMutation.StampUnread(rows, read: true, ref dirty);
+
+            Assert.Equal(0, resolved);
+            Assert.Null(dirty);
+        }
+
         // --- ApplyFlags -------------------------------------------------------
 
         [Fact]
