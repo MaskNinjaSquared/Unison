@@ -2,6 +2,14 @@
 
 Newest first.
 
+## Phase B — resolved-name batch + tip reconcile on façades
+
+`ContactFacade` owns `ApplyResolvedNameBatchAsync` and `NormalizePersistedChatNamesAsync`
+(remote subjects / contact names / account contact updates go through it).
+`IResolvedNameApplyHost` is self push-name only. Client startup / catch-up tip reconcile
+calls `IChatService.ReconcileChatPreviewsFromSqliteAsync`; `ChatPreviewReconciler` is no
+longer held by `WhatsAppService`.
+
 ## 2.0.19 — per-JID hydration fallback after empty FULL_HISTORY
 
 When FULL_HISTORY catch-up finishes stagnant/empty (or freshness reconnect is on
