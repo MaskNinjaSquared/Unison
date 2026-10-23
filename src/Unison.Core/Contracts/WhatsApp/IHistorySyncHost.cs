@@ -1,4 +1,5 @@
 using System.Threading.Tasks;
+using Unison.Core.State;
 
 namespace Unison.Core.Contracts.WhatsApp
 {
@@ -30,5 +31,17 @@ namespace Unison.Core.Contracts.WhatsApp
         /// starts persisting.
         /// </summary>
         void NotifyHistorySqliteChunkStarted(string syncType, int conversationCount);
+
+        /// <summary>Progress tick while waiting for a FULL_HISTORY on-demand answer.</summary>
+        void NoteFullHistoryCatchUpProgress(string reason);
+
+        /// <summary>
+        /// When a FULL_HISTORY ack is rejected while a user resync is waiting: end banner,
+        /// status line, and complete the wait as failed.
+        /// </summary>
+        void CompleteUserResyncOnFullHistoryAckRejected();
+
+        /// <summary>Arm the accepted-request timeout / catch-up watchdog for this request.</summary>
+        void ScheduleAcceptedHistoryOnDemandTimeout(HistoryOnDemandRequest state);
     }
 }

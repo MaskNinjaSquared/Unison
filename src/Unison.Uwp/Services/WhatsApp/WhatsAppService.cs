@@ -159,6 +159,7 @@ namespace Unison.Uwp.Services.WhatsApp
         private readonly Func<IContactService> _resolveContacts;
         private readonly Func<IGroupService> _resolveGroups;
         private readonly Func<IStatusService> _resolveStatus;
+        private readonly Func<IHistoryService> _resolveHistory;
 
         private IMessageService Messages => _resolveMessages != null ? _resolveMessages() : null;
 
@@ -169,6 +170,8 @@ namespace Unison.Uwp.Services.WhatsApp
         private IGroupService Groups => _resolveGroups != null ? _resolveGroups() : null;
 
         private IStatusService Status => _resolveStatus != null ? _resolveStatus() : null;
+
+        private IHistoryService History => _resolveHistory != null ? _resolveHistory() : null;
 
         /// <summary>App-state sync and other UWP hosts that still hold the concrete client.</summary>
         internal IMessageService MessagesFacade => Messages;
@@ -1030,7 +1033,8 @@ namespace Unison.Uwp.Services.WhatsApp
             Func<IMessageService> resolveMessages = null,
             Func<IChatService> resolveChats = null,
             Func<IGroupService> resolveGroups = null,
-            Func<IStatusService> resolveStatus = null)
+            Func<IStatusService> resolveStatus = null,
+            Func<IHistoryService> resolveHistory = null)
         {
             if (chatState == null)
             {
@@ -1056,6 +1060,7 @@ namespace Unison.Uwp.Services.WhatsApp
             _resolveChats = resolveChats;
             _resolveGroups = resolveGroups;
             _resolveStatus = resolveStatus;
+            _resolveHistory = resolveHistory;
             _ui = ui ?? throw new ArgumentNullException(nameof(ui));
             _usyncAliases = usyncAliases ?? throw new ArgumentNullException(nameof(usyncAliases));
             _listPaintGate = listPaintGate ?? new ChatListInitialPaintGate();
@@ -1144,11 +1149,12 @@ namespace Unison.Uwp.Services.WhatsApp
             Func<IMessageService> resolveMessages = null,
             Func<IChatService> resolveChats = null,
             Func<IGroupService> resolveGroups = null,
-            Func<IStatusService> resolveStatus = null)
+            Func<IStatusService> resolveStatus = null,
+            Func<IHistoryService> resolveHistory = null)
         {
             return _instance ?? (_instance = new WhatsAppService(
                 chatState, chatRows, activeChat, syncStatus, syncWork, historyMessages, chatPreviews, usyncGate, avatarFetcher, mediaCache, jidAlias, displayNames, historyRequests,
-                initialSync, syncBudget, workload, selfProfile, personStore, groupRosterStore, chatStore, systemInfo, ui, usyncAliases, pendingMessages, listPaintGate, appMemory, localSettings, resolveContacts, resolveMessages, resolveChats, resolveGroups, resolveStatus));
+                initialSync, syncBudget, workload, selfProfile, personStore, groupRosterStore, chatStore, systemInfo, ui, usyncAliases, pendingMessages, listPaintGate, appMemory, localSettings, resolveContacts, resolveMessages, resolveChats, resolveGroups, resolveStatus, resolveHistory));
         }
 
         /// <summary>
@@ -3012,53 +3018,36 @@ namespace Unison.Uwp.Services.WhatsApp
             });
         }
 
+        void IHistorySyncHost.NoteFullHistoryCatchUpProgress(string reason) =>
+            NoteFullHistoryCatchUpProgress(reason);
+
+        void IHistorySyncHost.CompleteUserResyncOnFullHistoryAckRejected()
+        {
+            if (!IsUserConversationResyncWaiting())
+            {
+                return;
+            }
+
+            EndHistoryCatchUpBanner("full-history-ack-rejected");
+            RaiseSyncStatus("History download rejected. Try again or re-link.");
+            var failed = Interlocked.Exchange(ref _userResyncHistoryTcs, null);
+            failed?.TrySetResult(false);
+        }
+
+        void IHistorySyncHost.ScheduleAcceptedHistoryOnDemandTimeout(HistoryOnDemandRequest state) =>
+            ScheduleAcceptedHistoryRequestTimeout(state);
+
         private void HandleHistoryOnDemandAckNode(BinaryNode node)
         {
-            if (node?.Attrs == null) return;
+            if (node?.Attrs == null || History == null)
+            {
+                return;
+            }
 
             node.Attrs.TryGetValue("class", out var ackClass);
             node.Attrs.TryGetValue("id", out var ackId);
             node.Attrs.TryGetValue("error", out var ackError);
-
-            if (!string.Equals(ackClass, "message", StringComparison.OrdinalIgnoreCase) || string.IsNullOrWhiteSpace(ackId))
-            {
-                return;
-            }
-
-            HistoryOnDemandRequest state = _historyRequests.Ack(ackId, ackError, DateTime.UtcNow);
-            if (state == null)
-            {
-                return;
-            }
-
-            if (!string.IsNullOrWhiteSpace(ackError))
-            {
-                Debug.WriteLine($"[WhatsAppService] {state.TypeName} ack rejected: id={ackId}, chat={state.ChatJid ?? "<full-history>"}, error={ackError}, trigger={state.TriggerReason ?? "unspecified"}");
-                if (state.Kind == HistoryOnDemandKind.Chat &&
-                    string.Equals(ackError, "479", StringComparison.OrdinalIgnoreCase))
-                {
-                    Debug.WriteLine($"[WhatsAppService] Not escalating HISTORY_SYNC_ON_DEMAND 479 for {state.ChatJid} into FULL_HISTORY_SYNC_ON_DEMAND. Treating as server rejection with backoff.");
-                }
-
-                if (state.Kind == HistoryOnDemandKind.FullHistory &&
-                    IsUserConversationResyncWaiting())
-                {
-                    EndHistoryCatchUpBanner("full-history-ack-rejected");
-                    RaiseSyncStatus("History download rejected. Try again or re-link.");
-                    var failed = Interlocked.Exchange(ref _userResyncHistoryTcs, null);
-                    failed?.TrySetResult(false);
-                }
-            }
-            else
-            {
-                Debug.WriteLine($"[WhatsAppService] {state.TypeName} ack accepted: id={ackId}, chat={state.ChatJid ?? "<full-history>"}, baseline={state.BaselineMessageCount}, trigger={state.TriggerReason ?? "unspecified"}. Waiting for follow-up payload.");
-                if (state.Kind == HistoryOnDemandKind.FullHistory)
-                {
-                    NoteFullHistoryCatchUpProgress("ack-accepted");
-                }
-
-                ScheduleAcceptedHistoryRequestTimeout(state);
-            }
+            History.HandleOnDemandAck(ackClass, ackId, ackError);
         }
 
         private HistoryCatchUpWatchdog CatchUpWatchdog =>

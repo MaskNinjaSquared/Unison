@@ -2,6 +2,11 @@
 
 Newest first.
 
+## Phase B — history-on-demand ack on HistoryFacade
+
+`IHistoryService.HandleOnDemandAck` owns registry Ack + logging; catch-up banner /
+timeout stay on `IHistorySyncHost`. Connection only forwards ack attrs.
+
 ## Phase B — require connection/enqueue/history deps; thin Connection socket hooks
 
 `MessageFacade` requires `Func<IConnectionService>`, `IIncomingMessageEnqueueHost`,

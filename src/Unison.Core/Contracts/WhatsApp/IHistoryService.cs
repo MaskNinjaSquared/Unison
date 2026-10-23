@@ -118,6 +118,11 @@ namespace Unison.Core.Contracts.WhatsApp
 
         /// <summary>A page was asked for <paramref name="jid"/> and has not landed yet.</summary>
         bool IsChatPagePending(string jid);
+
+        /// <summary>
+        /// Wire <c>ack</c> for an outstanding history-on-demand request (chat or full).
+        /// </summary>
+        void HandleOnDemandAck(string ackClass, string ackId, string ackError);
     }
 }
 

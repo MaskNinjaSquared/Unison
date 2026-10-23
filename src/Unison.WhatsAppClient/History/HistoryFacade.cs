@@ -1080,5 +1080,58 @@ namespace Unison.WhatsAppClient.History
                 Debug.WriteLine("[ConversationResync] Could not update the force-history flag: " + ex.Message);
             }
         }
+
+        /// <inheritdoc />
+        public void HandleOnDemandAck(string ackClass, string ackId, string ackError)
+        {
+            if (!string.Equals(ackClass, "message", StringComparison.OrdinalIgnoreCase) ||
+                string.IsNullOrWhiteSpace(ackId))
+            {
+                return;
+            }
+
+            HistoryOnDemandRequest state = _onDemandRequests.Ack(ackId, ackError, DateTime.UtcNow);
+            if (state == null)
+            {
+                return;
+            }
+
+            if (!string.IsNullOrWhiteSpace(ackError))
+            {
+                Debug.WriteLine(
+                    "[HistoryFacade] " + state.TypeName + " ack rejected: id=" + ackId +
+                    ", chat=" + (state.ChatJid ?? "<full-history>") +
+                    ", error=" + ackError +
+                    ", trigger=" + (state.TriggerReason ?? "unspecified"));
+                if (state.Kind == HistoryOnDemandKind.Chat &&
+                    string.Equals(ackError, "479", StringComparison.OrdinalIgnoreCase))
+                {
+                    Debug.WriteLine(
+                        "[HistoryFacade] Not escalating HISTORY_SYNC_ON_DEMAND 479 for " +
+                        state.ChatJid +
+                        " into FULL_HISTORY_SYNC_ON_DEMAND. Treating as server rejection with backoff.");
+                }
+
+                if (state.Kind == HistoryOnDemandKind.FullHistory)
+                {
+                    _historySync.CompleteUserResyncOnFullHistoryAckRejected();
+                }
+
+                return;
+            }
+
+            Debug.WriteLine(
+                "[HistoryFacade] " + state.TypeName + " ack accepted: id=" + ackId +
+                ", chat=" + (state.ChatJid ?? "<full-history>") +
+                ", baseline=" + state.BaselineMessageCount +
+                ", trigger=" + (state.TriggerReason ?? "unspecified") +
+                ". Waiting for follow-up payload.");
+            if (state.Kind == HistoryOnDemandKind.FullHistory)
+            {
+                _historySync.NoteFullHistoryCatchUpProgress("ack-accepted");
+            }
+
+            _historySync.ScheduleAcceptedHistoryOnDemandTimeout(state);
+        }
     }
 }

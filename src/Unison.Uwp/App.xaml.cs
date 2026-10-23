@@ -412,7 +412,8 @@ namespace Unison.Uwp
                     () => sp.GetRequiredService<IMessageService>(),
                     () => sp.GetRequiredService<IChatService>(),
                     () => sp.GetRequiredService<IGroupService>(),
-                    () => sp.GetRequiredService<IStatusService>()));
+                    () => sp.GetRequiredService<IStatusService>(),
+                    () => sp.GetRequiredService<IHistoryService>()));
             // The send flow lives on MessageFacade; the timeline caches and the socket it writes
             // through are still the client's, reached only through this narrow port.
             services.AddSingleton<IOutgoingMessageHost>(
