@@ -156,9 +156,13 @@ namespace Unison.Uwp.Services.WhatsApp
 
         /// <summary>Puts listing and metadata replies onto the rows for this client's own query passes.</summary>
         private readonly GroupMetadataApply _groupApply;
-        private IMessageService _messageService;
-        private IChatService _chatService;
+        private readonly Func<IMessageService> _resolveMessages;
+        private readonly Func<IChatService> _resolveChats;
         private readonly Func<IContactService> _resolveContacts;
+
+        private IMessageService Messages => _resolveMessages != null ? _resolveMessages() : null;
+
+        private IChatService ChatFacade => _resolveChats != null ? _resolveChats() : null;
 
         private IContactService Contacts => _resolveContacts != null ? _resolveContacts() : null;
         private readonly IPersonStore _personStore;
@@ -167,18 +171,6 @@ namespace Unison.Uwp.Services.WhatsApp
         private readonly bool _isWindowsMobile;
         private readonly IAppMemoryInfo _appMemory;
         private readonly ILocalSettings _localSettings;
-
-        /// <summary>Wired from App DI so history sync goes through MessageFacade (Person upsert + domain mapping).</summary>
-        public void AttachMessageService(IMessageService messageService)
-        {
-            _messageService = messageService;
-        }
-
-        /// <summary>Wired from App DI so live list apply goes through ChatFacade.</summary>
-        public void AttachChatService(IChatService chatService)
-        {
-            _chatService = chatService;
-        }
 
         private bool IsWindowsMobile => _isWindowsMobile;
 
@@ -1154,7 +1146,9 @@ namespace Unison.Uwp.Services.WhatsApp
             ChatListInitialPaintGate listPaintGate = null,
             IAppMemoryInfo appMemory = null,
             ILocalSettings localSettings = null,
-            Func<IContactService> resolveContacts = null)
+            Func<IContactService> resolveContacts = null,
+            Func<IMessageService> resolveMessages = null,
+            Func<IChatService> resolveChats = null)
         {
             if (chatState == null)
             {
@@ -1174,6 +1168,8 @@ namespace Unison.Uwp.Services.WhatsApp
             _appMemory = appMemory ?? new WinRtAppMemoryInfo();
             _localSettings = localSettings;
             _resolveContacts = resolveContacts;
+            _resolveMessages = resolveMessages;
+            _resolveChats = resolveChats;
             _ui = ui ?? throw new ArgumentNullException(nameof(ui));
             _previewReconciler = previewReconciler ?? throw new ArgumentNullException(nameof(previewReconciler));
             _nameRefresh = nameRefresh ?? throw new ArgumentNullException(nameof(nameRefresh));
@@ -1268,11 +1264,13 @@ namespace Unison.Uwp.Services.WhatsApp
             ChatListInitialPaintGate listPaintGate = null,
             IAppMemoryInfo appMemory = null,
             ILocalSettings localSettings = null,
-            Func<IContactService> resolveContacts = null)
+            Func<IContactService> resolveContacts = null,
+            Func<IMessageService> resolveMessages = null,
+            Func<IChatService> resolveChats = null)
         {
             return _instance ?? (_instance = new WhatsAppService(
                 chatState, chatRows, activeChat, syncStatus, syncWork, historyMessages, chatPreviews, usyncGate, avatarFetcher, mediaCache, jidAlias, displayNames, historyRequests,
-                initialSync, syncBudget, workload, selfProfile, personStore, groupRosterStore, chatStore, systemInfo, ui, previewReconciler, nameRefresh, storedPreviews, deduper, usyncAliases, listPaintGate, appMemory, localSettings, resolveContacts));
+                initialSync, syncBudget, workload, selfProfile, personStore, groupRosterStore, chatStore, systemInfo, ui, previewReconciler, nameRefresh, storedPreviews, deduper, usyncAliases, listPaintGate, appMemory, localSettings, resolveContacts, resolveMessages, resolveChats));
         }
 
         /// <summary>

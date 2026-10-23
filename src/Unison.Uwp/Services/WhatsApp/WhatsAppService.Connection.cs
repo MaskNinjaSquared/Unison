@@ -1778,14 +1778,14 @@ namespace Unison.Uwp.Services.WhatsApp
                     "; type=" + (sync?.SyncType.ToString() ?? "<none>"));
                 try
                 {
-                    // App always AttachMessageService after DI; history apply owns the chunk.
-                    if (_messageService == null)
+                    // Lazy Func from Create; history apply owns the chunk.
+                    if (Messages == null)
                     {
                         throw new InvalidOperationException(
-                            "IMessageService must be attached before history sync apply.");
+                            "IMessageService must resolve before history sync apply.");
                     }
 
-                    _messageService.SyncMessageHistoryAsync(sync).GetAwaiter().GetResult();
+                    Messages.SyncMessageHistoryAsync(sync).GetAwaiter().GetResult();
                 }
                 finally
                 {

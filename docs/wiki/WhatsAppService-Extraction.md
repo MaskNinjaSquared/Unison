@@ -176,11 +176,10 @@ Primitives that already left the contract (façade / Netstandard Phase A):
 
 ### DI still injects façades *into* the client
 
-The stores (`IPersonStore`, `IChatStore`, `IGroupRosterStore`) are constructor parameters of the client now. After `BuildServiceProvider`, `App.ConfigureServices` still does:
+The stores (`IPersonStore`, `IChatStore`, `IGroupRosterStore`) are constructor parameters of the client now. After `BuildServiceProvider`, façade `Attach*` into the client is gone for Message/Chat/Contact:
+`WhatsAppService.Create` takes `Func<IMessageService>` / `Func<IChatService>` / `Func<IContactService>` (lazy, breaks the DI cycle). The pump and history sync still *call* those façades; moving that ownership is the remaining Attach* inversion work.
 
-- `AttachMessageService` / `AttachChatService`
-
-`AttachContactService` is gone: `WhatsAppService.Create` takes `Func<IContactService>` (lazy, breaks the DI cycle). Background names/pictures run on `IContactService.RunBackgroundResolutionAsync`; deferred-startup overlay/hydrate/relabel is `RunDeferredStartupContactPassAsync`. The client keeps quiet-wait / handshake / catch-up gates and still raises `OnGroupListingDue` after background resolution.
+`AttachContactService` body work: background names/pictures on `IContactService.RunBackgroundResolutionAsync`; deferred-startup overlay/hydrate/relabel on `RunDeferredStartupContactPassAsync`. The client keeps quiet-wait / handshake / catch-up gates and still raises `OnGroupListingDue` after background resolution.
 
 `AttachDebugSendService` is gone (phase 4): `App` starts `IDebugSendService` once in Debug builds.
 The watcher already skipped requests while the transport was not ready, so the five start/stop

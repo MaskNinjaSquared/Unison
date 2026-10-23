@@ -855,7 +855,7 @@ namespace Unison.Uwp.Services.WhatsApp
             if (plan.HasSticker)
             {
                 ObserveIncomingWork(
-                    _messageService.HydrateIncomingStickerAsync(chatMessage, plan.Sticker, messageId, jid),
+                    Messages.HydrateIncomingStickerAsync(chatMessage, plan.Sticker, messageId, jid),
                     "hydrate-sticker",
                     messageId);
             }
@@ -863,7 +863,7 @@ namespace Unison.Uwp.Services.WhatsApp
             if (plan.HasImage)
             {
                 ObserveIncomingWork(
-                    _messageService.HydrateIncomingImageAsync(chatMessage, plan.Image, messageId, jid),
+                    Messages.HydrateIncomingImageAsync(chatMessage, plan.Image, messageId, jid),
                     "hydrate-image",
                     messageId);
             }
@@ -1240,7 +1240,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 }
 
                 // Reactions: MessageFacade maps onto parent; WA only persists / notifies.
-                if (_messageService != null)
+                if (Messages != null)
                 {
                     string reactionParticipant = NormalizeJid(e.Participant);
                     string reactionSenderName = e.IsFromMe
@@ -1269,7 +1269,7 @@ namespace Unison.Uwp.Services.WhatsApp
                     {
                         await _ui.RunAsync(() =>
                         {
-                            handledReaction = _messageService.TryHandleReaction(
+                            handledReaction = Messages.TryHandleReaction(
                                 e.Message,
                                 reactionContext,
                                 reactionTimeline,
@@ -1278,7 +1278,7 @@ namespace Unison.Uwp.Services.WhatsApp
                     }
                     else
                     {
-                        handledReaction = _messageService.TryHandleReaction(
+                        handledReaction = Messages.TryHandleReaction(
                             e.Message,
                             reactionContext,
                             reactionTimeline,
@@ -1452,7 +1452,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 // Domain ChatMessage via the MessageFacade (Kind resolved in mapper).
                 ApplyContextInfoExtras(e.Message, out string quotedText, out string quotedSender, out string quotedParticipantJid, out string quotedMessageId, out var quotedKind, out var mentionedJids, out bool isForwarded, out bool mentionAll);
 
-                if (_messageService == null)
+                if (Messages == null)
                 {
                     Debug.WriteLine("[WhatsAppService] Dropping inbound message: MessageFacade is not attached.");
                     RuntimeDiagnosticsService.Instance.Write(
@@ -1462,7 +1462,7 @@ namespace Unison.Uwp.Services.WhatsApp
                     return;
                 }
 
-                ChatMessage chatMessage = _messageService.GetChatMessage(
+                ChatMessage chatMessage = Messages.GetChatMessage(
                     new ChatMessageMapContext
                     {
                         MessageId = e.MessageId,
@@ -1657,7 +1657,7 @@ namespace Unison.Uwp.Services.WhatsApp
                     aliasPn = JidHelper.IsPhoneJid(jid) ? jid : aliasPair;
                 }
 
-                if (_chatService == null)
+                if (ChatFacade == null)
                 {
                     Debug.WriteLine("[WhatsAppService] Dropping live list apply: ChatFacade is not attached.");
                     RuntimeDiagnosticsService.Instance.Write(
@@ -1667,7 +1667,7 @@ namespace Unison.Uwp.Services.WhatsApp
                     return;
                 }
 
-                LiveIncomingChatListApplyResult listApply = await _chatService.ApplyLiveIncomingChatListAsync(
+                LiveIncomingChatListApplyResult listApply = await ChatFacade.ApplyLiveIncomingChatListAsync(
                     new LiveIncomingChatListApplyRequest
                     {
                         ChatJid = jid,
@@ -1700,7 +1700,7 @@ namespace Unison.Uwp.Services.WhatsApp
                         : ResolveDisplayName(jid, "notification");
                 }
 
-                _messageService.NotifyLiveIncoming(
+                Messages.NotifyLiveIncoming(
                     jid,
                     notificationName,
                     senderName,
@@ -1817,13 +1817,13 @@ namespace Unison.Uwp.Services.WhatsApp
             string participantJid = null,
             string senderName = null)
         {
-            if (_chatService == null)
+            if (ChatFacade == null)
             {
                 Debug.WriteLine("[WhatsAppService] Offline replay tip dropped: ChatFacade not attached.");
                 return;
             }
 
-            _chatService.RecordOfflineReplayTip(new OfflineReplayTipRequest
+            ChatFacade.RecordOfflineReplayTip(new OfflineReplayTipRequest
             {
                 Jid = jid,
                 Preview = preview,
@@ -1841,13 +1841,13 @@ namespace Unison.Uwp.Services.WhatsApp
 
         private Task ApplyOfflineReplayChatSummariesAsync(string reason)
         {
-            if (_chatService == null)
+            if (ChatFacade == null)
             {
                 Debug.WriteLine("[WhatsAppService] Offline summary apply skipped: ChatFacade not attached.");
                 return Task.CompletedTask;
             }
 
-            return _chatService.FlushOfflineReplayTipsAsync(reason);
+            return ChatFacade.FlushOfflineReplayTipsAsync(reason);
         }
 
         bool IOfflineReplayHost.IsActiveChat(string canonicalJid) => IsActiveChatJid(canonicalJid);
@@ -1879,9 +1879,9 @@ namespace Unison.Uwp.Services.WhatsApp
             string participantJid = null,
             string senderName = null)
         {
-            if (_chatService != null)
+            if (ChatFacade != null)
             {
-                return _chatService.RefreshChatPreviewAsync(
+                return ChatFacade.RefreshChatPreviewAsync(
                     jid,
                     displayContent,
                     timestamp,

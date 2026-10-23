@@ -129,7 +129,7 @@ Order that matters:
 7. ViewModel factories and platform adapters
 8. ViewModels: `ShellViewModel` **singleton**; others transient
 
-After `BuildServiceProvider`, `WhatsAppService.Attach*` wires the satellites that still call into the client (`AttachMessageService`, `AttachChatService`). Contacts resolve lazily via `Func<IContactService>` on `WhatsAppService.Create`. `IConnectionService.AttachWhatsAppService` breaks the cycle. Profile, History, and Status are resolved immediately because they subscribe to client events in their constructors and would otherwise miss the early ones.
+After `BuildServiceProvider`, Message/Chat/Contact façades resolve lazily via `Func<>` on `WhatsAppService.Create` (no `Attach*`). `IConnectionService.AttachWhatsAppService` breaks the cycle for connection. Profile, History, and Status are resolved immediately because they subscribe to client events in their constructors and would otherwise miss the early ones.
 
 `App.GetWhatsAppService()` is the only remaining central resolve for the concrete client.
 
