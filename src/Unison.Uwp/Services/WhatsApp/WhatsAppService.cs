@@ -2361,7 +2361,16 @@ namespace Unison.Uwp.Services.WhatsApp
                 // (post-message enrichment); disk hydrate already ran above.
                 await DeduplicateChatsAsync("deferred-startup");
                 await RepairLegacyDeletedPreviewsAsync();
-                await ReconcileChatPreviewsFromSqliteAsync(null, "deferred-startup");
+                if (ChatFacade != null)
+                {
+                    await ChatFacade.ReconcileChatPreviewsFromSqliteAsync(null, "deferred-startup")
+                        .ConfigureAwait(false);
+                }
+                else
+                {
+                    await ReconcileChatPreviewsFromSqliteAsync(null, "deferred-startup")
+                        .ConfigureAwait(false);
+                }
 
                 await NormalizePersistedChatNamesAsync();
 
