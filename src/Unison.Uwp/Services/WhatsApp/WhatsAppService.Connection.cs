@@ -1382,7 +1382,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 socket.OnPresenceUpdate += (s, e) =>
                 {
                     if (!IsCurrentSocket(s)) return;
-                    OnPresenceUpdate?.Invoke(this, e);
+                    Messages?.NotifyPresenceUpdated(e);
                 };
                 RegisterSocketAliases("service-known-aliases");
 
@@ -1676,17 +1676,15 @@ namespace Unison.Uwp.Services.WhatsApp
             socket.OnMessage += (s, node) => 
             {
                 if (!IsCurrentSocket(s)) return;
-                if (node != null && string.Equals(node.Tag, "ack", StringComparison.OrdinalIgnoreCase))
+                if (node != null &&
+                    string.Equals(node.Tag, "ack", StringComparison.OrdinalIgnoreCase) &&
+                    node.Attrs != null)
                 {
-                    if (node.Attrs != null && Messages != null)
-                    {
-                        node.Attrs.TryGetValue("class", out var ackClass);
-                        node.Attrs.TryGetValue("id", out var ackId);
-                        node.Attrs.TryGetValue("error", out var ackError);
-                        Messages.HandlePlaceholderResendAck(ackClass, ackId, ackError);
-                    }
-
-                    HandleHistoryOnDemandAckNode(node);
+                    node.Attrs.TryGetValue("class", out var ackClass);
+                    node.Attrs.TryGetValue("id", out var ackId);
+                    node.Attrs.TryGetValue("error", out var ackError);
+                    Messages?.HandlePlaceholderResendAck(ackClass, ackId, ackError);
+                    History?.HandleOnDemandAck(ackClass, ackId, ackError);
                 }
 
                 // Collect pushname from notify attribute on incoming messages

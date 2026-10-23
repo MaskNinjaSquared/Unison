@@ -21,7 +21,6 @@ namespace Unison.WhatsAppClient.Messages
     public sealed class MessageFacade : IMessageService
     {
         private readonly IPersonStore _personStore;
-        private readonly IWhatsAppService _whatsAppService;
         private readonly IChatMessageMapper _chatMessageMapper;
         private readonly IReactionMapper _reactionMapper;
         private readonly IHistoryService _history;
@@ -67,7 +66,6 @@ namespace Unison.WhatsAppClient.Messages
 
         public MessageFacade(
             IPersonStore personStore,
-            IWhatsAppService whatsAppService,
             IChatMessageMapper chatMessageMapper,
             IReactionMapper reactionMapper,
             IHistoryService history,
@@ -103,7 +101,6 @@ namespace Unison.WhatsAppClient.Messages
             _diagnostics = diagnostics;
             _jids = jids ?? throw new ArgumentNullException(nameof(jids));
             _personStore = personStore ?? throw new ArgumentNullException(nameof(personStore));
-            _whatsAppService = whatsAppService ?? throw new ArgumentNullException(nameof(whatsAppService));
             _chatMessageMapper = chatMessageMapper ?? throw new ArgumentNullException(nameof(chatMessageMapper));
             _reactionMapper = reactionMapper ?? throw new ArgumentNullException(nameof(reactionMapper));
             _history = history ?? throw new ArgumentNullException(nameof(history));
@@ -154,10 +151,6 @@ namespace Unison.WhatsAppClient.Messages
             _sqlOpenPageSize = 50;
             _sqlLoadMorePageSize = 30;
             _thinTimelineThreshold = Math.Max(5, _sqlOpenPageSize - ThinTimelineOnDemandMargin);
-
-            // Presence still originates on the client socket bridge until session events
-            // are subscribed here directly.
-            _whatsAppService.OnPresenceUpdate += (s, e) => Relay(() => PresenceUpdated?.Invoke(this, e), "PresenceUpdated");
         }
 
         public event EventHandler<string> ChatMessagesChanged;
@@ -173,6 +166,17 @@ namespace Unison.WhatsAppClient.Messages
             }
 
             Relay(() => ChatMessagesChanged?.Invoke(this, chatJid), "ChatMessagesChanged");
+        }
+
+        /// <inheritdoc />
+        public void NotifyPresenceUpdated(PresenceUpdateEventArgs e)
+        {
+            if (e == null)
+            {
+                return;
+            }
+
+            Relay(() => PresenceUpdated?.Invoke(this, e), "PresenceUpdated");
         }
 
         /// <inheritdoc />

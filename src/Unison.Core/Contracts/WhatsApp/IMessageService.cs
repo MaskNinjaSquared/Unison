@@ -26,6 +26,12 @@ namespace Unison.Core.Contracts.WhatsApp
         void NotifyChatMessagesChanged(string chatJid);
 
         /// <summary>
+        /// Host socket path: raise <see cref="PresenceUpdated"/> for a presence / chatstate
+        /// update from the live transport.
+        /// </summary>
+        void NotifyPresenceUpdated(PresenceUpdateEventArgs e);
+
+        /// <summary>
         /// Typing / online state for a chat the app subscribed to with
         /// <see cref="SubscribeToPresenceAsync"/>.
         /// </summary>

@@ -2,6 +2,12 @@
 
 Newest first.
 
+## Phase B — PresenceUpdated owned by MessageFacade; drop IWhatsAppService
+
+`NotifyPresenceUpdated` replaces client `OnPresenceUpdate`. `MessageFacade` no
+longer takes `IWhatsAppService`. Connection forwards socket presence and both
+ack kinds (placeholder + history-on-demand) in one place.
+
 ## Phase B — history-on-demand ack on HistoryFacade
 
 `IHistoryService.HandleOnDemandAck` owns registry Ack + logging; catch-up banner /

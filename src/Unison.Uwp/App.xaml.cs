@@ -527,7 +527,6 @@ namespace Unison.Uwp
                 sp => (IPendingMessageFlushHost)sp.GetRequiredService<IWhatsAppService>());
             services.AddSingleton<IMessageService>(sp => new MessageFacade(
                 sp.GetRequiredService<IPersonStore>(),
-                sp.GetRequiredService<IWhatsAppService>(),
                 sp.GetRequiredService<IChatMessageMapper>(),
                 sp.GetRequiredService<IReactionMapper>(),
                 sp.GetRequiredService<IHistoryService>(),

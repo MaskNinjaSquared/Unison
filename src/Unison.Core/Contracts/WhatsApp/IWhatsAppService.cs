@@ -39,8 +39,6 @@ namespace Unison.Core.Contracts.WhatsApp
         /// pairing surface has to offer a reload.
         /// </summary>
         event EventHandler OnQrExpired;
-        /// <summary>Presence / chatstate for the subscribed contact (forwards SocketClient).</summary>
-        event EventHandler<PresenceUpdateEventArgs> OnPresenceUpdate;
         /// <summary>
         /// A stream error arrived with this code. Reporting only: the client does not classify it
         /// and does not decide whether the session should be dropped — see

@@ -830,7 +830,6 @@ namespace Unison.Uwp.Services.WhatsApp
         public event EventHandler<SessionClearedEventArgs> OnSessionCleared;
         public event EventHandler<Exception> OnError;
         public event EventHandler OnDisplayNamesUpdated;
-        public event EventHandler<PresenceUpdateEventArgs> OnPresenceUpdate;
         public event EventHandler<string> OnStreamError;
         public event EventHandler<string> OnInvalidSessionSuspected;
         public event EventHandler OnBackgroundHistorySyncBounced;
@@ -3036,19 +3035,6 @@ namespace Unison.Uwp.Services.WhatsApp
 
         void IHistorySyncHost.ScheduleAcceptedHistoryOnDemandTimeout(HistoryOnDemandRequest state) =>
             ScheduleAcceptedHistoryRequestTimeout(state);
-
-        private void HandleHistoryOnDemandAckNode(BinaryNode node)
-        {
-            if (node?.Attrs == null || History == null)
-            {
-                return;
-            }
-
-            node.Attrs.TryGetValue("class", out var ackClass);
-            node.Attrs.TryGetValue("id", out var ackId);
-            node.Attrs.TryGetValue("error", out var ackError);
-            History.HandleOnDemandAck(ackClass, ackId, ackError);
-        }
 
         private HistoryCatchUpWatchdog CatchUpWatchdog =>
             _catchUpWatchdog ??= new HistoryCatchUpWatchdog(
