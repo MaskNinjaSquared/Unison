@@ -216,6 +216,17 @@ namespace Unison.WhatsAppClient.Groups
             return _apply.ApplyMetadataAsync(groupJid, metadata);
         }
 
+        /// <inheritdoc />
+        public Task ApplyGroupMetadataFromResponseAsync(string groupJid, BinaryNode response)
+        {
+            if (string.IsNullOrWhiteSpace(groupJid) || response == null)
+            {
+                return Task.CompletedTask;
+            }
+
+            return _apply.ApplyMetadataAsync(groupJid, _reader.ReadMetadata(response, groupJid));
+        }
+
         public async Task EnsureHighQualityGroupAvatarAsync(ChatItem chat)
         {
             if (chat == null || !GroupHighAvatar.ShouldFetch(chat.IsGroup, chat.JID, chat.AvatarHighUrl))

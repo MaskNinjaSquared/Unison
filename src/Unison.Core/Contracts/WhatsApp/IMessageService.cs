@@ -494,6 +494,19 @@ namespace Unison.Core.Contracts.WhatsApp
         void HandlePlaceholderResendAck(string ackClass, string ackId, string ackError);
 
         /// <summary>
+        /// After offline replay (or a follow-up): schedule a deferred pass that asks the phone
+        /// for outstanding placeholder resends. Host only decides <em>when</em>; the façade owns
+        /// the drain loop.
+        /// </summary>
+        void SchedulePlaceholderResendDrain(string trigger, int maxRequests = 4);
+
+        /// <summary>
+        /// Cold-start: load the pending-incoming journal, queue rows for persist, flush once,
+        /// then apply chat-list tips. Host only calls this after auth is known.
+        /// </summary>
+        Task RecoverPendingIncomingJournalAsync();
+
+        /// <summary>
         /// Peer-data placeholder-resend payloads: decode WebMessageInfo bytes and re-enqueue
         /// onto the host ingest queue (never recursive into the pump lock).
         /// </summary>

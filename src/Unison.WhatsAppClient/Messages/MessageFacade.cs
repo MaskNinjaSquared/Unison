@@ -153,6 +153,9 @@ namespace Unison.WhatsAppClient.Messages
             _thinTimelineThreshold = Math.Max(5, _sqlOpenPageSize - ThinTimelineOnDemandMargin);
         }
 
+        private static readonly TimeSpan PlaceholderResendDrainDelay = TimeSpan.FromSeconds(4);
+        private static readonly TimeSpan PlaceholderResendFollowUpDrainDelay = TimeSpan.FromSeconds(18);
+
         public event EventHandler<string> ChatMessagesChanged;
 
         public event EventHandler<PresenceUpdateEventArgs> PresenceUpdated;
@@ -1790,6 +1793,174 @@ namespace Unison.WhatsAppClient.Messages
                     "[MessageFacade] placeholder resend ack accepted for " +
                     requestState.MessageId + " in " + requestState.ChatJid +
                     ": stanzaId=" + ackId);
+            }
+        }
+
+        /// <inheritdoc />
+        public void SchedulePlaceholderResendDrain(string trigger, int maxRequests = 4)
+        {
+            SchedulePlaceholderResendDrain(trigger, maxRequests, PlaceholderResendDrainDelay);
+        }
+
+        private void SchedulePlaceholderResendDrain(string trigger, int maxRequests, TimeSpan delay)
+        {
+            Task.Run(async () =>
+            {
+                try
+                {
+                    await Task.Delay(delay).ConfigureAwait(false);
+                    await DrainPlaceholderResendsAsync(trigger, maxRequests).ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine(
+                        "[MessageFacade] Deferred placeholder resend drain failed (" +
+                        trigger + "): " + ex.Message);
+                }
+            });
+        }
+
+        private async Task DrainPlaceholderResendsAsync(string trigger, int maxRequests)
+        {
+            string deferReason;
+            if (_missingMessages.ShouldDeferPlaceholderResend(trigger, out deferReason))
+            {
+                Debug.WriteLine(
+                    "[MessageFacade] Skipping deferred placeholder resend drain (" +
+                    trigger + ") because " + deferReason);
+                return;
+            }
+
+            int totalEligible;
+            List<MissingMessageCandidate> pending =
+                _missingMessages.SelectPlaceholderResendDrain(maxRequests, out totalEligible);
+
+            if (pending == null || pending.Count == 0)
+            {
+                Debug.WriteLine(
+                    "[MessageFacade] Deferred placeholder resend drain found no pending messages (" +
+                    trigger + ")");
+                return;
+            }
+
+            Debug.WriteLine(
+                "[MessageFacade] Deferred placeholder resend drain selected " +
+                pending.Count + "/" + totalEligible + " eligible message(s) (" + trigger + "): " +
+                string.Join(" | ", pending.Select(MissingMessageCandidate.FormatForLog)));
+
+            int requested = 0;
+            foreach (MissingMessageCandidate candidate in pending)
+            {
+                if (_missingMessages.ShouldDeferPlaceholderResend(trigger, out deferReason))
+                {
+                    Debug.WriteLine(
+                        "[MessageFacade] Stopping deferred placeholder resend drain (" +
+                        trigger + ") because " + deferReason);
+                    break;
+                }
+
+                if (await _missingMessages.RequestPlaceholderResendAsync(
+                        candidate.ChatJid,
+                        candidate.MessageId,
+                        "deferred-drain:" + trigger)
+                    .ConfigureAwait(false))
+                {
+                    requested++;
+                }
+            }
+
+            Debug.WriteLine(
+                "[MessageFacade] Deferred placeholder resend drain requested " +
+                requested + "/" + pending.Count + " message(s) (" + trigger + ")");
+
+            if (totalEligible > pending.Count)
+            {
+                SchedulePlaceholderResendDrain(
+                    "follow-up:" + trigger,
+                    maxRequests,
+                    PlaceholderResendFollowUpDrainDelay);
+            }
+        }
+
+        /// <inheritdoc />
+        public async Task RecoverPendingIncomingJournalAsync()
+        {
+            try
+            {
+                List<PendingIncomingRecord> pending =
+                    await _messageStore.LoadPendingIncomingAsync().ConfigureAwait(false);
+                if (pending == null || pending.Count == 0)
+                {
+                    return;
+                }
+
+                int recovered = 0;
+                var latestByChat = new List<KeyValuePair<string, ChatMessage>>();
+                foreach (var group in pending
+                    .Where(item => item?.Message != null && !string.IsNullOrWhiteSpace(item.ChatJid))
+                    .GroupBy(
+                        item => JidHelper.Normalize(item.ChatJid),
+                        StringComparer.OrdinalIgnoreCase))
+                {
+                    List<ChatMessage> messages = group
+                        .Select(item => item.Message)
+                        .Where(message => message != null)
+                        .OrderBy(message => ChatMessageOrder.ToComparableUtc(message.Timestamp))
+                        .ToList();
+                    if (messages.Count == 0)
+                    {
+                        continue;
+                    }
+
+                    _pendingMessages.Add(group.Key, messages, DateTime.UtcNow, scheduleFlush: false);
+                    latestByChat.Add(new KeyValuePair<string, ChatMessage>(
+                        group.Key,
+                        messages[messages.Count - 1]));
+                    recovered += messages.Count;
+                }
+
+                _diagnostics?.Write(
+                    "messages",
+                    "incoming-journal-recovered",
+                    "count=" + recovered + "; chats=" + latestByChat.Count);
+
+                // Let the socket acquire storage first. The pending snapshot already
+                // makes these messages available if a conversation is opened.
+                _ = Task.Run(async () =>
+                {
+                    await Task.Delay(5000).ConfigureAwait(false);
+                    try
+                    {
+                        await _pendingFlush.FlushOfflineReplayAsync("incoming-journal-recovery")
+                            .ConfigureAwait(false);
+
+                        IChatService chats = _resolveChats();
+                        if (chats != null)
+                        {
+                            await chats.ApplyIncomingJournalRecoveryPreviewsAsync(latestByChat)
+                                .ConfigureAwait(false);
+                        }
+
+                        _diagnostics?.Write(
+                            "messages",
+                            "incoming-journal-recovery-applied",
+                            "count=" + recovered + "; chats=" + latestByChat.Count);
+                    }
+                    catch (Exception ex)
+                    {
+                        _diagnostics?.RecordException(
+                            "messages",
+                            "incoming-journal-recovery-flush-failed",
+                            ex);
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                _diagnostics?.RecordException(
+                    "messages",
+                    "incoming-journal-recovery-failed",
+                    ex);
             }
         }
 

@@ -75,6 +75,14 @@ namespace Unison.Uwp.Services.WhatsApp
             string trigger) =>
             TryRequestPlaceholderResendAsync(chatJid, messageId, trigger);
 
+        bool IMissingMessageChatHost.ShouldDeferPlaceholderResend(string trigger, out string reason) =>
+            ShouldDeferPlaceholderResend(trigger, out reason);
+
+        List<MissingMessageCandidate> IMissingMessageChatHost.SelectPlaceholderResendDrain(
+            int maxRequests,
+            out int totalEligible) =>
+            _missing.SelectForDrain(maxRequests, out totalEligible);
+
         PlaceholderResendRequestState IMissingMessageChatHost.TakePlaceholderPeerResponse(string stanzaId) =>
             _missing.TakePeerResponse(stanzaId);
 
@@ -250,155 +258,6 @@ namespace Unison.Uwp.Services.WhatsApp
                 _socket.IsAwaitingInitialSync,
                 _historyRequests.ChatsInFlight > 0,
                 out reason);
-        }
-
-        private async Task TryDrainPendingPlaceholderResendsAsync(string trigger, int maxRequests = 4)
-        {
-            if (_socket == null || !_socket.IsHandshakeComplete)
-            {
-                return;
-            }
-
-            if (ShouldDeferPlaceholderResend(trigger, out var deferReason))
-            {
-                Debug.WriteLine($"[WhatsAppService] Skipping deferred placeholder resend drain ({trigger}) because {deferReason}");
-                return;
-            }
-
-            List<MissingMessageCandidate> pending;
-            int totalEligible;
-            pending = _missing.SelectForDrain(maxRequests, out totalEligible);
-
-            if (pending.Count == 0)
-            {
-                Debug.WriteLine($"[WhatsAppService] Deferred placeholder resend drain found no pending messages ({trigger})");
-                return;
-            }
-
-            Debug.WriteLine($"[WhatsAppService] Deferred placeholder resend drain selected {pending.Count}/{totalEligible} eligible message(s) ({trigger}): {string.Join(" | ", pending.Select(MissingMessageCandidate.FormatForLog))}");
-
-            int requested = 0;
-            foreach (var candidate in pending)
-            {
-                if (ShouldDeferPlaceholderResend(trigger, out deferReason))
-                {
-                    Debug.WriteLine($"[WhatsAppService] Stopping deferred placeholder resend drain ({trigger}) because {deferReason}");
-                    break;
-                }
-
-                if (await TryRequestPlaceholderResendAsync(candidate.ChatJid, candidate.MessageId, $"deferred-drain:{trigger}"))
-                {
-                    requested++;
-                }
-            }
-
-            Debug.WriteLine($"[WhatsAppService] Deferred placeholder resend drain requested {requested}/{pending.Count} message(s) ({trigger})");
-
-            if (totalEligible > pending.Count)
-            {
-                SchedulePendingPlaceholderResendDrain($"follow-up:{trigger}", maxRequests, PlaceholderResendFollowUpDrainDelay);
-            }
-        }
-
-        private void SchedulePendingPlaceholderResendDrain(string trigger, int maxRequests = 4)
-        {
-            SchedulePendingPlaceholderResendDrain(trigger, maxRequests, PlaceholderResendDrainDelay);
-        }
-
-        private void SchedulePendingPlaceholderResendDrain(string trigger, int maxRequests, TimeSpan delay)
-        {
-            Task.Run(async () =>
-            {
-                try
-                {
-                    await Task.Delay(delay);
-                    await TryDrainPendingPlaceholderResendsAsync(trigger, maxRequests);
-                }
-                catch (Exception ex)
-                {
-                    Debug.WriteLine($"[WhatsAppService] Deferred placeholder resend drain failed ({trigger}): {ex.Message}");
-                }
-            });
-        }
-
-        private async Task RecoverPendingIncomingJournalAsync()
-        {
-            try
-            {
-                var pending = await _messageStore.LoadPendingIncomingAsync();
-                if (pending == null || pending.Count == 0)
-                {
-                    return;
-                }
-
-                int recovered = 0;
-                var latestByChat = new List<KeyValuePair<string, ChatMessage>>();
-                foreach (var group in pending
-                    .Where(item => item?.Message != null && !string.IsNullOrWhiteSpace(item.ChatJid))
-                    .GroupBy(item => NormalizeJid(item.ChatJid), StringComparer.OrdinalIgnoreCase))
-                {
-                    var messages = group
-                        .Select(item => item.Message)
-                        .Where(message => message != null)
-                        .OrderBy(message => ChatMessageOrder.ToComparableUtc(message.Timestamp))
-                        .ToList();
-                    if (messages.Count == 0)
-                    {
-                        continue;
-                    }
-
-                    QueueMessagesForPersist(
-                        group.Key,
-                        messages,
-                        queueIncomingJournal: false,
-                        scheduleFlush: false);
-                    latestByChat.Add(new KeyValuePair<string, ChatMessage>(
-                        group.Key,
-                        messages[messages.Count - 1]));
-                    recovered += messages.Count;
-                }
-
-                RuntimeDiagnosticsService.Instance.Write(
-                    "messages",
-                    "incoming-journal-recovered",
-                    "count=" + recovered + "; chats=" + latestByChat.Count);
-
-                // Let the socket acquire storage first. The pending snapshot already
-                // makes these messages available if a conversation is opened.
-                _ = Task.Run(async () =>
-                {
-                    await Task.Delay(5000);
-                    try
-                    {
-                        await FlushOfflineReplayMessagesAsync("incoming-journal-recovery");
-
-                        if (ChatFacade != null)
-                        {
-                            await ChatFacade.ApplyIncomingJournalRecoveryPreviewsAsync(latestByChat)
-                                .ConfigureAwait(false);
-                        }
-
-                        RuntimeDiagnosticsService.Instance.Write(
-                            "messages",
-                            "incoming-journal-recovery-applied",
-                            "count=" + recovered + "; chats=" + latestByChat.Count);
-                    }
-                    catch (Exception ex)
-                    {
-                        RuntimeDiagnosticsService.Instance.RecordException(
-                            "messages",
-                            "incoming-journal-recovery-flush-failed",
-                            ex);
-                    }
-                });
-            }
-            catch (Exception ex)
-            {
-                RuntimeDiagnosticsService.Instance.RecordException(
-                    "messages",
-                    "incoming-journal-recovery-failed",
-                    ex);
-            }
         }
 
         async Task IBoundMutationGate.RunAsync(Action action)
@@ -627,6 +486,9 @@ namespace Unison.Uwp.Services.WhatsApp
                 ScheduleOfflineReplayFlushTimer();
             }
         }
+
+        Task IPendingMessageFlushHost.FlushOfflineReplayAsync(string reason) =>
+            FlushOfflineReplayMessagesAsync(reason);
 
         bool IOfflineReplayHost.IsActiveChat(string canonicalJid) => IsActiveChatJid(canonicalJid);
 

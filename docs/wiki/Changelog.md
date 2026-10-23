@@ -2,6 +2,13 @@
 
 Newest first.
 
+## Phase B — placeholder drain, journal recover, receipt group metadata
+
+`SchedulePlaceholderResendDrain` / drain loop on `MessageFacade` (host keeps
+ledger + deferral + single resend). `RecoverPendingIncomingJournalAsync` on
+`MessageFacade` (flush via `IPendingMessageFlushHost`). Receipt path applies
+group IQ via `IGroupService.ApplyGroupMetadataFromResponseAsync`.
+
 ## Phase B — HistoryFacade.ApplyHistorySyncAsync owns chunk apply + notify
 
 Connection calls `ApplyHistorySyncAsync` (persist via `SyncMessageHistoryAsync` +

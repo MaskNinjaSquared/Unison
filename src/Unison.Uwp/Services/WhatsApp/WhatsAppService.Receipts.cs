@@ -3,8 +3,6 @@ using System.Diagnostics;
 using System.Threading.Tasks;
 using Unison.Baileys.Protocol;
 using Unison.Core.Contracts.WhatsApp;
-using Unison.Core.Helpers;
-using Unison.Core.Models;
 using Unison.Core.State;
 using Unison.WhatsAppClient.Abstractions;
 
@@ -33,7 +31,15 @@ namespace Unison.Uwp.Services.WhatsApp
             try
             {
                 var response = await _socket.QueryGroupMetadataAsync(canonical);
-                ApplyGroupSendPermissionsFromMetadata(response, canonical);
+                IGroupService groups = Groups;
+                if (groups != null)
+                {
+                    _ = groups.ApplyGroupMetadataFromResponseAsync(canonical, response);
+                }
+                else
+                {
+                    Debug.WriteLine("[WhatsAppService] Group metadata apply skipped: IGroupService missing");
+                }
 
                 int? counted = _receipts.CountRecipients(response);
                 if (counted == null)
@@ -51,22 +57,6 @@ namespace Unison.Uwp.Services.WhatsApp
                     $"[WhatsAppService] Group receipt aggregation metadata failed for {canonical}: {ex.Message}");
                 return 0;
             }
-        }
-
-        /// <summary>
-        /// Receipt path: apply a metadata IQ the client already fetched (no second query).
-        /// </summary>
-        private void ApplyGroupSendPermissionsFromMetadata(BinaryNode response, string groupJid)
-        {
-            GroupMetadataSnapshot snapshot = _groupMetadata.ReadMetadata(response, groupJid);
-            IGroupService groups = Groups;
-            if (groups == null)
-            {
-                Debug.WriteLine("[WhatsAppService] Group metadata apply skipped: IGroupService missing");
-                return;
-            }
-
-            _ = groups.ApplyGroupMetadataAsync(groupJid, snapshot);
         }
     }
 }

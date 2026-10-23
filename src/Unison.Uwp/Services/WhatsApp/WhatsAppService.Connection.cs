@@ -614,7 +614,10 @@ namespace Unison.Uwp.Services.WhatsApp
                 // is a single small file and does not block on rewriting any chat JSON.
                 // Recovered items remain visible to LoadChatMessagesAsync through the
                 // pending-persist snapshot until the delayed merge completes.
-                await RecoverPendingIncomingJournalAsync();
+                if (Messages != null)
+                {
+                    await Messages.RecoverPendingIncomingJournalAsync().ConfigureAwait(false);
+                }
 
                 _authState = await _authStore.LoadAsync();
                 if (_authState == null)
@@ -1880,7 +1883,9 @@ namespace Unison.Uwp.Services.WhatsApp
                         PublishConnectionUpdate("synced");
                         EnableScheduledPersist($"offline completion ({offlineCount} messages)");
                         _ = TryConsumeMessageStoreForceHistoryRepairAsync($"offline-complete:{offlineCount}");
-                        SchedulePendingPlaceholderResendDrain($"offline-complete:{offlineCount}", maxRequests: 8);
+                        Messages?.SchedulePlaceholderResendDrain(
+                            $"offline-complete:{offlineCount}",
+                            maxRequests: 8);
                     }
                     else
                     {

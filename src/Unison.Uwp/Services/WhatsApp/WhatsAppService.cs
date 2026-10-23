@@ -148,9 +148,6 @@ namespace Unison.Uwp.Services.WhatsApp
         private readonly IMediaCache _mediaCache;
         private readonly ReceiptReader _receipts;
 
-        /// <summary>Reads group listings through the alias table. Built after <see cref="JidAlias"/>.</summary>
-        private readonly GroupMetadataReader _groupMetadata;
-
         /// <summary>The alias table as the Core rules read it. Built after <see cref="JidAlias"/>.</summary>
         private readonly IJidResolver _jids;
 
@@ -762,8 +759,6 @@ namespace Unison.Uwp.Services.WhatsApp
         private const int HistoryHydrationMaxPagesPerChat = 5;
         private static readonly TimeSpan PlaceholderResendDispatchDelay = TimeSpan.FromSeconds(5);
         private static readonly TimeSpan PlaceholderResendResponseTimeout = TimeSpan.FromSeconds(15);
-        private static readonly TimeSpan PlaceholderResendDrainDelay = TimeSpan.FromSeconds(4);
-        private static readonly TimeSpan PlaceholderResendFollowUpDrainDelay = TimeSpan.FromSeconds(18);
         private static readonly TimeSpan HistoryOnDemandResponseTimeout = TimeSpan.FromSeconds(20);
         private static readonly TimeSpan FullHistoryOnDemandResponseTimeout = TimeSpan.FromMinutes(15);
         // --- FULL_HISTORY catch-up continue (next offline lot via soft-reconnect) ---
@@ -1091,7 +1086,6 @@ namespace Unison.Uwp.Services.WhatsApp
             // into this instance later, so the property has to be set before they are built.
             var jidResolver = new JidResolver(JidAlias);
             _jids = jidResolver;
-            _groupMetadata = new GroupMetadataReader(jidResolver);
             _receipts = new ReceiptReader(jidResolver);
             _chatState.Chats.CollectionChanged += (s, e) => InvalidateChatRowIndex();
 

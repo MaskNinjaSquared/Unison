@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 using Unison.Core.State;
 
@@ -33,6 +34,18 @@ namespace Unison.Core.Contracts.WhatsApp
         /// and reconnect / sync deferral allows it.
         /// </summary>
         Task<bool> RequestPlaceholderResendAsync(string chatJid, string messageId, string trigger);
+
+        /// <summary>
+        /// True when reconnect replay / initial sync / history-on-demand should block a resend.
+        /// </summary>
+        bool ShouldDeferPlaceholderResend(string trigger, out string reason);
+
+        /// <summary>
+        /// Next eligible placeholder-resend candidates for a deferred drain pass.
+        /// </summary>
+        List<MissingMessageCandidate> SelectPlaceholderResendDrain(
+            int maxRequests,
+            out int totalEligible);
 
         /// <summary>
         /// Claims the outstanding placeholder-resend request for a peer-data stanza, if any.
