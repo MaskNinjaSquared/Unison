@@ -264,31 +264,13 @@ namespace Unison.Uwp.Services.WhatsApp
                 // Every row sharing this identity, not just the first: a conversation is
                 // listed under both PN and LID, and correcting one left the other showing a
                 // preview of the message that was just deleted.
-                foreach (var chat in GetChatRowsForCanonicalJid(canonical))
-                {
-                    if (chat == null)
-                    {
-                        continue;
-                    }
-
-                    var latest = ChatPreviewTip.PickLatest(messages);
-                    if (latest != null)
-                    {
-                        bool isGroup = JidHelper.IsGroupJid(canonical) || chat.IsGroup;
-                        ChatMessageTipApply.Apply(
-                            chat,
-                            latest,
-                            isGroup,
-                            force: true,
-                            LocalizedChatStripLabels.SelfFallbackName(),
-                            GetCanonicalJid(latest.ParticipantJid),
-                            LocalizedChatStripLabels.Yesterday());
-                    }
-                    else
-                    {
-                        ChatPreviewTip.Clear(chat);
-                    }
-                }
+                AppStateDeleteMessagePreview.RefreshAliasRows(
+                    GetChatRowsForCanonicalJid(canonical),
+                    messages,
+                    canonical,
+                    GetCanonicalJid,
+                    LocalizedChatStripLabels.SelfFallbackName(),
+                    LocalizedChatStripLabels.Yesterday());
 
                 removed = true;
             });
