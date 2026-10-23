@@ -1469,9 +1469,10 @@ capture policy is `ContactFacade.CaptureSelfPushName`. The client no longer hold
 `NotifyBackgroundResolutionDueAsync`. The client implements `IBackgroundResolutionGate`
 (quiet wait, handshake, replay, catch-up, avatar defer, status/diagnostics) and
 `ContactFacade.TriggerBackgroundResolution` / `CancelBackgroundResolution` run the pass.
-`ShutdownAsync` cancels via the contact façade. **Deferred avatar enrichment is still a
-narrow port:** `IDeferredAvatarResolution` schedules a retry; the timer itself still lives
-on the client until the next slice. `ScheduleDeferredAvatarResolution` left `IWhatsAppService`.
+`ShutdownAsync` cancels via the contact façade. **Deferred avatar timer left too:**
+`DeferredAvatarResolution` (WhatsAppClient) implements `IDeferredAvatarResolution` and
+fires `TriggerBackgroundResolution` after the delay; the client only cancels it on
+shutdown / socket replace. `ScheduleDeferredAvatarResolution` left `IWhatsAppService`.
 
 **Chat-delete durable I/O is `IAppStateLocalHost.ForgetChatStorageAsync`.** RAM delete,
 badge, missing-message / on-demand forget live on `IChatService.ApplyAppStateDeleteChatAsync`.

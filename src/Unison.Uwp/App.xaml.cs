@@ -412,7 +412,8 @@ namespace Unison.Uwp
                     () => sp.GetRequiredService<IMessageService>(),
                     () => sp.GetRequiredService<IChatService>(),
                     () => sp.GetRequiredService<IGroupService>(),
-                    () => sp.GetRequiredService<IHistoryService>()));
+                    () => sp.GetRequiredService<IHistoryService>(),
+                    () => sp.GetRequiredService<IDeferredAvatarResolution>()));
             // The send flow lives on MessageFacade; the timeline caches and the socket it writes
             // through are still the client's, reached only through this narrow port.
             services.AddSingleton<IOutgoingMessageHost>(
@@ -496,8 +497,8 @@ namespace Unison.Uwp
                 sp => (WhatsAppService)sp.GetRequiredService<IWhatsAppService>());
             services.AddSingleton<IChatIdentityPersistence>(
                 sp => (WhatsAppService)sp.GetRequiredService<IWhatsAppService>());
-            services.AddSingleton<IDeferredAvatarResolution>(
-                sp => (WhatsAppService)sp.GetRequiredService<IWhatsAppService>());
+            services.AddSingleton<IDeferredAvatarResolution>(sp => new DeferredAvatarResolution(
+                () => sp.GetRequiredService<IContactService>()));
             services.AddSingleton<IBackgroundResolutionGate>(
                 sp => (WhatsAppService)sp.GetRequiredService<IWhatsAppService>());
             services.AddSingleton<IUsyncAliasHost>(

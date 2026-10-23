@@ -1312,7 +1312,7 @@ namespace Unison.Uwp.Services.WhatsApp
                     previousSocket.Dispose();
                 }
 
-                CancelDeferredProfilePictureResolution();
+                DeferredAvatars?.Cancel();
 
                 if (_authState == null) await InitializeConnectionStateAsync();
 
@@ -2104,7 +2104,7 @@ namespace Unison.Uwp.Services.WhatsApp
             _postReplayMaintenanceCts?.Cancel();
             _postReplayMaintenanceCts?.Dispose();
             _postReplayMaintenanceCts = null;
-            CancelDeferredProfilePictureResolution();
+            DeferredAvatars?.Cancel();
             Contacts?.CancelAliasFollowUp();
 
             lock (_persistLock)

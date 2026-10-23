@@ -2,11 +2,16 @@
 
 Newest first.
 
+## Phase 3 — DeferredAvatarResolution owns the retry timer
+
+`IDeferredAvatarResolution` is a WhatsAppClient singleton; the client no longer
+holds the CTS. Shutdown / socket replace cancel via the port.
+
 ## Phase 3 — BackgroundResolutionPass + IBackgroundResolutionGate
 
 Enrichment orchestration (quiet / handshake / replay / catch-up / avatar defer)
 moved to `BackgroundResolutionPass` on `ContactFacade`. Client keeps
-`IBackgroundResolutionGate` and the deferred-avatar timer. Six Core tests.
+`IBackgroundResolutionGate`. Six Core tests.
 
 ## Phase B — post-replay, deferred startup, offline release, receipt metadata, self name
 

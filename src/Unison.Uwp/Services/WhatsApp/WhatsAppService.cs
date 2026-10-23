@@ -43,7 +43,7 @@ using Unison.WhatsAppClient.Helpers;
 
 namespace Unison.Uwp.Services.WhatsApp
 {
-    public partial class WhatsAppService : INotifyPropertyChanged, IWhatsAppService, IMediaDownloadHost, IOfflineReplayHost, IPlaceholderResendSocket, IHistoryOnDemandSocket, IRuntimeSnapshotSource, IDeferredAvatarResolution, IBackgroundResolutionGate, IAppStateLocalHost, IConversationResyncHost, IHistorySyncHost, IUsyncAliasHost, IStartupUiHost, IJidAliasPersistence, IIncomingMessageEnqueueHost, Unison.WhatsAppClient.Abstractions.IResolvedNameApplyHost
+    public partial class WhatsAppService : INotifyPropertyChanged, IWhatsAppService, IMediaDownloadHost, IOfflineReplayHost, IPlaceholderResendSocket, IHistoryOnDemandSocket, IRuntimeSnapshotSource, IBackgroundResolutionGate, IAppStateLocalHost, IConversationResyncHost, IHistorySyncHost, IUsyncAliasHost, IStartupUiHost, IJidAliasPersistence, IIncomingMessageEnqueueHost, Unison.WhatsAppClient.Abstractions.IResolvedNameApplyHost
     {
         public event PropertyChangedEventHandler PropertyChanged;
         protected void OnPropertyChanged([CallerMemberName] string propertyName = null)
@@ -156,12 +156,16 @@ namespace Unison.Uwp.Services.WhatsApp
         private readonly Func<IContactService> _resolveContacts;
         private readonly Func<IGroupService> _resolveGroups;
         private readonly Func<IHistoryService> _resolveHistory;
+        private readonly Func<IDeferredAvatarResolution> _resolveDeferredAvatars;
 
         private IMessageService Messages => _resolveMessages != null ? _resolveMessages() : null;
 
         private IChatService ChatFacade => _resolveChats != null ? _resolveChats() : null;
 
         private IContactService Contacts => _resolveContacts != null ? _resolveContacts() : null;
+
+        private IDeferredAvatarResolution DeferredAvatars =>
+            _resolveDeferredAvatars != null ? _resolveDeferredAvatars() : null;
 
         private IGroupService Groups => _resolveGroups != null ? _resolveGroups() : null;
 
@@ -381,7 +385,6 @@ namespace Unison.Uwp.Services.WhatsApp
         private volatile bool _qrDeliveredThisConnection = false;
         private readonly SyncWorkGate _syncWork;
         private int _offlineReplayReleased;
-        private CancellationTokenSource _deferredProfilePictureResolutionCts;
         private DateTime _lastFreshnessReconnectFallbackUtc = DateTime.MinValue;
         private volatile bool _freshnessReconnectFallbackInProgress = false;
         private readonly HistoryCatchUpContinuation _catchUp = new HistoryCatchUpContinuation();
@@ -393,7 +396,6 @@ namespace Unison.Uwp.Services.WhatsApp
         private int _hydrationDayAttempts;
         private CancellationTokenSource _hydrationDayRetryCts;
         // Default retry delay for the deferred background-resolution pass (names+avatars+groups).
-        private static readonly TimeSpan AvatarFetchNextBatchDelay = TimeSpan.FromSeconds(20);
         private DateTime _replayDrainCompletedUtc = DateTime.MinValue;
         private DateTime _lastPostReplayLiveActivityUtc = DateTime.MinValue;
         
@@ -550,11 +552,6 @@ namespace Unison.Uwp.Services.WhatsApp
                 "; lotProgress=" + countsAsLot +
                 "; reason=" + (reason ?? string.Empty));
         }
-
-        void IDeferredAvatarResolution.Schedule(string reason, TimeSpan? delay) =>
-            ScheduleDeferredProfilePictureResolution(reason, delay);
-
-        void IDeferredAvatarResolution.Cancel() => CancelDeferredProfilePictureResolution();
 
         RuntimeDiagnosticsSnapshot IRuntimeSnapshotSource.CaptureRuntimeSnapshot()
         {
@@ -934,7 +931,7 @@ namespace Unison.Uwp.Services.WhatsApp
                             Math.Max(processed, 1),
                             stage);
                         _sqliteHistoryConversationsAccumulated = 0;
-                        ScheduleDeferredProfilePictureResolution(
+                        DeferredAvatars?.Schedule(
                             "after-first-sync-unlock:" + (stage ?? string.Empty),
                             TimeSpan.FromSeconds(2));
                         Interlocked.Exchange(ref _enrichmentAwaitingHeavyHistory, 0);
@@ -993,7 +990,8 @@ namespace Unison.Uwp.Services.WhatsApp
             Func<IMessageService> resolveMessages = null,
             Func<IChatService> resolveChats = null,
             Func<IGroupService> resolveGroups = null,
-            Func<IHistoryService> resolveHistory = null)
+            Func<IHistoryService> resolveHistory = null,
+            Func<IDeferredAvatarResolution> resolveDeferredAvatars = null)
         {
             if (chatState == null)
             {
@@ -1019,6 +1017,7 @@ namespace Unison.Uwp.Services.WhatsApp
             _resolveChats = resolveChats;
             _resolveGroups = resolveGroups;
             _resolveHistory = resolveHistory;
+            _resolveDeferredAvatars = resolveDeferredAvatars;
             _ui = ui ?? throw new ArgumentNullException(nameof(ui));
             _usyncAliases = usyncAliases ?? throw new ArgumentNullException(nameof(usyncAliases));
             _listPaintGate = listPaintGate ?? new ChatListInitialPaintGate();
@@ -1106,11 +1105,12 @@ namespace Unison.Uwp.Services.WhatsApp
             Func<IMessageService> resolveMessages = null,
             Func<IChatService> resolveChats = null,
             Func<IGroupService> resolveGroups = null,
-            Func<IHistoryService> resolveHistory = null)
+            Func<IHistoryService> resolveHistory = null,
+            Func<IDeferredAvatarResolution> resolveDeferredAvatars = null)
         {
             return _instance ?? (_instance = new WhatsAppService(
                 chatState, chatRows, activeChat, syncStatus, syncWork, historyMessages, chatPreviews, usyncGate, avatarFetcher, mediaCache, jidAlias, displayNames, historyRequests,
-                initialSync, syncBudget, workload, selfProfile, personStore, groupRosterStore, chatStore, systemInfo, ui, usyncAliases, pendingMessages, listPaintGate, appMemory, localSettings, resolveContacts, resolveMessages, resolveChats, resolveGroups, resolveHistory));
+                initialSync, syncBudget, workload, selfProfile, personStore, groupRosterStore, chatStore, systemInfo, ui, usyncAliases, pendingMessages, listPaintGate, appMemory, localSettings, resolveContacts, resolveMessages, resolveChats, resolveGroups, resolveHistory, resolveDeferredAvatars));
         }
 
         /// <summary>
@@ -1729,7 +1729,7 @@ namespace Unison.Uwp.Services.WhatsApp
             string deferReason;
             if (_syncWork.ShouldDeferAvatarFetch(out deferReason))
             {
-                ScheduleDeferredProfilePictureResolution(deferReason);
+                DeferredAvatars?.Schedule(deferReason);
             }
             else
             {
@@ -1738,7 +1738,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 {
                     using (TraceStartupPhase("post-replay-avatars"))
                     {
-                        CancelDeferredProfilePictureResolution();
+                        DeferredAvatars?.Cancel();
                         await contacts.RetrieveContactPicturesAsync(token).ConfigureAwait(false);
                     }
                 }
@@ -2251,61 +2251,6 @@ namespace Unison.Uwp.Services.WhatsApp
                 "background-resolution-deferred",
                 "reason=" + (reason ?? string.Empty));
 
-        private void CancelDeferredProfilePictureResolution()
-        {
-            var cts = _deferredProfilePictureResolutionCts;
-            if (cts == null)
-            {
-                return;
-            }
-
-            _deferredProfilePictureResolutionCts = null;
-            try
-            {
-                cts.Cancel();
-                cts.Dispose();
-            }
-            catch
-            {
-            }
-        }
-
-        private void ScheduleDeferredProfilePictureResolution(string reason, TimeSpan? delay = null)
-        {
-            CancelDeferredProfilePictureResolution();
-
-            var cts = new CancellationTokenSource();
-            _deferredProfilePictureResolutionCts = cts;
-            var token = cts.Token;
-            var effectiveDelay = delay ?? AvatarFetchNextBatchDelay;
-
-            _ = Task.Run(async () =>
-            {
-                try
-                {
-                    await Task.Delay(effectiveDelay, token);
-                    if (token.IsCancellationRequested)
-                    {
-                        return;
-                    }
-
-                    Debug.WriteLine($"[WhatsAppService] Retrying deferred profile picture fetch after {(int)effectiveDelay.TotalSeconds}s: previousReason={reason ?? "unspecified"}");
-                    Contacts?.TriggerBackgroundResolution();
-                }
-                catch (TaskCanceledException)
-                {
-                }
-                catch (ObjectDisposedException)
-                {
-                }
-                catch (Exception ex)
-                {
-                    Debug.WriteLine($"[WhatsAppService] Deferred profile picture retry failed: {ex.Message}");
-                }
-            });
-        }
-
-
         /// <summary>
         /// Watches an accepted FULL_HISTORY request and aborts only after a stretch with
         /// no catch-up progress (tips / SQLite chunks / offline apply). Progress resets
@@ -2674,7 +2619,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 return;
             }
 
-            ScheduleDeferredProfilePictureResolution(
+            DeferredAvatars?.Schedule(
                 "catch-up-finish:" + (reason ?? string.Empty),
                 TimeSpan.FromSeconds(5));
             Interlocked.Exchange(ref _enrichmentAwaitingHeavyHistory, 0);

@@ -6,9 +6,10 @@ namespace Unison.Core.Contracts.WhatsApp
     /// Retries the background name/avatar enrichment pass after a delay.
     /// </summary>
     /// <remarks>
-    /// The timer and the pass itself still live on the connection client
-    /// (<c>ShutdownAsync</c> cancels them). The contact avatar policy only needs
-    /// to ask for another run — it must not name the whole client for that.
+    /// Implemented in WhatsAppClient (<c>DeferredAvatarResolution</c>): owns the timer and
+    /// calls <see cref="IContactService.TriggerBackgroundResolution"/>. Callers (avatar
+    /// policy, usync, connection client) must not name the whole client for a retry.
+    /// <c>ShutdownAsync</c> cancels via this port.
     /// </remarks>
     public interface IDeferredAvatarResolution
     {
