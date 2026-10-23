@@ -17,16 +17,24 @@ namespace Unison.Core.Tests.Helpers
         private readonly DisplayNameTable _pushNames = new DisplayNameTable();
         private readonly ChatStateStore _chats = new ChatStateStore(new CountingDispatcher());
         private readonly CountingDispatcher _ui = new CountingDispatcher();
+        private readonly ChatRowIndex _rows;
         private readonly ChatListDeduper _deduper;
 
         public ChatListAliasMergeTests()
         {
-            var rows = new ChatRowIndex(() => _chats.Chats, _aliases.GetCanonicalJid);
-            _deduper = new ChatListDeduper(_ui, _chats, rows, _aliases, _pushNames);
+            _rows = new ChatRowIndex(() => _chats.Chats, _aliases.GetCanonicalJid);
+            _deduper = new ChatListDeduper(_ui, _chats, _rows, _aliases, _pushNames);
         }
 
         private ChatListAliasMerge Build() =>
-            new ChatListAliasMerge(_ui, _chats, _aliases, _deduper);
+            new ChatListAliasMerge(_ui, _chats, _rows, _aliases, _deduper, new NoMarkers());
+
+        private sealed class NoMarkers : ISelfMarkerNaming
+        {
+            public bool IsMarkerLabel(string label) => false;
+
+            public string StripMarker(string label) => label;
+        }
 
         [Fact]
         public async Task Already_aliased_addresses_run_the_list_dedupe()

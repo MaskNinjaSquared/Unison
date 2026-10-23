@@ -128,6 +128,9 @@ namespace Unison.Uwp.Services.WhatsApp
         /// They also dropped the candidates without cancelling their scheduled resends, so a timer
         /// stayed alive to ask the server for a message belonging to a deleted conversation.
         /// </remarks>
+        void IMissingMessageChatHost.ForgetMissingMessagesForChat(string chatJid) =>
+            ForgetMissingMessagesForChat(chatJid);
+
         private void ForgetMissingMessagesForChat(string chatJid)
         {
             string normJid = NormalizeJid(chatJid);
@@ -1080,12 +1083,15 @@ namespace Unison.Uwp.Services.WhatsApp
                             normalizedPeerRecipientLid,
                             jid))
                     {
-                        QueueMessageControlWork(
-                            "live-self-chat-collapse:" + e.MessageId,
-                            () => MergeTransientDirectChatIntoCanonicalAsync(
-                                normalizedPeerRecipientLid,
-                                jid,
-                                "live-self-chat-collapse"));
+                        if (ChatFacade != null)
+                        {
+                            QueueMessageControlWork(
+                                "live-self-chat-collapse:" + e.MessageId,
+                                () => ChatFacade.CollapseTransientDirectChatAsync(
+                                    normalizedPeerRecipientLid,
+                                    jid,
+                                    "live-self-chat-collapse"));
+                        }
                     }
                 }
 

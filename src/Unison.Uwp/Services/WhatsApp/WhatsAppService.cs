@@ -43,7 +43,7 @@ using Unison.WhatsAppClient.Helpers;
 
 namespace Unison.Uwp.Services.WhatsApp
 {
-    public partial class WhatsAppService : INotifyPropertyChanged, IWhatsAppService, IMediaDownloadHost, IAvatarReport, IOfflineReplayHost, IPlaceholderResendSocket, IHistoryOnDemandSocket, IRuntimeSnapshotSource, IDeferredAvatarResolution, IAppStateLocalHost, IConversationResyncHost, IHistorySyncHost, IUsyncAliasHost, IStartupUiHost, IJidAliasPersistence, Unison.WhatsAppClient.Abstractions.IResolvedNameApplyHost
+    public partial class WhatsAppService : INotifyPropertyChanged, IWhatsAppService, IMediaDownloadHost, IAvatarReport, IOfflineReplayHost, IPlaceholderResendSocket, IHistoryOnDemandSocket, IRuntimeSnapshotSource, IDeferredAvatarResolution, IAppStateLocalHost, IConversationResyncHost, IHistorySyncHost, IUsyncAliasHost, IStartupUiHost, IJidAliasPersistence, IMissingMessageChatHost, Unison.WhatsAppClient.Abstractions.IResolvedNameApplyHost
     {
         public event PropertyChangedEventHandler PropertyChanged;
         protected void OnPropertyChanged([CallerMemberName] string propertyName = null)
@@ -3954,11 +3954,11 @@ namespace Unison.Uwp.Services.WhatsApp
                     : Task.CompletedTask;
             bridge.ContactChanged = contact =>
                 Contacts != null
-                    ? Contacts.ApplyRemoteContactUpdatesAsync(MapAccountContacts(contact))
+                    ? Contacts.ApplyRemoteContactUpdatesAsync(AccountContactUpdateMap.From(contact))
                     : Task.CompletedTask;
             bridge.ContactsChanged = updates =>
                 Contacts != null
-                    ? Contacts.ApplyRemoteContactUpdatesAsync(MapAccountContacts(updates))
+                    ? Contacts.ApplyRemoteContactUpdatesAsync(AccountContactUpdateMap.From(updates))
                     : Task.CompletedTask;
             bridge.SelfPushNameChanged = name =>
                 Contacts != null
@@ -4383,57 +4383,6 @@ namespace Unison.Uwp.Services.WhatsApp
         {
             OnChatMessagesChanged?.Invoke(this, chatJid);
             _chatState.NotifyMessagesChanged(chatJid);
-        }
-
-        private static IReadOnlyList<AccountContactUpdate> MapAccountContacts(
-            Unison.Socket.Models.ContactUpdate contact)
-        {
-            if (contact == null)
-            {
-                return new AccountContactUpdate[0];
-            }
-
-            return new[]
-            {
-                new AccountContactUpdate
-                {
-                    Id = contact.Id,
-                    Lid = contact.Lid,
-                    PhoneNumber = contact.PhoneNumber,
-                    Name = contact.Name,
-                    Notify = contact.Notify
-                }
-            };
-        }
-
-        private static IReadOnlyList<AccountContactUpdate> MapAccountContacts(
-            IReadOnlyList<Unison.Socket.Models.ContactUpdate> contacts)
-        {
-            if (contacts == null || contacts.Count == 0)
-            {
-                return new AccountContactUpdate[0];
-            }
-
-            var mapped = new List<AccountContactUpdate>(contacts.Count);
-            for (int i = 0; i < contacts.Count; i++)
-            {
-                Unison.Socket.Models.ContactUpdate contact = contacts[i];
-                if (contact == null)
-                {
-                    continue;
-                }
-
-                mapped.Add(new AccountContactUpdate
-                {
-                    Id = contact.Id,
-                    Lid = contact.Lid,
-                    PhoneNumber = contact.PhoneNumber,
-                    Name = contact.Name,
-                    Notify = contact.Notify
-                });
-            }
-
-            return mapped;
         }
 
         Task Unison.WhatsAppClient.Abstractions.IResolvedNameApplyHost.ApplySelfPushNameFromAppStateAsync(

@@ -76,6 +76,8 @@ namespace Unison.WhatsAppClient.Chats
         private readonly IRuntimeDiagnostics _diagnostics;
         private readonly IHistoryMessageStore _historyMessages;
         private readonly IHistoryChatPreviewStore _chatPreviews;
+        private readonly IMessageStore _messageStore;
+        private readonly IMissingMessageChatHost _missingMessages;
         private readonly OfflineReplayTips _offlineReplayTips;
 
         /// <summary>Short enough that the first recovered chat shows while a long replay continues.</summary>
@@ -104,6 +106,8 @@ namespace Unison.WhatsAppClient.Chats
             IStringResources strings,
             IHistoryMessageStore historyMessages,
             IHistoryChatPreviewStore chatPreviews,
+            IMessageStore messageStore,
+            IMissingMessageChatHost missingMessages,
             IDialogService dialogs = null,
             IRuntimeDiagnostics diagnostics = null)
         {
@@ -129,6 +133,8 @@ namespace Unison.WhatsAppClient.Chats
             _strings = strings ?? throw new ArgumentNullException(nameof(strings));
             _historyMessages = historyMessages ?? throw new ArgumentNullException(nameof(historyMessages));
             _chatPreviews = chatPreviews ?? throw new ArgumentNullException(nameof(chatPreviews));
+            _messageStore = messageStore ?? throw new ArgumentNullException(nameof(messageStore));
+            _missingMessages = missingMessages ?? throw new ArgumentNullException(nameof(missingMessages));
             _dialogs = dialogs;
             _diagnostics = diagnostics;
             _offlineReplayTips = new OfflineReplayTips(
@@ -812,6 +818,48 @@ namespace Unison.WhatsAppClient.Chats
         public void RequestAliasChatMerge(string lidJid, string pnJid)
         {
             _ = _aliasMerge.MergeAsync(lidJid, pnJid);
+        }
+
+        /// <inheritdoc />
+        public async Task CollapseTransientDirectChatAsync(
+            string transientJid,
+            string canonicalJid,
+            string reason)
+        {
+            ChatListTransientCollapseResult collapsed =
+                await _aliasMerge.CollapseTransientAsync(transientJid, canonicalJid)
+                    .ConfigureAwait(false);
+            if (!collapsed.Merged)
+            {
+                return;
+            }
+
+            Debug.WriteLine(
+                "[ChatFacade] Collapsed transient direct chat " + collapsed.TransientJid +
+                " into " + collapsed.CanonicalJid + " (" + (reason ?? string.Empty) + ")");
+
+            _missingMessages.ForgetMissingMessagesForChat(collapsed.TransientJid);
+
+            if (collapsed.CanonicalMessages.Count > 0)
+            {
+                await _historyMessages.UpsertLiveMessagesAsync(
+                        collapsed.CanonicalJid,
+                        collapsed.CanonicalMessages)
+                    .ConfigureAwait(false);
+            }
+
+            try
+            {
+                await _messageStore.DeleteChatMessagesAsync(collapsed.TransientJid)
+                    .ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine(
+                    "[ChatFacade] Transient chat message delete failed: " + ex.Message);
+            }
+
+            _identity.PersistNow(reason ?? "transient-collapse");
         }
 
         public void RequestChatListDedup(string reason)

@@ -126,6 +126,15 @@ namespace Unison.Core.Contracts.WhatsApp
         Task DeduplicateChatListAsync(string reason);
 
         /// <summary>
+        /// Collapses a transient direct chat (often a LID self-address) into its canonical row:
+        /// timeline, list, name maps, then durable identity / message cleanup.
+        /// </summary>
+        Task CollapseTransientDirectChatAsync(
+            string transientJid,
+            string canonicalJid,
+            string reason);
+
+        /// <summary>
         /// After a local send: tip every alias row (create if missing), then request dedupe.
         /// </summary>
         Task ShowLocalSendPreviewAsync(

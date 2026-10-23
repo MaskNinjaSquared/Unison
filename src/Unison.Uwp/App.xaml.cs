@@ -366,8 +366,10 @@ namespace Unison.Uwp
             services.AddSingleton(sp => new ChatListAliasMerge(
                 sp.GetRequiredService<AttachedUiDispatcher>(),
                 sp.GetRequiredService<ChatStateStore>(),
+                sp.GetRequiredService<ChatRowIndex>(),
                 sp.GetRequiredService<JidAliasTable>(),
-                sp.GetRequiredService<ChatListDeduper>()));
+                sp.GetRequiredService<ChatListDeduper>(),
+                sp.GetRequiredService<ISelfMarkerNaming>()));
             services.AddSingleton(sp => new UsyncAliasFiling(
                 sp.GetRequiredService<JidAliasTable>()));
             services.AddSingleton<IWhatsAppService>(
@@ -614,6 +616,8 @@ namespace Unison.Uwp
                 sp => (IResolvedNameApplyHost)sp.GetRequiredService<IWhatsAppService>());
             services.AddSingleton<IOfflineReplayHost>(
                 sp => (WhatsAppService)sp.GetRequiredService<IWhatsAppService>());
+            services.AddSingleton<IMissingMessageChatHost>(
+                sp => (IMissingMessageChatHost)sp.GetRequiredService<IWhatsAppService>());
             services.AddSingleton<IChatAccountActions>(sp => new BridgeChatAccountActions(
                 sp.GetRequiredService<UwpSessionProvider>()));
             services.AddSingleton<IChatService>(sp => new ChatFacade(
@@ -639,6 +643,8 @@ namespace Unison.Uwp
                 sp.GetRequiredService<IStringResources>(),
                 sp.GetRequiredService<IHistoryMessageStore>(),
                 sp.GetRequiredService<IHistoryChatPreviewStore>(),
+                sp.GetRequiredService<IMessageStore>(),
+                sp.GetRequiredService<IMissingMessageChatHost>(),
                 sp.GetRequiredService<IDialogService>(),
                 sp.GetRequiredService<IRuntimeDiagnostics>()));
             // After IChatService: the projection persists resolved strip rows so cold start keeps names.
