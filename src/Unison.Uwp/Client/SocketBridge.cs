@@ -1443,7 +1443,7 @@ namespace Unison.Uwp.Client
         /// </summary>
         public void RegisterJidAlias(string jidA, string jidB, string source, bool writeLog = true)
         {
-            var mapping = ToMapping(jidA, jidB);
+            var mapping = LidMapping.TryFromAliasPair(jidA, jidB);
             if (mapping == null)
             {
                 return;
@@ -1462,7 +1462,7 @@ namespace Unison.Uwp.Client
             var mappings = new List<LidMapping>();
             foreach (var alias in aliases)
             {
-                var mapping = ToMapping(alias.Key, alias.Value);
+                var mapping = LidMapping.TryFromAliasPair(alias.Key, alias.Value);
                 if (mapping != null)
                 {
                     mappings.Add(mapping);
@@ -1470,14 +1470,6 @@ namespace Unison.Uwp.Client
             }
 
             Store(mappings, source, true);
-        }
-
-        private static LidMapping ToMapping(string jidA, string jidB)
-        {
-            var lid = JidUtils.IsLidUser(jidA) ? jidA : (JidUtils.IsLidUser(jidB) ? jidB : null);
-            var pn = JidUtils.IsPnUser(jidA) ? jidA : (JidUtils.IsPnUser(jidB) ? jidB : null);
-
-            return lid != null && pn != null ? new LidMapping(lid, pn) : null;
         }
 
         private void Store(List<LidMapping> mappings, string source, bool writeLog)

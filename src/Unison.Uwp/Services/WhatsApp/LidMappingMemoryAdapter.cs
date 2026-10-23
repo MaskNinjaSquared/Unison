@@ -4,7 +4,6 @@ using System.Threading.Tasks;
 using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Helpers;
 using Unison.Socket.Signal;
-using Unison.Socket.WABinary;
 
 namespace Unison.Uwp.Services.WhatsApp
 {
@@ -48,7 +47,9 @@ namespace Unison.Uwp.Services.WhatsApp
             var mappings = new List<LidMapping>();
             foreach (KeyValuePair<string, string> pair in pairs)
             {
-                LidMapping mapping = ToMapping(pair.Key, pair.Value);
+                LidMapping mapping = LidMapping.TryFromAliasPair(
+                    JidHelper.Normalize(pair.Key),
+                    JidHelper.Normalize(pair.Value));
                 if (mapping != null)
                 {
                     mappings.Add(mapping);
@@ -62,20 +63,6 @@ namespace Unison.Uwp.Services.WhatsApp
 
             // Same posture as SocketBridge.Store: announce from sync paths, do not await.
             _ = ObserveStoreAsync(_store.StoreMappingsAsync(mappings));
-        }
-
-        private static LidMapping ToMapping(string jidA, string jidB)
-        {
-            if (string.IsNullOrEmpty(jidA) || string.IsNullOrEmpty(jidB))
-            {
-                return null;
-            }
-
-            string a = JidHelper.Normalize(jidA);
-            string b = JidHelper.Normalize(jidB);
-            string lid = JidUtils.IsAnyLid(a) ? a : (JidUtils.IsAnyLid(b) ? b : null);
-            string pn = JidUtils.IsAnyPn(a) ? a : (JidUtils.IsAnyPn(b) ? b : null);
-            return lid != null && pn != null ? new LidMapping(lid, pn) : null;
         }
 
         private static async Task ObserveStoreAsync(Task write)
