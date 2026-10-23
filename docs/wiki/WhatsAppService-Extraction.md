@@ -681,13 +681,11 @@ Both take the shape this extraction keeps arriving at. The marker is localized, 
 stays in the UWP head behind `ISelfMarkerNaming`; the lookups stay too, because they warm a SQLite
 cache as a side effect. What moved is the decision.
 
-`MergeTransientDirectChatIntoCanonicalAsync` then gave up its decision too. The method is chat surgery
-— UI thread, SQLite, two collections — but underneath it answers one question: when the same contact
-turns out to occupy two rows, which side of each field survives. That is `TransientChatMerge`, and
-stating it separately exposed a gap: the transient row's name was checked for blank and for
-number-as-name but not for a self-marker, so a contact pushing "(You)" could be copied onto the
-canonical row during a merge even though the sanitizer blocks that everywhere else. The orchestration
-stays; only the decision left.
+`MergeTransientDirectChatIntoCanonicalAsync` gave up its decision to `TransientChatMerge`, then the
+orchestration itself moved to `ChatFacade.CollapseTransientDirectChatAsync` over
+`ChatListAliasMerge.CollapseTransientAsync` (timeline + list + name maps). Durable follow-up uses
+`IHistoryMessageStore` / `IMessageStore` / `IChatIdentityPersistence`; placeholder-ledger cleanup is
+`IMissingMessageChatHost` on the client. The pump only queues the façade call.
 
 The alias follow-up pass itself now lives on `ContactFacade` (`AliasFollowUpQueue` + debounce +
 `RunAliasFollowUpAsync`). What remains in `.Identity.cs` that is not this shape is what
@@ -697,9 +695,9 @@ to lift out of a method.
 
 **The apply decision left the method.** `ResolvedContactApplyPlan` answers, for one usync
 contact, whether to file the alias, merge the two chats (only the first time that LID is seen),
-store the push name, and fetch an avatar (only when a listed chat has none). Writing the alias,
-healing identity, merging and the picture round-trip stay on the client — those caches have not
-moved.
+store the push name, and fetch an avatar (only when a listed chat has none). Writing the alias
+and healing identity stay on the client; chat merge goes through `ChatListAliasMerge` /
+`ChatFacade`. The picture round-trip stays on the contact helpers.
 
 **The usync orchestration moved to the façade.** `ContactUsyncResolver` (in `Contacts/`, built by
 `ContactFacade`) now owns everything that decides: which numbers to ask about (`ContactLookupNumber`

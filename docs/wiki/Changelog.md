@@ -2,6 +2,13 @@
 
 Newest first.
 
+## Phase B — transient direct-chat collapse on ChatFacade
+
+Live self-chat LID collapse is `IChatService.CollapseTransientDirectChatAsync`
+over enriched `ChatListAliasMerge.CollapseTransientAsync` (`TransientChatMerge` +
+name maps). Missing-message ledger forget is `IMissingMessageChatHost`. Socket
+`ContactUpdate` → `AccountContactUpdate` mapping is `AccountContactUpdateMap`.
+
 ## Phase B — chat flags / read on ChatFacade
 
 `ChatFacade` owns local archive / pin / mute / read (`ApplyLocalChatFlagsAsync` /
