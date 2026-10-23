@@ -32,7 +32,6 @@ namespace Unison.Core.Contracts.WhatsApp
         /// </summary>
         event EventHandler<SessionClearedEventArgs> OnSessionCleared;
         event EventHandler<Exception> OnError;
-        event EventHandler<string> OnChatMessagesChanged;
         event EventHandler<string> OnQRCodeReceived;
         /// <summary>
         /// The code on screen is dead: the server ran out of refs to rotate through, or the

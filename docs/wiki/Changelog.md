@@ -2,6 +2,12 @@
 
 Newest first.
 
+## Phase B — ChatMessagesChanged owned by MessageFacade
+
+`IMessageService.NotifyChatMessagesChanged` replaces client
+`OnChatMessagesChanged`. Host still marshals to the UI thread and nudges
+`ChatStateStore`; VMs listen only on the façade.
+
 ## Phase B — history LID mappings via IJidAliasPersistence
 
 `HistoryFacade` files chunk LID↔PN pairs through `IJidAliasPersistence`;

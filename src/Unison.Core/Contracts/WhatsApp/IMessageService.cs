@@ -20,6 +20,12 @@ namespace Unison.Core.Contracts.WhatsApp
         event System.EventHandler<string> ChatMessagesChanged;
 
         /// <summary>
+        /// Host / media path: raise <see cref="ChatMessagesChanged"/> (UI thread already
+        /// marshalled by the caller when needed).
+        /// </summary>
+        void NotifyChatMessagesChanged(string chatJid);
+
+        /// <summary>
         /// Typing / online state for a chat the app subscribed to with
         /// <see cref="SubscribeToPresenceAsync"/>.
         /// </summary>

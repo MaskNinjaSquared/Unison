@@ -827,7 +827,6 @@ namespace Unison.Uwp.Services.WhatsApp
         public event EventHandler<SessionClearedEventArgs> OnSessionCleared;
         public event EventHandler<Exception> OnError;
         public event EventHandler OnDisplayNamesUpdated;
-        public event EventHandler<string> OnChatMessagesChanged;
         public event EventHandler<PresenceUpdateEventArgs> OnPresenceUpdate;
         public event EventHandler<string> OnStreamError;
         public event EventHandler<string> OnInvalidSessionSuspected;
@@ -4133,13 +4132,11 @@ namespace Unison.Uwp.Services.WhatsApp
         }
 
         /// <summary>
-        /// Announces a message change on both channels. Subscribers of the store see the same
-        /// notification as subscribers of this class, so a view model can move between them
-        /// without a behaviour change.
+        /// Announces a message change to the message façade and the chat-state store.
         /// </summary>
         private void RaiseChatMessagesChanged(string chatJid)
         {
-            OnChatMessagesChanged?.Invoke(this, chatJid);
+            Messages?.NotifyChatMessagesChanged(chatJid);
             _chatState.NotifyMessagesChanged(chatJid);
         }
 

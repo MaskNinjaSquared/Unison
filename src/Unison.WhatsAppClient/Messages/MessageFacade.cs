@@ -149,14 +149,25 @@ namespace Unison.WhatsAppClient.Messages
             _sqlLoadMorePageSize = 30;
             _thinTimelineThreshold = Math.Max(5, _sqlOpenPageSize - ThinTimelineOnDemandMargin);
 
-            // Both live as long as the app does, so there is nothing to unhook from.
-            _whatsAppService.OnChatMessagesChanged += (s, jid) => Relay(() => ChatMessagesChanged?.Invoke(this, jid), "ChatMessagesChanged");
+            // Presence still originates on the client socket bridge until session events
+            // are subscribed here directly.
             _whatsAppService.OnPresenceUpdate += (s, e) => Relay(() => PresenceUpdated?.Invoke(this, e), "PresenceUpdated");
         }
 
         public event EventHandler<string> ChatMessagesChanged;
 
         public event EventHandler<PresenceUpdateEventArgs> PresenceUpdated;
+
+        /// <inheritdoc />
+        public void NotifyChatMessagesChanged(string chatJid)
+        {
+            if (string.IsNullOrWhiteSpace(chatJid))
+            {
+                return;
+            }
+
+            Relay(() => ChatMessagesChanged?.Invoke(this, chatJid), "ChatMessagesChanged");
+        }
 
         /// <inheritdoc />
         public async Task HandleReceiptAsync(Unison.Baileys.Protocol.BinaryNode node)
@@ -1458,7 +1469,7 @@ namespace Unison.WhatsAppClient.Messages
 
             if (_activeChat.IsOpen(canonical))
             {
-                // Host posts OnChatMessagesChanged; this façade already relays that event.
+                // Host posts to NotifyChatMessagesChanged + chat-state store.
                 _outgoingHost.NotifyChatChanged(canonical);
             }
 
