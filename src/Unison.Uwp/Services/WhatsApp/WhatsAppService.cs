@@ -158,7 +158,9 @@ namespace Unison.Uwp.Services.WhatsApp
         private readonly GroupMetadataApply _groupApply;
         private IMessageService _messageService;
         private IChatService _chatService;
-        private IContactService _contactService;
+        private readonly Func<IContactService> _resolveContacts;
+
+        private IContactService Contacts => _resolveContacts != null ? _resolveContacts() : null;
         private readonly IPersonStore _personStore;
         private readonly IGroupRosterStore _groupRosterStore;
         private readonly IChatStore _chatStore;
@@ -176,17 +178,6 @@ namespace Unison.Uwp.Services.WhatsApp
         public void AttachChatService(IChatService chatService)
         {
             _chatService = chatService;
-        }
-
-        /// <summary>
-        /// Wired from App DI so the legacy <see cref="IWhatsAppService"/> contact members still
-        /// resolve. Only pass-throughs are left here — the notifications this used to push at the
-        /// facade are events now (see <see cref="OnAvatarCached"/>, <see cref="OnJidAliasResolved"/>,
-        /// <see cref="OnAvatarRetryDue"/>).
-        /// </summary>
-        public void AttachContactService(IContactService contactService)
-        {
-            _contactService = contactService;
         }
 
         private bool IsWindowsMobile => _isWindowsMobile;
@@ -584,15 +575,18 @@ namespace Unison.Uwp.Services.WhatsApp
         void IDeferredAvatarResolution.Schedule(string reason, TimeSpan? delay) =>
             ScheduleDeferredProfilePictureResolution(reason, delay);
 
+        void IDeferredAvatarResolution.Cancel() => CancelDeferredProfilePictureResolution();
+
         private Task HydrateCachedAvatarsFromContactAsync(string reason)
         {
-            if (_contactService == null)
+            IContactService contacts = Contacts;
+            if (contacts == null)
             {
                 Debug.WriteLine("[WhatsAppService] Avatar hydrate skipped (" + reason + "): contact facade missing");
                 return Task.CompletedTask;
             }
 
-            return _contactService.HydrateCachedAvatarUrisAsync(reason);
+            return contacts.HydrateCachedAvatarUrisAsync(reason);
         }
 
         RuntimeDiagnosticsSnapshot IRuntimeSnapshotSource.CaptureRuntimeSnapshot()
@@ -1159,7 +1153,8 @@ namespace Unison.Uwp.Services.WhatsApp
             UsyncAliasFiling usyncAliases,
             ChatListInitialPaintGate listPaintGate = null,
             IAppMemoryInfo appMemory = null,
-            ILocalSettings localSettings = null)
+            ILocalSettings localSettings = null,
+            Func<IContactService> resolveContacts = null)
         {
             if (chatState == null)
             {
@@ -1178,6 +1173,7 @@ namespace Unison.Uwp.Services.WhatsApp
             _isWindowsMobile = systemInfo.IsMobile();
             _appMemory = appMemory ?? new WinRtAppMemoryInfo();
             _localSettings = localSettings;
+            _resolveContacts = resolveContacts;
             _ui = ui ?? throw new ArgumentNullException(nameof(ui));
             _previewReconciler = previewReconciler ?? throw new ArgumentNullException(nameof(previewReconciler));
             _nameRefresh = nameRefresh ?? throw new ArgumentNullException(nameof(nameRefresh));
@@ -1271,11 +1267,12 @@ namespace Unison.Uwp.Services.WhatsApp
             UsyncAliasFiling usyncAliases,
             ChatListInitialPaintGate listPaintGate = null,
             IAppMemoryInfo appMemory = null,
-            ILocalSettings localSettings = null)
+            ILocalSettings localSettings = null,
+            Func<IContactService> resolveContacts = null)
         {
             return _instance ?? (_instance = new WhatsAppService(
                 chatState, chatRows, activeChat, syncStatus, syncWork, historyMessages, chatPreviews, usyncGate, avatarFetcher, mediaCache, jidAlias, displayNames, historyRequests,
-                initialSync, syncBudget, workload, selfProfile, personStore, groupRosterStore, chatStore, systemInfo, ui, previewReconciler, nameRefresh, storedPreviews, deduper, usyncAliases, listPaintGate, appMemory, localSettings));
+                initialSync, syncBudget, workload, selfProfile, personStore, groupRosterStore, chatStore, systemInfo, ui, previewReconciler, nameRefresh, storedPreviews, deduper, usyncAliases, listPaintGate, appMemory, localSettings, resolveContacts));
         }
 
         /// <summary>
@@ -1906,12 +1903,16 @@ namespace Unison.Uwp.Services.WhatsApp
             {
                 ScheduleDeferredProfilePictureResolution(deferReason);
             }
-            else if (_contactService != null)
+            else
             {
-                using (TraceStartupPhase("post-replay-avatars"))
+                IContactService contacts = Contacts;
+                if (contacts != null)
                 {
-                    CancelDeferredProfilePictureResolution();
-                    await _contactService.RetrieveContactPicturesAsync(token).ConfigureAwait(false);
+                    using (TraceStartupPhase("post-replay-avatars"))
+                    {
+                        CancelDeferredProfilePictureResolution();
+                        await contacts.RetrieveContactPicturesAsync(token).ConfigureAwait(false);
+                    }
                 }
             }
 
@@ -2453,11 +2454,12 @@ namespace Unison.Uwp.Services.WhatsApp
                 // Second pass for chats that arrived after the early hydrate (sync/catalog race).
                 await HydrateCachedAvatarsFromContactAsync("deferred-startup");
 
-                if (_contactService != null)
+                IContactService contacts = Contacts;
+                if (contacts != null)
                 {
                     try
                     {
-                        await _contactService.RefreshPhoneContactOverlayAsync(force: true);
+                        await contacts.RefreshPhoneContactOverlayAsync(force: true);
                         await ApplyResolvedNamesToChatsAsync();
                         SchedulePersist();
                     }
@@ -2620,34 +2622,24 @@ namespace Unison.Uwp.Services.WhatsApp
                     string profilePictureDeferReason;
                     if (ShouldDeferProfilePictureFetch(out profilePictureDeferReason))
                     {
-                        Debug.WriteLine($"[WhatsAppService] TriggerBackgroundResolution deferred until sync traffic settles: {profilePictureDeferReason}");
+                        Debug.WriteLine(
+                            "[WhatsAppService] TriggerBackgroundResolution deferred until sync traffic settles: " +
+                            profilePictureDeferReason);
                         ScheduleDeferredProfilePictureResolution(profilePictureDeferReason);
                         RaiseSyncStatus(null);
                         return;
                     }
 
-                    RaiseSyncStatus(SyncPhaseStatus.Format(SyncPhaseStatus.Names));
-                    using (TraceStartupPhase("background-names"))
+                    IContactService contacts = Contacts;
+                    if (contacts != null)
                     {
-                    await ResolveMissingNamesAsync();
-                    }
-
-                    if (ShouldDeferProfilePictureFetch(out profilePictureDeferReason))
-                    {
-                        Debug.WriteLine($"[WhatsAppService] Deferring profile picture fetch until sync traffic settles: {profilePictureDeferReason}");
-                        ScheduleDeferredProfilePictureResolution(profilePictureDeferReason);
-                    }
-                    else
-                    {
-                        CancelDeferredProfilePictureResolution();
-                        if (_contactService != null)
+                        using (TraceStartupPhase("background-names"))
                         {
-                            await _contactService.RetrieveContactPicturesAsync(token);
+                            await contacts.RunBackgroundResolutionAsync(token).ConfigureAwait(false);
                         }
                     }
 
                     // Last step: the group façade shows the status, runs the listing and clears it.
-                    RaiseSyncStatus(null);
                     RaiseReport(
                         () => OnGroupListingDue?.Invoke(this, EventArgs.Empty),
                         nameof(OnGroupListingDue));
@@ -5255,7 +5247,7 @@ namespace Unison.Uwp.Services.WhatsApp
         /// <summary>Delegates to <see cref="IContactService"/>; this class only supplies the client primitives.</summary>
         private Task ResolveMissingNamesAsync(bool force = false)
         {
-            return _contactService?.ResolveMissingNamesAsync(force) ?? Task.CompletedTask;
+            return Contacts?.ResolveMissingNamesAsync(force) ?? Task.CompletedTask;
         }
     
         public bool TryFileUsyncAlias(string userJid, string lidJid, out bool wasAlreadyAliased)

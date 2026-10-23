@@ -437,7 +437,7 @@ namespace Unison.Uwp.Services.WhatsApp
         /// <summary>Delegates to <see cref="IContactService"/> (owns cooldown/dedup policy); this class only supplies the client primitives.</summary>
         private Task RefreshContactNamesAsync(bool includeGroups = false, bool force = false)
         {
-            return _contactService?.RefreshContactNamesAsync(includeGroups, force) ?? Task.CompletedTask;
+            return Contacts?.RefreshContactNamesAsync(includeGroups, force) ?? Task.CompletedTask;
         }
     }
 }

@@ -401,7 +401,8 @@ namespace Unison.Uwp
                     sp.GetRequiredService<UsyncAliasFiling>(),
                     sp.GetRequiredService<ChatListInitialPaintGate>(),
                     sp.GetRequiredService<IAppMemoryInfo>(),
-                    sp.GetRequiredService<ILocalSettings>()));
+                    sp.GetRequiredService<ILocalSettings>(),
+                    () => sp.GetRequiredService<IContactService>()));
             // The send flow lives on MessageFacade; the timeline caches and the socket it writes
             // through are still the client's, reached only through this narrow port.
             services.AddSingleton<IOutgoingMessageHost>(
@@ -761,7 +762,7 @@ namespace Unison.Uwp
             Services.GetRequiredService<AttachedUiDispatcher>().Attach(rootFrame?.Dispatcher);
             whatsAppImpl.AttachMessageService(Services.GetRequiredService<IMessageService>());
             whatsAppImpl.AttachChatService(Services.GetRequiredService<IChatService>());
-            whatsAppImpl.AttachContactService(Services.GetRequiredService<IContactService>());
+            // ContactFacade is resolved lazily via Func in WhatsAppService.Create (no AttachContact).
             Services.GetRequiredService<IConnectionService>().AttachWhatsAppService(whatsApp);
             // The remaining facades subscribe to client events in their constructors, and they can
             // only hear what they were around for. Build them now rather than when a screen first asks.
