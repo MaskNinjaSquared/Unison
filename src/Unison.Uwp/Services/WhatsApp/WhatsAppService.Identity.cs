@@ -117,24 +117,6 @@ namespace Unison.Uwp.Services.WhatsApp
         public string ResolveDisplayName(string jid, string context = null) =>
             _displayNames.Resolve(jid, context);
 
-        private async Task PersistPersonNameAsync(string jid, string displayName)
-        {
-            try
-            {
-                await _personStore.InitializeAsync().ConfigureAwait(false);
-                await _personStore.UpsertIfChangedAsync(
-                    jid,
-                    displayName,
-                    null,
-                    JidHelper.TryPhoneFromJid(jid),
-                    PersonSource.Observed).ConfigureAwait(false);
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine("[WhatsAppService] Person name upsert failed: " + ex.Message);
-            }
-        }
-
         public string GetCanonicalJid(string jid) => JidAlias.GetCanonicalJid(jid);
 
         private async Task MergeTransientDirectChatIntoCanonicalAsync(string transientJid, string canonicalJid, string reason)

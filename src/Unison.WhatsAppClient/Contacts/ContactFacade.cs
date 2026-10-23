@@ -283,6 +283,54 @@ namespace Unison.WhatsAppClient.Contacts
             _resolvedNames.ApplySelfPushNameFromAppStateAsync(name);
 
         /// <inheritdoc />
+        public void CaptureSelfPushName(string pushName, string source = null) =>
+            _resolvedNames.CaptureSelfPushName(pushName, source);
+
+        /// <inheritdoc />
+        public void RememberPersonName(string jid, string displayName)
+        {
+            if (string.IsNullOrWhiteSpace(jid) || string.IsNullOrWhiteSpace(displayName))
+            {
+                return;
+            }
+
+            string norm = JidHelper.Normalize(jid);
+            string sanitized = SanitizeForResolvedName(displayName, norm);
+            if (string.IsNullOrWhiteSpace(sanitized))
+            {
+                return;
+            }
+
+            _pushNames.Set(norm, sanitized);
+
+            // History sync repeats the same push name on every message; gate skips no-op writes.
+            if (!PersonNamePersistGate.ShouldPersist(_personStore.TryGetCached(norm), sanitized))
+            {
+                return;
+            }
+
+            _ = PersistObservedPersonNameAsync(norm, sanitized);
+        }
+
+        private async Task PersistObservedPersonNameAsync(string jid, string displayName)
+        {
+            try
+            {
+                await _personStore.InitializeAsync().ConfigureAwait(false);
+                await _personStore.UpsertIfChangedAsync(
+                    jid,
+                    displayName,
+                    null,
+                    JidHelper.TryPhoneFromJid(jid),
+                    PersonSource.Observed).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[ContactFacade] Person name upsert failed: " + ex.Message);
+            }
+        }
+
+        /// <inheritdoc />
         public async Task ApplyRemoteContactUpdatesAsync(IReadOnlyList<AccountContactUpdate> contacts)
         {
             if (contacts == null || contacts.Count == 0)

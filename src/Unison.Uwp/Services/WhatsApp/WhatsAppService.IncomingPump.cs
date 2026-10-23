@@ -1236,7 +1236,14 @@ namespace Unison.Uwp.Services.WhatsApp
                         NormalizeJid(e.FromJid));
                     if (e.IsFromMe)
                     {
-                        CaptureSelfPushName(nameFromMsg, "message-echo");
+                        if (Contacts != null)
+                        {
+                            Contacts.CaptureSelfPushName(nameFromMsg, "message-echo");
+                        }
+                        else
+                        {
+                            CaptureSelfPushName(nameFromMsg, "message-echo");
+                        }
                     }
 
                     if (string.IsNullOrEmpty(senderJid))
@@ -1266,7 +1273,11 @@ namespace Unison.Uwp.Services.WhatsApp
                     else if (accept == PushNameAccept.Accept)
                     {
                         ContactNames.Set(senderJid, sanitized);
-                        RememberPersonName(senderJid, sanitized);
+                        if (Contacts != null)
+                        {
+                            Contacts.RememberPersonName(senderJid, sanitized);
+                        }
+
                         if (!e.IsOffline)
                         {
                             Log($"[WhatsAppService] Updated contact name for {senderJid} from message metadata: {sanitized}");
@@ -1409,11 +1420,6 @@ namespace Unison.Uwp.Services.WhatsApp
                             if (ChatFacade != null)
                             {
                                 await ChatFacade.DeduplicateChatListAsync("live-direct-alias-duplicate")
-                                    .ConfigureAwait(false);
-                            }
-                            else
-                            {
-                                await DeduplicateChatsAsync("live-direct-alias-duplicate")
                                     .ConfigureAwait(false);
                             }
                         });

@@ -154,6 +154,14 @@ namespace Unison.Core.Tests.Helpers
 
             public Task ApplyRemoteSelfPushNameAsync(string name) => Task.CompletedTask;
 
+            public void CaptureSelfPushName(string pushName, string source = null)
+            {
+            }
+
+            public void RememberPersonName(string jid, string displayName)
+            {
+            }
+
             public Task ApplyRemoteContactUpdatesAsync(
                 IReadOnlyList<AccountContactUpdate> contacts) =>
                 Task.CompletedTask;

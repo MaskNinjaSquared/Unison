@@ -666,7 +666,6 @@ namespace Unison.Uwp.Services.WhatsApp
         private readonly ChatPreviewReconciler _previewReconciler;
         private readonly ChatNameRefresh _nameRefresh;
         private readonly StoredChatPreviewRefresh _storedPreviews;
-        private readonly ChatListDeduper _deduper;
         private readonly UsyncAliasFiling _usyncAliases;
 
         public DisplayNameTable ContactNames => _chatState.PushNames;
@@ -1020,7 +1019,6 @@ namespace Unison.Uwp.Services.WhatsApp
             ChatPreviewReconciler previewReconciler,
             ChatNameRefresh nameRefresh,
             StoredChatPreviewRefresh storedPreviews,
-            ChatListDeduper deduper,
             UsyncAliasFiling usyncAliases,
             ChatListInitialPaintGate listPaintGate = null,
             IAppMemoryInfo appMemory = null,
@@ -1056,7 +1054,6 @@ namespace Unison.Uwp.Services.WhatsApp
             _nameRefresh = nameRefresh ?? throw new ArgumentNullException(nameof(nameRefresh));
             _nameRefresh.Applied += OnChatNamesApplied;
             _storedPreviews = storedPreviews ?? throw new ArgumentNullException(nameof(storedPreviews));
-            _deduper = deduper ?? throw new ArgumentNullException(nameof(deduper));
             _usyncAliases = usyncAliases ?? throw new ArgumentNullException(nameof(usyncAliases));
             _listPaintGate = listPaintGate ?? new ChatListInitialPaintGate();
             _listPaintGate.Released += OnChatListInitialPaintReleased;
@@ -1138,7 +1135,6 @@ namespace Unison.Uwp.Services.WhatsApp
             ChatPreviewReconciler previewReconciler,
             ChatNameRefresh nameRefresh,
             StoredChatPreviewRefresh storedPreviews,
-            ChatListDeduper deduper,
             UsyncAliasFiling usyncAliases,
             ChatListInitialPaintGate listPaintGate = null,
             IAppMemoryInfo appMemory = null,
@@ -1150,7 +1146,7 @@ namespace Unison.Uwp.Services.WhatsApp
         {
             return _instance ?? (_instance = new WhatsAppService(
                 chatState, chatRows, activeChat, syncStatus, syncWork, historyMessages, chatPreviews, usyncGate, avatarFetcher, mediaCache, jidAlias, displayNames, historyRequests,
-                initialSync, syncBudget, workload, selfProfile, personStore, groupRosterStore, chatStore, systemInfo, ui, previewReconciler, nameRefresh, storedPreviews, deduper, usyncAliases, listPaintGate, appMemory, localSettings, resolveContacts, resolveMessages, resolveChats, resolveGroups));
+                initialSync, syncBudget, workload, selfProfile, personStore, groupRosterStore, chatStore, systemInfo, ui, previewReconciler, nameRefresh, storedPreviews, usyncAliases, listPaintGate, appMemory, localSettings, resolveContacts, resolveMessages, resolveChats, resolveGroups));
         }
 
         /// <summary>
@@ -2119,93 +2115,6 @@ namespace Unison.Uwp.Services.WhatsApp
             }
         }
 
-        private async Task RepairLegacyDeletedPreviewsAsync()
-        {
-            // Builds before v5.14 could persist a replayed revoke envelope as a new
-            // "[Message Deleted]" row with DateTime.Now. Repair only those known-bad
-            // previews and leave normal chats untouched, keeping startup lightweight.
-            var suspicious = Chats.Where(LegacyDeletedPreview.IsSuspect).ToList();
-            if (suspicious.Count == 0) return;
-
-            bool changed = false;
-            foreach (var chat in suspicious)
-            {
-                try
-                {
-                    string jid = GetCanonicalJid(chat.JID);
-                    IReadOnlyList<HistoryMessage> recentRows =
-                        await _historyMessages.GetForChatAsync(jid, 120).ConfigureAwait(false);
-                    ChatMessage replacement = LegacyDeletedPreview.PickReplacement(
-                        recentRows?.Select(HistoryMessageMapper.ToChatMessage).ToList(),
-                        DateTime.UtcNow);
-
-                    await _ui.RunAsync(() =>
-                    {
-                        foreach (var row in GetChatRowsForCanonicalJid(jid))
-                        {
-                            if (replacement != null)
-                            {
-                                bool isGroup = jid.EndsWith("@g.us", StringComparison.OrdinalIgnoreCase)
-                                    || (row.JID ?? string.Empty).EndsWith("@g.us", StringComparison.OrdinalIgnoreCase)
-                                    || row.IsGroup;
-                                LiveChatPreviewApplier.ApplyIfNewer(
-                                    row,
-                                    ChatPreviewNormalizer.FormatListPreview(replacement, isGroup),
-                                    replacement.Timestamp,
-                                    force: true,
-                                    ChatPreviewNormalizer.InferKindFromMessage(replacement),
-                                    ChatPreviewNormalizer.FormatListAuthorPrefix(
-                                        replacement,
-                                        isGroup,
-                                        LocalizedChatStripLabels.SelfFallbackName(),
-                                        GetCanonicalJid(replacement.ParticipantJid)),
-                                    replacement.MentionedJids,
-                                    replacement.IsFromMe,
-                                    HistoryLiveMessageMapper.FromStatus(replacement.Status, replacement.IsFromMe),
-                                    replacement.Id,
-                                    LocalizedChatStripLabels.Yesterday(),
-                                    isGroup
-                                        ? ParticipantStripIdentity.PreferForDisplay(
-                                            replacement.ParticipantJid,
-                                            GetCanonicalJid(replacement.ParticipantJid))
-                                        : null,
-                                    isGroup && !replacement.IsFromMe ? replacement.SenderName : null);
-                            }
-                            else
-                            {
-                                ChatPreviewTip.Clear(row);
-                            }
-                        }
-                        ChatDisplayOrder.SortInPlace(Chats);
-                    });
-                    changed = true;
-                }
-                catch (Exception ex)
-                {
-                    Debug.WriteLine($"[WhatsAppService] Legacy deleted-preview repair failed for {chat.JID}: {ex.Message}");
-                }
-                await Task.Yield();
-            }
-
-            if (changed)
-            {
-                try
-                {
-                    // Same reason as the other catalogue writes: Chats belongs to the UI thread
-                    // and this loop has been yielding, so the snapshot has to be taken there.
-                    List<ChatItem> snapshot = null;
-                    await _ui.RunAsync(() => snapshot = Chats.Where(c => c != null).ToList());
-                    await PersistChatCatalogAsync(snapshot ?? new List<ChatItem>()).ConfigureAwait(false);
-                }
-                catch
-                {
-                }
-
-                _messageStore.ClearMemoryCache();
-                OnHistorySyncReceived?.Invoke(this, null);
-            }
-        }
-
         /// <summary>
         /// Client-owned tip pass after startup / catch-up / quiet history. UI goes through
         /// <see cref="IChatService.ReconcileChatPreviewsFromSqliteAsync"/>.
@@ -2317,20 +2226,19 @@ namespace Unison.Uwp.Services.WhatsApp
 
                 // Last Message / names next. Network avatar fetch stays behind history catch-up
                 // (post-message enrichment); disk hydrate already ran above.
-                if (ChatFacade != null)
+                IChatService chats = ChatFacade;
+                if (chats == null)
                 {
-                    await ChatFacade.DeduplicateChatListAsync("deferred-startup")
-                        .ConfigureAwait(false);
-                    await ChatFacade.RepairLegacyDeletedPreviewsAsync()
-                        .ConfigureAwait(false);
-                    await ChatFacade.ReconcileChatPreviewsFromSqliteAsync(null, "deferred-startup")
-                        .ConfigureAwait(false);
+                    Debug.WriteLine(
+                        "[WhatsAppService] Deferred list repair skipped: chat facade missing");
                 }
                 else
                 {
-                    await DeduplicateChatsAsync("deferred-startup").ConfigureAwait(false);
-                    await RepairLegacyDeletedPreviewsAsync().ConfigureAwait(false);
-                    await ReconcileChatPreviewsFromSqliteAsync(null, "deferred-startup")
+                    await chats.DeduplicateChatListAsync("deferred-startup")
+                        .ConfigureAwait(false);
+                    await chats.RepairLegacyDeletedPreviewsAsync()
+                        .ConfigureAwait(false);
+                    await chats.ReconcileChatPreviewsFromSqliteAsync(null, "deferred-startup")
                         .ConfigureAwait(false);
                 }
 
@@ -4469,37 +4377,6 @@ namespace Unison.Uwp.Services.WhatsApp
                 "reason=" + reason);
         }
 
-        /// <summary>
-        /// Updates ContactNames and persists Person name when it changes (fire-and-forget SQLite).
-        /// </summary>
-        private void RememberPersonName(string jid, string displayName)
-        {
-            if (string.IsNullOrWhiteSpace(jid) || string.IsNullOrWhiteSpace(displayName))
-            {
-                return;
-            }
-
-            string norm = NormalizeJid(jid);
-            string sanitized = SanitizeContactLabel(displayName, norm);
-            if (string.IsNullOrWhiteSpace(sanitized))
-            {
-                return;
-            }
-
-            ContactNames.Set(norm, sanitized);
-
-            // History sync repeats the same push name on every message its author wrote, and each
-            // repeat used to start its own database task. A group with five hundred messages from
-            // ten people produced five hundred writes to learn ten names, all in flight at once.
-            // The store's own cache already knows the answer without touching the disk.
-            if (!PersonNamePersistGate.ShouldPersist(_personStore.TryGetCached(norm), sanitized))
-            {
-                return;
-            }
-
-            _ = PersistPersonNameAsync(norm, sanitized);
-        }
-
         private string NormalizeSelfNameCandidate(string candidate, string canonical, string normalized) =>
             SelfNameCandidate.Normalize(candidate, canonical, normalized, _selfMarkers);
 
@@ -4692,6 +4569,11 @@ namespace Unison.Uwp.Services.WhatsApp
             string name) =>
             ApplyAppStateSelfPushNameAsync(name);
 
+        void Unison.WhatsAppClient.Abstractions.IResolvedNameApplyHost.CaptureSelfPushName(
+            string pushName,
+            string source) =>
+            CaptureSelfPushName(pushName, source);
+
         private async Task ApplyResolvedNameBatchAsync(IList<ResolvedNameEntry> entries)
         {
             if (entries == null || entries.Count == 0)
@@ -4863,8 +4745,11 @@ namespace Unison.Uwp.Services.WhatsApp
             CurrentUserName = sanitized;
 
             // Filed under both addresses: whichever one a chat row carries has to resolve.
-            RememberPersonName(selfJid, sanitized);
-            RememberPersonName(NormalizeJid(_authState.Me.Lid), sanitized);
+            if (Contacts != null)
+            {
+                Contacts.RememberPersonName(selfJid, sanitized);
+                Contacts.RememberPersonName(NormalizeJid(_authState.Me.Lid), sanitized);
+            }
 
             Debug.WriteLine(
                 "[WhatsAppService] Self push name captured from " + (source ?? "unknown") + ": '" + sanitized + "'");
@@ -4982,25 +4867,6 @@ namespace Unison.Uwp.Services.WhatsApp
                     }
                     break;
             }
-        }
-
-        private async Task DeduplicateChatsAsync(string reason)
-        {
-            ChatListDeduperResult result = await _deduper.RunAsync(reason ?? "client").ConfigureAwait(false);
-            if (result.Merged <= 0 && result.NormalizedKeys <= 0)
-                    {
-                        return;
-                    }
-
-            Debug.WriteLine(
-                $"[WhatsAppService] Deduplicated {result.Merged} duplicate chat entries and normalized " +
-                $"{result.NormalizedKeys} message caches (reason={reason})");
-                        OnDisplayNamesUpdated?.Invoke(this, EventArgs.Empty);
-                        SchedulePersist();
-            if (result.Merged > 0)
-                        {
-                _ = PersistChatIdentityStateAsync("dedupe:" + reason);
-                        }
         }
 
         private void OnChatNamesApplied(object sender, int updated)

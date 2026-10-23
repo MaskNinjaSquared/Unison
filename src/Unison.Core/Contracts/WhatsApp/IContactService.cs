@@ -159,6 +159,16 @@ namespace Unison.Core.Contracts.WhatsApp
         Task ApplyRemoteSelfPushNameAsync(string name);
 
         /// <summary>
+        /// Echo / stanza / app-state path that may rename the logged-in account (auth + sidebar).
+        /// </summary>
+        void CaptureSelfPushName(string pushName, string source = null);
+
+        /// <summary>
+        /// Files a push name in the in-memory map and, when the person store needs it, SQLite.
+        /// </summary>
+        void RememberPersonName(string jid, string displayName);
+
+        /// <summary>
         /// Account contact table slice: alias pairs first, then names under every address.
         /// Pairing before naming so LID rows can borrow the PN label.
         /// </summary>

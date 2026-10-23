@@ -1704,7 +1704,11 @@ namespace Unison.Uwp.Services.WhatsApp
                                            !string.Equals(existingNotifyName, sanitizedNotify, StringComparison.Ordinal);
                             if (changed)
                             {
-                                RememberPersonName(normalizedNotifyTarget, sanitizedNotify);
+                                if (Contacts != null)
+                                {
+                                    Contacts.RememberPersonName(normalizedNotifyTarget, sanitizedNotify);
+                                }
+
                                 Debug.WriteLine($"[WhatsAppService] Captured pushname from notify: {targetNotifyJid} -> {sanitizedNotify}");
                             }
                         }
@@ -1721,7 +1725,14 @@ namespace Unison.Uwp.Services.WhatsApp
                         if (!string.IsNullOrEmpty(sanitizedNotify) &&
                             IsSelfLinkedJid(normalizedNotifyTarget))
                         {
-                            CaptureSelfPushName(sanitizedNotify, "stanza-notify");
+                            if (Contacts != null)
+                            {
+                                Contacts.CaptureSelfPushName(sanitizedNotify, "stanza-notify");
+                            }
+                            else
+                            {
+                                CaptureSelfPushName(sanitizedNotify, "stanza-notify");
+                            }
                         }
 
                         // Proactively update any matching chat on the captured UI
