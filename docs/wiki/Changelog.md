@@ -2,6 +2,11 @@
 
 Newest first.
 
+## Phase 3 — media hydrate uses session transport readiness
+
+`IMediaDownloadHost.HasLiveSocket` removed; image/sticker hydrate asks
+`IWhatsAppSessionProvider.IsTransportReady`. Host is quiet-save only.
+
 ## Phase 3 — DeferredAvatarResolution owns the retry timer
 
 `IDeferredAvatarResolution` is a WhatsAppClient singleton; the client no longer

@@ -514,6 +514,7 @@ namespace Unison.Uwp
             services.AddSingleton<IMediaAvailability>(sp => new MediaAvailability(
                 sp.GetRequiredService<IWhatsAppService>(),
                 sp.GetRequiredService<IMediaDownloadHost>(),
+                sp.GetRequiredService<AppSessionProvider>(),
                 () => sp.GetRequiredService<IMessageService>(),
                 sp.GetRequiredService<IEncryptedMediaDownloader>(),
                 sp.GetRequiredService<IJidResolver>(),

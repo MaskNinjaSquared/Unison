@@ -361,10 +361,11 @@ on its own: that download left the incoming pump and runs from `MessageFacade` t
 
 The blob fetch no longer goes through the client either. `MediaAvailability` takes
 `IEncryptedMediaDownloader` (plain HTTP against the CDN, registered once in the container), so
-`IMediaDownloadHost` is down to the quiet save, the timeline nudge and `HasLiveSocket`. Those stay
-until the persist queue leaves the client. Preparing a voice note the user just sent for playback
-moved from the client's `IOutgoingMessageHost.PrepareLocalPlayback` to the façade, which calls
-`MediaAvailability` after the send returns; the client's duplicate playable-audio path is gone.
+`IMediaDownloadHost` is quiet-save only until the persist queue leaves the client. Image/sticker
+hydrate asks `IWhatsAppSessionProvider.IsTransportReady` instead of a host socket flag.
+Preparing a voice note the user just sent for playback moved from the client's
+`IOutgoingMessageHost.PrepareLocalPlayback` to the façade, which calls `MediaAvailability`
+after the send returns; the client's duplicate playable-audio path is gone.
 
 **3.7a is done, and it did not fold into `LidMappingStore`.** The plan above said to merge the
 session alias map into `LidMappingStore`, whose own header says it exists to replace exactly that.

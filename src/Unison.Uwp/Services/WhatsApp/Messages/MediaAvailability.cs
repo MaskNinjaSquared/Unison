@@ -9,6 +9,7 @@ using Unison.Core.Models;
 using Unison.Socket.Abstractions;
 using Unison.Uwp.Client;
 using Unison.Uwp.Helpers;
+using Unison.WhatsAppClient.Abstractions;
 using Unison.WhatsAppClient.Helpers;
 
 namespace Unison.Uwp.Services.WhatsApp.Messages
@@ -22,6 +23,7 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
     {
         private readonly IWhatsAppService _client;
         private readonly IMediaDownloadHost _host;
+        private readonly IWhatsAppSessionProvider _sessions;
         private readonly Func<IMessageService> _messages;
         private readonly IEncryptedMediaDownloader _downloader;
         private readonly IJidResolver _jids;
@@ -33,6 +35,7 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
         public MediaAvailability(
             IWhatsAppService client,
             IMediaDownloadHost host,
+            IWhatsAppSessionProvider sessions,
             Func<IMessageService> messages,
             IEncryptedMediaDownloader downloader,
             IJidResolver jids,
@@ -44,6 +47,7 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
             _client = client ?? throw new ArgumentNullException(nameof(client));
             _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
             _host = host ?? throw new ArgumentNullException(nameof(host));
+            _sessions = sessions ?? throw new ArgumentNullException(nameof(sessions));
             _messages = messages ?? throw new ArgumentNullException(nameof(messages));
             _downloader = downloader ?? throw new ArgumentNullException(nameof(downloader));
             _jids = jids ?? throw new ArgumentNullException(nameof(jids));
@@ -620,7 +624,7 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
             string messageId,
             string chatJid)
         {
-            if (chatMessage == null || imageMessage == null || !_host.HasLiveSocket)
+            if (chatMessage == null || imageMessage == null || !_sessions.IsTransportReady)
             {
                 return;
             }
@@ -721,7 +725,7 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
             string messageId,
             string chatJid)
         {
-            if (chatMessage == null || stickerMessage == null || !_host.HasLiveSocket)
+            if (chatMessage == null || stickerMessage == null || !_sessions.IsTransportReady)
             {
                 return;
             }
