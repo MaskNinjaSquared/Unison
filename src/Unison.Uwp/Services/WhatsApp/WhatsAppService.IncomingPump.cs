@@ -459,19 +459,6 @@ namespace Unison.Uwp.Services.WhatsApp
             }
         }
 
-        private void HandlePlaceholderResendAckNode(BinaryNode node)
-        {
-            if (node?.Attrs == null || Messages == null)
-            {
-                return;
-            }
-
-            node.Attrs.TryGetValue("class", out var ackClass);
-            node.Attrs.TryGetValue("id", out var ackId);
-            node.Attrs.TryGetValue("error", out var ackError);
-            Messages.HandlePlaceholderResendAck(ackClass, ackId, ackError);
-        }
-
         private void EnqueueDecryptedMessage(Client.DecryptedMessageEventArgs message)
         {
             if (message == null)

@@ -2,6 +2,12 @@
 
 Newest first.
 
+## Phase B — history LID mappings via IJidAliasPersistence
+
+`HistoryFacade` files chunk LID↔PN pairs through `IJidAliasPersistence`;
+`ApplyHistoryLidMappings` left `IHistorySyncHost`. Placeholder-resend ack
+attrs are forwarded from Connection directly into `MessageFacade`.
+
 ## Phase B — alias hints in Route; peer-data + receipts on MessageFacade
 
 `RouteIncomingChatEnvelopeAsync` registers envelope alias hints. Peer-data

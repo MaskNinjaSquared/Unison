@@ -1678,7 +1678,14 @@ namespace Unison.Uwp.Services.WhatsApp
                 if (!IsCurrentSocket(s)) return;
                 if (node != null && string.Equals(node.Tag, "ack", StringComparison.OrdinalIgnoreCase))
                 {
-                    HandlePlaceholderResendAckNode(node);
+                    if (node.Attrs != null && Messages != null)
+                    {
+                        node.Attrs.TryGetValue("class", out var ackClass);
+                        node.Attrs.TryGetValue("id", out var ackId);
+                        node.Attrs.TryGetValue("error", out var ackError);
+                        Messages.HandlePlaceholderResendAck(ackClass, ackId, ackError);
+                    }
+
                     HandleHistoryOnDemandAckNode(node);
                 }
 

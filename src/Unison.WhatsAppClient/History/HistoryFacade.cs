@@ -57,6 +57,7 @@ namespace Unison.WhatsAppClient.History
         private readonly IWhatsAppService _appState;
         private readonly IConversationResyncHost _resync;
         private readonly IHistorySyncHost _historySync;
+        private readonly IJidAliasPersistence _aliasPersist;
         private readonly IMessageStore _store;
         private readonly ILocalSettings _settings;
         private readonly IHistoryChatPreviewStore _chatPreviewStore;
@@ -98,6 +99,7 @@ namespace Unison.WhatsAppClient.History
             IWhatsAppService appState,
             IConversationResyncHost resync,
             IHistorySyncHost historySync,
+            IJidAliasPersistence aliasPersist,
             IMessageStore store,
             ILocalSettings settings,
             HistoryOnDemandRegistry onDemandRequests,
@@ -144,6 +146,7 @@ namespace Unison.WhatsAppClient.History
             _appState = appState;
             _resync = resync ?? throw new ArgumentNullException(nameof(resync));
             _historySync = historySync ?? throw new ArgumentNullException(nameof(historySync));
+            _aliasPersist = aliasPersist ?? throw new ArgumentNullException(nameof(aliasPersist));
             _store = store;
             _settings = settings;
             _onDemandRequests = onDemandRequests ?? throw new ArgumentNullException(nameof(onDemandRequests));
@@ -614,7 +617,7 @@ namespace Unison.WhatsAppClient.History
                 return;
             }
 
-            _historySync.ApplyHistoryLidMappings(pairs, "history-sqlite-chunk");
+            _aliasPersist.RegisterAliasMappings(pairs, "history-sqlite-chunk");
         }
 
         private async Task<int> PersistChatPreviewsAsync(HistorySync sync)

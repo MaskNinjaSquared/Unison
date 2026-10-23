@@ -7,7 +7,6 @@ using Unison.Core.Helpers;
 using Unison.Core.Models;
 using Unison.Core.State;
 using Unison.WhatsAppClient.Abstractions;
-using Unison.WhatsAppClient.Messages;
 
 namespace Unison.Uwp.Services.WhatsApp
 {

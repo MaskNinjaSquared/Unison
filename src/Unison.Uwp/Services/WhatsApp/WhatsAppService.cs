@@ -1864,12 +1864,6 @@ namespace Unison.Uwp.Services.WhatsApp
         }
 
         /// <inheritdoc />
-        public void ApplyHistoryLidMappings(IEnumerable<KeyValuePair<string, string>> lidToPn, string source)
-        {
-            RegisterAliasMappings(lidToPn, source ?? "history-sqlite");
-        }
-
-        /// <inheritdoc />
         public void NotifyHistorySqliteChunkApplied(string syncType, int conversationCount)
         {
             string type = syncType ?? string.Empty;

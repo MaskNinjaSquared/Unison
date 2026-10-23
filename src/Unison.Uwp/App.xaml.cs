@@ -456,6 +456,7 @@ namespace Unison.Uwp
                 sp.GetRequiredService<IWhatsAppService>(),
                 sp.GetRequiredService<IConversationResyncHost>(),
                 sp.GetRequiredService<IHistorySyncHost>(),
+                sp.GetRequiredService<IJidAliasPersistence>(),
                 sp.GetRequiredService<IMessageStore>(),
                 sp.GetRequiredService<ILocalSettings>(),
                 sp.GetRequiredService<HistoryOnDemandRegistry>(),
