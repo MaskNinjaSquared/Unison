@@ -50,25 +50,14 @@ namespace Unison.Uwp.Services.WhatsApp
         /// Every row for <paramref name="canonical"/>, adding one at the end when the account
         /// speaks about a chat the list does not hold yet. UI thread only.
         /// </summary>
-        private List<ChatItem> GetOrAddChatRowsForAppState(string canonical, out ChatItem created)
-        {
-            created = null;
-            List<ChatItem> rows = GetChatRowsForCanonicalJid(canonical);
-            if (rows.Count > 0)
-            {
-                return rows;
-            }
-
-            created = new ChatItem
-            {
-                JID = canonical,
-                Name = ResolveDisplayName(canonical),
-                Kind = ResolveChatKind(canonical)
-            };
-            Chats.Add(created);
-            rows.Add(created);
-            return rows;
-        }
+        private List<ChatItem> GetOrAddChatRowsForAppState(string canonical, out ChatItem created) =>
+            AppStateChatRows.GetOrAdd(
+                Chats,
+                GetChatRowsForCanonicalJid(canonical),
+                canonical,
+                jid => ResolveDisplayName(jid),
+                ResolveChatKind,
+                out created);
 
         /// <summary>
         /// A group was created or renamed while we were connected. The subject is the group's
