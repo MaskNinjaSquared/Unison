@@ -2451,29 +2451,17 @@ namespace Unison.Uwp.Services.WhatsApp
                 await ReconcileChatPreviewsFromSqliteAsync(null, "deferred-startup");
 
                 await NormalizePersistedChatNamesAsync();
-                // Second pass for chats that arrived after the early hydrate (sync/catalog race).
-                await HydrateCachedAvatarsFromContactAsync("deferred-startup");
 
+                // Disk hydrate + address-book overlay + relabel — ContactFacade owns the awaits.
                 IContactService contacts = Contacts;
                 if (contacts != null)
                 {
-                    try
-                    {
-                        await contacts.RefreshPhoneContactOverlayAsync(force: true);
-                        await ApplyResolvedNamesToChatsAsync();
-                        SchedulePersist();
-                    }
-                    catch (Exception exOverlay)
-                    {
-                        Debug.WriteLine("[WhatsAppService] Address-book overlay after bootstrap failed: " + exOverlay.Message);
-                    }
-                }
-
-                if (Chats.Count > 0 &&
-                    !UseFrugalSyncBudget &&
-                    !HistoryCatchUpLocalWorkPolicy.ShouldDeferHeavyLocalWork(IsHistoryCatchUpActive()))
-                {
-                    _ = ResolveMissingNamesAsync();
+                    bool resolveMissing =
+                        Chats.Count > 0 &&
+                        !UseFrugalSyncBudget &&
+                        !HistoryCatchUpLocalWorkPolicy.ShouldDeferHeavyLocalWork(IsHistoryCatchUpActive());
+                    await contacts.RunDeferredStartupContactPassAsync(resolveMissing)
+                        .ConfigureAwait(false);
                 }
             }
             catch (Exception ex)

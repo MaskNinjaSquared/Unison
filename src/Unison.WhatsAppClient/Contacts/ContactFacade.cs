@@ -647,6 +647,29 @@ namespace Unison.WhatsAppClient.Contacts
             }
         }
 
+        /// <inheritdoc />
+        public async Task RunDeferredStartupContactPassAsync(bool resolveMissingNames = false)
+        {
+            await HydrateCachedAvatarUrisAsync("deferred-startup").ConfigureAwait(false);
+
+            try
+            {
+                await RefreshPhoneContactOverlayAsync(force: true).ConfigureAwait(false);
+                await _nameRefresh.ApplyAsync().ConfigureAwait(false);
+                _catalog.Schedule();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine(
+                    "[ContactFacade] Address-book overlay after bootstrap failed: " + ex.Message);
+            }
+
+            if (resolveMissingNames)
+            {
+                _ = ResolveMissingNamesAsync();
+            }
+        }
+
         public async Task RetrieveContactPicturesAsync(CancellationToken token = default(CancellationToken))
         {
             await _avatars.RetrieveBatchAsync(token).ConfigureAwait(false);

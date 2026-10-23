@@ -133,6 +133,13 @@ namespace Unison.Core.Contracts.WhatsApp
         Task RunBackgroundResolutionAsync(CancellationToken cancellationToken = default(CancellationToken));
 
         /// <summary>
+        /// Deferred-startup contact pass after the catalog is normalized: disk avatar hydrate,
+        /// address-book overlay, list relabel, catalog schedule. Optionally starts
+        /// <see cref="ResolveMissingNamesAsync"/> (fire-and-forget) when the list is warm.
+        /// </summary>
+        Task RunDeferredStartupContactPassAsync(bool resolveMissingNames = false);
+
+        /// <summary>
         /// Single-chat avatar refresh with in-session dedup (used by UI on load-failure/visibility/JID-alias discovery).
         /// </summary>
         void RequestAvatarRefresh(ChatItem chat, bool force = false);

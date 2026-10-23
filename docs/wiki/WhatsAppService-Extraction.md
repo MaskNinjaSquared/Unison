@@ -180,22 +180,19 @@ The stores (`IPersonStore`, `IChatStore`, `IGroupRosterStore`) are constructor p
 
 - `AttachMessageService` / `AttachChatService`
 
-`AttachContactService` is gone: `WhatsAppService.Create` takes `Func<IContactService>` (lazy, breaks the DI cycle). Background names/pictures run on `IContactService.RunBackgroundResolutionAsync`; the client keeps quiet-wait / handshake / catch-up gates and still raises `OnGroupListingDue` after.
+`AttachContactService` is gone: `WhatsAppService.Create` takes `Func<IContactService>` (lazy, breaks the DI cycle). Background names/pictures run on `IContactService.RunBackgroundResolutionAsync`; deferred-startup overlay/hydrate/relabel is `RunDeferredStartupContactPassAsync`. The client keeps quiet-wait / handshake / catch-up gates and still raises `OnGroupListingDue` after background resolution.
 
 `AttachDebugSendService` is gone (phase 4): `App` starts `IDebugSendService` once in Debug builds.
 The watcher already skipped requests while the transport was not ready, so the five start/stop
 calls in `.Connection.cs` were redundant. In Debug it now polls the request file while disconnected
 too; requests still wait for the transport.
 
-`AttachContactService` is down to the awaited steps listed under
-[What phase 2 could not do](#what-phase-2-could-not-do): avatar hydrate, the address-book overlay,
-the two name passes and the picture batch. The alias avatar retry is an event (`OnAvatarRetryDue`).
+The alias avatar retry is an event (`OnAvatarRetryDue`).
 
 `AttachGroupService` is gone: its only use was the last step of the background resolution pass.
 The client now raises `OnGroupListingDue` there, and `GroupFacade` shows the Groups status, runs the
-listing and clears the status itself. The rest of that pass (`TriggerBackgroundResolution`, the
-post-message enrichment, the deferred picture retry) stays in the client: `ShutdownAsync` cancels it
-(phase 4) and its defer checks read the client's history and replay state.
+listing and clears the status itself. Quiet-wait / handshake gates for `TriggerBackgroundResolution`
+and post-message enrichment still sit on the client (`ShutdownAsync` cancels the CTS).
 
 That is the wrong direction: live ingest (status, names) **starts** in `WhatsAppService` and calls up. Phase 2 inverted the reportable half of it (client publishes; façade subscribes); the rest is blocked on phase 3 and is described below.
 
