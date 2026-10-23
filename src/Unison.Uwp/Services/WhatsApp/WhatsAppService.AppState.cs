@@ -47,19 +47,6 @@ namespace Unison.Uwp.Services.WhatsApp
         }
 
         /// <summary>
-        /// Every row for <paramref name="canonical"/>, adding one at the end when the account
-        /// speaks about a chat the list does not hold yet. UI thread only.
-        /// </summary>
-        private List<ChatItem> GetOrAddChatRowsForAppState(string canonical, out ChatItem created) =>
-            AppStateChatRows.GetOrAdd(
-                Chats,
-                GetChatRowsForCanonicalJid(canonical),
-                canonical,
-                jid => ResolveDisplayName(jid),
-                ResolveChatKind,
-                out created);
-
-        /// <summary>
         /// A group was created or renamed while we were connected. The subject is the group's
         /// only name, so it goes in the same cache a resolved contact name would.
         /// </summary>
@@ -123,7 +110,13 @@ namespace Unison.Uwp.Services.WhatsApp
             int resolved = 0;
             await _ui.RunAsync(() =>
             {
-                var rows = GetOrAddChatRowsForAppState(canonical, out ChatItem created);
+                var rows = AppStateChatRows.GetOrAdd(
+                    Chats,
+                    GetChatRowsForCanonicalJid(canonical),
+                    canonical,
+                    jid => ResolveDisplayName(jid),
+                    ResolveChatKind,
+                    out ChatItem created);
                 if (created != null)
                 {
                     dirty = new List<ChatItem> { created };
@@ -137,24 +130,18 @@ namespace Unison.Uwp.Services.WhatsApp
                 return;
             }
 
-            NotificationService.Instance.UpdateBadge(
-                ChatUnreadTally.TotalAcrossConversations(Chats, GetCanonicalJid));
-
-            // Reading on the phone left the pinned tile showing the old count: only the
-            // local read path told the shortcut service, and this one is the same event
-            // arriving from the other direction.
-            try
-            {
-                App.Services?.GetService<IShortcutService>()?.UpdateChatUnread(canonical, resolved);
-            }
-            catch
-            {
-            }
-
-            // A slice, not a full persist. The local read path moved off SchedulePersist
-            // because rewriting every preview plus three JSON maps costs seconds on Mobile
-            // eMMC, and nothing about this copy makes it cheaper.
-            _ = PersistChatCatalogSliceAsync(dirty);
+            // Badge + shortcut + slice: same policy as ChatFacade.ClearUnreadForChatAsync.
+            // A slice, not a full persist — rewriting every preview plus three JSON maps
+            // costs seconds on Mobile eMMC.
+            ChatUnreadSideEffects.AfterConversationUnreadChanged(
+                ChatUnreadTally.TotalAcrossConversations(Chats, GetCanonicalJid),
+                canonical,
+                resolved,
+                dirty,
+                total => NotificationService.Instance.UpdateBadge(total),
+                (shortcutJid, unread) =>
+                    App.Services?.GetService<IShortcutService>()?.UpdateChatUnread(shortcutJid, unread),
+                rows => _ = PersistChatCatalogSliceAsync(rows));
         }
 
         /// <summary>
@@ -178,7 +165,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 return;
             }
 
-            List<string> keys = ExpandHistoryChatKeys(canonical);
+            List<string> keys = new List<string>(ChatPinStoreKeys.For(canonical, _jids));
 
             await _ui.RunAsync(() =>
             {
@@ -378,7 +365,13 @@ namespace Unison.Uwp.Services.WhatsApp
             List<ChatItem> touched = null;
             await _ui.RunAsync(() =>
             {
-                var rows = GetOrAddChatRowsForAppState(canonical, out _);
+                var rows = AppStateChatRows.GetOrAdd(
+                    Chats,
+                    GetChatRowsForCanonicalJid(canonical),
+                    canonical,
+                    jid => ResolveDisplayName(jid),
+                    ResolveChatKind,
+                    out _);
 
                 long nowUnixMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
 
@@ -445,7 +438,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 try
                 {
                     await _chatPreviews.SetStatusAsync(
-                            ExpandHistoryChatKeys(canonical),
+                            new List<string>(ChatPinStoreKeys.For(canonical, _jids)),
                             status)
                         .ConfigureAwait(false);
                     await PersistChatCatalogAsync(touched).ConfigureAwait(false);

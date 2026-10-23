@@ -372,17 +372,24 @@ namespace Unison.WhatsAppClient.Chats
                 return;
             }
 
-            _notifications?.UpdateBadge(GetTotalUnreadCount());
-            try
-            {
-                _shortcuts.UpdateChatUnread(canonical, 0);
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine("[ChatFacade] Shortcut unread update failed: " + ex.Message);
-            }
-
-            _catalog.PersistRows(changed);
+            ChatUnreadSideEffects.AfterConversationUnreadChanged(
+                GetTotalUnreadCount(),
+                canonical,
+                chatUnread: 0,
+                changed,
+                total => _notifications?.UpdateBadge(total),
+                (shortcutJid, unread) =>
+                {
+                    try
+                    {
+                        _shortcuts.UpdateChatUnread(shortcutJid, unread);
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.WriteLine("[ChatFacade] Shortcut unread update failed: " + ex.Message);
+                    }
+                },
+                rows => _catalog.PersistRows(rows));
         }
 
         public int GetTotalUnreadCount()
