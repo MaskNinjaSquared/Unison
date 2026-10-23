@@ -47,37 +47,22 @@ namespace Unison.Uwp.Services.WhatsApp
         }
 
         /// <summary>
-        /// A group was created or renamed while we were connected. The subject is the group's
-        /// only name, so it goes in the same cache a resolved contact name would.
+        /// Group subjects (one or a listing batch) into the same cache a resolved contact name would.
         /// </summary>
-        internal Task ApplyGroupSubjectAsync(string jid, string subject)
-        {
-            return ApplyGroupSubjectsAsync(new[] { new KeyValuePair<string, string>(jid, subject) });
-        }
+        internal Task ApplyGroupSubjectsAsync(IEnumerable<KeyValuePair<string, string>> subjectsByJid) =>
+            ApplyResolvedNameBatchAsync(AppStateResolvedNameEntries.ForGroupSubjects(
+                subjectsByJid,
+                NormalizeJid,
+                GetCanonicalJid,
+                SanitizeContactLabel));
 
-        /// <summary>
-        /// The same for a batch, which is what a group listing produces.
-        /// </summary>
-        internal Task ApplyGroupSubjectsAsync(IEnumerable<KeyValuePair<string, string>> subjectsByJid)
-        {
-            var entries = new List<ResolvedNameEntry>();
-            if (subjectsByJid != null)
-            {
-                foreach (var pair in subjectsByJid)
-                {
-                    AddResolvedName(entries, pair.Key, pair.Value, isSubject: true);
-                }
-            }
-
-            return ApplyResolvedNameBatchAsync(entries);
-        }
-
-        internal Task ApplyAppStateContactNameAsync(string jid, string name)
-        {
-            var entries = new List<ResolvedNameEntry>();
-            AddResolvedName(entries, jid, name, isSubject: false);
-            return ApplyResolvedNameBatchAsync(entries);
-        }
+        internal Task ApplyAppStateContactNameAsync(string jid, string name) =>
+            ApplyResolvedNameBatchAsync(AppStateResolvedNameEntries.ForContact(
+                jid,
+                name,
+                NormalizeJid,
+                GetCanonicalJid,
+                SanitizeContactLabel));
 
         internal async Task ApplyAppStateSelfPushNameAsync(string name)
         {
@@ -165,7 +150,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 return;
             }
 
-            List<string> keys = new List<string>(ChatPinStoreKeys.For(canonical, _jids));
+            List<string> keys = PinStoreKeysFor(canonical);
 
             await _ui.RunAsync(() =>
             {
@@ -438,7 +423,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 try
                 {
                     await _chatPreviews.SetStatusAsync(
-                            new List<string>(ChatPinStoreKeys.For(canonical, _jids)),
+                            PinStoreKeysFor(canonical),
                             status)
                         .ConfigureAwait(false);
                     await PersistChatCatalogAsync(touched).ConfigureAwait(false);

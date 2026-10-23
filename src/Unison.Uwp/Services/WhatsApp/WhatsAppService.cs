@@ -475,8 +475,6 @@ namespace Unison.Uwp.Services.WhatsApp
         /// </summary>
         public bool IsHistoryCatchUpInProgress => IsHistoryCatchUpActive();
 
-        private bool IsReplayDrainActive => ShouldDeferReconnectReplayWork();
-
         private void RaiseSyncStatus(string status) => _syncStatus.Raise(status);
 
         private void PublishSyncStatus(string status) => _syncStatus.Publish(status);
@@ -780,6 +778,10 @@ namespace Unison.Uwp.Services.WhatsApp
         private void SortChatsForDisplay() =>
             ChatDisplayOrder.SortInPlace(Chats);
 
+        /// <summary>PN + LID + canonical keys for pin / history / avatar store lookups.</summary>
+        private List<string> PinStoreKeysFor(string jid) =>
+            new List<string>(ChatPinStoreKeys.For(jid, _jids));
+
         private DateTime GetNewestStoredMessageUtc()
         {
             return GetNewestStoredMessageUtc(null);
@@ -1016,9 +1018,10 @@ namespace Unison.Uwp.Services.WhatsApp
                 try
                 {
                     // force: SyncWorkGate would skip names while first-sync hold / replay is up.
-                    await ResolveMissingNamesAsync(force: true).ConfigureAwait(false);
-                    await RefreshContactNamesAsync(includeGroups: false, force: true)
+                    await (Contacts?.ResolveMissingNamesAsync(force: true) ?? Task.CompletedTask)
                         .ConfigureAwait(false);
+                    await (Contacts?.RefreshContactNamesAsync(includeGroups: false, force: true)
+                        ?? Task.CompletedTask).ConfigureAwait(false);
                 }
                 catch (Exception ex)
                 {
@@ -1784,7 +1787,8 @@ namespace Unison.Uwp.Services.WhatsApp
 
                     using (TraceStartupPhase("post-replay-names"))
                     {
-                        await ResolveMissingNamesAsync();
+                        await (Contacts?.ResolveMissingNamesAsync() ?? Task.CompletedTask)
+                            .ConfigureAwait(false);
                     }
 
                     if (!await WaitForStartupQuietAsync(quiet, "post-message-enrich-contacts", token) ||
@@ -1797,7 +1801,8 @@ namespace Unison.Uwp.Services.WhatsApp
 
                     using (TraceStartupPhase("post-replay-contacts"))
                     {
-                        await RefreshContactNamesAsync(includeGroups: false, force: false);
+                        await (Contacts?.RefreshContactNamesAsync(includeGroups: false, force: false)
+                            ?? Task.CompletedTask).ConfigureAwait(false);
                     }
 
                     if (_workload.SerializePostSyncEnrichment)
@@ -2493,7 +2498,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 return null;
             }
 
-            List<string> keys = new List<string>(ChatPinStoreKeys.For(chatJid, _jids));
+            List<string> keys = PinStoreKeysFor(chatJid);
             for (int i = 0; i < keys.Count; i++)
             {
                 HistoryMessage row = await _historyMessages.GetAsync(keys[i], messageId).ConfigureAwait(false);
@@ -4137,7 +4142,8 @@ namespace Unison.Uwp.Services.WhatsApp
             bridge.ContactChanged = contact => ApplyContactUpdateAsync(contact);
             bridge.ContactsChanged = updates => ApplyContactUpdatesAsync(updates);
             bridge.SelfPushNameChanged = name => ApplyAppStateSelfPushNameAsync(name);
-            bridge.GroupSubjectChanged = (jid, subject) => ApplyGroupSubjectAsync(jid, subject);
+            bridge.GroupSubjectChanged = (jid, subject) =>
+                ApplyGroupSubjectsAsync(new[] { new KeyValuePair<string, string>(jid, subject) });
             bridge.ChatDeleted = jid => ApplyAppStateDeleteChatAsync(jid);
             bridge.MessageDeleted = key => ApplyAppStateDeleteMessageAsync(key.RemoteJid, key.Id);
             bridge.ResolveSentMessage = ResolveSentMessageForRetryAsync;
@@ -4463,7 +4469,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
             try
             {
-                List<string> keys = new List<string>(ChatPinStoreKeys.For(canonical, _jids));
+                List<string> keys = PinStoreKeysFor(canonical);
                 var pins = new List<HistoryMessagePinUpdate>(keys.Count);
                 for (int i = 0; i < keys.Count; i++)
                 {
@@ -4682,18 +4688,11 @@ namespace Unison.Uwp.Services.WhatsApp
                 e.SenderLid,
                 NormalizeJid,
                 IsSelfLinkedJid,
-                GetCanonicalSelfPnJid,
+                JidAlias.GetCanonicalSelfPnJid,
                 GetCanonicalJid);
             routingReason = route.Reason;
             return route.ChatJid;
         }
-
-        internal string NormalizeChatJid(string jid) => NormalizeJid(jid);
-
-        internal bool IsSelfChatJid(string jid) => IsSelfJid(jid);
-
-        internal Task RunOnUiThreadTaskAsync(Func<Task> action) => _ui.RunTaskAsync(action);
-
 
         private void QueueChatMessagesChanged(string chatJid)
         {
@@ -5151,11 +5150,6 @@ namespace Unison.Uwp.Services.WhatsApp
         }
 
         /// <summary>Delegates to <see cref="IContactService"/>; this class only supplies the client primitives.</summary>
-        private Task ResolveMissingNamesAsync(bool force = false)
-        {
-            return Contacts?.ResolveMissingNamesAsync(force) ?? Task.CompletedTask;
-        }
-    
         public bool TryFileUsyncAlias(string userJid, string lidJid, out bool wasAlreadyAliased)
         {
             UsyncAliasFilingResult result = _usyncAliases.TryFile(userJid, lidJid);

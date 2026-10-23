@@ -137,8 +137,6 @@ namespace Unison.Uwp.Services.WhatsApp
 
         public string GetCanonicalJid(string jid) => JidAlias.GetCanonicalJid(jid);
 
-        private string GetCanonicalSelfPnJid() => JidAlias.GetCanonicalSelfPnJid();
-
         private async Task MergeTransientDirectChatIntoCanonicalAsync(string transientJid, string canonicalJid, string reason)
         {
             string normalizedTransient = NormalizeJid(transientJid);
@@ -353,13 +351,9 @@ namespace Unison.Uwp.Services.WhatsApp
                 {
                     await _ui.RunAsync(() =>
                     {
-                        var rows = new List<ChatItem>();
-                        foreach (var pn in batch.AvatarTargets)
-                        {
-                            rows.AddRange(GetChatRowsForCanonicalJid(pn)
-                                .Where(c => string.IsNullOrWhiteSpace(c.AvatarUrl)));
-                        }
-
+                        List<ChatItem> rows = AliasFollowUpAvatarRows.CollectMissing(
+                            batch.AvatarTargets,
+                            GetChatRowsForCanonicalJid);
                         if (rows.Count > 0)
                         {
                             RaiseReport(
@@ -390,10 +384,5 @@ namespace Unison.Uwp.Services.WhatsApp
             }
         }
 
-        /// <summary>Delegates to <see cref="IContactService"/> (owns cooldown/dedup policy); this class only supplies the client primitives.</summary>
-        private Task RefreshContactNamesAsync(bool includeGroups = false, bool force = false)
-        {
-            return Contacts?.RefreshContactNamesAsync(includeGroups, force) ?? Task.CompletedTask;
-        }
     }
 }

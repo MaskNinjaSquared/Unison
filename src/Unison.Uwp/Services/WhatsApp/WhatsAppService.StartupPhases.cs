@@ -44,7 +44,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 budget,
                 StartupQuietFloor,
                 token,
-                () => _initialSync.IsActive || IsReplayDrainActive,
+                () => _initialSync.IsActive || ShouldDeferReconnectReplayWork(),
                 begin,
                 () => RaiseSyncStatus(null),
                 (waitedMs, budgetMs) => RuntimeDiagnosticsService.Instance.Write(
