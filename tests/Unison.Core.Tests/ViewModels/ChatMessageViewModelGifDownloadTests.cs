@@ -228,6 +228,131 @@ namespace Unison.Core.Tests.ViewModels
             public IList<ChatMessage> ApplyBufferedReactions(IList<ChatMessage> chatMessages, IEnumerable<PendingReaction> pending) => chatMessages;
             public Task ResyncConversationsAsync(IProgress<ConversationResyncPhase> progress = null) => throw new NotImplementedException();
             public void NotifyLiveIncoming(string chatJid, string chatName, string senderName, string preview, bool isGroup, bool isFromMe, bool suppressToast, int totalUnread, ChatItem chat) { }
+
+            public void NotifyChatMessagesChanged(string chatJid) { }
+            public void NotifyPresenceUpdated(PresenceUpdateEventArgs e) { }
+            public void ScheduleIncomingMediaHydration(
+                ChatMessage message,
+                Message.Types.StickerMessage sticker,
+                Message.Types.ImageMessage image,
+                string messageId,
+                string chatJid)
+            {
+            }
+
+            public Task ApplyIncomingRevocationAsync(string chatJid, string targetMessageId, string envelopeMessageId = null) =>
+                Task.CompletedTask;
+            public Task ApplyIncomingPinInChatAsync(
+                string chatJid,
+                string targetMessageId,
+                bool pin,
+                long senderTimestampMs,
+                uint durationSeconds = 0) => Task.CompletedTask;
+            public Task<bool> ApplyAppStateDeleteMessageAsync(string chatJid, string messageId) =>
+                Task.FromResult(false);
+            public Task<bool> ApplyPinnedMessageStateAsync(
+                string chatJid,
+                string messageId,
+                bool isPinned,
+                DateTime? pinnedAtUtc,
+                DateTime? expiresAtUtc) => Task.FromResult(false);
+            public IncomingTimelineAcceptResult AcceptIncomingTimeline(
+                string chatJid,
+                ChatMessage message,
+                bool isGroup) => default;
+            public void QueueIncomingPersist(string chatJid, ChatMessage message) { }
+            public bool EnrichOfflineDuplicateFast(
+                string chatJid,
+                string messageId,
+                bool isFromMe,
+                string participantJid,
+                string verifiedName,
+                string pushName) => false;
+            public Task<bool> ApplyIncomingReactionAsync(Message message, ChatMessageMapContext context) =>
+                Task.FromResult(false);
+            public Task FinalizeAliasConsolidateAsync(
+                string canonicalChatJid,
+                string aliasSourceChatJid,
+                string messageId,
+                ChatMessage consolidatedMessage) => Task.CompletedTask;
+            public bool HasCachedMessageId(string chatJid, string messageId, bool isGroup) => false;
+            public Task ApplyOutgoingStatusAsync(string messageId, string status, string error = null) =>
+                Task.CompletedTask;
+            public Task HandleReceiptAsync(Unison.Baileys.Protocol.BinaryNode node) => Task.CompletedTask;
+            public void AcceptOutgoingTimeline(string chatJid, ChatMessage message) { }
+            public bool ApplyHeldMessageState(string chatJid, ChatMessage message) => false;
+            public Task<List<ChatMessage>> LoadLiveOverlayAsync(string chatJid) =>
+                Task.FromResult(new List<ChatMessage>());
+            public Task ApplyIncomingDuplicateAsync(IncomingDuplicateApplyRequest request) =>
+                Task.CompletedTask;
+            public Task ApplyIncomingAliasConsolidatedAsync(IncomingAliasConsolidatedApplyRequest request) =>
+                Task.CompletedTask;
+            public Task ApplyIncomingInsertedAsync(IncomingInsertedApplyRequest request) =>
+                Task.CompletedTask;
+            public bool TryHandleOfflineDuplicateFast(
+                string chatJid,
+                string messageId,
+                bool isGroup,
+                bool isFromMe,
+                string participantJid,
+                string verifiedName,
+                string pushName) => false;
+            public Task<bool> ApplyIncomingReactionFromEnvelopeAsync(
+                Message message,
+                string chatJid,
+                string messageId,
+                bool isGroup,
+                bool isFromMe,
+                string participantJid,
+                string selfDisplayName,
+                DateTime timestampUtc) => Task.FromResult(false);
+            public Task ProcessIncomingChatContentAsync(IncomingChatContentProcessRequest request) =>
+                Task.CompletedTask;
+            public Task<bool> TryApplyIncomingEnvelopeControlAsync(
+                Message message,
+                string chatJid,
+                string messageId,
+                bool isGroup,
+                bool isFromMe,
+                string participantJid,
+                string selfDisplayName,
+                DateTime timestampUtc) => Task.FromResult(false);
+            public Task RouteIncomingChatEnvelopeAsync(IncomingRoutedEnvelopeRequest request) =>
+                Task.CompletedTask;
+            public Task HandleIncomingPlaceholderAsync(
+                string chatJid,
+                string participantJid,
+                string messageId,
+                bool isFromMe,
+                DateTime timestampUtc,
+                string placeholderType) => Task.CompletedTask;
+            public Task NoteMissingMessageAndRequestResendAsync(
+                string chatJid,
+                string participantJid,
+                string messageId,
+                bool isFromMe,
+                DateTime timestampUtc,
+                string reason,
+                string resendTrigger) => Task.CompletedTask;
+            public void HandlePlaceholderResendAck(string ackClass, string ackId, string ackError) { }
+            public void NotifyInboundWireAck(string ackClass, string ackId, string ackError) { }
+            public Task NotifyOutgoingStatusAsync(string messageId, string status, string error) =>
+                Task.CompletedTask;
+            public Task NotifyReceiptAsync(Unison.Baileys.Protocol.BinaryNode node) => Task.CompletedTask;
+            public void SchedulePlaceholderResendDrain(string trigger, int maxRequests = 4) { }
+            public Task RecoverPendingIncomingJournalAsync() => Task.CompletedTask;
+            public Task NotifyOfflineReplaySettledAsync(
+                string reason,
+                bool schedulePlaceholderDrain,
+                int maxDrainRequests = 8) => Task.CompletedTask;
+            public Task NotifyIncomingDecryptedAsync(IncomingDecryptedNotifyRequest request) =>
+                Task.CompletedTask;
+            public Task ApplyPeerDataPlaceholderResendsAsync(
+                string stanzaId,
+                IEnumerable<Message.Types.PeerDataOperationRequestResponseMessage.Types.PeerDataOperationResult> results) =>
+                Task.CompletedTask;
+            public Task HandlePeerDataOperationResponseAsync(
+                Message.Types.PeerDataOperationRequestResponseMessage response) => Task.CompletedTask;
         }
     }
 }

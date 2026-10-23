@@ -25,6 +25,9 @@ namespace Unison.WhatsAppClient.Helpers
         private readonly IOutgoingMessageHost _host;
         private readonly IJidResolver _jids;
         private readonly IMediaCache _mediaCache;
+        private readonly Action<string> _notifyChatChanged;
+        private readonly Action<string, ChatMessage> _acceptOutgoing;
+        private readonly Func<string, ChatMessage, ChatPreviewKind, Task> _showLocalPreview;
         private readonly Func<DateTime> _utcNow;
         private readonly Func<string> _newMessageId;
 
@@ -32,12 +35,21 @@ namespace Unison.WhatsAppClient.Helpers
             IOutgoingMessageHost host,
             IJidResolver jids,
             IMediaCache mediaCache,
+            Action<string> notifyChatChanged,
+            Action<string, ChatMessage> acceptOutgoing,
+            Func<string, ChatMessage, ChatPreviewKind, Task> showLocalPreview,
             Func<DateTime> utcNow = null,
             Func<string> newMessageId = null)
         {
             _host = host ?? throw new ArgumentNullException(nameof(host));
             _jids = jids ?? throw new ArgumentNullException(nameof(jids));
             _mediaCache = mediaCache ?? throw new ArgumentNullException(nameof(mediaCache));
+            _notifyChatChanged = notifyChatChanged
+                ?? throw new ArgumentNullException(nameof(notifyChatChanged));
+            _acceptOutgoing = acceptOutgoing
+                ?? throw new ArgumentNullException(nameof(acceptOutgoing));
+            _showLocalPreview = showLocalPreview
+                ?? throw new ArgumentNullException(nameof(showLocalPreview));
             _utcNow = utcNow ?? (() => DateTime.UtcNow);
             _newMessageId = newMessageId ?? NewRandomMessageId;
         }
@@ -183,9 +195,9 @@ namespace Unison.WhatsAppClient.Helpers
 
         private async Task SendAsync(string chatJid, ChatMessage message, ChatPreviewKind kind, Func<Task> upload)
         {
-            _host.AcceptOutgoing(chatJid, message);
-            await _host.ShowLocalSendPreviewAsync(chatJid, message, kind);
-            _host.NotifyChatChanged(chatJid);
+            _acceptOutgoing(chatJid, message);
+            await _showLocalPreview(chatJid, message, kind);
+            _notifyChatChanged(chatJid);
             await _host.PersistLiveAsync(chatJid, message);
 
             try
@@ -207,7 +219,7 @@ namespace Unison.WhatsAppClient.Helpers
 
             await _host.PersistLiveAsync(chatJid, message);
             _host.QueueForPersist(chatJid, message);
-            _host.NotifyChatChanged(chatJid);
+            _notifyChatChanged(chatJid);
         }
 
         private static string NewRandomMessageId()

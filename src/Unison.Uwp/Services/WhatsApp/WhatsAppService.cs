@@ -43,7 +43,7 @@ using Unison.WhatsAppClient.Helpers;
 
 namespace Unison.Uwp.Services.WhatsApp
 {
-    public partial class WhatsAppService : INotifyPropertyChanged, IWhatsAppService, IMediaDownloadHost, IAvatarReport, IOfflineReplayHost, IPlaceholderResendSocket, IHistoryOnDemandSocket, IRuntimeSnapshotSource, IDeferredAvatarResolution, IAppStateLocalHost, IConversationResyncHost, IHistorySyncHost, IUsyncAliasHost, IStartupUiHost, IJidAliasPersistence, IIncomingMessageEnqueueHost, Unison.WhatsAppClient.Abstractions.IResolvedNameApplyHost
+    public partial class WhatsAppService : INotifyPropertyChanged, IWhatsAppService, IMediaDownloadHost, IOfflineReplayHost, IPlaceholderResendSocket, IHistoryOnDemandSocket, IRuntimeSnapshotSource, IDeferredAvatarResolution, IAppStateLocalHost, IConversationResyncHost, IHistorySyncHost, IUsyncAliasHost, IStartupUiHost, IJidAliasPersistence, IIncomingMessageEnqueueHost, Unison.WhatsAppClient.Abstractions.IResolvedNameApplyHost
     {
         public event PropertyChangedEventHandler PropertyChanged;
         protected void OnPropertyChanged([CallerMemberName] string propertyName = null)
@@ -840,23 +840,6 @@ namespace Unison.Uwp.Services.WhatsApp
         private void ReportStreamError(string code)
         {
             RaiseReport(() => OnStreamError?.Invoke(this, code), nameof(OnStreamError));
-        }
-
-        void IAvatarReport.ReportCached(string jid, string localUri)
-        {
-            ReportAvatarCached(jid, localUri);
-        }
-
-        private void ReportAvatarCached(string jid, string localAvatarUrl)
-        {
-            if (string.IsNullOrWhiteSpace(jid) || string.IsNullOrWhiteSpace(localAvatarUrl))
-            {
-                return;
-            }
-
-            RaiseReport(
-                () => Contacts?.NotifyAvatarCached(jid, localAvatarUrl),
-                nameof(IContactService.NotifyAvatarCached));
         }
 
         public string CurrentConnectionStatus { get; private set; }
@@ -4047,12 +4030,6 @@ namespace Unison.Uwp.Services.WhatsApp
 
                 return null;
                 });
-        }
-
-        private void QueueChatMessagesChanged(string chatJid)
-        {
-            // Façade NotifyChatMessagesChanged owns UI marshal + chat-state nudge.
-            Messages?.NotifyChatMessagesChanged(chatJid);
         }
 
         bool Unison.WhatsAppClient.Abstractions.IResolvedNameApplyHost.HasSelfCredentials =>

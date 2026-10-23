@@ -1695,8 +1695,7 @@ namespace Unison.Uwp.Services.WhatsApp
                     node.Attrs.TryGetValue("class", out var ackClass);
                     node.Attrs.TryGetValue("id", out var ackId);
                     node.Attrs.TryGetValue("error", out var ackError);
-                    Messages?.HandlePlaceholderResendAck(ackClass, ackId, ackError);
-                    History?.HandleOnDemandAck(ackClass, ackId, ackError);
+                    Messages?.NotifyInboundWireAck(ackClass, ackId, ackError);
                 }
 
                 // Collect pushname from notify attribute on incoming messages
@@ -1802,31 +1801,13 @@ namespace Unison.Uwp.Services.WhatsApp
             socket.OnOutgoingMessageStatusChanged += (s, e) =>
             {
                 if (!IsCurrentSocket(s) || Messages == null) return;
-                _ = Messages.ApplyOutgoingStatusAsync(e?.MessageId, e?.Status, e?.Error)
-                    .ContinueWith(t =>
-                    {
-                        if (t.IsFaulted && t.Exception != null)
-                        {
-                            Debug.WriteLine(
-                                "[WhatsAppService] Outgoing status update failed for " +
-                                (e?.MessageId ?? "?") + ": " +
-                                t.Exception.GetBaseException().Message);
-                        }
-                    }, TaskScheduler.Default);
+                _ = Messages.NotifyOutgoingStatusAsync(e?.MessageId, e?.Status, e?.Error);
             };
 
             socket.OnReceiptReceived += (s, node) =>
             {
                 if (!IsCurrentSocket(s) || Messages == null) return;
-                _ = Messages.HandleReceiptAsync(node).ContinueWith(t =>
-                {
-                    if (t.IsFaulted && t.Exception != null)
-                    {
-                        Debug.WriteLine(
-                            "[WhatsAppService] Receipt processing failed: " +
-                            t.Exception.GetBaseException().Message);
-                    }
-                }, TaskScheduler.Default);
+                _ = Messages.NotifyReceiptAsync(node);
             };
 
             socket.OnLinkCodeCompanionReg += (s, node) =>

@@ -22,6 +22,7 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
     {
         private readonly IWhatsAppService _client;
         private readonly IMediaDownloadHost _host;
+        private readonly Func<IMessageService> _messages;
         private readonly IEncryptedMediaDownloader _downloader;
         private readonly IJidResolver _jids;
         private readonly IMediaCache _cache;
@@ -32,6 +33,7 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
         public MediaAvailability(
             IWhatsAppService client,
             IMediaDownloadHost host,
+            Func<IMessageService> messages,
             IEncryptedMediaDownloader downloader,
             IJidResolver jids,
             IMediaCache cache,
@@ -42,6 +44,7 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
             _client = client ?? throw new ArgumentNullException(nameof(client));
             _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
             _host = host ?? throw new ArgumentNullException(nameof(host));
+            _messages = messages ?? throw new ArgumentNullException(nameof(messages));
             _downloader = downloader ?? throw new ArgumentNullException(nameof(downloader));
             _jids = jids ?? throw new ArgumentNullException(nameof(jids));
             _cache = cache ?? throw new ArgumentNullException(nameof(cache));
@@ -449,7 +452,7 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
             }
 
             await _host.SaveMessageQuietAsync(chatJid, message);
-            _host.NotifyMessagesChanged(chatJid);
+            _messages()?.NotifyChatMessagesChanged(chatJid);
         }
 
         private async Task<string> EnsureWebPDisplayUriAsync(ChatMessage message)
@@ -815,7 +818,7 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
         {
             await _host.SaveMessageQuietAsync(chatJid, message);
             _catalog.Schedule();
-            _host.NotifyMessagesChanged(chatJid);
+            _messages()?.NotifyChatMessagesChanged(chatJid);
         }
 
         private Task<string> SaveCachedImageAsync(byte[] imageBytes, string fileBase, string mimeType)

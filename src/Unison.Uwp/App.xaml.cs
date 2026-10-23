@@ -512,6 +512,7 @@ namespace Unison.Uwp
             services.AddSingleton<IMediaAvailability>(sp => new MediaAvailability(
                 sp.GetRequiredService<IWhatsAppService>(),
                 sp.GetRequiredService<IMediaDownloadHost>(),
+                () => sp.GetRequiredService<IMessageService>(),
                 sp.GetRequiredService<IEncryptedMediaDownloader>(),
                 sp.GetRequiredService<IJidResolver>(),
                 sp.GetRequiredService<IMediaCache>(),
@@ -592,15 +593,13 @@ namespace Unison.Uwp
             services.AddSingleton<ILidMappingStorage, SqliteLidMappingStorage>();
             services.AddSingleton(sp => new LidMappingStore(sp.GetRequiredService<ILidMappingStorage>()));
 
-            services.AddSingleton<IAvatarReport>(
-                sp => (WhatsAppService)sp.GetRequiredService<IWhatsAppService>());
             services.AddSingleton<IAvatarFetchActions>(sp => sp.GetRequiredService<AvatarFetcher>());
             services.AddSingleton<IChatAvatarFetch>(sp => new ChatAvatarFetch(
                 sp.GetRequiredService<UwpSessionProvider>(),
                 sp.GetRequiredService<IGroupService>(),
                 sp.GetRequiredService<IJidResolver>(),
                 sp.GetRequiredService<IChatStateStore>(),
-                sp.GetRequiredService<IAvatarReport>(),
+                () => sp.GetRequiredService<IContactService>(),
                 sp.GetRequiredService<AvatarFetcher>(),
                 sp.GetRequiredService<IAvatarCache>(),
                 sp.GetRequiredService<AttachedUiDispatcher>(),

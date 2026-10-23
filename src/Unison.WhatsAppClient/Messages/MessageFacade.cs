@@ -160,11 +160,19 @@ namespace Unison.WhatsAppClient.Messages
             _strings = strings;
             _receipts = new ReceiptReader(jids);
 
-            _textSend = new OutgoingTextSend(_outgoingHost, _jids);
+            _textSend = new OutgoingTextSend(
+                _outgoingHost,
+                _jids,
+                NotifyChatMessagesChanged,
+                AcceptOutgoingTimeline,
+                ShowOutgoingLocalPreviewAsync);
             _mediaSend = new OutgoingMediaSend(
                 _outgoingHost,
                 _jids,
-                mediaCache ?? throw new ArgumentNullException(nameof(mediaCache)));
+                mediaCache ?? throw new ArgumentNullException(nameof(mediaCache)),
+                NotifyChatMessagesChanged,
+                AcceptOutgoingTimeline,
+                ShowOutgoingLocalPreviewAsync);
             // systemInfo kept in the ctor for DI compatibility; page sizes match desktop on all devices.
             _ = systemInfo;
 
@@ -287,6 +295,35 @@ namespace Unison.WhatsAppClient.Messages
         }
 
         /// <inheritdoc />
+        public async Task NotifyOutgoingStatusAsync(string messageId, string status, string error)
+        {
+            try
+            {
+                await ApplyOutgoingStatusAsync(messageId, status, error).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine(
+                    "[MessageFacade] Outgoing status update failed for " +
+                    (messageId ?? "?") + ": " + ex.Message);
+            }
+        }
+
+        /// <inheritdoc />
+        public async Task NotifyReceiptAsync(Unison.Baileys.Protocol.BinaryNode node)
+        {
+            try
+            {
+                await HandleReceiptAsync(node).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine(
+                    "[MessageFacade] Receipt processing failed: " + ex.Message);
+            }
+        }
+
+        /// <inheritdoc />
         public async Task HandleReceiptAsync(Unison.Baileys.Protocol.BinaryNode node)
         {
             ReceiptFacts receipt = _receipts.Read(node);
@@ -383,7 +420,7 @@ namespace Unison.WhatsAppClient.Messages
 
             foreach (string chat in changedChats)
             {
-                _outgoingHost.NotifyChatChanged(chat);
+                NotifyChatMessagesChanged(chat);
             }
 
             if (!string.IsNullOrWhiteSpace(error))
@@ -477,7 +514,7 @@ namespace Unison.WhatsAppClient.Messages
             string clientError = null;
             try
             {
-                fromClient = await _outgoingHost.LoadLiveOverlayAsync(jid).ConfigureAwait(false);
+                fromClient = await LoadLiveOverlayAsync(jid).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
@@ -766,7 +803,7 @@ namespace Unison.WhatsAppClient.Messages
             List<ChatMessage> cached = null;
             try
             {
-                cached = await _outgoingHost.LoadLiveOverlayAsync(jid).ConfigureAwait(false);
+                cached = await LoadLiveOverlayAsync(jid).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
@@ -834,7 +871,7 @@ namespace Unison.WhatsAppClient.Messages
             List<ChatMessage> fromClient = null;
             try
             {
-                fromClient = await _outgoingHost.LoadLiveOverlayAsync(jid).ConfigureAwait(false);
+                fromClient = await LoadLiveOverlayAsync(jid).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
@@ -1578,7 +1615,7 @@ namespace Unison.WhatsAppClient.Messages
             if (_activeChat.IsOpen(canonical))
             {
                 // Host posts to NotifyChatMessagesChanged + chat-state store.
-                _outgoingHost.NotifyChatChanged(canonical);
+                NotifyChatMessagesChanged(canonical);
             }
 
             ChatMessage latest = null;
@@ -1608,6 +1645,27 @@ namespace Unison.WhatsAppClient.Messages
                 message,
                 MaxActiveChatMessagesInMemory,
                 DateTime.UtcNow);
+        }
+
+        private Task ShowOutgoingLocalPreviewAsync(
+            string chatJid,
+            ChatMessage message,
+            ChatPreviewKind kind)
+        {
+            IChatService chats = _resolveChats();
+            if (chats == null || message == null)
+            {
+                return Task.CompletedTask;
+            }
+
+            return chats.ShowLocalSendPreviewAsync(
+                chatJid,
+                message.Content,
+                message.Timestamp,
+                kind,
+                message.MentionedJids,
+                message.Id,
+                message.Status);
         }
 
         /// <inheritdoc />
@@ -1740,7 +1798,7 @@ namespace Unison.WhatsAppClient.Messages
                     "[MessageFacade] Deleting " + messageId + " from storage failed: " + ex.Message);
             }
 
-            _outgoingHost.NotifyChatChanged(canonical);
+            NotifyChatMessagesChanged(canonical);
             return true;
         }
 
@@ -1811,7 +1869,7 @@ namespace Unison.WhatsAppClient.Messages
                 await PersistPinnedMessageToSqliteAsync(canonical, messageId, state, target)
                     .ConfigureAwait(false);
                 QueueIncomingPersist(canonical, target);
-                _outgoingHost.NotifyChatChanged(canonical);
+                NotifyChatMessagesChanged(canonical);
                 return true;
             }
 
@@ -1860,6 +1918,13 @@ namespace Unison.WhatsAppClient.Messages
                 chatJid,
                 messageId,
                 resendTrigger ?? "placeholder-message");
+        }
+
+        /// <inheritdoc />
+        public void NotifyInboundWireAck(string ackClass, string ackId, string ackError)
+        {
+            HandlePlaceholderResendAck(ackClass, ackId, ackError);
+            _history.HandleOnDemandAck(ackClass, ackId, ackError);
         }
 
         /// <inheritdoc />
@@ -2936,7 +3001,7 @@ namespace Unison.WhatsAppClient.Messages
             if (timeline.ExistingChanged && timeline.Message != null)
             {
                 QueueIncomingPersist(jid, timeline.Message);
-                _outgoingHost.NotifyChatChanged(jid);
+                NotifyChatMessagesChanged(jid);
             }
 
             if (timeline.Kind == IncomingTimelineAcceptKind.AliasLinkedDuplicate)
@@ -3020,7 +3085,7 @@ namespace Unison.WhatsAppClient.Messages
 
                 if (_activeChat.IsOpen(jid))
                 {
-                    _outgoingHost.NotifyChatChanged(jid);
+                    NotifyChatMessagesChanged(jid);
                 }
                 else
                 {
@@ -3032,7 +3097,7 @@ namespace Unison.WhatsAppClient.Messages
 
             if (_activeChat.IsOpen(jid))
             {
-                _outgoingHost.NotifyChatChanged(jid);
+                NotifyChatMessagesChanged(jid);
             }
 
             string aliasLid = null;
@@ -3311,7 +3376,7 @@ namespace Unison.WhatsAppClient.Messages
 
                 if (_activeChat.IsOpen(jid))
                 {
-                    _outgoingHost.NotifyChatChanged(jid);
+                    NotifyChatMessagesChanged(jid);
                 }
             }
             else

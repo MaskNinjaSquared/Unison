@@ -2,6 +2,15 @@
 
 Newest first.
 
+## Phase B — outgoing UI notify/accept/preview; media + avatar off host; wire Notify*
+
+`OutgoingTextSend` / `OutgoingMediaSend` call façade callbacks for accept, local
+preview, and `NotifyChatMessagesChanged` (removed from `IOutgoingMessageHost`).
+`LoadLiveOverlay` is self-call on `MessageFacade`. Media download and
+`ChatAvatarFetch` notify via lazy `IMessageService` / `IContactService`
+(`IAvatarReport` gone). Socket acks/status/receipts use
+`NotifyInboundWireAck` / `NotifyOutgoingStatusAsync` / `NotifyReceiptAsync`.
+
 ## Phase B — MissingMessageLedger + PlaceholderResendDispatch on MessageFacade
 
 Ledger, schedule, drain, ack apply, and peer-data claim live on `MessageFacade`.

@@ -35,6 +35,20 @@ namespace Unison.Core.Tests.Helpers
         private OutgoingTextSend Create() => new OutgoingTextSend(
             _host,
             _jids,
+            jid => _host.Log.Add("changed:" + jid),
+            (chatJid, message) =>
+            {
+                _host.Log.Add("accept:" + chatJid + ":" + message.Status);
+                if (_host.StatusAppliedOnAccept != null)
+                {
+                    message.Status = _host.StatusAppliedOnAccept;
+                }
+            },
+            (chatJid, message, kind) =>
+            {
+                _host.Log.Add("preview:" + chatJid + ":" + kind);
+                return Task.CompletedTask;
+            },
             () => "3EB0ID",
             () => At,
             d => { _delays.Add(d); return Task.CompletedTask; });
@@ -228,23 +242,6 @@ namespace Unison.Core.Tests.Helpers
             public Task SendDocumentAsync(string jid, OutgoingDocument document, string messageId) =>
                 throw new NotSupportedException();
 
-            public void AcceptOutgoing(string chatJid, ChatMessage message)
-            {
-                Log.Add("accept:" + chatJid + ":" + message.Status);
-                if (StatusAppliedOnAccept != null)
-                {
-                    message.Status = StatusAppliedOnAccept;
-                }
-            }
-
-            public Task ShowLocalSendPreviewAsync(string chatJid, ChatMessage message, ChatPreviewKind kind)
-            {
-                Log.Add("preview:" + chatJid + ":" + kind);
-                return Task.CompletedTask;
-            }
-
-            public void NotifyChatChanged(string chatJid) => Log.Add("changed:" + chatJid);
-
             public Task PersistLiveAsync(string chatJid, ChatMessage message)
             {
                 Log.Add("persist-live:" + chatJid + ":" + message.Status);
@@ -282,8 +279,6 @@ namespace Unison.Core.Tests.Helpers
                 Log.Add("error");
             }
 
-            public Task<List<ChatMessage>> LoadLiveOverlayAsync(string chatJid) =>
-                throw new NotSupportedException();
         }
 
         private sealed class FakeJids : IJidResolver

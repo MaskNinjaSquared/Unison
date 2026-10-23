@@ -494,6 +494,23 @@ namespace Unison.Core.Contracts.WhatsApp
         void HandlePlaceholderResendAck(string ackClass, string ackId, string ackError);
 
         /// <summary>
+        /// Host socket path: one inbound <c>ack</c> node — placeholder resend then history
+        /// on-demand (history owns its own filter).
+        /// </summary>
+        void NotifyInboundWireAck(string ackClass, string ackId, string ackError);
+
+        /// <summary>
+        /// Host socket path: outgoing delivery/read status from the live transport.
+        /// Faults are logged on the façade (host must not swallow them).
+        /// </summary>
+        Task NotifyOutgoingStatusAsync(string messageId, string status, string error);
+
+        /// <summary>
+        /// Host socket path: receipt node from the live transport. Faults are logged here.
+        /// </summary>
+        Task NotifyReceiptAsync(Unison.Baileys.Protocol.BinaryNode node);
+
+        /// <summary>
         /// After offline replay (or a follow-up): schedule a deferred pass that asks the phone
         /// for outstanding placeholder resends. Host only decides <em>when</em>; the façade owns
         /// the drain loop.

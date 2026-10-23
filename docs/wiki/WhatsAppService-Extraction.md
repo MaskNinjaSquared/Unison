@@ -169,10 +169,13 @@ Post-session chat envelopes route on `MessageFacade` (`RouteIncomingChatEnvelope
 incl. alias hints, controls, content, placeholder note/resend, full peer-data
 response, placeholder ack, socket missing-message, receipts). Missing-message
 ledger + `PlaceholderResendDispatch` also live on `MessageFacade`; the host only
-implements `IPlaceholderResendSocket`. Stanza `notify` push-name is
-`ContactFacade.ApplyStanzaNotifyPushName`. History-on-demand wire acks are
-`HistoryFacade.HandleOnDemandAck`. Pump keeps queue lanes and session-only App
-State. Persistence flush timer / `ForgetChatStorage` / Connection lifecycle stay
+implements `IPlaceholderResendSocket`. Outgoing accept / local preview / chat-changed
+notify are façade callbacks (not `IOutgoingMessageHost`). Media and avatar cache
+notify go to `IMessageService` / `IContactService` directly. Socket wire acks,
+outgoing status, and receipts use `NotifyInboundWireAck` /
+`NotifyOutgoingStatusAsync` / `NotifyReceiptAsync`. Stanza `notify` push-name is
+`ContactFacade.ApplyStanzaNotifyPushName`. Pump keeps queue lanes and session-only
+App State. Persistence flush timer / `ForgetChatStorage` / Connection lifecycle stay
 on the host (not this phase).
 
 ### Facades still depend on the client

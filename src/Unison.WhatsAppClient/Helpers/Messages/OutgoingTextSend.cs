@@ -21,6 +21,9 @@ namespace Unison.WhatsAppClient.Helpers
     {
         private readonly IOutgoingMessageHost _host;
         private readonly IJidResolver _jids;
+        private readonly Action<string> _notifyChatChanged;
+        private readonly Action<string, ChatMessage> _acceptOutgoing;
+        private readonly Func<string, ChatMessage, ChatPreviewKind, Task> _showLocalPreview;
         private readonly Func<string> _newMessageId;
         private readonly Func<DateTime> _utcNow;
         private readonly Func<TimeSpan, Task> _delay;
@@ -28,12 +31,21 @@ namespace Unison.WhatsAppClient.Helpers
         public OutgoingTextSend(
             IOutgoingMessageHost host,
             IJidResolver jids,
+            Action<string> notifyChatChanged,
+            Action<string, ChatMessage> acceptOutgoing,
+            Func<string, ChatMessage, ChatPreviewKind, Task> showLocalPreview,
             Func<string> newMessageId = null,
             Func<DateTime> utcNow = null,
             Func<TimeSpan, Task> delay = null)
         {
             _host = host ?? throw new ArgumentNullException(nameof(host));
             _jids = jids ?? throw new ArgumentNullException(nameof(jids));
+            _notifyChatChanged = notifyChatChanged
+                ?? throw new ArgumentNullException(nameof(notifyChatChanged));
+            _acceptOutgoing = acceptOutgoing
+                ?? throw new ArgumentNullException(nameof(acceptOutgoing));
+            _showLocalPreview = showLocalPreview
+                ?? throw new ArgumentNullException(nameof(showLocalPreview));
             _newMessageId = newMessageId ?? NewRandomMessageId;
             _utcNow = utcNow ?? (() => DateTime.UtcNow);
             _delay = delay ?? Task.Delay;
@@ -77,9 +89,9 @@ namespace Unison.WhatsAppClient.Helpers
                 message.MentionAll,
                 message.Quote);
 
-            _host.AcceptOutgoing(chatJid, bubble);
-            await _host.ShowLocalSendPreviewAsync(chatJid, bubble, ChatPreviewKind.Text);
-            _host.NotifyChatChanged(chatJid);
+            _acceptOutgoing(chatJid, bubble);
+            await _showLocalPreview(chatJid, bubble, ChatPreviewKind.Text);
+            _notifyChatChanged(chatJid);
             await _host.PersistLiveAsync(chatJid, bubble);
 
             Exception failure = await SendWithRetryAsync(chatJid, message, messageId);
@@ -103,7 +115,7 @@ namespace Unison.WhatsAppClient.Helpers
 
             await _host.PersistLiveAsync(chatJid, bubble);
             _host.QueueForPersist(chatJid, bubble);
-            _host.NotifyChatChanged(chatJid);
+            _notifyChatChanged(chatJid);
             return bubble;
         }
 

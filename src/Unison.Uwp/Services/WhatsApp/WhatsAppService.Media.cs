@@ -44,11 +44,6 @@ namespace Unison.Uwp.Services.WhatsApp
             return SaveMessageAsync(chatJid, message);
         }
 
-        void IMediaDownloadHost.NotifyMessagesChanged(string chatJid)
-        {
-            QueueChatMessagesChanged(chatJid);
-        }
-
         bool IMediaDownloadHost.HasLiveSocket => _socket != null;
 
     }

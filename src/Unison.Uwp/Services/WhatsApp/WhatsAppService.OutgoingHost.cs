@@ -51,33 +51,6 @@ namespace Unison.Uwp.Services.WhatsApp
                 messageId);
         }
 
-        void IOutgoingMessageHost.AcceptOutgoing(string chatJid, ChatMessage message)
-        {
-            if (Messages != null)
-            {
-                Messages.AcceptOutgoingTimeline(chatJid, message);
-            }
-        }
-
-        Task IOutgoingMessageHost.ShowLocalSendPreviewAsync(string chatJid, ChatMessage message, ChatPreviewKind kind)
-        {
-            if (ChatFacade != null)
-            {
-                return ChatFacade.ShowLocalSendPreviewAsync(
-                    chatJid,
-                    message.Content,
-                    message.Timestamp,
-                    kind,
-                    message.MentionedJids,
-                    message.Id,
-                    message.Status);
-            }
-
-            return Task.CompletedTask;
-        }
-
-        void IOutgoingMessageHost.NotifyChatChanged(string chatJid) => QueueChatMessagesChanged(chatJid);
-
         Task IOutgoingMessageHost.PersistLiveAsync(string chatJid, ChatMessage message)
         {
             return PersistLiveMessagesAsync(chatJid, new[] { message });
@@ -184,10 +157,5 @@ namespace Unison.Uwp.Services.WhatsApp
         }
 
         void IOutgoingMessageHost.ReportError(Exception error) => OnError?.Invoke(this, error);
-
-        Task<List<ChatMessage>> IOutgoingMessageHost.LoadLiveOverlayAsync(string chatJid) =>
-            Messages != null
-                ? Messages.LoadLiveOverlayAsync(chatJid)
-                : Task.FromResult(new List<ChatMessage>());
     }
 }
