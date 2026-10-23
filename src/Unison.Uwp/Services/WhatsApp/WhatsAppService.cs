@@ -169,6 +169,13 @@ namespace Unison.Uwp.Services.WhatsApp
         private IGroupService Groups => _resolveGroups != null ? _resolveGroups() : null;
 
         private IStatusService Status => _resolveStatus != null ? _resolveStatus() : null;
+
+        /// <summary>App-state sync and other UWP hosts that still hold the concrete client.</summary>
+        internal IMessageService MessagesFacade => Messages;
+
+        internal IChatService ChatsFacade => ChatFacade;
+
+        internal IContactService ContactsFacade => Contacts;
         private readonly IPersonStore _personStore;
         private readonly IGroupRosterStore _groupRosterStore;
         private readonly IChatStore _chatStore;

@@ -1,51 +1,15 @@
 using System;
 using System.Collections.Generic;
-using System.Collections.ObjectModel;
 using System.Diagnostics;
-using System.IO;
 using System.Linq;
-using System.Reflection;
 using System.Threading.Tasks;
-using Unison.Uwp.Client;
-using Unison.Core.Helpers;
-using Unison.Core.Mappers;
-using Unison.Core.Models;
-using Unison.WhatsAppClient.Helpers;
-using Unison.Baileys.Protocol;
-using Unison.Uwp.Data;
-using Unison.Baileys.Crypto;
-using Unison.Uwp.Transport;
-using Proto;
-using Google.Protobuf;
-using System.Threading;
-using System.Runtime.InteropServices.WindowsRuntime;
-
-using System.ComponentModel;
-using System.Runtime.CompilerServices;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
-using Unison.Background;
-using Unison.Baileys.Diagnostics;
-using Unison.Baileys.Client;
-using Unison.Core.Constants;
-using Unison.Core.Contracts;
 using Unison.Core.Contracts.WhatsApp;
-using Unison.Core.State;
-using Unison.Socket.UseCases.Contacts;
-using Unison.Uwp.Helpers;
-using Microsoft.Extensions.DependencyInjection;
+using Unison.Core.Models;
 
 namespace Unison.Uwp.Services.WhatsApp
 {
     public partial class WhatsAppService
     {
-
-        /// <summary>App-state sync entry: self push-name is owned by <see cref="IContactService"/>.</summary>
-        internal Task ApplyAppStateSelfPushNameAsync(string name) =>
-            Contacts != null
-                ? Contacts.ApplyRemoteSelfPushNameAsync(name)
-                : Task.CompletedTask;
-
         /// <summary>
         /// Durable half of a chat deletion. RAM + badge are owned by
         /// <see cref="IChatService.ApplyAppStateDeleteChatAsync"/>.
@@ -54,12 +18,6 @@ namespace Unison.Uwp.Services.WhatsApp
             string canonicalJid,
             IReadOnlyList<string> storeKeys) =>
             ForgetChatInStorageAsync(canonicalJid, storeKeys);
-
-        /// <summary>App-state / SocketBridge entry: forwards to <see cref="IChatService"/>.</summary>
-        internal Task ApplyAppStateDeleteChatAsync(string jid) =>
-            ChatFacade != null
-                ? ChatFacade.ApplyAppStateDeleteChatAsync(jid)
-                : Task.CompletedTask;
 
         /// <summary>
         /// The persistent half of a chat deletion: tombstone the list preview, drop the stored
@@ -113,9 +71,6 @@ namespace Unison.Uwp.Services.WhatsApp
 
             try
             {
-                // Snapshot on the UI thread. By here we are several awaits deep on a pool
-                // thread, and Chats is bound to the list: enumerating it while the UI adds a
-                // row throws, and the catch below would turn that into a silently skipped save.
                 List<ChatItem> snapshot = null;
                 await _ui.RunAsync(() => snapshot = Chats.Where(c => c != null).ToList());
                 await PersistChatCatalogAsync(snapshot ?? new List<ChatItem>()).ConfigureAwait(false);
@@ -125,12 +80,5 @@ namespace Unison.Uwp.Services.WhatsApp
                 Debug.WriteLine("[WhatsAppService] Chat catalog persist failed: " + ex.Message);
             }
         }
-
-        /// <summary>App-state / SocketBridge entry: forwards to <see cref="IMessageService"/>.</summary>
-        internal Task<bool> ApplyAppStateDeleteMessageAsync(string jid, string messageId) =>
-            Messages != null
-                ? Messages.ApplyAppStateDeleteMessageAsync(jid, messageId)
-                : Task.FromResult(false);
-
     }
 }

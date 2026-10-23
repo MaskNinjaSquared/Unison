@@ -156,6 +156,50 @@ namespace Unison.WhatsAppClient.Chats
         }
 
         /// <inheritdoc />
+        public async Task ApplyIncomingJournalRecoveryPreviewsAsync(
+            IEnumerable<KeyValuePair<string, ChatMessage>> latestByChat)
+        {
+            if (latestByChat == null)
+            {
+                return;
+            }
+
+            string selfFallback = _strings.Get("Chat_SelfFallbackName", "You");
+            foreach (KeyValuePair<string, ChatMessage> item in latestByChat)
+            {
+                ChatMessage message = item.Value;
+                ChatPreviewKind kind = ChatPreviewNormalizer.InferKindFromMessage(message);
+                string preview = message?.Content;
+                if (string.IsNullOrWhiteSpace(preview) && kind != ChatPreviewKind.Revoked)
+                {
+                    preview = MediaPreviewTag.ForKind(kind) ?? "[Message]";
+                }
+
+                bool isGroupMsg = JidHelper.IsGroupJid(item.Key);
+                string stripParticipant = isGroupMsg
+                    ? ParticipantStripIdentity.PreferForDisplay(
+                        message?.ParticipantJid,
+                        _jids.GetCanonicalJid(message?.ParticipantJid))
+                    : null;
+
+                await RefreshChatPreviewAsync(
+                        item.Key,
+                        preview,
+                        message?.Timestamp ?? DateTime.MinValue,
+                        message?.IsFromMe == true,
+                        kind,
+                        ChatPreviewNormalizer.FormatListAuthorPrefix(
+                            message,
+                            isGroupMsg,
+                            selfFallback,
+                            stripParticipant),
+                        stripParticipant,
+                        isGroupMsg && message?.IsFromMe != true ? message?.SenderName : null)
+                    .ConfigureAwait(false);
+            }
+        }
+
+        /// <inheritdoc />
         public Task ApplyIncomingEnvelopePreviewAsync(IncomingEnvelopePreviewRequest request)
         {
             if (request == null || string.IsNullOrWhiteSpace(request.Jid))

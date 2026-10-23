@@ -103,6 +103,12 @@ namespace Unison.Core.Contracts.WhatsApp
         Task ApplyIncomingEnvelopePreviewAsync(IncomingEnvelopePreviewRequest request);
 
         /// <summary>
+        /// After journal recovery flush: re-tip only the chats that got recovered messages.
+        /// </summary>
+        Task ApplyIncomingJournalRecoveryPreviewsAsync(
+            IEnumerable<KeyValuePair<string, ChatMessage>> latestByChat);
+
+        /// <summary>
         /// Applies every waiting offline replay tip to the list. A failure puts them back and rethrows.
         /// </summary>
         Task FlushOfflineReplayTipsAsync(string reason);

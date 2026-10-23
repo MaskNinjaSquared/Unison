@@ -1419,7 +1419,9 @@ namespace Unison.Uwp.Services
             {
                 if (!string.IsNullOrEmpty(chatJid) && !string.IsNullOrEmpty(messageId))
                 {
-                    return await _owner.ApplyAppStateDeleteMessageAsync(chatJid, messageId);
+                    return _owner.MessagesFacade != null
+                        && await _owner.MessagesFacade.ApplyAppStateDeleteMessageAsync(chatJid, messageId)
+                            .ConfigureAwait(false);
                 }
 
                 return false;
@@ -1460,7 +1462,12 @@ namespace Unison.Uwp.Services
 
             if (value.PushNameSetting != null && !string.IsNullOrWhiteSpace(value.PushNameSetting.Name))
             {
-                await _owner.ApplyAppStateSelfPushNameAsync(value.PushNameSetting.Name);
+                if (_owner.ContactsFacade != null)
+                {
+                    await _owner.ContactsFacade.ApplyRemoteSelfPushNameAsync(value.PushNameSetting.Name)
+                        .ConfigureAwait(false);
+                }
+
                 return true;
             }
 
@@ -1472,13 +1479,19 @@ namespace Unison.Uwp.Services
 
             if (value.DeleteChatAction != null && !string.IsNullOrWhiteSpace(chatJid))
             {
-                await _owner.ApplyAppStateDeleteChatAsync(chatJid);
+                if (_owner.ChatsFacade != null)
+                {
+                    await _owner.ChatsFacade.ApplyAppStateDeleteChatAsync(chatJid).ConfigureAwait(false);
+                }
+
                 return true;
             }
 
             if (value.DeleteMessageForMeAction != null && !string.IsNullOrWhiteSpace(chatJid) && !string.IsNullOrWhiteSpace(messageId))
             {
-                return await _owner.ApplyAppStateDeleteMessageAsync(chatJid, messageId);
+                return _owner.MessagesFacade != null
+                    && await _owner.MessagesFacade.ApplyAppStateDeleteMessageAsync(chatJid, messageId)
+                        .ConfigureAwait(false);
             }
 
             if (value.ArchiveChatAction != null && !string.IsNullOrWhiteSpace(chatJid))
