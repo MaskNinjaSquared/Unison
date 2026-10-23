@@ -2,6 +2,12 @@
 
 Newest first.
 
+## Phase B — self push-name capture on ContactFacade
+
+`ContactFacade.CaptureSelfPushName` owns dash/PreferEstablished/RememberPersonName/
+list relabel. `IResolvedNameApplyHost` is auth+sidebar write (`WriteSelfDisplayName`)
+plus identity reads. `StartupPhaseTrace` lives in WhatsAppClient over `IRuntimeDiagnostics`.
+
 ## Phase B — usync alias merge uses TransientChatMerge
 
 `ChatListAliasMerge.MergeAsync` applies `TransientChatMerge` before dropping the
