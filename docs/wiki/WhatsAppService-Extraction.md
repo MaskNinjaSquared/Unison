@@ -247,7 +247,7 @@ Self-contained first. List/persist last.
 | 3.5b | Receipt aggregation state (done) | `GroupReceiptTally` (Core). **Outgoing status apply on `MessageFacade.ApplyOutgoingStatusAsync`** over shared `PendingMessageState` DI; host keeps group recipient count + self-link |
 | 3.6 | Names / usync (`.Identity.cs`) | `ContactFacade` / `ContactUsyncResolver`. **Rules and usync orchestration out — see below.** Push name, avatar check and number match on the façade; table filing is `UsyncAliasFiling`, chat merge is `ChatListAliasMerge`; the client keeps only `TryFileUsyncAlias` (socket + identity heal) |
 | 3.7a | Alias LID/PN + canonical (done) | `JidAliasTable` (Core), read through `IJidResolver` |
-| 3.7b | Converge onto `LidMappingStore` | **Started:** shared DI store + sync memory peek into `JidAliasTable`; group `@g.us` lowercased. Table still owns sync map — full async swap remains |
+| 3.7b | Converge onto `LidMappingStore` | **In progress:** shared DI store + sync peek + dual-write (`RememberPair`) table→store; group `@g.us` lowercased. Full async swap / table retirement remains |
 | 3.8 | `.AppState.cs` | **Rewritten — the premise was stale.** See below |
 | 3.9a | List display order (done) | `ChatDisplayOrder` (Core) |
 | 3.9b | `.Persistence.cs` + preview reconcile + the appliers from 3.8 | `ChatFacade` + `ChatStateStore` + `IChatStore` / `IMessageStore`. Close the transitional public dictionaries on `ChatStateStore`. **Persistence rules out; appliers remain — see below.** **Name maps closed (`DisplayNameTable`). `MessagesByChat` is `ChatMessageCache` (conversation set locked) and owns every edit to the per-chat lists — merge, key canonicalization, insert, trim, add-missing (with a limit), insert-if-absent, window rebuild, upsert, remove, id index; the client only reads them. `NotifyChangedExternally` closed; `MessagesByChat` has one reader left (the client).** **Repeated list-strip assembly is `ChatListStrip`. Phone-digit lookup is `KnownJidByPhoneDigits`. Delete/persist I/O stays** |
@@ -399,11 +399,13 @@ quietly stop firing.
 3.7b is the storage swap behind this seam: reconcile the key shapes, then let the table read
 `LidMappingStore` through its memory cache. Nothing above it has to change again.
 
-**3.7b started (sync peek + one store).** Case rule: `JidHelper.Normalize` lowercases `@g.us`
-(ChatStateStore / MessageIdIndex already OrdinalIgnoreCase). One `LidMappingStore` is shared by
-`SocketBridge`, `ContactFacade`, and `JidAliasTable` via `ILidMappingMemory` /
-`LidMappingMemoryAdapter` (sync cache peek; misses promote into the table). The table remains the
-sync map on the UI path; a full async-only replacement is still future work.
+**3.7b in progress (peek + dual-write + one store).** Case rule: `JidHelper.Normalize`
+lowercases `@g.us` (ChatStateStore / MessageIdIndex already OrdinalIgnoreCase). One
+`LidMappingStore` is shared by `SocketBridge`, `ContactFacade`, and `JidAliasTable` via
+`ILidMappingMemory` / `LidMappingMemoryAdapter` (sync cache peek; misses promote into the
+table). Table indexer/`Add` dual-writes LID↔PN pairs through `RememberPair` (fire-and-forget
+`StoreMappingsAsync`). The table remains the sync owner — full async swap / retirement is
+still a follow-on.
 
 **3.5a is done: reading left, the tally stayed.** `ReceiptReader` turns a `<receipt>` node into
 `ReceiptFacts` — status, message ids, chat, participant, whether it is a group — and counts how many

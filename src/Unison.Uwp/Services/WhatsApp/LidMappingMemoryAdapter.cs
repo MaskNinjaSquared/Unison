@@ -1,3 +1,6 @@
+using System;
+using System.Collections.Generic;
+using System.Threading.Tasks;
 using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Helpers;
 using Unison.Socket.Signal;
@@ -6,7 +9,8 @@ using Unison.Socket.WABinary;
 namespace Unison.Uwp.Services.WhatsApp
 {
     /// <summary>
-    /// Sync peek of <see cref="LidMappingStore"/> for <see cref="Unison.Core.State.JidAliasTable"/>.
+    /// Sync peek + fire-and-forget write of <see cref="LidMappingStore"/> for
+    /// <see cref="Unison.Core.State.JidAliasTable"/>.
     /// </summary>
     public sealed class LidMappingMemoryAdapter : ILidMappingMemory
     {
@@ -14,7 +18,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
         public LidMappingMemoryAdapter(LidMappingStore store)
         {
-            _store = store ?? throw new System.ArgumentNullException(nameof(store));
+            _store = store ?? throw new ArgumentNullException(nameof(store));
         }
 
         public bool TryGetPairedJid(string normalizedJid, out string pairedJid)
@@ -32,7 +36,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 return false;
             }
 
-            if (normalized.EndsWith("@lid", System.StringComparison.OrdinalIgnoreCase))
+            if (normalized.EndsWith("@lid", StringComparison.OrdinalIgnoreCase))
             {
                 string pnUser;
                 if (!_store.TryGetCachedPnUserForLid(user, out pnUser))
@@ -44,7 +48,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 return true;
             }
 
-            if (normalized.EndsWith("@s.whatsapp.net", System.StringComparison.OrdinalIgnoreCase))
+            if (normalized.EndsWith("@s.whatsapp.net", StringComparison.OrdinalIgnoreCase))
             {
                 string lidUser;
                 if (!_store.TryGetCachedLidUserForPn(user, out lidUser))
@@ -57,6 +61,45 @@ namespace Unison.Uwp.Services.WhatsApp
             }
 
             return false;
+        }
+
+        public void RememberPair(string jidA, string jidB)
+        {
+            LidMapping mapping = ToMapping(jidA, jidB);
+            if (mapping == null)
+            {
+                return;
+            }
+
+            // Same posture as SocketBridge.Store: announce from sync paths, do not await.
+            _ = ObserveStoreAsync(_store.StoreMappingsAsync(new List<LidMapping> { mapping }));
+        }
+
+        private static LidMapping ToMapping(string jidA, string jidB)
+        {
+            if (string.IsNullOrEmpty(jidA) || string.IsNullOrEmpty(jidB))
+            {
+                return null;
+            }
+
+            string a = JidHelper.Normalize(jidA);
+            string b = JidHelper.Normalize(jidB);
+            string lid = JidUtils.IsLidUser(a) ? a : (JidUtils.IsLidUser(b) ? b : null);
+            string pn = JidUtils.IsPnUser(a) ? a : (JidUtils.IsPnUser(b) ? b : null);
+            return lid != null && pn != null ? new LidMapping(lid, pn) : null;
+        }
+
+        private static async Task ObserveStoreAsync(Task write)
+        {
+            try
+            {
+                await write.ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine(
+                    "[LidMappingMemory] RememberPair store failed: " + ex.Message);
+            }
         }
     }
 }

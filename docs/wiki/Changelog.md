@@ -2,6 +2,12 @@
 
 Newest first.
 
+## Phase 3.7b — dual-write table → LidMappingStore
+
+`ILidMappingMemory.RememberPair` + `LidMappingMemoryAdapter` fire-and-forget
+`StoreMappingsAsync`. `JidAliasTable` indexer/`Add` dual-write LID↔PN pairs so
+the store stays warm with the sync map. Full async swap still pending.
+
 ## Phase 3.7b started — LidMappingStore shared + sync peek
 
 Group `@g.us` lowercased in `JidHelper.Normalize`. One DI `LidMappingStore` feeds

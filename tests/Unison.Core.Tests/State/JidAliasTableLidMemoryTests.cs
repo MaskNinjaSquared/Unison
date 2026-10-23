@@ -35,14 +35,35 @@ namespace Unison.Core.Tests.State
                 table.GetCanonicalJid("199999999999@lid"));
         }
 
+        [Fact]
+        public void Indexer_set_remembers_pair_into_memory()
+        {
+            var memory = new FakeMemory();
+            var table = new JidAliasTable();
+            table.AttachLidMappingMemory(memory);
+
+            table["199999999999@lid"] = "5511999990000@s.whatsapp.net";
+
+            Assert.Equal("199999999999@lid", memory.RememberedA);
+            Assert.Equal("5511999990000@s.whatsapp.net", memory.RememberedB);
+        }
+
         private sealed class FakeMemory : ILidMappingMemory
         {
             public string Paired { get; set; }
+            public string RememberedA { get; private set; }
+            public string RememberedB { get; private set; }
 
             public bool TryGetPairedJid(string normalizedJid, out string pairedJid)
             {
                 pairedJid = Paired;
                 return !string.IsNullOrEmpty(Paired);
+            }
+
+            public void RememberPair(string jidA, string jidB)
+            {
+                RememberedA = jidA;
+                RememberedB = jidB;
             }
         }
     }

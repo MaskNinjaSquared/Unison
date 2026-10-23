@@ -67,8 +67,8 @@ namespace Unison.Core.State
         }
 
         /// <summary>
-        /// Optional sync peek into <c>LidMappingStore</c>'s memory cache (phase 3.7b).
-        /// When the table misses, canonicalization can still resolve a pair without awaiting.
+        /// Optional sync peek / dual-write seam into <c>LidMappingStore</c> (phase 3.7b).
+        /// Misses promote into this table; indexer/`Add` remember LID↔PN pairs back into the store.
         /// </summary>
         public void AttachLidMappingMemory(ILidMappingMemory memory)
         {
@@ -402,6 +402,7 @@ namespace Unison.Core.State
 
                 if (notify)
                 {
+                    RememberLidPnPair(key, value);
                     RaiseChanged();
                 }
             }
@@ -499,6 +500,7 @@ namespace Unison.Core.State
                 _inner.Add(key, value);
             }
 
+            RememberLidPnPair(key, value);
             RaiseChanged();
         }
 
@@ -554,6 +556,12 @@ namespace Unison.Core.State
             {
                 RaiseChanged();
             }
+        }
+
+        private void RememberLidPnPair(string key, string value)
+        {
+            ILidMappingMemory memory = _lidMemory;
+            memory?.RememberPair(key, value);
         }
 
         private void RaiseChanged() => Changed?.Invoke(this, EventArgs.Empty);
