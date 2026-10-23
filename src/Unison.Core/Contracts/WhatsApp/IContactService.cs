@@ -127,6 +127,12 @@ namespace Unison.Core.Contracts.WhatsApp
         Task ResolveMissingNamesAsync(bool force = false);
 
         /// <summary>
+        /// Background names then pictures (or schedules a deferred retry). The connection client
+        /// still owns quiet-wait / handshake / catch-up gates and raises group listing after this.
+        /// </summary>
+        Task RunBackgroundResolutionAsync(CancellationToken cancellationToken = default(CancellationToken));
+
+        /// <summary>
         /// Single-chat avatar refresh with in-session dedup (used by UI on load-failure/visibility/JID-alias discovery).
         /// </summary>
         void RequestAvatarRefresh(ChatItem chat, bool force = false);

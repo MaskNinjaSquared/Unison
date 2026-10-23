@@ -56,6 +56,9 @@ namespace Unison.WhatsAppClient.Contacts
         private readonly ChatAvatarPolicy _avatars;
         private readonly IAvatarCache _avatarCache;
         private readonly GroupRosterPolicy _roster;
+        private readonly SyncStatusChannel _syncStatus;
+        private readonly SyncWorkGate _syncWork;
+        private readonly IDeferredAvatarResolution _deferredAvatars;
         private DateTime _lastWindowsPublishUtc = DateTime.MinValue;
         private int _lastWindowsPublishCount;
         private int _windowsPublishBusy;
@@ -97,8 +100,9 @@ namespace Unison.WhatsAppClient.Contacts
             _nameRefresh = nameRefresh ?? throw new ArgumentNullException(nameof(nameRefresh));
             _lifecycle = lifecycle ?? throw new ArgumentNullException(nameof(lifecycle));
             if (selfMarkers == null) throw new ArgumentNullException(nameof(selfMarkers));
-            if (syncStatus == null) throw new ArgumentNullException(nameof(syncStatus));
-            if (syncWork == null) throw new ArgumentNullException(nameof(syncWork));
+            _syncStatus = syncStatus ?? throw new ArgumentNullException(nameof(syncStatus));
+            _syncWork = syncWork ?? throw new ArgumentNullException(nameof(syncWork));
+            _deferredAvatars = deferredAvatars ?? throw new ArgumentNullException(nameof(deferredAvatars));
             _ui = ui ?? throw new ArgumentNullException(nameof(ui));
             _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
             if (sessions == null) throw new ArgumentNullException(nameof(sessions));
@@ -136,8 +140,8 @@ namespace Unison.WhatsAppClient.Contacts
                 ui,
                 nameRefresh,
                 aliasMerge,
-                syncWork,
-                deferredAvatars,
+                _syncWork,
+                _deferredAvatars,
                 diagnostics);
             _names = new ContactNameResolver(
                 _addressBook,
@@ -149,20 +153,20 @@ namespace Unison.WhatsAppClient.Contacts
                 ui,
                 catalog,
                 chats,
-                syncStatus,
-                syncWork,
+                _syncStatus,
+                _syncWork,
                 sessions,
                 nameRefresh,
                 workload ?? throw new ArgumentNullException(nameof(workload)));
             _avatars = new ChatAvatarPolicy(
-                deferredAvatars ?? throw new ArgumentNullException(nameof(deferredAvatars)),
+                _deferredAvatars,
                 jids,
                 chatAvatarFetch,
                 ui,
                 catalog,
                 chats,
-                syncStatus,
-                syncWork,
+                _syncStatus,
+                _syncWork,
                 sessions,
                 syncBudget,
                 workload ?? throw new ArgumentNullException(nameof(workload)),
@@ -613,6 +617,34 @@ namespace Unison.WhatsAppClient.Contacts
         public Task ResolveMissingNamesAsync(bool force = false)
         {
             return _names.ResolveMissingAsync(force);
+        }
+
+        /// <inheritdoc />
+        public async Task RunBackgroundResolutionAsync(CancellationToken cancellationToken = default(CancellationToken))
+        {
+            _syncStatus.Raise(SyncPhaseStatus.Format(SyncPhaseStatus.Names));
+            try
+            {
+                await ResolveMissingNamesAsync().ConfigureAwait(false);
+
+                string deferReason;
+                if (_syncWork.ShouldDeferAvatarFetch(out deferReason))
+                {
+                    Debug.WriteLine(
+                        "[ContactFacade] Deferring profile picture fetch until sync traffic settles: " +
+                        deferReason);
+                    _deferredAvatars.Schedule(deferReason);
+                }
+                else
+                {
+                    _deferredAvatars.Cancel();
+                    await RetrieveContactPicturesAsync(cancellationToken).ConfigureAwait(false);
+                }
+            }
+            finally
+            {
+                _syncStatus.Raise(null);
+            }
         }
 
         public async Task RetrieveContactPicturesAsync(CancellationToken token = default(CancellationToken))

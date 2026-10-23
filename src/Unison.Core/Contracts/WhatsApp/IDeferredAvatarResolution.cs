@@ -16,5 +16,8 @@ namespace Unison.Core.Contracts.WhatsApp
         /// Schedules another enrichment pass. A later call replaces a pending one.
         /// </summary>
         void Schedule(string reason, TimeSpan? delay = null);
+
+        /// <summary>Cancels a pending scheduled pass, if any.</summary>
+        void Cancel();
     }
 }
