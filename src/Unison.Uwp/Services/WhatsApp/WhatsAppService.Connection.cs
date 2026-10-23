@@ -2050,7 +2050,17 @@ namespace Unison.Uwp.Services.WhatsApp
                 return Task.CompletedTask;
             }
 
-            return socket.ConnectAsync();
+            // Host builds WinRT transports; bridge only runs Noise over them (Init shape).
+            var bridge = socket as SocketBridge;
+            if (bridge == null)
+            {
+                return socket.ConnectAsync();
+            }
+
+            WaTransportConnectAttempt attempt = WaTransportConnectAttempt.Create(
+                _transportFactory,
+                _isWindowsMobile);
+            return bridge.ConnectWithTransportsAsync(attempt.Primary, attempt.Fallback);
         }
 
         void IConnectionConnectOpenHost.StartHealthMonitorIfAssignedCurrent()

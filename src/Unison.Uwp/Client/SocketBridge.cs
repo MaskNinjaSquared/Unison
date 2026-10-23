@@ -36,7 +36,6 @@ using Unison.Baileys.Protocol;
 using Unison.Core.Contracts;
 using Unison.Core.Helpers;
 using Unison.Core.Models;
-using Unison.WhatsAppClient.Helpers;
 using Unison.Socket.Abstractions;
 using Unison.Socket.AppState;
 using Unison.Socket.Events;
@@ -155,16 +154,11 @@ namespace Unison.Uwp.Client
         private bool _authSaveScheduled;
         private AccountInfo _persistedAccount;
 
-        private readonly IWhatsAppTransportFactory _transportFactory;
-        private readonly bool _isMobile;
-
         public SocketBridge(
             AuthState authState,
             FileKeyStore sharedKeyStore,
             bool reuseLoadedKeyState,
-            LidMappingStore lidMappings = null,
-            IWhatsAppTransportFactory transportFactory = null,
-            bool isMobile = false)
+            LidMappingStore lidMappings = null)
         {
             if (authState == null)
             {
@@ -173,9 +167,6 @@ namespace Unison.Uwp.Client
 
             _authState = authState;
             _appStateKeyId = authState.MyAppStateKeyId;
-            _transportFactory = transportFactory
-                ?? throw new ArgumentNullException(nameof(transportFactory));
-            _isMobile = isMobile;
 
             // Same reasoning as the legacy client: reloading every Signal file is the slowest
             // part of a resume, so a store that is already warm is kept.
@@ -510,8 +501,29 @@ namespace Unison.Uwp.Client
             }
         }
 
-        public async Task ConnectAsync()
+        /// <summary>
+        /// <see cref="IWhatsAppSocket"/> entry. The live host must call
+        /// <see cref="ConnectWithTransportsAsync"/> so WinRT construction stays outside the bridge.
+        /// </summary>
+        public Task ConnectAsync()
         {
+            throw new InvalidOperationException(
+                "SocketBridge requires ConnectWithTransportsAsync — the host supplies IWhatsAppTransport.");
+        }
+
+        /// <summary>
+        /// Opens Noise over host-supplied transports (Init(IWaTransport) shape). Tries
+        /// <paramref name="fallback"/> only when primary connect throws.
+        /// </summary>
+        public async Task ConnectWithTransportsAsync(
+            IWhatsAppTransport primary,
+            IWhatsAppTransport fallback = null)
+        {
+            if (primary == null)
+            {
+                throw new ArgumentNullException(nameof(primary));
+            }
+
             // Reconnecting through the same instance is allowed; leaving the previous session
             // attached would give us two sockets raising the same events.
             if (Current != null)
@@ -521,43 +533,44 @@ namespace Unison.Uwp.Client
 
             Raise(OnConnectionUpdate, "connecting");
 
-            // Host supplies transports via IWhatsAppTransportFactory (no WinRT news here).
-            // Default HEAD: Mobile = MessageWebSocket only (Creators TLS hang avoidance).
-            // ConnectionStabilityExperiment: Mobile = StreamSocket first like tag 1.8.3,
-            // with MessageWebSocket fallback if connect fails.
-            bool streamFirst = WaTransportConnectOrder.PreferStreamSocketFirst(
-                _isMobile,
-                ConnectionStabilityExperiment.PreferStreamSocketOnMobile);
             RuntimeDiagnosticsService.Instance.Write(
                 "transport",
                 "socket-bridge-connect-order",
-                "mobile=" + _isMobile +
-                "; experiment=" + ConnectionStabilityExperiment.Enabled +
-                "; primary=" + (streamFirst ? "StreamSocket-RFC6455-broker" : "MessageWebSocket-classic") +
-                "; fallback=" + (streamFirst ? "MessageWebSocket-classic" : "none"));
+                "primary=" + (primary.Name ?? "unknown") +
+                "; fallback=" + (fallback != null ? (fallback.Name ?? "unknown") : "none"));
 
-            if (streamFirst)
+            bool usedFallback = false;
+            try
             {
-                try
-                {
-                    await ConnectWithTransportAsync(_transportFactory.CreateStreamSocketTransport())
-                        .ConfigureAwait(false);
-                }
-                catch (Exception streamFailure)
-                {
-                    RuntimeDiagnosticsService.Instance.RecordException(
-                        "transport",
-                        "streamsocket-connect-failed-fallback-classic",
-                        streamFailure);
-                    Disconnect();
-                    await ConnectWithTransportAsync(_transportFactory.CreateMessageWebSocketTransport())
-                        .ConfigureAwait(false);
-                }
+                await ConnectWithTransportAsync(primary).ConfigureAwait(false);
             }
-            else
+            catch (Exception primaryFailure)
             {
-                await ConnectWithTransportAsync(_transportFactory.CreateMessageWebSocketTransport())
-                    .ConfigureAwait(false);
+                if (fallback == null)
+                {
+                    throw;
+                }
+
+                RuntimeDiagnosticsService.Instance.RecordException(
+                    "transport",
+                    "primary-connect-failed-fallback",
+                    primaryFailure);
+                Disconnect();
+                usedFallback = true;
+                await ConnectWithTransportAsync(fallback).ConfigureAwait(false);
+            }
+            finally
+            {
+                if (!usedFallback && fallback != null)
+                {
+                    try
+                    {
+                        fallback.Dispose();
+                    }
+                    catch
+                    {
+                    }
+                }
             }
 
             _handshakeComplete = true;

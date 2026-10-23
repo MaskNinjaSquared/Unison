@@ -3630,9 +3630,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 _authState,
                 _sharedKeyStore,
                 reuseLoadedKeyState,
-                _lidMappings,
-                _transportFactory,
-                _isWindowsMobile);
+                _lidMappings);
 
             // ChatUpdate lives in Socket; Core's IChatService cannot name it. The concrete
             // ChatFacade owns the apply — same pattern as other socket→façade bridges that
