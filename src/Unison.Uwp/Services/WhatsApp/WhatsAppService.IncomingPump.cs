@@ -1490,7 +1490,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
                 ApplyPendingStateToMessage(jid, chatMessage);
 
-                ChatPreviewKind previewKind = ResolvePreviewKind(chatMessage, renderInfo);
+                ChatPreviewKind previewKind = LiveChatPreviewApplier.ResolveKind(chatMessage, renderInfo);
 
                 SetIncomingMessagePumpStage("dedupe", e);
                 IncomingTimelineAcceptResult timeline = AcceptIncomingTimeline(jid, chatMessage, isGroup);
@@ -1796,7 +1796,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 existing.ParticipantJid,
                 NormalizeJid(e.Participant),
                 existing.SenderName,
-                FirstNonEmptyString(e.VerifiedName, e.PushName));
+                FirstNonBlankText.Pick(e.VerifiedName, e.PushName));
             if (DuplicateArrivalEnrichment.Apply(existing, patch))
             {
                 QueueOfflineReplayMessageForPersist(persistJid, existing);

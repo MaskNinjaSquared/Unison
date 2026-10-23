@@ -135,8 +135,6 @@ namespace Unison.Uwp.Services.WhatsApp
             }
         }
 
-        private string GetBestWhatsAppName(params string[] jids) => _displayNames.FindBestPushName(jids);
-
         public string GetCanonicalJid(string jid) => JidAlias.GetCanonicalJid(jid);
 
         private string GetCanonicalSelfPnJid() => JidAlias.GetCanonicalSelfPnJid();

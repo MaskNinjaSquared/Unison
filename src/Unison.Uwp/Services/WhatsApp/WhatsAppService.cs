@@ -744,14 +744,6 @@ namespace Unison.Uwp.Services.WhatsApp
             return TryGetHistoryFreshnessStaleReason(DateTime.UtcNow, out reason);
         }
 
-        private static bool IsAutomaticPlaceholderRecoveryTrigger(string trigger) =>
-            AutomaticPlaceholderRecoveryTrigger.Matches(trigger);
-
-        private static DateTime ToComparableUtc(DateTime timestamp)
-        {
-            return ChatMessageOrder.ToComparableUtc(timestamp);
-        }
-
         /// <summary>
         /// Every row that stands for the same conversation - a chat addressed by LID and the same
         /// chat addressed by phone number are two rows until they are merged.
@@ -817,9 +809,6 @@ namespace Unison.Uwp.Services.WhatsApp
                 LocalizedStrings.Get("Common_Yesterday", "Yesterday"));
         }
 
-        private static int CompareChatsForDisplay(ChatItem left, ChatItem right) =>
-            ChatDisplayOrder.Compare(left, right);
-
         private void RepositionChatForDisplay(ChatItem chat) =>
             ChatDisplayOrder.Reposition(Chats, chat);
 
@@ -845,9 +834,9 @@ namespace Unison.Uwp.Services.WhatsApp
             DateTime newestNonSelfUtc = newestAnyUtc == DateTime.MinValue
                 ? DateTime.MinValue
                 : GetNewestStoredMessageUtc(jid => !IsSelfLinkedJid(jid));
-            bool hasGroups = HasGroupChats();
+            bool hasGroups = Chats.Any(c => c != null && (c.IsGroup || JidHelper.IsGroupJid(c.JID)));
             DateTime newestGroupUtc = hasGroups
-                ? GetNewestStoredMessageUtc(IsGroupJid)
+                ? GetNewestStoredMessageUtc(JidHelper.IsGroupJid)
                 : DateTime.MinValue;
 
             return HistoryFreshnessStaleDecision.IsStale(
@@ -1950,11 +1939,6 @@ namespace Unison.Uwp.Services.WhatsApp
             TrySchedulePostMessageEnrichment("heavy-history:" + reason);
         }
 
-        private static ChatPreviewKind ResolvePreviewKind(ChatMessage message, MessageRenderInfo renderInfo)
-        {
-            return LiveChatPreviewApplier.ResolveKind(message, renderInfo);
-        }
-
         /// <summary>
         /// Restarts the idle timer. Serialized on its own lock: the queue no longer holds one
         /// while the caller does this, and two threads swapping the field could otherwise
@@ -2475,6 +2459,21 @@ namespace Unison.Uwp.Services.WhatsApp
                 contextJid,
                 isGroup,
                 IsSelfMarkerLabel(label));
+        }
+
+        /// <summary>
+        /// Usable group label on the row or in the name cache (same rule as listing apply).
+        /// </summary>
+        private bool HasMeaningfulGroupLabel(string groupJid, string rowName)
+        {
+            string cached;
+            if (ContactNames.TryGetValue(groupJid, out cached) &&
+                IsMeaningfulChatLabel(cached, groupJid, true))
+            {
+                return true;
+            }
+
+            return IsMeaningfulChatLabel(rowName, groupJid, true);
         }
 
         /// <summary>
@@ -3649,7 +3648,9 @@ namespace Unison.Uwp.Services.WhatsApp
             {
                 DateTime newestAnyUtc = GetNewestStoredMessageUtc();
                 DateTime newestNonSelfUtc = GetNewestStoredMessageUtc(jid => !IsSelfLinkedJid(jid));
-                DateTime newestGroupUtc = HasGroupChats() ? GetNewestStoredMessageUtc(IsGroupJid) : DateTime.MinValue;
+                DateTime newestGroupUtc = Chats.Any(c => c != null && (c.IsGroup || JidHelper.IsGroupJid(c.JID)))
+                    ? GetNewestStoredMessageUtc(JidHelper.IsGroupJid)
+                    : DateTime.MinValue;
                 Debug.WriteLine($"[WhatsAppService] Post-offline freshness check passed: message freshness scopes are fresh (any={FormatFreshnessTimestamp(newestAnyUtc)}, nonSelf={FormatFreshnessTimestamp(newestNonSelfUtc)}, group={FormatFreshnessTimestamp(newestGroupUtc)}, offlineCount={offlineCount}, catchUpActive={catchUpActive})");
 
                 // Mid paginated catch-up: tip can look fresh after the first lot while older
@@ -4124,7 +4125,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 snapshots.Add(new HistoryBackfillChatSnapshot
                 {
                     Jid = jid,
-                    IsGroup = IsGroupJid(jid),
+                    IsGroup = JidHelper.IsGroupJid(jid),
                     ListIndex = i,
                     LastMessageUtc = tipUtc,
                     MessageCount = messageCount
@@ -4333,9 +4334,6 @@ namespace Unison.Uwp.Services.WhatsApp
             return FatalStreamCodeText.Read(ex?.Message);
         }
 
-
-        private static string MapWebMessageStatus(Proto.WebMessageInfo message) =>
-            WebMessageStatusMap.FromWebMessageInfo(message);
 
         private bool ApplyPendingStateToMessage(string chatJid, ChatMessage message)
         {
@@ -4694,7 +4692,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
         private string GetNamesFromCache(string jid)
         {
-            return GetBestWhatsAppName(GetCanonicalJid(jid), NormalizeJid(jid));
+            return _displayNames.FindBestPushName(GetCanonicalJid(jid), NormalizeJid(jid));
         }
 
         private IEnumerable<string> ExpandNameLookupCandidates(params string[] jids)
@@ -4855,7 +4853,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 return;
             }
 
-            if (isSubject && IsGroupIdPlaceholder(resolved, canonical))
+            if (isSubject && GroupIdPlaceholder.IsIdPlaceholder(resolved, canonical))
             {
                 return;
             }
@@ -4896,7 +4894,10 @@ namespace Unison.Uwp.Services.WhatsApp
                     {
                         if (!GroupNameSyncBlacklist.ShouldCacheSyncedSubject(
                                 entry.Name,
-                                HasMeaningfulGroupLabel(entry.Canonical, DuplicateChatRowPick.FirstNonBlankName(_chatRows.FindConversation(entry.Canonical)))))
+                                HasMeaningfulGroupLabel(
+                                    entry.Canonical,
+                                    DuplicateChatRowPick.FirstNonBlankName(
+                                        _chatRows.FindConversation(entry.Canonical)))))
                         {
                             continue;
                         }
@@ -5073,11 +5074,6 @@ namespace Unison.Uwp.Services.WhatsApp
         private string NormalizeJid(string jid)
         {
             return JidHelper.Normalize(jid);
-        }
-
-        private static string FirstNonEmptyString(params string[] values)
-        {
-            return FirstNonBlankText.Pick(values);
         }
 
         private bool IsSelfJid(string jid) => JidAlias.IsSelfJid(jid);
