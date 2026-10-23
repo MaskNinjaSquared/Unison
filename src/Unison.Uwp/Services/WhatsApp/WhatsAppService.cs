@@ -3686,19 +3686,14 @@ namespace Unison.Uwp.Services.WhatsApp
                 var stored = await FindPersistedChatMessageAsync(NormalizeJid(remoteJid), messageId)
                     .ConfigureAwait(false);
 
-                if (stored == null || !stored.IsFromMe || string.IsNullOrEmpty(stored.Content))
-                {
-                    return null;
-                }
-
-                if (stored.Kind != ChatMessageKind.Text)
+                global::Proto.Message rebuilt = SentMessageRetryRebuild.TryCreate(stored);
+                if (rebuilt == null && stored != null && stored.IsFromMe && stored.Kind != ChatMessageKind.Text)
                 {
                     Debug.WriteLine(
                         "[WhatsAppService] Retry lookup declined " + messageId + ": " + stored.Kind + " cannot be rebuilt");
-                    return null;
                 }
 
-                return new global::Proto.Message { Conversation = stored.Content };
+                return rebuilt;
             }
             catch (Exception ex)
             {

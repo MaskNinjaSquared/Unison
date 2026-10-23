@@ -2,6 +2,11 @@
 
 Newest first.
 
+## Extract — SentMessageRetryRebuild (text-only retry bytes)
+
+Rule for rebuilding a peer-requested resend from the persisted row lives in Core;
+`ResolveSentMessageForRetryAsync` only loads and logs.
+
 ## Phase 3.7b — bulk import + dual-write coalesce on restore
 
 `JidAliasTable.BeginBulkImport` + `RememberPairs`: persistence restore writes the
