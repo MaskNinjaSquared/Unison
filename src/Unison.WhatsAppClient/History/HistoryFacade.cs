@@ -52,11 +52,17 @@ namespace Unison.WhatsAppClient.History
 
         private static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(2);
 
+        /// <summary>Delay before asking the next FULL_HISTORY page after a quiet lot.</summary>
+        private static readonly TimeSpan CatchUpContinueReconnectDelay = TimeSpan.FromSeconds(12);
+
         private readonly IWhatsAppSessionProvider _sessions;
         private readonly IHistoryOnDemandSocket _onDemandSocket;
         private readonly Func<IConnectionService> _resolveConnection;
         private readonly IConversationResyncHost _resync;
         private readonly IHistorySyncHost _historySync;
+        private readonly IHistoryCatchUpHost _catchUpHost;
+        private readonly IConnectionSoftReconnect _softReconnect;
+        private readonly HistoryCatchUpContinuation _catchUp;
         private readonly IJidAliasPersistence _aliasPersist;
         private readonly IMessageStore _store;
         private readonly ILocalSettings _settings;
@@ -101,6 +107,9 @@ namespace Unison.WhatsAppClient.History
             Func<IMessageService> resolveMessages,
             IConversationResyncHost resync,
             IHistorySyncHost historySync,
+            IHistoryCatchUpHost catchUpHost,
+            IConnectionSoftReconnect softReconnect,
+            HistoryCatchUpContinuation catchUp,
             IJidAliasPersistence aliasPersist,
             IMessageStore store,
             ILocalSettings settings,
@@ -154,6 +163,9 @@ namespace Unison.WhatsAppClient.History
             _resolveMessages = resolveMessages;
             _resync = resync ?? throw new ArgumentNullException(nameof(resync));
             _historySync = historySync ?? throw new ArgumentNullException(nameof(historySync));
+            _catchUpHost = catchUpHost ?? throw new ArgumentNullException(nameof(catchUpHost));
+            _softReconnect = softReconnect ?? throw new ArgumentNullException(nameof(softReconnect));
+            _catchUp = catchUp ?? throw new ArgumentNullException(nameof(catchUp));
             _aliasPersist = aliasPersist ?? throw new ArgumentNullException(nameof(aliasPersist));
             _store = store;
             _settings = settings;
@@ -1184,6 +1196,153 @@ namespace Unison.WhatsAppClient.History
         public void NotifyBackgroundHistorySyncBounced()
         {
             NoteBackgroundHistorySyncBounce();
+        }
+
+        /// <inheritdoc />
+        public void NotifyCatchUpIdleBatch(
+            string requestId,
+            bool ackAccepted,
+            int progressSignals,
+            string triggerReason,
+            int idleMs)
+        {
+            DateTime newestUtc = _catchUpHost.GetNewestStoredMessageUtc();
+            string staleReason;
+            bool stillStale = _catchUpHost.TryGetHistoryFreshnessStaleReason(
+                DateTime.UtcNow,
+                out staleReason);
+            int stagnantStop = _workload.PacingFor(_syncBudget.IsFrugal)
+                .CatchUpStagnantCyclesBeforeStop;
+            int maxRounds = Math.Max(0, _workload.MaxFullHistoryCatchUpRounds);
+
+            HistoryCatchUpContinueResult decision = _catchUp.DecideAfterQuietLot(
+                newestUtc,
+                progressSignals,
+                stillStale,
+                stagnantStop,
+                maxRounds,
+                out HistoryCatchUpProgress before);
+
+            _catchUpHost.WriteHistoryJournal(
+                "catch-up-idle-decide",
+                "requestId=" + (requestId ?? string.Empty) +
+                "; idleMs=" + idleMs +
+                "; signals=" + progressSignals +
+                "; ackAccepted=" + ackAccepted +
+                "; stillStale=" + stillStale +
+                "; tipAdvanced=" + decision.TipAdvanced +
+                "; madeProgress=" + decision.MadeProgress +
+                "; newest=" + FreshnessTimestampFormat.ForLog(newestUtc) +
+                "; watermark=" + FreshnessTimestampFormat.ForLog(before.WatermarkUtc) +
+                "; round=" + before.Round +
+                "; stagnant=" + before.StagnantCycles +
+                "; stagnantStop=" + stagnantStop +
+                "; frugal=" + _syncBudget.IsFrugal +
+                "; action=" + decision.Action +
+                "; trigger=" + (triggerReason ?? string.Empty));
+
+            Debug.WriteLine(
+                "[HistoryFacade] Catch-up idle decide: requestId=" + (requestId ?? "<none>") +
+                ", stillStale=" + stillStale +
+                ", tipAdvanced=" + decision.TipAdvanced +
+                ", madeProgress=" + decision.MadeProgress +
+                ", signals=" + progressSignals +
+                ", newest=" + FreshnessTimestampFormat.ForLog(newestUtc) +
+                ", watermark=" + FreshnessTimestampFormat.ForLog(before.WatermarkUtc) +
+                ", round=" + before.Round +
+                ", stagnant=" + before.StagnantCycles +
+                "/" + stagnantStop +
+                ", action=" + decision.Action);
+
+            switch (decision.Action)
+            {
+                case HistoryCatchUpContinueAction.FinishFreshAndStagnant:
+                    _catchUpHost.FinishContinue("fresh-and-stagnant", releaseEnrichment: true);
+                    return;
+
+                case HistoryCatchUpContinueAction.FinishStagnantProgress:
+                    if (stillStale)
+                    {
+                        _catchUpHost.MarkForceHistoryRepairPending("stagnant-progress-still-stale");
+                    }
+
+                    _catchUpHost.FinishContinue("stagnant-progress", releaseEnrichment: true);
+                    if (stillStale)
+                    {
+                        _catchUpHost.StartHydrationFallback("stagnant-progress");
+                    }
+
+                    return;
+
+                case HistoryCatchUpContinueAction.FinishMaxContinues:
+                    if (stillStale)
+                    {
+                        _catchUpHost.MarkForceHistoryRepairPending("max-continues-still-stale");
+                    }
+
+                    _catchUpHost.FinishContinue("max-continues", releaseEnrichment: true);
+                    if (stillStale)
+                    {
+                        _catchUpHost.StartHydrationFallback("max-continues");
+                    }
+
+                    return;
+            }
+
+            _ = RequestAdjacentFullHistoryCatchUpAsync(
+                "idle-continue:requestId=" + (requestId ?? string.Empty) +
+                ":ackAccepted=" + ackAccepted +
+                ":round=" + decision.NextContinueRound +
+                ":stagnant=" + decision.NextStagnantCycles +
+                ":signals=" + progressSignals +
+                ":newest=" + FreshnessTimestampFormat.ForLog(newestUtc));
+        }
+
+        /// <summary>
+        /// Asks for the next FULL_HISTORY lot after a quiet page. Prefers the live socket; falls
+        /// back to soft-reconnect + post-drain request when the transport is not ready.
+        /// </summary>
+        private async Task RequestAdjacentFullHistoryCatchUpAsync(string reason)
+        {
+            try
+            {
+                await Task.Delay(CatchUpContinueReconnectDelay).ConfigureAwait(false);
+
+                if (!_catchUp.IsActive(_catchUpHost.IsCatchUpBannerActive))
+                {
+                    Debug.WriteLine(
+                        "[HistoryFacade] Adjacent FULL_HISTORY skipped; catch-up already finished (" +
+                        reason + ")");
+                    return;
+                }
+
+                if (!_catchUpHost.CanSolicitAdjacent)
+                {
+                    _catchUpHost.FinishContinue("adjacent-aborted", releaseEnrichment: true);
+                    return;
+                }
+
+                _catchUpHost.MarkEnrichmentAwaitingHeavyHistory();
+
+                bool ok = await _catchUpHost
+                    .TryRequestAdjacentLiveFullHistoryAsync(reason)
+                    .ConfigureAwait(false);
+                if (ok)
+                {
+                    return;
+                }
+
+                Debug.WriteLine(
+                    "[HistoryFacade] Adjacent FULL_HISTORY live request failed; soft-reconnect fallback.");
+                _softReconnect.RequestCatchUpContinueReconnect(reason ?? "adjacent-fallback");
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine(
+                    "[HistoryFacade] Adjacent FULL_HISTORY failed: " + ex.Message);
+                _catchUpHost.RecordHistoryException("catch-up-adjacent-failed", ex, reason);
+                _catchUpHost.FinishContinue("adjacent-error", releaseEnrichment: true);
+            }
         }
     }
 }

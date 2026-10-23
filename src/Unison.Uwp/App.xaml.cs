@@ -262,6 +262,7 @@ namespace Unison.Uwp
             // What history was asked of the phone and is still owed. The client answers acks and
             // timeouts against it; HistoryFacade asks for chat pages through it.
             services.AddSingleton<HistoryOnDemandRegistry>();
+            services.AddSingleton(_ => new HistoryCatchUpContinuation());
             // Contacts and avatars query the same rate-limited directory surface, so they queue
             // behind one gate even after they stop sharing an owner.
             services.AddSingleton<IUsyncGate, UsyncGate>();
@@ -394,6 +395,7 @@ namespace Unison.Uwp
                     sp.GetRequiredService<JidAliasTable>(),
                     sp.GetRequiredService<ContactDisplayNames>(),
                     sp.GetRequiredService<HistoryOnDemandRegistry>(),
+                    sp.GetRequiredService<HistoryCatchUpContinuation>(),
                     sp.GetRequiredService<InitialSyncProgressState>(),
                     sp.GetRequiredService<SyncBudget>(),
                     sp.GetRequiredService<SyncWorkloadStrategy>(),
@@ -449,6 +451,8 @@ namespace Unison.Uwp
                 sp => (WhatsAppService)sp.GetRequiredService<IWhatsAppService>());
             services.AddSingleton<IHistorySyncHost>(
                 sp => (WhatsAppService)sp.GetRequiredService<IWhatsAppService>());
+            services.AddSingleton<IHistoryCatchUpHost>(
+                sp => (WhatsAppService)sp.GetRequiredService<IWhatsAppService>());
             services.AddSingleton<IStatusThumbnailMaterializer, WinRtStatusThumbnailMaterializer>();
             services.AddSingleton<IHistoryMessageThumbnailMaterializer, WinRtHistoryMessageThumbnailMaterializer>();
             services.AddSingleton(sp => new HistoryFacade(
@@ -457,6 +461,9 @@ namespace Unison.Uwp
                 () => sp.GetRequiredService<IMessageService>(),
                 sp.GetRequiredService<IConversationResyncHost>(),
                 sp.GetRequiredService<IHistorySyncHost>(),
+                sp.GetRequiredService<IHistoryCatchUpHost>(),
+                sp.GetRequiredService<IConnectionSoftReconnect>(),
+                sp.GetRequiredService<HistoryCatchUpContinuation>(),
                 sp.GetRequiredService<IJidAliasPersistence>(),
                 sp.GetRequiredService<IMessageStore>(),
                 sp.GetRequiredService<ILocalSettings>(),

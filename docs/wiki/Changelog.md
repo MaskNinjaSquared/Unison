@@ -2,6 +2,11 @@
 
 Newest first.
 
+## Phase 4 — catch-up idle decide on HistoryFacade
+
+`NotifyCatchUpIdleBatch` owns quiet-lot / watchdog / timeout decide + adjacent
+FULL_HISTORY. Client keeps `IHistoryCatchUpHost` + shared `HistoryCatchUpContinuation`.
+
 ## Phase 4 — IConnectionSoftReconnect port
 
 `RequestSoftReconnect` / `RequestCatchUpContinueReconnect` expose the client's

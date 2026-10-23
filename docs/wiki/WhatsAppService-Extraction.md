@@ -1234,10 +1234,9 @@ is still current, handing back the expired copy — null when the phone answered
 keeps the `Task.Run`, the timeout log, the `catch-up-hard-timeout` journal line and the hand-off
 to `DecideCatchUpAfterIdleBatch`.
 
-**Slice 3 is closed.** What stays in the client — `DecideCatchUpAfterIdleBatch`,
-`RequestAdjacentFullHistoryCatchUpAsync` and the two soft-reconnect fallbacks — has no rule left in
-it; it reads `_suppressReconnect`, the auth state, the live transport and the enrichment gate, and
-falls back to a reconnect. That is connection lifecycle and moves with phase 4.
+**Slice 3 is closed.** Idle decide and adjacent FULL_HISTORY moved to `HistoryFacade`
+(Phase 4 wave 1). Soft-reconnect fallbacks stay on the client behind
+`IConnectionSoftReconnect` / `IHistoryCatchUpHost` until wave 2 owns ConnectAsync.
 
 ### Phase 4 — What remains is connection
 
@@ -1273,10 +1272,11 @@ startup. Before the client is attached, it answers as if nothing were there: the
 answers false and the rest do nothing. `App.GetWhatsAppService()` is gone; `App` resolves
 `IConnectionService`. The client's reconnect, resume and broker logic did not change.
 
-**Wave 1 started: media connect goes through the façade.** `MediaAvailability` asks
-`IConnectionService.EnsureConnectedAsync` instead of naming `IWhatsAppService`.
-`IConnectionSoftReconnect` exposes soft auto-reconnect and catch-up-continue without the
-god client; catch-up idle decide is the next slice of this wave.
+**Wave 1 closed (callers + catch-up).** `MediaAvailability` asks
+`IConnectionService.EnsureConnectedAsync`. `IConnectionSoftReconnect` exposes soft
+auto-reconnect and catch-up-continue. Idle-lot decide and adjacent FULL_HISTORY live on
+`HistoryFacade.NotifyCatchUpIdleBatch` over shared `HistoryCatchUpContinuation` and
+`IHistoryCatchUpHost`. Wave 2 is still ConnectAsync / pairing / resume / broker body.
 
 **The open conversation is shared state.** `ActiveChat` (`Unison.Core/State`, DI singleton over
 `JidAliasTable.GetCanonicalJid`) holds the conversation the user has open by its canonical

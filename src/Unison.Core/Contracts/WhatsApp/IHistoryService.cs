@@ -142,6 +142,17 @@ namespace Unison.Core.Contracts.WhatsApp
 
         /// <summary>Host path: background FULL_HISTORY solicitation bounced; toast gate counts these.</summary>
         void NotifyBackgroundHistorySyncBounced();
+
+        /// <summary>
+        /// Host path after a quiet FULL_HISTORY lot / watchdog idle / hard timeout: decide
+        /// whether to finish catch-up or ask the next adjacent page (live socket or soft-reconnect).
+        /// </summary>
+        void NotifyCatchUpIdleBatch(
+            string requestId,
+            bool ackAccepted,
+            int progressSignals,
+            string triggerReason,
+            int idleMs);
     }
 }
 

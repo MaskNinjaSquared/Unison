@@ -43,7 +43,7 @@ using Unison.WhatsAppClient.Helpers;
 
 namespace Unison.Uwp.Services.WhatsApp
 {
-    public partial class WhatsAppService : INotifyPropertyChanged, IWhatsAppService, IMediaDownloadHost, IOfflineReplayHost, IPlaceholderResendSocket, IHistoryOnDemandSocket, IRuntimeSnapshotSource, IBackgroundResolutionGate, IAppStateLocalHost, IConversationResyncHost, IHistorySyncHost, ISocketAliasRegistrar, IConnectionSoftReconnect, IStartupUiHost, IJidAliasPersistence, IIncomingMessageEnqueueHost, Unison.WhatsAppClient.Abstractions.IResolvedNameApplyHost
+    public partial class WhatsAppService : INotifyPropertyChanged, IWhatsAppService, IMediaDownloadHost, IOfflineReplayHost, IPlaceholderResendSocket, IHistoryOnDemandSocket, IRuntimeSnapshotSource, IBackgroundResolutionGate, IAppStateLocalHost, IConversationResyncHost, IHistorySyncHost, IHistoryCatchUpHost, ISocketAliasRegistrar, IConnectionSoftReconnect, IStartupUiHost, IJidAliasPersistence, IIncomingMessageEnqueueHost, Unison.WhatsAppClient.Abstractions.IResolvedNameApplyHost
     {
         public event PropertyChangedEventHandler PropertyChanged;
         protected void OnPropertyChanged([CallerMemberName] string propertyName = null)
@@ -387,7 +387,7 @@ namespace Unison.Uwp.Services.WhatsApp
         private int _offlineReplayReleased;
         private DateTime _lastFreshnessReconnectFallbackUtc = DateTime.MinValue;
         private volatile bool _freshnessReconnectFallbackInProgress = false;
-        private readonly HistoryCatchUpContinuation _catchUp = new HistoryCatchUpContinuation();
+        private readonly HistoryCatchUpContinuation _catchUp;
         private DateTime _lastCatchUpContinueUtc = DateTime.MinValue;
         private readonly SemaphoreSlim _historyHydrationLock = new SemaphoreSlim(1, 1);
         private int _historyHydrationActive;
@@ -971,6 +971,7 @@ namespace Unison.Uwp.Services.WhatsApp
             JidAliasTable jidAlias,
             ContactDisplayNames displayNames,
             HistoryOnDemandRegistry historyRequests,
+            HistoryCatchUpContinuation catchUp,
             InitialSyncProgressState initialSync,
             SyncBudget syncBudget,
             SyncWorkloadStrategy workload,
@@ -1025,6 +1026,7 @@ namespace Unison.Uwp.Services.WhatsApp
             _syncStatus = syncStatus ?? throw new ArgumentNullException(nameof(syncStatus));
             _syncWork = syncWork ?? throw new ArgumentNullException(nameof(syncWork));
             _historyRequests = historyRequests ?? throw new ArgumentNullException(nameof(historyRequests));
+            _catchUp = catchUp ?? throw new ArgumentNullException(nameof(catchUp));
             _initialSync = initialSync ?? throw new ArgumentNullException(nameof(initialSync));
             _syncBudget = syncBudget ?? throw new ArgumentNullException(nameof(syncBudget));
             _workload = workload ?? throw new ArgumentNullException(nameof(workload));
@@ -1084,6 +1086,7 @@ namespace Unison.Uwp.Services.WhatsApp
             JidAliasTable jidAlias,
             ContactDisplayNames displayNames,
             HistoryOnDemandRegistry historyRequests,
+            HistoryCatchUpContinuation catchUp,
             InitialSyncProgressState initialSync,
             SyncBudget syncBudget,
             SyncWorkloadStrategy workload,
@@ -1106,7 +1109,7 @@ namespace Unison.Uwp.Services.WhatsApp
         {
             return _instance ?? (_instance = new WhatsAppService(
                 chatState, chatRows, activeChat, syncStatus, syncWork, historyMessages, chatPreviews, usyncGate, avatarFetcher, mediaCache, jidAlias, displayNames, historyRequests,
-                initialSync, syncBudget, workload, selfProfile, personStore, groupRosterStore, chatStore, systemInfo, ui, pendingMessages, listPaintGate, appMemory, localSettings, resolveContacts, resolveMessages, resolveChats, resolveGroups, resolveHistory, resolveDeferredAvatars));
+                catchUp, initialSync, syncBudget, workload, selfProfile, personStore, groupRosterStore, chatStore, systemInfo, ui, pendingMessages, listPaintGate, appMemory, localSettings, resolveContacts, resolveMessages, resolveChats, resolveGroups, resolveHistory, resolveDeferredAvatars));
         }
 
         /// <summary>
@@ -1992,7 +1995,7 @@ namespace Unison.Uwp.Services.WhatsApp
                     }
                     else
                     {
-                        DecideCatchUpAfterIdleBatch(
+                        History?.NotifyCatchUpIdleBatch(
                             lotRequestId,
                             lotAckAccepted,
                             lotProgressSignals,
@@ -2303,7 +2306,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 }
 
                     HistoryOnDemandRequest last = exit.LastTick.Request;
-                    DecideCatchUpAfterIdleBatch(
+                    History?.NotifyCatchUpIdleBatch(
                         state.RequestId,
                         last.AckAccepted,
                         last.ProgressSignalCount,
@@ -2384,7 +2387,7 @@ namespace Unison.Uwp.Services.WhatsApp
                         "; baselineMsgs=" + state.BaselineMessageCount +
                         "; ramMsgs=" + currentMessageCount +
                         "; trigger=" + (state.TriggerReason ?? string.Empty));
-                    DecideCatchUpAfterIdleBatch(
+                    History?.NotifyCatchUpIdleBatch(
                         state.RequestId,
                         expired.AckAccepted,
                         progressSignals,
@@ -2416,168 +2419,53 @@ namespace Unison.Uwp.Services.WhatsApp
         /// not stop catch-up — older conversations often arrive without moving the newest tip.
         /// Keep insisting until several idle cycles show no progress, or max rounds is hit.
         /// </summary>
-        private void DecideCatchUpAfterIdleBatch(
-            string requestId,
-            bool ackAccepted,
-            int progressSignals,
-            string triggerReason,
-            int idleMs)
+        DateTime IHistoryCatchUpHost.GetNewestStoredMessageUtc() => GetNewestStoredMessageUtc();
+
+        bool IHistoryCatchUpHost.TryGetHistoryFreshnessStaleReason(DateTime nowUtc, out string reason) =>
+            TryGetHistoryFreshnessStaleReason(nowUtc, out reason);
+
+        bool IHistoryCatchUpHost.IsCatchUpBannerActive => IsHistoryCatchUpBannerActive;
+
+        bool IHistoryCatchUpHost.CanSolicitAdjacent =>
+            !_suppressReconnect && _authState != null && _authState.Registered;
+
+        void IHistoryCatchUpHost.MarkEnrichmentAwaitingHeavyHistory() =>
+            Interlocked.Exchange(ref _enrichmentAwaitingHeavyHistory, 1);
+
+        void IHistoryCatchUpHost.FinishContinue(string reason, bool releaseEnrichment) =>
+            FinishHistoryCatchUpContinue(reason, releaseEnrichment);
+
+        void IHistoryCatchUpHost.MarkForceHistoryRepairPending(string reason) =>
+            TryMarkForceHistoryRepairPending(reason);
+
+        void IHistoryCatchUpHost.StartHydrationFallback(string reason) =>
+            _ = RunHydrationFallbackPipelineAsync(reason);
+
+        async Task<bool> IHistoryCatchUpHost.TryRequestAdjacentLiveFullHistoryAsync(string reason)
         {
-            DateTime newestUtc = GetNewestStoredMessageUtc();
-            string staleReason;
-            bool stillStale = TryGetHistoryFreshnessStaleReason(DateTime.UtcNow, out staleReason);
-            int stagnantStop = CatchUpStagnantCyclesBeforeStop;
-
-            HistoryCatchUpContinueResult decision = _catchUp.DecideAfterQuietLot(
-                newestUtc,
-                progressSignals,
-                stillStale,
-                stagnantStop,
-                CatchUpContinueMaxRounds,
-                out HistoryCatchUpProgress before);
-
-            RuntimeDiagnosticsService.Instance.Write(
-                "history",
-                "catch-up-idle-decide",
-                "requestId=" + (requestId ?? string.Empty) +
-                "; idleMs=" + idleMs +
-                "; signals=" + progressSignals +
-                "; ackAccepted=" + ackAccepted +
-                "; stillStale=" + stillStale +
-                "; tipAdvanced=" + decision.TipAdvanced +
-                "; madeProgress=" + decision.MadeProgress +
-                "; newest=" + FreshnessTimestampFormat.ForLog(newestUtc) +
-                "; watermark=" + FreshnessTimestampFormat.ForLog(before.WatermarkUtc) +
-                "; round=" + before.Round +
-                "; stagnant=" + before.StagnantCycles +
-                "; stagnantStop=" + stagnantStop +
-                "; frugal=" + UseFrugalSyncBudget +
-                "; action=" + decision.Action +
-                "; trigger=" + (triggerReason ?? string.Empty));
+            if (_socket == null || !_socket.IsHandshakeComplete || !IsConnected)
+            {
+                return false;
+            }
 
             Debug.WriteLine(
-                "[WhatsAppService] Catch-up idle decide: requestId=" + (requestId ?? "<none>") +
-                ", stillStale=" + stillStale +
-                ", tipAdvanced=" + decision.TipAdvanced +
-                ", madeProgress=" + decision.MadeProgress +
-                ", signals=" + progressSignals +
-                ", newest=" + FreshnessTimestampFormat.ForLog(newestUtc) +
-                ", watermark=" + FreshnessTimestampFormat.ForLog(before.WatermarkUtc) +
-                ", round=" + before.Round +
-                ", stagnant=" + before.StagnantCycles +
-                "/" + stagnantStop +
-                ", action=" + decision.Action);
+                "[WhatsAppService] Adjacent FULL_HISTORY on live socket: " + reason);
+            RuntimeDiagnosticsService.Instance.Write(
+                "history",
+                "catch-up-adjacent-live",
+                "reason=" + (reason ?? string.Empty) +
+                "; round=" + _catchUp.Snapshot().Round);
 
-            switch (decision.Action)
-            {
-                case HistoryCatchUpContinueAction.FinishFreshAndStagnant:
-                    FinishHistoryCatchUpContinue("fresh-and-stagnant", releaseEnrichment: true);
-                    return;
-
-                case HistoryCatchUpContinueAction.FinishStagnantProgress:
-                    if (stillStale)
-                    {
-                        // Mobile cap may stop mid-backlog; latch so the next session resumes.
-                        TryMarkForceHistoryRepairPending("stagnant-progress-still-stale");
-                    }
-
-                    FinishHistoryCatchUpContinue("stagnant-progress", releaseEnrichment: true);
-                    if (stillStale)
-                    {
-                        _ = RunHydrationFallbackPipelineAsync("stagnant-progress");
-                    }
-
-                    return;
-
-                case HistoryCatchUpContinueAction.FinishMaxContinues:
-                    if (stillStale)
-                    {
-                        TryMarkForceHistoryRepairPending("max-continues-still-stale");
-                    }
-
-                    FinishHistoryCatchUpContinue("max-continues", releaseEnrichment: true);
-                    if (stillStale)
-                    {
-                        _ = RunHydrationFallbackPipelineAsync("max-continues");
-                    }
-
-                    return;
-            }
-
-            // Insist on the next FULL_HISTORY page on the live socket. Soft-reconnect alone does
-            // not solicit history — and a reconnect with an empty offline buffer never re-enters
-            // LogHistoryFreshnessAfterOfflineDrain in a way that asks again.
-            _ = RequestAdjacentFullHistoryCatchUpAsync(
-                "idle-continue:requestId=" + (requestId ?? string.Empty) +
-                ":ackAccepted=" + ackAccepted +
-                ":round=" + decision.NextContinueRound +
-                ":stagnant=" + decision.NextStagnantCycles +
-                ":signals=" + progressSignals +
-                ":newest=" + FreshnessTimestampFormat.ForLog(newestUtc));
+            return await RequestFullHistoryOnDemandTrackedAsync(
+                reason,
+                isFreshnessRepair: true).ConfigureAwait(false);
         }
 
-        /// <summary>
-        /// Asks for the next FULL_HISTORY lot after a quiet page. Prefers the live socket; falls
-        /// back to soft-reconnect + post-drain request when the transport is not ready.
-        /// </summary>
-        private async Task RequestAdjacentFullHistoryCatchUpAsync(string reason)
-        {
-            try
-            {
-                await Task.Delay(CatchUpContinueReconnectDelay).ConfigureAwait(false);
+        void IHistoryCatchUpHost.WriteHistoryJournal(string eventName, string detail) =>
+            RuntimeDiagnosticsService.Instance.Write("history", eventName, detail);
 
-                if (!IsHistoryCatchUpActive())
-                {
-                    Debug.WriteLine(
-                        "[WhatsAppService] Adjacent FULL_HISTORY skipped; catch-up already finished (" +
-                        reason + ")");
-                return;
-            }
-
-                if (_suppressReconnect || _authState == null || !_authState.Registered)
-            {
-                    FinishHistoryCatchUpContinue("adjacent-aborted", releaseEnrichment: true);
-                return;
-            }
-
-                Interlocked.Exchange(ref _enrichmentAwaitingHeavyHistory, 1);
-
-                if (_socket != null && _socket.IsHandshakeComplete && IsConnected)
-            {
-                Debug.WriteLine(
-                        "[WhatsAppService] Adjacent FULL_HISTORY on live socket: " + reason);
-                    RuntimeDiagnosticsService.Instance.Write(
-                        "history",
-                        "catch-up-adjacent-live",
-                        "reason=" + (reason ?? string.Empty) +
-                        "; round=" + _catchUp.Snapshot().Round);
-
-                    bool ok = await RequestFullHistoryOnDemandTrackedAsync(
-                        reason,
-                        isFreshnessRepair: true).ConfigureAwait(false);
-                    if (ok)
-            {
-                return;
-            }
-
-                    Debug.WriteLine(
-                        "[WhatsAppService] Adjacent FULL_HISTORY live request failed; soft-reconnect fallback.");
-                }
-
-                ScheduleCatchUpContinueReconnect(reason ?? "adjacent-fallback");
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine(
-                    "[WhatsAppService] Adjacent FULL_HISTORY failed: " + ex.Message);
-                RuntimeDiagnosticsService.Instance.RecordException(
-                    "history",
-                    "catch-up-adjacent-failed",
-                    ex,
-                    reason);
-                FinishHistoryCatchUpContinue("adjacent-error", releaseEnrichment: true);
-            }
-        }
+        void IHistoryCatchUpHost.RecordHistoryException(string eventName, Exception error, string detail) =>
+            RuntimeDiagnosticsService.Instance.RecordException("history", eventName, error, detail);
 
         private bool IsHistoryCatchUpActive()
         {
