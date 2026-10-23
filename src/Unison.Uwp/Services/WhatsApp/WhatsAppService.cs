@@ -43,7 +43,7 @@ using Unison.WhatsAppClient.Helpers;
 
 namespace Unison.Uwp.Services.WhatsApp
 {
-    public partial class WhatsAppService : INotifyPropertyChanged, IWhatsAppService, IMediaDownloadHost, IAvatarReport, IOfflineReplayHost, IPlaceholderResendSocket, IHistoryOnDemandSocket, IRuntimeSnapshotSource, IDeferredAvatarResolution, IAppStateLocalHost, IConversationResyncHost, IHistorySyncHost, IUsyncAliasHost, IStartupUiHost, IJidAliasPersistence
+    public partial class WhatsAppService : INotifyPropertyChanged, IWhatsAppService, IMediaDownloadHost, IAvatarReport, IOfflineReplayHost, IPlaceholderResendSocket, IHistoryOnDemandSocket, IRuntimeSnapshotSource, IDeferredAvatarResolution, IAppStateLocalHost, IConversationResyncHost, IHistorySyncHost, IUsyncAliasHost, IStartupUiHost, IJidAliasPersistence, Unison.WhatsAppClient.Abstractions.IResolvedNameApplyHost
     {
         public event PropertyChangedEventHandler PropertyChanged;
         protected void OnPropertyChanged([CallerMemberName] string propertyName = null)
@@ -707,41 +707,6 @@ namespace Unison.Uwp.Services.WhatsApp
         /// it used to - a new alias, a row re-keyed to its canonical address.
         /// </summary>
         private void InvalidateChatRowIndex() => _chatRows.Invalidate();
-
-        /// <summary>
-        /// Updates the chat-list strip when the candidate is not older than the current tip.
-        /// HistorySync, disk reads and delayed echoes can arrive out of order; Last Message is
-        /// driven by TimestampUtc, and MessageId is how we detect a different tip at the same second.
-        /// </summary>
-        private bool ApplyChatPreviewIfNewer(
-            ChatItem chat,
-            string preview,
-            DateTime timestamp,
-            bool force = false,
-            ChatPreviewKind? kindHint = null,
-            string authorPrefix = null,
-            System.Collections.Generic.IList<string> mentionedJids = null,
-            bool? isFromMe = null,
-            MessageSendState? sendState = null,
-            string messageId = null,
-            string participantJid = null,
-            string senderName = null)
-        {
-            return LiveChatPreviewApplier.ApplyIfNewer(
-                chat,
-                preview,
-                timestamp,
-                force,
-                kindHint,
-                authorPrefix,
-                mentionedJids,
-                isFromMe,
-                sendState,
-                messageId,
-                LocalizedChatStripLabels.Yesterday(),
-                participantJid,
-                senderName);
-        }
 
         private DateTime GetNewestStoredMessageUtc()
         {
@@ -2183,11 +2148,11 @@ namespace Unison.Uwp.Services.WhatsApp
                                 bool isGroup = jid.EndsWith("@g.us", StringComparison.OrdinalIgnoreCase)
                                     || (row.JID ?? string.Empty).EndsWith("@g.us", StringComparison.OrdinalIgnoreCase)
                                     || row.IsGroup;
-                                ApplyChatPreviewIfNewer(
+                                LiveChatPreviewApplier.ApplyIfNewer(
                                     row,
                                     ChatPreviewNormalizer.FormatListPreview(replacement, isGroup),
                                     replacement.Timestamp,
-                                    true,
+                                    force: true,
                                     ChatPreviewNormalizer.InferKindFromMessage(replacement),
                                     ChatPreviewNormalizer.FormatListAuthorPrefix(
                                         replacement,
@@ -2198,6 +2163,7 @@ namespace Unison.Uwp.Services.WhatsApp
                                     replacement.IsFromMe,
                                     HistoryLiveMessageMapper.FromStatus(replacement.Status, replacement.IsFromMe),
                                     replacement.Id,
+                                    LocalizedChatStripLabels.Yesterday(),
                                     isGroup
                                         ? ParticipantStripIdentity.PreferForDisplay(
                                             replacement.ParticipantJid,
@@ -4094,12 +4060,22 @@ namespace Unison.Uwp.Services.WhatsApp
         {
             var bridge = new SocketBridge(_authState, _sharedKeyStore, reuseLoadedKeyState);
 
-            bridge.ChatSettingsChanged = ApplyChatUpdateAsync;
+            bridge.ChatSettingsChanged = update =>
+                ChatFacade != null
+                    ? ChatFacade.ApplyRemoteChatSettingsAsync(update)
+                    : ApplyChatUpdateAsync(update);
             bridge.ContactChanged = contact => ApplyContactUpdateAsync(contact);
             bridge.ContactsChanged = updates => ApplyContactUpdatesAsync(updates);
-            bridge.SelfPushNameChanged = name => ApplyAppStateSelfPushNameAsync(name);
+            bridge.SelfPushNameChanged = name =>
+                Contacts != null
+                    ? Contacts.ApplyRemoteSelfPushNameAsync(name)
+                    : ApplyAppStateSelfPushNameAsync(name);
             bridge.GroupSubjectChanged = (jid, subject) =>
-                ApplyGroupSubjectsAsync(new[] { new KeyValuePair<string, string>(jid, subject) });
+                Contacts != null
+                    ? Contacts.ApplyRemoteGroupSubjectsAsync(
+                        new[] { new KeyValuePair<string, string>(jid, subject) })
+                    : ApplyGroupSubjectsAsync(
+                        new[] { new KeyValuePair<string, string>(jid, subject) });
             bridge.ChatDeleted = jid => ApplyAppStateDeleteChatAsync(jid);
             bridge.MessageDeleted = key => ApplyAppStateDeleteMessageAsync(key.RemoteJid, key.Id);
             bridge.ResolveSentMessage = ResolveSentMessageForRetryAsync;
@@ -4708,7 +4684,15 @@ namespace Unison.Uwp.Services.WhatsApp
         /// Applies a set of resolved names: the cache is filled, the rows that carry any of those
         /// addresses are relabelled, and the list is told once that names changed.
         /// </summary>
-        private async Task ApplyResolvedNameBatchAsync(List<ResolvedNameEntry> entries)
+        Task Unison.WhatsAppClient.Abstractions.IResolvedNameApplyHost.ApplyResolvedNameBatchAsync(
+            IList<ResolvedNameEntry> entries) =>
+            ApplyResolvedNameBatchAsync(entries);
+
+        Task Unison.WhatsAppClient.Abstractions.IResolvedNameApplyHost.ApplySelfPushNameFromAppStateAsync(
+            string name) =>
+            ApplyAppStateSelfPushNameAsync(name);
+
+        private async Task ApplyResolvedNameBatchAsync(IList<ResolvedNameEntry> entries)
         {
             if (entries == null || entries.Count == 0)
             {

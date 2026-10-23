@@ -71,28 +71,6 @@ namespace Unison.Uwp.Services.WhatsApp
                 out existingMessage);
         }
 
-        /// <summary>
-        /// Checks whether a message ID exists in any alias-linked chat bucket.
-        /// Used by the offline fast-path to avoid the heavier TryFindAliasLinkedMessage.
-        /// </summary>
-        private bool HasMessageIdInAnyAlias(string chatJid, string messageId)
-        {
-            if (string.IsNullOrWhiteSpace(chatJid) || string.IsNullOrWhiteSpace(messageId))
-            {
-                return false;
-            }
-
-            foreach (var candidate in GetAliasLinkedDirectChatJids(chatJid))
-            {
-                if (HasMessageId(candidate, messageId))
-                {
-                    return true;
-                }
-            }
-
-            return false;
-        }
-
         private void RegisterMissingMessage(string chatJid, string participant, string messageId, bool isFromMe, DateTime timestamp, string reason)
         {
             string normJid = NormalizeJid(chatJid);
@@ -238,18 +216,16 @@ namespace Unison.Uwp.Services.WhatsApp
 
         private bool ShouldDeferPlaceholderResend(string trigger, out string reason)
         {
+            reason = null;
             if (_socket == null || !_socket.IsHandshakeComplete)
             {
-                reason = null;
                 return false;
             }
-
-            bool historyOnDemandInFlight = _historyRequests.ChatsInFlight > 0;
 
             return PlaceholderResendDeferral.IsDeferred(
                 ShouldDeferReconnectReplayWork(),
                 _socket.IsAwaitingInitialSync,
-                historyOnDemandInFlight,
+                _historyRequests.ChatsInFlight > 0,
                 out reason);
         }
 
@@ -475,49 +451,6 @@ namespace Unison.Uwp.Services.WhatsApp
             }
         }
 
-        // MessageRenderInfo lives with MessageRenderReader in WhatsAppClient.Helpers.
-
-        private Proto.Message UnwrapMessage(Proto.Message msg)
-        {
-            return HistorySyncContentFilter.Unwrap(msg);
-        }
-
-        private static Proto.ContextInfo GetContextInfo(Proto.Message unwrapped)
-        {
-            return HistorySyncContentFilter.GetContextInfo(unwrapped);
-        }
-
-        private void ApplyContextInfoExtras(
-            Proto.Message msg,
-            out string quotedText,
-            out string quotedSender,
-            out string quotedParticipantJid,
-            out string quotedMessageId,
-            out ChatPreviewKind quotedKind,
-            out List<string> mentionedJids,
-            out bool isForwarded,
-            out bool mentionAll)
-        {
-            QuotedContext context = QuotedContext.Read(msg);
-
-            quotedText = context.QuotedText;
-            quotedParticipantJid = context.QuotedParticipantJid;
-            quotedMessageId = context.QuotedMessageId;
-            quotedKind = context.QuotedKind;
-            mentionedJids = context.MentionedJids;
-            isForwarded = context.IsForwarded;
-            mentionAll = context.MentionAll;
-
-            // Naming the author is the one part that is not in the envelope: it needs the account,
-            // the alias table and the directory, which is why the reading above stops here.
-            quotedSender = QuotedSenderNaming.Resolve(
-                context.QuotedParticipantJid,
-                p => IsSelfJid(p) || IsSelfLinkedJid(p),
-                p => ResolveDisplayName(p, "quote"),
-                p => ResolveDisplayName(p, "sender"),
-                LocalizedChatStripLabels.SelfFallbackName());
-        }
-
         private async Task ApplyIncomingRevocationAsync(string chatJid, string targetMessageId, string envelopeMessageId = null)
         {
             string targetId = targetMessageId;
@@ -603,19 +536,6 @@ namespace Unison.Uwp.Services.WhatsApp
                         target.IsFromMe ? null : target.SenderName);
                 }
             }
-        }
-
-        private MessageRenderInfo ExtractMessageRenderInfo(Proto.Message msg)
-        {
-            return MessageRenderReader.Read(msg, line => Log("[WhatsAppService] " + line));
-        }
-
-        /// <summary>
-        /// Extracts user-visible preview text from a Proto.Message.
-        /// </summary>
-        private string ExtractMessageContent(Proto.Message msg)
-        {
-            return ExtractMessageRenderInfo(msg)?.Content;
         }
 
         private async Task ProcessPeerDataOperationResponseAsync(Proto.Message.Types.PeerDataOperationRequestResponseMessage response)
@@ -1124,7 +1044,10 @@ namespace Unison.Uwp.Services.WhatsApp
                         // For DMs, check the from JID and all known alias buckets
                         string fastDmJid = GetCanonicalJid(normalizedFromJid);
                         if (HasMessageId(fastDmJid, e.MessageId) ||
-                            HasMessageIdInAnyAlias(normalizedFromJid, e.MessageId))
+                            AliasLinkedMessageFind.HasId(
+                                MessagesByChat,
+                                GetAliasLinkedDirectChatJids(normalizedFromJid),
+                                e.MessageId))
                         {
                             EnrichOfflineDuplicateFast(fastDmJid, e);
                             ResolveMissingMessage(fastDmJid, e.MessageId, "offline-duplicate-fast");
@@ -1263,7 +1186,9 @@ namespace Unison.Uwp.Services.WhatsApp
 
                 SetIncomingMessagePumpStage("render", e);
                 // Extract message render payload
-                var renderInfo = ExtractMessageRenderInfo(e.Message);
+                MessageRenderInfo renderInfo = MessageRenderReader.Read(
+                    e.Message,
+                    line => Log("[WhatsAppService] " + line));
                 IncomingEmptyContentSkip emptySkip = IncomingEmptyContentSkip.For(
                     renderInfo?.Content,
                     e.Message?.SenderKeyDistributionMessage != null,
@@ -1407,7 +1332,21 @@ namespace Unison.Uwp.Services.WhatsApp
 
                 SetIncomingMessagePumpStage("model", e);
                 // Domain ChatMessage via the MessageFacade (Kind resolved in mapper).
-                ApplyContextInfoExtras(e.Message, out string quotedText, out string quotedSender, out string quotedParticipantJid, out string quotedMessageId, out var quotedKind, out var mentionedJids, out bool isForwarded, out bool mentionAll);
+                // Naming the quoted author needs account / alias / directory — not in the envelope.
+                QuotedContext quotedContext = QuotedContext.Read(e.Message);
+                string quotedText = quotedContext.QuotedText;
+                string quotedParticipantJid = quotedContext.QuotedParticipantJid;
+                string quotedMessageId = quotedContext.QuotedMessageId;
+                ChatPreviewKind quotedKind = quotedContext.QuotedKind;
+                List<string> mentionedJids = quotedContext.MentionedJids;
+                bool isForwarded = quotedContext.IsForwarded;
+                bool mentionAll = quotedContext.MentionAll;
+                string quotedSender = QuotedSenderNaming.Resolve(
+                    quotedContext.QuotedParticipantJid,
+                    p => IsSelfJid(p) || IsSelfLinkedJid(p),
+                    p => ResolveDisplayName(p, "quote"),
+                    p => ResolveDisplayName(p, "sender"),
+                    LocalizedChatStripLabels.SelfFallbackName());
 
                 if (Messages == null)
                 {
