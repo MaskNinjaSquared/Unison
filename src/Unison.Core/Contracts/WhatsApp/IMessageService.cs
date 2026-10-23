@@ -419,5 +419,11 @@ namespace Unison.Core.Contracts.WhatsApp
             string participantJid,
             string selfDisplayName,
             DateTime timestampUtc);
+
+        /// <summary>
+        /// After routing: render → push-name → sender/attention → build bubble →
+        /// <see cref="AcceptIncomingTimeline"/> → alias/duplicate/insert follow-up.
+        /// </summary>
+        Task ProcessIncomingChatContentAsync(IncomingChatContentProcessRequest request);
     }
 }

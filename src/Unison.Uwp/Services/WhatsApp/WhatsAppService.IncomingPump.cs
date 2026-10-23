@@ -947,129 +947,6 @@ namespace Unison.Uwp.Services.WhatsApp
                     return;
                 }
 
-                SetIncomingMessagePumpStage("render", e);
-                // Extract message render payload
-                MessageRenderInfo renderInfo = MessageRenderReader.Read(
-                    e.Message,
-                    line => Log("[WhatsAppService] " + line));
-                IncomingEmptyContentSkip emptySkip = IncomingEmptyContentSkip.For(
-                    renderInfo?.Content,
-                    e.Message?.SenderKeyDistributionMessage != null,
-                    !string.IsNullOrEmpty(e.MessageId));
-                if (emptySkip.ShouldSkip)
-                {
-                    // SenderKeyDistributionMessage-only payloads have no user-facing content
-                    // They were already processed in SocketClient — just skip silently
-                    if (emptySkip.Reason == IncomingEmptyContentReason.SenderKeyDistributionOnly)
-                    {
-                        Log("[WhatsAppService] SenderKeyDistribution-only message, no content to display");
-                    }
-                    else
-                    {
-                        Log("[WhatsAppService] No text content in message, skipping");
-                    }
-
-                    // A placeholder recovery that lands as an unrecognised type still has to
-                    // clear the missing-message ledger, or the resend drain keeps asking for
-                    // a message that will never draw.
-                    if (emptySkip.ClearMissingLedger)
-                    {
-                        string skipJid = GetCanonicalJid(normalizedFromJid) ?? NormalizeJid(e.FromJid);
-                        ResolveMissingMessage(skipJid, e.MessageId, "empty-content");
-                    }
-
-                    return;
-                }
-
-                string content = renderInfo.Content;
-
-
-                // Update contact name cache if a pushName or verifiedName is provided
-                string nameFromMsg = e.VerifiedName ?? e.PushName;
-                if (!string.IsNullOrEmpty(nameFromMsg))
-                {
-                    Contacts?.AcceptIncomingPushName(
-                        nameFromMsg,
-                        e.IsFromMe,
-                        e.Participant,
-                        e.FromJid,
-                        e.IsOffline);
-                }
-
-                // Resolve sender name and true 'IsFromMe' status.
-                // Envelope participant is often a LID; participantAlt carries the phone. The bubble
-                // walks aliases/roster later — the strip tip must prefer the phone up front or
-                // ChatAuthorProjection never finds the name keyed under the PN.
-                string participantJid = NormalizeJid(e.Participant);
-                string participantAltJid = NormalizeJid(e.ParticipantAlt);
-                string stripParticipantJid = ParticipantStripIdentity.PreferForDisplay(
-                    participantJid,
-                    participantAltJid);
-                string resolvedParticipantName =
-                    (!string.IsNullOrEmpty(stripParticipantJid)
-                        ? ResolveDisplayName(stripParticipantJid, "sender")
-                        : null)
-                    ?? (!string.IsNullOrEmpty(participantJid)
-                        ? ResolveDisplayName(participantJid, "sender")
-                        : null);
-                IncomingSenderResolution sender = IncomingSenderResolver.Resolve(
-                    isGroup,
-                    e.IsFromMe,
-                    _authState?.Me?.Name,
-                    LocalizedChatStripLabels.SelfFallbackName(),
-                    resolvedParticipantName,
-                    ResolveDisplayName(jid, "sender"),
-                    !string.IsNullOrEmpty(participantJid) || !string.IsNullOrEmpty(stripParticipantJid));
-                string senderName = sender.SenderName;
-                bool isActuallyFromMe = sender.IsFromMe;
-                
-                // Decided once, here, so the badge and the toast cannot disagree about whether the
-                // user is looking at this conversation. Initial sync / offline drain never pop
-                // message toasts (unread still updates).
-                bool quietForSync =
-                    (_initialSync != null && _initialSync.IsActive) ||
-                    (_socket != null && _socket.IsAwaitingInitialSync);
-                IncomingAttention attention = IncomingAttention.For(
-                    isActuallyFromMe,
-                    IsActiveChatJid(jid),
-                    Unison.Uwp.App.IsWindowVisible,
-                    suppressToastForSync: quietForSync);
-
-                // List preview body is unprefixed; group author is applied via LastMessageAuthor.
-                // Strip identity prefers PN when known; FormatListAuthorPrefix falls back to the
-                // phone digits rather than printing a LID.
-                string displayContent = content;
-                string listAuthorPrefix = isGroup
-                    ? ChatPreviewNormalizer.FormatListAuthorPrefix(
-                        new ChatMessage
-                        {
-                            SenderName = senderName,
-                            IsFromMe = isActuallyFromMe,
-                            ParticipantJid = participantJid
-                        },
-                        true,
-                        LocalizedChatStripLabels.SelfFallbackName(),
-                        stripParticipantJid)
-                    : string.Empty;
-
-                SetIncomingMessagePumpStage("model", e);
-                // Domain ChatMessage via the MessageFacade (Kind resolved in mapper).
-                // Naming the quoted author needs account / alias / directory — not in the envelope.
-                QuotedContext quotedContext = QuotedContext.Read(e.Message);
-                string quotedText = quotedContext.QuotedText;
-                string quotedParticipantJid = quotedContext.QuotedParticipantJid;
-                string quotedMessageId = quotedContext.QuotedMessageId;
-                ChatPreviewKind quotedKind = quotedContext.QuotedKind;
-                List<string> mentionedJids = quotedContext.MentionedJids;
-                bool isForwarded = quotedContext.IsForwarded;
-                bool mentionAll = quotedContext.MentionAll;
-                string quotedSender = QuotedSenderNaming.Resolve(
-                    quotedContext.QuotedParticipantJid,
-                    p => IsSelfJid(p) || IsSelfLinkedJid(p),
-                    p => ResolveDisplayName(p, "quote"),
-                    p => ResolveDisplayName(p, "sender"),
-                    LocalizedChatStripLabels.SelfFallbackName());
-
                 if (Messages == null)
                 {
                     Debug.WriteLine("[WhatsAppService] Dropping inbound message: MessageFacade is not attached.");
@@ -1080,119 +957,28 @@ namespace Unison.Uwp.Services.WhatsApp
                     return;
                 }
 
-                ChatMessage chatMessage = Messages.GetChatMessage(
-                    new ChatMessageMapContext
-                    {
-                        MessageId = e.MessageId,
-                        ChatJid = jid,
-                        RemoteJid = jid,
-                        ParticipantJid = participantJid,
-                        SenderName = senderName,
-                        IsFromMe = isActuallyFromMe,
-                        Timestamp = MessageTimestampValidity.KeepOrDiscard(e.Timestamp, DateTime.UtcNow),
-                        Status = isActuallyFromMe ? ApplyChatStatusPolicy(jid, ChatMessage.StatusSent) : null
-                    },
-                    IncomingChatMessageSnapshot.FromRender(
-                        renderInfo,
-                        content,
-                        isForwarded,
-                        quotedText,
-                        quotedKind,
-                        quotedSender,
-                        quotedParticipantJid,
-                        quotedMessageId,
-                        mentionedJids,
-                        mentionAll));
-
-                IncomingMediaMetadata.Apply(chatMessage, renderInfo);
-
-                Messages?.ApplyHeldMessageState(jid, chatMessage);
-
-                ChatPreviewKind previewKind = LiveChatPreviewApplier.ResolveKind(chatMessage, renderInfo);
-
-                SetIncomingMessagePumpStage("dedupe", e);
-                IncomingTimelineAcceptResult timeline = Messages != null
-                    ? Messages.AcceptIncomingTimeline(jid, chatMessage, isGroup)
-                    : new IncomingTimelineAcceptResult
-                    {
-                        Kind = IncomingTimelineAcceptKind.Inserted,
-                        Message = chatMessage
-                    };
-
-                if (timeline.Kind == IncomingTimelineAcceptKind.AliasConsolidated)
+                SetIncomingMessagePumpStage("content", e);
+                bool quietForSync =
+                    (_initialSync != null && _initialSync.IsActive) ||
+                    (_socket != null && _socket.IsAwaitingInitialSync);
+                await Messages.ProcessIncomingChatContentAsync(new IncomingChatContentProcessRequest
                 {
-                    SetIncomingMessagePumpStage("alias-consolidate", e);
-                    await Messages.ApplyIncomingAliasConsolidatedAsync(
-                        new IncomingAliasConsolidatedApplyRequest
-                        {
-                            ChatJid = jid,
-                            IncomingMessage = chatMessage,
-                            Timeline = timeline,
-                            DisplayContent = displayContent,
-                            IsOffline = e.IsOffline,
-                            IsGroup = isGroup,
-                            IsFromMe = isActuallyFromMe,
-                            PreviewKind = previewKind,
-                            ListAuthorPrefix = listAuthorPrefix,
-                            StripParticipantJid = stripParticipantJid,
-                            SenderName = senderName
-                        }).ConfigureAwait(false);
-                    if (!e.IsOffline)
-                    {
-                        Log($"[WhatsAppService] Alias-linked duplicate message {e.MessageId} consolidated into {jid}");
-                    }
-                    return;
-                }
-
-                if (timeline.Kind == IncomingTimelineAcceptKind.DuplicateSameChat ||
-                    timeline.Kind == IncomingTimelineAcceptKind.AliasLinkedDuplicate)
-                {
-                    SetIncomingMessagePumpStage("duplicate", e);
-                    await Messages.ApplyIncomingDuplicateAsync(new IncomingDuplicateApplyRequest
-                    {
-                        ChatJid = jid,
-                        IncomingMessage = chatMessage,
-                        Timeline = timeline,
-                        DisplayContent = displayContent,
-                        IsOffline = e.IsOffline,
-                        IsGroup = isGroup,
-                        IsFromMe = isActuallyFromMe,
-                        PreviewKind = previewKind,
-                        ListAuthorPrefix = listAuthorPrefix,
-                        StripParticipantJid = stripParticipantJid,
-                        SenderName = senderName
-                    }).ConfigureAwait(false);
-                    if (!e.IsOffline)
-                    {
-                        Log($"[WhatsAppService] Duplicate message {e.MessageId} for {jid}, refreshed preview if needed");
-                    }
-                    return;
-                }
-
-                if (!e.IsOffline)
-                {
-                    Log($"[WhatsAppService] Added message to chat {jid}. Total messages in memory: {MessagesByChat.CountFor(jid)}");
-                }
-
-                SetIncomingMessagePumpStage(e.IsOffline ? "offline-insert" : "ui-preview", e);
-                IncomingMediaHydrationPlan mediaPlan = IncomingMediaHydrationPlan.From(renderInfo);
-                await Messages.ApplyIncomingInsertedAsync(new IncomingInsertedApplyRequest
-                {
+                    Message = e.Message,
+                    MessageId = e.MessageId,
                     ChatJid = jid,
-                    Message = chatMessage,
-                    DisplayContent = displayContent,
-                    NotifyContent = content,
+                    FromJid = e.FromJid,
+                    ParticipantJid = e.Participant,
+                    ParticipantAltJid = e.ParticipantAlt,
+                    VerifiedName = e.VerifiedName,
+                    PushName = e.PushName,
+                    Timestamp = e.Timestamp,
                     IsOffline = e.IsOffline,
                     IsGroup = isGroup,
-                    IsFromMe = isActuallyFromMe,
-                    PreviewKind = previewKind,
-                    ListAuthorPrefix = listAuthorPrefix,
-                    StripParticipantJid = stripParticipantJid,
-                    SenderName = senderName,
-                    CountsAsUnread = attention.CountsAsUnread,
-                    SuppressToast = attention.SuppressToast,
-                    Sticker = mediaPlan.HasSticker ? mediaPlan.Sticker : null,
-                    Image = mediaPlan.HasImage ? mediaPlan.Image : null
+                    EnvelopeIsFromMe = e.IsFromMe,
+                    SelfDisplayName = _authState?.Me?.Name,
+                    QuietForSync = quietForSync,
+                    IsActiveChat = IsActiveChatJid(jid),
+                    IsWindowVisible = Unison.Uwp.App.IsWindowVisible
                 }).ConfigureAwait(false);
             }
             catch (Exception ex)

@@ -53,6 +53,7 @@ namespace Unison.WhatsAppClient.Messages
         private readonly PendingMessageState _pendingMessageState;
         private readonly IMissingMessageChatHost _missingMessages;
         private readonly Func<IChatService> _resolveChats;
+        private readonly Func<IContactService> _resolveContacts;
         private readonly ReceiptReader _receipts;
         private readonly GroupReceiptTally _groupReceipts = new GroupReceiptTally();
         private readonly IRuntimeDiagnostics _diagnostics;
@@ -85,6 +86,7 @@ namespace Unison.WhatsAppClient.Messages
             PendingMessageState pendingMessageState,
             IMissingMessageChatHost missingMessages,
             Func<IChatService> resolveChats = null,
+            Func<IContactService> resolveContacts = null,
             IChatStore chatStore = null,
             IStringResources strings = null,
             ISystemInfoProvider systemInfo = null,
@@ -118,6 +120,7 @@ namespace Unison.WhatsAppClient.Messages
             _missingMessages = missingMessages
                 ?? throw new ArgumentNullException(nameof(missingMessages));
             _resolveChats = resolveChats;
+            _resolveContacts = resolveContacts;
             _strings = strings;
             _receipts = new ReceiptReader(jids);
 
@@ -1677,6 +1680,197 @@ namespace Unison.WhatsAppClient.Messages
             await PersistPinnedMessageToSqliteAsync(canonical, messageId, state, null)
                 .ConfigureAwait(false);
             return false;
+        }
+
+        /// <inheritdoc />
+        public async Task ProcessIncomingChatContentAsync(IncomingChatContentProcessRequest request)
+        {
+            if (request?.Message == null || string.IsNullOrWhiteSpace(request.ChatJid))
+            {
+                return;
+            }
+
+            string jid = request.ChatJid;
+            bool isGroup = request.IsGroup;
+            string selfFallback = _strings != null
+                ? _strings.Get("Chat_SelfFallbackName", "You")
+                : "You";
+
+            MessageRenderInfo renderInfo = MessageRenderReader.Read(
+                request.Message,
+                line => Debug.WriteLine("[MessageFacade] " + line));
+            IncomingEmptyContentSkip emptySkip = IncomingEmptyContentSkip.For(
+                renderInfo?.Content,
+                request.Message.SenderKeyDistributionMessage != null,
+                !string.IsNullOrEmpty(request.MessageId));
+            if (emptySkip.ShouldSkip)
+            {
+                if (emptySkip.ClearMissingLedger && !string.IsNullOrEmpty(request.MessageId))
+                {
+                    _missingMessages.ResolveMissingMessage(
+                        jid,
+                        request.MessageId,
+                        "empty-content");
+                }
+
+                return;
+            }
+
+            string content = renderInfo.Content;
+            string nameFromMsg = request.VerifiedName ?? request.PushName;
+            if (!string.IsNullOrEmpty(nameFromMsg))
+            {
+                IContactService contacts = _resolveContacts != null ? _resolveContacts() : null;
+                contacts?.AcceptIncomingPushName(
+                    nameFromMsg,
+                    request.EnvelopeIsFromMe,
+                    request.ParticipantJid,
+                    request.FromJid,
+                    request.IsOffline);
+            }
+
+            string participantJid = JidHelper.Normalize(request.ParticipantJid);
+            string participantAltJid = JidHelper.Normalize(request.ParticipantAltJid);
+            string stripParticipantJid = ParticipantStripIdentity.PreferForDisplay(
+                participantJid,
+                participantAltJid);
+            string resolvedParticipantName =
+                (!string.IsNullOrEmpty(stripParticipantJid)
+                    ? _chatState.ResolveDisplayName(stripParticipantJid)
+                    : null)
+                ?? (!string.IsNullOrEmpty(participantJid)
+                    ? _chatState.ResolveDisplayName(participantJid)
+                    : null);
+            IncomingSenderResolution sender = IncomingSenderResolver.Resolve(
+                isGroup,
+                request.EnvelopeIsFromMe,
+                request.SelfDisplayName,
+                selfFallback,
+                resolvedParticipantName,
+                _chatState.ResolveDisplayName(jid),
+                !string.IsNullOrEmpty(participantJid) || !string.IsNullOrEmpty(stripParticipantJid));
+            string senderName = sender.SenderName;
+            bool isActuallyFromMe = sender.IsFromMe;
+
+            IncomingAttention attention = IncomingAttention.For(
+                isActuallyFromMe,
+                request.IsActiveChat,
+                request.IsWindowVisible,
+                suppressToastForSync: request.QuietForSync);
+
+            string listAuthorPrefix = isGroup
+                ? ChatPreviewNormalizer.FormatListAuthorPrefix(
+                    new ChatMessage
+                    {
+                        SenderName = senderName,
+                        IsFromMe = isActuallyFromMe,
+                        ParticipantJid = participantJid
+                    },
+                    true,
+                    selfFallback,
+                    stripParticipantJid)
+                : string.Empty;
+
+            QuotedContext quotedContext = QuotedContext.Read(request.Message);
+            string quotedSender = QuotedSenderNaming.Resolve(
+                quotedContext.QuotedParticipantJid,
+                p => _jids.IsSelfLinked(p),
+                p => _chatState.ResolveDisplayName(p),
+                p => _chatState.ResolveDisplayName(p),
+                selfFallback);
+
+            ChatMessage chatMessage = GetChatMessage(
+                new ChatMessageMapContext
+                {
+                    MessageId = request.MessageId,
+                    ChatJid = jid,
+                    RemoteJid = jid,
+                    ParticipantJid = participantJid,
+                    SenderName = senderName,
+                    IsFromMe = isActuallyFromMe,
+                    Timestamp = MessageTimestampValidity.KeepOrDiscard(request.Timestamp, DateTime.UtcNow),
+                    Status = isActuallyFromMe
+                        ? SelfChatStatusPolicy.Resolve(
+                            ChatMessage.StatusSent,
+                            _jids.IsSelfLinked(jid))
+                        : null
+                },
+                IncomingChatMessageSnapshot.FromRender(
+                    renderInfo,
+                    content,
+                    quotedContext.IsForwarded,
+                    quotedContext.QuotedText,
+                    quotedContext.QuotedKind,
+                    quotedSender,
+                    quotedContext.QuotedParticipantJid,
+                    quotedContext.QuotedMessageId,
+                    quotedContext.MentionedJids,
+                    quotedContext.MentionAll));
+
+            IncomingMediaMetadata.Apply(chatMessage, renderInfo);
+            ApplyHeldMessageState(jid, chatMessage);
+
+            ChatPreviewKind previewKind = LiveChatPreviewApplier.ResolveKind(chatMessage, renderInfo);
+            IncomingTimelineAcceptResult timeline = AcceptIncomingTimeline(jid, chatMessage, isGroup);
+
+            if (timeline.Kind == IncomingTimelineAcceptKind.AliasConsolidated)
+            {
+                await ApplyIncomingAliasConsolidatedAsync(new IncomingAliasConsolidatedApplyRequest
+                {
+                    ChatJid = jid,
+                    IncomingMessage = chatMessage,
+                    Timeline = timeline,
+                    DisplayContent = content,
+                    IsOffline = request.IsOffline,
+                    IsGroup = isGroup,
+                    IsFromMe = isActuallyFromMe,
+                    PreviewKind = previewKind,
+                    ListAuthorPrefix = listAuthorPrefix,
+                    StripParticipantJid = stripParticipantJid,
+                    SenderName = senderName
+                }).ConfigureAwait(false);
+                return;
+            }
+
+            if (timeline.Kind == IncomingTimelineAcceptKind.DuplicateSameChat ||
+                timeline.Kind == IncomingTimelineAcceptKind.AliasLinkedDuplicate)
+            {
+                await ApplyIncomingDuplicateAsync(new IncomingDuplicateApplyRequest
+                {
+                    ChatJid = jid,
+                    IncomingMessage = chatMessage,
+                    Timeline = timeline,
+                    DisplayContent = content,
+                    IsOffline = request.IsOffline,
+                    IsGroup = isGroup,
+                    IsFromMe = isActuallyFromMe,
+                    PreviewKind = previewKind,
+                    ListAuthorPrefix = listAuthorPrefix,
+                    StripParticipantJid = stripParticipantJid,
+                    SenderName = senderName
+                }).ConfigureAwait(false);
+                return;
+            }
+
+            IncomingMediaHydrationPlan mediaPlan = IncomingMediaHydrationPlan.From(renderInfo);
+            await ApplyIncomingInsertedAsync(new IncomingInsertedApplyRequest
+            {
+                ChatJid = jid,
+                Message = chatMessage,
+                DisplayContent = content,
+                NotifyContent = content,
+                IsOffline = request.IsOffline,
+                IsGroup = isGroup,
+                IsFromMe = isActuallyFromMe,
+                PreviewKind = previewKind,
+                ListAuthorPrefix = listAuthorPrefix,
+                StripParticipantJid = stripParticipantJid,
+                SenderName = senderName,
+                CountsAsUnread = attention.CountsAsUnread,
+                SuppressToast = attention.SuppressToast,
+                Sticker = mediaPlan.HasSticker ? mediaPlan.Sticker : null,
+                Image = mediaPlan.HasImage ? mediaPlan.Image : null
+            }).ConfigureAwait(false);
         }
 
         /// <inheritdoc />

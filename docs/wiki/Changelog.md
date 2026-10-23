@@ -2,6 +2,12 @@
 
 Newest first.
 
+## Phase B — ProcessIncomingChatContent on MessageFacade
+
+Render → push-name → sender/attention → bubble → AcceptIncomingTimeline →
+alias/duplicate/insert follow-up lives on `IMessageService.ProcessIncomingChatContentAsync`.
+Pump after revoke/pin/reaction only supplies envelope fields + quiet/active flags.
+
 ## Phase B — alias consolidate, status ingest, reaction/offline wrappers
 
 `ApplyIncomingAliasConsolidatedAsync` owns finalize + tip. Live status builds and
