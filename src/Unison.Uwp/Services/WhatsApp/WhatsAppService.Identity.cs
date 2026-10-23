@@ -269,11 +269,6 @@ namespace Unison.Uwp.Services.WhatsApp
         /// <see cref="IsSelfLinkedJid"/> reads the poisoned entry itself as evidence that the
         /// contact is us, which switches that guard off.
         /// </remarks>
-        private bool IsSelfPoisoningAliasPair(string aliasKey, string aliasValue)
-        {
-            return AliasPairPolicy.IsUnsafeToRestore(aliasKey, aliasValue, JidAlias);
-        }
-
         /// <summary>
         /// The bookkeeping half: validates the pair, files it both ways, and reports whether it
         /// told us anything we did not already know. No UI, no disk, no scans.
