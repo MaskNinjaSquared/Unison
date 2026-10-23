@@ -382,9 +382,42 @@ namespace Unison.Core.Contracts.WhatsApp
         Task ApplyIncomingDuplicateAsync(IncomingDuplicateApplyRequest request);
 
         /// <summary>
+        /// After <see cref="AcceptIncomingTimeline"/> consolidates an alias: durable finalize
+        /// then tip refresh.
+        /// </summary>
+        Task ApplyIncomingAliasConsolidatedAsync(IncomingAliasConsolidatedApplyRequest request);
+
+        /// <summary>
         /// After <see cref="AcceptIncomingTimeline"/> inserts: offline tip + persist, or live
         /// list apply + notify + persist, plus media hydrate.
         /// </summary>
         Task ApplyIncomingInsertedAsync(IncomingInsertedApplyRequest request);
+
+        /// <summary>
+        /// Offline fast-path: when the id is already in RAM, enrich blank fields, clear
+        /// missing-message, and skip the full inbound pipeline. Returns true when handled.
+        /// </summary>
+        bool TryHandleOfflineDuplicateFast(
+            string chatJid,
+            string messageId,
+            bool isGroup,
+            bool isFromMe,
+            string participantJid,
+            string verifiedName,
+            string pushName);
+
+        /// <summary>
+        /// Reaction envelope: builds sender naming when needed and applies. Returns true when
+        /// the envelope was a reaction this façade handled.
+        /// </summary>
+        Task<bool> ApplyIncomingReactionFromEnvelopeAsync(
+            Message message,
+            string chatJid,
+            string messageId,
+            bool isGroup,
+            bool isFromMe,
+            string participantJid,
+            string selfDisplayName,
+            DateTime timestampUtc);
     }
 }

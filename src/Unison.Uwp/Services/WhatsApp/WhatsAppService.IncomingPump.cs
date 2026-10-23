@@ -771,59 +771,6 @@ namespace Unison.Uwp.Services.WhatsApp
         }
 
         /// <summary>
-        /// Status is not a chat: report the decoded row and skip ChatItem routing. Persistence is
-        /// StatusFacade's, on <c>history_status</c>.
-        /// </summary>
-        private void IngestLiveStatus(Client.DecryptedMessageEventArgs e)
-        {
-            if (e?.Message == null)
-            {
-                return;
-            }
-
-            string author = IncomingLiveStatusAuthor.Resolve(
-                NormalizeJid(e.Participant),
-                e.IsFromMe,
-                NormalizeJid(_authState?.Me?.Id));
-
-            if (string.IsNullOrWhiteSpace(author))
-            {
-                Debug.WriteLine("[WhatsAppService] Live status skipped: no author id=" + e.MessageId);
-                return;
-            }
-
-            HistoryStatus row = HistoryStatusBuilder.FromLive(
-                author,
-                e.MessageId,
-                e.IsFromMe,
-                e.PushName,
-                e.Timestamp,
-                e.Message);
-            if (row == null)
-            {
-                string gaps = StatusItemDiagnostics.DescribeProtoGaps(e.Message);
-                Debug.WriteLine(
-                    "[WhatsAppService] Live status dropped id=" + e.MessageId +
-                    "; author=" + author + "; " + gaps);
-                RuntimeDiagnosticsService.Instance.Write(
-                    "status",
-                    "live-dropped",
-                    "id=" + e.MessageId + "; author=" + author + "; " + gaps);
-                return;
-            }
-
-            RuntimeDiagnosticsService.Instance.Write(
-                "status",
-                "live-built",
-                StatusItemDiagnostics.DescribeItem(row) + "; " +
-                StatusItemDiagnostics.DescribeProtoGaps(e.Message));
-
-            RaiseReport(
-                () => OnLiveStatusReceived?.Invoke(this, row),
-                nameof(OnLiveStatusReceived));
-        }
-
-        /// <summary>
         /// Handles real-time decrypted messages from SocketClient
         /// </summary>
         private async Task HandleDecryptedMessageAsync(Client.DecryptedMessageEventArgs e)
@@ -881,36 +828,39 @@ namespace Unison.Uwp.Services.WhatsApp
                 if (IncomingEnvelopeDisposition.ClassifyAddress(normalizedFromJid) == IncomingEnvelopeKind.StatusBroadcast ||
                     IncomingEnvelopeDisposition.ClassifyAddress(e.FromJid) == IncomingEnvelopeKind.StatusBroadcast)
                 {
-                    IngestLiveStatus(e);
+                    if (Status != null)
+                    {
+                        await Status.IngestLiveFromDecryptedAsync(new IncomingLiveStatusRequest
+                        {
+                            ParticipantJid = e.Participant,
+                            SelfJid = _authState?.Me?.Id,
+                            IsFromMe = e.IsFromMe,
+                            MessageId = e.MessageId,
+                            PushName = e.PushName,
+                            Timestamp = e.Timestamp,
+                            Message = e.Message
+                        }).ConfigureAwait(false);
+                    }
                     return;
                 }
 
                 bool isGroup = JidHelper.IsGroupJid(normalizedFromJid);
 
                 // -- FAST PATH: offline replay duplicate detection --
-                // When draining the offline batch (1000+ messages), skip the expensive
-                // content extraction, alias resolution, and UI dispatches for messages
-                // we already have on disk. Pushname capture from the raw 'notify' attr
-                // is already handled independently in the OnMessage handler.
-                // Enrichment still runs: a duplicate can carry a participant or a better
-                // sender name the first delivery lacked, and the full path used to keep
-                // those while this path threw them away.
                 if (e.IsOffline && !string.IsNullOrEmpty(e.MessageId) && Messages != null)
                 {
                     string fastJid = GetCanonicalJid(normalizedFromJid);
-                    if (Messages.HasCachedMessageId(fastJid, e.MessageId, isGroup))
+                    if (Messages.TryHandleOfflineDuplicateFast(
+                        fastJid,
+                        e.MessageId,
+                        isGroup,
+                        e.IsFromMe,
+                        e.Participant,
+                        e.VerifiedName,
+                        e.PushName))
                     {
-                        Messages.EnrichOfflineDuplicateFast(
-                            fastJid,
-                            e.MessageId,
-                            e.IsFromMe,
-                            e.Participant,
-                            e.VerifiedName,
-                            e.PushName);
-                        ResolveMissingMessage(fastJid, e.MessageId, "offline-duplicate-fast");
                         return;
                     }
-                    // Not a known duplicate ? fall through to full pipeline
                 }
 
                 string routingReason = isGroup ? "group-from" : null;
@@ -981,35 +931,20 @@ namespace Unison.Uwp.Services.WhatsApp
                     return;
                 }
 
-                // Reactions: MessageFacade owns map/persist/notify; pump only builds context names.
-                if (Messages != null)
-                {
-                    string reactionParticipant = NormalizeJid(e.Participant);
-                    string reactionSenderName = e.IsFromMe
-                        ? (_authState?.Me?.Name ?? LocalizedChatStripLabels.SelfFallbackName())
-                        : (isGroup
-                            ? ResolveDisplayName(
-                                !string.IsNullOrEmpty(reactionParticipant) ? reactionParticipant : jid,
-                                "sender")
-                            : ResolveDisplayName(jid, "sender"));
-
-                    var reactionContext = new ChatMessageMapContext
-                    {
-                        MessageId = e.MessageId,
-                        ChatJid = jid,
-                        RemoteJid = jid,
-                        ParticipantJid = reactionParticipant,
-                        SenderName = reactionSenderName,
-                        IsFromMe = e.IsFromMe,
-                        Timestamp = MessageTimestampValidity.KeepOrDiscard(e.Timestamp, DateTime.UtcNow)
-                    };
-
-                    if (await Messages.ApplyIncomingReactionAsync(e.Message, reactionContext)
+                if (Messages != null &&
+                    await Messages.ApplyIncomingReactionFromEnvelopeAsync(
+                            e.Message,
+                            jid,
+                            e.MessageId,
+                            isGroup,
+                            e.IsFromMe,
+                            e.Participant,
+                            _authState?.Me?.Name,
+                            e.Timestamp)
                         .ConfigureAwait(false))
-                    {
-                        SetIncomingMessagePumpStage("reaction", e);
-                        return;
-                    }
+                {
+                    SetIncomingMessagePumpStage("reaction", e);
+                    return;
                 }
 
                 SetIncomingMessagePumpStage("render", e);
@@ -1186,34 +1121,22 @@ namespace Unison.Uwp.Services.WhatsApp
 
                 if (timeline.Kind == IncomingTimelineAcceptKind.AliasConsolidated)
                 {
-                    Debug.WriteLine($"[WhatsAppService] Consolidated alias-linked duplicate {chatMessage.Id} from {timeline.AliasSourceChatJid} into {jid}");
-
-                    string duplicateJidForPersist = timeline.AliasSourceChatJid;
-                    ChatMessage consolidatedForPersist = timeline.ConsolidatedMessage;
-                    QueueMessageControlWork(
-                        "alias-duplicate-persist:" + chatMessage.Id,
-                        () => Messages != null
-                            ? Messages.FinalizeAliasConsolidateAsync(
-                                jid,
-                                duplicateJidForPersist,
-                                chatMessage.Id,
-                                consolidatedForPersist)
-                            : Task.CompletedTask);
-
-                    QueueOrApplyIncomingEnvelopePreview(
-                        "alias-duplicate-preview:" + chatMessage.Id,
-                        e.IsOffline,
-                        jid,
-                        displayContent,
-                        chatMessage,
-                        isGroup,
-                        isActuallyFromMe,
-                        countUnread: false,
-                        markDirtyWhenOffline: true,
-                        previewKind,
-                        listAuthorPrefix,
-                        stripParticipantJid,
-                        senderName);
+                    SetIncomingMessagePumpStage("alias-consolidate", e);
+                    await Messages.ApplyIncomingAliasConsolidatedAsync(
+                        new IncomingAliasConsolidatedApplyRequest
+                        {
+                            ChatJid = jid,
+                            IncomingMessage = chatMessage,
+                            Timeline = timeline,
+                            DisplayContent = displayContent,
+                            IsOffline = e.IsOffline,
+                            IsGroup = isGroup,
+                            IsFromMe = isActuallyFromMe,
+                            PreviewKind = previewKind,
+                            ListAuthorPrefix = listAuthorPrefix,
+                            StripParticipantJid = stripParticipantJid,
+                            SenderName = senderName
+                        }).ConfigureAwait(false);
                     if (!e.IsOffline)
                     {
                         Log($"[WhatsAppService] Alias-linked duplicate message {e.MessageId} consolidated into {jid}");
@@ -1324,96 +1247,6 @@ namespace Unison.Uwp.Services.WhatsApp
                 "offline-summary-apply-failed",
                 error,
                 "reason=" + reason);
-        }
-        /// <summary>
-        /// Offline tip recording stays on the pump thread (order with persist); live refresh
-        /// stays on the control queue so strip work does not block ingestion.
-        /// </summary>
-        private void QueueOrApplyIncomingEnvelopePreview(
-            string controlReason,
-            bool isOffline,
-            string jid,
-            string displayContent,
-            ChatMessage chatMessage,
-            bool isGroup,
-            bool isActuallyFromMe,
-            bool countUnread,
-            bool markDirtyWhenOffline,
-            ChatPreviewKind previewKind,
-            string listAuthorPrefix,
-            string stripParticipantJid,
-            string senderName)
-        {
-            if (isOffline)
-            {
-                _ = ApplyIncomingEnvelopePreviewAsync(
-                    jid,
-                    displayContent,
-                    chatMessage,
-                    isOffline: true,
-                    isGroup,
-                    isActuallyFromMe,
-                    countUnread,
-                    markDirtyWhenOffline,
-                    previewKind,
-                    listAuthorPrefix,
-                    stripParticipantJid,
-                    senderName);
-                return;
-            }
-
-            QueueMessageControlWork(
-                controlReason,
-                () => ApplyIncomingEnvelopePreviewAsync(
-                    jid,
-                    displayContent,
-                    chatMessage,
-                    isOffline: false,
-                    isGroup,
-                    isActuallyFromMe,
-                    countUnread,
-                    markDirtyWhenOffline,
-                    previewKind,
-                    listAuthorPrefix,
-                    stripParticipantJid,
-                    senderName));
-        }
-
-        private Task ApplyIncomingEnvelopePreviewAsync(
-            string jid,
-            string displayContent,
-            ChatMessage chatMessage,
-            bool isOffline,
-            bool isGroup,
-            bool isActuallyFromMe,
-            bool countUnread,
-            bool markDirtyWhenOffline,
-            ChatPreviewKind previewKind,
-            string listAuthorPrefix,
-            string stripParticipantJid,
-            string senderName)
-        {
-            if (ChatFacade == null)
-            {
-                return Task.CompletedTask;
-            }
-
-            return ChatFacade.ApplyIncomingEnvelopePreviewAsync(new IncomingEnvelopePreviewRequest
-            {
-                Jid = jid,
-                Preview = displayContent,
-                Timestamp = chatMessage.Timestamp,
-                IsGroup = isGroup,
-                IsFromMe = isActuallyFromMe,
-                IsOffline = isOffline,
-                CountUnread = countUnread,
-                MarkDirtyWhenOffline = markDirtyWhenOffline,
-                Kind = previewKind,
-                Status = chatMessage.Status,
-                AuthorPrefix = listAuthorPrefix,
-                ParticipantJid = isGroup ? stripParticipantJid : null,
-                SenderName = isGroup && !isActuallyFromMe ? senderName : null
-            });
         }
 
     }

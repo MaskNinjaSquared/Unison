@@ -158,6 +158,7 @@ namespace Unison.Uwp.Services.WhatsApp
         private readonly Func<IChatService> _resolveChats;
         private readonly Func<IContactService> _resolveContacts;
         private readonly Func<IGroupService> _resolveGroups;
+        private readonly Func<IStatusService> _resolveStatus;
 
         private IMessageService Messages => _resolveMessages != null ? _resolveMessages() : null;
 
@@ -166,6 +167,8 @@ namespace Unison.Uwp.Services.WhatsApp
         private IContactService Contacts => _resolveContacts != null ? _resolveContacts() : null;
 
         private IGroupService Groups => _resolveGroups != null ? _resolveGroups() : null;
+
+        private IStatusService Status => _resolveStatus != null ? _resolveStatus() : null;
         private readonly IPersonStore _personStore;
         private readonly IGroupRosterStore _groupRosterStore;
         private readonly IChatStore _chatStore;
@@ -1023,7 +1026,8 @@ namespace Unison.Uwp.Services.WhatsApp
             Func<IContactService> resolveContacts = null,
             Func<IMessageService> resolveMessages = null,
             Func<IChatService> resolveChats = null,
-            Func<IGroupService> resolveGroups = null)
+            Func<IGroupService> resolveGroups = null,
+            Func<IStatusService> resolveStatus = null)
         {
             if (chatState == null)
             {
@@ -1048,6 +1052,7 @@ namespace Unison.Uwp.Services.WhatsApp
             _resolveMessages = resolveMessages;
             _resolveChats = resolveChats;
             _resolveGroups = resolveGroups;
+            _resolveStatus = resolveStatus;
             _ui = ui ?? throw new ArgumentNullException(nameof(ui));
             _usyncAliases = usyncAliases ?? throw new ArgumentNullException(nameof(usyncAliases));
             _listPaintGate = listPaintGate ?? new ChatListInitialPaintGate();
@@ -1135,11 +1140,12 @@ namespace Unison.Uwp.Services.WhatsApp
             Func<IContactService> resolveContacts = null,
             Func<IMessageService> resolveMessages = null,
             Func<IChatService> resolveChats = null,
-            Func<IGroupService> resolveGroups = null)
+            Func<IGroupService> resolveGroups = null,
+            Func<IStatusService> resolveStatus = null)
         {
             return _instance ?? (_instance = new WhatsAppService(
                 chatState, chatRows, activeChat, syncStatus, syncWork, historyMessages, chatPreviews, usyncGate, avatarFetcher, mediaCache, jidAlias, displayNames, historyRequests,
-                initialSync, syncBudget, workload, selfProfile, personStore, groupRosterStore, chatStore, systemInfo, ui, usyncAliases, pendingMessages, listPaintGate, appMemory, localSettings, resolveContacts, resolveMessages, resolveChats, resolveGroups));
+                initialSync, syncBudget, workload, selfProfile, personStore, groupRosterStore, chatStore, systemInfo, ui, usyncAliases, pendingMessages, listPaintGate, appMemory, localSettings, resolveContacts, resolveMessages, resolveChats, resolveGroups, resolveStatus));
         }
 
         /// <summary>

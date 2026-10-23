@@ -51,6 +51,54 @@ namespace Unison.WhatsAppClient.Status
 
         public event EventHandler StatusUpdated;
 
+        /// <inheritdoc />
+        public Task IngestLiveFromDecryptedAsync(IncomingLiveStatusRequest request)
+        {
+            if (request?.Message == null)
+            {
+                return Task.CompletedTask;
+            }
+
+            string author = IncomingLiveStatusAuthor.Resolve(
+                JidHelper.Normalize(request.ParticipantJid),
+                request.IsFromMe,
+                JidHelper.Normalize(request.SelfJid));
+
+            if (string.IsNullOrWhiteSpace(author))
+            {
+                Debug.WriteLine("[StatusFacade] Live status skipped: no author id=" + request.MessageId);
+                return Task.CompletedTask;
+            }
+
+            HistoryStatus row = HistoryStatusBuilder.FromLive(
+                author,
+                request.MessageId,
+                request.IsFromMe,
+                request.PushName,
+                request.Timestamp,
+                request.Message);
+            if (row == null)
+            {
+                string gaps = StatusItemDiagnostics.DescribeProtoGaps(request.Message);
+                Debug.WriteLine(
+                    "[StatusFacade] Live status dropped id=" + request.MessageId +
+                    "; author=" + author + "; " + gaps);
+                _diagnostics?.Write(
+                    "status",
+                    "live-dropped",
+                    "id=" + request.MessageId + "; author=" + author + "; " + gaps);
+                return Task.CompletedTask;
+            }
+
+            _diagnostics?.Write(
+                "status",
+                "live-built",
+                StatusItemDiagnostics.DescribeItem(row) + "; " +
+                StatusItemDiagnostics.DescribeProtoGaps(request.Message));
+
+            return IngestLiveSafeAsync(row);
+        }
+
         public async Task<IReadOnlyList<StatusAuthorItem>> GetActiveAuthorsAsync()
         {
             IReadOnlyList<HistoryStatus> items = await _store.GetActiveAsync().ConfigureAwait(false);

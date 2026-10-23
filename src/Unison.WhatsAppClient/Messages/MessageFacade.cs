@@ -1680,6 +1680,134 @@ namespace Unison.WhatsAppClient.Messages
         }
 
         /// <inheritdoc />
+        public bool TryHandleOfflineDuplicateFast(
+            string chatJid,
+            string messageId,
+            bool isGroup,
+            bool isFromMe,
+            string participantJid,
+            string verifiedName,
+            string pushName)
+        {
+            if (string.IsNullOrWhiteSpace(chatJid) || string.IsNullOrEmpty(messageId))
+            {
+                return false;
+            }
+
+            if (!HasCachedMessageId(chatJid, messageId, isGroup))
+            {
+                return false;
+            }
+
+            EnrichOfflineDuplicateFast(
+                chatJid,
+                messageId,
+                isFromMe,
+                participantJid,
+                verifiedName,
+                pushName);
+            _missingMessages.ResolveMissingMessage(chatJid, messageId, "offline-duplicate-fast");
+            return true;
+        }
+
+        /// <inheritdoc />
+        public Task<bool> ApplyIncomingReactionFromEnvelopeAsync(
+            Message message,
+            string chatJid,
+            string messageId,
+            bool isGroup,
+            bool isFromMe,
+            string participantJid,
+            string selfDisplayName,
+            DateTime timestampUtc)
+        {
+            if (message == null || string.IsNullOrWhiteSpace(chatJid))
+            {
+                return Task.FromResult(false);
+            }
+
+            string reactionParticipant = JidHelper.Normalize(participantJid);
+            string reactionSenderName;
+            if (isFromMe)
+            {
+                reactionSenderName = !string.IsNullOrWhiteSpace(selfDisplayName)
+                    ? selfDisplayName
+                    : (_strings != null
+                        ? _strings.Get("Chat_SelfFallbackName", "You")
+                        : "You");
+            }
+            else if (isGroup)
+            {
+                string key = !string.IsNullOrEmpty(reactionParticipant) ? reactionParticipant : chatJid;
+                reactionSenderName = _chatState.ResolveDisplayName(key);
+            }
+            else
+            {
+                reactionSenderName = _chatState.ResolveDisplayName(chatJid);
+            }
+
+            var reactionContext = new ChatMessageMapContext
+            {
+                MessageId = messageId,
+                ChatJid = chatJid,
+                RemoteJid = chatJid,
+                ParticipantJid = reactionParticipant,
+                SenderName = reactionSenderName,
+                IsFromMe = isFromMe,
+                Timestamp = MessageTimestampValidity.KeepOrDiscard(timestampUtc, DateTime.UtcNow)
+            };
+
+            return ApplyIncomingReactionAsync(message, reactionContext);
+        }
+
+        /// <inheritdoc />
+        public async Task ApplyIncomingAliasConsolidatedAsync(IncomingAliasConsolidatedApplyRequest request)
+        {
+            if (request == null ||
+                request.Timeline == null ||
+                string.IsNullOrWhiteSpace(request.ChatJid) ||
+                request.IncomingMessage == null)
+            {
+                return;
+            }
+
+            string jid = request.ChatJid;
+            IncomingTimelineAcceptResult timeline = request.Timeline;
+
+            Debug.WriteLine(
+                "[MessageFacade] Consolidated alias-linked duplicate " + request.IncomingMessage.Id +
+                " from " + timeline.AliasSourceChatJid + " into " + jid);
+
+            await FinalizeAliasConsolidateAsync(
+                    jid,
+                    timeline.AliasSourceChatJid,
+                    request.IncomingMessage.Id,
+                    timeline.ConsolidatedMessage)
+                .ConfigureAwait(false);
+
+            IChatService chats = _resolveChats != null ? _resolveChats() : null;
+            if (chats != null)
+            {
+                await chats.ApplyIncomingEnvelopePreviewAsync(new IncomingEnvelopePreviewRequest
+                {
+                    Jid = jid,
+                    Preview = request.DisplayContent,
+                    Timestamp = request.IncomingMessage.Timestamp,
+                    IsGroup = request.IsGroup,
+                    IsFromMe = request.IsFromMe,
+                    IsOffline = request.IsOffline,
+                    CountUnread = false,
+                    MarkDirtyWhenOffline = true,
+                    Kind = request.PreviewKind,
+                    Status = request.IncomingMessage.Status,
+                    AuthorPrefix = request.ListAuthorPrefix,
+                    ParticipantJid = request.IsGroup ? request.StripParticipantJid : null,
+                    SenderName = request.IsGroup && !request.IsFromMe ? request.SenderName : null
+                }).ConfigureAwait(false);
+            }
+        }
+
+        /// <inheritdoc />
         public async Task ApplyIncomingDuplicateAsync(IncomingDuplicateApplyRequest request)
         {
             if (request == null ||

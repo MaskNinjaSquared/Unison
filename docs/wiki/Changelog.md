@@ -2,6 +2,14 @@
 
 Newest first.
 
+## Phase B — alias consolidate, status ingest, reaction/offline wrappers
+
+`ApplyIncomingAliasConsolidatedAsync` owns finalize + tip. Live status builds and
+ingests on `IStatusService.IngestLiveFromDecryptedAsync` (pump no longer raises
+`OnLiveStatusReceived` for this path). `TryHandleOfflineDuplicateFast` and
+`ApplyIncomingReactionFromEnvelopeAsync` collapse pump orchestration. Dead
+`IIncomingRevocationHost` removed.
+
 ## Phase B — incoming insert + duplicate follow-up on MessageFacade
 
 `IMessageService.ApplyIncomingInsertedAsync` owns offline tip/persist/unload and

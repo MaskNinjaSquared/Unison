@@ -45,5 +45,11 @@ namespace Unison.Core.Contracts.WhatsApp
 
         /// <summary>Compact Status metadata line for runtime diagnostics.</summary>
         string DescribeStatusItem(HistoryStatus item, int index = -1);
+
+        /// <summary>
+        /// Live status@broadcast: build a <see cref="HistoryStatus"/> from the envelope and
+        /// ingest (thumb + store). Replaces the pump → <c>OnLiveStatusReceived</c> hop.
+        /// </summary>
+        Task IngestLiveFromDecryptedAsync(IncomingLiveStatusRequest request);
     }
 }
