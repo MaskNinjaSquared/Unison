@@ -273,7 +273,6 @@
     <Compile Include="Services\VoicePlaybackRoutingService.cs" />
     <Compile Include="Services\WhatsApp\WhatsAppService.cs" />
     <Compile Include="Services\WhatsApp\WhatsAppService.Connection.cs" />
-    <Compile Include="Services\WhatsApp\WhatsAppService.Media.cs" />
     <Compile Include="Services\WhatsApp\WhatsAppService.StartupPhases.cs" />
     <Compile Include="Services\WhatsApp\WhatsAppService.Identity.cs" />
     <Compile Include="Services\WhatsApp\WhatsAppService.AppState.cs" />

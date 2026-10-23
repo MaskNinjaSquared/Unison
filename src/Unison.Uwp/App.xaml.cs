@@ -510,8 +510,8 @@ namespace Unison.Uwp
                 sp.GetRequiredService<IRuntimeDiagnostics>()));
             services.AddSingleton<IStatusService>(sp => sp.GetRequiredService<StatusFacade>());
 
-            services.AddSingleton<IMediaDownloadHost>(
-                sp => (WhatsAppService)sp.GetRequiredService<IWhatsAppService>());
+            services.AddSingleton<IMediaDownloadHost>(sp => new QuietMediaMessagePersist(
+                sp.GetRequiredService<IOutgoingMessageHost>()));
             // The save debounce stays on the client until its shutdown path moves (phase 4);
             // façades reach it only through this port.
             services.AddSingleton<IChatCatalogPersistence>(

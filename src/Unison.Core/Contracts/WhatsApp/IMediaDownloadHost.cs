@@ -4,12 +4,13 @@ using Unison.Core.Models;
 namespace Unison.Core.Contracts.WhatsApp
 {
     /// <summary>
-    /// The quiet save the on-demand media download still asks of the client.
+    /// Quiet persist for on-demand media download (repaired URI on the row).
     /// </summary>
     /// <remarks>
     /// Hydrate used to ask <c>HasLiveSocket</c> here; that check is
     /// <c>IWhatsAppSessionProvider.IsTransportReady</c> on the availability type instead.
-    /// Quiet save stays until the persist queue leaves the client.
+    /// Implemented by <c>QuietMediaMessagePersist</c> over
+    /// <see cref="IOutgoingMessageHost.PersistLiveAsync"/> — not by the compatibility client.
     /// </remarks>
     public interface IMediaDownloadHost
     {

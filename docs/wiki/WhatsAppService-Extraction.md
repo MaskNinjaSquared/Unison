@@ -241,7 +241,7 @@ Self-contained first. List/persist last.
 | 3.2b | Group apply + roster persist | **Done.** Listing, unresolved-metadata fallback, metadata apply, roster restore, the full-size group picture and member pictures run from `GroupFacade` |
 | 3.3a | Media cache + file naming (done) | `IMediaCache` / `MediaCacheService`, `MediaFileExtensions` |
 | 3.3b | Derived renditions — transcode / poster / WebP (done) | `MediaDerivationService` |
-| 3.3c | Download reading and fetch (done) | `MediaDownloadPlan` (Core); orchestration and HTTP fetch on `MessageFacade`. Only the quiet save stays on the client — see below |
+| 3.3c | Download reading and fetch (done) | `MediaDownloadPlan` (Core); orchestration and HTTP fetch on `MessageFacade`. Quiet save is `QuietMediaMessagePersist` over `IOutgoingMessageHost.PersistLiveAsync` (not the compatibility client) |
 | 3.4 | Send (main file) | **Text, image and audio orchestration on `MessageFacade` (done)** via `OutgoingTextSend` / `OutgoingMediaSend` (Core) over `IOutgoingMessageHost`. **`AcceptOutgoing` / `LoadLiveOverlay` forward to `IMessageService`.** Socket write / invalidate / health counters stay on the host |
 | 3.5a | Receipt reading (done) | `ReceiptReader` |
 | 3.5b | Receipt aggregation state (done) | `GroupReceiptTally` (Core). **Outgoing status apply on `MessageFacade.ApplyOutgoingStatusAsync`** over shared `PendingMessageState` DI; host keeps group recipient count + self-link |
@@ -360,9 +360,11 @@ so a phone still fetches one file at a time. The same gate covers an image or a 
 on its own: that download left the incoming pump and runs from `MessageFacade` too.
 
 The blob fetch no longer goes through the client either. `MediaAvailability` takes
-`IEncryptedMediaDownloader` (plain HTTP against the CDN, registered once in the container), so
-`IMediaDownloadHost` is quiet-save only until the persist queue leaves the client. Image/sticker
-hydrate asks `IWhatsAppSessionProvider.IsTransportReady` instead of a host socket flag.
+`IEncryptedMediaDownloader` (plain HTTP against the CDN, registered once in the container).
+`IMediaDownloadHost` is `QuietMediaMessagePersist` (WhatsAppClient) over
+`IOutgoingMessageHost.PersistLiveAsync` — the compatibility client no longer implements it.
+The durable write still uses the host's live upsert until the persist queue leaves entirely.
+Image/sticker hydrate asks `IWhatsAppSessionProvider.IsTransportReady` instead of a host socket flag.
 Preparing a voice note the user just sent for playback moved from the client's
 `IOutgoingMessageHost.PrepareLocalPlayback` to the façade, which calls `MediaAvailability`
 after the send returns; the client's duplicate playable-audio path is gone.

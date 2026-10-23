@@ -2,6 +2,13 @@
 
 Newest first.
 
+## Extract — 3.3c quiet media save off the client
+
+`QuietMediaMessagePersist` implements `IMediaDownloadHost` over
+`IOutgoingMessageHost.PersistLiveAsync` (swallow on failure).
+`WhatsAppService` no longer implements the port; `WhatsAppService.Media.cs` gone.
+Three Core tests.
+
 ## Extract — connection wire pure rules → WhatsAppClient
 
 `SocketTransportFailure`, `FatalStreamCodeFromException`, `PairingRestartStreamCode`,
