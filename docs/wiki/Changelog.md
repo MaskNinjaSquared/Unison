@@ -2,6 +2,12 @@
 
 Newest first.
 
+## Extract — serialized post-message enrichment into dispatch
+
+`PostMessageEnrichmentDispatch.RunSerializedAsync` owns the low-memory avatars →
+groups quiet gaps. Host ports: defer-avatar gate, deferred schedule, picture
+retrieve, group listing. Core tests for defer vs retrieve paths.
+
 ## Extract — OfflineReplayFlushDispatch
 
 `OfflineReplayFlushDispatch` + `OfflineReplayFlushBatch` + `IOfflineReplayFlushHost`.

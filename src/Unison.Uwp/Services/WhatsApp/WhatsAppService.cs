@@ -1712,13 +1712,34 @@ namespace Unison.Uwp.Services.WhatsApp
             }
         }
 
-        Task IPostMessageEnrichmentHost.RunSerializedEnrichmentAsync(
-            TimeSpan quiet,
-            CancellationToken token) =>
-            RunSerializedPostSyncEnrichmentAsync(quiet, token);
-
         void IPostMessageEnrichmentHost.TriggerBackgroundResolution() =>
             Contacts?.TriggerBackgroundResolution();
+
+        bool IPostMessageEnrichmentHost.TryDeferAvatarFetch(out string reason) =>
+            _syncWork.ShouldDeferAvatarFetch(out reason);
+
+        void IPostMessageEnrichmentHost.ScheduleDeferredAvatars(string reason) =>
+            DeferredAvatars?.Schedule(reason);
+
+        async Task IPostMessageEnrichmentHost.RetrieveContactPicturesAsync(CancellationToken token)
+        {
+            IContactService contacts = Contacts;
+            if (contacts == null)
+            {
+                return;
+            }
+
+            using (TraceStartupPhase("post-replay-avatars"))
+            {
+                DeferredAvatars?.Cancel();
+                await contacts.RetrieveContactPicturesAsync(token).ConfigureAwait(false);
+            }
+        }
+
+        void IPostMessageEnrichmentHost.NotifyGroupListingDue() =>
+            RaiseReport(
+                () => Groups?.NotifyGroupListingDue(),
+                nameof(IGroupService.NotifyGroupListingDue));
 
         void IPostMessageEnrichmentHost.WriteComplete(string reason, bool serialized) =>
             RuntimeDiagnosticsService.Instance.Write(
@@ -1732,53 +1753,6 @@ namespace Unison.Uwp.Services.WhatsApp
                 "post-message-enrichment-failed",
                 ex,
                 "reason=" + reason);
-
-        /// <summary>
-        /// Low-memory path: one avatar pass, then group listing, each behind its own quiet gap.
-        /// Does not call <see cref="IContactService.TriggerBackgroundResolution"/>, which would
-        /// re-run names and cascade another avatar schedule.
-        /// </summary>
-        private async Task RunSerializedPostSyncEnrichmentAsync(TimeSpan quiet, CancellationToken token)
-        {
-            if (!await WaitForStartupQuietAsync(quiet, "post-message-enrich-avatars", token) ||
-                !IsConnected ||
-                !Unison.Uwp.App.IsWindowVisible)
-            {
-                RaiseSyncStatus(null);
-                return;
-            }
-
-            string deferReason;
-            if (_syncWork.ShouldDeferAvatarFetch(out deferReason))
-            {
-                DeferredAvatars?.Schedule(deferReason);
-            }
-            else
-            {
-                IContactService contacts = Contacts;
-                if (contacts != null)
-                {
-                    using (TraceStartupPhase("post-replay-avatars"))
-                    {
-                        DeferredAvatars?.Cancel();
-                        await contacts.RetrieveContactPicturesAsync(token).ConfigureAwait(false);
-                    }
-                }
-            }
-
-            if (!await WaitForStartupQuietAsync(quiet, "post-message-enrich-groups", token) ||
-                !IsConnected ||
-                !Unison.Uwp.App.IsWindowVisible)
-            {
-                RaiseSyncStatus(null);
-                return;
-            }
-
-            RaiseSyncStatus(null);
-            RaiseReport(
-                () => Groups?.NotifyGroupListingDue(),
-                nameof(IGroupService.NotifyGroupListingDue));
-        }
 
         private void ReleaseEnrichmentAfterHeavyHistory(string reason)
         {

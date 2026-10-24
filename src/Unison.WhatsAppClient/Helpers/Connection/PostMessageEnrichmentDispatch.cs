@@ -91,7 +91,7 @@ namespace Unison.WhatsAppClient.Helpers
 
                 if (host.SerializePostSyncEnrichment)
                 {
-                    await host.RunSerializedEnrichmentAsync(quiet, token).ConfigureAwait(false);
+                    await RunSerializedAsync(host, quiet, token).ConfigureAwait(false);
                 }
                 else
                 {
@@ -107,6 +107,52 @@ namespace Unison.WhatsAppClient.Helpers
             {
                 host.RecordFailed(ex, reason);
             }
+        }
+
+        /// <summary>
+        /// Low-memory path: one avatar pass, then group listing, each behind its own quiet gap.
+        /// Does not call <see cref="IPostMessageEnrichmentHost.TriggerBackgroundResolution"/>.
+        /// </summary>
+        public static async Task RunSerializedAsync(
+            IPostMessageEnrichmentHost host,
+            TimeSpan quiet,
+            CancellationToken token)
+        {
+            if (host == null)
+            {
+                throw new ArgumentNullException(nameof(host));
+            }
+
+            if (!await WaitReadyAsync(
+                    host,
+                    quiet,
+                    "post-message-enrich-avatars",
+                    token).ConfigureAwait(false))
+            {
+                return;
+            }
+
+            string deferReason;
+            if (host.TryDeferAvatarFetch(out deferReason))
+            {
+                host.ScheduleDeferredAvatars(deferReason);
+            }
+            else
+            {
+                await host.RetrieveContactPicturesAsync(token).ConfigureAwait(false);
+            }
+
+            if (!await WaitReadyAsync(
+                    host,
+                    quiet,
+                    "post-message-enrich-groups",
+                    token).ConfigureAwait(false))
+            {
+                return;
+            }
+
+            host.ClearSyncStatus();
+            host.NotifyGroupListingDue();
         }
 
         private static async Task<bool> WaitReadyAsync(

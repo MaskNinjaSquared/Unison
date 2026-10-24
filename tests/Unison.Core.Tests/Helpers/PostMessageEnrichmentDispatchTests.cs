@@ -106,9 +106,34 @@ namespace Unison.Core.Tests.Helpers
                 "r2",
                 CancellationToken.None);
 
-            Assert.Contains("serialized", host.Log);
+            Assert.Contains("quiet:post-message-enrich-avatars", host.Log);
+            Assert.Contains("pictures", host.Log);
+            Assert.Contains("quiet:post-message-enrich-groups", host.Log);
+            Assert.Contains("group-listing", host.Log);
             Assert.DoesNotContain("trigger-bg", host.Log);
             Assert.Contains("complete:r2:True", host.Log);
+        }
+
+        [Fact]
+        public async Task Serialized_defers_avatars_when_gate_says_so()
+        {
+            var host = new FakeHost { DeferAvatars = true, AvatarDeferReason = "replay" };
+
+            await PostMessageEnrichmentDispatch.RunSerializedAsync(
+                host,
+                TimeSpan.FromSeconds(1),
+                CancellationToken.None);
+
+            Assert.Equal(
+                new[]
+                {
+                    "quiet:post-message-enrich-avatars",
+                    "defer-avatars:replay",
+                    "quiet:post-message-enrich-groups",
+                    "clear-status",
+                    "group-listing"
+                },
+                host.Log);
         }
 
         [Fact]
@@ -141,6 +166,10 @@ namespace Unison.Core.Tests.Helpers
             public bool QuietOk { get; set; } = true;
 
             public bool Serialize { get; set; }
+
+            public bool DeferAvatars { get; set; }
+
+            public string AvatarDeferReason { get; set; }
 
             public bool EnrichmentAwaitingHeavyHistory => AwaitingHeavy;
 
@@ -200,15 +229,24 @@ namespace Unison.Core.Tests.Helpers
                 return Task.CompletedTask;
             }
 
-            public Task RunSerializedEnrichmentAsync(
-                TimeSpan quiet,
-                CancellationToken token)
+            public void TriggerBackgroundResolution() => Log.Add("trigger-bg");
+
+            public bool TryDeferAvatarFetch(out string reason)
             {
-                Log.Add("serialized");
+                reason = AvatarDeferReason;
+                return DeferAvatars;
+            }
+
+            public void ScheduleDeferredAvatars(string reason) =>
+                Log.Add("defer-avatars:" + reason);
+
+            public Task RetrieveContactPicturesAsync(CancellationToken token)
+            {
+                Log.Add("pictures");
                 return Task.CompletedTask;
             }
 
-            public void TriggerBackgroundResolution() => Log.Add("trigger-bg");
+            public void NotifyGroupListingDue() => Log.Add("group-listing");
 
             public void WriteComplete(string reason, bool serialized) =>
                 Log.Add("complete:" + reason + ":" + serialized);

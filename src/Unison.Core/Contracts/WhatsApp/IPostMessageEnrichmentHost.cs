@@ -54,9 +54,16 @@ namespace Unison.Core.Contracts.WhatsApp
 
         Task RefreshContactNamesAsync(CancellationToken token);
 
-        Task RunSerializedEnrichmentAsync(TimeSpan quiet, CancellationToken token);
-
         void TriggerBackgroundResolution();
+
+        /// <summary>True when avatar fetch should wait; <paramref name="reason"/> is set.</summary>
+        bool TryDeferAvatarFetch(out string reason);
+
+        void ScheduleDeferredAvatars(string reason);
+
+        Task RetrieveContactPicturesAsync(CancellationToken token);
+
+        void NotifyGroupListingDue();
 
         void WriteComplete(string reason, bool serialized);
 
