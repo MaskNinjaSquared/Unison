@@ -185,7 +185,12 @@ lifecycle stay on the host (not this phase).
 
 `ConnectionFacade` still takes `IWhatsAppService` where raw client connection events remain. **`ProfileFacade`, `ChatFacade`, `MessageFacade`, `ContactFacade`, `GroupFacade`, `HistoryFacade`, and `StatusFacade` no longer do** for event wiring — Profile uses `IConnectionService`; chats reach local pin/delete through `IAppStateLocalHost`; messages use hosts + lazy `IConnectionService` / other façades; history/contact/group inbound signals are `Notify*` methods the host calls. `ChatMessagesChanged` / `PresenceUpdated` / history sync / avatar cache / alias / group listing are raised via façade `Notify*` (no client events for those). Policy is already on the façades; **primitives** (fetch a chat avatar, send bytes, persist, canonical JID) still run inside the client for the others. Group send-permission refresh and roster restore are the exception: they run in Core, and nothing in them calls back into the client. The full-size group picture and member pictures are fetched by `GroupFacade`.
 
-Helpers under `Contacts/` (`ContactNameResolver`, `ChatAvatarPolicy`, `GroupRosterPolicy`, `AddressBookOverlay`) are the largest non-UI consumers of client members (`RaiseSyncStatus`, `FetchAndApplyAvatarAsync`, `IsTransportReady`, …). Extracting avatars/names is mostly moving those primitives so the helpers stop needing the god client.
+Helpers under `Contacts/` (`ContactNameResolver`, `ChatAvatarPolicy`, `GroupRosterPolicy`,
+`AddressBookOverlay`) no longer take the god client — they use `SyncStatusChannel`,
+`IWhatsAppSessionProvider.IsTransportReady`, `IChatAvatarFetch`, and stores. Remaining
+Phase B host ownership: post-replay / post-message enrichment scheduling (partially
+extracted as `PostReplayMaintenanceDispatch`), offline-replay flush/timer, and the
+incoming pump drain loop until Netstandard D.
 
 Primitives that already left the contract (façade / Netstandard Phase A):
 
@@ -1289,7 +1294,7 @@ notification release is `OfflineReplayRelease` over `IOfflineReplayReleaseHost`
 `ConnectionUpdateDispatch`, `SocketErrorDispatch`, `HistorySyncWireApply`,
 `SessionInitializedDispatch`, `OfflineReplayRelease`, `QrCodeWireDispatch`,
 `AuthStateWireDispatch`, `InboundWireNodeDispatch`, `DecryptedMessageWireDispatch`,
-and `SocketFacadeWireDispatch` (each over a host port).
+`SocketFacadeWireDispatch`, and `PostReplayMaintenanceDispatch` (each over a host port).
 
 **The open conversation is shared state.** `ActiveChat` (`Unison.Core/State`, DI singleton over
 `JidAliasTable.GetCanonicalJid`) holds the conversation the user has open by its canonical

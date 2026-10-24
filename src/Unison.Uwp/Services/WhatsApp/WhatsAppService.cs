@@ -44,7 +44,7 @@ using Unison.WhatsAppClient.Helpers;
 
 namespace Unison.Uwp.Services.WhatsApp
 {
-    public partial class WhatsAppService : INotifyPropertyChanged, IWhatsAppService, IOfflineReplayHost, IOfflineReplayReleaseHost, IConnectionUpdateHost, ISocketErrorHost, IHistorySyncWireHost, ISessionInitializedHost, IQrCodeWireHost, IAuthStateWireHost, IInboundWireNodeHost, IDecryptedMessageWireHost, ISocketFacadeWireHost, IPlaceholderResendSocket, IHistoryOnDemandSocket, IRuntimeSnapshotSource, IBackgroundResolutionGate, IAppStateLocalHost, IConversationResyncHost, IHistorySyncHost, IHistoryCatchUpHost, IConnectionEnsureHost, IConnectionResumeHost, IConnectionPairingStage2Host, IConnectionBrokerTransferHost, IConnectionSoftReconnectHost, IConnectionLifecycleHost, IConnectionConnectGateSource, IConnectionConnectPrepareHost, IConnectionConnectOpenHost, ISocketAliasRegistrar, IStartupUiHost, IJidAliasPersistence, IIncomingMessageEnqueueHost, Unison.WhatsAppClient.Abstractions.IResolvedNameApplyHost
+    public partial class WhatsAppService : INotifyPropertyChanged, IWhatsAppService, IOfflineReplayHost, IOfflineReplayReleaseHost, IConnectionUpdateHost, ISocketErrorHost, IHistorySyncWireHost, ISessionInitializedHost, IQrCodeWireHost, IAuthStateWireHost, IInboundWireNodeHost, IDecryptedMessageWireHost, ISocketFacadeWireHost, IPostReplayMaintenanceHost, IPlaceholderResendSocket, IHistoryOnDemandSocket, IRuntimeSnapshotSource, IBackgroundResolutionGate, IAppStateLocalHost, IConversationResyncHost, IHistorySyncHost, IHistoryCatchUpHost, IConnectionEnsureHost, IConnectionResumeHost, IConnectionPairingStage2Host, IConnectionBrokerTransferHost, IConnectionSoftReconnectHost, IConnectionLifecycleHost, IConnectionConnectGateSource, IConnectionConnectPrepareHost, IConnectionConnectOpenHost, ISocketAliasRegistrar, IStartupUiHost, IJidAliasPersistence, IIncomingMessageEnqueueHost, Unison.WhatsAppClient.Abstractions.IResolvedNameApplyHost
     {
         public event PropertyChangedEventHandler PropertyChanged;
         protected void OnPropertyChanged([CallerMemberName] string propertyName = null)
@@ -1456,98 +1456,14 @@ namespace Unison.Uwp.Services.WhatsApp
             var token = cts.Token;
             _postReplayMaintenanceCts = cts;
 
+            // Messages first: keep the socket and UI free for live traffic and catch-up.
+            // Names / groups / avatars wait for SchedulePostMessageEnrichment.
             _ = Task.Run(async () =>
             {
                 try
                 {
-                    // Messages first: keep the socket and UI free for live traffic and catch-up.
-                    // Names / groups / avatars wait for SchedulePostMessageEnrichment.
-                    bool quiet = await WaitForStartupQuietAsync(
-                        UseFrugalSyncBudget
-                            ? TimeSpan.FromSeconds(8)
-                            : TimeSpan.FromSeconds(12),
-                        "post-replay",
-                        token);
-                    if (!quiet || !IsConnected || !Unison.Uwp.App.IsWindowVisible)
-                    {
-                        RaiseSyncStatus(null);
-                        return;
-                    }
-
-                    if (!await WaitForMemoryHeadroomAsync("post-replay", token))
-                    {
-                        RuntimeDiagnosticsService.Instance.Write(
-                            "startup",
-                            "post-replay-maintenance-skipped",
-                            "reason=memory; level=" +
-                            _appMemory.UsageLevel);
-                        RaiseSyncStatus(null);
-                        return;
-                    }
-
-                    // Catch-up still owed: keep the socket free for chronological backlog.
-                    // Full preview tip-scan + usync enrichment wait until FinishHistoryCatchUp.
-                    string catchUpDeferReason = HistoryCatchUpLocalWorkPolicy.DeferReason(
-                        IsHistoryCatchUpActive());
-                    if (catchUpDeferReason != null)
-                    {
-                        Interlocked.Exchange(ref _enrichmentAwaitingHeavyHistory, 1);
-                        RuntimeDiagnosticsService.Instance.Write(
-                            "startup",
-                            "post-replay-maintenance-deferred",
-                            "reason=" + catchUpDeferReason + "; offlineCount=" + offlineCount);
-                        Debug.WriteLine(
-                            "[WhatsAppService] Post-replay maintenance deferred (" +
-                            catchUpDeferReason + "; offlineCount=" + offlineCount + ")");
-                        return;
-                    }
-
-                    // Always realign list Last Message from SQLite after offline drain settles —
-                    // memory MessagesByChat is often empty for chats the user never opened.
-                    // Defer while the first list paint is still releasing rows (Mobile crash window).
-                    if (_listPaintGate != null && !_listPaintGate.IsReleased)
-                    {
-                        RuntimeDiagnosticsService.Instance.Write(
-                            "preview-tip",
-                            "reconcile-deferred-list-paint",
-                            "reason=post-replay");
-                    }
-                    else if (ChatFacade != null)
-                    {
-                        try
-                        {
-                            token.ThrowIfCancellationRequested();
-                            bool runDelayedBulk =
-                                offlineCount >= 50 && !UseFrugalSyncBudget;
-                            await ChatFacade.NotifyPostReplayMaintenanceAsync(
-                                offlineCount,
-                                runDelayedBulk,
-                                token).ConfigureAwait(false);
-                        }
-                        catch (OperationCanceledException)
-                        {
-                            RaiseSyncStatus(null);
-                            return;
-                        }
-                    }
-
-                    RuntimeDiagnosticsService.Instance.Write(
-                        "startup",
-                        "post-replay-message-maintenance-complete",
-                        "offlineCount=" + offlineCount);
-
-                    TrySchedulePostMessageEnrichment("post-replay:" + offlineCount);
-                }
-                catch (TaskCanceledException)
-                {
-                }
-                catch (Exception ex)
-                {
-                    RuntimeDiagnosticsService.Instance.RecordException(
-                        "startup",
-                        "post-replay-maintenance-failed",
-                        ex,
-                        "offlineCount=" + offlineCount);
+                    await PostReplayMaintenanceDispatch.RunAsync(this, offlineCount, token)
+                        .ConfigureAwait(false);
                 }
                 finally
                 {
@@ -1559,6 +1475,89 @@ namespace Unison.Uwp.Services.WhatsApp
                 }
             });
         }
+
+        bool IPostReplayMaintenanceHost.UseFrugalSyncBudget => UseFrugalSyncBudget;
+
+        bool IPostReplayMaintenanceHost.IsConnected => IsConnected;
+
+        bool IPostReplayMaintenanceHost.IsWindowVisible => Unison.Uwp.App.IsWindowVisible;
+
+        bool IPostReplayMaintenanceHost.IsHistoryCatchUpActive => IsHistoryCatchUpActive();
+
+        bool IPostReplayMaintenanceHost.IsListPaintPending =>
+            _listPaintGate != null && !_listPaintGate.IsReleased;
+
+        Task<bool> IPostReplayMaintenanceHost.WaitForStartupQuietAsync(
+            TimeSpan timeout,
+            CancellationToken token) =>
+            WaitForStartupQuietAsync(timeout, "post-replay", token);
+
+        Task<bool> IPostReplayMaintenanceHost.WaitForMemoryHeadroomAsync(
+            CancellationToken token) =>
+            WaitForMemoryHeadroomAsync("post-replay", token);
+
+        void IPostReplayMaintenanceHost.ClearSyncStatus() => RaiseSyncStatus(null);
+
+        void IPostReplayMaintenanceHost.WriteMemorySkipped() =>
+            RuntimeDiagnosticsService.Instance.Write(
+                "startup",
+                "post-replay-maintenance-skipped",
+                "reason=memory; level=" + _appMemory.UsageLevel);
+
+        void IPostReplayMaintenanceHost.MarkEnrichmentAwaitingHeavyHistory() =>
+            Interlocked.Exchange(ref _enrichmentAwaitingHeavyHistory, 1);
+
+        void IPostReplayMaintenanceHost.WriteDeferred(
+            string catchUpDeferReason,
+            int offlineCount)
+        {
+            RuntimeDiagnosticsService.Instance.Write(
+                "startup",
+                "post-replay-maintenance-deferred",
+                "reason=" + catchUpDeferReason + "; offlineCount=" + offlineCount);
+            Debug.WriteLine(
+                "[WhatsAppService] Post-replay maintenance deferred (" +
+                catchUpDeferReason + "; offlineCount=" + offlineCount + ")");
+        }
+
+        void IPostReplayMaintenanceHost.WriteListPaintDeferred() =>
+            RuntimeDiagnosticsService.Instance.Write(
+                "preview-tip",
+                "reconcile-deferred-list-paint",
+                "reason=post-replay");
+
+        async Task IPostReplayMaintenanceHost.NotifyPostReplayMaintenanceAsync(
+            int offlineCount,
+            bool runDelayedBulk,
+            CancellationToken token)
+        {
+            if (ChatFacade == null)
+            {
+                return;
+            }
+
+            await ChatFacade.NotifyPostReplayMaintenanceAsync(
+                    offlineCount,
+                    runDelayedBulk,
+                    token)
+                .ConfigureAwait(false);
+        }
+
+        void IPostReplayMaintenanceHost.WriteComplete(int offlineCount) =>
+            RuntimeDiagnosticsService.Instance.Write(
+                "startup",
+                "post-replay-message-maintenance-complete",
+                "offlineCount=" + offlineCount);
+
+        void IPostReplayMaintenanceHost.TrySchedulePostMessageEnrichment(string reason) =>
+            TrySchedulePostMessageEnrichment(reason);
+
+        void IPostReplayMaintenanceHost.RecordFailed(Exception ex, int offlineCount) =>
+            RuntimeDiagnosticsService.Instance.RecordException(
+                "startup",
+                "post-replay-maintenance-failed",
+                ex,
+                "offlineCount=" + offlineCount);
 
         /// <summary>
         /// Names / groups / avatars after messages. Skips while a heavy history catch-up is owed

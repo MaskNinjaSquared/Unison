@@ -2,6 +2,13 @@
 
 Newest first.
 
+## Extract — PostReplayMaintenanceDispatch
+
+`PostReplayMaintenanceDispatch` + `PostReplayMaintenanceGates` +
+`IPostReplayMaintenanceHost`. `SchedulePostReplayMaintenance` only swaps the CTS
+and runs the helper (quiet / memory / catch-up / list-paint → ChatFacade notify →
+enrichment arm). Core tests for gates and paths.
+
 ## Extract — remaining WireSocketEventHandlers thin-wires
 
 `QrCodeWireDispatch`, `AuthStateWireDispatch`, `InboundWireNodeDispatch`,
