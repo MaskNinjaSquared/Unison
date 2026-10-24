@@ -2,6 +2,13 @@
 
 Newest first.
 
+## Extract — ChatCatalogPersistDispatch
+
+`ChatCatalogPersistDispatch` + `IChatCatalogPersistHost`. Debounced catalogue
+`SchedulePersist` / `EnableScheduledPersist` left the client; `PersistScheduler`,
+timer and `PersistDataAsync` stay on the host. Core tests for defer / arm /
+restore / enable-with-deferred.
+
 ## ConnectionFacade — drop IWhatsAppService
 
 `IConnectionEventSource` + `IConnectionSessionHost` (WhatsAppService). Facade

@@ -97,22 +97,8 @@ namespace Unison.Uwp.Services.WhatsApp
             }
         }
 
-        internal void EnableScheduledPersist(string reason)
-        {
-            var result = _persistScheduler.EnableAfterStartup();
-            if (result == PersistEnableResult.AlreadyEnabled)
-            {
-                return;
-            }
-
-            Debug.WriteLine($"[WhatsAppService] Startup persist suppression lifted: {reason}");
-
-            if (result == PersistEnableResult.LiftedWithDeferredSave)
-            {
-                Debug.WriteLine($"[WhatsAppService] Flushing deferred persist after startup warm-up: {reason}");
-                SchedulePersist();
-            }
-        }
+        internal void EnableScheduledPersist(string reason) =>
+            ChatCatalogPersistDispatch.EnableAfterStartup(this, reason);
 
         /// <summary>
         /// Loads compact chat metadata for the UI. Safe to run after the connection has
@@ -353,35 +339,48 @@ namespace Unison.Uwp.Services.WhatsApp
         /// <summary>
         /// Schedules a debounced persist operation. Multiple calls within 3 seconds will batch into one save.
         /// </summary>
-        internal void SchedulePersist()
-        {
-            if (_persistScheduler.Request() == PersistScheduleAction.Deferred)
-            {
-                Debug.WriteLine("[WhatsAppService] SchedulePersist skipped during startup warm-up");
-                return;
-            }
+        internal void SchedulePersist() =>
+            ChatCatalogPersistDispatch.Schedule(this);
 
+        PersistScheduleAction IChatCatalogPersistHost.RequestPersist() =>
+            _persistScheduler.Request();
+
+        void IChatCatalogPersistHost.LogDeferredDuringWarmup() =>
+            Debug.WriteLine("[WhatsAppService] SchedulePersist skipped during startup warm-up");
+
+        void IChatCatalogPersistHost.ArmDebounceTimer()
+        {
             lock (_persistLock)
             {
-                // Cancel existing timer and restart with 3 second delay
                 _persistTimer?.Dispose();
-                _persistTimer = new System.Threading.Timer(async _ =>
-                {
-                    if (!_persistScheduler.TryBeginPersist())
-                    {
-                        return;
-                    }
-
-                    // Put the save back if it did not land, or a transient disk error would
-                    // swallow the debt and the change would sit unsaved until something else
-                    // happened to dirty the catalogue again.
-                    if (!await PersistDataAsync())
-                    {
-                        _persistScheduler.Restore();
-                    }
-                }, null, 3000, Timeout.Infinite);
+                _persistTimer = new System.Threading.Timer(
+                    _ => _ = ChatCatalogPersistDispatch.OnDebounceElapsedAsync(this),
+                    null,
+                    ChatCatalogPersistDispatch.DebounceMilliseconds,
+                    Timeout.Infinite);
             }
         }
+
+        bool IChatCatalogPersistHost.TryBeginPersist() =>
+            _persistScheduler.TryBeginPersist();
+
+        Task<bool> IChatCatalogPersistHost.RunFullPersistAsync() =>
+            PersistDataAsync();
+
+        void IChatCatalogPersistHost.RestorePersistDebt() =>
+            _persistScheduler.Restore();
+
+        PersistEnableResult IChatCatalogPersistHost.EnableAfterStartup() =>
+            _persistScheduler.EnableAfterStartup();
+
+        void IChatCatalogPersistHost.LogSuppressionLifted(string reason) =>
+            Debug.WriteLine(
+                "[WhatsAppService] Startup persist suppression lifted: " + reason);
+
+        void IChatCatalogPersistHost.LogFlushingDeferred(string reason) =>
+            Debug.WriteLine(
+                "[WhatsAppService] Flushing deferred persist after startup warm-up: " +
+                reason);
 
         void IChatCatalogPersistence.Schedule() => SchedulePersist();
         void IChatIdentityPersistence.PersistNow(string reason) =>

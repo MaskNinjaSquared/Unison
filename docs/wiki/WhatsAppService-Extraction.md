@@ -203,7 +203,7 @@ typed queue item still on the host).
 Primitives that already left the contract (façade / Netstandard Phase A):
 
 - **UI thread.** `AttachedUiDispatcher` (UWP, `IDispatcher`) is a singleton the client, `ChatFacade`, `ContactFacade` and the contact helpers take in their constructors. `App` attaches the root frame's `CoreDispatcher` to it; `AttachUiDispatcher` and `IWhatsAppService.RunOnUiThreadAsync` are gone.
-- **Catalog save.** `IChatCatalogPersistence` (`Schedule`, `PersistRows`) replaces `SchedulePersistPublic` / `PersistChatListRowsPublic`. It is a narrow port the client implements: the debounce timer stays in the client because `ShutdownAsync` (phase 4) resets it.
+- **Catalog save.** `IChatCatalogPersistence` (`Schedule`, `PersistRows`) replaces `SchedulePersistPublic` / `PersistChatListRowsPublic`. Debounce orchestration is `ChatCatalogPersistDispatch` over `IChatCatalogPersistHost`; the timer field and `PersistDataAsync` stay on the client because `ShutdownAsync` resets them.
 - **Network reachability.** `INetworkAccess` / `WinRtNetworkAccess` — `ConnectionFacade.HasInternetAccess` no longer calls `NetworkInformation` directly.
 - **Foreground wait.** `ContactFacade` refreshes the People overlay after `IAppLifecycle.WaitUntilForegroundAsync` instead of hooking `Window.Activated`.
 
