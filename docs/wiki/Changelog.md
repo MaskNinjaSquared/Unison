@@ -2,6 +2,13 @@
 
 Newest first.
 
+## Extract — SocketError / HistorySyncWire / SessionInitialized dispatches
+
+Thin-wire trio after ConnectionUpdate: `SocketErrorDispatch` + `ISocketErrorHost`
+(OnError / OnStreamError), `HistorySyncWireApply` + `IHistorySyncWireHost`
+(OnHistorySyncReceived; still not gated on current socket),
+`SessionInitializedDispatch` + `ISessionInitializedHost`. Core tests for each.
+
 ## Extract — ConnectionUpdateDispatch from WireSocketEventHandlers
 
 `ConnectionUpdateDispatch` + `IConnectionUpdateHost`. OnConnectionUpdate only

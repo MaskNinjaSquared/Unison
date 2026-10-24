@@ -225,7 +225,7 @@ namespace Unison.Uwp.Services.WhatsApp
             ConnectionUpdateDispatch.Handle(this, status);
         };
 
-        socket.OnSessionInitialized += async (s, e) => 
+        socket.OnSessionInitialized += async (s, e) =>
         {
             if (!IsCurrentSocket(s))
             {
@@ -233,134 +233,19 @@ namespace Unison.Uwp.Services.WhatsApp
                 return;
             }
 
-            if (_fatalSessionEnded)
-            {
-                PairingTrace("OnSessionInitialized IGNORED (fatal session ended)");
-                return;
-            }
-
-            PairingTrace("OnSessionInitialized → raising UI event");
-            Debug.WriteLine("[WhatsAppService] Session initialized - triggering missing name resolution");
-            _sessionEstablishedThisConnection = true;
-            _pairingRestartPending = false;
-            _countPreSessionCloseAsFatal = true;
-            Interlocked.Exchange(ref _preSessionCloseStreak, 0);
-            _sessionEstablishedTcs.TrySetResult(true);
-            EnsureSelfPhonePersisted();
-            await PersistAuthStateAsync(s as IWhatsAppSocket, "session-initialized");
-
-            bool deferReplayWork = ShouldDeferReconnectReplayWork();
-
-            if (deferReplayWork)
-            {
-                Debug.WriteLine("[WhatsAppService] Deferring reconnect name/group work until replay drain completes.");
-            }
-            else
-            {
-                // Names and avatars are enrichment, not connection prerequisites.
-                // Schedule them after the first messages and input are responsive.
-                SchedulePostReplayMaintenance(0);
-                _ = TryConsumeMessageStoreForceHistoryRepairAsync("session-initialized");
-            }
-             
-            OnSessionInitialized?.Invoke(this, EventArgs.Empty);
-            PairingTrace("OnSessionInitialized UI event raised");
+            await SessionInitializedDispatch.RunAsync(this).ConfigureAwait(false);
         };
 
         socket.OnStreamError += (s, code) =>
-        {
-            bool current = IsCurrentSocket(s);
-            bool explicitLogout = ExplicitLogoutStreamCode.Matches(code);
+            SocketErrorDispatch.HandleStreamError(this, code, IsCurrentSocket(s));
 
-            // A 401/device_removed on the socket we just replaced is still the
-            // account being revoked — the reconnect loop made this sender "stale"
-            // before the close reason finished dispatching.
-            if (StaleSocketEventGate.ShouldIgnore(current, explicitLogout))
-            {
-                return;
-            }
-
-            if (PairingRestartStreamCode.Matches(code))
-            {
-                if (!current)
-                {
-                    return;
-                }
-
-                MarkPairingRestartPending("stream-error-515");
-                TryStartPairingStage2Reconnect("stream-error-515");
-            }
-            else if (explicitLogout)
-            {
-                LatchFatalSession("stream-" + (code ?? "logout"));
-            }
-
-            ReportStreamError(code);
-        };
-
-        socket.OnError += async (s, ex) => 
-        {
-            string fatalCode = FatalStreamCodeFromException.TryRead(ex);
-            bool explicitLogout = ExplicitLogoutStreamCode.Matches(fatalCode);
-            bool current = IsCurrentSocket(s);
-
-            if (StaleSocketEventGate.ShouldIgnore(current, explicitLogout))
-            {
-                return;
-            }
-
-            Debug.WriteLine($"[WhatsAppService] Socket error: {ex.Message}");
-            RuntimeDiagnosticsService.Instance.RecordException(
-                "connection",
-                "socket-error",
+        socket.OnError += async (s, ex) =>
+            await SocketErrorDispatch.HandleErrorAsync(
+                this,
                 ex,
-                "socketConnected=" + socket.IsConnected + "; handshake=" + socket.IsHandshakeComplete);
-
-            if (explicitLogout)
-            {
-                LatchFatalSession("error-" + fatalCode);
-            }
-
-            if (fatalCode != null)
-            {
-                ReportStreamError(fatalCode);
-            }
-
-            if (_suppressReconnect || _fatalSessionEnded)
-            {
-                OnError?.Invoke(this, ex);
-                return;
-            }
-
-            if (!current)
-            {
-                return;
-            }
-
-            bool transportFailure = SocketTransportFailure.Matches(
-                ex,
+                IsCurrentSocket(s),
                 socket.IsConnected,
-                socket.IsHandshakeComplete);
-
-            if (transportFailure)
-            {
-                if (_pairingRestartPending)
-                {
-                    PairingTrace("transport failure during pairing stage2 → defer to ReconnectForPairingAsync");
-                }
-                else
-                {
-                    Debug.WriteLine("[WhatsAppService] Transport failure detected; persistent reconnect scheduled");
-                    await Task.Delay(250);
-                    if (!_fatalSessionEnded && !_suppressReconnect)
-                    {
-                        ScheduleAutoReconnect("socket-error");
-                    }
-                }
-            }
-
-            OnError?.Invoke(this, ex);
-        };
+                socket.IsHandshakeComplete).ConfigureAwait(false);
 
         socket.OnMessage += (s, node) =>
         {
@@ -387,49 +272,9 @@ namespace Unison.Uwp.Services.WhatsApp
             }
         };
 
-        socket.OnHistorySyncReceived += (s, sync) => 
-        {
-            // Not gated on the socket still being the current one, unlike everything else
-            // here. A history chunk is the account's past: it was downloaded and decrypted
-            // before the connection was replaced, it says nothing about the connection, and
-            // the phone will not offer it again. Turning it away because a reconnect happened
-            // mid-sync is how an account that synced hundreds of chats ended up showing a few
-            // dozen, most of them still labelled with a phone number. A wiped session is the
-            // one case where there is nothing left to merge into.
-            if (_fatalSessionEnded || _authState == null)
-            {
-                return;
-            }
-
-            // SocketClient raised this from a background pipeline. MessageWebSocket
-            // delivers on the UI thread; the transport hops off before this runs.
-            // Still wait for the chunk so the next protobuf is not parsed on top of it.
-            int conversations = sync?.Conversations?.Count ?? 0;
-            var started = System.Diagnostics.Stopwatch.StartNew();
-            RuntimeDiagnosticsService.Instance.Write(
-                "history",
-                "sync-apply-begin",
-                "conversations=" + conversations +
-                "; type=" + (sync?.SyncType.ToString() ?? "<none>"));
-            try
-            {
-                if (History == null)
-                {
-                    throw new InvalidOperationException(
-                        "IHistoryService must resolve before history sync apply.");
-                }
-
-                History.ApplyHistorySyncAsync(sync).GetAwaiter().GetResult();
-            }
-            finally
-            {
-                RuntimeDiagnosticsService.Instance.Write(
-                    "history",
-                    "sync-apply-end",
-                    "conversations=" + conversations +
-                    "; elapsedMs=" + started.ElapsedMilliseconds);
-            }
-        };
+        // Not gated on current socket — see HistorySyncWireApply header.
+        socket.OnHistorySyncReceived += (s, sync) =>
+            HistorySyncWireApply.Run(this, sync);
 
         // Handle real-time decrypted messages (not history sync)
         socket.OnDecryptedMessageReceived += (s, e) =>
@@ -656,6 +501,121 @@ namespace Unison.Uwp.Services.WhatsApp
 
         void IConnectionUpdateHost.RaiseQrExpired() =>
             OnQrExpired?.Invoke(this, EventArgs.Empty);
+
+        bool ISocketErrorHost.SuppressReconnect => _suppressReconnect;
+
+        bool ISocketErrorHost.FatalSessionEnded => _fatalSessionEnded;
+
+        bool ISocketErrorHost.PairingRestartPending => _pairingRestartPending;
+
+        void ISocketErrorHost.MarkPairingRestartPending(string reason) =>
+            MarkPairingRestartPending(reason);
+
+        void ISocketErrorHost.TryStartPairingStage2Reconnect(string trigger) =>
+            TryStartPairingStage2Reconnect(trigger);
+
+        void ISocketErrorHost.LatchFatalSession(string reason) =>
+            LatchFatalSession(reason);
+
+        void ISocketErrorHost.ReportStreamError(string code) =>
+            ReportStreamError(code);
+
+        void ISocketErrorHost.LogSocketError(Exception ex, bool socketConnected, bool handshakeComplete)
+        {
+            Debug.WriteLine("[WhatsAppService] Socket error: " + ex.Message);
+            RuntimeDiagnosticsService.Instance.RecordException(
+                "connection",
+                "socket-error",
+                ex,
+                "socketConnected=" + socketConnected + "; handshake=" + handshakeComplete);
+        }
+
+        void ISocketErrorHost.PairingTrace(string line) => PairingTrace(line);
+
+        void ISocketErrorHost.LogTransportFailureScheduled() =>
+            Debug.WriteLine(
+                "[WhatsAppService] Transport failure detected; persistent reconnect scheduled");
+
+        Task ISocketErrorHost.DelayBeforeReconnectAsync(int milliseconds) =>
+            Task.Delay(milliseconds);
+
+        void ISocketErrorHost.ScheduleAutoReconnect(string trigger) =>
+            ScheduleAutoReconnect(trigger);
+
+        void ISocketErrorHost.RaiseOnError(Exception ex) =>
+            OnError?.Invoke(this, ex);
+
+        bool IHistorySyncWireHost.FatalSessionEnded => _fatalSessionEnded;
+
+        bool IHistorySyncWireHost.HasAuthState => _authState != null;
+
+        void IHistorySyncWireHost.WriteSyncApplyBegin(int conversations, string syncType) =>
+            RuntimeDiagnosticsService.Instance.Write(
+                "history",
+                "sync-apply-begin",
+                "conversations=" + conversations + "; type=" + syncType);
+
+        void IHistorySyncWireHost.WriteSyncApplyEnd(int conversations, long elapsedMs) =>
+            RuntimeDiagnosticsService.Instance.Write(
+                "history",
+                "sync-apply-end",
+                "conversations=" + conversations + "; elapsedMs=" + elapsedMs);
+
+        Task IHistorySyncWireHost.ApplyHistorySyncAsync(HistorySync sync)
+        {
+            if (History == null)
+            {
+                throw new InvalidOperationException(
+                    "IHistoryService must resolve before history sync apply.");
+            }
+
+            return History.ApplyHistorySyncAsync(sync);
+        }
+
+        bool ISessionInitializedHost.FatalSessionEnded => _fatalSessionEnded;
+
+        void ISessionInitializedHost.MarkSessionEstablished() =>
+            _sessionEstablishedThisConnection = true;
+
+        void ISessionInitializedHost.ClearPairingRestartPending() =>
+            _pairingRestartPending = false;
+
+        void ISessionInitializedHost.EnablePreSessionCloseAsFatal() =>
+            _countPreSessionCloseAsFatal = true;
+
+        void ISessionInitializedHost.ResetPreSessionCloseStreak() =>
+            Interlocked.Exchange(ref _preSessionCloseStreak, 0);
+
+        void ISessionInitializedHost.CompleteSessionEstablishedWait() =>
+            _sessionEstablishedTcs.TrySetResult(true);
+
+        void ISessionInitializedHost.EnsureSelfPhonePersisted() =>
+            EnsureSelfPhonePersisted();
+
+        Task ISessionInitializedHost.PersistAuthStateForSessionAsync() =>
+            PersistAuthStateAsync(_socket, "session-initialized");
+
+        bool ISessionInitializedHost.ShouldDeferReconnectReplayWork() =>
+            ShouldDeferReconnectReplayWork();
+
+        void ISessionInitializedHost.LogDeferringReconnectWork() =>
+            Debug.WriteLine(
+                "[WhatsAppService] Deferring reconnect name/group work until replay drain completes.");
+
+        void ISessionInitializedHost.SchedulePostReplayMaintenance() =>
+            SchedulePostReplayMaintenance(0);
+
+        void ISessionInitializedHost.StartMessageStoreForceHistoryRepair(string reason) =>
+            _ = TryConsumeMessageStoreForceHistoryRepairAsync(reason);
+
+        void ISessionInitializedHost.RaiseSessionInitialized() =>
+            OnSessionInitialized?.Invoke(this, EventArgs.Empty);
+
+        void ISessionInitializedHost.PairingTrace(string line) => PairingTrace(line);
+
+        void ISessionInitializedHost.LogSessionInitialized() =>
+            Debug.WriteLine(
+                "[WhatsAppService] Session initialized - triggering missing name resolution");
 
         /// <summary>
         /// Binds one monitored socket into <see cref="IConnectionHealthMonitorHost"/> for
