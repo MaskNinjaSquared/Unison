@@ -190,8 +190,8 @@ Helpers under `Contacts/` (`ContactNameResolver`, `ChatAvatarPolicy`, `GroupRost
 `IWhatsAppSessionProvider.IsTransportReady`, `IChatAvatarFetch`, and stores. Remaining
 Phase B host ownership: post-replay / post-message enrichment / offline-replay
 flush extracted as `PostReplayMaintenanceDispatch`, `PostMessageEnrichmentDispatch`
-and `OfflineReplayFlushDispatch` (CAS/CTS/timer field still on the host); the
-incoming pump drain loop remains until Netstandard D.
+`OfflineReplayFlushDispatch`, and `IncomingPumpDrainDispatch` (CAS/CTS/timer /
+typed queue item still on the host).
 
 Primitives that already left the contract (façade / Netstandard Phase A):
 
@@ -1289,7 +1289,8 @@ auto-reconnect and catch-up-continue. Idle-lot decide and adjacent FULL_HISTORY 
 soft-reconnect / lifecycle / Connect gates + prepare + open / close disposition /
 health-monitor live in WhatsAppClient helpers + hosts. `ConnectAsync` body is
 orchestration over those helpers; `BuildSocketBridge` / `WireSocketEventHandlers`
-and the incoming pump stay on the client until Netstandard D. Offline pending-
+stays on the client until further Netstandard work; the incoming pump drain loop
+is `IncomingPumpDrainDispatch` (host still owns typed queue + handle). Offline pending-
 notification release is `OfflineReplayRelease` over `IOfflineReplayReleaseHost`
 (wire still attaches the event on the client). Thin-wire dispatches:
 `ConnectionUpdateDispatch`, `SocketErrorDispatch`, `HistorySyncWireApply`,

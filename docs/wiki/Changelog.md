@@ -2,6 +2,13 @@
 
 Newest first.
 
+## Extract — IncomingPumpDrainDispatch (Netstandard D)
+
+`IncomingPumpDrainDispatch` + `IIncomingPumpDrainHost`. Live-first drain loop,
+live timeout / retry / apply counters left the client; typed queue item and
+`HandleDecryptedMessageAsync` stay on the host. Core tests for empty / offline /
+timeout / success / fault.
+
 ## Extract — serialized post-message enrichment into dispatch
 
 `PostMessageEnrichmentDispatch.RunSerializedAsync` owns the low-memory avatars →

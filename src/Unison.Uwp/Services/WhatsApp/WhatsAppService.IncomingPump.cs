@@ -99,11 +99,13 @@ namespace Unison.Uwp.Services.WhatsApp
             RestartIncomingMessagePumpIfNeeded();
         }
 
+        private Client.DecryptedMessageEventArgs _pumpCurrent;
+
         private void RestartIncomingMessagePumpIfNeeded()
         {
             int generation;
             if (!_incoming.TryStart(
-                    started => Task.Run(() => ProcessIncomingMessageQueueAsync(started)),
+                    started => Task.Run(() => IncomingPumpDrainDispatch.RunAsync(this, started)),
                     DateTime.UtcNow,
                     out generation))
             {
@@ -137,77 +139,106 @@ namespace Unison.Uwp.Services.WhatsApp
             return _incoming.IsStalled(limit, DateTime.UtcNow);
         }
 
-        private async Task ProcessIncomingMessageQueueAsync(int generation)
+        int IIncomingPumpDrainHost.LiveTimeoutMilliseconds =>
+            IncomingPumpDrainDispatch.DefaultLiveTimeoutMilliseconds;
+
+        bool IIncomingPumpDrainHost.TryTakeNext(int generation, DateTime utcNow)
         {
-            while (true)
+            Client.DecryptedMessageEventArgs next;
+            if (!_incoming.TryTakeNext(generation, utcNow, out next))
             {
-                // Offline replay records are timestamp-guarded, so serving live traffic
-                // first cannot let them overwrite a newer preview.
-                Client.DecryptedMessageEventArgs next;
-                if (!_incoming.TryTakeNext(generation, DateTime.UtcNow, out next))
-                {
-                    return;
-                }
-
-                try
-                {
-                    Task handleTask = HandleDecryptedMessageAsync(next);
-                    if (!next.IsOffline)
-                    {
-                        Task completed = await Task.WhenAny(handleTask, Task.Delay(LiveIncomingMessageTimeoutMs));
-                        if (completed != handleTask)
-                        {
-                            RuntimeDiagnosticsService.Instance.Write(
-                                "messages",
-                                "incoming-message-timeout",
-                                "id=" + (next.MessageId ?? "<none>") +
-                                "; stage=" + _incoming.Stage +
-                                "; timeoutMs=" + LiveIncomingMessageTimeoutMs);
-
-                            _ = handleTask.ContinueWith(
-                                t =>
-                                {
-                                    if (t.IsFaulted)
-                                    {
-                                        RuntimeDiagnosticsService.Instance.RecordException(
-                                            "messages",
-                                            "late-message-fault",
-                                            t.Exception,
-                                            "id=" + (next.MessageId ?? "<none>"));
-                                    }
-                                },
-                                TaskScheduler.Default);
-
-                            bool requeueTimedOutMessage = _incoming.ShouldRetryTimedOut(next);
-                            ResetIncomingMessagePump(
-                                requeueTimedOutMessage ? "message-timeout-retry" : "message-timeout-skip",
-                                requeueCurrent: requeueTimedOutMessage);
-                            RestartIncomingMessagePumpIfNeeded();
-                            return;
-                        }
-                    }
-
-                    await handleTask;
-                    _incoming.ForgetTimeout(next);
-                    Interlocked.Increment(ref _diagnosticsAppliedMessageCount);
-                    Interlocked.Exchange(ref _diagnosticsLastAppliedMessageUtcTicks, DateTime.UtcNow.Ticks);
-                }
-                catch (Exception ex)
-                {
-                    Debug.WriteLine($"[WhatsAppService] Incoming message pump error: {ex.Message}");
-                    RuntimeDiagnosticsService.Instance.RecordException(
-                        "messages",
-                        "incoming-pump-error",
-                        ex,
-                        "offline=" + (next != null && next.IsOffline) +
-                        "; id=" + (next?.MessageId ?? "<none>") +
-                        "; stage=" + _incoming.Stage);
-                }
-                finally
-                {
-                    _incoming.Finish(generation, next, DateTime.UtcNow);
-                }
+                _pumpCurrent = null;
+                return false;
             }
+
+            _pumpCurrent = next;
+            return true;
+        }
+
+        bool IIncomingPumpDrainHost.IsCurrentOffline =>
+            _pumpCurrent != null && _pumpCurrent.IsOffline;
+
+        string IIncomingPumpDrainHost.CurrentMessageId =>
+            _pumpCurrent?.MessageId;
+
+        string IIncomingPumpDrainHost.CurrentStage => _incoming.Stage;
+
+        Task IIncomingPumpDrainHost.HandleCurrentAsync() =>
+            HandleDecryptedMessageAsync(_pumpCurrent);
+
+        bool IIncomingPumpDrainHost.ShouldRetryTimedOutCurrent() =>
+            _incoming.ShouldRetryTimedOut(_pumpCurrent);
+
+        void IIncomingPumpDrainHost.ResetPump(string reason, bool requeueCurrent) =>
+            ResetIncomingMessagePump(reason, requeueCurrent);
+
+        void IIncomingPumpDrainHost.RestartPumpIfNeeded() =>
+            RestartIncomingMessagePumpIfNeeded();
+
+        void IIncomingPumpDrainHost.ForgetTimeoutCurrent() =>
+            _incoming.ForgetTimeout(_pumpCurrent);
+
+        void IIncomingPumpDrainHost.FinishCurrent(int generation, DateTime utcNow)
+        {
+            _incoming.Finish(generation, _pumpCurrent, utcNow);
+            _pumpCurrent = null;
+        }
+
+        void IIncomingPumpDrainHost.NotifyMessageApplied()
+        {
+            Interlocked.Increment(ref _diagnosticsAppliedMessageCount);
+            Interlocked.Exchange(
+                ref _diagnosticsLastAppliedMessageUtcTicks,
+                DateTime.UtcNow.Ticks);
+        }
+
+        void IIncomingPumpDrainHost.LogLiveTimeout(
+            string messageId,
+            string stage,
+            int timeoutMs) =>
+            RuntimeDiagnosticsService.Instance.Write(
+                "messages",
+                "incoming-message-timeout",
+                "id=" + (messageId ?? "<none>") +
+                "; stage=" + stage +
+                "; timeoutMs=" + timeoutMs);
+
+        void IIncomingPumpDrainHost.ObserveLateHandleFault(Task handleTask, string messageId)
+        {
+            if (handleTask == null)
+            {
+                return;
+            }
+
+            _ = handleTask.ContinueWith(
+                t =>
+                {
+                    if (t.IsFaulted)
+                    {
+                        RuntimeDiagnosticsService.Instance.RecordException(
+                            "messages",
+                            "late-message-fault",
+                            t.Exception,
+                            "id=" + (messageId ?? "<none>"));
+                    }
+                },
+                TaskScheduler.Default);
+        }
+
+        void IIncomingPumpDrainHost.LogPumpError(
+            Exception ex,
+            string messageId,
+            bool offline,
+            string stage)
+        {
+            Debug.WriteLine("[WhatsAppService] Incoming message pump error: " + ex.Message);
+            RuntimeDiagnosticsService.Instance.RecordException(
+                "messages",
+                "incoming-pump-error",
+                ex,
+                "offline=" + offline +
+                "; id=" + (messageId ?? "<none>") +
+                "; stage=" + stage);
         }
 
         private async Task WaitForIncomingMessageQueueDrainAsync(int timeoutMs)
