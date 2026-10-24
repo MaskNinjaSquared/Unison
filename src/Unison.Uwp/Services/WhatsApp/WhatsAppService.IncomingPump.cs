@@ -280,17 +280,8 @@ namespace Unison.Uwp.Services.WhatsApp
             }
         }
 
-        void IPendingMessageFlushHost.ApplyFlushAction(PendingFlushAction action)
-        {
-            if (action == PendingFlushAction.FlushNow)
-            {
-                _ = FlushOfflineReplayMessagesAsync("message-batch-threshold");
-            }
-            else if (action == PendingFlushAction.ScheduleTimer)
-            {
-                ScheduleOfflineReplayFlushTimer();
-            }
-        }
+        void IPendingMessageFlushHost.ApplyFlushAction(PendingFlushAction action) =>
+            OfflineReplayFlushDispatch.ApplyAction(this, action);
 
         Task IPendingMessageFlushHost.FlushOfflineReplayAsync(string reason) =>
             FlushOfflineReplayMessagesAsync(reason);

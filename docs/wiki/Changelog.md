@@ -2,6 +2,13 @@
 
 Newest first.
 
+## Extract — OfflineReplayFlushDispatch
+
+`OfflineReplayFlushDispatch` + `OfflineReplayFlushBatch` + `IOfflineReplayFlushHost`.
+Flush body, ApplyFlushAction and idle-timer claim left the client; timer field /
+flush lock / SQLite ports stay on the host. Core tests for id split, apply,
+empty drain, persist and restore-on-failure.
+
 ## Extract — PostMessageEnrichmentDispatch
 
 `PostMessageEnrichmentDispatch` + `PostMessageEnrichmentGates` +

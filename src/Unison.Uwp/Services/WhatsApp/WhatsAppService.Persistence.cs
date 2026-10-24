@@ -264,113 +264,16 @@ namespace Unison.Uwp.Services.WhatsApp
             }
 
             var action = _pendingMessages.Add(jid, messages, DateTime.UtcNow, scheduleFlush);
-
-            if (action == PendingFlushAction.FlushNow)
-            {
-                _ = FlushOfflineReplayMessagesAsync("message-batch-threshold");
-            }
-            else if (action == PendingFlushAction.ScheduleTimer)
-            {
-                ScheduleOfflineReplayFlushTimer();
-            }
+            OfflineReplayFlushDispatch.ApplyAction(this, action);
         }
 
-        private async Task FlushOfflineReplayMessagesAsync(string reason)
-        {
-            await _offlineReplayFlushLock.WaitAsync();
-            try
-            {
-                var drain = _pendingMessages.Drain(DateTime.UtcNow);
-                if (drain == null)
-                {
-                    return;
-                }
-
-                lock (_offlineReplayTimerLock)
-                {
-                    _offlineReplayFlushTimer?.Dispose();
-                    _offlineReplayFlushTimer = null;
-                }
-
-                try
-                {
-                    int saved = 0;
-                    var outgoingIdsToRemove = new HashSet<string>(StringComparer.Ordinal);
-                    var incomingIdsToRemove = new HashSet<string>(StringComparer.Ordinal);
-                    foreach (var kvp in drain.MessagesByChat)
-                    {
-                        if (kvp.Value == null || kvp.Value.Count == 0)
-                        {
-                            continue;
-                        }
-
-                        var batchMessages = _pendingMessages.SelectBatch(kvp.Value);
-
-                        await PersistLiveMessagesAsync(kvp.Key, batchMessages);
-
-                        var outgoingIds = batchMessages
-                            .Where(m => m != null && m.IsFromMe && !string.IsNullOrWhiteSpace(m.Id))
-                            .Select(m => m.Id)
-                            .Distinct(StringComparer.Ordinal)
-                            .ToList();
-                        var incomingIds = batchMessages
-                            .Where(m => m != null && !m.IsFromMe && !string.IsNullOrWhiteSpace(m.Id))
-                            .Select(m => m.Id)
-                            .Distinct(StringComparer.Ordinal)
-                            .ToList();
-
-                        foreach (var outgoingId in outgoingIds)
-                        {
-                            outgoingIdsToRemove.Add(outgoingId);
-                        }
-                        foreach (var incomingId in incomingIds)
-                        {
-                            incomingIdsToRemove.Add(incomingId);
-                        }
-
-                        saved += batchMessages.Count;
-                    }
-
-                    if (outgoingIdsToRemove.Count > 0)
-                    {
-                        await _messageStore.RemovePendingOutgoingAsync(outgoingIdsToRemove);
-                    }
-                    if (incomingIdsToRemove.Count > 0)
-                    {
-                        await _messageStore.RemovePendingIncomingAsync(incomingIdsToRemove);
-                    }
-
-                    Debug.WriteLine($"[WhatsAppService] Flushed {saved} queued message(s) across {drain.ChatCount} chat(s), dirtyChats={drain.DirtyChats.Count}, reason={reason}");
-
-                    // Guarded against a "shutdown" reason no caller passes. Suspension does
-                    // not come through here at all and is not meant to: it flushes the
-                    // append-only journal, which is what keeps these messages, and skips the
-                    // per-chat rewrite that would blow the suspend deadline. Recovery is
-                    // PrepareForSuspendAsync on the way out and incoming-journal-recovery on
-                    // the way back in.
-                    SchedulePersist();
-                }
-                catch (Exception ex)
-                {
-                    _pendingMessages.Restore(drain);
-
-                    RuntimeDiagnosticsService.Instance.RecordException(
-                        "messages",
-                        "message-batch-flush-deferred",
-                        ex,
-                        "reason=" + reason + "; chats=" + drain.ChatCount);
-                }
-            }
-            finally
-            {
-                if (_pendingMessages.CompleteFlush())
-                {
-                    ScheduleOfflineReplayFlushTimer();
-                }
-
-                _offlineReplayFlushLock.Release();
-            }
-        }
+        /// <summary>
+        /// Drains the pending queue to SQLite. Suspension does not come through here:
+        /// it flushes the append-only journal and skips the per-chat rewrite that would
+        /// blow the suspend deadline.
+        /// </summary>
+        private Task FlushOfflineReplayMessagesAsync(string reason) =>
+            OfflineReplayFlushDispatch.FlushAsync(this, reason);
 
         /// <summary>
         /// Persists current chats and messages to disk.

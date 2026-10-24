@@ -44,7 +44,7 @@ using Unison.WhatsAppClient.Helpers;
 
 namespace Unison.Uwp.Services.WhatsApp
 {
-    public partial class WhatsAppService : INotifyPropertyChanged, IWhatsAppService, IOfflineReplayHost, IOfflineReplayReleaseHost, IConnectionUpdateHost, ISocketErrorHost, IHistorySyncWireHost, ISessionInitializedHost, IQrCodeWireHost, IAuthStateWireHost, IInboundWireNodeHost, IDecryptedMessageWireHost, ISocketFacadeWireHost, IPostReplayMaintenanceHost, IPostMessageEnrichmentHost, IPlaceholderResendSocket, IHistoryOnDemandSocket, IRuntimeSnapshotSource, IBackgroundResolutionGate, IAppStateLocalHost, IConversationResyncHost, IHistorySyncHost, IHistoryCatchUpHost, IConnectionEnsureHost, IConnectionResumeHost, IConnectionPairingStage2Host, IConnectionBrokerTransferHost, IConnectionSoftReconnectHost, IConnectionLifecycleHost, IConnectionConnectGateSource, IConnectionConnectPrepareHost, IConnectionConnectOpenHost, ISocketAliasRegistrar, IStartupUiHost, IJidAliasPersistence, IIncomingMessageEnqueueHost, Unison.WhatsAppClient.Abstractions.IResolvedNameApplyHost
+    public partial class WhatsAppService : INotifyPropertyChanged, IWhatsAppService, IOfflineReplayHost, IOfflineReplayReleaseHost, IOfflineReplayFlushHost, IConnectionUpdateHost, ISocketErrorHost, IHistorySyncWireHost, ISessionInitializedHost, IQrCodeWireHost, IAuthStateWireHost, IInboundWireNodeHost, IDecryptedMessageWireHost, ISocketFacadeWireHost, IPostReplayMaintenanceHost, IPostMessageEnrichmentHost, IPlaceholderResendSocket, IHistoryOnDemandSocket, IRuntimeSnapshotSource, IBackgroundResolutionGate, IAppStateLocalHost, IConversationResyncHost, IHistorySyncHost, IHistoryCatchUpHost, IConnectionEnsureHost, IConnectionResumeHost, IConnectionPairingStage2Host, IConnectionBrokerTransferHost, IConnectionSoftReconnectHost, IConnectionLifecycleHost, IConnectionConnectGateSource, IConnectionConnectPrepareHost, IConnectionConnectOpenHost, ISocketAliasRegistrar, IStartupUiHost, IJidAliasPersistence, IIncomingMessageEnqueueHost, Unison.WhatsAppClient.Abstractions.IResolvedNameApplyHost
     {
         public event PropertyChangedEventHandler PropertyChanged;
         protected void OnPropertyChanged([CallerMemberName] string propertyName = null)
@@ -1812,24 +1812,85 @@ namespace Unison.Uwp.Services.WhatsApp
             lock (_offlineReplayTimerLock)
             {
                 _offlineReplayFlushTimer?.Dispose();
-                _offlineReplayFlushTimer = new System.Threading.Timer(async _ =>
-            {
-                if (!_pendingMessages.TryClaimFlush())
-            {
-                return;
-            }
-
-                try
-                {
-                    await FlushOfflineReplayMessagesAsync("message-batch-idle");
-            }
-            catch (Exception ex)
-            {
-                    Debug.WriteLine($"[WhatsAppService] Non-fatal message batch flush failure: {ex.Message}");
-                }
-                }, null, (int)OfflineReplayFlushInterval.TotalMilliseconds, Timeout.Infinite);
+                _offlineReplayFlushTimer = new System.Threading.Timer(
+                    _ => _ = OfflineReplayFlushDispatch.OnIdleTimerAsync(this),
+                    null,
+                    (int)OfflineReplayFlushInterval.TotalMilliseconds,
+                    Timeout.Infinite);
             }
         }
+
+        Task IOfflineReplayFlushHost.EnterFlushLockAsync() =>
+            _offlineReplayFlushLock.WaitAsync();
+
+        void IOfflineReplayFlushHost.ReleaseFlushLock() =>
+            _offlineReplayFlushLock.Release();
+
+        PendingMessageDrain IOfflineReplayFlushHost.DrainPending(DateTime utcNow) =>
+            _pendingMessages.Drain(utcNow);
+
+        void IOfflineReplayFlushHost.ClearFlushTimer()
+        {
+            lock (_offlineReplayTimerLock)
+            {
+                _offlineReplayFlushTimer?.Dispose();
+                _offlineReplayFlushTimer = null;
+            }
+        }
+
+        List<ChatMessage> IOfflineReplayFlushHost.SelectBatch(IEnumerable<ChatMessage> queued) =>
+            _pendingMessages.SelectBatch(queued);
+
+        Task IOfflineReplayFlushHost.PersistLiveMessagesAsync(
+            string chatJid,
+            IList<ChatMessage> messages) =>
+            PersistLiveMessagesAsync(chatJid, messages);
+
+        Task IOfflineReplayFlushHost.RemovePendingOutgoingAsync(IEnumerable<string> ids) =>
+            _messageStore.RemovePendingOutgoingAsync(ids);
+
+        Task IOfflineReplayFlushHost.RemovePendingIncomingAsync(IEnumerable<string> ids) =>
+            _messageStore.RemovePendingIncomingAsync(ids);
+
+        void IOfflineReplayFlushHost.RestoreDrain(PendingMessageDrain drain) =>
+            _pendingMessages.Restore(drain);
+
+        void IOfflineReplayFlushHost.LogFlushed(
+            int saved,
+            int chatCount,
+            int dirtyChatCount,
+            string reason) =>
+            Debug.WriteLine(
+                "[WhatsAppService] Flushed " + saved + " queued message(s) across " +
+                chatCount + " chat(s), dirtyChats=" + dirtyChatCount + ", reason=" + reason);
+
+        void IOfflineReplayFlushHost.ScheduleCatalogPersist() => SchedulePersist();
+
+        void IOfflineReplayFlushHost.RecordFlushDeferred(
+            Exception ex,
+            string reason,
+            int chatCount) =>
+            RuntimeDiagnosticsService.Instance.RecordException(
+                "messages",
+                "message-batch-flush-deferred",
+                ex,
+                "reason=" + reason + "; chats=" + chatCount);
+
+        bool IOfflineReplayFlushHost.CompleteFlush() =>
+            _pendingMessages.CompleteFlush();
+
+        void IOfflineReplayFlushHost.ScheduleFlushTimer() =>
+            ScheduleOfflineReplayFlushTimer();
+
+        bool IOfflineReplayFlushHost.TryClaimFlush() =>
+            _pendingMessages.TryClaimFlush();
+
+        void IOfflineReplayFlushHost.LogNonFatalIdleFlushFailure(Exception ex) =>
+            Debug.WriteLine(
+                "[WhatsAppService] Non-fatal message batch flush failure: " + ex.Message);
+
+        void IOfflineReplayFlushHost.StartFlush(string reason) =>
+            _ = FlushOfflineReplayMessagesAsync(reason);
 
         /// <inheritdoc />
         public void NotifyHistorySqliteChunkApplied(string syncType, int conversationCount)
