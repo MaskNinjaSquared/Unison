@@ -1385,15 +1385,23 @@ namespace Unison.Uwp.Services
                 return;
             }
 
+            // ContactAction dual-writes used to call RegisterJidAlias(1) per mutation → Bridge
+            // Store(1) flood on regular_low. Bulk-import coalesces memory dual-write; pending
+            // socket pairs flush once after the scope ends.
             int applied = 0;
-            foreach (var mutation in mutations.Values)
+            using (_owner.JidAlias.BeginBulkImport())
             {
-                WhatsAppService.Log($"[AppStateSync] {collectionName}: mutation candidate index={mutation?.Index} operation={mutation?.Operation} summary={DescribeAction(mutation?.SyncAction?.Value)}");
-                if (await ApplyMutationAsync(collectionName, mutation, isInitialSync))
+                foreach (var mutation in mutations.Values)
                 {
-                    applied++;
+                    WhatsAppService.Log($"[AppStateSync] {collectionName}: mutation candidate index={mutation?.Index} operation={mutation?.Operation} summary={DescribeAction(mutation?.SyncAction?.Value)}");
+                    if (await ApplyMutationAsync(collectionName, mutation, isInitialSync))
+                    {
+                        applied++;
+                    }
                 }
             }
+
+            _owner.FlushPendingSocketAliasesAfterAppState(collectionName);
 
             if (applied > 0)
             {

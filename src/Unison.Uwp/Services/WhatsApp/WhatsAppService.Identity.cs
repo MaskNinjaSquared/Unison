@@ -82,6 +82,66 @@ namespace Unison.Uwp.Services.WhatsApp
             _socket?.RegisterJidAliases(aliases, source);
         }
 
+        // Changed pairs queued while JidAlias.BeginBulkImport is open so N×
+        // RegisterJidAlias(1) (and the Bridge Store log) become one RegisterJidAliases.
+        private readonly object _pendingSocketAliasGate = new object();
+        private Dictionary<string, string> _pendingSocketAliases;
+
+        private void QueuePendingSocketAlias(string jidA, string jidB)
+        {
+            if (string.IsNullOrWhiteSpace(jidA) || string.IsNullOrWhiteSpace(jidB))
+            {
+                return;
+            }
+
+            lock (_pendingSocketAliasGate)
+            {
+                if (_pendingSocketAliases == null)
+                {
+                    _pendingSocketAliases = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                }
+
+                _pendingSocketAliases[jidA] = jidB;
+                _pendingSocketAliases[jidB] = jidA;
+            }
+        }
+
+        /// <summary>
+        /// Pushes queued dual-write pairs to the socket in one batch. No-op while a
+        /// bulk-import scope is still open (nested flushes defer to the outer end).
+        /// </summary>
+        private void FlushPendingSocketAliases(string source)
+        {
+            if (JidAlias != null && JidAlias.IsBulkImporting)
+            {
+                return;
+            }
+
+            Dictionary<string, string> pending;
+            lock (_pendingSocketAliasGate)
+            {
+                pending = _pendingSocketAliases;
+                _pendingSocketAliases = null;
+            }
+
+            if (pending == null || pending.Count == 0)
+            {
+                return;
+            }
+
+            _socket?.RegisterJidAliases(pending, source ?? "bulk-alias");
+        }
+
+        /// <summary>
+        /// App-state mutation apply ends here so N× ContactAction dual-writes become one
+        /// <c>RegisterJidAliases</c> (one Bridge Store log) instead of one Store(1) each.
+        /// </summary>
+        internal void FlushPendingSocketAliasesAfterAppState(string collectionName) =>
+            FlushPendingSocketAliases(
+                string.IsNullOrWhiteSpace(collectionName)
+                    ? "app-state"
+                    : "app-state:" + collectionName);
+
         private async Task PersistJidAliasesAsync(string reason)
         {
             try
@@ -183,13 +243,18 @@ namespace Unison.Uwp.Services.WhatsApp
             }
 
             int changed = 0;
-            foreach (var pair in lidToPn)
+            using (JidAlias.BeginBulkImport())
             {
-                if (TryRecordAliasMapping(pair.Key, pair.Value, source))
+                foreach (var pair in lidToPn)
                 {
-                    changed++;
+                    if (TryRecordAliasMapping(pair.Key, pair.Value, source))
+                    {
+                        changed++;
+                    }
                 }
             }
+
+            FlushPendingSocketAliases(source);
 
             if (changed > 0)
             {
@@ -230,13 +295,20 @@ namespace Unison.Uwp.Services.WhatsApp
             }
 
             bool changed = AliasPairFiling.FileBothWays(JidAlias, lid, pn);
-            RegisterSocketAlias(lid, pn, source);
-
             if (!changed)
             {
                 // Live traffic re-states the same pair on every message. Recognising that costs a
-                // dictionary lookup and saves everything below.
+                // dictionary lookup and saves everything below — including a Bridge Store(1).
                 return false;
+            }
+
+            if (JidAlias.IsBulkImporting)
+            {
+                QueuePendingSocketAlias(lid, pn);
+            }
+            else
+            {
+                RegisterSocketAlias(lid, pn, source);
             }
 
             RaiseReport(

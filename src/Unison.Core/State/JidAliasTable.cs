@@ -78,6 +78,21 @@ namespace Unison.Core.State
         }
 
         /// <summary>
+        /// True while a <see cref="BeginBulkImport"/> scope is open (including nested).
+        /// Hosts use this to defer per-pair socket dual-writes until the outer flush.
+        /// </summary>
+        public bool IsBulkImporting
+        {
+            get
+            {
+                lock (_sync)
+                {
+                    return _bulkImportDepth > 0;
+                }
+            }
+        }
+
+        /// <summary>
         /// Coalesces dual-write + <see cref="Changed"/> across many sets (persistence restore).
         /// Dispose flushes one <c>RememberPairs</c> of the snapshot and one change notify.
         /// </summary>

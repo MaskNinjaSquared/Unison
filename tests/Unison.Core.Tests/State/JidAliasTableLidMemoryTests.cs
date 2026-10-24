@@ -75,6 +75,26 @@ namespace Unison.Core.Tests.State
             Assert.Equal(1, changed);
         }
 
+        [Fact]
+        public void IsBulkImporting_tracks_nested_scopes()
+        {
+            var table = new JidAliasTable();
+            Assert.False(table.IsBulkImporting);
+
+            using (table.BeginBulkImport())
+            {
+                Assert.True(table.IsBulkImporting);
+                using (table.BeginBulkImport())
+                {
+                    Assert.True(table.IsBulkImporting);
+                }
+
+                Assert.True(table.IsBulkImporting);
+            }
+
+            Assert.False(table.IsBulkImporting);
+        }
+
         private sealed class FakeMemory : ILidMappingMemory
         {
             public string Paired { get; set; }
