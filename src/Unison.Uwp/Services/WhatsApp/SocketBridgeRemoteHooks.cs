@@ -47,6 +47,10 @@ namespace Unison.Uwp.Services.WhatsApp
                 contacts != null
                     ? contacts.ApplyRemoteSelfPushNameAsync(name)
                     : Task.CompletedTask;
+            bridge.FavoritesListChanged = ids =>
+                chatFacade is ChatFacade favoriteChats
+                    ? favoriteChats.ApplyRemoteFavoritesListAsync(ids)
+                    : Task.CompletedTask;
             bridge.GroupSubjectChanged = (jid, subject) =>
                 contacts != null
                     ? contacts.ApplyRemoteGroupSubjectsAsync(

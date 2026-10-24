@@ -5,6 +5,7 @@ using Unison.Core.Helpers;
 using Unison.Core.Models;
 using Unison.Uwp.Services;
 using Unison.Uwp.UI.Views;
+using Windows.Foundation;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
 using Windows.UI.Xaml.Controls.Primitives;
@@ -15,9 +16,106 @@ namespace Unison.Uwp.UI.Templates
 {
     public sealed partial class ChatItemTemplates : ResourceDictionary
     {
+        private const string RowMenuName = "ChatRowMenu";
+
         public ChatItemTemplates()
         {
             InitializeComponent();
+        }
+
+        /// <summary>
+        /// Shows the row menu at <paramref name="position"/> in the <paramref name="anchor"/>'s
+        /// coordinates. Always opens against the template <c>Grid</c> (feature/2.1), so
+        /// <see cref="FlyoutBase.Target"/>.DataContext is the <see cref="ChatItem"/>.
+        /// </summary>
+        public static void ShowRowContextMenu(FrameworkElement anchor, Point position = default(Point))
+        {
+            if (anchor == null)
+            {
+                return;
+            }
+
+            FrameworkElement root = ResolveTemplateRoot(anchor);
+            MenuFlyout flyout = ResolveRowContextMenu(anchor);
+            if (root == null || flyout == null)
+            {
+                return;
+            }
+
+            // ShowAt(root): Target is the row Grid → DataContext is ChatItem (feature/2.1).
+
+            Point atRoot = position;
+            if (position != default(Point) && !ReferenceEquals(anchor, root))
+            {
+                try
+                {
+                    atRoot = anchor.TransformToVisual(root).TransformPoint(position);
+                }
+                catch
+                {
+                    atRoot = default(Point);
+                }
+            }
+
+            try
+            {
+                if (atRoot == default(Point))
+                {
+                    flyout.ShowAt(root);
+                }
+                else
+                {
+                    flyout.ShowAt(root, atRoot);
+                }
+            }
+            catch
+            {
+                try
+                {
+                    flyout.ShowAt(root);
+                }
+                catch
+                {
+                }
+            }
+        }
+
+        public static MenuFlyout ResolveRowContextMenu(FrameworkElement anchor)
+        {
+            FrameworkElement root = ResolveTemplateRoot(anchor);
+            if (root == null)
+            {
+                return null;
+            }
+
+            return root.ContextFlyout as MenuFlyout
+                ?? root.FindName(RowMenuName) as MenuFlyout;
+        }
+
+        /// <summary>
+        /// Hides the row menu if it is open (Legacy Hold → CommandBar must not leave a MenuFlyout up).
+        /// </summary>
+        public static void HideRowContextMenu(FrameworkElement anchor)
+        {
+            try
+            {
+                ResolveRowContextMenu(anchor)?.Hide();
+            }
+            catch
+            {
+            }
+        }
+
+        private static FrameworkElement ResolveTemplateRoot(FrameworkElement anchor)
+        {
+            if (anchor is ListViewItem container)
+            {
+                return container.ContentTemplateRoot as FrameworkElement
+                    ?? container.Content as FrameworkElement
+                    ?? container;
+            }
+
+            return anchor;
         }
 
         /// <summary>
@@ -49,6 +147,15 @@ namespace Unison.Uwp.UI.Templates
         public static bool ShowsGroupAvatar(bool isGroup, ChatKind kind)
         {
             return isGroup || kind == ChatKind.Community;
+        }
+
+        /// <summary>
+        /// List-row x:Load gate for the standard avatar (not community announcements).
+        /// x:Bind cannot invert a bool inline, and Visibility=Collapsed still constructs the control.
+        /// </summary>
+        public static bool ShowsStandardListAvatar(bool isCommunityAnnounce)
+        {
+            return !isCommunityAnnounce;
         }
 
         private void ChatContextFlyout_Opening(object sender, object e)
@@ -92,6 +199,14 @@ namespace Unison.Uwp.UI.Templates
                 else if (string.Equals(tag, "chatUnpin", StringComparison.Ordinal) && menuItem != null)
                 {
                     menuItem.Visibility = chat.IsChatPinned ? Visibility.Visible : Visibility.Collapsed;
+                }
+                else if (string.Equals(tag, "addFavorite", StringComparison.Ordinal) && menuItem != null)
+                {
+                    menuItem.Visibility = chat.IsFavorite ? Visibility.Collapsed : Visibility.Visible;
+                }
+                else if (string.Equals(tag, "removeFavorite", StringComparison.Ordinal) && menuItem != null)
+                {
+                    menuItem.Visibility = chat.IsFavorite ? Visibility.Visible : Visibility.Collapsed;
                 }
                 else if (string.Equals(tag, "widgetPin", StringComparison.Ordinal) && menuItem != null)
                 {
@@ -160,6 +275,38 @@ namespace Unison.Uwp.UI.Templates
             }
         }
 
+        private async void FavoriteChat_Click(object sender, RoutedEventArgs e)
+        {
+            var chat = ResolveChat(sender as FrameworkElement);
+            if (chat == null)
+            {
+                return;
+            }
+
+            IChatService chats = null;
+            try
+            {
+                chats = App.Services?.GetService<IChatService>();
+            }
+            catch
+            {
+            }
+
+            if (chats == null)
+            {
+                return;
+            }
+
+            try
+            {
+                await chats.SetFavoriteAsync(chat, !chat.IsFavorite);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine("[ChatItemTemplates] Favorite failed: " + ex.Message);
+            }
+        }
+
         private void PinToStart_Click(object sender, RoutedEventArgs e)
         {
             var chat = ResolveChat(sender as FrameworkElement);
@@ -211,7 +358,6 @@ namespace Unison.Uwp.UI.Templates
             var element = sender as FrameworkElement;
             var chat = ResolveChat(element);
             string tag = element?.Tag as string;
-            long? until = null;
             IChatService chats = null;
             try
             {
@@ -221,11 +367,12 @@ namespace Unison.Uwp.UI.Templates
             {
             }
 
-            if (chats == null)
+            if (chats == null || chat == null)
             {
                 return;
             }
 
+            long? until = null;
             if (string.Equals(tag, "mute8h", StringComparison.Ordinal))
             {
                 until = chats.MuteUntilEightHoursFromNow();
@@ -280,7 +427,7 @@ namespace Unison.Uwp.UI.Templates
                 return chat;
             }
 
-            // Walk up from submenu items to the root MenuFlyout target.
+            // Walk up from submenu items to the root MenuFlyout target (feature/2.1).
             DependencyObject current = element;
             while (current != null)
             {

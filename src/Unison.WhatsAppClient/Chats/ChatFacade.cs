@@ -363,6 +363,157 @@ namespace Unison.WhatsAppClient.Chats
             }
         }
 
+        public async Task SetFavoriteAsync(ChatItem chat, bool favorite)
+        {
+            if (chat == null || string.IsNullOrWhiteSpace(chat.JID))
+            {
+                return;
+            }
+
+            string canonicalJid = _jids.GetCanonicalJid(chat.JID);
+            bool wasFavorite = chat.IsFavorite;
+            if (wasFavorite == favorite)
+            {
+                return;
+            }
+
+            await ApplyLocalFavoriteAsync(canonicalJid, favorite).ConfigureAwait(false);
+
+            if (!_account.IsAvailable)
+            {
+                Debug.WriteLine("[ChatFacade] Favorite kept locally: no socket to tell the account");
+                return;
+            }
+
+            try
+            {
+                IList<string> fullList = CollectFavoriteJids();
+                await _account.SetFavoritesListAsync(fullList, add: true).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[ChatFacade] Favorite patch failed; rolling back" + Environment.NewLine + ex);
+                try
+                {
+                    await ApplyLocalFavoriteAsync(canonicalJid, wasFavorite).ConfigureAwait(false);
+                }
+                catch (Exception rollbackEx)
+                {
+                    Debug.WriteLine(
+                        "[ChatFacade] Favorite rollback failed" + Environment.NewLine + rollbackEx);
+                }
+
+                throw;
+            }
+        }
+
+        /// <summary>
+        /// App-state delivered a full Favourites list — replace local membership to match.
+        /// </summary>
+        public async Task ApplyRemoteFavoritesListAsync(IReadOnlyList<string> favoriteJids)
+        {
+            var wanted = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            if (favoriteJids != null)
+            {
+                foreach (string raw in favoriteJids)
+                {
+                    string canonical = _jids.GetCanonicalJid(raw);
+                    if (!string.IsNullOrWhiteSpace(canonical))
+                    {
+                        wanted.Add(canonical);
+                    }
+                }
+            }
+
+            List<ChatItem> snapshot = null;
+            await _ui.RunAsync(() =>
+            {
+                snapshot = new List<ChatItem>(_chatState.Chats);
+            }).ConfigureAwait(false);
+
+            if (snapshot == null)
+            {
+                return;
+            }
+
+            foreach (ChatItem chat in snapshot)
+            {
+                if (chat == null || string.IsNullOrWhiteSpace(chat.JID))
+                {
+                    continue;
+                }
+
+                string canonical = _jids.GetCanonicalJid(chat.JID);
+                bool should = wanted.Contains(canonical);
+                if (chat.IsFavorite == should)
+                {
+                    continue;
+                }
+
+                await ApplyLocalFavoriteAsync(canonical, should).ConfigureAwait(false);
+            }
+
+            // Persist favourites that are not yet in the in-memory list (cold ids).
+            foreach (string jid in wanted)
+            {
+                _chatStore.RememberFavorite(jid, true);
+                await _chatStore.SetFavoriteAsync(jid, true).ConfigureAwait(false);
+            }
+        }
+
+        private async Task ApplyLocalFavoriteAsync(string canonicalJid, bool favorite)
+        {
+            if (string.IsNullOrWhiteSpace(canonicalJid))
+            {
+                return;
+            }
+
+            await _ui.RunAsync(() =>
+            {
+                foreach (ChatItem row in _chatState.Chats)
+                {
+                    if (row == null || string.IsNullOrWhiteSpace(row.JID))
+                    {
+                        continue;
+                    }
+
+                    if (string.Equals(
+                            _jids.GetCanonicalJid(row.JID),
+                            canonicalJid,
+                            StringComparison.OrdinalIgnoreCase))
+                    {
+                        row.IsFavorite = favorite;
+                    }
+                }
+            }).ConfigureAwait(false);
+
+            _chatStore.RememberFavorite(canonicalJid, favorite);
+            await _chatStore.SetFavoriteAsync(canonicalJid, favorite).ConfigureAwait(false);
+        }
+
+        private IList<string> CollectFavoriteJids()
+        {
+            var ids = new List<string>();
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (ChatItem chat in _chatState.Chats)
+            {
+                if (chat == null || !chat.IsFavorite || string.IsNullOrWhiteSpace(chat.JID))
+                {
+                    continue;
+                }
+
+                string canonical = _jids.GetCanonicalJid(chat.JID);
+                if (string.IsNullOrWhiteSpace(canonical) || !seen.Add(canonical))
+                {
+                    continue;
+                }
+
+                ids.Add(canonical);
+            }
+
+            return ids;
+        }
+
         /// <summary>
         /// Account-side read/unread onto every alias row, then badge / shortcut / catalog slice.
         /// </summary>

@@ -57,6 +57,11 @@ namespace Unison.WhatsAppClient.Helpers
                 chat.MutedUntil = state.MutedUntil;
             }
 
+            if (state.Knows(ChatLocalStateFields.Favorite))
+            {
+                chat.IsFavorite = state.IsFavorite;
+            }
+
             if (!state.Knows(ChatLocalStateFields.Pin))
             {
                 return;

@@ -215,12 +215,22 @@ namespace Unison.Core.Models
         /// <summary>True when there are unread messages (bind with BooleanToVisibilityConverter).</summary>
         public bool HasUnread => _unreadCount > 0;
 
+        private bool _isFavorite;
+
         /// <summary>
-        /// WhatsApp Favourites list (app-state <c>favoritesAction</c> / label list FAVORITES).
-        /// Separate from chat-list pin (<see cref="IsChatPinned"/>). Stub until that store exists —
-        /// the Favorites filter stays empty on purpose.
+        /// WhatsApp Favourites list (app-state <c>favoritesAction</c>).
+        /// Separate from chat-list pin (<see cref="IsChatPinned"/>).
         /// </summary>
-        public bool IsFavorite => false;
+        public bool IsFavorite
+        {
+            get => _isFavorite;
+            set
+            {
+                if (_isFavorite == value) return;
+                _isFavorite = value;
+                OnPropertyChanged();
+            }
+        }
 
         /// <summary>
         /// Local unsent draft. Always false until drafts are stored on the chat row.

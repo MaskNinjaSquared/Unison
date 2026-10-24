@@ -40,6 +40,17 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
             return socket.SetChatPinnedAsync(jid, pinned);
         }
 
+        public Task SetFavoritesListAsync(IEnumerable<string> jids, bool add)
+        {
+            IWhatsAppSocket socket = _sessions.Socket;
+            if (socket == null)
+            {
+                return Task.CompletedTask;
+            }
+
+            return socket.SetFavoritesListAsync(jids, add);
+        }
+
         public Task DeleteChatAsync(string jid, IEnumerable<RangeMessage> lastMessages)
         {
             IWhatsAppSocket socket = _sessions.Socket;

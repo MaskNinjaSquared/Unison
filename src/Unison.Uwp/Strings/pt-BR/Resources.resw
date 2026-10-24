@@ -682,8 +682,29 @@ Desative depois de diagnosticar: manter ligado deixa o app lento.</value>
   <data name="Favorites_Header.Text" xml:space="preserve">
     <value>Favoritos</value>
   </data>
+  <data name="Favorites_EmptyTitle.Text" xml:space="preserve">
+    <value>Adicionar favoritos</value>
+  </data>
+  <data name="Favorites_AddPeopleOrGroups.Content" xml:space="preserve">
+    <value>Adicionar pessoas ou grupos</value>
+  </data>
+  <data name="Favorites_SortAlphabetical.Text" xml:space="preserve">
+    <value>A-Z</value>
+  </data>
+  <data name="ChatList_AddFavorite.Text" xml:space="preserve">
+    <value>Adicionar aos favoritos</value>
+  </data>
+  <data name="ChatList_RemoveFavorite.Text" xml:space="preserve">
+    <value>Remover dos favoritos</value>
+  </data>
+  <data name="Favorites_OpenChat.Text" xml:space="preserve">
+    <value>Abrir conversa</value>
+  </data>
+  <data name="Favorites_Remove.Text" xml:space="preserve">
+    <value>Remover dos favoritos</value>
+  </data>
   <data name="Favorites_Empty.Text" xml:space="preserve">
-    <value>Os Favoritos São Exibidos nas seções de Conversas e Ligações. Adicione quantas pessoas e quantos grupos você quiser.</value>
+    <value>Os favoritos são exibidos nas abas Conversas e Ligações. Adicione quantas pessoas e quantos grupos você quiser.</value>
   </data>
   <data name="Calls_Header.Text" xml:space="preserve">
     <value>Chamadas</value>
@@ -1052,6 +1073,9 @@ Desative depois de diagnosticar: manter ligado deixa o app lento.</value>
   </data>
   <data name="MessageContact_Add.Text" xml:space="preserve">
     <value>Adicionar contato</value>
+  </data>
+  <data name="Message_GroupJoin" xml:space="preserve">
+    <value>{0} entrou no grupo</value>
   </data>
   <data name="ChatDetail_AddContactLink.Content" xml:space="preserve">
     <value>Adicionar contato</value>

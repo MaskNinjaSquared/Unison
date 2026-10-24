@@ -51,6 +51,7 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
         private ChatsView _hookedChats;
         private ArchivedChatsView _hookedArchived;
         private LegacyPivotPlaceholderView _hookedPlaceholder;
+        private Unison.Uwp.UI.Views.FavoritesView _hookedFavorites;
         private StatusView _hookedStatusBar;
         private bool _detailOpen;
         private bool _detailHooked;
@@ -885,6 +886,11 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                 placeholder.DebugRequested += List_DebugRequested;
                 placeholder.SettingsRequested += List_SettingsRequested;
             }
+            else if (content is Unison.Uwp.UI.Views.FavoritesView favorites)
+            {
+                _hookedFavorites = favorites;
+                favorites.ChatSelected += LegacyFavorites_ChatSelected;
+            }
             else if (content is StatusView status)
             {
                 _hookedStatusBar = status;
@@ -927,6 +933,12 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                 _hookedPlaceholder = null;
             }
 
+            if (_hookedFavorites != null)
+            {
+                _hookedFavorites.ChatSelected -= LegacyFavorites_ChatSelected;
+                _hookedFavorites = null;
+            }
+
             if (_hookedStatusBar != null)
             {
                 _hookedStatusBar.SearchRequested -= List_SearchRequested;
@@ -961,6 +973,16 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
         private void Archived_ChatOpenRequested(object sender, ChatSelectedEventArgs e)
         {
             Chats_ChatOpenRequested(sender, e);
+        }
+
+        private void LegacyFavorites_ChatSelected(object sender, Unison.Uwp.UI.Views.ChatSelectedEventArgs e)
+        {
+            if (e?.SelectedChat == null)
+            {
+                return;
+            }
+
+            _ = OpenDetailAsync(e.SelectedChat);
         }
 
         private void List_SearchRequested(object sender, EventArgs e) => EnterSearchState();
@@ -1230,10 +1252,14 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                 return new ArchivedChatsView();
             }
 
-            if (string.Equals(tag, "calls", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(tag, "favorites", StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(tag, "calls", StringComparison.OrdinalIgnoreCase))
             {
                 return new LegacyPivotPlaceholderView();
+            }
+
+            if (string.Equals(tag, "favorites", StringComparison.OrdinalIgnoreCase))
+            {
+                return new Unison.Uwp.UI.Views.FavoritesView();
             }
 
             return new ChatsView();

@@ -870,6 +870,7 @@ namespace Unison.Uwp
                 sp.GetRequiredService<IChatService>(),
                 sp.GetRequiredService<IRuntimeDiagnostics>()));
             services.AddTransient<ChatListViewModel>();
+            services.AddTransient<FavoritesViewModel>();
             services.AddTransient<ChatDetailViewModel>();
             services.AddTransient<StatusListViewModel>();
             services.AddTransient<StatusDetailViewModel>();

@@ -98,10 +98,13 @@
                   ItemTemplate="{StaticResource ChatItemTemplate}"
                   ItemContainerStyle="{StaticResource WhatsAppChatListItemStyle}"
                   SelectionMode="Single"
+                  IsRightTapEnabled="True"
                   Loaded="ChatList_Loaded"
                   Unloaded="ChatList_Unloaded"
                   SelectionChanged="ChatList_SelectionChanged"
                   ContainerContentChanging="ChatList_ContainerContentChanging"
+                  RightTapped="ChatList_RightTapped"
+                  PointerPressed="ChatList_PointerPressed"
                   ShowsScrollingPlaceholders="False"
                   Margin="0,0,0,0">
         </ListView>
@@ -178,7 +181,11 @@
                       ItemTemplate="{StaticResource ChatItemTemplate}"
                       ItemContainerStyle="{StaticResource WhatsAppChatListItemStyle}"
                       SelectionMode="Single"
+                      IsRightTapEnabled="True"
                       SelectionChanged="CommunityHubList_SelectionChanged"
+                      ContainerContentChanging="CommunityHubList_ContainerContentChanging"
+                      RightTapped="ChatList_RightTapped"
+                      PointerPressed="ChatList_PointerPressed"
                       ShowsScrollingPlaceholders="False"/>
         </Grid>
 
@@ -249,6 +256,112 @@
                     </AppBarButton>
                 </CommandBar.SecondaryCommands>
         </CommandBar>
+        </Grid>
+
+        <!-- Hold on a row: MessageActions-style chrome. Transparent scrim dismisses (bar stays hit-testable below).
+             Desktop right-click uses MenuFlyout at the pointer (see code-behind). -->
+        <Grid x:Name="ChatActionsHost"
+              Grid.RowSpan="4"
+              Visibility="Collapsed"
+              Canvas.ZIndex="20">
+            <Border x:Name="ChatActionsScrim"
+                    Background="Transparent"
+                    HorizontalAlignment="Stretch"
+                    VerticalAlignment="Stretch"
+                    Tapped="ChatActionsScrim_Tapped"/>
+            <Grid VerticalAlignment="Bottom"
+                  MinHeight="{StaticResource LegacyCommandBarCompactHeight}"
+                  Background="{ThemeResource LegacyCommandBarBackgroundBrush}">
+                <CommandBar x:Name="ChatActionsBar"
+                            Style="{StaticResource LegacyCommandBarStyle}"
+                            Loaded="ChatActionsBar_Loaded">
+                    <AppBarButton x:Name="ChatActionsPinButton"
+                                  Style="{StaticResource LegacyAppBarButtonStyle}"
+                                  Label="Pin"
+                                  Click="ChatActionsPin_Click">
+                        <TextBlock Text="&#xE840;"
+                                   FontFamily="{StaticResource IconFont}"
+                                   FontSize="{StaticResource LegacyAppBarGlyphSize}"
+                                   TextLineBounds="Tight"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center"/>
+                    </AppBarButton>
+                    <AppBarButton x:Name="ChatActionsMuteButton"
+                                  Style="{StaticResource LegacyAppBarButtonStyle}"
+                                  Label="Mute"
+                                  Click="ChatActionsMute_Click">
+                        <TextBlock Text="&#xE74F;"
+                                   FontFamily="{StaticResource IconFont}"
+                                   FontSize="{StaticResource LegacyAppBarGlyphSize}"
+                                   TextLineBounds="Tight"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center"/>
+                    </AppBarButton>
+                    <AppBarButton x:Name="ChatActionsArchiveButton"
+                                  Style="{StaticResource LegacyAppBarButtonStyle}"
+                                  Label="Archive"
+                                  Click="ChatActionsArchive_Click">
+                        <TextBlock Text="&#xE7B8;"
+                                   FontFamily="{StaticResource IconFont}"
+                                   FontSize="{StaticResource LegacyAppBarGlyphSize}"
+                                   TextLineBounds="Tight"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center"/>
+                    </AppBarButton>
+                    <AppBarButton x:Name="ChatActionsDeleteButton"
+                                  Style="{StaticResource LegacyAppBarButtonStyle}"
+                                  Label="Delete"
+                                  Click="ChatActionsDelete_Click">
+                        <TextBlock Text="&#xE74D;"
+                                   FontFamily="{StaticResource IconFont}"
+                                   FontSize="{StaticResource LegacyAppBarGlyphSize}"
+                                   TextLineBounds="Tight"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center"/>
+                    </AppBarButton>
+                    <CommandBar.SecondaryCommands>
+                        <AppBarButton x:Name="ChatActionsViewProfileButton"
+                                      Label="View profile"
+                                      Click="ChatActionsViewProfile_Click">
+                            <AppBarButton.Icon>
+                                <FontIcon FontFamily="{StaticResource IconFont}" Glyph="&#xE77B;"/>
+                            </AppBarButton.Icon>
+                        </AppBarButton>
+                        <AppBarButton x:Name="ChatActionsPinToStartButton"
+                                      Label="Pin to Start"
+                                      Click="ChatActionsPinToStart_Click">
+                            <AppBarButton.Icon>
+                                <FontIcon FontFamily="{StaticResource LegacyIconFont}" Glyph="&#xEB08;"/>
+                            </AppBarButton.Icon>
+                        </AppBarButton>
+                        <AppBarButton x:Name="ChatActionsAddContactButton"
+                                      Label="Add contact"
+                                      Click="ChatActionsAddContact_Click">
+                            <AppBarButton.Icon>
+                                <FontIcon FontFamily="{StaticResource IconFont}" Glyph="&#xE8FA;"/>
+                            </AppBarButton.Icon>
+                        </AppBarButton>
+                        <AppBarButton x:Name="ChatActionsFavoriteButton"
+                                      x:Uid="ChatList_AddFavorite"
+                                      Label="Add to favorites"
+                                      Click="ChatActionsFavorite_Click">
+                            <AppBarButton.Icon>
+                                <FontIcon FontFamily="{StaticResource IconFont}" Glyph="&#xE734;"/>
+                            </AppBarButton.Icon>
+                        </AppBarButton>
+                        <AppBarSeparator/>
+                        <AppBarButton x:Name="ChatActionsMute8hButton"
+                                      Label="Mute 8 hours"
+                                      Click="ChatActionsMute8h_Click"/>
+                        <AppBarButton x:Name="ChatActionsMute1wButton"
+                                      Label="Mute 1 week"
+                                      Click="ChatActionsMute1w_Click"/>
+                        <AppBarButton x:Name="ChatActionsMuteForeverButton"
+                                      Label="Mute always"
+                                      Click="ChatActionsMuteForever_Click"/>
+                    </CommandBar.SecondaryCommands>
+                </CommandBar>
+            </Grid>
         </Grid>
     </Grid>
 </UserControl>

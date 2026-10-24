@@ -272,8 +272,17 @@ namespace Unison.Uwp.Client
         /// <summary>The user renamed themselves on another device.</summary>
         public Func<string, Task> SelfPushNameChanged { get; set; }
 
+        /// <summary>Full Favourites list from app-state; host replaces local membership.</summary>
+        public Func<IReadOnlyList<string>, Task> FavoritesListChanged { get; set; }
+
         /// <summary>A group was created or renamed: jid first, then the new subject.</summary>
         public Func<string, string, Task> GroupSubjectChanged { get; set; }
+
+        /// <summary>
+        /// <c>w:gp2</c> participant <c>add</c> (Baileys <c>GROUP_PARTICIPANT_ADD</c>).
+        /// Host inserts GroupJoin system lines — not stubbed on the wire as WebMessageInfo.
+        /// </summary>
+        public Func<IReadOnlyList<GroupJoinNotifyRequest>, Task> GroupParticipantsJoined { get; set; }
 
         /// <summary>A chat was deleted on another device.</summary>
         public Func<string, Task> ChatDeleted { get; set; }
@@ -1115,6 +1124,14 @@ namespace Unison.Uwp.Client
         }
 
         /// <summary>
+        /// Replaces the account Favourites list. Pass the complete desired JID set.
+        /// </summary>
+        public Task SetFavoritesListAsync(IEnumerable<string> jids, bool add)
+        {
+            return RequireAppState().Patch.ExecuteAsync(AppStatePatchFactory.Favorites(jids, add));
+        }
+
+        /// <summary>
         /// Re-emits pin/mute/archive mutations even when LT-hash says we are current.
         /// </summary>
         public async Task ResyncAppStateReportingAllAsync()
@@ -1642,6 +1659,11 @@ namespace Unison.Uwp.Client
                 var changed = SelfPushNameChanged;
                 return changed != null ? changed(name) : Done;
             };
+            appState.Actions.FavoritesChanged = ids =>
+            {
+                var changed = FavoritesListChanged;
+                return changed != null ? changed(ids) : Done;
+            };
 
             appState.Attach(module);
 
@@ -2049,6 +2071,7 @@ namespace Unison.Uwp.Client
             }
 
             await ApplyGroupNamesAsync(batch).ConfigureAwait(false);
+            await ApplyGroupParticipantsJoinedAsync(batch).ConfigureAwait(false);
 
             IList<string> deletedChats;
             var chatDeleted = ChatDeleted;
@@ -2133,6 +2156,62 @@ namespace Unison.Uwp.Client
                     await subjectChanged(group.Id, group.Subject).ConfigureAwait(false);
                 }
             }
+        }
+
+        /// <summary>
+        /// <c>w:gp2</c> <c>add</c> only — synthesize GroupJoin timeline lines. Other actions
+        /// (remove / promote / …) stay event-only until their kinds exist.
+        /// </summary>
+        private async Task ApplyGroupParticipantsJoinedAsync(WaEventBatch batch)
+        {
+            var joined = GroupParticipantsJoined;
+            if (joined == null)
+            {
+                return;
+            }
+
+            GroupParticipantsUpdate update;
+            if (!batch.TryGet(WaEventKind.GroupParticipantsUpdate, out update) ||
+                update == null ||
+                update.Action != GroupParticipantAction.Add ||
+                update.Participants == null ||
+                update.Participants.Count == 0 ||
+                string.IsNullOrWhiteSpace(update.Id))
+            {
+                return;
+            }
+
+            DateTime stamp = DateTime.UtcNow;
+            var requests = new List<GroupJoinNotifyRequest>(update.Participants.Count);
+            foreach (string participant in update.Participants)
+            {
+                if (string.IsNullOrWhiteSpace(participant))
+                {
+                    continue;
+                }
+
+                string phone = null;
+                if (update.ParticipantPhones != null)
+                {
+                    update.ParticipantPhones.TryGetValue(participant, out phone);
+                }
+
+                requests.Add(new GroupJoinNotifyRequest
+                {
+                    GroupJid = update.Id,
+                    ParticipantJid = participant,
+                    PhoneDigits = phone,
+                    NotificationId = update.NotificationId,
+                    TimestampUtc = stamp
+                });
+            }
+
+            if (requests.Count == 0)
+            {
+                return;
+            }
+
+            await joined(requests).ConfigureAwait(false);
         }
 
         // -- Plumbing --------------------------------------------------------

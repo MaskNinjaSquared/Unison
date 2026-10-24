@@ -110,6 +110,15 @@ Three Core tests.
 `ConnectionUpdateRoute`, `StaleSocketEventGate` — OnError / OnStreamError /
 OnConnectionUpdate decisions leave the client; hosts only apply side effects.
 
+## Favourites — protocol + SQLite + FavoritesView
+
+Protocol already had `favoritesAction` (bulk list). SQLite gained `Chat.IsFavorite`;
+`ChatItem.IsFavorite` is real. `IChatService.SetFavoriteAsync` updates local + sends the
+full favourites list (`AppStatePatchFactory.Favorites`). Inbound list replace via
+`SyncActionProcessor.FavoritesChanged`. UI: empty CTA, A–Z SemanticZoom, overlay
+`ContactsVisualizerControl` (Title + Items + ICommand — no NavigationService hop),
+context menu + Legacy More. Filter chip already used `IsFavorite`.
+
 ## Phase D — IConnectionSocketSessionFactory (connect open leaves the god client)
 
 `ConnectionConnectOpen` takes `IConnectionSocketSessionFactory`: UWP

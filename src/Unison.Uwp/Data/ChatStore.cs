@@ -123,6 +123,12 @@ namespace Unison.Uwp.Data
             return WriteAsync(jid, existing => existing.IsWidgetPinned = pinned);
         }
 
+        public Task SetFavoriteAsync(string jid, bool favorite)
+        {
+            RememberFavorite(jid, favorite);
+            return WriteAsync(jid, existing => existing.IsFavorite = favorite);
+        }
+
         public Task SetMutedUntilAsync(string jid, long? mutedUntil)
         {
             RememberMutedUntil(jid, mutedUntil);
@@ -137,6 +143,11 @@ namespace Unison.Uwp.Data
         public void RememberChatPinned(string jid, bool pinned)
         {
             _cache.Mutate(jid, state => state.IsChatPinned = pinned);
+        }
+
+        public void RememberFavorite(string jid, bool favorite)
+        {
+            _cache.Mutate(jid, state => state.IsFavorite = favorite);
         }
 
         public void RememberMutedUntil(string jid, long? mutedUntil)
@@ -250,6 +261,7 @@ namespace Unison.Uwp.Data
                 Status = status,
                 IsChatPinned = row.IsChatPinned,
                 IsWidgetPinned = row.IsWidgetPinned,
+                IsFavorite = row.IsFavorite,
                 MutedUntil = row.MutedUntil,
                 KnownFields = ChatLocalStateFields.All
             };
@@ -263,6 +275,7 @@ namespace Unison.Uwp.Data
                 Status = (int)state.Status,
                 IsChatPinned = state.IsChatPinned,
                 IsWidgetPinned = state.IsWidgetPinned,
+                IsFavorite = state.IsFavorite,
                 MutedUntil = state.MutedUntil,
                 UpdatedAtUtc = DateTime.UtcNow
             };

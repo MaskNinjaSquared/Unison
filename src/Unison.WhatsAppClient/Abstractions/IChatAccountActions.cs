@@ -20,6 +20,9 @@ namespace Unison.WhatsAppClient.Abstractions
 
         Task SetPinnedAsync(string jid, bool pinned);
 
+        /// <summary>Replaces the Favourites list. Pass the complete desired JID set.</summary>
+        Task SetFavoritesListAsync(IEnumerable<string> jids, bool add);
+
         Task DeleteChatAsync(string jid, IEnumerable<RangeMessage> lastMessages);
 
         Task MarkChatReadAsync(string jid, IEnumerable<RangeMessage> lastMessages);

@@ -15,6 +15,7 @@ namespace Unison.Core.Models
         private ChatStatus _status = ChatStatus.Active;
         private bool _isChatPinned;
         private bool _isWidgetPinned;
+        private bool _isFavorite;
         private long? _mutedUntil;
         private ChatLocalStateFields _known;
 
@@ -53,6 +54,17 @@ namespace Unison.Core.Models
             {
                 _isWidgetPinned = value;
                 _known |= ChatLocalStateFields.WidgetPin;
+            }
+        }
+
+        /// <summary>WhatsApp Favourites list membership (favoritesAction).</summary>
+        public bool IsFavorite
+        {
+            get { return _isFavorite; }
+            set
+            {
+                _isFavorite = value;
+                _known |= ChatLocalStateFields.Favorite;
             }
         }
 

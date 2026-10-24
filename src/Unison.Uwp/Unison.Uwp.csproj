@@ -20,7 +20,7 @@
     <PackageCertificateThumbprint>
     </PackageCertificateThumbprint>
     <!-- APPX4001: declare bundle platforms explicitly -->
-    <AppxBundlePlatforms>x64|arm</AppxBundlePlatforms>
+    <AppxBundlePlatforms>arm</AppxBundlePlatforms>
     <!-- PRI257: avoid NuGet satellite assemblies overriding app default language -->
     <AppxGeneratePrisForPortableLibrariesEnabled>false</AppxGeneratePrisForPortableLibrariesEnabled>
     <!-- Prefer 64-bit ILC; can avoid some 1.7.6 Analysis NREs -->
@@ -440,6 +440,9 @@
     </Compile>
     <Compile Include="UI\Controls\CallsEmptyControl.xaml.cs">
       <DependentUpon>CallsEmptyControl.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="UI\Controls\ContactsVisualizerControl.xaml.cs">
+      <DependentUpon>ContactsVisualizerControl.xaml</DependentUpon>
     </Compile>
     <Compile Include="UI\Controls\FavoritesEmptyControl.xaml.cs">
       <DependentUpon>FavoritesEmptyControl.xaml</DependentUpon>
@@ -1077,6 +1080,10 @@
       <SubType>Designer</SubType>
     </Page>
     <Page Include="UI\Controls\FavoritesEmptyControl.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Include="UI\Controls\ContactsVisualizerControl.xaml">
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </Page>

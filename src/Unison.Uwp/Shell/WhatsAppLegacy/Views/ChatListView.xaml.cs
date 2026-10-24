@@ -4,13 +4,19 @@ using System.Diagnostics;
 using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
 using Unison.Core.Contracts;
+using Unison.Core.Contracts.WhatsApp;
+using Unison.Core.Helpers;
 using Unison.Core.Models;
 using Unison.Core.ViewModels;
+using Windows.Devices.Input;
 using Windows.Foundation;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
+using Windows.UI.Xaml.Input;
 using Windows.UI.Xaml.Media;
+using Unison.Uwp.Helpers;
 using Unison.Uwp.Services;
+using Unison.Uwp.UI.Helpers;
 using Unison.Uwp.UI.Templates;
 
 namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
@@ -79,6 +85,12 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
         /// </summary>
         private bool _suppressSelectionChanged;
         private int _containerChangingCount;
+
+        /// <summary>Same gate as message bubbles: Hold must not also open the desktop MenuFlyout.</summary>
+        private readonly MessageBubbleContextGestureGate _rowContextGate =
+            new MessageBubbleContextGestureGate();
+
+        private ChatItem _actionsChat;
 
         public ChatListView()
             : this(null, null)
@@ -345,6 +357,8 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                 return;
             }
 
+            DismissChatActions();
+
             if (ViewModel.TryOpenCommunityHub(chat))
             {
                 SetSelectionQuiet(null);
@@ -553,20 +567,51 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
 
         private void ChatList_ContainerContentChanging(ListViewBase sender, ContainerContentChangingEventArgs args)
         {
-            if (args == null || args.InRecycleQueue || args.Item == null)
+            HandleLegacyRowContainerChanging(args, trace: true);
+        }
+
+        private void CommunityHubList_ContainerContentChanging(ListViewBase sender, ContainerContentChangingEventArgs args)
+        {
+            HandleLegacyRowContainerChanging(args, trace: false);
+        }
+
+        private void HandleLegacyRowContainerChanging(ContainerContentChangingEventArgs args, bool trace)
+        {
+            if (args == null)
             {
                 return;
             }
 
-            _containerChangingCount++;
-            if (_containerChangingCount <= 5 || (_containerChangingCount % 25) == 0)
+            var container = args.ItemContainer as ListViewItem;
+            if (container == null)
             {
-                TraceListUi(
-                    "container-changing",
-                    "n=" + _containerChangingCount +
-                    "; phase=" + args.Phase +
-                    "; visibleVm=" + (ViewModel?.VisibleChats?.Count ?? 0),
-                    flush: _containerChangingCount <= 3);
+                return;
+            }
+
+            // Hold → CommandBar (HideRowContextMenu in Holding). Mouse → ShowAt(Grid) like feature/2.1.
+            container.ContextFlyout = null;
+            container.IsHoldingEnabled = true;
+            container.Holding -= ChatRow_Holding;
+
+            if (args.InRecycleQueue || args.Item == null)
+            {
+                return;
+            }
+
+            container.Holding += ChatRow_Holding;
+
+            if (trace)
+            {
+                _containerChangingCount++;
+                if (_containerChangingCount <= 5 || (_containerChangingCount % 25) == 0)
+                {
+                    TraceListUi(
+                        "container-changing",
+                        "n=" + _containerChangingCount +
+                        "; phase=" + args.Phase +
+                        "; visibleVm=" + (ViewModel?.VisibleChats?.Count ?? 0),
+                        flush: _containerChangingCount <= 3);
+                }
             }
 
             // On demand, and only for rows that actually reached the screen. Fetching every
@@ -584,6 +629,477 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                     "n=" + _containerChangingCount);
                 _ = RuntimeDiagnosticsService.Instance.FlushAsync("chat-list-ui:row-realized-failed");
             }
+        }
+
+        private void ChatRow_Holding(object sender, HoldingRoutedEventArgs e)
+        {
+            if (e.HoldingState != Windows.UI.Input.HoldingState.Started)
+            {
+                return;
+            }
+
+            e.Handled = true;
+            if (!_rowContextGate.TryBeginFromHold())
+            {
+                return;
+            }
+
+            var container = sender as ListViewItem;
+            ChatItemTemplates.HideRowContextMenu(container);
+            OpenChatActions(ResolveContainerChat(container));
+        }
+
+        /// <summary>
+        /// Desktop mouse only. Touch long-press uses Holding → CommandBar (RightTapped echo is ignored).
+        /// </summary>
+        private void ChatList_RightTapped(object sender, RightTappedRoutedEventArgs e)
+        {
+            if (e == null || e.PointerDeviceType != PointerDeviceType.Mouse)
+            {
+                return;
+            }
+
+            ListViewItem container = FindListViewItem(e.OriginalSource as DependencyObject);
+            if (container == null)
+            {
+                return;
+            }
+
+            e.Handled = true;
+            TryShowRowContextMenu(container, e.GetPosition(container));
+        }
+
+        private void ChatList_PointerPressed(object sender, PointerRoutedEventArgs e)
+        {
+            if (e == null)
+            {
+                return;
+            }
+
+            var point = e.GetCurrentPoint(sender as UIElement);
+            if (point == null || !point.Properties.IsRightButtonPressed)
+            {
+                return;
+            }
+
+            ListViewItem container = FindListViewItem(e.OriginalSource as DependencyObject);
+            if (container == null)
+            {
+                return;
+            }
+
+            e.Handled = true;
+            TryShowRowContextMenu(container, e.GetCurrentPoint(container).Position);
+        }
+
+        private void TryShowRowContextMenu(ListViewItem container, Point position)
+        {
+            if (container == null || !_rowContextGate.TryBeginFromRightTap())
+            {
+                return;
+            }
+
+            if (ResolveContainerChat(container) == null)
+            {
+                return;
+            }
+
+            ChatItemTemplates.ShowRowContextMenu(container, position);
+        }
+
+        private static ListViewItem FindListViewItem(DependencyObject start)
+        {
+            DependencyObject current = start;
+            while (current != null)
+            {
+                if (current is ListViewItem item)
+                {
+                    return item;
+                }
+
+                current = VisualTreeHelper.GetParent(current);
+            }
+
+            return null;
+        }
+
+        private static ChatItem ResolveContainerChat(ListViewItem container)
+        {
+            if (container == null)
+            {
+                return null;
+            }
+
+            if (container.Content is ChatItem asContent)
+            {
+                return asContent;
+            }
+
+            if (container.DataContext is ChatItem fromDc)
+            {
+                return fromDc;
+            }
+
+            if (container.Content is FrameworkElement root && root.DataContext is ChatItem fromRoot)
+            {
+                return fromRoot;
+            }
+
+            return null;
+        }
+
+        private void OpenChatActions(ChatItem chat)
+        {
+            if (chat == null || ChatActionsHost == null)
+            {
+                return;
+            }
+
+            try
+            {
+                App.Services?.GetService<IChatStore>()?.ApplyTo(chat);
+            }
+            catch
+            {
+            }
+
+            _actionsChat = chat;
+            ApplyChatActionsChrome(chat);
+            ChatActionsHost.Visibility = Visibility.Visible;
+            LegacyCommandBarLayout.CenterPrimaryCommands(ChatActionsBar);
+        }
+
+        private void DismissChatActions()
+        {
+            _actionsChat = null;
+            if (ChatActionsHost != null)
+            {
+                ChatActionsHost.Visibility = Visibility.Collapsed;
+            }
+        }
+
+        private void ApplyChatActionsChrome(ChatItem chat)
+        {
+            if (chat == null)
+            {
+                return;
+            }
+
+            bool pinned = chat.IsChatPinned;
+            bool muted = chat.IsMutedLocally;
+            bool archived = chat.Status == ChatStatus.Archived;
+            bool liveTiles;
+            try
+            {
+                var provider = App.Services?.GetService<ISystemInfoProvider>();
+                liveTiles = provider != null
+                    ? provider.LiveTilesCompatible()
+                    : SystemInfoProvider.DetectLiveTilesCompatible();
+            }
+            catch
+            {
+                liveTiles = SystemInfoProvider.DetectLiveTilesCompatible();
+            }
+
+            if (ChatActionsPinButton != null)
+            {
+                ChatActionsPinButton.Label = pinned
+                    ? LocalizedStrings.Get("ChatList_UnpinChat", "Unpin")
+                    : LocalizedStrings.Get("ChatList_PinChat", "Pin");
+            }
+
+            if (ChatActionsMuteButton != null)
+            {
+                ChatActionsMuteButton.Label = muted
+                    ? LocalizedStrings.Get("ChatDetail_UnmuteNotifications", "Unmute")
+                    : LocalizedStrings.Get("ChatDetail_MuteNotifications", "Mute");
+            }
+
+            if (ChatActionsArchiveButton != null)
+            {
+                ChatActionsArchiveButton.Label = archived
+                    ? LocalizedStrings.Get("ChatList_UnarchiveChat", "Unarchive")
+                    : LocalizedStrings.Get("ChatList_ArchiveChat", "Archive");
+            }
+
+            bool canViewProfile = !chat.IsGroup &&
+                                  !chat.IsCommunityAnnounce &&
+                                  chat.Kind != ChatKind.Community &&
+                                  !string.IsNullOrWhiteSpace(chat.JID);
+            SetAppBarVisibility(ChatActionsViewProfileButton, canViewProfile);
+
+            bool canAdd = false;
+            try
+            {
+                canAdd = App.Services?.GetService<IContactService>()?.CanAddToAddressBook(chat.JID) == true;
+            }
+            catch
+            {
+            }
+
+            SetAppBarVisibility(ChatActionsAddContactButton, canAdd);
+
+            if (ChatActionsFavoriteButton != null)
+            {
+                ChatActionsFavoriteButton.Label = chat.IsFavorite
+                    ? LocalizedStrings.Get("ChatList_RemoveFavorite", "Remove from favorites")
+                    : LocalizedStrings.Get("ChatList_AddFavorite", "Add to favorites");
+                SetAppBarVisibility(ChatActionsFavoriteButton, true);
+            }
+
+            if (ChatActionsPinToStartButton != null)
+            {
+                ChatActionsPinToStartButton.Label = chat.IsWidgetPinned
+                    ? LocalizedStrings.Get("ChatDetail_UnpinFromStart", "Unpin from Start")
+                    : LocalizedStrings.Get("ChatDetail_PinToStart", "Pin to Start");
+                SetAppBarVisibility(ChatActionsPinToStartButton, liveTiles);
+            }
+
+            SetAppBarVisibility(ChatActionsMute8hButton, !muted);
+            SetAppBarVisibility(ChatActionsMute1wButton, !muted);
+            SetAppBarVisibility(ChatActionsMuteForeverButton, !muted);
+        }
+
+        private static void SetAppBarVisibility(AppBarButton button, bool visible)
+        {
+            if (button != null)
+            {
+                button.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
+            }
+        }
+
+        private void ChatActionsBar_Loaded(object sender, RoutedEventArgs e)
+        {
+            if (ChatActionsDeleteButton != null)
+            {
+                ChatActionsDeleteButton.Label = LocalizedStrings.Get("ChatList_DeleteChat", "Delete");
+            }
+
+            if (ChatActionsViewProfileButton != null)
+            {
+                ChatActionsViewProfileButton.Label = LocalizedStrings.Get("ChatList_ViewProfile", "View profile");
+            }
+
+            if (ChatActionsAddContactButton != null)
+            {
+                ChatActionsAddContactButton.Label = LocalizedStrings.Get("ChatDetail_AddContact", "Add contact");
+            }
+
+            if (ChatActionsMute8hButton != null)
+            {
+                ChatActionsMute8hButton.Label = LocalizedStrings.Get("ChatDetail_MuteFor8Hours", "8 hours");
+            }
+
+            if (ChatActionsMute1wButton != null)
+            {
+                ChatActionsMute1wButton.Label = LocalizedStrings.Get("ChatDetail_MuteFor1Week", "1 week");
+            }
+
+            if (ChatActionsMuteForeverButton != null)
+            {
+                ChatActionsMuteForeverButton.Label = LocalizedStrings.Get("ChatDetail_MuteForever", "Always");
+            }
+
+            LegacyCommandBarLayout.CenterPrimaryCommands(sender as CommandBar);
+        }
+
+        private void ChatActionsScrim_Tapped(object sender, TappedRoutedEventArgs e)
+        {
+            e.Handled = true;
+            if (!_rowContextGate.ShouldDismissFromScrim(DateTime.UtcNow))
+            {
+                return;
+            }
+
+            DismissChatActions();
+        }
+
+        private void ChatActionsPin_Click(object sender, RoutedEventArgs e)
+        {
+            var chat = _actionsChat;
+            if (chat == null)
+            {
+                return;
+            }
+
+            SetChatPinned(chat, !chat.IsChatPinned);
+            DismissChatActions();
+        }
+
+        private void ChatActionsMute_Click(object sender, RoutedEventArgs e)
+        {
+            var chat = _actionsChat;
+            if (chat == null)
+            {
+                return;
+            }
+
+            if (chat.IsMutedLocally)
+            {
+                SetLocalMute(chat, null);
+                DismissChatActions();
+                return;
+            }
+
+            // Not muted: open the overflow so the user picks a duration (same place as More).
+            if (ChatActionsBar != null)
+            {
+                ChatActionsBar.IsOpen = true;
+            }
+        }
+
+        private void ChatActionsArchive_Click(object sender, RoutedEventArgs e)
+        {
+            var chat = _actionsChat;
+            if (chat == null)
+            {
+                return;
+            }
+
+            if (chat.Status == ChatStatus.Archived)
+            {
+                UnarchiveChat(chat);
+            }
+            else
+            {
+                ArchiveChat(chat);
+            }
+
+            DismissChatActions();
+        }
+
+        private void ChatActionsDelete_Click(object sender, RoutedEventArgs e)
+        {
+            var chat = _actionsChat;
+            if (chat == null)
+            {
+                return;
+            }
+
+            DeleteChat(chat);
+            DismissChatActions();
+        }
+
+        private void ChatActionsViewProfile_Click(object sender, RoutedEventArgs e)
+        {
+            ViewProfile(_actionsChat);
+            DismissChatActions();
+        }
+
+        private void ChatActionsPinToStart_Click(object sender, RoutedEventArgs e)
+        {
+            PinChatToStart(_actionsChat);
+            DismissChatActions();
+        }
+
+        private async void ChatActionsFavorite_Click(object sender, RoutedEventArgs e)
+        {
+            var chat = _actionsChat;
+            DismissChatActions();
+            if (chat == null)
+            {
+                return;
+            }
+
+            IChatService chats = null;
+            try
+            {
+                chats = App.Services?.GetService<IChatService>();
+            }
+            catch
+            {
+            }
+
+            if (chats == null)
+            {
+                return;
+            }
+
+            try
+            {
+                await chats.SetFavoriteAsync(chat, !chat.IsFavorite);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[ChatListView] Favorite failed: " + ex.Message);
+            }
+        }
+
+        private async void ChatActionsAddContact_Click(object sender, RoutedEventArgs e)
+        {
+            var chat = _actionsChat;
+            DismissChatActions();
+            if (chat == null)
+            {
+                return;
+            }
+
+            IContactService contacts = null;
+            try
+            {
+                contacts = App.Services?.GetService<IContactService>();
+            }
+            catch
+            {
+            }
+
+            if (contacts == null)
+            {
+                return;
+            }
+
+            IStringResources strings = null;
+            try
+            {
+                strings = App.Services?.GetService<IStringResources>();
+            }
+            catch
+            {
+            }
+
+            try
+            {
+                await contacts.ShowAddToAddressBookAsync(
+                    chat.GetNameResolved(strings),
+                    contacts.TryResolvePhone(chat.JID),
+                    chat.GetAvatarUrl(preferHigh: true),
+                    chat.JID);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[ChatListView] Add contact failed: " + ex.Message);
+            }
+        }
+
+        private void ChatActionsMute8h_Click(object sender, RoutedEventArgs e) =>
+            MuteActionsChatWith(c => c.MuteUntilEightHoursFromNow());
+
+        private void ChatActionsMute1w_Click(object sender, RoutedEventArgs e) =>
+            MuteActionsChatWith(c => c.MuteUntilOneWeekFromNow());
+
+        private void ChatActionsMuteForever_Click(object sender, RoutedEventArgs e) =>
+            MuteActionsChatWith(c => c.MuteForeverUnixSeconds);
+
+        private void MuteActionsChatWith(Func<IChatService, long> untilFactory)
+        {
+            var chat = _actionsChat;
+            IChatService chats = null;
+            try
+            {
+                chats = App.Services?.GetService<IChatService>();
+            }
+            catch
+            {
+            }
+
+            if (chat == null || chats == null || untilFactory == null)
+            {
+                DismissChatActions();
+                return;
+            }
+
+            SetLocalMute(chat, untilFactory(chats));
+            DismissChatActions();
         }
 
         private static void TraceListUi(string eventName, string details, bool flush)

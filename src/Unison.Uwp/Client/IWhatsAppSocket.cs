@@ -152,6 +152,9 @@ namespace Unison.Uwp.Client
         /// <summary>Pins or unpins a conversation for the whole account.</summary>
         Task SetChatPinnedAsync(string jid, bool pinned);
 
+        /// <summary>Replaces the account Favourites list (complete JID set).</summary>
+        Task SetFavoritesListAsync(IEnumerable<string> jids, bool add);
+
         /// <summary>
         /// Deletes a conversation for the whole account. The range names the tail it covers.
         /// </summary>

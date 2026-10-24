@@ -17,6 +17,10 @@ namespace Unison.Core.Tests.Models
 
             Assert.True(chat.IsChatPinned);
             Assert.False(chat.IsFavorite);
+
+            chat.IsFavorite = true;
+            Assert.True(chat.IsFavorite);
+            Assert.True(chat.IsChatPinned);
         }
     }
 }

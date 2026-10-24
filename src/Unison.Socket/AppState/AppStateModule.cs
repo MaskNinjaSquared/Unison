@@ -96,6 +96,13 @@ namespace Unison.Socket.AppState
             set { Actions.PushNameChanged = value; }
         }
 
+        /// <summary>Full Favourites JID list from app-state (<c>favoritesAction</c>).</summary>
+        public Func<IReadOnlyList<string>, Task> FavoritesChanged
+        {
+            get { return Actions.FavoritesChanged; }
+            set { Actions.FavoritesChanged = value; }
+        }
+
         /// <summary>
         /// Called with the id of a key the phone has shared, so the host can remember which one to
         /// encode with.

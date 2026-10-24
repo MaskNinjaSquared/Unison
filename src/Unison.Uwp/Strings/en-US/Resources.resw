@@ -682,8 +682,29 @@ Disable after diagnosing: keeping it on slows the app.</value>
   <data name="Favorites_Header.Text" xml:space="preserve">
     <value>Favorites</value>
   </data>
+  <data name="Favorites_EmptyTitle.Text" xml:space="preserve">
+    <value>Add favorites</value>
+  </data>
+  <data name="Favorites_AddPeopleOrGroups.Content" xml:space="preserve">
+    <value>Add people or groups</value>
+  </data>
+  <data name="Favorites_SortAlphabetical.Text" xml:space="preserve">
+    <value>A-Z</value>
+  </data>
+  <data name="ChatList_AddFavorite.Text" xml:space="preserve">
+    <value>Add to favorites</value>
+  </data>
+  <data name="ChatList_RemoveFavorite.Text" xml:space="preserve">
+    <value>Remove from favorites</value>
+  </data>
+  <data name="Favorites_OpenChat.Text" xml:space="preserve">
+    <value>Open chat</value>
+  </data>
+  <data name="Favorites_Remove.Text" xml:space="preserve">
+    <value>Remove from favorites</value>
+  </data>
   <data name="Favorites_Empty.Text" xml:space="preserve">
-    <value>Favorites are shown in the Chats and Calls sections. Add as many people and groups as you want.</value>
+    <value>Favorites are shown in the Chats and Calls tabs. Add as many people and groups as you want.</value>
   </data>
   <data name="Calls_Header.Text" xml:space="preserve">
     <value>Calls</value>
@@ -1055,6 +1076,9 @@ Disable after diagnosing: keeping it on slows the app.</value>
   </data>
   <data name="MessageContact_Add.Text" xml:space="preserve">
     <value>Add contact</value>
+  </data>
+  <data name="Message_GroupJoin" xml:space="preserve">
+    <value>{0} joined the group</value>
   </data>
   <data name="ChatDetail_AddContactLink.Content" xml:space="preserve">
     <value>Add contact</value>

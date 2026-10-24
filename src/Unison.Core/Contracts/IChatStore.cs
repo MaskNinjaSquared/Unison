@@ -27,6 +27,9 @@ namespace Unison.Core.Contracts
         /// <summary>The Start-screen tile.</summary>
         Task SetWidgetPinnedAsync(string jid, bool pinned);
 
+        /// <summary>WhatsApp Favourites list membership (favoritesAction).</summary>
+        Task SetFavoriteAsync(string jid, bool favorite);
+
         /// <summary>Unix seconds mute deadline; null unmutes.</summary>
         Task SetMutedUntilAsync(string jid, long? mutedUntil);
 
@@ -38,6 +41,9 @@ namespace Unison.Core.Contracts
         /// <see cref="ApplyTo"/> (batch release / tip refresh) reads a stale cache and clears the pin.
         /// </summary>
         void RememberChatPinned(string jid, bool pinned);
+
+        /// <summary>Same as <see cref="RememberChatPinned"/> for Favourites.</summary>
+        void RememberFavorite(string jid, bool favorite);
 
         /// <summary>
         /// Same as <see cref="RememberChatPinned"/> for the mute deadline.

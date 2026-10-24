@@ -27,6 +27,13 @@ namespace Unison.Core.Contracts.WhatsApp
         Task SetPinnedAsync(ChatItem chat, bool pinned);
 
         /// <summary>
+        /// Adds or removes the conversation from WhatsApp Favourites (account-wide
+        /// <c>favoritesAction</c>). Local membership is updated first; the wire patch replaces
+        /// the full favourites list.
+        /// </summary>
+        Task SetFavoriteAsync(ChatItem chat, bool favorite);
+
+        /// <summary>
         /// Marks everything in the conversation as read: the senders are told, and the unread
         /// badge is cleared here and on the phone. Does nothing when there was nothing unread,
         /// so it is safe to call every time a chat is opened.

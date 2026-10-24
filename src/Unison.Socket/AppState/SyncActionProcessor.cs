@@ -48,6 +48,12 @@ namespace Unison.Socket.AppState
         public Func<string, Task> PushNameChanged { get; set; }
 
         /// <summary>
+        /// Full Favourites JID list from a <c>favoritesAction</c> mutation (index is only
+        /// <c>["favorites"]</c> — no per-chat id). Host replaces local membership from this set.
+        /// </summary>
+        public Func<IReadOnlyList<string>, Task> FavoritesChanged { get; set; }
+
+        /// <summary>
         /// Applies a batch. Chat updates are gathered and emitted together, because a sync
         /// commonly touches dozens of chats and the app should redraw once.
         /// </summary>
@@ -126,6 +132,13 @@ namespace Unison.Socket.AppState
             if (value.PushNameSetting != null)
             {
                 ApplyPushNameSetting(value.PushNameSetting.Name);
+                return;
+            }
+
+            // Favourites is one global record: index ["favorites"], value carries the full list.
+            if (value.FavoritesAction != null)
+            {
+                ApplyFavoritesList(value.FavoritesAction);
                 return;
             }
 
@@ -283,6 +296,36 @@ namespace Unison.Socket.AppState
             {
                 work.ContinueWith(
                     t => _log.Error("[AppState] Failed to store the new push name", t.Exception),
+                    TaskContinuationOptions.OnlyOnFaulted);
+            }
+        }
+
+        private void ApplyFavoritesList(global::Proto.SyncActionValue.Types.FavoritesAction favorites)
+        {
+            var changed = FavoritesChanged;
+            if (changed == null)
+            {
+                return;
+            }
+
+            var ids = new List<string>();
+            if (favorites?.Favorites != null)
+            {
+                foreach (var entry in favorites.Favorites)
+                {
+                    if (entry != null && !string.IsNullOrWhiteSpace(entry.Id))
+                    {
+                        ids.Add(entry.Id);
+                    }
+                }
+            }
+
+            _log.Debug("[AppState] Favorites list: " + ids.Count + " id(s)");
+            var work = changed(ids);
+            if (work != null)
+            {
+                work.ContinueWith(
+                    t => _log.Error("[AppState] Failed to apply favorites list", t.Exception),
                     TaskContinuationOptions.OnlyOnFaulted);
             }
         }
