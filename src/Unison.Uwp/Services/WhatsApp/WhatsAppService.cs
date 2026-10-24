@@ -45,7 +45,7 @@ using Unison.WhatsAppClient.Helpers;
 
 namespace Unison.Uwp.Services.WhatsApp
 {
-    public partial class WhatsAppService : INotifyPropertyChanged, IWhatsAppService, IConnectionEventSource, IConnectionSessionHost, IOfflineReplayHost, IOfflineReplayReleaseHost, IOfflineReplayFlushHost, IIncomingPumpDrainHost, IChatCatalogPersistHost, IChatCatalogFullPersistHost, ILoadPersistedChatCatalogHost, IForgetChatStorageHost, IConnectionUpdateHost, ISocketErrorHost, IHistorySyncWireHost, ISessionInitializedHost, IQrCodeWireHost, IAuthStateWireHost, IInboundWireNodeHost, IDecryptedMessageWireHost, ISocketFacadeWireHost, IPostReplayMaintenanceHost, IPostMessageEnrichmentHost, IPlaceholderResendSocket, IHistoryOnDemandSocket, IRuntimeSnapshotSource, IBackgroundResolutionGate, IAppStateLocalHost, IConversationResyncHost, IHistorySyncHost, IHistoryCatchUpHost, IConnectionEnsureHost, IConnectionResumeHost, IConnectionPairingStage2Host, IConnectionBrokerTransferHost, IConnectionSoftReconnectHost, IConnectionLifecycleHost, IConnectionConnectGateSource, IConnectionConnectPrepareHost, IConnectionConnectOpenHost, ISocketAliasRegistrar, IStartupUiHost, IJidAliasPersistence, IIncomingMessageEnqueueHost, IResolvedNameApplyHost, IHistoryHydrationBackfillHost, ISqliteHistoryQuietFinalizeHost, IHistoryPostOfflineFreshnessHost, IDeferredStartupMaintenanceHost, IHistoryCatchUpFinishHost, IUserResyncFullHistoryHost, IFreshnessReconnectFallbackHost, ICatchUpContinueReconnectHost, IFirstSyncListReleaseHost, IFullHistoryCatchUpProgressHost, IHistorySqliteChunkAppliedHost
+    public partial class WhatsAppService : INotifyPropertyChanged, IWhatsAppService, IConnectionEventSource, IConnectionSessionHost, IOfflineReplayHost, IOfflineReplayReleaseHost, IOfflineReplayFlushHost, IIncomingPumpDrainHost, IChatCatalogPersistHost, IChatCatalogFullPersistHost, ILoadPersistedChatCatalogHost, IForgetChatStorageHost, IConnectionUpdateHost, ISocketErrorHost, IHistorySyncWireHost, ISessionInitializedHost, IQrCodeWireHost, IAuthStateWireHost, IInboundWireNodeHost, IDecryptedMessageWireHost, ISocketFacadeWireHost, IPostReplayMaintenanceHost, IPostMessageEnrichmentHost, IPlaceholderResendSocket, IHistoryOnDemandSocket, IRuntimeSnapshotSource, IBackgroundResolutionGate, IAppStateLocalHost, IConversationResyncHost, IHistorySyncHost, IHistoryCatchUpHost, IConnectionEnsureHost, IConnectionResumeHost, IConnectionPairingStage2Host, IConnectionBrokerTransferHost, IConnectionSoftReconnectHost, IConnectionLifecycleHost, IConnectionConnectGateSource, IConnectionConnectPrepareHost, IConnectionConnectOpenHost, ISocketAliasRegistrar, IStartupUiHost, IJidAliasPersistence, IIncomingMessageEnqueueHost, IResolvedNameApplyHost, IHistoryHydrationBackfillHost, ISqliteHistoryQuietFinalizeHost, IHistoryPostOfflineFreshnessHost, IDeferredStartupMaintenanceHost, IHistoryCatchUpFinishHost, IUserResyncFullHistoryHost, IFreshnessReconnectFallbackHost, ICatchUpContinueReconnectHost, IFirstSyncListReleaseHost, IFullHistoryCatchUpProgressHost, IHistorySqliteChunkAppliedHost, IAcceptedHistoryRequestTimeoutHost, IAutoReconnectLoopHost, IConversationResyncWaitHost, IFullHistoryOnDemandClearHost, IInitializeConnectionStateHost
     {
         public event PropertyChangedEventHandler PropertyChanged;
         protected void OnPropertyChanged([CallerMemberName] string propertyName = null)
@@ -1187,45 +1187,38 @@ namespace Unison.Uwp.Services.WhatsApp
             }
 
             progress?.Report(ConversationResyncPhase.PreparingConversations);
-            RaiseSyncStatus("Re-syncing conversations...");
+            await ConversationResyncWaitDispatch.RunAsync(this).ConfigureAwait(false);
+        }
 
-            var historyDone = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        // --- IConversationResyncWaitHost -------------------------------------
+
+        void IConversationResyncWaitHost.LogConversationResync(string message) =>
+            Log("[WhatsAppService] " + message);
+
+        void IConversationResyncWaitHost.RaiseConversationResyncStatus(string status) =>
+            RaiseSyncStatus(status);
+
+        void IConversationResyncWaitHost.ArmUserResyncHistoryWait(
+            TaskCompletionSource<bool> historyDone) =>
             Interlocked.Exchange(ref _userResyncHistoryTcs, historyDone)?.TrySetCanceled();
 
-            bool requested = await EnsureFullHistoryRequestedForUserResyncAsync("user-resync-conversations")
-                .ConfigureAwait(false);
+        Task<bool> IConversationResyncWaitHost.EnsureFullHistoryRequestedForUserResyncAsync(
+            string reason) =>
+            EnsureFullHistoryRequestedForUserResyncAsync(reason);
 
-            if (!requested)
-            {
-                Log("[WhatsAppService] Full history request could not be sent after wipe/reconnect.");
-                RaiseSyncStatus("Could not start history download. Try again.");
-                historyDone.TrySetResult(false);
-                Interlocked.CompareExchange(ref _userResyncHistoryTcs, null, historyDone);
-                Log("[WhatsAppService] Resync conversations finished (request failed).");
-                return;
-            }
-
-            RaiseSyncStatus("Preparing conversations…");
-
-            try
-            {
-                Task finished = await Task.WhenAny(
-                        historyDone.Task,
-                        Task.Delay(UserResyncFullHistoryGates.HistoryWaitTimeout))
-                    .ConfigureAwait(false);
-                if (UserResyncFullHistoryGates.HistoryWaitTimedOut(finished, historyDone.Task))
-                {
-                    Log("[WhatsAppService] Resync conversations timed out waiting for history sync.");
-                    historyDone.TrySetResult(false);
-                }
-            }
-            finally
-            {
-                Interlocked.CompareExchange(ref _userResyncHistoryTcs, null, historyDone);
-            }
-
-            Log("[WhatsAppService] Resync conversations finished (history observed or timed out).");
+        void IConversationResyncWaitHost.CompleteUserResyncHistoryWaitFailed(
+            TaskCompletionSource<bool> historyDone)
+        {
+            historyDone.TrySetResult(false);
+            Interlocked.CompareExchange(ref _userResyncHistoryTcs, null, historyDone);
         }
+
+        TimeSpan IConversationResyncWaitHost.HistoryWaitTimeout =>
+            UserResyncFullHistoryGates.HistoryWaitTimeout;
+
+        void IConversationResyncWaitHost.ClearUserResyncHistoryWait(
+            TaskCompletionSource<bool> historyDone) =>
+            Interlocked.CompareExchange(ref _userResyncHistoryTcs, null, historyDone);
 
         /// <summary>
         /// Drops the in-memory conversation state after the on-disk copy has been wiped.
@@ -2148,93 +2141,84 @@ namespace Unison.Uwp.Services.WhatsApp
             });
         }
 
-        private void ScheduleAcceptedHistoryRequestTimeout(HistoryOnDemandRequest state)
-        {
-            if (!HistoryRequestTimeout.TryArm(state, out Task<HistoryOnDemandRequest> expiry))
-            {
-                return;
-            }
+        private void ScheduleAcceptedHistoryRequestTimeout(HistoryOnDemandRequest state) =>
+            AcceptedHistoryRequestTimeoutDispatch.Schedule(this, state);
 
-            bool isFullHistory = state.Kind == HistoryOnDemandKind.FullHistory;
-            TimeSpan timeout = HistoryRequestTimeout.WindowFor(state);
+        // --- IAcceptedHistoryRequestTimeoutHost ------------------------------
 
-            if (isFullHistory)
-            {
-                ScheduleFullHistoryCatchUpWatchdog(state);
-            }
+        bool IAcceptedHistoryRequestTimeoutHost.TryArmHistoryRequestTimeout(
+            HistoryOnDemandRequest state,
+            out Task<HistoryOnDemandRequest> expiry) =>
+            HistoryRequestTimeout.TryArm(state, out expiry);
 
-            _ = Task.Run(async () =>
-            {
-                HistoryOnDemandRequest expired = await expiry;
-                if (expired == null)
-                {
-                    return;
-                }
+        TimeSpan IAcceptedHistoryRequestTimeoutHost.HistoryRequestTimeoutWindow(
+            HistoryOnDemandRequest state) =>
+            HistoryRequestTimeout.WindowFor(state);
 
-                int progressSignals = expired.ProgressSignalCount;
-                string lastProgressReason = expired.LastProgressReason;
-                DateTime lastProgressUtc = expired.LastProgressUtc;
-                int currentMessageCount;
-                if (isFullHistory)
-                {
-                    currentMessageCount = GetStoredMessageCount();
-                }
-                else
-                {
-                    currentMessageCount = MessagesByChat.TryGet(state.ChatJid, out var currentMessages) && currentMessages != null
-                        ? currentMessages.Count
-                        : 0;
-                }
+        void IAcceptedHistoryRequestTimeoutHost.ScheduleFullHistoryCatchUpWatchdog(
+            HistoryOnDemandRequest state) =>
+            ScheduleFullHistoryCatchUpWatchdog(state);
 
-                Debug.WriteLine(
-                    "[WhatsAppService] " + state.TypeName + " timed out: requestId=" + state.RequestId +
-                    ", chat=" + (state.ChatJid ?? "<full-history>") +
-                    ", baseline=" + state.BaselineMessageCount +
-                    ", current=" + currentMessageCount +
-                    ", timeoutMs=" + (int)timeout.TotalMilliseconds +
-                    ", signals=" + progressSignals +
-                    ", lastProgress=" + (lastProgressReason ?? "<none>") +
-                    ", lastProgressUtc=" + (lastProgressUtc == DateTime.MinValue ? "<none>" : lastProgressUtc.ToString("O")) +
-                    ", trigger=" + (state.TriggerReason ?? "unspecified"));
+        int IAcceptedHistoryRequestTimeoutHost.GetStoredMessageCount() =>
+            GetStoredMessageCount();
 
-                if (isFullHistory)
-                {
-                    Debug.WriteLine(
-                        "[WhatsAppService] FullHistorySyncOnDemand hard timeout: evaluating catch-up continue.");
-                    RuntimeDiagnosticsService.Instance.Write(
-                        "history",
-                        "catch-up-hard-timeout",
-                        "requestId=" + state.RequestId +
-                        "; signals=" + progressSignals +
-                        "; lastProgress=" + (lastProgressReason ?? "<none>") +
-                        "; baselineMsgs=" + state.BaselineMessageCount +
-                        "; ramMsgs=" + currentMessageCount +
-                        "; trigger=" + (state.TriggerReason ?? string.Empty));
-                    History?.NotifyCatchUpIdleBatch(
-                        state.RequestId,
-                        expired.AckAccepted,
-                        progressSignals,
-                        state.TriggerReason ?? "hard-timeout",
-                        (int)timeout.TotalMilliseconds);
-                }
-            });
-        }
+        int IAcceptedHistoryRequestTimeoutHost.GetChatMessageCount(string chatJid) =>
+            MessagesByChat.TryGet(chatJid, out var currentMessages) && currentMessages != null
+                ? currentMessages.Count
+                : 0;
 
-        private void ClearFullHistoryOnDemandRequestState(string reason)
-        {
-            switch (_historyRequests.ClearFull(out string requestId, out string repairId))
-            {
-                case HistoryOnDemandFullClear.Tracked:
-                    Debug.WriteLine($"[WhatsAppService] Cleared full-history request state after {reason}: requestId={requestId}");
-                    EndHistoryCatchUpBanner("clear-full-history:" + reason);
-                    return;
+        void IAcceptedHistoryRequestTimeoutHost.LogHistoryRequestTimeout(string message) =>
+            Debug.WriteLine("[WhatsAppService] " + message);
 
-                case HistoryOnDemandFullClear.Stale:
-                    Debug.WriteLine($"[WhatsAppService] Cleared stale full-history request flags after {reason}: requestId={requestId ?? "<none>"}, repairId={repairId ?? "<none>"}");
-                    EndHistoryCatchUpBanner("clear-full-history:" + reason);
-                    return;
-            }
-        }
+        void IAcceptedHistoryRequestTimeoutHost.WriteCatchUpHardTimeoutJournal(
+            string requestId,
+            int progressSignals,
+            string lastProgressReason,
+            int baselineMessageCount,
+            int currentMessageCount,
+            string triggerReason) =>
+            RuntimeDiagnosticsService.Instance.Write(
+                "history",
+                "catch-up-hard-timeout",
+                "requestId=" + requestId +
+                "; signals=" + progressSignals +
+                "; lastProgress=" + (lastProgressReason ?? "<none>") +
+                "; baselineMsgs=" + baselineMessageCount +
+                "; ramMsgs=" + currentMessageCount +
+                "; trigger=" + (triggerReason ?? string.Empty));
+
+        void IAcceptedHistoryRequestTimeoutHost.NotifyCatchUpIdleBatch(
+            string requestId,
+            bool ackAccepted,
+            int progressSignals,
+            string triggerReason,
+            int idleMs) =>
+            History?.NotifyCatchUpIdleBatch(
+                requestId,
+                ackAccepted,
+                progressSignals,
+                triggerReason,
+                idleMs);
+
+        void IAcceptedHistoryRequestTimeoutHost.FireAndForgetHistoryRequestTimeout(
+            Func<Task> work) =>
+            _ = Task.Run(work);
+
+        private void ClearFullHistoryOnDemandRequestState(string reason) =>
+            FullHistoryOnDemandClearDispatch.Run(this, reason);
+
+        // --- IFullHistoryOnDemandClearHost -----------------------------------
+
+        HistoryOnDemandFullClear IFullHistoryOnDemandClearHost.ClearFull(
+            out string requestId,
+            out string repairId) =>
+            _historyRequests.ClearFull(out requestId, out repairId);
+
+        void IFullHistoryOnDemandClearHost.LogFullHistoryClear(string message) =>
+            Debug.WriteLine("[WhatsAppService] " + message);
+
+        void IFullHistoryOnDemandClearHost.EndHistoryCatchUpBanner(string reason) =>
+            EndHistoryCatchUpBanner(reason);
 
         /// <summary>
         /// After a FULL_HISTORY request goes quiet: soft-reconnect for the next offline lot while
