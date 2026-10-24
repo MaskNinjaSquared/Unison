@@ -2,13 +2,14 @@ using System;
 using System.Diagnostics;
 using Unison.Core.Contracts;
 using Unison.Core.Contracts.WhatsApp;
+using Unison.Core.Models;
 using Unison.Core.ViewModels;
 using Windows.Foundation;
 
 namespace Unison.Uwp.Services
 {
     /// <summary>
-    /// UWP adapter for <see cref="IAppActivationRouter"/>: parses People / launch arguments
+    /// UWP adapter for <see cref="IAppActivationRouter"/>: parses People / launch arguments / Share
     /// and queues chat or profile navigation on <see cref="ShellViewModel"/>.
     /// </summary>
     public sealed class AppActivationRouter : IAppActivationRouter
@@ -77,6 +78,19 @@ namespace Unison.Uwp.Services
                 "contact-panel-activated",
                 "hasProfile=" + (arguments.Length > 0));
             RouteLaunchArguments(arguments, appWasAlreadyOpen);
+        }
+
+        public void RouteShare(IncomingSharePayload payload)
+        {
+            if (payload == null || payload.IsEmpty || _shell == null)
+            {
+                return;
+            }
+
+            WriteLifecycle(
+                "share-activated",
+                "hasText=" + payload.HasText + "; media=" + (payload.Media?.Count ?? 0));
+            _shell.QueueIncomingShare(payload);
         }
 
         public string BuildPeopleLaunchArguments(string remoteId, bool openProfile)

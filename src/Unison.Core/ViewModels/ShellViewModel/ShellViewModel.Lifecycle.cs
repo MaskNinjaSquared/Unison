@@ -39,31 +39,66 @@ namespace Unison.Core.ViewModels
         /// <summary>
         /// Fast-launch bootstrap: auth first, then Start (welcome) or AppShell.
         /// Login/QR is only reached via Start → Get started, or session wipe.
-        /// Safe to call again (toast / second Boot): re-asserts root surface.
+        /// Safe to call again (toast / second Boot): awaits the in-flight cold start, then
+        /// re-asserts root surface — never returns early while still on Startup.
         /// </summary>
-        public async Task InitializeAsync()
+        public Task InitializeAsync()
         {
             Initialize();
 
-            if (_startInProgress)
+            Task inflight;
+            lock (_coldStartGate)
             {
-                return;
+                if (_initialized)
+                {
+                    return ResyncRootSurfaceAsync();
+                }
+
+                if (_coldStartTask == null)
+                {
+                    _coldStartTask = RunColdStartAsync();
+                }
+                else
+                {
+                    _diagnostics?.Write("startup", "shell-initialize-join-inflight");
+                }
+
+                inflight = _coldStartTask;
+            }
+
+            return JoinColdStartAsync(inflight);
+        }
+
+        private async Task JoinColdStartAsync(Task inflight)
+        {
+            try
+            {
+                await inflight.ConfigureAwait(false);
+            }
+            catch
+            {
+                // Primary RunColdStartAsync already logged / chose Start.
             }
 
             if (_initialized)
             {
                 await ResyncRootSurfaceAsync().ConfigureAwait(false);
-                return;
             }
+        }
 
+        private async Task RunColdStartAsync()
+        {
             _startInProgress = true;
             AppSurface = SurfaceStartup;
 
             try
             {
+                _diagnostics?.Write("startup", "shell-initialize-begin");
+
                 if (_backgroundAccessPrompt != null &&
                     !await _backgroundAccessPrompt.EnsureOrExitAsync())
                 {
+                    _diagnostics?.Write("startup", "shell-initialize-abort", "reason=background-access");
                     return;
                 }
 
@@ -86,16 +121,70 @@ namespace Unison.Core.ViewModels
                 }
 
                 _initialized = true;
+                _diagnostics?.Write(
+                    "startup",
+                    "shell-initialize-end",
+                    "surface=" + (AppSurface ?? string.Empty));
             }
             catch (Exception ex)
             {
                 Debug.WriteLine($"[ShellViewModel] InitializeAsync failed: {ex}");
+                _diagnostics?.Write("startup", "shell-initialize-failed", ex.Message);
                 EnterStartSurface();
+                _initialized = true;
             }
             finally
             {
                 _startInProgress = false;
+                if (!_initialized)
+                {
+                    // Background-access abort: allow a later Boot remount to retry.
+                    lock (_coldStartGate)
+                    {
+                        if (!_initialized)
+                        {
+                            _coldStartTask = null;
+                        }
+                    }
+                }
             }
+        }
+
+        /// <summary>
+        /// BootView hit its init budget while still on Startup. Auth may already be loaded
+        /// (lid-warm can hang after auth-load); promote Connected + connect instead of dumping
+        /// a registered account onto the welcome Start screen.
+        /// </summary>
+        public async Task PromoteSurfaceAfterBootInitTimeoutAsync()
+        {
+            if (!string.Equals(AppSurface, SurfaceStartup, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            try
+            {
+                // IsRegisteredAsync only awaits InitializeConnectionState when _authState is
+                // still null — after auth-load it returns without waiting on a stuck lid-warm.
+                if (await _connectionService.IsRegisteredAsync().ConfigureAwait(false))
+                {
+                    ApplyProfile(_profileService.GetCurrentProfile());
+                    EnterConnectedSurface();
+                    _diagnostics?.Write("startup", "boot-timeout-promoted-connected");
+                    _ = ConnectInBackgroundAsync();
+                    _ = LoadPersistedUiStateInBackgroundAsync();
+                    _ = SyncProfileInBackgroundAsync();
+                    _initialized = true;
+                    return;
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[ShellViewModel] Promote after boot timeout failed: " + ex.Message);
+                _diagnostics?.Write("startup", "boot-timeout-promote-failed", ex.Message);
+            }
+
+            EnterStartSurface();
         }
 
         /// <summary>
@@ -193,6 +282,7 @@ namespace Unison.Core.ViewModels
             }
 
             NavigateToAppShell();
+            EnsurePendingSharePickerVisible();
         }
 
         /// <summary>
@@ -223,6 +313,7 @@ namespace Unison.Core.ViewModels
             if (string.Equals(AppSurface, SurfaceConnected, StringComparison.Ordinal))
             {
                 NavigateToAppShell();
+                EnsurePendingSharePickerVisible();
                 return;
             }
 

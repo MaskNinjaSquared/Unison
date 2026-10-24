@@ -2,6 +2,198 @@
 
 Newest first.
 
+## Refactor wave — DeferredAvatars seam + pane chrome DRY + GroupJoin map
+
+Two highs + light hygiene (Mobile test window kept clear of Legacy Hold):
+
+- **H1:** `ScheduleDeferredAvatarsCore` unifies enrichment / catch-up / first-sync
+  unlock deferred-avatar schedules (`FirstSyncUnlockDeferredAvatarDelay`).
+- **H2:** `ChatPaneWideBothChrome` after `ChatPaneLayoutApply` on Unison/WhatsApp/UI
+  Chats + Archived (WideBoth splitter vs narrow reset).
+- Light: `GroupJoinNotifyMap` (+ tests), Share Complete docs, SyncWorkload regions,
+  tipAdvanced asserts on MinValue watermark, ForgetChatStorage / AppState naming
+  comments, ShellThemeStrategy fallback note, csproj helper comment.
+
+## Legacy Mobile — Hold opens CommandBar only; dismiss scrim above list chrome
+
+Touch Hold on a chat row still auto-opened the shared template `Grid.ContextFlyout`
+(MenuFlyout) in parallel with the actions CommandBar — `Hide()` lost the race.
+Legacy now detaches that flyout per row (`DetachRowContextFlyoutForLegacyHold`)
+and keeps it for mouse `ShowAt`. Chat-actions dismiss matches ChatDetail
+MessageActions: scrim on rows 0–2, actions bar on row 3 (`ZIndex` above
+`ListCommandBar`), with the list chrome `IsHitTestVisible=false` while open.
+
+## Open-chat rounds — VSM hitch + shared paint helpers
+
+Two heavy + light cleanup pass while validating PreferFast/Normal yield:
+
+- **H1:** Unison/WhatsApp/UI Chats (+ Archived) apply pane geometry via
+  `ChatPaneLayoutApply` (Visibility/GridLength like Legacy) with skip-if-same-pane
+  — no `VisualStateManager.GoToState` on list→detail.
+- **H2:** `ChatOpenPaintSchedule` + `ChatOpenHostSequence` shared by all
+  `ChatDetailView` / Chats hosts (Normal yield, PreferFast Complete).
+- Light: Identity dead usings; host `IsWindowVisible` → `IAppVisibility`;
+  `SharePickerCatalogRefresh`; csproj Compile for new UI helpers.
+
+## Unison / WhatsApp — list tap opens chat as fast as Legacy
+
+Mobile kept a 2s `TimelineMaterializeDelay` after the ProgressBar on Unison and
+WhatsApp list→detail opens; Legacy already set `PreferFastTimelineLoad` on every
+open and skipped it. Chats + Archived hosts now set PreferFast before
+`CompleteActiveChatLoadAsync` (same path as toast/deep-link). Pre-load hitch:
+Unison/WhatsApp yielded the paint turn at `CoreDispatcherPriority.Low` (queued
+behind VSM/list layout); Legacy used `Normal` — aligned.
+
+## Share Target — picker list refresh + same host window
+
+Cold “Compartilhar com” opened the picker while Boot still had an empty
+`ChatStateStore`, then `EnsurePendingSharePickerVisible` left `IsSharePickerOpen`
+already true without rebuilding — overlay stayed empty after chats loaded.
+Share now queues until Connected, always rebuilds on Ensure, and refreshes
+candidates on `Chats.CollectionChanged` / display-name changes while open
+(`SharePickerCatalog`). `ContactsVisualizerControl` applies `ItemsSource` updates
+even during deferred open. Activation stays on the Share host window (warm reuses
+Frame; cold boots then picker) — no `LaunchUriAsync` handoff — with visibility /
+notification init parity to toast.
+
+## Mobile — toast / deep-link chat open no longer waits 2s + tip flood
+
+Opening a chat from a notification (or other deep-link) kept Mobile’s
+`TimelineMaterializeDelay` (2s) and let `tip-swapped` UI slices run on the
+dispatcher during `LoadMessages`, so the conversation felt frozen for seconds
+after cold start. Toast hosts set `PreferFastTimelineLoad` before
+`CompleteActiveChatLoadAsync`; that path (and deep-link list hold) skips the
+delay (`ChatTimelineOpenPriority`) and holds `ChatTimelineLoadPriorityGate` so
+`ChatPreviewReconciler` pauses tip UI until the timeline paints.
+`Task.Delay` for the remaining list→detail pause uses `ConfigureAwait(false)`.
+
+## Mobile — stop FULL_HISTORY hang after tip reconcile + stagnant catch-up
+
+Long journals showed quiet waits between full tip walks, then catch-up finish
+re-latching force-repair + hydration → periodic FULL_HISTORY forever on Low.
+Three gates: full tip reconcile cool-down 5s→90s (`FullChatPreviewReconcileGate`);
+`AllowStagnantHistoryRepairCascade` false on Low/Unsupported (no MarkForce /
+hydration / periodic re-solicit after stagnant or max-continues; High still
+true); seeding the catch-up tip watermark from `MinValue` is no longer
+`tipAdvanced` progress (`HistoryCatchUpContinueDecision`).
+
+## Share Target — stay on host window (fix Mobile splash→close)
+
+`ReportCompleted` / `LaunchUriAsync(unison://share)` handoff still killed Mobile:
+the share host is the only window, so completing the contract after splash exited
+the process. Share Target now materializes the payload, binds
+`IShareTargetSession` (`ShareTargetSession`), and routes the picker on that same
+window. `ReportCompleted` runs only on picker cancel, after media apply, or on
+suspend (text-only keeps the host alive for the composer). Removed the `unison`
+protocol handoff.
+
+## Mobile — tighter Low / Unsupported sync rules
+
+`SyncWorkloadStrategy` for Low (1 GB Mobile) and Unsupported (512 MB) now backs
+off harder during first sync and enrichment: Low skips history thumbs during
+sync, caps adjacent FULL_HISTORY rounds at 4 (was 12), serial enrichment quiet
+12s, avatar fetch batch 1, leaner name usync, and deferred-avatar retry at most
+twice with a 40s delay. Unsupported disables deferred-avatar wake entirely
+(viewport / open-chat only), lengthens quiet gaps, and keeps catch-up at zero.
+`DeferredAvatarResolution` reads delay + max retries from the tier via DI.
+
+## Mobile — stop background-names CPU loop + share NRE
+
+Deferred avatar retry (`DeferredAvatarResolution` ~20s) was calling full
+`TriggerBackgroundResolution`, so `ResolveMissingNamesAsync` re-ran forever while
+avatars stayed deferred — journal `background-names` every ~20–30s after minute 10.
+Retry is now pictures-only (`TriggerDeferredAvatarRetry`). Share Target cold start
+also NRE’d in `ResumeConnectionWhenVisibleAsync` when connection DI was not ready;
+null-guard skips with `visibility-reconnect-skipped`.
+
+## Share Target — Mobile splash→close (handoff attempt; superseded)
+
+Earlier handoff via `LaunchUriAsync(unison://share)` still closed Mobile because
+the share host is the only window. Superseded by “stay on host window” above.
+Cold boot still re-shows the picker when the connected shell mounts.
+
+## Chat list — coalesce full tip reconcile (Mobile paint storm)
+
+`post-replay` and `deferred-startup` each walked every chat tip within seconds,
+flooding Low/Arm UI with `tip-swapped` PropertyChanged. Full reconciles are now
+single-flight + cool-down (`FullChatPreviewReconcileGate`; later raised to 90s —
+see “stop FULL_HISTORY hang” above); deferred-startup skips the second walk
+unless dedupe merged rows or legacy tip repair rewrote strips. Frugal devices
+also pause ~48ms between UI slices so the list can paint. Stale tips stay
+visible until swap (no per-row “Loading”).
+
+## Phase D — ConnectionConnectAbortedJournal
+
+Prepare-abort journal strings (`connect-aborted` / `reason=…`) moved to
+`ConnectionConnectAbortedJournal` in WhatsAppClient (same pattern as
+`ConnectionKeyStoreOpenJournal`). Host still only calls `RuntimeDiagnosticsService.Write`.
+
+## Share Target + contacts overlay (Mobile open) + Favourites WP8 jump
+
+Share Target (`windows.shareTarget`) materializes text/files into `IncomingSharePayload`,
+routes via `IAppActivationRouter.RouteShare` → shell picker → chat
+`ApplyIncomingShareAsync`. Overlay on `MainView` / Legacy `ShellView`.
+
+Contacts overlay open on Mobile: theme strategy now owns compact rows, deferred
+`ItemsSource`, and fade (`ContactsPicker*` on `ShellThemeStrategy` /
+`IShellThemeService`). Favourites picker is full-bleed (`Grid.RowSpan`);
+hardware Back closes while open.
+
+Favourites SemanticZoom jump list is always A–Z + # (`AlphabetJumpTile`); empty
+letters stay visible but disabled (WP8-style accent tiles).
+
+## Favorites — SemanticZoom jump list no longer crashes open
+
+Zoomed-out `CollectionGroups` items are `ICollectionViewGroup`, not `AlphabetChatGroup`.
+`x:Bind` with the wrong `x:DataType` threw WinRT `0xC000027B` when opening the tab.
+Header / jump templates now use `{Binding Key}` / `{Binding Group.Key}`.
+
+## Chat list — context menu no longer opens twice
+
+Modern `ChatListView` had `Grid.ContextFlyout` (platform open) **and** ListView
+`Holding`/`RightTapped`/`PointerPressed` calling `ShowAt` — two stacked menus.
+Restored feature/2.1 behaviour: ContextFlyout only; clear `ListViewItem.ContextFlyout`.
+Legacy still hides the flyout on Hold → CommandBar and ShowAt for mouse.
+
+## Phase D — connect open ownership closed (pump/reconnect stay UWP)
+
+`IConnectionSocketAssignment` lives in Core next to the open host. Abort/clear of the
+assigned socket and key-store open journal strings are portable helpers
+(`ConnectionAssignedSocketClear`, `ConnectionKeyStoreOpenJournal`). Open sequence
+unchanged; **incoming pump and reconnect timers stay on `WhatsAppService`** until an
+explicit follow-up (Mobile hot path — do not move without confirmation).
+
+## LidMapping — no boot warm; High only gets a larger LRU
+
+Removed critical-path `GetAllAsync` LID cache warm (hung Mobile cold boot; wasted I/O
+even on PC because the LRU already capped entries). **Every** tier:
+`WarmMaxPairs = 0` — fill RAM as PN/LID pairs arrive. LRU caps differ only:
+Unsupported 512 / Low 1024 / High 2048 pairs. `GetRecentForwardPairsAsync` remains
+for tests or a future opt-in seed, not boot. Wiki: [Socket stack](Socket-Stack#addressing-lid-not-jidalias).
+
+Other lifecycle warms audited (left as-is): `ChatStore.WarmAsync` is catalogue-sized
+(~hundreds of mute/pin rows, not a mapping dump); `ChatAuthorProjection` person
+lookups are per-JID on demand; `FileKeyStore` secondary warm is Signal crypto, not
+PN/LID.
+
+## Boot — registered account no longer lands on Start/QR mid-init
+
+Mobile double/triple `OnLaunched` used to hit `InitializeAsync` while cold start
+was in flight and return immediately on `_startInProgress`, leaving `AppSurface`
+at Startup — Boot then navigated to the language Start screen. Concurrent
+callers now await the shared cold-start task; Boot also promotes Connected
+before treating leftover Startup as Start. Persisted JID alias restore is
+budgeted (3s) and deferred like lid-warm so `jid-aliases` cannot stall the
+critical path for 10s+.
+
+## Phase D — ConnectionOpenHost (portable open host)
+
+`ConnectionOpenHost` implements `IConnectionConnectOpenHost` in
+`Unison.WhatsAppClient`. `WhatsAppService` only exposes
+`IConnectionSocketAssignment` (assign session / key store / refuse / health);
+`OpenConnectAsync` routes through the portable host + factory. God client is
+no longer the open-host type.
+
 ## Extract — ForgetChatStorageDispatch
 
 `ForgetChatStorageDispatch` + `ForgetChatStorageKeys` + `IForgetChatStorageHost`.

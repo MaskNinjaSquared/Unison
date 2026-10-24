@@ -88,11 +88,20 @@ namespace Unison.Socket.Models
 
         public string Id { get; set; }
 
+        /// <summary>Notification stanza id when the server sent one (stable synthetic message keys).</summary>
+        public string NotificationId { get; set; }
+
         public string Author { get; set; }
 
         public GroupParticipantAction Action { get; set; }
 
         public IList<string> Participants { get; private set; }
+
+        /// <summary>
+        /// PN when the participant row is LID-addressed (<c>phone_number</c> on the wire).
+        /// Keyed by the same JID that appears in <see cref="Participants"/>.
+        /// </summary>
+        public IDictionary<string, string> ParticipantPhones { get; set; }
 
         /// <summary>
         /// Per-participant failure codes, keyed by JID. The server reports a partial success rather

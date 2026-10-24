@@ -1,8 +1,10 @@
+using Unison.Core.Models;
+
 namespace Unison.Core.Contracts
 {
     /// <summary>
-    /// Routes inbound app activations (Start tile, toast, People) into shell navigation intents.
-    /// Platform activation kinds stay in the UWP host; this contract speaks only in arguments / remote ids.
+    /// Routes inbound app activations (Start tile, toast, People, Share) into shell navigation intents.
+    /// Platform activation kinds stay in the UWP host; this contract speaks only in arguments / remote ids / payloads.
     /// </summary>
     public interface IAppActivationRouter
     {
@@ -22,6 +24,12 @@ namespace Unison.Core.Contracts
 
         /// <summary>People ContactPanel / ContactProfile host — full-page Profile.</summary>
         void RouteContactPanel(string remoteId, bool appWasAlreadyOpen);
+
+        /// <summary>
+        /// Share Target: open the shell contact picker with a materialized payload.
+        /// No-op when <paramref name="payload"/> is null/empty.
+        /// </summary>
+        void RouteShare(IncomingSharePayload payload);
 
         /// <summary>
         /// Reads the first <c>ContactRemoteIds</c> value from a People protocol URI query

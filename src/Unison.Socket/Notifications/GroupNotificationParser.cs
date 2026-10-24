@@ -59,6 +59,7 @@ namespace Unison.Socket.Notifications
             var child = children[0];
             var groupId = JidUtils.NormalizedUser(node.GetAttribute("from"));
             var author = node.GetAttribute("participant");
+            var notificationId = node.GetAttribute("id");
 
             switch (child.Tag)
             {
@@ -87,6 +88,7 @@ namespace Unison.Socket.Notifications
                     result.Participants = BuildParticipants(
                         groupId,
                         author,
+                        notificationId,
                         GroupParticipantAction.Modify,
                         child);
                     break;
@@ -95,6 +97,7 @@ namespace Unison.Socket.Notifications
                     result.Participants = BuildParticipants(
                         groupId,
                         author,
+                        notificationId,
                         GroupParticipantAction.Promote,
                         child);
                     break;
@@ -103,6 +106,7 @@ namespace Unison.Socket.Notifications
                     result.Participants = BuildParticipants(
                         groupId,
                         author,
+                        notificationId,
                         GroupParticipantAction.Demote,
                         child);
                     break;
@@ -111,6 +115,7 @@ namespace Unison.Socket.Notifications
                     result.Participants = BuildParticipants(
                         groupId,
                         author,
+                        notificationId,
                         GroupParticipantAction.Add,
                         child);
                     break;
@@ -120,6 +125,7 @@ namespace Unison.Socket.Notifications
                     result.Participants = BuildParticipants(
                         groupId,
                         author,
+                        notificationId,
                         GroupParticipantAction.Remove,
                         child);
                     break;
@@ -189,6 +195,7 @@ namespace Unison.Socket.Notifications
         private static GroupParticipantsUpdate BuildParticipants(
             string groupId,
             string author,
+            string notificationId,
             GroupParticipantAction action,
             BinaryNode child)
         {
@@ -196,6 +203,7 @@ namespace Unison.Socket.Notifications
             {
                 Id = groupId,
                 Author = author,
+                NotificationId = notificationId,
                 Action = action
             };
 
@@ -208,6 +216,18 @@ namespace Unison.Socket.Notifications
                     if (!string.IsNullOrEmpty(jid))
                     {
                         update.Participants.Add(jid);
+                    }
+
+                    // Baileys: phone_number when the row is LID-addressed (PN companion).
+                    var phone = participant.GetAttribute("phone_number");
+                    if (!string.IsNullOrEmpty(phone) && !string.IsNullOrEmpty(jid))
+                    {
+                        if (update.ParticipantPhones == null)
+                        {
+                            update.ParticipantPhones = new Dictionary<string, string>();
+                        }
+
+                        update.ParticipantPhones[jid] = phone;
                     }
 
                     var error = participant.GetAttribute("error");

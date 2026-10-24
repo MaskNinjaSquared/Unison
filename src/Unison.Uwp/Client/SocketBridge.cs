@@ -35,6 +35,7 @@ using Unison.Baileys.Crypto;
 using Unison.Baileys.Protocol;
 using Unison.Core.Contracts;
 using Unison.Core.Helpers;
+using Unison.Core.Helpers.Groups;
 using Unison.Core.Models;
 using Unison.Socket.Abstractions;
 using Unison.Socket.AppState;
@@ -2181,31 +2182,13 @@ namespace Unison.Uwp.Client
                 return;
             }
 
-            DateTime stamp = DateTime.UtcNow;
-            var requests = new List<GroupJoinNotifyRequest>(update.Participants.Count);
-            foreach (string participant in update.Participants)
-            {
-                if (string.IsNullOrWhiteSpace(participant))
-                {
-                    continue;
-                }
-
-                string phone = null;
-                if (update.ParticipantPhones != null)
-                {
-                    update.ParticipantPhones.TryGetValue(participant, out phone);
-                }
-
-                requests.Add(new GroupJoinNotifyRequest
-                {
-                    GroupJid = update.Id,
-                    ParticipantJid = participant,
-                    PhoneDigits = phone,
-                    NotificationId = update.NotificationId,
-                    TimestampUtc = stamp
-                });
-            }
-
+            IReadOnlyList<GroupJoinNotifyRequest> requests =
+                GroupJoinNotifyMap.FromAddParticipants(
+                    update.Id,
+                    update.Participants,
+                    update.ParticipantPhones,
+                    update.NotificationId,
+                    DateTime.UtcNow);
             if (requests.Count == 0)
             {
                 return;

@@ -1,6 +1,6 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <Package xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10" xmlns:mp="http://schemas.microsoft.com/appx/2014/phone/manifest" xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10" xmlns:uap4="http://schemas.microsoft.com/appx/manifest/uap/windows10/4" IgnorableNamespaces="uap uap4 mp">
-  <Identity Name="Unison.UWPApp" Publisher="CN=UniDev" Version="2.1.24.0" />
+  <Identity Name="Unison.UWPApp" Publisher="CN=UniDev" Version="2.2.12.0" />
   <mp:PhoneIdentity PhoneProductId="a1b2c3d4-e5f6-7890-abcd-ef1234567890" PhonePublisherId="00000000-0000-0000-0000-000000000000" />
   <Properties>
     <DisplayName>Unison</DisplayName>
@@ -53,6 +53,30 @@
           <uap:Protocol Name="ms-contact-profile">
             <uap:DisplayName>Unison</uap:DisplayName>
           </uap:Protocol>
+        </uap:Extension>
+        <uap:Extension Category="windows.shareTarget">
+          <uap:ShareTarget>
+            <uap:SupportedFileTypes>
+              <uap:FileType>.jpg</uap:FileType>
+              <uap:FileType>.jpeg</uap:FileType>
+              <uap:FileType>.png</uap:FileType>
+              <uap:FileType>.gif</uap:FileType>
+              <uap:FileType>.bmp</uap:FileType>
+              <uap:FileType>.webp</uap:FileType>
+              <uap:FileType>.pdf</uap:FileType>
+              <uap:FileType>.txt</uap:FileType>
+              <uap:FileType>.doc</uap:FileType>
+              <uap:FileType>.docx</uap:FileType>
+              <uap:FileType>.xls</uap:FileType>
+              <uap:FileType>.xlsx</uap:FileType>
+              <uap:FileType>.ppt</uap:FileType>
+              <uap:FileType>.pptx</uap:FileType>
+              <uap:FileType>.zip</uap:FileType>
+            </uap:SupportedFileTypes>
+            <uap:DataFormat>Text</uap:DataFormat>
+            <uap:DataFormat>Uri</uap:DataFormat>
+            <uap:DataFormat>StorageItems</uap:DataFormat>
+          </uap:ShareTarget>
         </uap:Extension>
         <Extension Category="windows.backgroundTasks" EntryPoint="Unison.Background.WhatsAppSocketActivityTask">
           <BackgroundTasks>

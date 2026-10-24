@@ -201,5 +201,17 @@
                Background="{ThemeResource ApplicationPageBackgroundThemeBrush}"
                Navigated="ContentFrame_Navigated"
                NavigationFailed="ContentFrame_NavigationFailed"/>
+
+        <!-- Share Target picker: full-bleed over pivot + detail (Mobile opaque cover). -->
+        <controls:ContactsVisualizerControl
+            x:Name="SharePickerOverlay"
+            Grid.Column="0"
+            Grid.ColumnSpan="2"
+            Canvas.ZIndex="100"
+            IsOpen="{x:Bind ViewModel.IsSharePickerOpen, Mode=TwoWay}"
+            Title="{x:Bind ViewModel.SharePickerTitle, Mode=OneWay}"
+            ItemsSource="{x:Bind ViewModel.SharePickerCandidates, Mode=OneWay}"
+            ItemClickCommand="{x:Bind ViewModel.SelectShareChatCommand}"
+            BackCommand="{x:Bind ViewModel.CloseSharePickerCommand}"/>
     </Grid>
 </Page>

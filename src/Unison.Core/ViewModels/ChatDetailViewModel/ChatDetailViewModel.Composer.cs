@@ -390,6 +390,65 @@ namespace Unison.Core.ViewModels
             }
         }
 
+        /// <summary>
+        /// Applies a Share Target payload to the open conversation: seeds the composer for text,
+        /// and runs the existing attach previews for media.
+        /// </summary>
+        public async Task ApplyIncomingShareAsync(IncomingSharePayload payload)
+        {
+            if (payload == null || payload.IsEmpty || _activeChat == null)
+            {
+                return;
+            }
+
+            string targetJid = _activeChat.JID;
+            if (string.IsNullOrWhiteSpace(targetJid))
+            {
+                return;
+            }
+
+            if (payload.HasText)
+            {
+                MessageText = payload.Text.Trim();
+            }
+
+            if (!payload.HasMedia)
+            {
+                return;
+            }
+
+            var images = new List<PickedChatMedia>();
+            foreach (PickedChatMedia item in payload.Media)
+            {
+                if (item == null)
+                {
+                    continue;
+                }
+
+                if (item.IsImage)
+                {
+                    images.Add(item);
+                    continue;
+                }
+
+                if (item.IsAudio)
+                {
+                    await SendPickedAudioAsync(targetJid, item);
+                    continue;
+                }
+
+                if (item.IsDocument)
+                {
+                    await SendPickedDocumentAsync(targetJid, item);
+                }
+            }
+
+            if (images.Count > 0)
+            {
+                await SendPickedImagesAsync(targetJid, images);
+            }
+        }
+
         private int _recordingCueGeneration;
 
         private async Task StartRecordingAsync()

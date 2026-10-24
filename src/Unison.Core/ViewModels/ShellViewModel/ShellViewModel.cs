@@ -48,6 +48,7 @@ namespace Unison.Core.ViewModels
 
         /// <summary>Only for the startup address-book pass over the restored chat list.</summary>
         private readonly IContactService _contactService;
+        private readonly IShareTargetSession _shareTarget;
 
         private bool _isPaneOpen;
         private string _currentUserName;
@@ -68,6 +69,14 @@ namespace Unison.Core.ViewModels
         private bool _initialized;
         private bool _eventsHooked;
         private bool _startInProgress;
+
+        /// <summary>
+        /// In-flight cold start. Concurrent Boot remounts (Mobile double/triple OnLaunched)
+        /// must await this instead of returning while still on Startup — that used to dump a
+        /// registered account onto the language Start screen.
+        /// </summary>
+        private Task _coldStartTask;
+        private readonly object _coldStartGate = new object();
         private bool _startPairingOnLoginSurface = true;
         private double _chatListPaneWidth;
         private readonly NotificationCounterWatch _notificationCounter;
@@ -94,7 +103,8 @@ namespace Unison.Core.ViewModels
             ISessionLogger sessionLogger = null,
             IBackgroundAccessPrompt backgroundAccessPrompt = null,
             IContactService contactService = null,
-            ChatListDeepLinkHoldGate deepLinkHold = null)
+            ChatListDeepLinkHoldGate deepLinkHold = null,
+            IShareTargetSession shareTarget = null)
         {
             _chatState = chatState ?? throw new ArgumentNullException(nameof(chatState));
             _connectionService = connectionService ?? throw new ArgumentNullException(nameof(connectionService));
@@ -112,12 +122,14 @@ namespace Unison.Core.ViewModels
             _backgroundAccessPrompt = backgroundAccessPrompt;
             _contactService = contactService;
             _deepLinkHold = deepLinkHold;
+            _shareTarget = shareTarget;
 
             _chatListPaneWidth = ReadStoredChatListPaneWidth();
 
             TogglePaneCommand = new RelayCommand(() => IsPaneOpen = !IsPaneOpen);
             NavigateToSectionCommand = new RelayCommand<string>(NavigateToSection);
             OpenProfileSettingsCommand = new RelayCommand(OpenProfileSettings);
+            InitShareCommands();
 
             _navigator.ShellNavigated += Navigator_ShellNavigated;
             _notificationCounter = new NotificationCounterWatch(_chatState.Chats);
