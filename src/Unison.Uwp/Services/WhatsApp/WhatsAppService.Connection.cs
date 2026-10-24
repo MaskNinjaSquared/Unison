@@ -78,14 +78,8 @@ namespace Unison.Uwp.Services.WhatsApp
         private void PublishConnectionUpdate(string status)
         {
             CurrentConnectionStatus = status ?? string.Empty;
-            if (string.Equals(
-                    CurrentConnectionStatus,
-                    "connected",
-                    StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(
-                    CurrentConnectionStatus,
-                    "synced",
-                    StringComparison.OrdinalIgnoreCase))
+            if (ConnectionStatusNotifyPolicy.ShouldClearReconnectRequiredToast(
+                    CurrentConnectionStatus))
             {
                 SetSuppressReconnectToast(false);
                 string clearError;
@@ -129,7 +123,7 @@ namespace Unison.Uwp.Services.WhatsApp
             }
         }
 
-        private bool IsCurrentSocket(object sender)
+        internal bool IsCurrentSocket(object sender)
         {
             return sender != null && ReferenceEquals(_socket, sender);
         }
@@ -172,139 +166,8 @@ namespace Unison.Uwp.Services.WhatsApp
         }
 
 
-        private void WireSocketEventHandlers(IWhatsAppSocket socket)
-        {
-            socket.OnQRCodeReceived += (s, qr) =>
-                QrCodeWireDispatch.Handle(this, qr, IsCurrentSocket(s));
-
-            socket.OnPresenceUpdate += (s, e) =>
-            {
-                if (!IsCurrentSocket(s)) return;
-                SocketFacadeWireDispatch.HandlePresence(this, e);
-            };
-            RegisterSocketAliases("service-known-aliases");
-
-        socket.OnAuthStateUpdate += async (s, e) =>
-        {
-            if (!IsCurrentSocket(s)) return;
-            await AuthStateWireDispatch.RunAsync(this).ConfigureAwait(false);
-        };
-        
-        socket.OnConnectionUpdate += (s, status) =>
-        {
-            if (!IsCurrentSocket(s))
-            {
-                Debug.WriteLine($"[WhatsAppService] Ignoring stale socket status: {status}");
-                return;
-            }
-
-            ConnectionUpdateDispatch.Handle(this, status);
-        };
-
-        socket.OnSessionInitialized += async (s, e) =>
-        {
-            if (!IsCurrentSocket(s))
-            {
-                PairingTrace("OnSessionInitialized IGNORED (stale socket)");
-                return;
-            }
-
-            await SessionInitializedDispatch.RunAsync(this).ConfigureAwait(false);
-        };
-
-        socket.OnStreamError += (s, code) =>
-            SocketErrorDispatch.HandleStreamError(this, code, IsCurrentSocket(s));
-
-        socket.OnError += async (s, ex) =>
-            await SocketErrorDispatch.HandleErrorAsync(
-                this,
-                ex,
-                IsCurrentSocket(s),
-                socket.IsConnected,
-                socket.IsHandshakeComplete).ConfigureAwait(false);
-
-        socket.OnMessage += (s, node) =>
-        {
-            if (!IsCurrentSocket(s))
-            {
-                return;
-            }
-
-            InboundWireNodeDispatch.Handle(this, node);
-        };
-
-        // Not gated on current socket — see HistorySyncWireApply header.
-        socket.OnHistorySyncReceived += (s, sync) =>
-            HistorySyncWireApply.Run(this, sync);
-
-        // Handle real-time decrypted messages (not history sync)
-        socket.OnDecryptedMessageReceived += (s, e) =>
-        {
-            if (!IsCurrentSocket(s) || e == null) return Task.CompletedTask;
-            DecryptedMessageWireDispatch.Handle(
-                this,
-                e.FromJid,
-                e.Participant,
-                e.ParticipantAlt,
-                e.AddressingMode,
-                e.MessageId,
-                e.Message,
-                e.Timestamp,
-                e.IsFromMe,
-                e.PushName,
-                e.VerifiedName,
-                e.SenderLid,
-                e.PeerRecipientPn,
-                e.PeerRecipientLid,
-                e.RecipientJid,
-                e.IsOffline);
-            return Task.CompletedTask;
-        };
-
-        socket.OnMissingMessageDetected += (s, e) =>
-        {
-            if (!IsCurrentSocket(s) || e == null) return;
-            SocketFacadeWireDispatch.HandleMissingMessage(
-                this,
-                e.ChatJid,
-                e.Participant,
-                e.MessageId,
-                e.IsFromMe,
-                e.Timestamp,
-                e.Reason);
-        };
-
-        socket.OnOutgoingMessageStatusChanged += (s, e) =>
-        {
-            if (!IsCurrentSocket(s)) return;
-            _ = SocketFacadeWireDispatch.HandleOutgoingStatusAsync(
-                this,
-                e?.MessageId,
-                e?.Status,
-                e?.Error);
-        };
-
-        socket.OnReceiptReceived += (s, node) =>
-        {
-            if (!IsCurrentSocket(s)) return;
-            _ = SocketFacadeWireDispatch.HandleReceiptAsync(this, node);
-        };
-
-        socket.OnLinkCodeCompanionReg += (s, node) =>
-            SocketFacadeWireDispatch.HandleLinkCodeCompanion(this, node, IsCurrentSocket(s));
-
-        // Handle replay release after server offline completion or the long safety timeout.
-        socket.OnReceivedPendingNotifications += async (s, offlineCount) =>
-        {
-            if (!IsCurrentSocket(s)) return;
-            await OfflineReplayRelease.RunAsync(this, offlineCount).ConfigureAwait(false);
-        };
-
-        // Dirty bits and server_sync are answered inside the session now: the socket layer
-        // clears the flag and its own app state module runs the resync, so there is nothing
-        // for the service to coordinate.
-
-        }
+        private void WireSocketEventHandlers(IWhatsAppSocket socket) =>
+            SocketEventHandlerWiring.Attach(socket, this);
 
         bool IOfflineReplayReleaseHost.TryMarkFirstRelease() =>
             Interlocked.Exchange(ref _offlineReplayReleased, 1) == 0;
@@ -314,8 +177,8 @@ namespace Unison.Uwp.Services.WhatsApp
             Debug.WriteLine(
                 "[WhatsAppService] Received pending-notification replay release (" +
                 offlineCount + " messages); first=" + firstRelease);
-            RuntimeDiagnosticsService.Instance.Write(
-                "connection",
+                    RuntimeDiagnosticsService.Instance.Write(
+                        "connection",
                 "offline-replay-release",
                 "count=" + offlineCount + "; first=" + firstRelease);
         }
@@ -337,8 +200,17 @@ namespace Unison.Uwp.Services.WhatsApp
             }
         }
 
-        bool IOfflineReplayReleaseHost.IsAssignedTransportReady =>
-            _socket != null && _socket.IsConnected && _socket.IsHandshakeComplete;
+        bool IOfflineReplayReleaseHost.IsAssignedTransportReady
+        {
+            get
+            {
+                var socket = _socket;
+                return ConnectionTransportReady.IsReady(
+                    socket != null,
+                    socket != null && socket.IsConnected,
+                    socket != null && socket.IsHandshakeComplete);
+            }
+        }
 
         void IOfflineReplayReleaseHost.WriteSyncedSkipped(int offlineCount)
         {
@@ -670,24 +542,24 @@ namespace Unison.Uwp.Services.WhatsApp
             string recipientJid,
             bool isOffline)
         {
-            EnqueueDecryptedMessage(new DecryptedMessageEventArgs
-            {
-                FromJid = fromJid,
-                Participant = participant,
-                ParticipantAlt = participantAlt,
-                AddressingMode = addressingMode,
-                MessageId = messageId,
-                Message = message,
-                Timestamp = timestamp,
-                IsFromMe = isFromMe,
-                PushName = pushName,
-                VerifiedName = verifiedName,
-                SenderLid = senderLid,
-                PeerRecipientPn = peerRecipientPn,
-                PeerRecipientLid = peerRecipientLid,
-                RecipientJid = recipientJid,
-                IsOffline = isOffline
-            });
+            // addressingMode is wire-only diagnostics today; the Core pump envelope omits it.
+            _ = addressingMode;
+            EnqueueDecryptedMessage(
+                IncomingDecryptedNotifyMap.FromPump(
+                    message,
+                    messageId,
+                    fromJid,
+                    recipientJid,
+                    peerRecipientPn,
+                    peerRecipientLid,
+                    senderLid,
+                    participant,
+                    participantAlt,
+                    verifiedName,
+                    pushName,
+                    timestamp,
+                    isOffline,
+                    isFromMe));
         }
 
         void ISocketFacadeWireHost.NotifyPresenceUpdated(PresenceUpdateEventArgs args) =>
@@ -851,7 +723,7 @@ namespace Unison.Uwp.Services.WhatsApp
             }
         }
 
-        private void PairingTrace(string message)
+        internal void PairingTrace(string message)
         {
             string line = "[Pairing/WA] " + (message ?? string.Empty);
             try
@@ -887,7 +759,9 @@ namespace Unison.Uwp.Services.WhatsApp
         /// </summary>
         private void TryStartPairingStage2Reconnect(string reason)
         {
-            if (_suppressReconnect || _fatalSessionEnded)
+            if (ConnectionSoftReconnectGates.ShouldSkipPairingStage2Start(
+                    _suppressReconnect,
+                    _fatalSessionEnded))
             {
                 PairingTrace("stage2-reconnect skipped (suppress/fatal) reason=" + (reason ?? string.Empty));
                 return;
@@ -922,7 +796,13 @@ namespace Unison.Uwp.Services.WhatsApp
         {
             lock (_reconnectStateLock)
             {
-                if (_suppressReconnect || _fatalSessionEnded || _isReconnecting || _pairingRestartPending)
+                SoftReconnectScheduleAction schedule =
+                    ConnectionSoftReconnectGates.DecideSchedule(
+                        _suppressReconnect,
+                        _fatalSessionEnded,
+                        _isReconnecting,
+                        _pairingRestartPending);
+                if (schedule == SoftReconnectScheduleAction.Skip)
                 {
                     if (_pairingRestartPending)
                     {
@@ -932,6 +812,7 @@ namespace Unison.Uwp.Services.WhatsApp
                     }
                     return;
                 }
+
                 _isReconnecting = true;
             }
 
@@ -957,23 +838,24 @@ namespace Unison.Uwp.Services.WhatsApp
                 }
                 finally
                 {
-                    bool restartNeeded;
+                    SoftReconnectPostLoopAction postLoop;
                     lock (_reconnectStateLock)
                     {
                         _isReconnecting = false;
-                        restartNeeded = !_suppressReconnect &&
-                                        !_fatalSessionEnded &&
-                                        !_pairingRestartPending &&
-                                        _authState != null &&
-                                        _authState.Registered &&
-                                        !IsConnected;
+                        postLoop = ConnectionSoftReconnectGates.DecidePostLoop(
+                            _suppressReconnect,
+                            _fatalSessionEnded,
+                            _pairingRestartPending,
+                            _authState != null,
+                            _authState != null && _authState.Registered,
+                            IsConnected);
                     }
 
-                    if (restartNeeded)
+                    if (postLoop == SoftReconnectPostLoopAction.Reschedule)
                     {
                         ScheduleAutoReconnect("post-loop-disconnected");
                     }
-                    else if (_pairingRestartPending && !IsConnected)
+                    else if (postLoop == SoftReconnectPostLoopAction.PairingStage2Fallback)
                     {
                         // Generic loop exited / was racing — ensure stage-2 still runs.
                         TryStartPairingStage2Reconnect("post-generic-loop-pairing-pending");
@@ -1020,10 +902,10 @@ namespace Unison.Uwp.Services.WhatsApp
                 }
 
                 // No linked account ⇒ never toast “Unison desconectado” from orphaned broker closes.
-                bool hasActiveAccount =
-                    _authState.Registered &&
-                    _authState.Me != null &&
-                    !string.IsNullOrWhiteSpace(_authState.Me.Id);
+                bool hasActiveAccount = LinkedAccountGate.HasLinkedAccount(
+                    _authState.Registered,
+                    _authState.Me != null,
+                    _authState.Me != null ? _authState.Me.Id : null);
                 SetSuppressReconnectToast(!hasActiveAccount);
 
                 // Durable LID↔PN pairs first so sync peeks work before alias restore.
@@ -1046,26 +928,33 @@ namespace Unison.Uwp.Services.WhatsApp
                 int poisonedAliases = 0;
                 using (JidAlias.BeginBulkImport())
                 {
-                    foreach (var kvp in storedAliases)
+                foreach (var kvp in storedAliases)
+                {
+                    // Only the identity checks, not the full live validation: the table is
+                    // also written by paths that predate that validation, and rejecting their
+                    // entries here would drop identities that are merely unusual, not wrong.
+                    PersistedAliasRestoreAction restore =
+                        PersistedAliasRestore.Evaluate(
+                            kvp.Key,
+                            kvp.Value,
+                            JidAlias,
+                            out string aliasKey,
+                            out string aliasValue);
+                    if (restore == PersistedAliasRestoreAction.Skip)
                     {
-                        string aliasKey = NormalizeJid(kvp.Key);
-                        string aliasValue = NormalizeJid(kvp.Value);
-                        if (string.IsNullOrWhiteSpace(aliasKey) || string.IsNullOrWhiteSpace(aliasValue))
-                        {
-                            continue;
-                        }
+                        continue;
+                    }
 
-                        // Only the identity checks, not the full live validation: the table is
-                        // also written by paths that predate that validation, and rejecting their
-                        // entries here would drop identities that are merely unusual, not wrong.
-                        if (AliasPairPolicy.IsUnsafeToRestore(aliasKey, aliasValue, JidAlias))
-                        {
-                            Debug.WriteLine($"[WhatsAppService] Dropping persisted alias that confuses our own identity: {aliasKey} -> {aliasValue}");
-                            poisonedAliases++;
-                            continue;
-                        }
+                    if (restore == PersistedAliasRestoreAction.DropPoison)
+                    {
+                        Debug.WriteLine(
+                            "[WhatsAppService] Dropping persisted alias that confuses our own identity: " +
+                            aliasKey + " -> " + aliasValue);
+                        poisonedAliases++;
+                        continue;
+                    }
 
-                        JidAlias[aliasKey] = aliasValue;
+                    JidAlias[aliasKey] = aliasValue;
                     }
 
                     // The own PN/LID pair is tiny and required before the socket starts.
@@ -1116,7 +1005,10 @@ namespace Unison.Uwp.Services.WhatsApp
         public async Task<bool> IsRegisteredAsync()
         {
             if (_authState == null) await InitializeConnectionStateAsync();
-            return _authState != null && _authState.Registered && _authState.Me != null;
+            return LinkedAccountGate.IsRegisteredWithIdentity(
+                _authState != null,
+                _authState != null && _authState.Registered,
+                _authState != null && _authState.Me != null);
         }
 
         /// <summary>
@@ -1315,7 +1207,7 @@ namespace Unison.Uwp.Services.WhatsApp
             ConsumeBrokerReconnectRequestAsync();
 
         void IConnectionResumeHost.MarkForceFreshConnectOnResume() =>
-            Interlocked.Exchange(ref _forceFreshConnectOnResume, 1);
+                Interlocked.Exchange(ref _forceFreshConnectOnResume, 1);
 
         async Task<bool> IConnectionResumeHost.TryReclaimBrokerOwnedSocketAsync()
         {
@@ -1325,34 +1217,34 @@ namespace Unison.Uwp.Services.WhatsApp
                 return false;
             }
 
-            RuntimeDiagnosticsService.Instance.Write(
-                "socket-broker",
-                "resume-reclaim-start",
-                "transport=" + brokerSocket.TransportName);
-            try
-            {
-                if (await brokerSocket.ReclaimSocketFromBrokerAsync())
-                {
-                    Interlocked.Exchange(ref _forceFreshConnectOnResume, 0);
-                    StartConnectionHealthMonitor(brokerSocket);
-                    RestartIncomingMessagePumpIfNeeded();
-                    PublishConnectionUpdate("connected");
-                    RuntimeDiagnosticsService.Instance.Write(
-                        "socket-broker",
-                        "resume-reclaim-complete",
-                        "transport=" + brokerSocket.TransportName);
-                    return true;
-                }
-            }
-            catch (Exception ex)
-            {
-                RuntimeDiagnosticsService.Instance.RecordException(
+                RuntimeDiagnosticsService.Instance.Write(
                     "socket-broker",
-                    "resume-reclaim-failed",
-                    ex);
-            }
+                    "resume-reclaim-start",
+                    "transport=" + brokerSocket.TransportName);
+                try
+                {
+                    if (await brokerSocket.ReclaimSocketFromBrokerAsync())
+                    {
+                        Interlocked.Exchange(ref _forceFreshConnectOnResume, 0);
+                        StartConnectionHealthMonitor(brokerSocket);
+                        RestartIncomingMessagePumpIfNeeded();
+                        PublishConnectionUpdate("connected");
+                        RuntimeDiagnosticsService.Instance.Write(
+                            "socket-broker",
+                            "resume-reclaim-complete",
+                            "transport=" + brokerSocket.TransportName);
+                    return true;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    RuntimeDiagnosticsService.Instance.RecordException(
+                        "socket-broker",
+                        "resume-reclaim-failed",
+                        ex);
+                }
 
-            Interlocked.Exchange(ref _forceFreshConnectOnResume, 1);
+                Interlocked.Exchange(ref _forceFreshConnectOnResume, 1);
             return false;
         }
 
@@ -1363,7 +1255,7 @@ namespace Unison.Uwp.Services.WhatsApp
             EnsureConnectedAsync(timeoutMs, forceFreshTransport);
 
         void IConnectionResumeHost.RestartIncomingMessagePumpIfNeeded() =>
-            RestartIncomingMessagePumpIfNeeded();
+                RestartIncomingMessagePumpIfNeeded();
 
         void IConnectionResumeHost.RequestSoftReconnect(string reason) =>
             ScheduleAutoReconnect(reason);
@@ -1406,11 +1298,20 @@ namespace Unison.Uwp.Services.WhatsApp
                     return false;
                 }
 
+                DateTime nowUtc = DateTime.UtcNow;
+                bool ownerIsBroker = string.Equals(state.Owner, "broker", StringComparison.Ordinal);
+                bool brokerSocketStillRegistered =
+                    SocketActivityInformation.AllSockets.ContainsKey(state.SocketId);
                 bool brokerEntryMissing =
-                    string.Equals(state.Owner, "broker", StringComparison.Ordinal) &&
-                    DateTime.UtcNow - state.UpdatedUtc > TimeSpan.FromSeconds(3) &&
-                    !SocketActivityInformation.AllSockets.ContainsKey(state.SocketId);
-                if (!state.ReconnectRequired && !brokerEntryMissing)
+                    ownerIsBroker &&
+                    nowUtc - state.UpdatedUtc > BrokerReconnectConsumePolicy.StaleBrokerGrace &&
+                    !brokerSocketStillRegistered;
+                if (!BrokerReconnectConsumePolicy.ShouldConsume(
+                    state.ReconnectRequired,
+                    ownerIsBroker,
+                    state.UpdatedUtc,
+                    nowUtc,
+                    brokerSocketStillRegistered))
                 {
                     return false;
                 }
@@ -1466,7 +1367,10 @@ namespace Unison.Uwp.Services.WhatsApp
             get
             {
                 var socket = _socket;
-                return socket != null && socket.IsConnected && socket.IsHandshakeComplete;
+                return ConnectionTransportReady.IsReady(
+                    socket != null,
+                    socket != null && socket.IsConnected,
+                    socket != null && socket.IsHandshakeComplete);
             }
         }
 
@@ -1492,7 +1396,7 @@ namespace Unison.Uwp.Services.WhatsApp
         }
 
         Task IConnectionBrokerTransferHost.PersistBackgroundDisplayNamesAsync() =>
-            PersistBackgroundDisplayNamesAsync();
+                    PersistBackgroundDisplayNamesAsync();
 
         Task IConnectionBrokerTransferHost.PrepareForSuspendAsync() =>
             PrepareForSuspendAsync();
@@ -1532,31 +1436,40 @@ namespace Unison.Uwp.Services.WhatsApp
         private async Task<bool> IsCurrentSocketHealthyAsync()
         {
             var socket = _socket;
-            if (socket == null || !socket.IsConnected || !socket.IsHandshakeComplete)
-            {
-                return false;
-            }
-
             // The verified keep-alive normally produces an inbound IQ result every
             // twenty seconds. Fresh frames alone are not sufficient when the ordered
             // protocol queue stopped making progress: in that state the socket can
             // answer pings while user messages never reach the application.
             var profile = ConnectionHealthProfile.OnDemand;
-            var action = ConnectionHealthPolicy.Evaluate(
-                socket.HasStalledNodeProcessing(ConnectionHealthPolicy.NodeProcessingStallLimit),
-                socket.HasFreshConnection(profile.FreshnessLimit));
+            bool nodeStalled = socket != null &&
+                socket.HasStalledNodeProcessing(ConnectionHealthPolicy.NodeProcessingStallLimit);
+            bool connectionFresh = socket != null &&
+                socket.HasFreshConnection(profile.FreshnessLimit);
+            OnDemandSocketHealthStep step = ConnectionHealthPolicy.DecideOnDemand(
+                socket != null,
+                socket != null && socket.IsConnected,
+                socket != null && socket.IsHandshakeComplete,
+                nodeStalled,
+                connectionFresh);
 
-            if (action == ConnectionHealthAction.Reconnect)
+            if (step == OnDemandSocketHealthStep.NotReady)
             {
-                Debug.WriteLine($"[WhatsAppService] Socket node queue is stalled (depth={socket.QueuedNodeProcessingCount})");
+                return false;
             }
-            else if (action == ConnectionHealthAction.Idle)
+
+            if (step == OnDemandSocketHealthStep.Healthy)
             {
                 return true;
             }
 
-            if (action == ConnectionHealthAction.Probe &&
-                await socket.ProbeConnectionAsync(profile.ProbeTimeoutMs))
+            if (step == OnDemandSocketHealthStep.TearDown)
+            {
+                Debug.WriteLine(
+                    "[WhatsAppService] Socket node queue is stalled (depth=" +
+                    socket.QueuedNodeProcessingCount + ")");
+            }
+            else if (step == OnDemandSocketHealthStep.Probe &&
+                     await socket.ProbeConnectionAsync(profile.ProbeTimeoutMs))
             {
                 return true;
             }
@@ -1608,7 +1521,7 @@ namespace Unison.Uwp.Services.WhatsApp
             IsCurrentSocketHealthyAsync();
 
         void IConnectionEnsureHost.DropCurrentSocketForFastResume() =>
-            DropCurrentSocketForFastResume();
+                    DropCurrentSocketForFastResume();
 
         Task<bool> IConnectionEnsureHost.IsRegisteredAsync() => IsRegisteredAsync();
 
@@ -1628,9 +1541,9 @@ namespace Unison.Uwp.Services.WhatsApp
             try
             {
                 await gate.ConfigureAwait(false);
-            }
-            catch
-            {
+                        }
+                        catch
+                        {
                 // The connection check in ConnectionEnsure provides the user-facing error.
             }
         }
@@ -1761,9 +1674,11 @@ namespace Unison.Uwp.Services.WhatsApp
             int attempt = 0;
             Exception lastError = null;
 
-            while (!_suppressReconnect && !_fatalSessionEnded)
+            while (ConnectionSoftReconnectGates.ShouldContinueLoop(
+                       _suppressReconnect,
+                       _fatalSessionEnded))
             {
-                if (_pairingRestartPending)
+                if (ConnectionSoftReconnectGates.ShouldExitForPairing(_pairingRestartPending))
                 {
                     PairingTrace(
                         "AutoReconnectLoop EXIT — pairingRestartPending (trigger=" +
@@ -1785,13 +1700,16 @@ namespace Unison.Uwp.Services.WhatsApp
                 }
 
                 await InitializeAsync();
-                if (_authState == null || !_authState.Registered || _fatalSessionEnded)
+                if (ConnectionSoftReconnectGates.ShouldStopBecauseSessionNotRegistered(
+                        _authState != null,
+                        _authState != null && _authState.Registered,
+                        _fatalSessionEnded))
                 {
                     Debug.WriteLine("[WhatsAppService] Reconnect loop stopped because the session is not registered");
                     return;
                 }
 
-                if (_pairingRestartPending)
+                if (ConnectionSoftReconnectGates.ShouldExitForPairing(_pairingRestartPending))
                 {
                     PairingTrace("AutoReconnectLoop EXIT before delay — pairing claimed stage2");
                     return;
@@ -1804,7 +1722,10 @@ namespace Unison.Uwp.Services.WhatsApp
                 try
                 {
                     await Task.Delay(delay);
-                    if (_suppressReconnect || _fatalSessionEnded || _pairingRestartPending)
+                    if (ConnectionSoftReconnectGates.ShouldAbortAfterDelay(
+                            _suppressReconnect,
+                            _fatalSessionEnded,
+                            _pairingRestartPending))
                     {
                         if (_pairingRestartPending)
                         {
@@ -1818,6 +1739,7 @@ namespace Unison.Uwp.Services.WhatsApp
                     {
                         return;
                     }
+
                     if (await IsCurrentSocketHealthyAsync())
                     {
                         Debug.WriteLine($"[WhatsAppService] Reconnect succeeded on attempt {attempt + 1}");
@@ -1835,7 +1757,10 @@ namespace Unison.Uwp.Services.WhatsApp
                 attempt++;
             }
 
-            if (lastError != null && !_suppressReconnect && !_fatalSessionEnded)
+            if (ConnectionSoftReconnectGates.ShouldRaiseReconnectLoopError(
+                    lastError != null,
+                    _suppressReconnect,
+                    _fatalSessionEnded))
             {
                 OnError?.Invoke(this, lastError);
             }
@@ -1848,13 +1773,17 @@ namespace Unison.Uwp.Services.WhatsApp
         private Task ReconnectForPairingAsync() => ConnectionPairingStage2.RunAsync(this);
 
         bool IConnectionPairingStage2Host.ShouldAbortPairingRestart =>
-            _suppressReconnect || _fatalSessionEnded;
+            ConnectionSoftReconnectGates.ShouldAbortPairingRestart(
+                _suppressReconnect,
+                _fatalSessionEnded);
 
         bool IConnectionPairingStage2Host.IsRegistered =>
             _authState != null && _authState.Registered;
 
         bool IConnectionPairingStage2Host.CanScheduleSoftReconnect =>
-            !_suppressReconnect && !_fatalSessionEnded;
+            ConnectionSoftReconnectGates.CanScheduleSoftReconnect(
+                _suppressReconnect,
+                _fatalSessionEnded);
 
         void IConnectionPairingStage2Host.ClearPairingRestartPending() =>
             _pairingRestartPending = false;
@@ -1928,11 +1857,14 @@ namespace Unison.Uwp.Services.WhatsApp
             get
             {
                 var current = _socket;
-                return current != null &&
-                       current.IsConnected &&
-                       current.IsHandshakeComplete &&
-                       _authState != null &&
-                       _authState.Registered;
+                bool ready = ConnectionTransportReady.IsReady(
+                    current != null,
+                    current != null && current.IsConnected,
+                    current != null && current.IsHandshakeComplete);
+                return ConnectionTransportReady.HasHealthyRegistered(
+                    ready,
+                    _authState != null,
+                    _authState != null && _authState.Registered);
             }
         }
 
@@ -1941,10 +1873,13 @@ namespace Unison.Uwp.Services.WhatsApp
             get
             {
                 var current = _socket;
-                return current != null &&
-                       current.IsConnected &&
-                       current.IsHandshakeComplete &&
-                       (_authState == null || !_authState.Registered);
+                bool ready = ConnectionTransportReady.IsReady(
+                    current != null,
+                    current != null && current.IsConnected,
+                    current != null && current.IsHandshakeComplete);
+                return ConnectionTransportReady.HasHealthyUnregistered(
+                    ready,
+                    _authState == null || !_authState.Registered);
             }
         }
 
@@ -1975,9 +1910,9 @@ namespace Unison.Uwp.Services.WhatsApp
         {
             StopConnectionHealthMonitor("connect-replace-socket");
             if (_socket == null)
-            {
-                return;
-            }
+                {
+                    return;
+                }
 
             var previousSocket = _socket;
             _socket = null;
@@ -2049,8 +1984,8 @@ namespace Unison.Uwp.Services.WhatsApp
 
             await socket.InitializeKeyStoreAsync().ConfigureAwait(false);
             _sharedKeyStore = socket.PersistentKeyStore;
-            RuntimeDiagnosticsService.Instance.Write(
-                "connection",
+                        RuntimeDiagnosticsService.Instance.Write(
+                            "connection",
                 reuseLoadedKeyState ? "fast-resume-key-store-reused" : "key-store-cold-loaded",
                 "sessions=" + auth.Sessions.Count + "; prekeys=" + auth.PreKeys.Count);
         }
@@ -2059,10 +1994,10 @@ namespace Unison.Uwp.Services.WhatsApp
             ShouldRefuseConnectBecauseSessionDied();
 
         void IConnectionConnectOpenHost.AbortAssignedSocket(string journalReason)
-        {
-            RuntimeDiagnosticsService.Instance.Write(
-                "connection",
-                "connect-aborted",
+                {
+                    RuntimeDiagnosticsService.Instance.Write(
+                        "connection",
+                        "connect-aborted",
                 "reason=" + journalReason);
             var socket = _socket;
             try
@@ -2073,9 +2008,9 @@ namespace Unison.Uwp.Services.WhatsApp
             {
             }
 
-            if (ReferenceEquals(_socket, socket))
-            {
-                _socket = null;
+                if (ReferenceEquals(_socket, socket))
+                {
+                    _socket = null;
             }
         }
 
@@ -2084,8 +2019,8 @@ namespace Unison.Uwp.Services.WhatsApp
             var socket = _socket;
             if (socket == null)
             {
-                return Task.CompletedTask;
-            }
+            return Task.CompletedTask;
+        }
 
             // Host builds WinRT transports; bridge only runs Noise over them (Init shape).
             var bridge = socket as SocketBridge;
@@ -2188,21 +2123,21 @@ namespace Unison.Uwp.Services.WhatsApp
             WaitForIncomingMessageQueueDrainAsync(timeoutMs);
 
         void IConnectionLifecycleHost.DisconnectAndDisposeSocket()
-        {
-            var socket = _socket;
-            _socket = null;
-            if (socket != null)
             {
-                socket.Disconnect();
-                socket.Dispose();
+                var socket = _socket;
+                _socket = null;
+                if (socket != null)
+                {
+                    socket.Disconnect();
+                    socket.Dispose();
             }
-        }
+                }
 
         void IConnectionLifecycleHost.PublishSuspended() =>
-            PublishConnectionUpdate("suspended");
+                PublishConnectionUpdate("suspended");
 
         void IConnectionLifecycleHost.ResetIncomingPumpForSuspend() =>
-            ResetIncomingMessagePump("suspend", requeueCurrent: true);
+                ResetIncomingMessagePump("suspend", requeueCurrent: true);
 
         async Task IConnectionLifecycleHost.PersistSuspendTailWithBudgetAsync(int budgetMs)
         {

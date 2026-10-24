@@ -76,7 +76,7 @@ namespace Unison.Uwp.Services.WhatsApp
             _socket?.RegisterJidAlias(jidA, jidB, source);
         }
 
-        private void RegisterSocketAliases(string source)
+        internal void RegisterSocketAliases(string source)
         {
             var aliases = JidAlias.Snapshot();
             _socket?.RegisterJidAliases(aliases, source);

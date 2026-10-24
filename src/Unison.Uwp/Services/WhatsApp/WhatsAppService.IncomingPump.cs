@@ -50,17 +50,22 @@ namespace Unison.Uwp.Services.WhatsApp
             bool isFromMe,
             string pushName)
         {
-            EnqueueDecryptedMessage(new DecryptedMessageEventArgs
-            {
-                FromJid = fromJid,
-                Participant = participant,
-                MessageId = messageId,
-                Message = message,
-                Timestamp = timestampUtc,
-                IsFromMe = isFromMe,
-                PushName = pushName,
-                VerifiedName = null
-            });
+            EnqueueDecryptedMessage(
+                IncomingDecryptedNotifyMap.FromPump(
+                    message,
+                    messageId,
+                    fromJid,
+                    recipientJid: null,
+                    peerRecipientPn: null,
+                    peerRecipientLid: null,
+                    senderLid: null,
+                    participant,
+                    participantAltJid: null,
+                    verifiedName: null,
+                    pushName,
+                    timestampUtc,
+                    isOffline: false,
+                    isFromMe));
         }
 
         bool IPlaceholderResendSocket.IsHandshakeComplete =>
@@ -88,7 +93,7 @@ namespace Unison.Uwp.Services.WhatsApp
             }
         }
 
-        private void EnqueueDecryptedMessage(Client.DecryptedMessageEventArgs message)
+        private void EnqueueDecryptedMessage(IncomingDecryptedNotifyRequest message)
         {
             if (message == null)
             {
@@ -99,7 +104,7 @@ namespace Unison.Uwp.Services.WhatsApp
             RestartIncomingMessagePumpIfNeeded();
         }
 
-        private Client.DecryptedMessageEventArgs _pumpCurrent;
+        private IncomingDecryptedNotifyRequest _pumpCurrent;
 
         private void RestartIncomingMessagePumpIfNeeded()
         {
@@ -118,7 +123,9 @@ namespace Unison.Uwp.Services.WhatsApp
                 "generation=" + generation);
         }
 
-        private void SetIncomingMessagePumpStage(string stage, Client.DecryptedMessageEventArgs message = null)
+        private void SetIncomingMessagePumpStage(
+            string stage,
+            IncomingDecryptedNotifyRequest message = null)
         {
             _incoming.SetStage(stage, message, DateTime.UtcNow);
         }
@@ -144,7 +151,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
         bool IIncomingPumpDrainHost.TryTakeNext(int generation, DateTime utcNow)
         {
-            Client.DecryptedMessageEventArgs next;
+            IncomingDecryptedNotifyRequest next;
             if (!_incoming.TryTakeNext(generation, utcNow, out next))
             {
                 _pumpCurrent = null;
@@ -253,19 +260,23 @@ namespace Unison.Uwp.Services.WhatsApp
         }
 
         /// <summary>
-        /// Handles real-time decrypted messages from SocketClient
+        /// Handles one drained Core envelope (queue item is already
+        /// <see cref="IncomingDecryptedNotifyRequest"/>).
         /// </summary>
-        private async Task HandleDecryptedMessageAsync(Client.DecryptedMessageEventArgs e)
+        private async Task HandleDecryptedMessageAsync(IncomingDecryptedNotifyRequest request)
         {
             // ProcessIncomingMessageQueueAsync is the sole caller and already guarantees
             // one-at-a-time ingestion. A second non-reentrant semaphore here caused a
             // permanent self-deadlock when recovered messages re-entered the pipeline.
             try
             {
-                SetIncomingMessagePumpStage("routing", e);
-                if (!e.IsOffline)
+                SetIncomingMessagePumpStage("routing", request);
+                if (request != null && !request.IsOffline)
                 {
-                    Log($"[WhatsAppService] HandleDecryptedMessageAsync from {e.FromJid}, participant={e.Participant}, id={e.MessageId}");
+                    Log(
+                        "[WhatsAppService] HandleDecryptedMessageAsync from " + request.FromJid +
+                        ", participant=" + request.ParticipantJid +
+                        ", id=" + request.MessageId);
                 }
 
                 if (Messages == null)
@@ -274,39 +285,21 @@ namespace Unison.Uwp.Services.WhatsApp
                     RuntimeDiagnosticsService.Instance.Write(
                         "messages",
                         "message-facade-missing",
-                        "messageId=" + (e.MessageId ?? string.Empty));
+                        "messageId=" + (request?.MessageId ?? string.Empty));
                     return;
                 }
 
-                SetIncomingMessagePumpStage("route", e);
-                await Messages.NotifyIncomingDecryptedAsync(new IncomingDecryptedNotifyRequest
-                {
-                    Message = e.Message,
-                    MessageId = e.MessageId,
-                    FromJid = e.FromJid,
-                    RecipientJid = e.RecipientJid,
-                    PeerRecipientPn = e.PeerRecipientPn,
-                    PeerRecipientLid = e.PeerRecipientLid,
-                    SenderLid = e.SenderLid,
-                    ParticipantJid = e.Participant,
-                    ParticipantAltJid = e.ParticipantAlt,
-                    VerifiedName = e.VerifiedName,
-                    PushName = e.PushName,
-                    Timestamp = e.Timestamp,
-                    IsOffline = e.IsOffline,
-                    IsFromMe = e.IsFromMe,
-                    // MessageFacade fills blank SelfDisplayName from SelfProfileState.
-                    SelfDisplayName = null
-                }).ConfigureAwait(false);
+                SetIncomingMessagePumpStage("route", request);
+                await Messages.NotifyIncomingDecryptedAsync(request).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"[WhatsAppService] HandleDecryptedMessageAsync error: {ex.Message}");
+                Debug.WriteLine("[WhatsAppService] HandleDecryptedMessageAsync error: " + ex.Message);
                 RuntimeDiagnosticsService.Instance.RecordException(
                     "messages",
                     "handle-decrypted-failed",
                     ex,
-                    "id=" + (e?.MessageId ?? "<none>") + "; stage=" + _incoming.Stage);
+                    "id=" + (request?.MessageId ?? "<none>") + "; stage=" + _incoming.Stage);
                 throw;
             }
         }

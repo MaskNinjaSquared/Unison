@@ -37,6 +37,25 @@ namespace Unison.WhatsAppClient.Helpers
     }
 
     /// <summary>
+    /// Next step for <c>IsCurrentSocketHealthyAsync</c> after transport flags +
+    /// <see cref="ConnectionHealthPolicy.Evaluate"/>. Probe I/O stays on the host.
+    /// </summary>
+    public enum OnDemandSocketHealthStep
+    {
+        /// <summary>No assigned socket, or Noise not ready.</summary>
+        NotReady,
+
+        /// <summary>Fresh + not stalled — treat as healthy without a probe.</summary>
+        Healthy,
+
+        /// <summary>Quiet — host should call <c>ProbeConnectionAsync</c>.</summary>
+        Probe,
+
+        /// <summary>Stalled queue — disconnect and drop; do not probe.</summary>
+        TearDown
+    }
+
+    /// <summary>
     /// Thresholds for one situation in which socket health is evaluated. The rule is the
     /// same in both; only the tolerances differ.
     /// </summary>
@@ -130,6 +149,36 @@ namespace Unison.WhatsAppClient.Helpers
             return connectionIsFresh
                 ? ConnectionHealthAction.Idle
                 : ConnectionHealthAction.Probe;
+        }
+
+        /// <summary>
+        /// On-demand health gate used before send / ensure-connected. Combines transport
+        /// readiness with <see cref="Evaluate"/>.
+        /// </summary>
+        public static OnDemandSocketHealthStep DecideOnDemand(
+            bool hasSocket,
+            bool isConnected,
+            bool handshakeComplete,
+            bool nodeProcessingStalled,
+            bool connectionIsFresh)
+        {
+            if (!hasSocket || !isConnected || !handshakeComplete)
+            {
+                return OnDemandSocketHealthStep.NotReady;
+            }
+
+            ConnectionHealthAction action = Evaluate(nodeProcessingStalled, connectionIsFresh);
+            if (action == ConnectionHealthAction.Idle)
+            {
+                return OnDemandSocketHealthStep.Healthy;
+            }
+
+            if (action == ConnectionHealthAction.Probe)
+            {
+                return OnDemandSocketHealthStep.Probe;
+            }
+
+            return OnDemandSocketHealthStep.TearDown;
         }
 
         /// <summary>

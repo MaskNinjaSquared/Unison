@@ -178,8 +178,12 @@ on `MessageFacade` (host: IQ + recipient-count cache). Offline release /
 post-replay list repair / deferred-startup list repair / background resolution+listing
 are façade `Notify*` (host keeps quiet/memory/catch-up gates). Stanza `notify`
 push-name is `ContactFacade.NotifyInboundMessageNode`. Pump keeps queue lanes and
-session-only App State. Persistence flush timer / Connection lifecycle stay on the host.
+session-only App State. Persistence debounce timer / Connection lifecycle stay on the host.
 `ForgetChatStorage` orchestration is `ForgetChatStorageDispatch` (I/O on the host).
+Full catalogue persist, preview-slice persist, and suspend-tail orchestration are
+`ChatCatalogFullPersistDispatch` (`IChatCatalogFullPersistHost`); startup catalogue
+hydrate is `LoadPersistedChatCatalogDispatch` (`ILoadPersistedChatCatalogHost`).
+SQLite writes and UI snapshots remain on the host.
 
 ### Facades still depend on the client
 
@@ -198,12 +202,42 @@ Helpers under `Contacts/` (`ContactNameResolver`, `ChatAvatarPolicy`, `GroupRost
 Phase B host ownership: post-replay / post-message enrichment / offline-replay
 flush extracted as `PostReplayMaintenanceDispatch`, `PostMessageEnrichmentDispatch`
 `OfflineReplayFlushDispatch`, and `IncomingPumpDrainDispatch` (CAS/CTS/timer /
-typed queue item still on the host).
+typed queue item is now Core `IncomingDecryptedNotifyRequest` (was UWP
+`DecryptedMessageEventArgs`); queue algebra lives in Core `IncomingMessageQueue<T>`;
+wire→queue map is `IncomingDecryptedNotifyMap`). Soft-reconnect schedule / post-loop /
+loop gates are `ConnectionSoftReconnectGates` (pure; Task.Run + locks stay on host).
+Connect transport-ready / session-died refuse / reconnect-toast clear are
+`ConnectionTransportReady` / `SessionDiedConnectRefusal` /
+`ConnectionStatusNotifyPolicy`. `BuildSocketBridge` is thin (`SocketBridgeRemoteHooks`);
+`WireSocketEventHandlers` body is `SocketEventHandlerWiring` (UWP; still
+`IWhatsAppSocket`). Broker reconnect consume gate is
+`BrokerReconnectConsumePolicy` (IPC / dispose stay on host). Startup alias-row
+restore decision is `PersistedAliasRestore` (Core; bulk file + self seed stay).
+Linked-account / IsRegistered shape is `LinkedAccountGate`. Soft-reconnect
+pairing abort / can-schedule / loop-error raise live on
+`ConnectionSoftReconnectGates`. On-demand healthy/probe/teardown is
+`ConnectionHealthPolicy.DecideOnDemand` (`OnDemandSocketHealthStep`).
+History hydration batch loop is `HistoryHydrationBackfillDispatch`
+(`IHistoryHydrationBackfillHost`; lock/CAS stay on host). Freshness reconnect
+schedule/abort gates are `FreshnessReconnectFallbackGates`. SQLite quiet
+finalize body is `SqliteHistoryQuietFinalizeDispatch`
+(`ISqliteHistoryQuietFinalizeHost`; delay/generation CAS stay on host).
+Catch-up continue soft-reconnect gates are `CatchUpContinueReconnectGates`.
+SQLite chunk type/progress numbers are `HistorySqliteChunkClassify`.
+Post-offline freshness orchestration is `HistoryPostOfflineFreshnessDispatch`
+(`IHistoryPostOfflineFreshnessHost`). Reconnect FULL_HISTORY floor is
+`ReconnectHistoryCatchUpFloorGates`. Catch-up finish next-step is
+`HistoryCatchUpFinishDecision`. First-sync list unlock gate is
+`FirstSyncListReleaseGates`. Deferred startup body is
+`DeferredStartupMaintenanceDispatch` (+ `DeferredStartupFrugalGate`).
+Hydration day-retry arm is `HydrationDayRetryGates`.
+User-resync FULL_HISTORY connect/retry/wait timeouts are
+`UserResyncFullHistoryGates` (host still owns wipe + socket send).
 
 Primitives that already left the contract (façade / Netstandard Phase A):
 
 - **UI thread.** `AttachedUiDispatcher` (UWP, `IDispatcher`) is a singleton the client, `ChatFacade`, `ContactFacade` and the contact helpers take in their constructors. `App` attaches the root frame's `CoreDispatcher` to it; `AttachUiDispatcher` and `IWhatsAppService.RunOnUiThreadAsync` are gone.
-- **Catalog save.** `IChatCatalogPersistence` (`Schedule`, `PersistRows`) replaces `SchedulePersistPublic` / `PersistChatListRowsPublic`. Debounce orchestration is `ChatCatalogPersistDispatch` over `IChatCatalogPersistHost`; the timer field and `PersistDataAsync` stay on the client because `ShutdownAsync` resets them.
+- **Catalog save.** `IChatCatalogPersistence` (`Schedule`, `PersistRows`) replaces `SchedulePersistPublic` / `PersistChatListRowsPublic`. Debounce orchestration is `ChatCatalogPersistDispatch` over `IChatCatalogPersistHost`. Full persist / suspend-tail orchestration is `ChatCatalogFullPersistDispatch`; startup hydrate is `LoadPersistedChatCatalogDispatch`. The debounce timer field and SQLite/UI snapshot I/O stay on the client because `ShutdownAsync` resets the timer.
 - **Network reachability.** `INetworkAccess` / `WinRtNetworkAccess` — `ConnectionFacade.HasInternetAccess` no longer calls `NetworkInformation` directly.
 - **Foreground wait.** `ContactFacade` refreshes the People overlay after `IAppLifecycle.WaitUntilForegroundAsync` instead of hooking `Window.Activated`.
 
@@ -1295,9 +1329,12 @@ auto-reconnect and catch-up-continue. Idle-lot decide and adjacent FULL_HISTORY 
 **Phase 4 orchestration closed.** Ensure / resume / pairing stage-2 / broker /
 soft-reconnect / lifecycle / Connect gates + prepare + open / close disposition /
 health-monitor live in WhatsAppClient helpers + hosts. `ConnectAsync` body is
-orchestration over those helpers; `BuildSocketBridge` / `WireSocketEventHandlers`
-stays on the client until further Netstandard work; the incoming pump drain loop
-is `IncomingPumpDrainDispatch` (host still owns typed queue + handle). Offline pending-
+orchestration over those helpers; `BuildSocketBridge` /
+`SocketEventHandlerWiring` stay UWP (`IWhatsAppSocket`); broker consume gate is
+`BrokerReconnectConsumePolicy`; startup alias restore is `PersistedAliasRestore`;
+linked-account gates / on-demand health step / soft-reconnect pairing helpers
+as above. The incoming pump drain loop is
+`IncomingPumpDrainDispatch` (host still owns typed queue + handle). Offline pending-
 notification release is `OfflineReplayRelease` over `IOfflineReplayReleaseHost`
 (wire still attaches the event on the client). Thin-wire dispatches:
 `ConnectionUpdateDispatch`, `SocketErrorDispatch`, `HistorySyncWireApply`,
