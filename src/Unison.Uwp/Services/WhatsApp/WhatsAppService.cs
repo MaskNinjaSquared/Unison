@@ -45,7 +45,7 @@ using Unison.WhatsAppClient.Helpers;
 
 namespace Unison.Uwp.Services.WhatsApp
 {
-    public partial class WhatsAppService : INotifyPropertyChanged, IWhatsAppService, IConnectionEventSource, IConnectionSessionHost, IOfflineReplayHost, IOfflineReplayReleaseHost, IOfflineReplayFlushHost, IIncomingPumpDrainHost, IChatCatalogPersistHost, IChatCatalogFullPersistHost, ILoadPersistedChatCatalogHost, IForgetChatStorageHost, IConnectionUpdateHost, ISocketErrorHost, IHistorySyncWireHost, ISessionInitializedHost, IQrCodeWireHost, IAuthStateWireHost, IInboundWireNodeHost, IDecryptedMessageWireHost, ISocketFacadeWireHost, IPostReplayMaintenanceHost, IPostMessageEnrichmentHost, IPlaceholderResendSocket, IHistoryOnDemandSocket, IRuntimeSnapshotSource, IBackgroundResolutionGate, IAppStateLocalHost, IConversationResyncHost, IHistorySyncHost, IHistoryCatchUpHost, IConnectionEnsureHost, IConnectionResumeHost, IConnectionPairingStage2Host, IConnectionBrokerTransferHost, IConnectionSoftReconnectHost, IConnectionLifecycleHost, IConnectionConnectGateSource, IConnectionConnectPrepareHost, IConnectionConnectOpenHost, ISocketAliasRegistrar, IStartupUiHost, IJidAliasPersistence, IIncomingMessageEnqueueHost, IResolvedNameApplyHost, IHistoryHydrationBackfillHost, ISqliteHistoryQuietFinalizeHost, IHistoryPostOfflineFreshnessHost, IDeferredStartupMaintenanceHost
+    public partial class WhatsAppService : INotifyPropertyChanged, IWhatsAppService, IConnectionEventSource, IConnectionSessionHost, IOfflineReplayHost, IOfflineReplayReleaseHost, IOfflineReplayFlushHost, IIncomingPumpDrainHost, IChatCatalogPersistHost, IChatCatalogFullPersistHost, ILoadPersistedChatCatalogHost, IForgetChatStorageHost, IConnectionUpdateHost, ISocketErrorHost, IHistorySyncWireHost, ISessionInitializedHost, IQrCodeWireHost, IAuthStateWireHost, IInboundWireNodeHost, IDecryptedMessageWireHost, ISocketFacadeWireHost, IPostReplayMaintenanceHost, IPostMessageEnrichmentHost, IPlaceholderResendSocket, IHistoryOnDemandSocket, IRuntimeSnapshotSource, IBackgroundResolutionGate, IAppStateLocalHost, IConversationResyncHost, IHistorySyncHost, IHistoryCatchUpHost, IConnectionEnsureHost, IConnectionResumeHost, IConnectionPairingStage2Host, IConnectionBrokerTransferHost, IConnectionSoftReconnectHost, IConnectionLifecycleHost, IConnectionConnectGateSource, IConnectionConnectPrepareHost, IConnectionConnectOpenHost, ISocketAliasRegistrar, IStartupUiHost, IJidAliasPersistence, IIncomingMessageEnqueueHost, IResolvedNameApplyHost, IHistoryHydrationBackfillHost, ISqliteHistoryQuietFinalizeHost, IHistoryPostOfflineFreshnessHost, IDeferredStartupMaintenanceHost, IHistoryCatchUpFinishHost, IUserResyncFullHistoryHost
     {
         public event PropertyChangedEventHandler PropertyChanged;
         protected void OnPropertyChanged([CallerMemberName] string propertyName = null)
@@ -1373,70 +1373,33 @@ namespace Unison.Uwp.Services.WhatsApp
         /// forced fresh transport — a live socket that already completed pull will not
         /// spontaneously re-bootstrap like pairing.
         /// </summary>
-        private async Task<bool> EnsureFullHistoryRequestedForUserResyncAsync(string reason)
-        {
-            try
-            {
-                await EnsureConnectedAsync(
-                        timeoutMs: UserResyncFullHistoryGates.FirstConnectTimeoutMs,
-                        forceFreshTransport: false)
-                    .ConfigureAwait(false);
-            }
-            catch (Exception ex)
-            {
-                Log($"[WhatsAppService] EnsureConnected before user resync failed ({reason}): {ex.Message}");
-            }
+        private Task<bool> EnsureFullHistoryRequestedForUserResyncAsync(string reason) =>
+            UserResyncFullHistoryDispatch.RunAsync(this, reason);
 
-            bool firstOk = await RequestFullHistoryOnDemandTrackedAsync(reason, isFreshnessRepair: true)
-                .ConfigureAwait(false);
-            if (!UserResyncFullHistoryGates.NeedsFreshTransportRetry(firstOk))
-            {
-                Log($"[WhatsAppService] FULL_HISTORY requested for user resync ({reason}).");
-                return true;
-            }
+        // --- IUserResyncFullHistoryHost --------------------------------------
 
-            Log($"[WhatsAppService] FULL_HISTORY not sent on live socket ({reason}); forcing fresh reconnect + retry.");
-            RaiseSyncStatus("Reconnecting to reload history...");
+        Task IUserResyncFullHistoryHost.EnsureConnectedAsync(int timeoutMs, bool forceFreshTransport) =>
+            EnsureConnectedAsync(timeoutMs: timeoutMs, forceFreshTransport: forceFreshTransport);
 
-            try
-            {
-                // Reset the per-session gate cleared above; otherwise a failed first
-                // attempt that flipped the flag without a real send would block retry.
-                _historyRequests.ReleaseFull();
+        Task<bool> IUserResyncFullHistoryHost.RequestFullHistoryOnDemandTrackedAsync(
+            string reason,
+            bool isFreshnessRepair) =>
+            RequestFullHistoryOnDemandTrackedAsync(reason, isFreshnessRepair);
 
-                await EnsureConnectedAsync(
-                        timeoutMs: UserResyncFullHistoryGates.FreshConnectTimeoutMs,
-                        forceFreshTransport: true)
-                    .ConfigureAwait(false);
-            }
-            catch (Exception ex)
-            {
-                Log($"[WhatsAppService] Fresh reconnect for user resync failed ({reason}): {ex.Message}");
-                return false;
-            }
+        void IUserResyncFullHistoryHost.ReleaseFullHistoryRequestGate() =>
+            _historyRequests.ReleaseFull();
 
-            // Brief settle so handshake / peer session assert can finish before PDO.
-            await Task.Delay(UserResyncFullHistoryGates.PostReconnectSettle).ConfigureAwait(false);
+        bool IUserResyncFullHistoryHost.IsFullHistoryClaimed =>
+            _historyRequests.IsFullClaimed;
 
-            bool secondOk = await RequestFullHistoryOnDemandTrackedAsync(
-                    reason + ":after-reconnect",
-                    isFreshnessRepair: true)
-                .ConfigureAwait(false);
-            if (secondOk)
-            {
-                Log($"[WhatsAppService] FULL_HISTORY requested after reconnect ({reason}).");
-            }
+        Task IUserResyncFullHistoryHost.TryConsumeMessageStoreForceHistoryRepairAsync(string reason) =>
+            TryConsumeMessageStoreForceHistoryRepairAsync(reason);
 
-            // Leave MessageStoreForceHistoryRepair set so session-initialized / offline
-            // complete can still consume it when the socket becomes ready later.
-            if (!secondOk)
-            {
-                await TryConsumeMessageStoreForceHistoryRepairAsync(reason + ":post-reconnect-consume")
-                    .ConfigureAwait(false);
-            }
+        void IUserResyncFullHistoryHost.LogUserResync(string message) =>
+            Log("[WhatsAppService] " + message);
 
-            return UserResyncFullHistoryGates.SucceededAfterRetry(secondOk, _historyRequests.IsFullClaimed);
-        }
+        void IUserResyncFullHistoryHost.RaiseUserResyncStatus(string status) =>
+            RaiseSyncStatus(status);
 
         private void CompleteUserResyncHistoryWait(string reason)
         {
@@ -2428,9 +2391,18 @@ namespace Unison.Uwp.Services.WhatsApp
             return _catchUp.IsActive(IsHistoryCatchUpBannerActive);
         }
 
-        private void FinishHistoryCatchUpContinue(string reason, bool releaseEnrichment)
+        private void FinishHistoryCatchUpContinue(string reason, bool releaseEnrichment) =>
+            HistoryCatchUpFinishDispatch.Run(this, reason, releaseEnrichment);
+
+        // --- IHistoryCatchUpFinishHost ---------------------------------------
+
+        HistoryCatchUpProgress IHistoryCatchUpFinishHost.FinishCatchUpProgress() =>
+            _catchUp.Finish();
+
+        void IHistoryCatchUpFinishHost.WriteCatchUpFinishJournal(
+            string reason,
+            HistoryCatchUpProgress last)
         {
-            HistoryCatchUpProgress last = _catchUp.Finish();
             RuntimeDiagnosticsService.Instance.Write(
                 "history",
                 "catch-up-finish",
@@ -2438,37 +2410,34 @@ namespace Unison.Uwp.Services.WhatsApp
                 "; rounds=" + last.Round +
                 "; stagnant=" + last.StagnantCycles +
                 "; watermark=" + FreshnessTimestampFormat.ForLog(last.WatermarkUtc));
-
-            EndHistoryCatchUpBanner(reason ?? "catch-up-finish");
-
-            HistoryCatchUpFinishNext next = HistoryCatchUpFinishDecision.Decide(
-                releaseEnrichment,
-                IsFirstSyncListHoldInProgress);
-            if (next == HistoryCatchUpFinishNext.None)
-            {
-                return;
-            }
-
-            // Quiet-finalize may have deferred IsCompleted while catch-up pages still ran —
-            // names, then list unlock, then photos (not on the first quiet).
-            if (next == HistoryCatchUpFinishNext.ReleaseListAfterNames)
-            {
-                int processed = Math.Max(
-                    _sqliteHistoryConversationsAccumulated,
-                    _initialSync.ProcessedConversations);
-                RequestFirstSyncListReleaseAfterNames(
-                    "catch-up-finish:" + (reason ?? string.Empty),
-                    processed,
-                    Math.Max(processed, 1));
-                return;
-            }
-
-            DeferredAvatars?.Schedule(
-                "catch-up-finish:" + (reason ?? string.Empty),
-                TimeSpan.FromSeconds(5));
-            Interlocked.Exchange(ref _enrichmentAwaitingHeavyHistory, 0);
-            TrySchedulePostMessageEnrichment("catch-up-finish:" + (reason ?? string.Empty));
         }
+
+        void IHistoryCatchUpFinishHost.EndHistoryCatchUpBanner(string reason) =>
+            EndHistoryCatchUpBanner(reason);
+
+        bool IHistoryCatchUpFinishHost.IsFirstSyncListHoldInProgress =>
+            IsFirstSyncListHoldInProgress;
+
+        int IHistoryCatchUpFinishHost.SqliteHistoryConversationsAccumulated =>
+            _sqliteHistoryConversationsAccumulated;
+
+        int IHistoryCatchUpFinishHost.InitialSyncProcessedConversations =>
+            _initialSync.ProcessedConversations;
+
+        void IHistoryCatchUpFinishHost.RequestFirstSyncListReleaseAfterNames(
+            string reason,
+            int processed,
+            int total) =>
+            RequestFirstSyncListReleaseAfterNames(reason, processed, total);
+
+        void IHistoryCatchUpFinishHost.ScheduleDeferredAvatars(string reason, TimeSpan delay) =>
+            DeferredAvatars?.Schedule(reason, delay);
+
+        void IHistoryCatchUpFinishHost.ClearEnrichmentAwaitingHeavyHistory() =>
+            Interlocked.Exchange(ref _enrichmentAwaitingHeavyHistory, 0);
+
+        void IHistoryCatchUpFinishHost.TrySchedulePostMessageEnrichment(string reason) =>
+            TrySchedulePostMessageEnrichment(reason);
 
         void IConnectionSoftReconnectHost.ScheduleSoftReconnect(string reason) =>
             ScheduleAutoReconnect(reason);

@@ -232,7 +232,10 @@ Post-offline freshness orchestration is `HistoryPostOfflineFreshnessDispatch`
 `DeferredStartupMaintenanceDispatch` (+ `DeferredStartupFrugalGate`).
 Hydration day-retry arm is `HydrationDayRetryGates`.
 User-resync FULL_HISTORY connect/retry/wait timeouts are
-`UserResyncFullHistoryGates` (host still owns wipe + socket send).
+`UserResyncFullHistoryGates`; the retry orchestration is
+`UserResyncFullHistoryDispatch` (`IUserResyncFullHistoryHost`).
+Catch-up finish follow-up (list release vs enrichment) is
+`HistoryCatchUpFinishDispatch` (`IHistoryCatchUpFinishHost`).
 
 Primitives that already left the contract (façade / Netstandard Phase A):
 
