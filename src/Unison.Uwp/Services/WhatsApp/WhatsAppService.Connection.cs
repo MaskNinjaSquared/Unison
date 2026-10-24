@@ -34,6 +34,7 @@ using Unison.Socket.UseCases.Contacts;
 using Unison.Uwp.Helpers;
 using Microsoft.Extensions.DependencyInjection;
 using Unison.WhatsAppClient.Helpers;
+using Windows.Networking.Sockets;
 
 namespace Unison.Uwp.Services.WhatsApp
 {
