@@ -111,13 +111,16 @@ namespace Unison.Uwp.Services.WhatsApp
         /// Pushes queued dual-write pairs to the socket in one batch. No-op while a
         /// bulk-import scope is still open (nested flushes defer to the outer end).
         /// </summary>
-        private void FlushPendingSocketAliases(string source)
-        {
-            if (JidAlias != null && JidAlias.IsBulkImporting)
-            {
-                return;
-            }
+        private void FlushPendingSocketAliases(string source) =>
+            FlushPendingSocketAliasesDispatch.Run(this, source);
 
+        // --- IFlushPendingSocketAliasesHost ----------------------------------
+
+        bool IFlushPendingSocketAliasesHost.IsBulkImportingAliases =>
+            JidAlias != null && JidAlias.IsBulkImporting;
+
+        IReadOnlyDictionary<string, string> IFlushPendingSocketAliasesHost.TakePendingSocketAliasesOrNull()
+        {
             Dictionary<string, string> pending;
             lock (_pendingSocketAliasGate)
             {
@@ -125,13 +128,16 @@ namespace Unison.Uwp.Services.WhatsApp
                 _pendingSocketAliases = null;
             }
 
-            if (pending == null || pending.Count == 0)
-            {
-                return;
-            }
-
-            _socket?.RegisterJidAliases(pending, source ?? "bulk-alias");
+            return pending;
         }
+
+        void IFlushPendingSocketAliasesHost.RegisterSocketJidAliases(
+            IReadOnlyDictionary<string, string> pending,
+            string source) =>
+            _socket?.RegisterJidAliases(
+                pending as Dictionary<string, string> ??
+                    new Dictionary<string, string>(pending, StringComparer.OrdinalIgnoreCase),
+                source);
 
         /// <summary>
         /// App-state mutation apply ends here so N× ContactAction dual-writes become one
@@ -143,35 +149,44 @@ namespace Unison.Uwp.Services.WhatsApp
                     ? "app-state"
                     : "app-state:" + collectionName);
 
-        private async Task PersistJidAliasesAsync(string reason)
+        private Task PersistJidAliasesAsync(string reason) =>
+            PersistJidAliasesDispatch.RunAsync(this, reason);
+
+        // --- IPersistJidAliasesHost ------------------------------------------
+
+        async Task<IReadOnlyList<string>> IPersistJidAliasesHost.CollectDistinctChatJidsAsync()
         {
-            try
+            List<string> chatJids = null;
+            await _ui.RunAsync(() =>
             {
-                List<string> chatJids = null;
-                await _ui.RunAsync(() =>
-                    {
-                        chatJids = Chats
-                            .Where(c => c != null && !string.IsNullOrWhiteSpace(c.JID))
-                            .Select(c => NormalizeJid(c.JID))
-                            .Where(j => !string.IsNullOrWhiteSpace(j))
-                            .Distinct(StringComparer.OrdinalIgnoreCase)
-                            .ToList();
-                    });
-
-                if (chatJids == null || chatJids.Count == 0)
-                {
-                    return;
-                }
-
-                var aliasSnapshot = JidAlias.Snapshot();
-                await _messageStore.SaveJidAliasesAsync(aliasSnapshot, chatJids);
-                Debug.WriteLine($"[WhatsAppService] Persisted {aliasSnapshot.Count} alias entries immediately ({reason})");
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"[WhatsAppService] Failed to persist aliases immediately ({reason}): {ex.Message}");
-            }
+                chatJids = Chats
+                    .Where(c => c != null && !string.IsNullOrWhiteSpace(c.JID))
+                    .Select(c => NormalizeJid(c.JID))
+                    .Where(j => !string.IsNullOrWhiteSpace(j))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+            });
+            return chatJids;
         }
+
+        IReadOnlyDictionary<string, string> IPersistJidAliasesHost.SnapshotJidAliases() =>
+            JidAlias.Snapshot();
+
+        Task IPersistJidAliasesHost.SaveJidAliasesAsync(
+            IReadOnlyDictionary<string, string> aliases,
+            IReadOnlyList<string> chatJids) =>
+            _messageStore.SaveJidAliasesAsync(
+                aliases as Dictionary<string, string> ??
+                    new Dictionary<string, string>(aliases),
+                chatJids);
+
+        void IPersistJidAliasesHost.LogPersistedJidAliases(int count, string reason) =>
+            Debug.WriteLine(
+                $"[WhatsAppService] Persisted {count} alias entries immediately ({reason})");
+
+        void IPersistJidAliasesHost.LogPersistJidAliasesFailed(string reason, string message) =>
+            Debug.WriteLine(
+                $"[WhatsAppService] Failed to persist aliases immediately ({reason}): {message}");
 
         private Task PersistChatIdentityStateAsync(string reason) =>
             PersistChatIdentityStateDispatch.RunAsync(this, reason);
@@ -258,32 +273,28 @@ namespace Unison.Uwp.Services.WhatsApp
             string source) =>
             RegisterAliasMappings(lidToPn, source);
 
-        internal void RegisterAliasMappings(IEnumerable<KeyValuePair<string, string>> lidToPn, string source)
-        {
-            if (lidToPn == null)
-            {
-                return;
-            }
+        internal void RegisterAliasMappings(
+            IEnumerable<KeyValuePair<string, string>> lidToPn,
+            string source) =>
+            RegisterAliasMappingsDispatch.Run(this, lidToPn, source);
 
-            int changed = 0;
-            using (JidAlias.BeginBulkImport())
-            {
-                foreach (var pair in lidToPn)
-                {
-                    if (TryRecordAliasMapping(pair.Key, pair.Value, source))
-                    {
-                        changed++;
-                    }
-                }
-            }
+        // --- IRegisterAliasMappingsHost --------------------------------------
 
+        IDisposable IRegisterAliasMappingsHost.BeginAliasBulkImport() =>
+            JidAlias.BeginBulkImport();
+
+        bool IRegisterAliasMappingsHost.TryRecordAliasMapping(
+            string lidJid,
+            string pnJid,
+            string source) =>
+            TryRecordAliasMapping(lidJid, pnJid, source);
+
+        void IRegisterAliasMappingsHost.FlushPendingSocketAliases(string source) =>
             FlushPendingSocketAliases(source);
 
-            if (changed > 0)
-            {
-                Debug.WriteLine($"[WhatsAppService] Recorded {changed} new alias pair(s) from {source}");
-            }
-        }
+        void IRegisterAliasMappingsHost.LogRecordedNewAliasPairs(int changed, string source) =>
+            Debug.WriteLine(
+                $"[WhatsAppService] Recorded {changed} new alias pair(s) from {source}");
 
         /// <summary>
         /// Whether filing this pair would put a contact under our own identity.

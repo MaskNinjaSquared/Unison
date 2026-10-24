@@ -177,34 +177,46 @@ namespace Unison.Uwp.Services.WhatsApp
             }
         }
 
-        private async Task PersistBackgroundDisplayNamesAsync()
-        {
-            try
-            {
-                // Copies first: these are live UI-thread collections.
-                var displayNames = BackgroundDisplayNameTable.Build(
-                    Chats.ToList(),
-                    ContactNames.ToList(),
-                    PhoneContactNamesByJid.ToList(),
-                    JidAlias.ToList());
+        private Task PersistBackgroundDisplayNamesAsync() =>
+            PersistBackgroundDisplayNamesDispatch.RunAsync(this);
 
-                await BackgroundDisplayNameStore.SaveAsync(
-                    displayNames,
-                    _authState?.Me?.Id,
-                    _authState?.Me?.Lid);
-                RuntimeDiagnosticsService.Instance.Write(
-                    "socket-broker",
-                    "display-name-snapshot-persisted",
-                    "count=" + displayNames.Count);
-            }
-            catch (Exception nameSnapshotError)
-            {
-                RuntimeDiagnosticsService.Instance.RecordException(
-                    "socket-broker",
-                    "display-name-snapshot-failed",
-                    nameSnapshotError);
-            }
-        }
+        // --- IPersistBackgroundDisplayNamesHost ------------------------------
+
+        IReadOnlyDictionary<string, string> IPersistBackgroundDisplayNamesHost.BuildBackgroundDisplayNamesTable() =>
+            // Copies first: these are live UI-thread collections.
+            BackgroundDisplayNameTable.Build(
+                Chats.ToList(),
+                ContactNames.ToList(),
+                PhoneContactNamesByJid.ToList(),
+                JidAlias.ToList());
+
+        string IPersistBackgroundDisplayNamesHost.BackgroundSelfMeId =>
+            _authState?.Me?.Id;
+
+        string IPersistBackgroundDisplayNamesHost.BackgroundSelfMeLid =>
+            _authState?.Me?.Lid;
+
+        Task IPersistBackgroundDisplayNamesHost.SaveBackgroundDisplayNamesAsync(
+            IReadOnlyDictionary<string, string> displayNames,
+            string meId,
+            string meLid) =>
+            BackgroundDisplayNameStore.SaveAsync(
+                displayNames as Dictionary<string, string> ??
+                    new Dictionary<string, string>(displayNames),
+                meId,
+                meLid);
+
+        void IPersistBackgroundDisplayNamesHost.WriteBackgroundDisplayNamesPersisted(int count) =>
+            RuntimeDiagnosticsService.Instance.Write(
+                "socket-broker",
+                "display-name-snapshot-persisted",
+                "count=" + count);
+
+        void IPersistBackgroundDisplayNamesHost.RecordBackgroundDisplayNamesFailed(Exception error) =>
+            RuntimeDiagnosticsService.Instance.RecordException(
+                "socket-broker",
+                "display-name-snapshot-failed",
+                error);
 
         private void QueueOfflineReplayMessageForPersist(string jid, ChatMessage message)
         {
@@ -221,37 +233,23 @@ namespace Unison.Uwp.Services.WhatsApp
             return _pendingMessages.SnapshotFor(chatJid, jid => GetCanonicalJid(NormalizeJid(jid)));
         }
 
-        private async Task PersistLiveMessagesAsync(string chatJid, IList<ChatMessage> messages)
-        {
-            if (_historyMessages == null || string.IsNullOrWhiteSpace(chatJid) || messages == null)
-            {
-                return;
-            }
+        private Task PersistLiveMessagesAsync(string chatJid, IList<ChatMessage> messages) =>
+            PersistLiveMessagesDispatch.RunAsync(this, chatJid, messages);
 
-            var list = new List<ChatMessage>();
-            for (int i = 0; i < messages.Count; i++)
-            {
-                if (messages[i] != null)
-                {
-                    list.Add(messages[i]);
-                }
-            }
+        // --- IPersistLiveMessagesHost ----------------------------------------
 
-            if (list.Count == 0)
-            {
-                return;
-            }
+        bool IPersistLiveMessagesHost.HasHistoryMessageStore => _historyMessages != null;
 
-            try
-            {
-                await _historyMessages.UpsertLiveMessagesAsync(NormalizeJid(chatJid), list).ConfigureAwait(false);
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine("[WhatsAppService] SQLite live persist failed: " + ex.Message);
-                throw;
-            }
-        }
+        string IPersistLiveMessagesHost.NormalizeChatJid(string chatJid) =>
+            NormalizeJid(chatJid);
+
+        Task IPersistLiveMessagesHost.UpsertLiveMessagesAsync(
+            string normalizedChatJid,
+            IReadOnlyList<ChatMessage> messages) =>
+            _historyMessages.UpsertLiveMessagesAsync(normalizedChatJid, messages);
+
+        void IPersistLiveMessagesHost.LogLivePersistFailed(string message) =>
+            Debug.WriteLine("[WhatsAppService] SQLite live persist failed: " + message);
 
         private void QueueMessagesForPersist(string jid, IEnumerable<ChatMessage> messages, bool queueIncomingJournal = true, bool scheduleFlush = true)
         {

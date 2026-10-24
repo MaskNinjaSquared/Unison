@@ -1101,29 +1101,32 @@ namespace Unison.Uwp.Services.WhatsApp
         /// Sends the unlink notice while the socket is still up. Silent when there is nothing to
         /// unlink from: an unregistered or already-closed session has nobody to tell.
         /// </summary>
-        public async Task NotifyServerLogoutAsync(string reason = null)
-        {
-            var socket = _socket;
-            if (socket == null)
-            {
-                return;
-            }
+        public Task NotifyServerLogoutAsync(string reason = null) =>
+            NotifyServerLogoutDispatch.RunAsync(this, reason);
 
+        // --- INotifyServerLogoutHost -----------------------------------------
+
+        bool INotifyServerLogoutHost.HasActiveSocket => _socket != null;
+
+        void INotifyServerLogoutHost.ArmUserLogoutDisconnectFlags()
+        {
             // The close this produces is the one we asked for, so the reconnect machinery must
             // not read it as the connection dropping under us.
             _suppressReconnect = true;
             _fatalSessionEnded = true;
-            StopConnectionHealthMonitor("logout");
-
-            try
-            {
-                await socket.LogoutAsync(reason ?? "user-initiated").ConfigureAwait(false);
-            }
-            catch (Exception ex)
-            {
-                RuntimeDiagnosticsService.Instance.RecordException("connection", "logout-notice-failed", ex);
-            }
         }
+
+        void INotifyServerLogoutHost.StopConnectionHealthMonitorForLogout(string reason) =>
+            StopConnectionHealthMonitor(reason);
+
+        Task INotifyServerLogoutHost.LogoutActiveSocketAsync(string reason) =>
+            _socket.LogoutAsync(reason);
+
+        void INotifyServerLogoutHost.RecordLogoutNoticeFailed(Exception error) =>
+            RuntimeDiagnosticsService.Instance.RecordException(
+                "connection",
+                "logout-notice-failed",
+                error);
 
         public Task ClearSessionAsync() => ClearSessionDispatch.RunAsync(this);
 
