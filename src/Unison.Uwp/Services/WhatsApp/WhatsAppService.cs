@@ -45,7 +45,7 @@ using Unison.WhatsAppClient.Helpers;
 
 namespace Unison.Uwp.Services.WhatsApp
 {
-    public partial class WhatsAppService : INotifyPropertyChanged, IWhatsAppService, IConnectionEventSource, IConnectionSessionHost, IOfflineReplayHost, IOfflineReplayReleaseHost, IOfflineReplayFlushHost, IIncomingPumpDrainHost, IChatCatalogPersistHost, IChatCatalogFullPersistHost, ILoadPersistedChatCatalogHost, IForgetChatStorageHost, IConnectionUpdateHost, ISocketErrorHost, IHistorySyncWireHost, ISessionInitializedHost, IQrCodeWireHost, IAuthStateWireHost, IInboundWireNodeHost, IDecryptedMessageWireHost, ISocketFacadeWireHost, IPostReplayMaintenanceHost, IPostMessageEnrichmentHost, IPlaceholderResendSocket, IHistoryOnDemandSocket, IRuntimeSnapshotSource, IBackgroundResolutionGate, IAppStateLocalHost, IConversationResyncHost, IHistorySyncHost, IHistoryCatchUpHost, IConnectionEnsureHost, IConnectionResumeHost, IConnectionPairingStage2Host, IConnectionBrokerTransferHost, IConnectionSoftReconnectHost, IConnectionLifecycleHost, IConnectionConnectGateSource, IConnectionConnectPrepareHost, IConnectionConnectOpenHost, ISocketAliasRegistrar, IStartupUiHost, IJidAliasPersistence, IIncomingMessageEnqueueHost, IResolvedNameApplyHost, IHistoryHydrationBackfillHost, ISqliteHistoryQuietFinalizeHost, IHistoryPostOfflineFreshnessHost, IDeferredStartupMaintenanceHost, IHistoryCatchUpFinishHost, IUserResyncFullHistoryHost, IFreshnessReconnectFallbackHost, ICatchUpContinueReconnectHost, IFirstSyncListReleaseHost, IFullHistoryCatchUpProgressHost
+    public partial class WhatsAppService : INotifyPropertyChanged, IWhatsAppService, IConnectionEventSource, IConnectionSessionHost, IOfflineReplayHost, IOfflineReplayReleaseHost, IOfflineReplayFlushHost, IIncomingPumpDrainHost, IChatCatalogPersistHost, IChatCatalogFullPersistHost, ILoadPersistedChatCatalogHost, IForgetChatStorageHost, IConnectionUpdateHost, ISocketErrorHost, IHistorySyncWireHost, ISessionInitializedHost, IQrCodeWireHost, IAuthStateWireHost, IInboundWireNodeHost, IDecryptedMessageWireHost, ISocketFacadeWireHost, IPostReplayMaintenanceHost, IPostMessageEnrichmentHost, IPlaceholderResendSocket, IHistoryOnDemandSocket, IRuntimeSnapshotSource, IBackgroundResolutionGate, IAppStateLocalHost, IConversationResyncHost, IHistorySyncHost, IHistoryCatchUpHost, IConnectionEnsureHost, IConnectionResumeHost, IConnectionPairingStage2Host, IConnectionBrokerTransferHost, IConnectionSoftReconnectHost, IConnectionLifecycleHost, IConnectionConnectGateSource, IConnectionConnectPrepareHost, IConnectionConnectOpenHost, ISocketAliasRegistrar, IStartupUiHost, IJidAliasPersistence, IIncomingMessageEnqueueHost, IResolvedNameApplyHost, IHistoryHydrationBackfillHost, ISqliteHistoryQuietFinalizeHost, IHistoryPostOfflineFreshnessHost, IDeferredStartupMaintenanceHost, IHistoryCatchUpFinishHost, IUserResyncFullHistoryHost, IFreshnessReconnectFallbackHost, ICatchUpContinueReconnectHost, IFirstSyncListReleaseHost, IFullHistoryCatchUpProgressHost, IHistorySqliteChunkAppliedHost
     {
         public event PropertyChangedEventHandler PropertyChanged;
         protected void OnPropertyChanged([CallerMemberName] string propertyName = null)
@@ -1750,76 +1750,82 @@ namespace Unison.Uwp.Services.WhatsApp
             _ = FlushOfflineReplayMessagesAsync(reason);
 
         /// <inheritdoc />
-        public void NotifyHistorySqliteChunkApplied(string syncType, int conversationCount)
-        {
-            HistorySqliteChunkClassify.Classify(
-                syncType,
-                out string type,
-                out bool isOnDemand,
-                out bool isFull);
-            int count = HistorySqliteChunkClassify.ClampConversationCount(conversationCount);
+        public void NotifyHistorySqliteChunkApplied(string syncType, int conversationCount) =>
+            HistorySqliteChunkAppliedDispatch.Run(this, syncType, conversationCount);
 
+        // --- IHistorySqliteChunkAppliedHost ----------------------------------
+
+        int IHistorySqliteChunkAppliedHost.SqliteHistoryFullFinalizeDelayMs =>
+            SqliteHistoryFullFinalizeDelayMs;
+
+        int IHistorySqliteChunkAppliedHost.SqliteHistoryFinalizeQuietMs =>
+            SqliteHistoryFinalizeQuietMs;
+
+        bool IHistorySqliteChunkAppliedHost.IsEnrichmentAwaitingHeavyHistory =>
+            Interlocked.CompareExchange(ref _enrichmentAwaitingHeavyHistory, 0, 0) == 1;
+
+        int IHistorySqliteChunkAppliedHost.SqliteHistoryConversationsAccumulated =>
+            _sqliteHistoryConversationsAccumulated;
+
+        void IHistorySqliteChunkAppliedHost.MarkHistorySyncReceivedNow() =>
             _lastHistorySyncReceivedUtc = DateTime.UtcNow;
-            NoteFullHistoryCatchUpProgress(
-                "sqlite-applied:" + type + ":conversations=" + count);
 
-            if (!isOnDemand)
+        void IHistorySqliteChunkAppliedHost.NoteFullHistoryCatchUpProgress(string reason) =>
+            NoteFullHistoryCatchUpProgress(reason);
+
+        int IHistorySqliteChunkAppliedHost.AddSqliteHistoryConversations(int count)
+        {
+            _sqliteHistoryConversationsAccumulated =
+                Math.Max(0, _sqliteHistoryConversationsAccumulated) + count;
+            return _sqliteHistoryConversationsAccumulated;
+        }
+
+        void IHistorySqliteChunkAppliedHost.PublishInitialSyncProgress(
+            bool isActive,
+            bool isCompleted,
+            int processed,
+            int total,
+            string stage) =>
+            PublishInitialSyncProgress(isActive, isCompleted, processed, total, stage);
+
+        int IHistorySqliteChunkAppliedHost.NextSqliteHistoryFinalizeGeneration() =>
+            Interlocked.Increment(ref _sqliteHistoryFinalizeGeneration);
+
+        void IHistorySqliteChunkAppliedHost.FinalizeSqliteHistoryAfterQuiet(
+            int generation,
+            int delayMs,
+            int processed) =>
+            _ = FinalizeSqliteHistoryProgressAfterQuietAsync(generation, delayMs, processed);
+
+        void IHistorySqliteChunkAppliedHost.CompleteUserResyncHistoryWait(string reason) =>
+            CompleteUserResyncHistoryWait(reason);
+
+        void IHistorySqliteChunkAppliedHost.RememberLastHistorySyncType(string type)
+        {
+            try
             {
-                _sqliteHistoryConversationsAccumulated =
-                    Math.Max(0, _sqliteHistoryConversationsAccumulated) + count;
-                int processed = _sqliteHistoryConversationsAccumulated;
-
-                // Total unknown until Full (or quiet finalize): count-only UI ("N loaded").
-                // Full still uses processed as total so the banner can show "N of N" then complete.
-                int total = HistorySqliteChunkClassify.ProgressTotal(isFull, processed);
-
-                PublishInitialSyncProgress(
-                    true,
-                    false,
-                    processed,
-                    total,
-                    HistorySqliteChunkClassify.AppliedProgressReason(isFull));
-
-                int generation = Interlocked.Increment(ref _sqliteHistoryFinalizeGeneration);
-                int delayMs = HistorySqliteChunkClassify.FinalizeDelayMs(
-                    isFull,
-                    SqliteHistoryFullFinalizeDelayMs,
-                    SqliteHistoryFinalizeQuietMs);
-                _ = FinalizeSqliteHistoryProgressAfterQuietAsync(generation, delayMs, processed);
-            }
-
-            if (HistorySqliteChunkClassify.ShouldCompleteUserResync(count, isFull))
-            {
-                CompleteUserResyncHistoryWait("history-sqlite:" + type);
-            }
-
-            bool awaitingCatchUp =
-                Interlocked.CompareExchange(ref _enrichmentAwaitingHeavyHistory, 0, 0) == 1;
-            if (HistorySqliteChunkClassify.ShouldReleaseEnrichment(
-                    isFull,
-                    awaitingCatchUp,
-                    count))
-            {
-                try
+                Proto.HistorySync.Types.HistorySyncType parsed;
+                if (Enum.TryParse(type, ignoreCase: true, out parsed))
                 {
-                    Proto.HistorySync.Types.HistorySyncType parsed;
-                    if (Enum.TryParse(type, ignoreCase: true, out parsed))
-                    {
-                        _lastHistorySyncTypeReceived = parsed;
-                    }
+                    _lastHistorySyncTypeReceived = parsed;
                 }
-                catch
-                {
-                }
-
-                ReleaseEnrichmentAfterHeavyHistory(type);
             }
+            catch
+            {
+            }
+        }
 
+        void IHistorySqliteChunkAppliedHost.ReleaseEnrichmentAfterHeavyHistory(string type) =>
+            ReleaseEnrichmentAfterHeavyHistory(type);
+
+        void IHistorySqliteChunkAppliedHost.LogHistorySqliteChunkApplied(
+            string type,
+            int count,
+            int accumulated) =>
             Log(
                 "[WhatsAppService] History SQLite path applied (type=" + type +
                 ", conversations=" + count +
-                ", accumulated=" + _sqliteHistoryConversationsAccumulated + ").");
-        }
+                ", accumulated=" + accumulated + ").");
 
         /// <summary>
         /// Called when a non-on-demand history chunk starts persisting so the chat list can show
