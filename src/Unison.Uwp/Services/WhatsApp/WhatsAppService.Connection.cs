@@ -47,12 +47,26 @@ namespace Unison.Uwp.Services.WhatsApp
             return new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         }
 
-        private async Task PersistAuthStateAsync(IWhatsAppSocket sourceSocket, string reason)
+        private Task PersistAuthStateAsync(IWhatsAppSocket sourceSocket, string reason) =>
+            PersistAuthStateDispatch.RunAsync(this, sourceSocket, reason);
+
+        // --- IPersistAuthStateHost -------------------------------------------
+
+        object IPersistAuthStateHost.ResolveAuthToSave(object sourceSocket)
         {
-            var authToSave = sourceSocket?.Auth ?? _socket?.Auth ?? _authState;
+            var typed = sourceSocket as IWhatsAppSocket;
+            return typed?.Auth ?? _socket?.Auth ?? _authState;
+        }
+
+        void IPersistAuthStateHost.LogSkipAuthStateSave(string reason) =>
+            Debug.WriteLine(
+                $"[WhatsAppService] Skipping auth-state save for {reason}: no live auth state");
+
+        async Task IPersistAuthStateHost.AssignAndSaveAuthAsync(object auth)
+        {
+            var authToSave = auth as AuthState;
             if (authToSave == null)
             {
-                Debug.WriteLine($"[WhatsAppService] Skipping auth-state save for {reason}: no live auth state");
                 return;
             }
 
@@ -60,21 +74,20 @@ namespace Unison.Uwp.Services.WhatsApp
             await _authStore.SaveAsync(authToSave);
         }
 
-        private async Task WaitForSessionEstablishedAsync(string reason)
-        {
-            var gate = _sessionEstablishedTcs;
+        private Task WaitForSessionEstablishedAsync(string reason) =>
+            WaitForSessionEstablishedDispatch.RunAsync(this, reason);
+
+        // --- IWaitForSessionEstablishedHost ----------------------------------
+
+        void IWaitForSessionEstablishedHost.LogWaitingForSession(string reason) =>
             Log($"[WhatsAppService] Waiting for session establishment before processing {reason}.");
 
-            try
-            {
-                await gate.Task;
-            }
-            catch (Exception ex)
-            {
-                Log($"[WhatsAppService] Startup gate completed abnormally while waiting to process {reason}; aborting gated work. {ex.Message}");
-                throw;
-            }
-        }
+        Task IWaitForSessionEstablishedHost.WaitSessionEstablishedGateAsync() =>
+            _sessionEstablishedTcs.Task;
+
+        void IWaitForSessionEstablishedHost.LogSessionGateAborted(string reason, Exception error) =>
+            Log(
+                $"[WhatsAppService] Startup gate completed abnormally while waiting to process {reason}; aborting gated work. {error.Message}");
 
         private void PublishConnectionUpdate(string status) =>
             PublishConnectionUpdateDispatch.Run(this, status);
