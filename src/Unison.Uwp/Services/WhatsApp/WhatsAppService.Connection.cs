@@ -159,14 +159,18 @@ namespace Unison.Uwp.Services.WhatsApp
             return sender != null && ReferenceEquals(_socket, sender);
         }
 
-        private void StopConnectionHealthMonitor(string reason)
+        private void StopConnectionHealthMonitor(string reason) =>
+            StopConnectionHealthMonitorDispatch.Run(this, reason);
+
+        // --- IStopConnectionHealthMonitorHost --------------------------------
+
+        bool IStopConnectionHealthMonitorHost.TryCancelConnectionHealthMonitor()
         {
             var cts = _connectionHealthCts;
             _connectionHealthCts = null;
             if (cts == null)
             {
-                StopPeriodicFullHistorySafety(reason);
-                return;
+                return false;
             }
 
             try
@@ -178,23 +182,38 @@ namespace Unison.Uwp.Services.WhatsApp
             {
             }
 
-            Debug.WriteLine($"[WhatsAppService] Connection health monitor stopped: {reason}");
-            StopPeriodicFullHistorySafety(reason);
+            return true;
         }
 
-        private void StartConnectionHealthMonitor(IWhatsAppSocket socket)
+        void IStopConnectionHealthMonitorHost.LogConnectionHealthMonitorStopped(string reason) =>
+            Debug.WriteLine($"[WhatsAppService] Connection health monitor stopped: {reason}");
+
+        void IStopConnectionHealthMonitorHost.StopPeriodicFullHistorySafety(string reason) =>
+            StopPeriodicFullHistorySafety(reason);
+
+        private void StartConnectionHealthMonitor(IWhatsAppSocket socket) =>
+            StartConnectionHealthMonitorDispatch.Run(this, socket);
+
+        // --- IStartConnectionHealthMonitorHost -------------------------------
+
+        void IStartConnectionHealthMonitorHost.StopConnectionHealthMonitor(string reason) =>
+            StopConnectionHealthMonitor(reason);
+
+        void IStartConnectionHealthMonitorHost.StartConnectionHealthLoop(object socket)
         {
-            StopConnectionHealthMonitor("restart");
-            if (socket == null)
+            var typed = socket as IWhatsAppSocket;
+            if (typed == null)
             {
                 return;
             }
 
             var cts = new CancellationTokenSource();
             _connectionHealthCts = cts;
-            _connectionHealthTask = Task.Run(() => ConnectionHealthLoopAsync(socket, cts.Token));
-            StartPeriodicFullHistorySafety();
+            _connectionHealthTask = Task.Run(() => ConnectionHealthLoopAsync(typed, cts.Token));
         }
+
+        void IStartConnectionHealthMonitorHost.StartPeriodicFullHistorySafety() =>
+            StartPeriodicFullHistorySafety();
 
 
         private void WireSocketEventHandlers(IWhatsAppSocket socket) =>
@@ -796,40 +815,40 @@ namespace Unison.Uwp.Services.WhatsApp
         /// <summary>
         /// Owns stage-2 reconnect after pair-success / 515. Idempotent under <see cref="_isReconnecting"/>.
         /// </summary>
-        private void TryStartPairingStage2Reconnect(string reason)
-        {
-            if (ConnectionSoftReconnectGates.ShouldSkipPairingStage2Start(
-                    _suppressReconnect,
-                    _fatalSessionEnded))
-            {
-                PairingTrace("stage2-reconnect skipped (suppress/fatal) reason=" + (reason ?? string.Empty));
-                return;
-            }
+        private void TryStartPairingStage2Reconnect(string reason) =>
+            TryStartPairingStage2ReconnectDispatch.Run(this, reason);
 
+        // --- ITryStartPairingStage2ReconnectHost -----------------------------
+
+        bool ITryStartPairingStage2ReconnectHost.SuppressReconnect => _suppressReconnect;
+
+        bool ITryStartPairingStage2ReconnectHost.FatalSessionEnded => _fatalSessionEnded;
+
+        void ITryStartPairingStage2ReconnectHost.TracePairingStage2(string message) =>
+            PairingTrace(message);
+
+        void ITryStartPairingStage2ReconnectHost.MarkPairingRestartPending(string reason) =>
             MarkPairingRestartPending(reason);
 
-            bool start = false;
+        bool ITryStartPairingStage2ReconnectHost.TryClaimReconnectSlot()
+        {
             lock (_reconnectStateLock)
             {
-                if (!_isReconnecting)
+                if (_isReconnecting)
                 {
-                    _isReconnecting = true;
-                    start = true;
+                    return false;
                 }
-            }
 
-            if (!start)
-            {
-                PairingTrace(
-                    "stage2-reconnect already in-flight reason=" + (reason ?? string.Empty) +
-                    " — leaving ownership to current reconnect (pairingRestartPending=true blocks generic loop)");
-                return;
+                _isReconnecting = true;
+                return true;
             }
-
-            StopConnectionHealthMonitor("pairing-restart");
-            PairingTrace("stage2-reconnect START reason=" + (reason ?? string.Empty));
-            _ = ReconnectForPairingAsync();
         }
+
+        void ITryStartPairingStage2ReconnectHost.StopConnectionHealthMonitor(string reason) =>
+            StopConnectionHealthMonitor(reason);
+
+        void ITryStartPairingStage2ReconnectHost.FireAndForgetPairingStage2Reconnect() =>
+            _ = ReconnectForPairingAsync();
 
         private void ScheduleAutoReconnect(string reason) =>
             ScheduleAutoReconnectDispatch.Schedule(this, reason);
@@ -1545,66 +1564,86 @@ namespace Unison.Uwp.Services.WhatsApp
         void IConnectionBrokerTransferHost.RecordBrokerException(string eventName, Exception error) =>
             RuntimeDiagnosticsService.Instance.RecordException("socket-broker", eventName, error);
 
-        private async Task<bool> IsCurrentSocketHealthyAsync()
+        /// <summary>
+        /// The verified keep-alive normally produces an inbound IQ result every
+        /// twenty seconds. Fresh frames alone are not sufficient when the ordered
+        /// protocol queue stopped making progress: in that state the socket can
+        /// answer pings while user messages never reach the application.
+        /// </summary>
+        private Task<bool> IsCurrentSocketHealthyAsync() =>
+            IsCurrentSocketHealthyDispatch.RunAsync(this);
+
+        // --- IIsCurrentSocketHealthyHost -------------------------------------
+
+        object IIsCurrentSocketHealthyHost.CurrentSocket => _socket;
+
+        bool IIsCurrentSocketHealthyHost.SocketHasStalledNodeProcessing(object socket)
         {
-            var socket = _socket;
-            // The verified keep-alive normally produces an inbound IQ result every
-            // twenty seconds. Fresh frames alone are not sufficient when the ordered
-            // protocol queue stopped making progress: in that state the socket can
-            // answer pings while user messages never reach the application.
-            var profile = ConnectionHealthProfile.OnDemand;
-            bool nodeStalled = socket != null &&
-                socket.HasStalledNodeProcessing(ConnectionHealthPolicy.NodeProcessingStallLimit);
-            bool connectionFresh = socket != null &&
-                socket.HasFreshConnection(profile.FreshnessLimit);
-            OnDemandSocketHealthStep step = ConnectionHealthPolicy.DecideOnDemand(
-                socket != null,
-                socket != null && socket.IsConnected,
-                socket != null && socket.IsHandshakeComplete,
-                nodeStalled,
-                connectionFresh);
+            var typed = socket as IWhatsAppSocket;
+            return typed != null &&
+                typed.HasStalledNodeProcessing(ConnectionHealthPolicy.NodeProcessingStallLimit);
+        }
 
-            if (step == OnDemandSocketHealthStep.NotReady)
+        bool IIsCurrentSocketHealthyHost.SocketHasFreshConnection(object socket)
+        {
+            var typed = socket as IWhatsAppSocket;
+            return typed != null &&
+                typed.HasFreshConnection(ConnectionHealthProfile.OnDemand.FreshnessLimit);
+        }
+
+        bool IIsCurrentSocketHealthyHost.SocketIsConnected(object socket) =>
+            socket is IWhatsAppSocket typed && typed.IsConnected;
+
+        bool IIsCurrentSocketHealthyHost.SocketIsHandshakeComplete(object socket) =>
+            socket is IWhatsAppSocket typed && typed.IsHandshakeComplete;
+
+        int IIsCurrentSocketHealthyHost.SocketQueuedNodeProcessingCount(object socket) =>
+            socket is IWhatsAppSocket typed ? typed.QueuedNodeProcessingCount : 0;
+
+        void IIsCurrentSocketHealthyHost.LogNodeQueueStalled(int depth) =>
+            Debug.WriteLine(
+                "[WhatsAppService] Socket node queue is stalled (depth=" + depth + ")");
+
+        Task<bool> IIsCurrentSocketHealthyHost.ProbeSocketConnectionAsync(object socket)
+        {
+            var typed = socket as IWhatsAppSocket;
+            if (typed == null)
             {
-                return false;
+                return Task.FromResult(false);
             }
 
-            if (step == OnDemandSocketHealthStep.Healthy)
+            return typed.ProbeConnectionAsync(ConnectionHealthProfile.OnDemand.ProbeTimeoutMs);
+        }
+
+        bool IIsCurrentSocketHealthyHost.SuppressReconnect
+        {
+            get => _suppressReconnect;
+            set => _suppressReconnect = value;
+        }
+
+        void IIsCurrentSocketHealthyHost.DisconnectSocket(object socket)
+        {
+            var typed = socket as IWhatsAppSocket;
+            if (typed == null)
             {
-                return true;
+                return;
             }
 
-            if (step == OnDemandSocketHealthStep.TearDown)
-            {
-                Debug.WriteLine(
-                    "[WhatsAppService] Socket node queue is stalled (depth=" +
-                    socket.QueuedNodeProcessingCount + ")");
-            }
-            else if (step == OnDemandSocketHealthStep.Probe &&
-                     await socket.ProbeConnectionAsync(profile.ProbeTimeoutMs))
-            {
-                return true;
-            }
-
-            bool previousSuppressReconnect = _suppressReconnect;
-            _suppressReconnect = true;
             try
             {
-                socket.Disconnect();
+                typed.Disconnect();
             }
             catch
             {
             }
-            finally
-            {
-                _suppressReconnect = previousSuppressReconnect;
-            }
+        }
 
+        void IIsCurrentSocketHealthyHost.ClearCurrentSocketIfSame(object socket)
+        {
             if (ReferenceEquals(_socket, socket))
             {
                 _socket = null;
             }
-            return false;
         }
 
         /// <summary>
