@@ -188,9 +188,10 @@ lifecycle stay on the host (not this phase).
 Helpers under `Contacts/` (`ContactNameResolver`, `ChatAvatarPolicy`, `GroupRosterPolicy`,
 `AddressBookOverlay`) no longer take the god client — they use `SyncStatusChannel`,
 `IWhatsAppSessionProvider.IsTransportReady`, `IChatAvatarFetch`, and stores. Remaining
-Phase B host ownership: post-replay / post-message enrichment scheduling (partially
-extracted as `PostReplayMaintenanceDispatch`), offline-replay flush/timer, and the
-incoming pump drain loop until Netstandard D.
+Phase B host ownership: post-replay / post-message enrichment scheduling extracted
+as `PostReplayMaintenanceDispatch` and `PostMessageEnrichmentDispatch` (CAS/CTS
+still on the host); offline-replay flush/timer and the incoming pump drain loop
+remain until Netstandard D.
 
 Primitives that already left the contract (façade / Netstandard Phase A):
 
@@ -1294,7 +1295,8 @@ notification release is `OfflineReplayRelease` over `IOfflineReplayReleaseHost`
 `ConnectionUpdateDispatch`, `SocketErrorDispatch`, `HistorySyncWireApply`,
 `SessionInitializedDispatch`, `OfflineReplayRelease`, `QrCodeWireDispatch`,
 `AuthStateWireDispatch`, `InboundWireNodeDispatch`, `DecryptedMessageWireDispatch`,
-`SocketFacadeWireDispatch`, and `PostReplayMaintenanceDispatch` (each over a host port).
+`SocketFacadeWireDispatch`, `PostReplayMaintenanceDispatch`, and
+`PostMessageEnrichmentDispatch` (each over a host port).
 
 **The open conversation is shared state.** `ActiveChat` (`Unison.Core/State`, DI singleton over
 `JidAliasTable.GetCanonicalJid`) holds the conversation the user has open by its canonical

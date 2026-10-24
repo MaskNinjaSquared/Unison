@@ -44,7 +44,7 @@ using Unison.WhatsAppClient.Helpers;
 
 namespace Unison.Uwp.Services.WhatsApp
 {
-    public partial class WhatsAppService : INotifyPropertyChanged, IWhatsAppService, IOfflineReplayHost, IOfflineReplayReleaseHost, IConnectionUpdateHost, ISocketErrorHost, IHistorySyncWireHost, ISessionInitializedHost, IQrCodeWireHost, IAuthStateWireHost, IInboundWireNodeHost, IDecryptedMessageWireHost, ISocketFacadeWireHost, IPostReplayMaintenanceHost, IPlaceholderResendSocket, IHistoryOnDemandSocket, IRuntimeSnapshotSource, IBackgroundResolutionGate, IAppStateLocalHost, IConversationResyncHost, IHistorySyncHost, IHistoryCatchUpHost, IConnectionEnsureHost, IConnectionResumeHost, IConnectionPairingStage2Host, IConnectionBrokerTransferHost, IConnectionSoftReconnectHost, IConnectionLifecycleHost, IConnectionConnectGateSource, IConnectionConnectPrepareHost, IConnectionConnectOpenHost, ISocketAliasRegistrar, IStartupUiHost, IJidAliasPersistence, IIncomingMessageEnqueueHost, Unison.WhatsAppClient.Abstractions.IResolvedNameApplyHost
+    public partial class WhatsAppService : INotifyPropertyChanged, IWhatsAppService, IOfflineReplayHost, IOfflineReplayReleaseHost, IConnectionUpdateHost, ISocketErrorHost, IHistorySyncWireHost, ISessionInitializedHost, IQrCodeWireHost, IAuthStateWireHost, IInboundWireNodeHost, IDecryptedMessageWireHost, ISocketFacadeWireHost, IPostReplayMaintenanceHost, IPostMessageEnrichmentHost, IPlaceholderResendSocket, IHistoryOnDemandSocket, IRuntimeSnapshotSource, IBackgroundResolutionGate, IAppStateLocalHost, IConversationResyncHost, IHistorySyncHost, IHistoryCatchUpHost, IConnectionEnsureHost, IConnectionResumeHost, IConnectionPairingStage2Host, IConnectionBrokerTransferHost, IConnectionSoftReconnectHost, IConnectionLifecycleHost, IConnectionConnectGateSource, IConnectionConnectPrepareHost, IConnectionConnectOpenHost, ISocketAliasRegistrar, IStartupUiHost, IJidAliasPersistence, IIncomingMessageEnqueueHost, Unison.WhatsAppClient.Abstractions.IResolvedNameApplyHost
     {
         public event PropertyChangedEventHandler PropertyChanged;
         protected void OnPropertyChanged([CallerMemberName] string propertyName = null)
@@ -1563,62 +1563,15 @@ namespace Unison.Uwp.Services.WhatsApp
         /// Names / groups / avatars after messages. Skips while a heavy history catch-up is owed
         /// or in flight so reconnect does not spend the socket on USync before the backlog.
         /// </summary>
-        private void TrySchedulePostMessageEnrichment(string reason)
-        {
-            if (Interlocked.CompareExchange(ref _enrichmentAwaitingHeavyHistory, 0, 0) == 1)
-            {
-                Debug.WriteLine(
-                    "[WhatsAppService] Post-message enrichment deferred until heavy history finishes (" +
-                    reason + ")");
-                    return;
-                }
-
-            string catchUpDeferReason = HistoryCatchUpLocalWorkPolicy.DeferReason(
-                IsHistoryCatchUpActive());
-            if (catchUpDeferReason != null)
-            {
-                Interlocked.Exchange(ref _enrichmentAwaitingHeavyHistory, 1);
-                Debug.WriteLine(
-                    "[WhatsAppService] Post-message enrichment deferred (" + catchUpDeferReason +
-                    "; " + reason + ")");
-                RuntimeDiagnosticsService.Instance.Write(
-                    "startup",
-                    "post-message-enrichment-deferred",
-                    "reason=" + (reason ?? string.Empty) + "; " + catchUpDeferReason);
-                return;
-            }
-
-            if (_historyRequests.IsFullInFlight)
-            {
-                Interlocked.Exchange(ref _enrichmentAwaitingHeavyHistory, 1);
-                Debug.WriteLine(
-                    "[WhatsAppService] Post-message enrichment armed for after FULL_HISTORY (" +
-                    reason + ")");
-                    return;
-                }
-
-            if (_listPaintGate != null && !_listPaintGate.IsReleased)
-            {
-                Interlocked.Exchange(ref _enrichmentAwaitingListPaint, 1);
-                Debug.WriteLine(
-                    "[WhatsAppService] Post-message enrichment deferred until chat list paint (" +
-                    reason + ")");
-                    RuntimeDiagnosticsService.Instance.Write(
-                    "startup",
-                    "post-message-enrichment-deferred-list-paint",
-                    "reason=" + (reason ?? string.Empty));
-                    return;
-                }
-
-            SchedulePostMessageEnrichment(reason);
-        }
+        private void TrySchedulePostMessageEnrichment(string reason) =>
+            PostMessageEnrichmentDispatch.TrySchedule(this, reason);
 
         private void OnChatListInitialPaintReleased(object sender, EventArgs e)
         {
             if (Interlocked.Exchange(ref _enrichmentAwaitingListPaint, 0) != 1)
             {
-                        return;
-                    }
+                return;
+            }
 
             TrySchedulePostMessageEnrichment("list-paint-released");
         }
@@ -1630,8 +1583,8 @@ namespace Unison.Uwp.Services.WhatsApp
                 Debug.WriteLine(
                     "[WhatsAppService] Post-message enrichment already started this session (" +
                     reason + ")");
-                    return;
-                }
+                return;
+            }
 
             Interlocked.Exchange(ref _enrichmentAwaitingHeavyHistory, 0);
 
@@ -1646,7 +1599,7 @@ namespace Unison.Uwp.Services.WhatsApp
             _postMessageEnrichmentCts = cts;
 
             Debug.WriteLine("[WhatsAppService] Scheduling post-message enrichment (" + reason + ")");
-                        RuntimeDiagnosticsService.Instance.Write(
+            RuntimeDiagnosticsService.Instance.Write(
                 "startup",
                 "post-message-enrichment-scheduled",
                 "reason=" + reason);
@@ -1655,59 +1608,8 @@ namespace Unison.Uwp.Services.WhatsApp
             {
                 try
                 {
-                    TimeSpan quiet = TimeSpan.FromSeconds(_workload.PostSyncEnrichmentQuietSeconds);
-                    if (!await WaitForStartupQuietAsync(quiet, "post-message-enrich", token) ||
-                        !IsConnected ||
-                        !Unison.Uwp.App.IsWindowVisible)
-                    {
-                        RaiseSyncStatus(null);
-                                return;
-                            }
-
-                    using (TraceStartupPhase("post-replay-names"))
-                    {
-                        await (Contacts?.ResolveMissingNamesAsync() ?? Task.CompletedTask)
-                            .ConfigureAwait(false);
-                    }
-
-                    if (!await WaitForStartupQuietAsync(quiet, "post-message-enrich-contacts", token) ||
-                        !IsConnected ||
-                        !Unison.Uwp.App.IsWindowVisible)
-                    {
-                        RaiseSyncStatus(null);
-                    return;
-                }
-
-                    using (TraceStartupPhase("post-replay-contacts"))
-                    {
-                        await (Contacts?.RefreshContactNamesAsync(includeGroups: false, force: false)
-                            ?? Task.CompletedTask).ConfigureAwait(false);
-                    }
-
-                    if (_workload.SerializePostSyncEnrichment)
-                    {
-                        await RunSerializedPostSyncEnrichmentAsync(quiet, token).ConfigureAwait(false);
-                }
-                else
-                {
-                        Contacts?.TriggerBackgroundResolution();
-                    }
-
-                    RuntimeDiagnosticsService.Instance.Write(
-                        "startup",
-                        "post-message-enrichment-complete",
-                        "reason=" + reason + "; serial=" + _workload.SerializePostSyncEnrichment);
-                }
-                catch (TaskCanceledException)
-                {
-                }
-                catch (Exception ex)
-                {
-                RuntimeDiagnosticsService.Instance.RecordException(
-                        "startup",
-                        "post-message-enrichment-failed",
-                        ex,
-                        "reason=" + reason);
+                    await PostMessageEnrichmentDispatch.RunAsync(this, reason, token)
+                        .ConfigureAwait(false);
                 }
                 finally
                 {
@@ -1719,6 +1621,117 @@ namespace Unison.Uwp.Services.WhatsApp
                 }
             });
         }
+
+        bool IPostMessageEnrichmentHost.EnrichmentAwaitingHeavyHistory =>
+            Interlocked.CompareExchange(ref _enrichmentAwaitingHeavyHistory, 0, 0) == 1;
+
+        bool IPostMessageEnrichmentHost.IsHistoryCatchUpActive => IsHistoryCatchUpActive();
+
+        bool IPostMessageEnrichmentHost.IsFullHistoryInFlight =>
+            _historyRequests.IsFullInFlight;
+
+        bool IPostMessageEnrichmentHost.IsListPaintPending =>
+            _listPaintGate != null && !_listPaintGate.IsReleased;
+
+        bool IPostMessageEnrichmentHost.IsConnected => IsConnected;
+
+        bool IPostMessageEnrichmentHost.IsWindowVisible => Unison.Uwp.App.IsWindowVisible;
+
+        bool IPostMessageEnrichmentHost.SerializePostSyncEnrichment =>
+            _workload.SerializePostSyncEnrichment;
+
+        TimeSpan IPostMessageEnrichmentHost.EnrichmentQuietWait =>
+            TimeSpan.FromSeconds(_workload.PostSyncEnrichmentQuietSeconds);
+
+        void IPostMessageEnrichmentHost.LogDeferUntilHeavyFinishes(string reason) =>
+            Debug.WriteLine(
+                "[WhatsAppService] Post-message enrichment deferred until heavy history finishes (" +
+                reason + ")");
+
+        void IPostMessageEnrichmentHost.MarkAwaitingHeavyHistory() =>
+            Interlocked.Exchange(ref _enrichmentAwaitingHeavyHistory, 1);
+
+        void IPostMessageEnrichmentHost.WriteCatchUpDeferred(
+            string reason,
+            string catchUpDeferReason)
+        {
+            Debug.WriteLine(
+                "[WhatsAppService] Post-message enrichment deferred (" + catchUpDeferReason +
+                "; " + reason + ")");
+            RuntimeDiagnosticsService.Instance.Write(
+                "startup",
+                "post-message-enrichment-deferred",
+                "reason=" + (reason ?? string.Empty) + "; " + catchUpDeferReason);
+        }
+
+        void IPostMessageEnrichmentHost.LogArmAfterFullHistory(string reason) =>
+            Debug.WriteLine(
+                "[WhatsAppService] Post-message enrichment armed for after FULL_HISTORY (" +
+                reason + ")");
+
+        void IPostMessageEnrichmentHost.MarkAwaitingListPaint() =>
+            Interlocked.Exchange(ref _enrichmentAwaitingListPaint, 1);
+
+        void IPostMessageEnrichmentHost.WriteListPaintDeferred(string reason)
+        {
+            Debug.WriteLine(
+                "[WhatsAppService] Post-message enrichment deferred until chat list paint (" +
+                reason + ")");
+            RuntimeDiagnosticsService.Instance.Write(
+                "startup",
+                "post-message-enrichment-deferred-list-paint",
+                "reason=" + (reason ?? string.Empty));
+        }
+
+        void IPostMessageEnrichmentHost.BeginEnrichmentSchedule(string reason) =>
+            SchedulePostMessageEnrichment(reason);
+
+        Task<bool> IPostMessageEnrichmentHost.WaitForStartupQuietAsync(
+            TimeSpan timeout,
+            string phase,
+            CancellationToken token) =>
+            WaitForStartupQuietAsync(timeout, phase, token);
+
+        void IPostMessageEnrichmentHost.ClearSyncStatus() => RaiseSyncStatus(null);
+
+        async Task IPostMessageEnrichmentHost.ResolveMissingNamesAsync(CancellationToken token)
+        {
+            using (TraceStartupPhase("post-replay-names"))
+            {
+                await (Contacts?.ResolveMissingNamesAsync() ?? Task.CompletedTask)
+                    .ConfigureAwait(false);
+            }
+        }
+
+        async Task IPostMessageEnrichmentHost.RefreshContactNamesAsync(CancellationToken token)
+        {
+            using (TraceStartupPhase("post-replay-contacts"))
+            {
+                await (Contacts?.RefreshContactNamesAsync(includeGroups: false, force: false)
+                    ?? Task.CompletedTask).ConfigureAwait(false);
+            }
+        }
+
+        Task IPostMessageEnrichmentHost.RunSerializedEnrichmentAsync(
+            TimeSpan quiet,
+            CancellationToken token) =>
+            RunSerializedPostSyncEnrichmentAsync(quiet, token);
+
+        void IPostMessageEnrichmentHost.TriggerBackgroundResolution() =>
+            Contacts?.TriggerBackgroundResolution();
+
+        void IPostMessageEnrichmentHost.WriteComplete(string reason, bool serialized) =>
+            RuntimeDiagnosticsService.Instance.Write(
+                "startup",
+                "post-message-enrichment-complete",
+                "reason=" + reason + "; serial=" + serialized);
+
+        void IPostMessageEnrichmentHost.RecordFailed(Exception ex, string reason) =>
+            RuntimeDiagnosticsService.Instance.RecordException(
+                "startup",
+                "post-message-enrichment-failed",
+                ex,
+                "reason=" + reason);
 
         /// <summary>
         /// Low-memory path: one avatar pass, then group listing, each behind its own quiet gap.

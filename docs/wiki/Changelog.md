@@ -2,6 +2,13 @@
 
 Newest first.
 
+## Extract — PostMessageEnrichmentDispatch
+
+`PostMessageEnrichmentDispatch` + `PostMessageEnrichmentGates` +
+`IPostMessageEnrichmentHost`. TrySchedule gates (heavy / catch-up / FULL_HISTORY /
+list-paint) and the enrichment run body left the client; CAS + CTS schedule stay
+on the host. Core tests for classify / try / run paths.
+
 ## Extract — PostReplayMaintenanceDispatch
 
 `PostReplayMaintenanceDispatch` + `PostReplayMaintenanceGates` +
