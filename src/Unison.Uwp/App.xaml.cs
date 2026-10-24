@@ -266,6 +266,8 @@ namespace Unison.Uwp
                 sp.GetRequiredService<LidMappingPersistHost>());
             // Host owns WinRT transport construction; SocketBridge only asks the factory.
             services.AddSingleton<IWhatsAppTransportFactory, UwpWhatsAppTransportFactory>();
+            // Host owns SocketBridge build + wire + transport open; portable connect-open only calls this.
+            services.AddSingleton<IConnectionSocketSessionFactory, UwpConnectionSocketSessionFactory>();
             services.AddSingleton<ILidMappingMemory>(sp =>
                 new LidMappingMemoryAdapter(sp.GetRequiredService<LidMappingStore>()));
             services.AddSingleton(sp =>
@@ -320,8 +322,8 @@ namespace Unison.Uwp
             // unlock chats, then load photos).
             services.AddSingleton(sp => new SyncWorkGate(
                 sp.GetRequiredService<HistoryOnDemandRegistry>(),
-                () => ((WhatsAppService)sp.GetRequiredService<IWhatsAppService>()).Socket?.IsAwaitingInitialSync ?? false,
-                () => ((WhatsAppService)sp.GetRequiredService<IWhatsAppService>()).IsHistoryCatchUpInProgress,
+                () => (sp.GetRequiredService<WhatsAppService>()).Socket?.IsAwaitingInitialSync ?? false,
+                () => (sp.GetRequiredService<WhatsAppService>()).IsHistoryCatchUpInProgress,
                 () =>
                 {
                     IHistoryService history = sp.GetService<IHistoryService>();
@@ -402,49 +404,50 @@ namespace Unison.Uwp
                 maxMessagesPerChatBatch: 1500));
             // Shared by send/receipt/pin/open — one hold table for statuses and pins.
             services.AddSingleton(_ => new PendingMessageState());
-            services.AddSingleton<IWhatsAppService>(
-                sp => WhatsAppService.Create(
-                    sp.GetRequiredService<ChatStateStore>(),
-                    sp.GetRequiredService<ChatRowIndex>(),
-                    sp.GetRequiredService<ActiveChat>(),
-                    sp.GetRequiredService<SyncStatusChannel>(),
-                    sp.GetRequiredService<SyncWorkGate>(),
-                    sp.GetRequiredService<IHistoryMessageStore>(),
-                    sp.GetRequiredService<IHistoryChatPreviewStore>(),
-                    sp.GetRequiredService<IUsyncGate>(),
-                    sp.GetRequiredService<AvatarFetcher>(),
-                    sp.GetRequiredService<IMediaCache>(),
-                    sp.GetRequiredService<JidAliasTable>(),
-                    sp.GetRequiredService<ContactDisplayNames>(),
-                    sp.GetRequiredService<HistoryOnDemandRegistry>(),
-                    sp.GetRequiredService<HistoryCatchUpContinuation>(),
-                    sp.GetRequiredService<InitialSyncProgressState>(),
-                    sp.GetRequiredService<SyncBudget>(),
-                    sp.GetRequiredService<SyncWorkloadStrategy>(),
-                    sp.GetRequiredService<SelfProfileState>(),
-                    sp.GetRequiredService<IPersonStore>(),
-                    sp.GetRequiredService<IGroupRosterStore>(),
-                    sp.GetRequiredService<IChatStore>(),
-                    sp.GetRequiredService<ISystemInfoProvider>(),
-                    sp.GetRequiredService<AttachedUiDispatcher>(),
-                    sp.GetRequiredService<PendingMessageQueue>(),
-                    sp.GetRequiredService<LidMappingStore>(),
-                    sp.GetRequiredService<IWhatsAppTransportFactory>(),
-                    sp.GetRequiredService<ChatListInitialPaintGate>(),
-                    sp.GetRequiredService<IAppMemoryInfo>(),
-                    sp.GetRequiredService<ILocalSettings>(),
-                    () => sp.GetRequiredService<IContactService>(),
-                    () => sp.GetRequiredService<IMessageService>(),
-                    () => sp.GetRequiredService<IChatService>(),
-                    () => sp.GetRequiredService<IGroupService>(),
-                    () => sp.GetRequiredService<IHistoryService>(),
-                    () => sp.GetRequiredService<IDeferredAvatarResolution>()));
+            // Concrete first so host ports resolve without casting IWhatsAppService → WhatsAppService.
+            services.AddSingleton(sp => WhatsAppService.Create(
+                sp.GetRequiredService<ChatStateStore>(),
+                sp.GetRequiredService<ChatRowIndex>(),
+                sp.GetRequiredService<ActiveChat>(),
+                sp.GetRequiredService<SyncStatusChannel>(),
+                sp.GetRequiredService<SyncWorkGate>(),
+                sp.GetRequiredService<IHistoryMessageStore>(),
+                sp.GetRequiredService<IHistoryChatPreviewStore>(),
+                sp.GetRequiredService<IUsyncGate>(),
+                sp.GetRequiredService<AvatarFetcher>(),
+                sp.GetRequiredService<IMediaCache>(),
+                sp.GetRequiredService<JidAliasTable>(),
+                sp.GetRequiredService<ContactDisplayNames>(),
+                sp.GetRequiredService<HistoryOnDemandRegistry>(),
+                sp.GetRequiredService<HistoryCatchUpContinuation>(),
+                sp.GetRequiredService<InitialSyncProgressState>(),
+                sp.GetRequiredService<SyncBudget>(),
+                sp.GetRequiredService<SyncWorkloadStrategy>(),
+                sp.GetRequiredService<SelfProfileState>(),
+                sp.GetRequiredService<IPersonStore>(),
+                sp.GetRequiredService<IGroupRosterStore>(),
+                sp.GetRequiredService<IChatStore>(),
+                sp.GetRequiredService<ISystemInfoProvider>(),
+                sp.GetRequiredService<AttachedUiDispatcher>(),
+                sp.GetRequiredService<PendingMessageQueue>(),
+                sp.GetRequiredService<LidMappingStore>(),
+                sp.GetRequiredService<IConnectionSocketSessionFactory>(),
+                sp.GetRequiredService<ChatListInitialPaintGate>(),
+                sp.GetRequiredService<IAppMemoryInfo>(),
+                sp.GetRequiredService<ILocalSettings>(),
+                () => sp.GetRequiredService<IContactService>(),
+                () => sp.GetRequiredService<IMessageService>(),
+                () => sp.GetRequiredService<IChatService>(),
+                () => sp.GetRequiredService<IGroupService>(),
+                () => sp.GetRequiredService<IHistoryService>(),
+                () => sp.GetRequiredService<IDeferredAvatarResolution>()));
+            services.AddSingleton<IWhatsAppService>(sp => sp.GetRequiredService<WhatsAppService>());
             // The send flow lives on MessageFacade; the timeline caches and the socket it writes
             // through are still the client's, reached only through this narrow port.
             services.AddSingleton<IOutgoingMessageHost>(
-                sp => (WhatsAppService)sp.GetRequiredService<IWhatsAppService>());
+                sp => sp.GetRequiredService<WhatsAppService>());
             services.AddSingleton<IHistoryOnDemandSocket>(
-                sp => (WhatsAppService)sp.GetRequiredService<IWhatsAppService>());
+                sp => sp.GetRequiredService<WhatsAppService>());
             // Asking "is this the same person?" no longer means naming the client.
             services.AddSingleton<IJidResolver>(
                 sp => new JidResolver(sp.GetRequiredService<JidAliasTable>()));
@@ -458,7 +461,7 @@ namespace Unison.Uwp
             // The connection is a SocketBridge, so there is always a session to hand out.
             // UWP façades take the bridge-extended provider; Application façades take the portable one.
             services.AddSingleton<BridgeSessionProvider>(sp => new BridgeSessionProvider(
-                () => ((WhatsAppService)sp.GetRequiredService<IWhatsAppService>()).Socket));
+                () => (sp.GetRequiredService<WhatsAppService>()).Socket));
             services.AddSingleton<UwpSessionProvider>(sp => sp.GetRequiredService<BridgeSessionProvider>());
             services.AddSingleton<AppSessionProvider>(
                 sp => sp.GetRequiredService<BridgeSessionProvider>());
@@ -472,11 +475,11 @@ namespace Unison.Uwp
             // Falls back to the service's own resync when the socket is down and the session
             // provider has nothing to give it.
             services.AddSingleton<IConversationResyncHost>(
-                sp => (WhatsAppService)sp.GetRequiredService<IWhatsAppService>());
+                sp => sp.GetRequiredService<WhatsAppService>());
             services.AddSingleton<IHistorySyncHost>(
-                sp => (WhatsAppService)sp.GetRequiredService<IWhatsAppService>());
+                sp => sp.GetRequiredService<WhatsAppService>());
             services.AddSingleton<IHistoryCatchUpHost>(
-                sp => (WhatsAppService)sp.GetRequiredService<IWhatsAppService>());
+                sp => sp.GetRequiredService<WhatsAppService>());
             services.AddSingleton<IStatusThumbnailMaterializer, WinRtStatusThumbnailMaterializer>();
             services.AddSingleton<IHistoryMessageThumbnailMaterializer, WinRtHistoryMessageThumbnailMaterializer>();
             services.AddSingleton(sp => new HistoryFacade(
@@ -525,40 +528,40 @@ namespace Unison.Uwp
             // The save debounce stays on the client until its shutdown path moves (phase 4);
             // façades reach it only through this port.
             services.AddSingleton<IChatCatalogPersistence>(
-                sp => (WhatsAppService)sp.GetRequiredService<IWhatsAppService>());
+                sp => sp.GetRequiredService<WhatsAppService>());
             services.AddSingleton<IChatIdentityPersistence>(
-                sp => (WhatsAppService)sp.GetRequiredService<IWhatsAppService>());
+                sp => sp.GetRequiredService<WhatsAppService>());
             services.AddSingleton<IDeferredAvatarResolution>(sp => new DeferredAvatarResolution(
                 () => sp.GetRequiredService<IContactService>()));
             services.AddSingleton<IBackgroundResolutionGate>(
-                sp => (WhatsAppService)sp.GetRequiredService<IWhatsAppService>());
+                sp => sp.GetRequiredService<WhatsAppService>());
             services.AddSingleton<ISocketAliasRegistrar>(
-                sp => (WhatsAppService)sp.GetRequiredService<IWhatsAppService>());
+                sp => sp.GetRequiredService<WhatsAppService>());
             services.AddSingleton<IConnectionSoftReconnectHost>(
-                sp => (WhatsAppService)sp.GetRequiredService<IWhatsAppService>());
+                sp => sp.GetRequiredService<WhatsAppService>());
             services.AddSingleton<IConnectionLifecycleHost>(
-                sp => (WhatsAppService)sp.GetRequiredService<IWhatsAppService>());
+                sp => sp.GetRequiredService<WhatsAppService>());
             services.AddSingleton<IConnectionEnsureHost>(
-                sp => (WhatsAppService)sp.GetRequiredService<IWhatsAppService>());
+                sp => sp.GetRequiredService<WhatsAppService>());
             services.AddSingleton<IConnectionResumeHost>(
-                sp => (WhatsAppService)sp.GetRequiredService<IWhatsAppService>());
+                sp => sp.GetRequiredService<WhatsAppService>());
             services.AddSingleton<IConnectionBrokerTransferHost>(
-                sp => (WhatsAppService)sp.GetRequiredService<IWhatsAppService>());
+                sp => sp.GetRequiredService<WhatsAppService>());
             services.AddSingleton<IConnectionEventSource>(
-                sp => (WhatsAppService)sp.GetRequiredService<IWhatsAppService>());
+                sp => sp.GetRequiredService<WhatsAppService>());
             services.AddSingleton<IConnectionSessionHost>(
-                sp => (WhatsAppService)sp.GetRequiredService<IWhatsAppService>());
+                sp => sp.GetRequiredService<WhatsAppService>());
             services.AddSingleton<IUsyncAliasHost>(sp => new UsyncAliasHost(
                 sp.GetRequiredService<UsyncAliasFiling>(),
                 sp.GetRequiredService<ISocketAliasRegistrar>()));
             services.AddSingleton<IStartupUiHost>(
-                sp => (WhatsAppService)sp.GetRequiredService<IWhatsAppService>());
+                sp => sp.GetRequiredService<WhatsAppService>());
             services.AddSingleton<IAppStateLocalHost>(
-                sp => (WhatsAppService)sp.GetRequiredService<IWhatsAppService>());
+                sp => sp.GetRequiredService<WhatsAppService>());
             services.AddSingleton<IEncryptedMediaDownloader>(_ => new HttpEncryptedMediaDownloader(
                 new DelegateSocketLog(line => Diag.W("[Media] " + line))));
             services.AddSingleton(sp => new MediaDownloadGate(
-                () => ((WhatsAppService)sp.GetRequiredService<IWhatsAppService>()).UsesSingleMediaDownloadSlot));
+                () => (sp.GetRequiredService<WhatsAppService>()).UsesSingleMediaDownloadSlot));
             services.AddSingleton<IMediaAvailability>(sp => new MediaAvailability(
                 sp.GetRequiredService<IConnectionService>(),
                 sp.GetRequiredService<IMediaDownloadHost>(),
@@ -573,11 +576,11 @@ namespace Unison.Uwp
             services.AddSingleton<IMessageWireActions>(sp => new BridgeMessageWireActions(
                 sp.GetRequiredService<UwpSessionProvider>()));
             services.AddSingleton<IOutgoingReceiptHost>(
-                sp => (IOutgoingReceiptHost)sp.GetRequiredService<IWhatsAppService>());
+                sp => sp.GetRequiredService<WhatsAppService>());
             services.AddSingleton<IBoundMutationGate>(
-                sp => (IBoundMutationGate)sp.GetRequiredService<IWhatsAppService>());
+                sp => sp.GetRequiredService<WhatsAppService>());
             services.AddSingleton<IPendingMessageFlushHost>(
-                sp => (IPendingMessageFlushHost)sp.GetRequiredService<IWhatsAppService>());
+                sp => sp.GetRequiredService<WhatsAppService>());
             services.AddSingleton<IMessageService>(sp => new MessageFacade(
                 sp.GetRequiredService<IPersonStore>(),
                 sp.GetRequiredService<IChatMessageMapper>(),
@@ -614,7 +617,7 @@ namespace Unison.Uwp
                 sp.GetRequiredService<SyncWorkGate>(),
                 sp.GetRequiredService<InitialSyncProgressState>(),
                 sp.GetRequiredService<IAppVisibility>(),
-                () => ((WhatsAppService)sp.GetRequiredService<IWhatsAppService>()).Socket?.IsAwaitingInitialSync ?? false,
+                () => (sp.GetRequiredService<WhatsAppService>()).Socket?.IsAwaitingInitialSync ?? false,
                 sp.GetRequiredService<IChatStore>(),
                 sp.GetService<IStringResources>(),
                 sp.GetRequiredService<ISystemInfoProvider>(),
@@ -693,23 +696,23 @@ namespace Unison.Uwp
                 sp.GetRequiredService<IAppLifecycle>(),
                 sp.GetRequiredService<ChatListDeduper>(),
                 sp.GetRequiredService<ChatRowIndex>(),
-                (IJidAliasPersistence)sp.GetRequiredService<IWhatsAppService>(),
+                sp.GetRequiredService<WhatsAppService>(),
                 sp.GetRequiredService<IChatIdentityPersistence>(),
-                (IResolvedNameApplyHost)sp.GetRequiredService<IWhatsAppService>(),
+                sp.GetRequiredService<WhatsAppService>(),
                 sp.GetRequiredService<IRuntimeDiagnostics>()));
             services.AddSingleton<IJidAliasPersistence>(
-                sp => (IJidAliasPersistence)sp.GetRequiredService<IWhatsAppService>());
+                sp => sp.GetRequiredService<WhatsAppService>());
             services.AddSingleton<IResolvedNameApplyHost>(
-                sp => (IResolvedNameApplyHost)sp.GetRequiredService<IWhatsAppService>());
+                sp => sp.GetRequiredService<WhatsAppService>());
             services.AddSingleton<IOfflineReplayHost>(
-                sp => (WhatsAppService)sp.GetRequiredService<IWhatsAppService>());
+                sp => sp.GetRequiredService<WhatsAppService>());
             services.AddSingleton<IPlaceholderResendSocket>(
-                sp => (IPlaceholderResendSocket)sp.GetRequiredService<IWhatsAppService>());
+                sp => sp.GetRequiredService<WhatsAppService>());
             // After IMessageService: ChatFacade forgets repairs when a row is deleted/collapsed.
             services.AddSingleton<IMissingMessageChatHost>(
                 sp => (IMissingMessageChatHost)sp.GetRequiredService<IMessageService>());
             services.AddSingleton<IIncomingMessageEnqueueHost>(
-                sp => (IIncomingMessageEnqueueHost)sp.GetRequiredService<IWhatsAppService>());
+                sp => sp.GetRequiredService<WhatsAppService>());
             services.AddSingleton<IChatAccountActions>(sp => new BridgeChatAccountActions(
                 sp.GetRequiredService<UwpSessionProvider>()));
             services.AddSingleton<IChatService>(sp => new ChatFacade(
@@ -878,8 +881,7 @@ namespace Unison.Uwp
             services.AddTransient<LegacySettingsViewModel>();
 
             Services = services.BuildServiceProvider(validateScopes: true);
-            var whatsApp = Services.GetRequiredService<IWhatsAppService>();
-            var whatsAppImpl = (WhatsAppService)whatsApp;
+            var whatsAppImpl = Services.GetRequiredService<WhatsAppService>();
             // The root frame was built on the UI thread, so its dispatcher is the one the client
             // has to marshal onto. Done here rather than from a page's Loaded so the client is
             // never without one: whichever surface happens to come up first, the container is

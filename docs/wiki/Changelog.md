@@ -110,6 +110,15 @@ Three Core tests.
 `ConnectionUpdateRoute`, `StaleSocketEventGate` — OnError / OnStreamError /
 OnConnectionUpdate decisions leave the client; hosts only apply side effects.
 
+## Phase D — IConnectionSocketSessionFactory (connect open leaves the god client)
+
+`ConnectionConnectOpen` takes `IConnectionSocketSessionFactory`: UWP
+`UwpConnectionSocketSessionFactory` owns `SocketBridge` build, remote hooks,
+`SocketEventHandlerWiring`, key-store init, and transport open.
+`WhatsAppService` only assigns the session + key store and starts health.
+App registers concrete `WhatsAppService` so host ports no longer cast
+`IWhatsAppService`.
+
 ## Phase D — Init(IWaTransport) shape on connect open
 
 Host builds transports (`WaTransportConnectAttempt` + factory) and calls

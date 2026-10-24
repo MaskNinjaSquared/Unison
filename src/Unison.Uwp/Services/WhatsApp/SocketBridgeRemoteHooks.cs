@@ -1,8 +1,8 @@
 // =============================================================================
 // SocketBridgeRemoteHooks
 //
-// Wires SocketBridge app-state / contact callbacks onto the façades. Kept out of
-// WhatsAppService.BuildSocketBridge so connect open only constructs + assigns.
+// Wires SocketBridge app-state / contact callbacks onto the façades. Called from
+// UwpConnectionSocketSessionFactory so connect-open construction stays in one adapter.
 // =============================================================================
 using System;
 using System.Collections.Generic;
@@ -51,6 +51,10 @@ namespace Unison.Uwp.Services.WhatsApp
                 contacts != null
                     ? contacts.ApplyRemoteGroupSubjectsAsync(
                         new[] { new KeyValuePair<string, string>(jid, subject) })
+                    : Task.CompletedTask;
+            bridge.GroupParticipantsJoined = joins =>
+                messages != null
+                    ? messages.NotifyGroupJoinsAsync(joins)
                     : Task.CompletedTask;
             bridge.ChatDeleted = jid =>
                 chatFacade != null

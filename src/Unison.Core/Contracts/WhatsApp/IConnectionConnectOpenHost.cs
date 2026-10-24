@@ -1,22 +1,25 @@
 using System.Threading.Tasks;
+using Unison.Core.Contracts;
 
 namespace Unison.Core.Contracts.WhatsApp
 {
     /// <summary>
-    /// What <c>ConnectionConnectOpen</c> needs to build, wire, and open the transport
-    /// after <c>ConnectionConnectPrepare</c> succeeds.
+    /// What <c>ConnectionConnectOpen</c> needs after prepare: assign the session the
+    /// factory built, apply key-store side effects, refuse/abort, and start health.
+    /// Socket construction and WinRT transport open live on
+    /// <see cref="IConnectionSocketSessionFactory"/>.
     /// </summary>
     public interface IConnectionConnectOpenHost
     {
-        void BuildAssignAndWireSocket(bool reuseLoadedKeyState);
+        ConnectionSocketSessionRequest CreateSocketSessionRequest(bool reuseLoadedKeyState);
 
-        Task InitializeKeyStoreAfterAssignAsync(bool reuseLoadedKeyState);
+        void AssignSocketSession(object session);
+
+        void ApplyPersistentKeyStore(object keyStore, bool reuseLoadedKeyState);
 
         bool ShouldRefuseConnectBecauseSessionDied { get; }
 
         void AbortAssignedSocket(string journalReason);
-
-        Task ConnectAssignedTransportAsync();
 
         void StartHealthMonitorIfAssignedCurrent();
 

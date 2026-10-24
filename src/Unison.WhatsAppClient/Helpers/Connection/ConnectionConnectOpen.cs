@@ -1,11 +1,12 @@
 // =============================================================================
 // ConnectionConnectOpen
 //
-// After prepare: build + wire handlers, init key store, open transport, start
-// health monitor. Handler bodies stay on the host.
+// After prepare: factory builds + wires the session, host assigns it, factory
+// inits keys and opens transport, host starts the health monitor.
 // =============================================================================
 using System;
 using System.Threading.Tasks;
+using Unison.Core.Contracts;
 using Unison.Core.Contracts.WhatsApp;
 
 namespace Unison.WhatsAppClient.Helpers
@@ -15,6 +16,7 @@ namespace Unison.WhatsAppClient.Helpers
     {
         public static async Task RunAsync(
             IConnectionConnectOpenHost host,
+            IConnectionSocketSessionFactory sockets,
             bool reuseLoadedKeyState)
         {
             if (host == null)
@@ -22,8 +24,18 @@ namespace Unison.WhatsAppClient.Helpers
                 throw new ArgumentNullException(nameof(host));
             }
 
-            host.BuildAssignAndWireSocket(reuseLoadedKeyState);
-            await host.InitializeKeyStoreAfterAssignAsync(reuseLoadedKeyState).ConfigureAwait(false);
+            if (sockets == null)
+            {
+                throw new ArgumentNullException(nameof(sockets));
+            }
+
+            ConnectionSocketSessionRequest request =
+                host.CreateSocketSessionRequest(reuseLoadedKeyState);
+            object session = sockets.CreateAndWire(request);
+            host.AssignSocketSession(session);
+
+            object keyStore = await sockets.InitializeKeyStoreAsync(session).ConfigureAwait(false);
+            host.ApplyPersistentKeyStore(keyStore, reuseLoadedKeyState);
 
             if (host.ShouldRefuseConnectBecauseSessionDied)
             {
@@ -33,7 +45,7 @@ namespace Unison.WhatsAppClient.Helpers
 
             try
             {
-                await host.ConnectAssignedTransportAsync().ConfigureAwait(false);
+                await sockets.ConnectTransportAsync(session).ConfigureAwait(false);
                 host.StartHealthMonitorIfAssignedCurrent();
             }
             catch

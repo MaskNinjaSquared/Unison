@@ -1,8 +1,8 @@
 // =============================================================================
 // SocketEventHandlerWiring
 //
-// WireSocketEventHandlers body. Kept out of WhatsAppService.Connection.cs so
-// connect-open only assigns the socket; IWhatsAppSocket stays UWP-only.
+// Event wiring body. Called from UwpConnectionSocketSessionFactory so portable
+// ConnectionConnectOpen never names IWhatsAppSocket; UWP-only.
 // =============================================================================
 using System;
 using System.Diagnostics;

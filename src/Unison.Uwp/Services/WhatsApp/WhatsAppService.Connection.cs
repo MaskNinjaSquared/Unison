@@ -216,9 +216,6 @@ namespace Unison.Uwp.Services.WhatsApp
             StartPeriodicFullHistorySafety();
 
 
-        private void WireSocketEventHandlers(IWhatsAppSocket socket) =>
-            SocketEventHandlerWiring.Attach(socket, this);
-
         bool IOfflineReplayReleaseHost.TryMarkFirstRelease() =>
             Interlocked.Exchange(ref _offlineReplayReleased, 1) == 0;
 
@@ -1822,7 +1819,7 @@ namespace Unison.Uwp.Services.WhatsApp
         }
 
         Task IConnectAsyncHost.OpenConnectAsync(bool reuseLoadedKeyState) =>
-            ConnectionConnectOpen.RunAsync(this, reuseLoadedKeyState);
+            ConnectionConnectOpen.RunAsync(this, _socketSessions, reuseLoadedKeyState);
 
         public Task AutoReconnectAsync()
         {
@@ -2067,26 +2064,31 @@ namespace Unison.Uwp.Services.WhatsApp
             _historyRequests.ClearBackoff();
         }
 
-        void IConnectionConnectOpenHost.BuildAssignAndWireSocket(bool reuseLoadedKeyState)
-        {
-            IWhatsAppSocket socket = BuildSocketBridge(reuseLoadedKeyState);
-            _socket = socket;
-            WireSocketEventHandlers(socket);
-        }
+        ConnectionSocketSessionRequest IConnectionConnectOpenHost.CreateSocketSessionRequest(
+            bool reuseLoadedKeyState) =>
+            new ConnectionSocketSessionRequest
+            {
+                AuthState = _authState,
+                SharedKeyStore = _sharedKeyStore,
+                ReuseLoadedKeyState = reuseLoadedKeyState,
+                LidMappings = _lidMappings,
+                WireOwner = this
+            };
 
-        async Task IConnectionConnectOpenHost.InitializeKeyStoreAfterAssignAsync(bool reuseLoadedKeyState)
+        void IConnectionConnectOpenHost.AssignSocketSession(object session) =>
+            _socket = session as IWhatsAppSocket;
+
+        void IConnectionConnectOpenHost.ApplyPersistentKeyStore(object keyStore, bool reuseLoadedKeyState)
         {
-            var socket = _socket;
+            _sharedKeyStore = keyStore as FileKeyStore;
             var auth = _authState;
-            if (socket == null || auth == null)
+            if (auth == null)
             {
                 return;
             }
 
-            await socket.InitializeKeyStoreAsync().ConfigureAwait(false);
-            _sharedKeyStore = socket.PersistentKeyStore;
-                        RuntimeDiagnosticsService.Instance.Write(
-                            "connection",
+            RuntimeDiagnosticsService.Instance.Write(
+                "connection",
                 reuseLoadedKeyState ? "fast-resume-key-store-reused" : "key-store-cold-loaded",
                 "sessions=" + auth.Sessions.Count + "; prekeys=" + auth.PreKeys.Count);
         }
@@ -2095,45 +2097,17 @@ namespace Unison.Uwp.Services.WhatsApp
             ShouldRefuseConnectBecauseSessionDied();
 
         void IConnectionConnectOpenHost.AbortAssignedSocket(string journalReason)
-                {
-                    RuntimeDiagnosticsService.Instance.Write(
-                        "connection",
-                        "connect-aborted",
+        {
+            RuntimeDiagnosticsService.Instance.Write(
+                "connection",
+                "connect-aborted",
                 "reason=" + journalReason);
             var socket = _socket;
-            try
+            _socketSessions.DisposeSession(socket);
+            if (ReferenceEquals(_socket, socket))
             {
-                socket?.Dispose();
+                _socket = null;
             }
-            catch
-            {
-            }
-
-                if (ReferenceEquals(_socket, socket))
-                {
-                    _socket = null;
-            }
-        }
-
-        Task IConnectionConnectOpenHost.ConnectAssignedTransportAsync()
-        {
-            var socket = _socket;
-            if (socket == null)
-            {
-            return Task.CompletedTask;
-        }
-
-            // Host builds WinRT transports; bridge only runs Noise over them (Init shape).
-            var bridge = socket as SocketBridge;
-            if (bridge == null)
-            {
-                return socket.ConnectAsync();
-            }
-
-            WaTransportConnectAttempt attempt = WaTransportConnectAttempt.Create(
-                _transportFactory,
-                _isWindowsMobile);
-            return bridge.ConnectWithTransportsAsync(attempt.Primary, attempt.Fallback);
         }
 
         void IConnectionConnectOpenHost.StartHealthMonitorIfAssignedCurrent()
@@ -2149,13 +2123,7 @@ namespace Unison.Uwp.Services.WhatsApp
         {
             var socket = _socket;
             _socket = null;
-            try
-            {
-                socket?.Dispose();
-            }
-            catch
-            {
-            }
+            _socketSessions.DisposeSession(socket);
         }
 
         /// <summary>

@@ -142,7 +142,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
         private IWhatsAppSocket _socket;
         private readonly LidMappingStore _lidMappings;
-        private readonly IWhatsAppTransportFactory _transportFactory;
+        private readonly IConnectionSocketSessionFactory _socketSessions;
         private AuthStore _authStore = new AuthStore();
         private IMessageStore _messageStore = new MessageStore();
         private readonly IHistoryMessageStore _historyMessages;
@@ -924,7 +924,7 @@ namespace Unison.Uwp.Services.WhatsApp
             AttachedUiDispatcher ui,
             PendingMessageQueue pendingMessages,
             LidMappingStore lidMappings = null,
-            IWhatsAppTransportFactory transportFactory = null,
+            IConnectionSocketSessionFactory socketSessions = null,
             ChatListInitialPaintGate listPaintGate = null,
             IAppMemoryInfo appMemory = null,
             ILocalSettings localSettings = null,
@@ -941,8 +941,8 @@ namespace Unison.Uwp.Services.WhatsApp
             }
 
             _lidMappings = lidMappings;
-            _transportFactory = transportFactory
-                ?? throw new ArgumentNullException(nameof(transportFactory));
+            _socketSessions = socketSessions
+                ?? throw new ArgumentNullException(nameof(socketSessions));
 
             if (systemInfo == null)
             {
@@ -1045,7 +1045,7 @@ namespace Unison.Uwp.Services.WhatsApp
             AttachedUiDispatcher ui,
             PendingMessageQueue pendingMessages,
             LidMappingStore lidMappings = null,
-            IWhatsAppTransportFactory transportFactory = null,
+            IConnectionSocketSessionFactory socketSessions = null,
             ChatListInitialPaintGate listPaintGate = null,
             IAppMemoryInfo appMemory = null,
             ILocalSettings localSettings = null,
@@ -1058,7 +1058,7 @@ namespace Unison.Uwp.Services.WhatsApp
         {
             return _instance ?? (_instance = new WhatsAppService(
                 chatState, chatRows, activeChat, syncStatus, syncWork, historyMessages, chatPreviews, usyncGate, avatarFetcher, mediaCache, jidAlias, displayNames, historyRequests,
-                catchUp, initialSync, syncBudget, workload, selfProfile, personStore, groupRosterStore, chatStore, systemInfo, ui, pendingMessages, lidMappings, transportFactory, listPaintGate, appMemory, localSettings, resolveContacts, resolveMessages, resolveChats, resolveGroups, resolveHistory, resolveDeferredAvatars));
+                catchUp, initialSync, syncBudget, workload, selfProfile, personStore, groupRosterStore, chatStore, systemInfo, ui, pendingMessages, lidMappings, socketSessions, listPaintGate, appMemory, localSettings, resolveContacts, resolveMessages, resolveChats, resolveGroups, resolveHistory, resolveDeferredAvatars));
         }
 
         /// <summary>
@@ -3601,38 +3601,6 @@ namespace Unison.Uwp.Services.WhatsApp
             Task.Delay(delay);
 
         /// <summary>
-        /// Builds the connection over the rewritten socket stack.
-        /// </summary>
-        /// <remarks>
-        /// The legacy client decoded app state itself and called back into this class through
-        /// <see cref="AppStateSyncService"/>. The new stack decodes it inside the session and
-        /// publishes what changed, so the same methods are reached here instead - by callback
-        /// rather than by a service holding a reference to us.
-        /// </remarks>
-        private SocketBridge BuildSocketBridge(bool reuseLoadedKeyState)
-        {
-            var bridge = new SocketBridge(
-                _authState,
-                _sharedKeyStore,
-                reuseLoadedKeyState,
-                _lidMappings);
-
-            SocketBridgeRemoteHooks.Attach(
-                bridge,
-                ChatFacade,
-                Contacts,
-                Messages,
-                ResolveSentMessageForRetryAsync);
-
-            RuntimeDiagnosticsService.Instance.Write(
-                "connection",
-                "socket-rewrite-enabled",
-                "transport=" + bridge.TransportName);
-
-            return bridge;
-        }
-
-        /// <summary>
         /// Rebuilds a message we sent, so a retry receipt that arrives after the socket's cache
         /// has expired can still be answered.
         ///
@@ -3641,7 +3609,7 @@ namespace Unison.Uwp.Services.WhatsApp
         /// asking to see again - so it declines instead, and the peer falls back to asking our
         /// phone. Answering with the wrong bytes is worse than not answering.
         /// </summary>
-        private Task<global::Proto.Message> ResolveSentMessageForRetryAsync(
+        internal Task<global::Proto.Message> ResolveSentMessageForRetryAsync(
             string remoteJid,
             string messageId) =>
             ResolveSentMessageForRetryDispatch.RunAsync(this, remoteJid, messageId);
