@@ -33,6 +33,7 @@ using Unison.Core.State;
 using Unison.Socket.UseCases.Contacts;
 using Unison.Uwp.Helpers;
 using Microsoft.Extensions.DependencyInjection;
+using Unison.WhatsAppClient.Abstractions;
 using Unison.WhatsAppClient.Helpers;
 using Windows.Networking.Sockets;
 
@@ -876,63 +877,84 @@ namespace Unison.Uwp.Services.WhatsApp
             await _initLock.WaitAsync();
             try
             {
-                if (_authState != null) return;
+                await InitializeConnectionStateDispatch.RunAsync(this).ConfigureAwait(false);
+            }
+            finally
+            {
+                _initLock.Release();
+            }
+        }
 
-                await _messageStore.InitializeAsync();
-                LoadHistoryFreshnessRepairState();
+        // --- IInitializeConnectionStateHost ----------------------------------
 
-                // Recover the compact incoming journal before a new socket starts. This
-                // is a single small file and does not block on rewriting any chat JSON.
-                // Recovered items remain visible to LoadChatMessagesAsync through the
-                // pending-persist snapshot until the delayed merge completes.
-                if (Messages != null)
-                {
-                    await Messages.RecoverPendingIncomingJournalAsync().ConfigureAwait(false);
-                }
+        bool IInitializeConnectionStateHost.HasAuthState => _authState != null;
 
-                _authState = await _authStore.LoadAsync();
-                if (_authState == null)
-                {
-                    _authState = AuthState.Create();
-                    Debug.WriteLine($"[WhatsAppService] Created NEW AuthState (ObjID: {_authState.GetHashCode()})");
-                }
-                else
-                {
-                    Debug.WriteLine($"[WhatsAppService] Loaded EXISTING AuthState (ObjID: {_authState.GetHashCode()}), registered: {_authState.Registered}");
-                }
+        Task IInitializeConnectionStateHost.InitializeMessageStoreAsync() =>
+            _messageStore.InitializeAsync();
 
-                // No linked account ⇒ never toast “Unison desconectado” from orphaned broker closes.
-                bool hasActiveAccount = LinkedAccountGate.HasLinkedAccount(
-                    _authState.Registered,
-                    _authState.Me != null,
-                    _authState.Me != null ? _authState.Me.Id : null);
-                SetSuppressReconnectToast(!hasActiveAccount);
+        void IInitializeConnectionStateHost.LoadHistoryFreshnessRepairState() =>
+            LoadHistoryFreshnessRepairState();
 
-                // Durable LID↔PN pairs first so sync peeks work before alias restore.
-                if (_lidMappings != null)
-                {
-                    try
-                    {
-                        await _lidMappings.WarmCacheFromStorageAsync().ConfigureAwait(false);
-                    }
-                    catch (Exception ex)
-                    {
-                        Debug.WriteLine("[WhatsAppService] LidMapping warm failed: " + ex.Message);
-                    }
-                }
+        async Task IInitializeConnectionStateHost.RecoverPendingIncomingJournalAsync()
+        {
+            if (Messages != null)
+            {
+                await Messages.RecoverPendingIncomingJournalAsync().ConfigureAwait(false);
+            }
+        }
 
-                // PN/LID aliases are compact protocol state, not optional UI data. Load
-                // them before ConnectAsync snapshots the alias map for SocketClient.
-                // Bulk import: one RememberPairs + one Changed (not N dual-writes).
-                var storedAliases = await _messageStore.LoadJidAliasesAsync();
-                int poisonedAliases = 0;
-                using (JidAlias.BeginBulkImport())
-                {
+        async Task IInitializeConnectionStateHost.LoadOrCreateAuthStateAsync()
+        {
+            _authState = await _authStore.LoadAsync();
+            if (_authState == null)
+            {
+                _authState = AuthState.Create();
+                Debug.WriteLine(
+                    "[WhatsAppService] Created NEW AuthState (ObjID: " +
+                    _authState.GetHashCode() + ")");
+            }
+            else
+            {
+                Debug.WriteLine(
+                    "[WhatsAppService] Loaded EXISTING AuthState (ObjID: " +
+                    _authState.GetHashCode() + "), registered: " + _authState.Registered);
+            }
+        }
+
+        void IInitializeConnectionStateHost.ApplyLinkedAccountReconnectToastGate()
+        {
+            bool hasActiveAccount = LinkedAccountGate.HasLinkedAccount(
+                _authState.Registered,
+                _authState.Me != null,
+                _authState.Me != null ? _authState.Me.Id : null);
+            SetSuppressReconnectToast(!hasActiveAccount);
+        }
+
+        async Task IInitializeConnectionStateHost.WarmLidMappingCacheAsync()
+        {
+            if (_lidMappings == null)
+            {
+                return;
+            }
+
+            try
+            {
+                await _lidMappings.WarmCacheFromStorageAsync().ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[WhatsAppService] LidMapping warm failed: " + ex.Message);
+            }
+        }
+
+        async Task IInitializeConnectionStateHost.RestorePersistedJidAliasesAsync()
+        {
+            var storedAliases = await _messageStore.LoadJidAliasesAsync();
+            int poisonedAliases = 0;
+            using (JidAlias.BeginBulkImport())
+            {
                 foreach (var kvp in storedAliases)
                 {
-                    // Only the identity checks, not the full live validation: the table is
-                    // also written by paths that predate that validation, and rejecting their
-                    // entries here would drop identities that are merely unusual, not wrong.
                     PersistedAliasRestoreAction restore =
                         PersistedAliasRestore.Evaluate(
                             kvp.Key,
@@ -955,38 +977,37 @@ namespace Unison.Uwp.Services.WhatsApp
                     }
 
                     JidAlias[aliasKey] = aliasValue;
-                    }
-
-                    // The own PN/LID pair is tiny and required before the socket starts.
-                    string selfId;
-                    string selfLid;
-                    if (TryGetSelfIdentityAliasPair(out selfId, out selfLid))
-                    {
-                        JidAlias[selfId] = selfLid;
-                        JidAlias[selfLid] = selfId;
-                    }
                 }
 
-                if (poisonedAliases > 0)
+                string selfId;
+                string selfLid;
+                if (TryGetSelfIdentityAliasPair(out selfId, out selfLid))
                 {
-                    Debug.WriteLine($"[WhatsAppService] Dropped {poisonedAliases} poisoned alias entr(ies) while restoring");
+                    JidAlias[selfId] = selfLid;
+                    JidAlias[selfLid] = selfId;
                 }
-
-                string registerId;
-                string registerLid;
-                if (TryGetSelfIdentityAliasPair(out registerId, out registerLid))
-                {
-                    RegisterSocketAlias(registerId, registerLid, "initialize-identity");
-                }
-
-                // Seed sidebar profile from persisted Me (name may exist before avatar fetch).
-                SyncSelfProfileFromAuth();
             }
-            finally
+
+            if (poisonedAliases > 0)
             {
-                _initLock.Release();
+                Debug.WriteLine(
+                    "[WhatsAppService] Dropped " + poisonedAliases +
+                    " poisoned alias entr(ies) while restoring");
             }
         }
+
+        void IInitializeConnectionStateHost.RegisterSelfIdentitySocketAlias()
+        {
+            string registerId;
+            string registerLid;
+            if (TryGetSelfIdentityAliasPair(out registerId, out registerLid))
+            {
+                RegisterSocketAlias(registerId, registerLid, "initialize-identity");
+            }
+        }
+
+        void IInitializeConnectionStateHost.SyncSelfProfileFromAuth() =>
+            SyncSelfProfileFromAuth();
 
         /// <summary>
         /// Compatibility path for callers that genuinely need both connection state and
@@ -1669,102 +1690,42 @@ namespace Unison.Uwp.Services.WhatsApp
             return Task.CompletedTask;
         }
 
-        private async Task AutoReconnectLoopAsync(string trigger)
-        {
-            int attempt = 0;
-            Exception lastError = null;
+        private Task AutoReconnectLoopAsync(string trigger) =>
+            AutoReconnectLoopDispatch.RunAsync(this, trigger);
 
-            while (ConnectionSoftReconnectGates.ShouldContinueLoop(
-                       _suppressReconnect,
-                       _fatalSessionEnded))
-            {
-                if (ConnectionSoftReconnectGates.ShouldExitForPairing(_pairingRestartPending))
-                {
-                    PairingTrace(
-                        "AutoReconnectLoop EXIT — pairingRestartPending (trigger=" +
-                        (trigger ?? string.Empty) + ")");
-                    return;
-                }
+        // --- IAutoReconnectLoopHost ------------------------------------------
 
-                try
-                {
-                    if (await IsCurrentSocketHealthyAsync())
-                    {
-                        Debug.WriteLine($"[WhatsAppService] Reconnect loop found a healthy socket ({trigger})");
-                        return;
-                    }
-                }
-                catch (Exception ex)
-                {
-                    lastError = ex;
-                }
+        bool IAutoReconnectLoopHost.SuppressReconnect => _suppressReconnect;
 
-                await InitializeAsync();
-                if (ConnectionSoftReconnectGates.ShouldStopBecauseSessionNotRegistered(
-                        _authState != null,
-                        _authState != null && _authState.Registered,
-                        _fatalSessionEnded))
-                {
-                    Debug.WriteLine("[WhatsAppService] Reconnect loop stopped because the session is not registered");
-                    return;
-                }
+        bool IAutoReconnectLoopHost.FatalSessionEnded => _fatalSessionEnded;
 
-                if (ConnectionSoftReconnectGates.ShouldExitForPairing(_pairingRestartPending))
-                {
-                    PairingTrace("AutoReconnectLoop EXIT before delay — pairing claimed stage2");
-                    return;
-                }
+        bool IAutoReconnectLoopHost.PairingRestartPending => _pairingRestartPending;
 
-                TimeSpan delay = ConnectionHealthPolicy.ReconnectDelay(attempt);
-                PublishConnectionUpdate("reconnecting");
-                Debug.WriteLine($"[WhatsAppService] Reconnect attempt {attempt + 1} in {delay.TotalSeconds:F0}s (trigger={trigger})");
+        bool IAutoReconnectLoopHost.IsAuthStatePresent => _authState != null;
 
-                try
-                {
-                    await Task.Delay(delay);
-                    if (ConnectionSoftReconnectGates.ShouldAbortAfterDelay(
-                            _suppressReconnect,
-                            _fatalSessionEnded,
-                            _pairingRestartPending))
-                    {
-                        if (_pairingRestartPending)
-                        {
-                            PairingTrace("AutoReconnectLoop EXIT after delay — pairing claimed stage2");
-                        }
-                        return;
-                    }
+        bool IAutoReconnectLoopHost.IsAuthRegistered =>
+            _authState != null && _authState.Registered;
 
-                    await ConnectAsync();
-                    if (_fatalSessionEnded)
-                    {
-                        return;
-                    }
+        Task<bool> IAutoReconnectLoopHost.IsCurrentSocketHealthyAsync() =>
+            IsCurrentSocketHealthyAsync();
 
-                    if (await IsCurrentSocketHealthyAsync())
-                    {
-                        Debug.WriteLine($"[WhatsAppService] Reconnect succeeded on attempt {attempt + 1}");
-                        return;
-                    }
+        Task IAutoReconnectLoopHost.InitializeAsync() => InitializeAsync();
 
-                    lastError = new InvalidOperationException("Connection completed without a healthy WhatsApp socket");
-                }
-                catch (Exception ex)
-                {
-                    lastError = ex;
-                    Debug.WriteLine($"[WhatsAppService] Reconnect attempt {attempt + 1} failed: {ex.Message}");
-                }
+        Task IAutoReconnectLoopHost.ConnectAsync() => ConnectAsync();
 
-                attempt++;
-            }
+        TimeSpan IAutoReconnectLoopHost.ReconnectDelayForAttempt(int attempt) =>
+            ConnectionHealthPolicy.ReconnectDelay(attempt);
 
-            if (ConnectionSoftReconnectGates.ShouldRaiseReconnectLoopError(
-                    lastError != null,
-                    _suppressReconnect,
-                    _fatalSessionEnded))
-            {
-                OnError?.Invoke(this, lastError);
-            }
-        }
+        void IAutoReconnectLoopHost.PublishReconnectingStatus() =>
+            PublishConnectionUpdate("reconnecting");
+
+        void IAutoReconnectLoopHost.LogAutoReconnect(string message) =>
+            Debug.WriteLine("[WhatsAppService] " + message);
+
+        void IAutoReconnectLoopHost.TracePairing(string detail) => PairingTrace(detail);
+
+        void IAutoReconnectLoopHost.RaiseReconnectLoopError(Exception error) =>
+            OnError?.Invoke(this, error);
 
         /// <summary>
         /// Reconnects after close code 515 to complete pairing stage 2.
