@@ -1,6 +1,7 @@
 using System;
 using System.ComponentModel;
 using Microsoft.Extensions.DependencyInjection;
+using Unison.Core.Helpers;
 using Unison.Core.Models;
 using Unison.Core.ViewModels;
 using Windows.UI.Xaml;
@@ -60,7 +61,7 @@ namespace Unison.Uwp.UI.Views
         {
             _favoritesCvs.Source = ViewModel.GroupedFavorites;
             FavoritesList.ItemsSource = _favoritesCvs.View;
-            FavoritesJumpList.ItemsSource = _favoritesCvs.View.CollectionGroups;
+            FavoritesJumpList.ItemsSource = ViewModel.JumpTiles;
             SortLabelText.Text = ViewModel.SortLabel ?? "A-Z";
         }
 
@@ -74,6 +75,11 @@ namespace Unison.Uwp.UI.Views
             if (string.Equals(e.PropertyName, nameof(FavoritesViewModel.GroupedFavorites), StringComparison.Ordinal))
             {
                 _favoritesCvs.Source = ViewModel.GroupedFavorites;
+            }
+
+            if (string.Equals(e.PropertyName, nameof(FavoritesViewModel.JumpTiles), StringComparison.Ordinal))
+            {
+                FavoritesJumpList.ItemsSource = ViewModel.JumpTiles;
             }
 
             if (string.Equals(e.PropertyName, nameof(FavoritesViewModel.HasFavorites), StringComparison.Ordinal) ||
@@ -108,6 +114,25 @@ namespace Unison.Uwp.UI.Views
             if (chat != null)
             {
                 ChatSelected?.Invoke(this, new ChatSelectedEventArgs(chat));
+            }
+        }
+
+        private void FavoritesJumpList_ItemClick(object sender, ItemClickEventArgs e)
+        {
+            var tile = e.ClickedItem as AlphabetJumpTile;
+            if (tile == null || !tile.IsEnabled || tile.Group == null)
+            {
+                return;
+            }
+
+            FavoritesZoom.IsZoomedInViewActive = true;
+            try
+            {
+                FavoritesList.ScrollIntoView(tile.Group, ScrollIntoViewAlignment.Leading);
+            }
+            catch
+            {
+                // Group may not be realized yet; zoom-in alone is still useful.
             }
         }
 

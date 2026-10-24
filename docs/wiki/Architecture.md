@@ -148,7 +148,7 @@ Facades extracted **policy** around it (pairing/logout, pin/mark-read, contact o
 |---|---|---|
 | `AuthStore` | `LocalSettings` container `WhatsAppAuth` | Credentials (`AuthState` JSON) |
 | `FileKeyStore` | `SignalKeys\` | Sessions, prekeys, sender keys, app-state keys |
-| `SqliteLidMappingStorage` | SQLite | PN ↔ LID map for the rc14 addressing model |
+| `SqliteLidMappingStorage` | SQLite | PN ↔ LID map (durable). RAM LRU is tier-capped; Mobile never full-warms — see [Socket stack](Socket-Stack#addressing-lid-not-jidalias) |
 | `ChatStore` / `PersonStore` | SQLite | Local chat flags (mute/pin) and people |
 | `MessageStore` | App data JSON | Leftover identity sidecars (contact names / aliases); chat/message JSON no longer the live path |
 | `HistoryChatPreviewStore` | SQLite `history_chat_preview` | List catalog, schema 6: `ChatStatus` Active/Deleted/Archived plus `DeletedAtUtc` tombstone; history chunks apply as **delta** (insert new / update lifecycle + tip when newer); UI hydrates via `ChatPreviewChunkPersisted` |

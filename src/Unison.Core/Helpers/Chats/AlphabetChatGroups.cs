@@ -29,7 +29,7 @@ namespace Unison.Core.Helpers
     {
         /// <summary>
         /// Builds A–Z then # groups from <paramref name="chats"/>, sorted by display name.
-        /// Empty groups are omitted.
+        /// Empty groups are omitted from the zoomed-in list (headers stay dense).
         /// </summary>
         public static ObservableCollection<AlphabetChatGroup> Build(
             IEnumerable<ChatItem> chats,
@@ -79,6 +79,41 @@ namespace Unison.Core.Helpers
             }
 
             return result;
+        }
+
+        /// <summary>
+        /// Always A–Z then #. Letters with no members stay visible but <see cref="AlphabetJumpTile.IsEnabled"/> is false.
+        /// </summary>
+        public static ObservableCollection<AlphabetJumpTile> BuildJumpTiles(
+            IEnumerable<AlphabetChatGroup> populatedGroups)
+        {
+            var map = new Dictionary<string, AlphabetChatGroup>(StringComparer.Ordinal);
+            if (populatedGroups != null)
+            {
+                foreach (AlphabetChatGroup group in populatedGroups)
+                {
+                    if (group == null || string.IsNullOrEmpty(group.Key))
+                    {
+                        continue;
+                    }
+
+                    map[group.Key] = group;
+                }
+            }
+
+            var tiles = new ObservableCollection<AlphabetJumpTile>();
+            for (char c = 'A'; c <= 'Z'; c++)
+            {
+                string key = c.ToString();
+                AlphabetChatGroup group;
+                map.TryGetValue(key, out group);
+                tiles.Add(new AlphabetJumpTile(key, group));
+            }
+
+            AlphabetChatGroup hash;
+            map.TryGetValue("#", out hash);
+            tiles.Add(new AlphabetJumpTile("#", hash));
+            return tiles;
         }
 
         public static string LetterKey(string name)

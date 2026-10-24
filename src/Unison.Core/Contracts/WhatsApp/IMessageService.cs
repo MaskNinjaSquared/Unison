@@ -560,5 +560,11 @@ namespace Unison.Core.Contracts.WhatsApp
         /// </summary>
         Task HandlePeerDataOperationResponseAsync(
             Message.Types.PeerDataOperationRequestResponseMessage response);
+
+        /// <summary>
+        /// <c>w:gp2</c> participant <c>add</c>: insert GroupJoin system lines (Baileys
+        /// <c>GROUP_PARTICIPANT_ADD</c>). No toast; list strip is plain text.
+        /// </summary>
+        Task NotifyGroupJoinsAsync(System.Collections.Generic.IReadOnlyList<GroupJoinNotifyRequest> joins);
     }
 }

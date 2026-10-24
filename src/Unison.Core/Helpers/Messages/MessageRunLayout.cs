@@ -165,6 +165,12 @@ namespace Unison.Core.Helpers
                 return false;
             }
 
+            // GroupJoin uses date-separator chrome — never share a bubble run.
+            if (left.IsGroupJoin || right.IsGroupJoin)
+            {
+                return false;
+            }
+
             if (left.IsFromMe != right.IsFromMe)
             {
                 return false;

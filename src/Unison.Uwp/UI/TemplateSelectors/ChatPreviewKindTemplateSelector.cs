@@ -54,6 +54,9 @@ namespace Unison.Uwp.UI.TemplateSelectors
                     return DocumentTemplate ?? TextTemplate;
                 case ChatPreviewKind.Contact:
                     return ContactTemplate ?? TextTemplate;
+                case ChatPreviewKind.GroupJoin:
+                    // Plain strip text — empty chip like Text.
+                    return TextTemplate;
                 case ChatPreviewKind.Reaction:
                     return ReactionTemplate ?? TextTemplate;
                 case ChatPreviewKind.Revoked:

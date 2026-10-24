@@ -1225,6 +1225,7 @@ namespace Unison.WhatsAppClient.Contacts
                 }
                 else
                 {
+                    _deferredAvatars.ResetScheduleStreak();
                     _deferredAvatars.Cancel();
                     await RetrieveContactPicturesAsync(cancellationToken).ConfigureAwait(false);
                 }
@@ -1253,6 +1254,54 @@ namespace Unison.WhatsAppClient.Contacts
 
         /// <inheritdoc />
         public void TriggerBackgroundResolution() => _backgroundResolution.Trigger();
+
+        /// <inheritdoc />
+        public void TriggerDeferredAvatarRetry()
+        {
+            _ = Task.Run(() => RunDeferredAvatarRetryAsync(CancellationToken.None));
+        }
+
+        /// <summary>
+        /// Pictures (+ group listing nudge) after a deferred-avatar timer. Skips
+        /// <see cref="ResolveMissingNamesAsync"/> so a stuck deferral does not re-walk
+        /// every chat name every 20s on Mobile.
+        /// </summary>
+        private async Task RunDeferredAvatarRetryAsync(CancellationToken cancellationToken)
+        {
+            try
+            {
+                string deferReason;
+                if (_syncWork.ShouldDeferAvatarFetch(out deferReason))
+                {
+                    Debug.WriteLine(
+                        "[ContactFacade] Deferred avatar retry still blocked: " + deferReason);
+                    _deferredAvatars.Schedule(deferReason);
+                    return;
+                }
+
+                _deferredAvatars.ResetScheduleStreak();
+                _deferredAvatars.Cancel();
+                await RetrieveContactPicturesAsync(cancellationToken).ConfigureAwait(false);
+                try
+                {
+                    _groups.NotifyGroupListingDue();
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine(
+                        "[ContactFacade] NotifyGroupListingDue after avatar retry failed: " +
+                        ex.Message);
+                }
+            }
+            catch (TaskCanceledException)
+            {
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine(
+                    "[ContactFacade] Deferred avatar retry failed: " + ex.Message);
+            }
+        }
 
         /// <inheritdoc />
         public void CancelBackgroundResolution() => _backgroundResolution.Cancel();

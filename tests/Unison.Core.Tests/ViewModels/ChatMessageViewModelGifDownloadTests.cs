@@ -357,6 +357,8 @@ namespace Unison.Core.Tests.ViewModels
                 Task.CompletedTask;
             public Task HandlePeerDataOperationResponseAsync(
                 Message.Types.PeerDataOperationRequestResponseMessage response) => Task.CompletedTask;
+            public Task NotifyGroupJoinsAsync(System.Collections.Generic.IReadOnlyList<GroupJoinNotifyRequest> joins) =>
+                Task.CompletedTask;
         }
     }
 }

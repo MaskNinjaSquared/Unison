@@ -33,6 +33,10 @@ namespace Unison.Core.Tests.Helpers
 
             public bool HasAuthState => HasAuth;
 
+            public void NoteConnectionStateInitStep(string step)
+            {
+            }
+
             private void Step(string name) =>
                 Trace = string.IsNullOrEmpty(Trace) ? name : Trace + "," + name;
 

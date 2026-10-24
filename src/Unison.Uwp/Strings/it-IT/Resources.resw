@@ -1035,6 +1035,9 @@ Disabilita dopo la diagnosi: lasciarlo attivo rallenta l'app.</value>
   <data name="MessageContact_Add.Text" xml:space="preserve">
     <value>Aggiungi contatto</value>
   </data>
+  <data name="Message_GroupJoin" xml:space="preserve">
+    <value>{0} è entrato nel gruppo</value>
+  </data>
   <data name="ChatDetail_AddContactLink.Content" xml:space="preserve">
     <value>Aggiungi contatto</value>
   </data>

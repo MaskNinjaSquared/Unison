@@ -30,10 +30,17 @@ namespace Unison.Socket.Abstractions
         Task<IDictionary<string, string>> GetAsync(IEnumerable<string> keys);
 
         /// <summary>
-        /// Every stored key/value. Used to warm the mapping store's memory cache at session
-        /// start so sync peeks see pairs written on a previous run.
+        /// Every stored key/value. Tests and diagnostics only — production warm must not
+        /// call this (full-table load hung Mobile cold boot). Prefer
+        /// <see cref="GetRecentForwardPairsAsync"/>.
         /// </summary>
         Task<IDictionary<string, string>> GetAllAsync();
+
+        /// <summary>
+        /// Newest forward pairs (PN user → LID user), excluding <c>_reverse</c> index rows.
+        /// Used for a capped High-tier seed; Mobile never asks.
+        /// </summary>
+        Task<IDictionary<string, string>> GetRecentForwardPairsAsync(int maxPairs);
 
         /// <summary>Writes every pair, overwriting existing keys. Should be atomic if the host can be.</summary>
         Task SetAsync(IDictionary<string, string> values);
@@ -87,6 +94,35 @@ namespace Unison.Socket.Abstractions
             }
 
             return Task.FromResult(copy);
+        }
+
+        public Task<IDictionary<string, string>> GetRecentForwardPairsAsync(int maxPairs)
+        {
+            IDictionary<string, string> found = new Dictionary<string, string>(StringComparer.Ordinal);
+            if (maxPairs <= 0)
+            {
+                return Task.FromResult(found);
+            }
+
+            lock (_gate)
+            {
+                foreach (var pair in _values)
+                {
+                    if (pair.Key == null ||
+                        pair.Key.EndsWith("_reverse", StringComparison.Ordinal))
+                    {
+                        continue;
+                    }
+
+                    found[pair.Key] = pair.Value;
+                    if (found.Count >= maxPairs)
+                    {
+                        break;
+                    }
+                }
+            }
+
+            return Task.FromResult(found);
         }
 
         public Task SetAsync(IDictionary<string, string> values)

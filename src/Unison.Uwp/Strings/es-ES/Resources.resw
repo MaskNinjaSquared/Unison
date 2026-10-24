@@ -974,7 +974,10 @@ Desactívalo tras el diagnóstico: mantenerlo activo ralentiza la aplicación.</
     <value>Mensaje</value>
   </data>
   <data name="MessageContact_Add.Text" xml:space="preserve">
-    <value>A�adir contacto</value>
+    <value>A�adir contacto</value>
+  </data>
+  <data name="Message_GroupJoin" xml:space="preserve">
+    <value>{0} se unió al grupo</value>
   </data>
   <data name="ChatDetail_AddContactLink.Content" xml:space="preserve">
     <value>Añadir contacto</value>

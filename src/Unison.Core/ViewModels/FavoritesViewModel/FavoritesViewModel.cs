@@ -29,6 +29,8 @@ namespace Unison.Core.ViewModels
         private bool _hasFavorites;
         private ObservableCollection<AlphabetChatGroup> _groupedFavorites =
             new ObservableCollection<AlphabetChatGroup>();
+        private ObservableCollection<AlphabetJumpTile> _jumpTiles =
+            new ObservableCollection<AlphabetJumpTile>();
         private ObservableCollection<ChatItem> _pickerCandidates =
             new ObservableCollection<ChatItem>();
 
@@ -77,6 +79,22 @@ namespace Unison.Core.ViewModels
 
                 _groupedFavorites = value;
                 OnPropertyChanged(nameof(GroupedFavorites));
+            }
+        }
+
+        /// <summary>Always A–Z + # for SemanticZoom zoomed-out; empty letters are disabled.</summary>
+        public ObservableCollection<AlphabetJumpTile> JumpTiles
+        {
+            get => _jumpTiles;
+            private set
+            {
+                if (ReferenceEquals(_jumpTiles, value))
+                {
+                    return;
+                }
+
+                _jumpTiles = value;
+                OnPropertyChanged(nameof(JumpTiles));
             }
         }
 
@@ -262,6 +280,7 @@ namespace Unison.Core.ViewModels
             GroupedFavorites = AlphabetChatGroups.Build(
                 favorites,
                 c => c.GetNameResolved(_strings) ?? c.Name ?? c.JID ?? string.Empty);
+            JumpTiles = AlphabetChatGroups.BuildJumpTiles(GroupedFavorites);
 
             if (IsPickerOpen)
             {

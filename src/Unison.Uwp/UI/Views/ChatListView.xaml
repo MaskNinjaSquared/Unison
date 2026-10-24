@@ -300,6 +300,7 @@
                       ItemContainerStyle="{StaticResource WhatsAppChatListItemStyle}"
                       SelectionMode="Single"
                       SelectionChanged="CommunityHubList_SelectionChanged"
+                      ContainerContentChanging="CommunityHubList_ContainerContentChanging"
                       ShowsScrollingPlaceholders="False"/>
         </Grid>
     </Grid>

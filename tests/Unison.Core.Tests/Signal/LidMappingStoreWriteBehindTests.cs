@@ -184,11 +184,17 @@ namespace Unison.Core.Tests.Signal
             {
                 BatchSize = batchSize;
                 DelayMs = delayMs;
+                MemoryCacheMaxEntries = 1024;
+                WarmMaxPairs = 0;
             }
 
             public int BatchSize { get; }
 
             public int DelayMs { get; }
+
+            public int MemoryCacheMaxEntries { get; }
+
+            public int WarmMaxPairs { get; }
         }
 
         private sealed class CountingLidMappingStorage : ILidMappingStorage
@@ -203,6 +209,9 @@ namespace Unison.Core.Tests.Signal
                 _inner.GetAsync(keys);
 
             public Task<IDictionary<string, string>> GetAllAsync() => _inner.GetAllAsync();
+
+            public Task<IDictionary<string, string>> GetRecentForwardPairsAsync(int maxPairs) =>
+                _inner.GetRecentForwardPairsAsync(maxPairs);
 
             public Task SetAsync(IDictionary<string, string> values)
             {

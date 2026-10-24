@@ -29,6 +29,7 @@
             <SolidColorBrush x:Key="WhatsAppTextMediumBrush" Color="#FFCFCFCF"/>
             <SolidColorBrush x:Key="WhatsAppTextLowBrush" Color="#FF667781"/>
             <SolidColorBrush x:Key="WhatsAppGreenFocusBrush" Color="#FF1DAA61"/>
+            <SolidColorBrush x:Key="BootSurfaceBrush" Color="Transparent"/>
             <SolidColorBrush x:Key="WhatsAppUnderlineNormalBrush" Color="#FF9F9F9F"/>
 
             <SolidColorBrush x:Key="ChatListBackgroundBrush" Color="#FF2C2C2C"/>
@@ -154,6 +155,7 @@
             <SolidColorBrush x:Key="WhatsAppTextMediumBrush" Color="#FFCFCFCF"/>
             <SolidColorBrush x:Key="WhatsAppTextLowBrush" Color="#FF667781"/>
             <SolidColorBrush x:Key="WhatsAppGreenFocusBrush" Color="#FF1DAA61"/>
+            <SolidColorBrush x:Key="BootSurfaceBrush" Color="Transparent"/>
             <SolidColorBrush x:Key="WhatsAppUnderlineNormalBrush" Color="#FF9F9F9F"/>
 
             <SolidColorBrush x:Key="ChatListBackgroundBrush" Color="#FF2C2C2C"/>
@@ -278,6 +280,7 @@
             <SolidColorBrush x:Key="WhatsAppTextMediumBrush" Color="#FF3B4A54"/>
             <SolidColorBrush x:Key="WhatsAppTextLowBrush" Color="#FF667781"/>
             <SolidColorBrush x:Key="WhatsAppGreenFocusBrush" Color="#FF1DAA61"/>
+            <SolidColorBrush x:Key="BootSurfaceBrush" Color="Transparent"/>
             <SolidColorBrush x:Key="WhatsAppUnderlineNormalBrush" Color="#FF8696A0"/>
 
             <SolidColorBrush x:Key="ChatListBackgroundBrush" Color="#FFFFFFFF"/>

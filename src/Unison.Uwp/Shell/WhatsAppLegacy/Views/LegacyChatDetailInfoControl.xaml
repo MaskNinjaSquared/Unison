@@ -10,9 +10,9 @@
     d:DesignWidth="400">
 
     <UserControl.Resources>
-        <SolidColorBrush x:Key="ChatDetailInfoBackgroundBrush" Color="#00656A"/>
-        <SolidColorBrush x:Key="ChatDetailInfoCommandBarBrush" Color="#00656A"/>
-        <SolidColorBrush x:Key="ChatDetailInfoToggleOnBrush" Color="#00656A"/>
+        <SolidColorBrush x:Key="ChatDetailInfoBackgroundBrush" Color="#04564A"/>
+        <SolidColorBrush x:Key="ChatDetailInfoCommandBarBrush" Color="#04564A"/>
+        <SolidColorBrush x:Key="ChatDetailInfoToggleOnBrush" Color="#04564A"/>
         <SolidColorBrush x:Key="ChatDetailInfoToggleOnHoverBrush" Color="#007A80"/>
         <SolidColorBrush x:Key="ChatDetailInfoToggleOnPressedBrush" Color="#005256"/>
 

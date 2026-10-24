@@ -979,6 +979,9 @@
   <data name="MessageContact_Add.Text" xml:space="preserve">
     <value>???????? ???????</value>
   </data>
+  <data name="Message_GroupJoin" xml:space="preserve">
+    <value>{0} вступил(а) в группу</value>
+  </data>
   <data name="ChatDetail_AddContactLink.Content" xml:space="preserve">
     <value>Добавить контакт</value>
   </data>

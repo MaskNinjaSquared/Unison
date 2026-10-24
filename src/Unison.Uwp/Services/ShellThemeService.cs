@@ -48,6 +48,12 @@ namespace Unison.Uwp.Services
 
         public string ShellBrandIcon => Current.ShellBrandIcon;
 
+        public bool ContactsPickerUsesCompactRows => Current.ContactsPickerUsesCompactRows;
+
+        public bool ContactsPickerAnimatesOpen => Current.ContactsPickerAnimatesOpen;
+
+        public bool ContactsPickerDefersItemsUntilOpen => Current.ContactsPickerDefersItemsUntilOpen;
+
         public Type ResolveRootPage(NavigationDestination destination) =>
             Current.ResolveRootPage(destination);
 
@@ -88,6 +94,12 @@ namespace Unison.Uwp.Services
                 Debug.WriteLine("[ShellTheme] ApplyChrome: " + ex.Message);
             }
         }
+
+        /// <summary>Boot end fill (Legacy #04564A; WhatsApp transparent; Unison splash green).</summary>
+        public Windows.UI.Color BootSurfaceColor => Current.BootSurfaceColor;
+
+        /// <summary>When true, BootView ColorAnimation from splash green to <see cref="BootSurfaceColor"/>.</summary>
+        public bool FadeBootLogoBackground => Current.FadeBootLogoBackground;
 
         public Task ApplyMobileStatusBarAsync()
         {

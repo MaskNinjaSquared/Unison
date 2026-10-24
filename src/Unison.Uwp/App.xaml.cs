@@ -3,6 +3,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Windows.ApplicationModel;
 using Windows.ApplicationModel.Activation;
+using Windows.ApplicationModel.DataTransfer.ShareTarget;
 using Windows.Foundation;
 using Windows.Foundation.Metadata;
 using Windows.Graphics.Display;
@@ -338,6 +339,8 @@ namespace Unison.Uwp
             services.AddSingleton<ChatListInitialPaintGate>();
             // Toast/tile: hold chat-list x:Load until the conversation pane has loaded.
             services.AddSingleton<ChatListDeepLinkHoldGate>();
+            // Toast/deep-link chat open: pause tip-swapped UI while timeline SQLite loads.
+            services.AddSingleton<ChatTimelineLoadPriorityGate>();
             // Hold DisplayRequest for the first-sync list hold; HistoryFacade calls Hold/Release.
             services.AddSingleton<IDisplayKeepAwakeService, DisplayKeepAwakeService>();
             services.AddSingleton<ICameraOrientationService, CameraOrientationService>();
@@ -367,7 +370,10 @@ namespace Unison.Uwp
                 sp.GetRequiredService<AttachedUiDispatcher>(),
                 sp.GetRequiredService<IStringResources>(),
                 sp.GetRequiredService<IRuntimeDiagnostics>(),
-                () => sp.GetRequiredService<SyncBudget>().IsFrugal));
+                () => sp.GetRequiredService<SyncBudget>().IsFrugal,
+                () => Unison.Core.Helpers.Chats.ChatTimelineOpenPriority.ShouldPauseTipReconcileUi(
+                    sp.GetRequiredService<ChatListDeepLinkHoldGate>().IsHeld,
+                    sp.GetRequiredService<ChatTimelineLoadPriorityGate>().IsHeld)));
             services.AddSingleton(sp => new ChatNameRefresh(
                 sp.GetRequiredService<AttachedUiDispatcher>(),
                 sp.GetRequiredService<IChatStateStore>(),
@@ -531,8 +537,14 @@ namespace Unison.Uwp
                 sp => sp.GetRequiredService<WhatsAppService>());
             services.AddSingleton<IChatIdentityPersistence>(
                 sp => sp.GetRequiredService<WhatsAppService>());
-            services.AddSingleton<IDeferredAvatarResolution>(sp => new DeferredAvatarResolution(
-                () => sp.GetRequiredService<IContactService>()));
+            services.AddSingleton<IDeferredAvatarResolution>(sp =>
+            {
+                SyncWorkloadStrategy workload = sp.GetRequiredService<SyncWorkloadStrategy>();
+                return new DeferredAvatarResolution(
+                    () => sp.GetRequiredService<IContactService>(),
+                    () => TimeSpan.FromSeconds(workload.DeferredAvatarRetryDelaySeconds),
+                    () => workload.DeferredAvatarMaxRetries);
+            });
             services.AddSingleton<IBackgroundResolutionGate>(
                 sp => sp.GetRequiredService<WhatsAppService>());
             services.AddSingleton<ISocketAliasRegistrar>(
@@ -821,6 +833,8 @@ namespace Unison.Uwp
             services.AddSingleton<IFilePicker, FilePickerService>();
             services.AddSingleton<IAudioExportService, AudioExportService>();
             services.AddSingleton<IShareService, ShareService>();
+            services.AddSingleton<ShareTargetSession>();
+            services.AddSingleton<IShareTargetSession>(sp => sp.GetRequiredService<ShareTargetSession>());
             services.AddSingleton<IAudioRecordingService, AudioRecordingService>();
             services.AddSingleton<IUiSoundService, UiSoundService>();
             services.AddSingleton<IVoicePlaybackRoutingService, VoicePlaybackRoutingService>();
@@ -1044,6 +1058,81 @@ namespace Unison.Uwp
             base.OnActivated(args);
         }
 
+        protected override async void OnShareTargetActivated(ShareTargetActivatedEventArgs args)
+        {
+            ShareOperation operation = args?.ShareOperation;
+            if (operation == null)
+            {
+                return;
+            }
+
+            bool appWasAlreadyOpen = WasAppAlreadyOpen(args.PreviousExecutionState);
+            RuntimeDiagnosticsService.Instance.Write(
+                "lifecycle",
+                "share-target-activated",
+                "previousState=" + args.PreviousExecutionState +
+                "; warm=" + appWasAlreadyOpen);
+
+            try
+            {
+                // Same window as Unigram on Mobile: the Share Target host IS the app
+                // window. Warm (Running/Suspended) reuses Frame content; cold boots then
+                // opens the picker on that host. Do not LaunchUriAsync / ReportCompleted
+                // handoff — that dismisses the only window (splash→exit).
+                // IShareTargetSession.Complete only after cancel / media apply / suspend —
+                // never here during activation (would dismiss the Mobile share host).
+                NotificationService.Instance.Initialize();
+                LiveTilesService.Instance.Initialize();
+                EnsureWindowVisibilityTracking();
+
+                IncomingSharePayload payload = await ShareActivationMaterializer.MaterializeAsync(operation);
+                try
+                {
+                    operation.ReportDataRetrieved();
+                }
+                catch
+                {
+                }
+
+                if (payload == null || payload.IsEmpty)
+                {
+                    try
+                    {
+                        operation.ReportCompleted();
+                    }
+                    catch
+                    {
+                    }
+
+                    return;
+                }
+
+                // Ensure DI before Bind so Complete() on cancel/apply/suspend can find the session.
+                EnsureRootFrame();
+                Services?.GetService<ShareTargetSession>()?.Bind(operation);
+
+                ActivateWithRouter(
+                    args.PreviousExecutionState,
+                    _ => string.Empty,
+                    (router, _) => router.RouteShare(payload));
+            }
+            catch (Exception ex)
+            {
+                try
+                {
+                    operation.ReportError(ex.Message);
+                }
+                catch
+                {
+                }
+
+                RuntimeDiagnosticsService.Instance.Write(
+                    "lifecycle",
+                    "share-target-fail",
+                    ex.Message);
+            }
+        }
+
         private const string PeopleMessageScheme = "ms-ipmessaging";
         private const string PeopleProfileScheme = "ms-contact-profile";
 
@@ -1230,7 +1319,19 @@ namespace Unison.Uwp
 
             try
             {
-                await App.GetConnectionService().ResumeAsync();
+                // Share Target cold start can raise visibility before DI/connection exist
+                // (NRE → journal "visibility-reconnect-failed" then process dies).
+                IConnectionService connection = App.GetConnectionService();
+                if (connection == null)
+                {
+                    RuntimeDiagnosticsService.Instance.Write(
+                        "lifecycle",
+                        "visibility-reconnect-skipped",
+                        "reason=connection-not-ready");
+                    return;
+                }
+
+                await connection.ResumeAsync();
             }
             catch (Exception ex)
             {
@@ -1437,6 +1538,18 @@ namespace Unison.Uwp
             RuntimeDiagnosticsService.Instance.Write("lifecycle", "suspending-start");
             try
             {
+                // Text-only share leaves the contract open so the composer stays usable;
+                // end it on suspend so the source app is not stuck waiting.
+                try
+                {
+                    Services?.GetService<IShareTargetSession>()?.Complete();
+                }
+                catch (Exception shareEx)
+                {
+                    System.Diagnostics.Debug.WriteLine(
+                        "[App] ShareTarget Complete on suspend: " + shareEx.Message);
+                }
+
                 try
                 {
                     LidMappingPersistHost lidPersist = Services?.GetService<LidMappingPersistHost>();

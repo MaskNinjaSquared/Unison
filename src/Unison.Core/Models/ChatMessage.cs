@@ -380,7 +380,8 @@ namespace Unison.Core.Models
         /// </summary>
         [JsonIgnore]
         public bool ShowTextContent =>
-            !IsRevoked && !IsAudio && !IsImage && !IsVideo && !IsGif && !IsSticker && !IsDocument && !IsContact;
+            !IsRevoked && !IsAudio && !IsImage && !IsVideo && !IsGif && !IsSticker && !IsDocument &&
+            !IsContact && !IsGroupJoin;
 
         /// <summary>Protocol video message (local file may still be pending download).</summary>
         [JsonIgnore]
@@ -448,6 +449,36 @@ namespace Unison.Core.Models
         /// <summary>Shared contact card (<c>ContactMessage</c>).</summary>
         [JsonIgnore]
         public bool IsContact => _kind == ChatMessageKind.Contact;
+
+        /// <summary>Group join system line (<c>w:gp2</c> add).</summary>
+        [JsonIgnore]
+        public bool IsGroupJoin => _kind == ChatMessageKind.GroupJoin;
+
+        private string _groupJoinJid;
+        /// <summary>JID of the member who joined (protocol participant jid).</summary>
+        public string GroupJoinJid
+        {
+            get => _groupJoinJid;
+            set
+            {
+                if (string.Equals(_groupJoinJid, value, StringComparison.Ordinal)) return;
+                _groupJoinJid = value;
+                OnPropertyChanged();
+            }
+        }
+
+        private string _groupJoinPhone;
+        /// <summary>Phone digits when the wire sent <c>phone_number</c> (LID rows).</summary>
+        public string GroupJoinPhone
+        {
+            get => _groupJoinPhone;
+            set
+            {
+                if (string.Equals(_groupJoinPhone, value, StringComparison.Ordinal)) return;
+                _groupJoinPhone = value;
+                OnPropertyChanged();
+            }
+        }
 
         private string _contactCardDisplayName;
         /// <summary>Display name on the shared contact card (protocol / vCard FN).</summary>
@@ -1245,6 +1276,7 @@ namespace Unison.Core.Models
                 nameof(IsSticker),
                 nameof(IsDocument),
                 nameof(IsContact),
+                nameof(IsGroupJoin),
                 nameof(ShowTextContent),
                 nameof(ShowStickerError),
                 nameof(ShowStickerLoading),

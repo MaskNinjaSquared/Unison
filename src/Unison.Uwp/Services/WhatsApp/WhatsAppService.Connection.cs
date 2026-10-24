@@ -34,6 +34,7 @@ using Unison.Socket.UseCases.Contacts;
 using Unison.Uwp.Helpers;
 using Microsoft.Extensions.DependencyInjection;
 using Unison.WhatsAppClient.Abstractions;
+using Unison.WhatsAppClient.Connection;
 using Unison.WhatsAppClient.Helpers;
 using Windows.Networking.Sockets;
 
@@ -942,10 +943,18 @@ namespace Unison.Uwp.Services.WhatsApp
         /// </summary>
         public async Task InitializeConnectionStateAsync()
         {
-            await _initLock.WaitAsync();
+            await _initLock.WaitAsync().ConfigureAwait(false);
             try
             {
+                RuntimeDiagnosticsService.Instance.Write(
+                    "startup",
+                    "connection-state-init-begin",
+                    "hasAuth=" + (_authState != null));
                 await InitializeConnectionStateDispatch.RunAsync(this).ConfigureAwait(false);
+                RuntimeDiagnosticsService.Instance.Write(
+                    "startup",
+                    "connection-state-init-end",
+                    "registered=" + (_authState != null && _authState.Registered));
             }
             finally
             {
@@ -956,6 +965,12 @@ namespace Unison.Uwp.Services.WhatsApp
         // --- IInitializeConnectionStateHost ----------------------------------
 
         bool IInitializeConnectionStateHost.HasAuthState => _authState != null;
+
+        void IInitializeConnectionStateHost.NoteConnectionStateInitStep(string step) =>
+            RuntimeDiagnosticsService.Instance.Write(
+                "startup",
+                "connection-state-init-step",
+                "step=" + (step ?? string.Empty));
 
         Task IInitializeConnectionStateHost.InitializeMessageStoreAsync() =>
             _messageStore.InitializeAsync();
@@ -998,26 +1013,88 @@ namespace Unison.Uwp.Services.WhatsApp
             SetSuppressReconnectToast(!hasActiveAccount);
         }
 
-        async Task IInitializeConnectionStateHost.WarmLidMappingCacheAsync()
+        Task IInitializeConnectionStateHost.WarmLidMappingCacheAsync()
         {
             if (_lidMappings == null)
             {
-                return;
+                return Task.CompletedTask;
             }
 
-            try
-            {
-                await _lidMappings.WarmCacheFromStorageAsync().ConfigureAwait(false);
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine("[WhatsAppService] LidMapping warm failed: " + ex.Message);
-            }
+            // All tiers: WarmMaxPairs == 0 — no boot seed (Mobile or High). High only
+            // keeps a larger in-memory LRU; pairs enter RAM on demand.
+            RuntimeDiagnosticsService.Instance.Write(
+                "startup",
+                "lid-warm-skipped",
+                "reason=on-demand;maxPairs=0");
+            return Task.CompletedTask;
         }
 
         async Task IInitializeConnectionStateHost.RestorePersistedJidAliasesAsync()
         {
-            var storedAliases = await _messageStore.LoadJidAliasesAsync();
+            // Mobile Low: reading/deserializing a large aliases JSON has blocked cold boot
+            // for 10s+ after lid-warm (journal stuck on step=jid-aliases). Cap and continue;
+            // aliases still resolve on demand / later warm.
+            const int AliasBudgetMs = 3000;
+            Dictionary<string, string> storedAliases;
+            try
+            {
+                Task<Dictionary<string, string>> load = _messageStore.LoadJidAliasesAsync();
+                Task finished = await Task.WhenAny(load, Task.Delay(AliasBudgetMs)).ConfigureAwait(false);
+                if (finished != load)
+                {
+                    RuntimeDiagnosticsService.Instance.Write(
+                        "startup",
+                        "jid-aliases-timeout",
+                        "budgetMs=" + AliasBudgetMs);
+                    _ = load.ContinueWith(
+                        t =>
+                        {
+                            if (t.Status != TaskStatus.RanToCompletion)
+                            {
+                                return;
+                            }
+
+                            try
+                            {
+                                ApplyPersistedJidAliases(t.Result);
+                                RuntimeDiagnosticsService.Instance.Write(
+                                    "startup",
+                                    "jid-aliases-deferred-done",
+                                    "count=" + (t.Result != null ? t.Result.Count : 0));
+                            }
+                            catch (Exception deferredEx)
+                            {
+                                Debug.WriteLine(
+                                    "[WhatsAppService] Deferred JID alias restore failed: " +
+                                    deferredEx.Message);
+                            }
+                        },
+                        TaskContinuationOptions.None);
+                    return;
+                }
+
+                storedAliases = await load.ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[WhatsAppService] JID alias load failed: " + ex.Message);
+                RuntimeDiagnosticsService.Instance.Write(
+                    "startup",
+                    "jid-aliases-failed",
+                    ex.Message);
+                return;
+            }
+
+            ApplyPersistedJidAliases(storedAliases);
+        }
+
+        void ApplyPersistedJidAliases(Dictionary<string, string> storedAliases)
+        {
+            if (storedAliases == null || storedAliases.Count == 0)
+            {
+                return;
+            }
+
             int poisonedAliases = 0;
             using (JidAlias.BeginBulkImport())
             {
@@ -1788,13 +1865,10 @@ namespace Unison.Uwp.Services.WhatsApp
 
         void IConnectAsyncHost.WriteConnectPrepareAbort(ConnectionConnectPrepareResult result)
         {
-            string reason = result == ConnectionConnectPrepareResult.AbortSessionWipeInFlight
-                ? "session-wipe-in-flight"
-                : "fatal-session-ended-after-auth-load";
             RuntimeDiagnosticsService.Instance.Write(
                 "connection",
-                "connect-aborted",
-                "reason=" + reason);
+                ConnectionConnectAbortedJournal.EventName,
+                ConnectionConnectAbortedJournal.DetailForPrepareAbort(result));
         }
 
         void IConnectAsyncHost.LogConnectAuthState()
@@ -1819,7 +1893,7 @@ namespace Unison.Uwp.Services.WhatsApp
         }
 
         Task IConnectAsyncHost.OpenConnectAsync(bool reuseLoadedKeyState) =>
-            ConnectionConnectOpen.RunAsync(this, _socketSessions, reuseLoadedKeyState);
+            ConnectionConnectOpen.RunAsync(_connectionOpen, _socketSessions, reuseLoadedKeyState);
 
         public Task AutoReconnectAsync()
         {
@@ -2064,7 +2138,7 @@ namespace Unison.Uwp.Services.WhatsApp
             _historyRequests.ClearBackoff();
         }
 
-        ConnectionSocketSessionRequest IConnectionConnectOpenHost.CreateSocketSessionRequest(
+        ConnectionSocketSessionRequest IConnectionSocketAssignment.CreateSocketSessionRequest(
             bool reuseLoadedKeyState) =>
             new ConnectionSocketSessionRequest
             {
@@ -2075,10 +2149,10 @@ namespace Unison.Uwp.Services.WhatsApp
                 WireOwner = this
             };
 
-        void IConnectionConnectOpenHost.AssignSocketSession(object session) =>
+        void IConnectionSocketAssignment.AssignSocketSession(object session) =>
             _socket = session as IWhatsAppSocket;
 
-        void IConnectionConnectOpenHost.ApplyPersistentKeyStore(object keyStore, bool reuseLoadedKeyState)
+        void IConnectionSocketAssignment.ApplyPersistentKeyStore(object keyStore, bool reuseLoadedKeyState)
         {
             _sharedKeyStore = keyStore as FileKeyStore;
             var auth = _authState;
@@ -2089,28 +2163,17 @@ namespace Unison.Uwp.Services.WhatsApp
 
             RuntimeDiagnosticsService.Instance.Write(
                 "connection",
-                reuseLoadedKeyState ? "fast-resume-key-store-reused" : "key-store-cold-loaded",
-                "sessions=" + auth.Sessions.Count + "; prekeys=" + auth.PreKeys.Count);
+                ConnectionKeyStoreOpenJournal.EventName(reuseLoadedKeyState),
+                ConnectionKeyStoreOpenJournal.Detail(auth.Sessions.Count, auth.PreKeys.Count));
         }
 
-        bool IConnectionConnectOpenHost.ShouldRefuseConnectBecauseSessionDied =>
+        bool IConnectionSocketAssignment.ShouldRefuseConnectBecauseSessionDied =>
             ShouldRefuseConnectBecauseSessionDied();
 
-        void IConnectionConnectOpenHost.AbortAssignedSocket(string journalReason)
-        {
-            RuntimeDiagnosticsService.Instance.Write(
-                "connection",
-                "connect-aborted",
-                "reason=" + journalReason);
-            var socket = _socket;
-            _socketSessions.DisposeSession(socket);
-            if (ReferenceEquals(_socket, socket))
-            {
-                _socket = null;
-            }
-        }
+        void IConnectionSocketAssignment.AbortAssignedSocket(string journalReason) =>
+            ConnectionAssignedSocketClear.Abort(this, journalReason);
 
-        void IConnectionConnectOpenHost.StartHealthMonitorIfAssignedCurrent()
+        void IConnectionSocketAssignment.StartHealthMonitorIfAssignedCurrent()
         {
             var socket = _socket;
             if (socket != null)
@@ -2119,7 +2182,16 @@ namespace Unison.Uwp.Services.WhatsApp
             }
         }
 
-        void IConnectionConnectOpenHost.ClearAssignedSocketAfterFailedConnect()
+        void IConnectionSocketAssignment.ClearAssignedSocketAfterFailedConnect() =>
+            ConnectionAssignedSocketClear.AfterFailedConnect(this);
+
+        void IConnectionAssignedSocketClearHost.NoteConnectAborted(string journalReason) =>
+            RuntimeDiagnosticsService.Instance.Write(
+                "connection",
+                "connect-aborted",
+                "reason=" + (journalReason ?? string.Empty));
+
+        void IConnectionAssignedSocketClearHost.DisposeAndClearAssignedSocket()
         {
             var socket = _socket;
             _socket = null;

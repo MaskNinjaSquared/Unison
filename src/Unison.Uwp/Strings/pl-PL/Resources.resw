@@ -1035,6 +1035,9 @@ Wyłącz po zakończeniu diagnozy: pozostawienie włączonego spowalnia aplikacj
   <data name="MessageContact_Add.Text" xml:space="preserve">
     <value>Dodaj kontakt</value>
   </data>
+  <data name="Message_GroupJoin" xml:space="preserve">
+    <value>{0} dołączył do grupy</value>
+  </data>
   <data name="ChatDetail_AddContactLink.Content" xml:space="preserve">
     <value>Dodaj kontakt</value>
   </data>

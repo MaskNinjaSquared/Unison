@@ -263,6 +263,11 @@ namespace Unison.Core.ViewModels
                 RaiseContactUiChanged();
             }
 
+            if (IsGroupJoinProperty(name))
+            {
+                Raise(nameof(IsGroupJoin));
+            }
+
             if (IsAudioProperty(name))
             {
                 RaiseAudioModelUiChanged();
@@ -356,6 +361,12 @@ namespace Unison.Core.ViewModels
             name == nameof(ChatMessage.ContactCardPhone) ||
             name == nameof(ChatMessage.ContactCardPhotoUri) ||
             name == nameof(ChatMessage.HasContactCardPhoto) ||
+            name == nameof(ChatMessage.Kind);
+
+        private static bool IsGroupJoinProperty(string name) =>
+            name == nameof(ChatMessage.IsGroupJoin) ||
+            name == nameof(ChatMessage.GroupJoinJid) ||
+            name == nameof(ChatMessage.GroupJoinPhone) ||
             name == nameof(ChatMessage.Kind);
 
         private static bool IsAudioProperty(string name) =>
@@ -1235,6 +1246,8 @@ namespace Unison.Core.ViewModels
         public bool IsDocument => Model.IsDocument;
 
         public bool IsContact => Model.IsContact;
+
+        public bool IsGroupJoin => Model.IsGroupJoin;
 
         public string ContactCardDisplayName
         {

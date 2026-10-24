@@ -249,6 +249,11 @@ namespace Unison.WhatsAppClient.Helpers
                     row.MediaFileName = NullIfEmpty(message.ContactCardDisplayName);
                     row.MediaLocalUri = NullIfEmpty(message.ContactCardPhotoUri);
                     break;
+                case ChatPreviewKind.GroupJoin:
+                    // Url=joiner JID, DirectPath=phone when present; Body holds the system line.
+                    row.MediaUrl = NullIfEmpty(message.GroupJoinJid);
+                    row.MediaDirectPath = NullIfEmpty(message.GroupJoinPhone);
+                    break;
             }
         }
 

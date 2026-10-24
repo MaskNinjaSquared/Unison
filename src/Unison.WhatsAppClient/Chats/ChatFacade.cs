@@ -87,6 +87,10 @@ namespace Unison.WhatsAppClient.Chats
         /// <summary>Short enough that the first recovered chat shows while a long replay continues.</summary>
         private static readonly TimeSpan OfflineReplayTipThrottle = TimeSpan.FromMilliseconds(180);
 
+        private readonly object _fullPreviewReconcileGate = new object();
+        private Task _inflightFullPreviewReconcile;
+        private DateTime _lastFullPreviewReconcileUtc = DateTime.MinValue;
+
         public ChatFacade(
             IChatAccountActions account,
             IAppStateLocalHost localAppState,
@@ -392,7 +396,11 @@ namespace Unison.WhatsAppClient.Chats
             }
             catch (Exception ex)
             {
-                Debug.WriteLine("[ChatFacade] Favorite patch failed; rolling back" + Environment.NewLine + ex);
+                // Common when regular_low LT-hash is corrupt (MAC mismatch → resync give-up):
+                // local membership rolls back; wire stays unchanged until app-state recovers.
+                Debug.WriteLine(
+                    "[ChatFacade] Favorite patch failed; rolling back local membership: " +
+                    ex.Message + Environment.NewLine + ex);
                 try
                 {
                     await ApplyLocalFavoriteAsync(canonicalJid, wasFavorite).ConfigureAwait(false);
@@ -1002,9 +1010,102 @@ namespace Unison.WhatsAppClient.Chats
             _catalog.PersistRows(chats);
         }
 
-        public async Task ReconcileChatPreviewsFromSqliteAsync(
+        public Task ReconcileChatPreviewsFromSqliteAsync(
             IReadOnlyList<string> chatJids = null,
             string reason = null)
+        {
+            return ReconcileChatPreviewsFromSqliteCoreAsync(
+                chatJids,
+                reason,
+                forceFull: false);
+        }
+
+        /// <summary>
+        /// Full-list tip walks are single-flight + cool-down coalesced so post-replay and
+        /// deferred-startup do not paint every row twice. Chunked (jid list) walks bypass
+        /// that gate. <paramref name="forceFull"/> wins after structural list edits.
+        /// </summary>
+        private async Task ReconcileChatPreviewsFromSqliteCoreAsync(
+            IReadOnlyList<string> chatJids,
+            string reason,
+            bool forceFull)
+        {
+            bool isFull = chatJids == null || chatJids.Count == 0;
+            if (!isFull)
+            {
+                await ApplySqlitePreviewReconcileAsync(chatJids, reason).ConfigureAwait(false);
+                return;
+            }
+
+            if (!forceFull &&
+                FullChatPreviewReconcileGate.ShouldSkipDuplicateFull(
+                    _lastFullPreviewReconcileUtc,
+                    DateTime.UtcNow,
+                    FullChatPreviewReconcileGate.DefaultCoolDown,
+                    listStructureChanged: false))
+            {
+                WritePreviewTipDiag(
+                    "reconcile-coalesced",
+                    "reason=" + (reason ?? "unknown") + "; mode=cool-down");
+                return;
+            }
+
+            // Claim or join. A forced walk that joined an older pass retries once so tips
+            // land after structural edits that ran while that pass was in flight.
+            bool retriedAfterJoin = false;
+            while (true)
+            {
+                Task existing;
+                Task ours = null;
+                lock (_fullPreviewReconcileGate)
+                {
+                    existing = _inflightFullPreviewReconcile;
+                    if (existing == null)
+                    {
+                        ours = RunFullPreviewReconcileAsync(reason);
+                        _inflightFullPreviewReconcile = ours;
+                    }
+                }
+
+                if (existing != null)
+                {
+                    await existing.ConfigureAwait(false);
+                    if (!forceFull || retriedAfterJoin)
+                    {
+                        WritePreviewTipDiag(
+                            "reconcile-coalesced",
+                            "reason=" + (reason ?? "unknown") + "; mode=joined-inflight");
+                        return;
+                    }
+
+                    retriedAfterJoin = true;
+                    continue;
+                }
+
+                await ours.ConfigureAwait(false);
+                return;
+            }
+        }
+
+        private async Task RunFullPreviewReconcileAsync(string reason)
+        {
+            try
+            {
+                await ApplySqlitePreviewReconcileAsync(null, reason).ConfigureAwait(false);
+            }
+            finally
+            {
+                lock (_fullPreviewReconcileGate)
+                {
+                    _inflightFullPreviewReconcile = null;
+                    _lastFullPreviewReconcileUtc = DateTime.UtcNow;
+                }
+            }
+        }
+
+        private async Task ApplySqlitePreviewReconcileAsync(
+            IReadOnlyList<string> chatJids,
+            string reason)
         {
             int updated = await _sqlitePreviews.ReconcileAsync(chatJids, reason).ConfigureAwait(false);
             if (updated <= 0)
@@ -1016,6 +1117,14 @@ namespace Unison.WhatsAppClient.Chats
             // progress (that stuck "Synchronizing history…" on quiet accounts). Still
             // flush the catalogue when a tip actually moved.
             _offlineReplay.SchedulePersist();
+        }
+
+        private void WritePreviewTipDiag(string eventName, string details)
+        {
+            if (_diagnostics != null)
+            {
+                _diagnostics.Write("preview-tip", eventName, details);
+            }
         }
 
         public async Task RefreshChatPreviewAsync(
@@ -1136,9 +1245,14 @@ namespace Unison.WhatsAppClient.Chats
         /// <inheritdoc />
         public async Task NotifyDeferredStartupListRepairAsync()
         {
-            await DeduplicateChatListAsync("deferred-startup").ConfigureAwait(false);
-            await RepairLegacyDeletedPreviewsAsync().ConfigureAwait(false);
-            await ReconcileChatPreviewsFromSqliteAsync(null, "deferred-startup")
+            bool deduped = await RunChatListDedupAsync("deferred-startup").ConfigureAwait(false);
+            bool repaired = await RepairLegacyDeletedPreviewsCoreAsync().ConfigureAwait(false);
+            // Skip a second full tip walk when post-replay just finished and the list
+            // shape did not change; force when dedupe/repair invalidated those tips.
+            await ReconcileChatPreviewsFromSqliteCoreAsync(
+                    null,
+                    "deferred-startup",
+                    forceFull: deduped || repaired)
                 .ConfigureAwait(false);
         }
 
@@ -1201,12 +1315,13 @@ namespace Unison.WhatsAppClient.Chats
 
         public Task DeduplicateChatListAsync(string reason) => RunChatListDedupAsync(reason);
 
-        private async Task RunChatListDedupAsync(string reason)
+        /// <returns>True when rows were merged (tip ownership may have moved).</returns>
+        private async Task<bool> RunChatListDedupAsync(string reason)
         {
             ChatListDeduperResult result = await _deduper.RunAsync(reason ?? "facade").ConfigureAwait(false);
             if (result.Merged <= 0 && result.NormalizedKeys <= 0)
             {
-                return;
+                return false;
             }
 
             Debug.WriteLine(
@@ -1219,6 +1334,8 @@ namespace Unison.WhatsAppClient.Chats
             {
                 _identity.PersistNow("dedupe:" + (reason ?? "facade"));
             }
+
+            return result.Merged > 0;
         }
 
         public async Task ShowLocalSendPreviewAsync(
@@ -1259,7 +1376,11 @@ namespace Unison.WhatsAppClient.Chats
             _catalog.Schedule();
         }
 
-        public async Task RepairLegacyDeletedPreviewsAsync()
+        public Task RepairLegacyDeletedPreviewsAsync() =>
+            RepairLegacyDeletedPreviewsCoreAsync();
+
+        /// <returns>True when at least one suspect tip was rewritten or cleared.</returns>
+        private async Task<bool> RepairLegacyDeletedPreviewsCoreAsync()
         {
             // Builds before v5.14 could persist a replayed revoke envelope as a new
             // "[Message Deleted]" row with DateTime.Now. Repair only those known-bad
@@ -1279,7 +1400,7 @@ namespace Unison.WhatsAppClient.Chats
 
             if (suspicious == null || suspicious.Count == 0)
             {
-                return;
+                return false;
             }
 
             string yesterday = _strings.Get("Common_Yesterday", "Yesterday");
@@ -1369,7 +1490,7 @@ namespace Unison.WhatsAppClient.Chats
 
             if (!changed)
             {
-                return;
+                return false;
             }
 
             try
@@ -1404,6 +1525,7 @@ namespace Unison.WhatsAppClient.Chats
 
             _resolveHistory()?.NotifyHistorySyncReceived(null);
             _offlineReplay.SchedulePersist();
+            return true;
         }
 
         public async Task<LiveIncomingChatListApplyResult> ApplyLiveIncomingChatListAsync(

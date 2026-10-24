@@ -3259,6 +3259,101 @@ namespace Unison.WhatsAppClient.Messages
             UnloadMessageCacheIfInactive(jid);
         }
 
+        /// <inheritdoc />
+        public async Task NotifyGroupJoinsAsync(IReadOnlyList<GroupJoinNotifyRequest> joins)
+        {
+            if (joins == null || joins.Count == 0)
+            {
+                return;
+            }
+
+            string template = _strings != null
+                ? _strings.Get("Message_GroupJoin", "{0} joined the group")
+                : "{0} joined the group";
+
+            foreach (GroupJoinNotifyRequest join in joins)
+            {
+                if (join == null ||
+                    string.IsNullOrWhiteSpace(join.GroupJid) ||
+                    string.IsNullOrWhiteSpace(join.ParticipantJid))
+                {
+                    continue;
+                }
+
+                string groupJid = JidHelper.Normalize(join.GroupJid) ?? join.GroupJid.Trim();
+                if (!JidHelper.IsGroupJid(groupJid))
+                {
+                    continue;
+                }
+
+                string participant = _jids.GetCanonicalJid(join.ParticipantJid) ?? join.ParticipantJid.Trim();
+                string phoneDigits = PhoneNumberHelper.NormalizePhoneDigits(join.PhoneDigits)
+                    ?? PhoneNumberHelper.NormalizePhoneDigits(JidHelper.TryPhoneFromJid(join.PhoneDigits))
+                    ?? JidHelper.TryPhoneFromJid(participant);
+
+                string who = (_chatState.ResolveDisplayName(participant) ?? string.Empty).Trim();
+                if (string.IsNullOrEmpty(who) ||
+                    who.IndexOf('@') >= 0 ||
+                    SelfChatNaming.IsKnownFallback(who))
+                {
+                    who = !string.IsNullOrWhiteSpace(phoneDigits)
+                        ? phoneDigits
+                        : (JidHelper.TryPhoneFromJid(participant) ?? participant);
+                }
+
+                string content = string.Format(
+                    System.Globalization.CultureInfo.CurrentCulture,
+                    template,
+                    who);
+
+                DateTime stamp = join.TimestampUtc == default
+                    ? DateTime.UtcNow
+                    : DateTime.SpecifyKind(join.TimestampUtc, DateTimeKind.Utc);
+
+                string id = !string.IsNullOrWhiteSpace(join.NotificationId)
+                    ? "gj-" + join.NotificationId.Trim() + "-" + participant
+                    : "gj-" + participant + "-" + stamp.Ticks.ToString(System.Globalization.CultureInfo.InvariantCulture);
+
+                var chatMessage = new ChatMessage
+                {
+                    Id = id,
+                    Kind = ChatMessageKind.GroupJoin,
+                    Content = content,
+                    Timestamp = stamp,
+                    IsFromMe = false,
+                    GroupJoinJid = participant,
+                    GroupJoinPhone = phoneDigits,
+                    ParticipantJid = participant,
+                    SenderName = who
+                };
+
+                IncomingTimelineAcceptResult timeline = AcceptIncomingTimeline(groupJid, chatMessage, isGroup: true);
+                if (timeline.Kind == IncomingTimelineAcceptKind.DuplicateSameChat ||
+                    timeline.Kind == IncomingTimelineAcceptKind.AliasLinkedDuplicate ||
+                    timeline.Kind == IncomingTimelineAcceptKind.AliasConsolidated)
+                {
+                    continue;
+                }
+
+                await ApplyIncomingInsertedAsync(new IncomingInsertedApplyRequest
+                {
+                    ChatJid = groupJid,
+                    Message = chatMessage,
+                    DisplayContent = content,
+                    NotifyContent = content,
+                    IsOffline = false,
+                    IsGroup = true,
+                    IsFromMe = false,
+                    PreviewKind = ChatPreviewKind.GroupJoin,
+                    ListAuthorPrefix = string.Empty,
+                    StripParticipantJid = participant,
+                    SenderName = who,
+                    CountsAsUnread = false,
+                    SuppressToast = true
+                }).ConfigureAwait(false);
+            }
+        }
+
         private void UnloadMessageCacheIfInactive(string jid)
         {
             if (string.IsNullOrWhiteSpace(jid) || _activeChat.IsOpen(jid))

@@ -9,6 +9,11 @@ using Unison.WhatsAppClient.Helpers;
 
 namespace Unison.Uwp.Services.WhatsApp
 {
+    /// <summary>
+    /// ForgetChatStorage host surface (<see cref="IAppStateLocalHost"/> /
+    /// <see cref="IForgetChatStorageHost"/>). Not a live app-state mutation cluster —
+    /// file name is historical.
+    /// </summary>
     public partial class WhatsAppService
     {
         /// <summary>

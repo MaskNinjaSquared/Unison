@@ -3,10 +3,7 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:controls="using:Unison.Uwp.UI.Controls"
-    xmlns:helpers="using:Unison.Core.Helpers"
-    xmlns:models="using:Unison.Core.Models"
     xmlns:templates="using:Unison.Uwp.UI.Templates"
-    xmlns:conv="using:Unison.Uwp.UI.Converters"
     Background="{ThemeResource WhatsAppBackgroundBrush}">
 
     <Page.Resources>
@@ -14,24 +11,56 @@
             <ResourceDictionary.MergedDictionaries>
                 <templates:ChatItemTemplates/>
             </ResourceDictionary.MergedDictionaries>
-            <conv:BooleanToVisibilityConverter x:Key="BoolToVis"/>
 
-            <DataTemplate x:Key="FavoriteGroupHeaderTemplate" x:DataType="helpers:AlphabetChatGroup">
-                <TextBlock Text="{x:Bind Key}"
-                           Margin="16,8,16,4"
-                           FontSize="14"
-                           FontWeight="SemiBold"
-                           Foreground="{ThemeResource WhatsAppTextMediumBrush}"/>
-            </DataTemplate>
-
-            <DataTemplate x:Key="FavoriteZoomedOutTemplate" x:DataType="helpers:AlphabetChatGroup">
-                <Border Width="48" Height="48" Margin="4">
-                    <TextBlock Text="{x:Bind Key}"
-                               FontSize="20"
+            <!-- Group headers: letter in accent outline (no under-header separator line). -->
+            <DataTemplate x:Key="FavoriteGroupHeaderTemplate">
+                <Border Width="36" Height="36"
+                        Margin="16,12,16,4"
+                        BorderBrush="{ThemeResource SystemControlHighlightAccentBrush}"
+                        BorderThickness="2"
+                        Background="Transparent">
+                    <TextBlock Text="{Binding Key}"
+                               FontSize="18"
                                FontWeight="SemiBold"
                                HorizontalAlignment="Center"
                                VerticalAlignment="Center"
-                               Foreground="{ThemeResource WhatsAppTextHighBrush}"/>
+                               Foreground="{ThemeResource SystemControlHighlightAccentBrush}"/>
+                </Border>
+            </DataTemplate>
+
+            <!-- Flat header container: kills the default ListViewHeaderItem separator/chrome. -->
+            <Style x:Key="FavoriteGroupHeaderContainerStyle" TargetType="ListViewHeaderItem">
+                <Setter Property="HorizontalContentAlignment" Value="Left"/>
+                <Setter Property="VerticalContentAlignment" Value="Center"/>
+                <Setter Property="Padding" Value="0"/>
+                <Setter Property="Margin" Value="0"/>
+                <Setter Property="MinHeight" Value="0"/>
+                <Setter Property="BorderThickness" Value="0"/>
+                <Setter Property="Background" Value="Transparent"/>
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="ListViewHeaderItem">
+                            <ContentPresenter Content="{TemplateBinding Content}"
+                                              ContentTemplate="{TemplateBinding ContentTemplate}"
+                                              HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                              VerticalAlignment="{TemplateBinding VerticalContentAlignment}"/>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+
+            <!-- WP8 jump tile: large letter on accent square; Opacity dims empty letters. -->
+            <DataTemplate x:Key="FavoriteZoomedOutTemplate">
+                <Border Width="72" Height="72"
+                        Margin="6"
+                        Background="{ThemeResource SystemControlHighlightAccentBrush}"
+                        Opacity="{Binding Opacity}">
+                    <TextBlock Text="{Binding Key}"
+                               FontSize="36"
+                               FontWeight="SemiBold"
+                               HorizontalAlignment="Center"
+                               VerticalAlignment="Center"
+                               Foreground="White"/>
                 </Border>
             </DataTemplate>
         </ResourceDictionary>
@@ -108,7 +137,8 @@
                               Background="Transparent"
                               ItemTemplate="{StaticResource ChatItemTemplate}">
                         <ListView.GroupStyle>
-                            <GroupStyle HeaderTemplate="{StaticResource FavoriteGroupHeaderTemplate}"/>
+                            <GroupStyle HeaderTemplate="{StaticResource FavoriteGroupHeaderTemplate}"
+                                        HeaderContainerStyle="{StaticResource FavoriteGroupHeaderContainerStyle}"/>
                         </ListView.GroupStyle>
                         <ListView.ItemContainerStyle>
                             <Style TargetType="ListViewItem">
@@ -120,20 +150,46 @@
                     </ListView>
                 </SemanticZoom.ZoomedInView>
                 <SemanticZoom.ZoomedOutView>
+                    <!-- Centered A–Z jump grid (WP8 people-hub style). -->
                     <GridView x:Name="FavoritesJumpList"
+                              HorizontalAlignment="Center"
+                              VerticalAlignment="Center"
                               ItemTemplate="{StaticResource FavoriteZoomedOutTemplate}"
-                              SelectionMode="None"/>
+                              IsItemClickEnabled="True"
+                              ItemClick="FavoritesJumpList_ItemClick"
+                              SelectionMode="None"
+                              Background="Transparent">
+                        <GridView.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <ItemsWrapGrid Orientation="Horizontal"
+                                               HorizontalAlignment="Center"
+                                               MaximumRowsOrColumns="4"/>
+                            </ItemsPanelTemplate>
+                        </GridView.ItemsPanel>
+                        <GridView.ItemContainerStyle>
+                            <Style TargetType="GridViewItem">
+                                <Setter Property="HorizontalContentAlignment" Value="Center"/>
+                                <Setter Property="VerticalContentAlignment" Value="Center"/>
+                                <Setter Property="Margin" Value="0"/>
+                                <Setter Property="Padding" Value="0"/>
+                                <Setter Property="MinWidth" Value="0"/>
+                                <Setter Property="MinHeight" Value="0"/>
+                            </Style>
+                        </GridView.ItemContainerStyle>
+                    </GridView>
                 </SemanticZoom.ZoomedOutView>
             </SemanticZoom>
-
-            <controls:ContactsVisualizerControl
-                x:Name="PickerOverlay"
-                Canvas.ZIndex="10"
-                IsOpen="{x:Bind ViewModel.IsPickerOpen, Mode=TwoWay}"
-                Title="{x:Bind ViewModel.PickerTitle, Mode=OneWay}"
-                ItemsSource="{x:Bind ViewModel.PickerCandidates, Mode=OneWay}"
-                ItemClickCommand="{x:Bind ViewModel.AddFavoriteCommand}"
-                BackCommand="{x:Bind ViewModel.ClosePickerCommand}"/>
         </Grid>
+
+        <!-- Full-bleed over header + list (Mobile open used to leave chrome peeking through). -->
+        <controls:ContactsVisualizerControl
+            x:Name="PickerOverlay"
+            Grid.RowSpan="2"
+            Canvas.ZIndex="10"
+            IsOpen="{x:Bind ViewModel.IsPickerOpen, Mode=TwoWay}"
+            Title="{x:Bind ViewModel.PickerTitle, Mode=OneWay}"
+            ItemsSource="{x:Bind ViewModel.PickerCandidates, Mode=OneWay}"
+            ItemClickCommand="{x:Bind ViewModel.AddFavoriteCommand}"
+            BackCommand="{x:Bind ViewModel.ClosePickerCommand}"/>
     </Grid>
 </Page>

@@ -56,6 +56,8 @@
             <!-- Branding Colors -->
             <SolidColorBrush x:Key="UnisonGreenBrush" Color="#FF20C064"/>
             <SolidColorBrush x:Key="UnisonGreenBrightBrush" Color="#FF3DCA75"/>
+            <!-- Fallback only; each shell ThemeDictionaries defines BootSurfaceBrush. -->
+            <SolidColorBrush x:Key="BootSurfaceBrush" Color="#FF20C064"/>
             <SolidColorBrush x:Key="TextBoxBackgroundThemeBrush" Color="Transparent"/>
             <SolidColorBrush x:Key="TextBoxFocusedBackgroundThemeBrush" Color="Transparent"/>
             <SolidColorBrush x:Key="TextBoxButtonBackgroundThemeBrush" Color="Transparent"/>

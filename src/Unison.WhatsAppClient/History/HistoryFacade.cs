@@ -1273,13 +1273,13 @@ namespace Unison.WhatsAppClient.History
                     return;
 
                 case HistoryCatchUpContinueAction.FinishStagnantProgress:
-                    if (stillStale)
+                    if (stillStale && _workload.AllowStagnantHistoryRepairCascade)
                     {
                         _catchUpHost.MarkForceHistoryRepairPending("stagnant-progress-still-stale");
                     }
 
                     _catchUpHost.FinishContinue("stagnant-progress", releaseEnrichment: true);
-                    if (stillStale)
+                    if (stillStale && _workload.AllowStagnantHistoryRepairCascade)
                     {
                         _catchUpHost.StartHydrationFallback("stagnant-progress");
                     }
@@ -1287,13 +1287,13 @@ namespace Unison.WhatsAppClient.History
                     return;
 
                 case HistoryCatchUpContinueAction.FinishMaxContinues:
-                    if (stillStale)
+                    if (stillStale && _workload.AllowStagnantHistoryRepairCascade)
                     {
                         _catchUpHost.MarkForceHistoryRepairPending("max-continues-still-stale");
                     }
 
                     _catchUpHost.FinishContinue("max-continues", releaseEnrichment: true);
-                    if (stillStale)
+                    if (stillStale && _workload.AllowStagnantHistoryRepairCascade)
                     {
                         _catchUpHost.StartHydrationFallback("max-continues");
                     }

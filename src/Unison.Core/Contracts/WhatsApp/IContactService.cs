@@ -151,6 +151,12 @@ namespace Unison.Core.Contracts.WhatsApp
         /// </summary>
         void TriggerBackgroundResolution();
 
+        /// <summary>
+        /// Avatar-only retry after <see cref="IDeferredAvatarResolution"/> fired. Must not
+        /// re-run name resolution — that loop kept Mobile CPU busy every ~20s after sync.
+        /// </summary>
+        void TriggerDeferredAvatarRetry();
+
         /// <summary>Cancels an in-flight <see cref="TriggerBackgroundResolution"/> pass.</summary>
         void CancelBackgroundResolution();
 

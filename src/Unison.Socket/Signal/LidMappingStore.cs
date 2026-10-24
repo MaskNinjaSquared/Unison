@@ -39,10 +39,12 @@ namespace Unison.Socket.Signal
 
         private static readonly TimeSpan CacheLifetime = TimeSpan.FromDays(3);
 
+        private const int DefaultMemoryCacheMaxEntries = 1024;
+
         private readonly ILidMappingStorage _storage;
         private readonly ISocketLog _log;
         private readonly ILidMappingPersistPolicy _policy;
-        private readonly TtlCache<string> _cache = new TtlCache<string>(CacheLifetime);
+        private readonly TtlCache<string> _cache;
 
         private readonly object _inflightGate = new object();
         private readonly object _pendingGate = new object();
@@ -74,6 +76,11 @@ namespace Unison.Socket.Signal
             _storage = storage;
             _log = log ?? NullSocketLog.Instance;
             _policy = policy;
+            int maxEntries = policy != null && policy.MemoryCacheMaxEntries > 0
+                ? policy.MemoryCacheMaxEntries
+                : DefaultMemoryCacheMaxEntries;
+            // refreshOnRead: hits become MRU so actively used pairs survive the tier cap.
+            _cache = new TtlCache<string>(CacheLifetime, maxEntries, refreshOnRead: true);
             // Write-behind starts held so history sync owns SQLite; host Releases after quiet-finalize.
             _diskPersistSuppressed = UsesWriteBehind;
         }
@@ -369,19 +376,43 @@ namespace Unison.Socket.Signal
         }
 
         /// <summary>
-        /// Loads durable pairs into the memory cache so sync peeks work before any async
-        /// resolve. Forward keys only (skips the <c>_reverse</c> index rows).
+        /// Seeds the memory cache from durable storage. Production tiers use
+        /// <c>WarmMaxPairs == 0</c> (no boot warm on Mobile or High) — fill on demand.
+        /// Pass an explicit <paramref name="maxForwardPairs"/> in tests; capped loads use
+        /// <see cref="ILidMappingStorage.GetRecentForwardPairsAsync"/>.
         /// </summary>
-        public async Task WarmCacheFromStorageAsync()
+        public async Task WarmCacheFromStorageAsync(int? maxForwardPairs = null)
         {
-            IDictionary<string, string> all = await _storage.GetAllAsync().ConfigureAwait(false);
-            if (all == null || all.Count == 0)
+            int limit;
+            if (maxForwardPairs.HasValue)
+            {
+                limit = maxForwardPairs.Value;
+            }
+            else if (_policy != null)
+            {
+                limit = _policy.WarmMaxPairs;
+            }
+            else
+            {
+                // No policy (unit tests): load everything the in-memory store holds.
+                limit = -1;
+            }
+
+            if (limit == 0)
+            {
+                return;
+            }
+
+            IDictionary<string, string> rows = limit < 0
+                ? await _storage.GetAllAsync().ConfigureAwait(false)
+                : await _storage.GetRecentForwardPairsAsync(limit).ConfigureAwait(false);
+            if (rows == null || rows.Count == 0)
             {
                 return;
             }
 
             int warmed = 0;
-            foreach (KeyValuePair<string, string> entry in all)
+            foreach (KeyValuePair<string, string> entry in rows)
             {
                 if (string.IsNullOrEmpty(entry.Key) ||
                     string.IsNullOrEmpty(entry.Value) ||

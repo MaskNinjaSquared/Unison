@@ -410,10 +410,10 @@
                                     Margin="0,0,0,2">
                             <Grid Margin="0,0,0,8">
                                 <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
                                     <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
                                 </Grid.ColumnDefinitions>
-                                <TextBlock Grid.Column="0"
+                                <TextBlock Grid.Column="1"
                                            Text="{x:Bind ContactCardDisplayName, Mode=OneWay}"
                                            Foreground="{ThemeResource ChatDetailSentTextBrush}"
                                            FontSize="15"
@@ -423,8 +423,8 @@
                                            TextTrimming="CharacterEllipsis"
                                            MaxLines="2"
                                            VerticalAlignment="Center"
-                                           Margin="0,0,10,0"/>
-                                <controls:ChatAvatarControl Grid.Column="1"
+                                           Margin="20,0,0,0"/>
+                                <controls:ChatAvatarControl Grid.Column="0"
                                                             Size="40"
                                                             Width="40"
                                                             Height="40"
@@ -434,7 +434,7 @@
                             </Grid>
                             <Button Style="{StaticResource TransparentMediaButtonStyle}"
                                     HorizontalAlignment="Stretch"
-                                    HorizontalContentAlignment="Left"
+                                    HorizontalContentAlignment="Center"
                                     Padding="0,6"
                                     Command="{x:Bind MessageContactChatCommand, Mode=OneWay}"
                                     Visibility="{x:Bind CanMessageContact, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}">
@@ -446,7 +446,7 @@
                             </Button>
                             <Button Style="{StaticResource TransparentMediaButtonStyle}"
                                     HorizontalAlignment="Stretch"
-                                    HorizontalContentAlignment="Left"
+                                    HorizontalContentAlignment="Center"
                                     Padding="0,6"
                                     Command="{x:Bind MessageContactAddCommand, Mode=OneWay}"
                                     Visibility="{x:Bind ShowMessageContactAddButton, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}">
@@ -1229,7 +1229,25 @@
         </Grid>
     </DataTemplate>
 
+    <!-- GroupJoin: date-separator chrome (system line), not a bubble. -->
+    <DataTemplate x:Key="MessageGroupJoinTemplate" x:DataType="vm:ChatMessageViewModel">
+        <Grid HorizontalAlignment="Stretch">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+            <controls:ChatDateSeparator
+                Grid.Row="0"
+                Text="{x:Bind DateSeparatorText, Mode=OneWay}"
+                Visibility="{x:Bind IsFirstOfDay, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+            <controls:ChatDateSeparator
+                Grid.Row="1"
+                Text="{x:Bind Content, Mode=OneWay}"/>
+        </Grid>
+    </DataTemplate>
+
     <selectors:MessageTemplateSelector x:Key="MessageTemplateSelector"
                                        SentTemplate="{StaticResource MessageSentTemplate}"
-                                       ReceivedTemplate="{StaticResource MessageReceivedTemplate}"/>
+                                       ReceivedTemplate="{StaticResource MessageReceivedTemplate}"
+                                       GroupJoinTemplate="{StaticResource MessageGroupJoinTemplate}"/>
 </ResourceDictionary>

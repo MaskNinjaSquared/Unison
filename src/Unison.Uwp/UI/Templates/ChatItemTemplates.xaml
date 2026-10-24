@@ -8,9 +8,10 @@
     xmlns:controls="using:Unison.Uwp.UI.Controls">
 
     <DataTemplate x:Key="ChatItemTemplate" x:DataType="models:ChatItem">
-        <!-- ContextFlyout on the row Grid (feature/2.1): Target.DataContext is the ChatItem.
-             Lists may ShowAt(this Grid, point) for pointer placement. Legacy Hold hides the
-             flyout and opens the CommandBar instead. -->
+        <!-- ContextFlyout on the row Grid (feature/2.1): platform opens once; Target.DataContext
+             is the ChatItem. Modern ChatListView must NOT also ShowAt from Holding/RightTapped
+             (that drew the menu twice). Legacy Hold hides this flyout and opens the CommandBar;
+             Legacy mouse still ShowAt(Grid, point). -->
         <Grid Height="76" Padding="12,0" Background="Transparent">
             <Grid.ContextFlyout>
                 <MenuFlyout x:Name="ChatRowMenu"

@@ -16,6 +16,8 @@ namespace Unison.Core.Models
         /// <summary>WhatsApp GIF playback (video envelope with <c>GifPlayback</c>).</summary>
         Gif = 8,
         /// <summary>Shared contact card (vCard / <c>ContactMessage</c>).</summary>
-        Contact = 9
+        Contact = 9,
+        /// <summary>Group join system line — strip shows plain text, no chip icon.</summary>
+        GroupJoin = 10
     }
 }

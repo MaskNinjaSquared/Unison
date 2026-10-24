@@ -150,6 +150,10 @@ namespace Unison.Core.Tests.Helpers
             {
             }
 
+            public void TriggerDeferredAvatarRetry()
+            {
+            }
+
             public void CancelBackgroundResolution()
             {
             }

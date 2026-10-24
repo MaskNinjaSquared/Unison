@@ -186,7 +186,8 @@ namespace Unison.Core.Contracts.WhatsApp
             System.Threading.CancellationToken cancellationToken);
 
         /// <summary>
-        /// Deferred-startup list pass: dedupe, legacy deleted-preview repair, SQLite tip reconcile.
+        /// Deferred-startup list pass: dedupe, legacy deleted-preview repair, SQLite tip
+        /// reconcile (coalesced with a recent post-replay full walk unless the list changed).
         /// Host owns quiet/memory gates and contact-name hydrate before this.
         /// </summary>
         Task NotifyDeferredStartupListRepairAsync();

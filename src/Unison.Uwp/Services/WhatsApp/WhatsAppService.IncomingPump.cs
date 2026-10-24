@@ -319,7 +319,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
         bool IOfflineReplayHost.IsActiveChat(string canonicalJid) => IsActiveChatJid(canonicalJid);
 
-        bool IOfflineReplayHost.IsWindowVisible => Unison.Uwp.App.IsWindowVisible;
+        bool IOfflineReplayHost.IsWindowVisible => IsAppWindowVisible;
 
         void IOfflineReplayHost.NoteCatchUpProgress(string reason) => NoteFullHistoryCatchUpProgress(reason);
 

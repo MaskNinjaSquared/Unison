@@ -230,7 +230,9 @@ Further shrinking those rows is **State/contract seams** (or Phase E), not anoth
 | `WireSocketEventHandlers` / incoming pump | Wire attach moved into `UwpConnectionSocketSessionFactory`; pump still on the client; offline-replay release body is `OfflineReplayRelease` |
 | `IConnectionSocketSessionFactory` / `UwpConnectionSocketSessionFactory` | Done — build + wire + transport open leave `WhatsAppService`; portable `ConnectionConnectOpen` owns the sequence |
 | DI registers concrete `WhatsAppService` | Done — host ports resolve without casting `IWhatsAppService` |
-| Portable connection host owning open end-to-end | In progress — open sequence is portable + factory; delete/move remaining `WhatsAppService` fields next |
+| `ConnectionOpenHost` / `IConnectionSocketAssignment` | Done — portable open host; assignment port in Core; abort/clear + key-store journal helpers in WhatsAppClient |
+| Portable connection **open** end-to-end | **Done** — `ConnectionConnectOpen` + `ConnectionOpenHost`; UWP only owns `_socket` field, dispose, and health-monitor start. **Not** moved (ask before Mobile risk): incoming pump, auto-reconnect / health-monitor timers |
+| `ConnectionConnectAbortedJournal` | Done — prepare-abort reason strings portable (journal only; no pump/reconnect) |
 
 ### Phase E (future) — client-owned public I/O
 

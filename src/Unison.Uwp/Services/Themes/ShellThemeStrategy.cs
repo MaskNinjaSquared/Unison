@@ -1,5 +1,6 @@
 using System;
 using Unison.Core.Models;
+using Windows.UI;
 using Windows.UI.Xaml.Controls;
 
 namespace Unison.Uwp.Services.Themes
@@ -11,6 +12,23 @@ namespace Unison.Uwp.Services.Themes
     public abstract class ShellThemeStrategy
     {
         /// <summary>
+        /// Package splash / BootView start fill (manifest <c>SplashScreen BackgroundColor</c>).
+        /// </summary>
+        public static Color SplashBootSurfaceColor => Color.FromArgb(0xFF, 0x20, 0xC0, 0x64);
+
+        /// <summary>
+        /// End fill for <c>BootView</c> after optional fade (see <see cref="FadeBootLogoBackground"/>).
+        /// Theme resource key: <c>BootSurfaceBrush</c>.
+        /// </summary>
+        public virtual Color BootSurfaceColor => SplashBootSurfaceColor;
+
+        /// <summary>
+        /// When true, boot fades splash green → <see cref="BootSurfaceColor"/> (Imgur shutdown ColorAnimation).
+        /// Unison stays on splash green; Legacy/WhatsApp fade.
+        /// </summary>
+        public virtual bool FadeBootLogoBackground => false;
+
+        /// <summary>
         /// When true, sync feedback is shown in the chat-list header.
         /// When false, Mobile status-bar progress is used instead (Unison Mobile).
         /// </summary>
@@ -20,6 +38,21 @@ namespace Unison.Uwp.Services.Themes
         /// When true, <see cref="StatusBarService"/> may show/hide sync progress on Mobile.
         /// </summary>
         public virtual bool UsesMobileStatusBarProgress => false;
+
+        /// <summary>
+        /// Compact avatar+name rows in <c>ContactsVisualizerControl</c> (no preview / flyout).
+        /// Default true — full chat-row template makes Mobile overlay open feel janky.
+        /// </summary>
+        public virtual bool ContactsPickerUsesCompactRows => true;
+
+        /// <summary>Short opacity fade when the contacts overlay opens.</summary>
+        public virtual bool ContactsPickerAnimatesOpen => true;
+
+        /// <summary>
+        /// Bind ListView items only after the overlay is Visible (one dispatcher tick).
+        /// Avoids realizing heavy rows in the same frame as the open.
+        /// </summary>
+        public virtual bool ContactsPickerDefersItemsUntilOpen => true;
 
         /// <summary>Sidebar brand. Unison shell shows Unison; WhatsApp shell shows WhatsApp Uwp.</summary>
         public virtual string ShellBrandName => "Unison";
@@ -63,6 +96,11 @@ namespace Unison.Uwp.Services.Themes
         /// Shell content page for Chats / Status / Debug.
         /// Settings is not mapped here — use <see cref="OpenSettings"/>.
         /// </summary>
+        /// <remarks>
+        /// Base maps Chats/Archived to <c>UI.Views.*</c> as a fallback only.
+        /// Unison and WhatsApp strategies override to <c>Shell.*</c> pages; do not
+        /// delete <c>UI.Views.ChatsView</c> until every theme path is audited.
+        /// </remarks>
         public virtual Type ResolveShellPage(NavigationDestination destination)
         {
             switch (destination)

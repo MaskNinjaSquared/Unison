@@ -1035,6 +1035,9 @@ Schakel uit na diagnostiseren: het ingeschakeld laten vertraagd de app.</value>
   <data name="MessageContact_Add.Text" xml:space="preserve">
     <value>Contact toevoegen</value>
   </data>
+  <data name="Message_GroupJoin" xml:space="preserve">
+    <value>{0} is lid geworden van de groep</value>
+  </data>
   <data name="ChatDetail_AddContactLink.Content" xml:space="preserve">
     <value>Contact toevoegen</value>
   </data>

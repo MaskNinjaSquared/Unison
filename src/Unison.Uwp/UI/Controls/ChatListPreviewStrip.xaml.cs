@@ -375,7 +375,8 @@ namespace Unison.Uwp.UI.Controls
             bool hasAuthorDetail = AuthorDetailBlock != null &&
                                    AuthorDetailBlock.Visibility == Visibility.Visible &&
                                    !string.IsNullOrEmpty(AuthorDetailBlock.Text);
-            bool hasChip = Kind != ChatPreviewKind.Text;
+            // GroupJoin is plain system text — no media chip (same budget as Text).
+            bool hasChip = Kind != ChatPreviewKind.Text && Kind != ChatPreviewKind.GroupJoin;
             bool hasText = !string.IsNullOrEmpty(PreviewTextBlock.Text);
 
             double authorDesired = hasAuthor ? AuthorBlock.DesiredSize.Width : 0;

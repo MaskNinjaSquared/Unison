@@ -200,6 +200,11 @@ namespace Unison.WhatsAppClient.Helpers
                         ? row.MediaFileName
                         : body;
                     break;
+
+                case ChatPreviewKind.GroupJoin:
+                    message.GroupJoinJid = row.MediaUrl;
+                    message.GroupJoinPhone = row.MediaDirectPath;
+                    break;
             }
         }
 

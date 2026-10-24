@@ -26,6 +26,19 @@ namespace Unison.Core.Contracts
         /// <summary>ms-appx logo for the shell sidebar brand.</summary>
         string ShellBrandIcon { get; }
 
+        /// <summary>
+        /// Contact picker rows without preview strip / context flyout (cheaper on Mobile open).
+        /// </summary>
+        bool ContactsPickerUsesCompactRows { get; }
+
+        /// <summary>Fade-in when <c>ContactsVisualizerControl.IsOpen</c> becomes true.</summary>
+        bool ContactsPickerAnimatesOpen { get; }
+
+        /// <summary>
+        /// Assign ListView items only after the overlay is visible (avoids open-frame jank).
+        /// </summary>
+        bool ContactsPickerDefersItemsUntilOpen { get; }
+
         /// <summary>Applies the shell stored in LocalSettings (call early at launch).</summary>
         void ApplyFromSettings();
 

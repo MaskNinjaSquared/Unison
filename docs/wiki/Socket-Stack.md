@@ -189,9 +189,29 @@ Offline nodes are processed **sequentially** (`OfflineNodeProcessor` + `OfflineS
 
 rc14 replaced the old PN/LID alias table with `LidMappingStore`:
 
-- 3-day cache, coalesced lookups, USync fallback
-- Storage is opaque (`ILidMappingStorage`); UWP uses SQLite
+- TTL + LRU memory cache (hits refresh lifetime), coalesced lookups, USync fallback
+- Storage is opaque (`ILidMappingStorage`); UWP uses SQLite (`LidMapping` table)
 - Device part is reattached on read
+- Disk stays complete; RAM only holds a tier-capped working set
+
+### Memory warm policy (post–3.7b correction)
+
+Full-table `GetAllAsync` on cold boot was wrong even on PC: Mobile hung tens of seconds
+on `unison.db`, and the cache already capped entries so most of the dump was discarded.
+
+| Tier | Boot / init | RAM pairs (LRU) | Seed from disk |
+|---|---|---|---|
+| Unsupported | on-demand only | 512 | none |
+| Low (Mobile 1 GB) | on-demand only | 1024 | none |
+| High / desktop | on-demand only | 2048 | none |
+
+No tier warms on boot. High only keeps a **larger LRU**; Mobile stays tighter.
+Pairs arrive into RAM as envelopes / history / usync / alias dual-write hit the store.
+`JidAliasTable` remains the sync owner for UI canonicalization; SQLite is the durable
+miss path (`GetAsync` by primary key).
+
+Numbers live on `SyncWorkloadStrategy` → `ILidMappingPersistPolicy`
+(`MemoryCacheMaxEntries`; `WarmMaxPairs` stays 0).
 
 Documented deviation: Unison omits `:0` on JIDs (rc14 writes `user:0@s.whatsapp.net`).
 

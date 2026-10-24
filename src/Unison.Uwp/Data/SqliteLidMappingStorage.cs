@@ -107,6 +107,48 @@ namespace Unison.Uwp.Data
             return found;
         }
 
+        public async Task<IDictionary<string, string>> GetRecentForwardPairsAsync(int maxPairs)
+        {
+            IDictionary<string, string> found = new Dictionary<string, string>(StringComparer.Ordinal);
+            if (maxPairs <= 0)
+            {
+                return found;
+            }
+
+            await EnsureInitializedAsync().ConfigureAwait(false);
+
+            try
+            {
+                // Forward keys only; reverse rows are rebuilt in memory by CachePair.
+                List<LidMappingRow> rows = await _connection.QueryAsync<LidMappingRow>(
+                        "SELECT Key, Value, UpdatedAtUtc FROM LidMapping " +
+                        "WHERE Key NOT LIKE '%_reverse' " +
+                        "ORDER BY UpdatedAtUtc DESC LIMIT ?",
+                        maxPairs)
+                    .ConfigureAwait(false);
+                if (rows == null)
+                {
+                    return found;
+                }
+
+                foreach (LidMappingRow row in rows)
+                {
+                    if (row == null || string.IsNullOrEmpty(row.Key) || string.IsNullOrEmpty(row.Value))
+                    {
+                        continue;
+                    }
+
+                    found[row.Key] = row.Value;
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[SqliteLidMappingStorage] GetRecentForward failed: " + ex.Message);
+            }
+
+            return found;
+        }
+
         public async Task SetAsync(IDictionary<string, string> values)
         {
             if (values == null || values.Count == 0)

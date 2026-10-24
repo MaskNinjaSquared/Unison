@@ -2,7 +2,8 @@
 // ForgetChatStorageDispatch
 //
 // ForgetChatInStorageAsync body: tombstone previews, drop history, clear RAM
-// cache, persist catalogue. Handler entry stays on IAppStateLocalHost.
+// cache, persist catalogue. Façade entry is IAppStateLocalHost.ForgetChatStorageAsync
+// (ForgetChatStorage port; name historical).
 // =============================================================================
 using System;
 using System.Collections.Generic;

@@ -9,6 +9,7 @@ using System;
 using System.Threading.Tasks;
 using Unison.Baileys.Client;
 using Unison.Core.Contracts;
+using Unison.Core.Helpers;
 using Unison.Socket.Signal;
 using Unison.Uwp.Client;
 using Unison.WhatsAppClient.Helpers;
@@ -90,12 +91,28 @@ namespace Unison.Uwp.Services.WhatsApp
             var bridge = socket as SocketBridge;
             if (bridge == null)
             {
-                return socket.ConnectAsync();
+                throw new InvalidOperationException(
+                    "ConnectTransportAsync expects SocketBridge (Init IWaTransport); got " +
+                    socket.GetType().FullName);
             }
 
+            bool mobile = _systemInfo.IsMobile();
             WaTransportConnectAttempt attempt = WaTransportConnectAttempt.Create(
                 _transports,
-                _systemInfo.IsMobile());
+                mobile);
+
+            // Mobile must open StreamSocket first (broker / SocketActivity). Experiment on →
+            // PreferStreamSocketOnMobile; factory journals so a MessageWebSocket-only mobile
+            // path cannot ship silently.
+            RuntimeDiagnosticsService.Instance.Write(
+                "transport",
+                "connect-attempt-plan",
+                "mobile=" + mobile +
+                "; preferStreamOnMobile=" +
+                ConnectionStabilityExperiment.PreferStreamSocketOnMobile +
+                "; primary=" + (attempt.Primary != null ? attempt.Primary.Name : "null") +
+                "; fallback=" + (attempt.Fallback != null ? attempt.Fallback.Name : "none"));
+
             return bridge.ConnectWithTransportsAsync(attempt.Primary, attempt.Fallback);
         }
 

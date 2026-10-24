@@ -11,6 +11,9 @@ namespace Unison.WhatsAppClient.Abstractions
     {
         bool HasAuthState { get; }
 
+        /// <summary>Journal a named init step (Mobile boot hang diagnosis).</summary>
+        void NoteConnectionStateInitStep(string step);
+
         Task InitializeMessageStoreAsync();
 
         void LoadHistoryFreshnessRepairState();

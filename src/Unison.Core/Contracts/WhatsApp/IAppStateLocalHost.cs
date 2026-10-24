@@ -4,7 +4,8 @@ using System.Threading.Tasks;
 namespace Unison.Core.Contracts.WhatsApp
 {
     /// <summary>
-    /// Durable chat-delete I/O that still lives on the compatibility client.
+    /// ForgetChatStorage port on the compatibility client (name is historical —
+    /// the only member is durable chat-delete I/O, not live app-state apply).
     /// </summary>
     /// <remarks>
     /// Wire + RAM halves live on the façades (<c>IChatService.DeleteChatAsync</c> /

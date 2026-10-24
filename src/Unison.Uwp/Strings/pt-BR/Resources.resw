@@ -688,6 +688,9 @@ Desative depois de diagnosticar: manter ligado deixa o app lento.</value>
   <data name="Favorites_AddPeopleOrGroups.Content" xml:space="preserve">
     <value>Adicionar pessoas ou grupos</value>
   </data>
+  <data name="Share_PickChat.Text" xml:space="preserve">
+    <value>Enviar para…</value>
+  </data>
   <data name="Favorites_SortAlphabetical.Text" xml:space="preserve">
     <value>A-Z</value>
   </data>

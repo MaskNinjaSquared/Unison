@@ -41,7 +41,7 @@ No behaviour change for users. Prep so later diffs are one cluster, not a 16k-li
 | `WhatsAppService.Media.cs` | On-demand decrypt + cache (`Ensure*AvailableAsync`) |
 | `WhatsAppService.StartupPhases.cs` | Quiet-wait / memory-headroom host wiring (`StartupQuietGate`) |
 | `WhatsAppService.Identity.cs` | Canonical JID, alias LID/PN, `ResolveDisplayName`, usync |
-| `WhatsAppService.AppState.cs` | App-state appliers (pin, mute, delete, names) |
+| `WhatsAppService.AppState.cs` | ForgetChatStorage host only (name historical; appliers live on façades) |
 | `WhatsAppService.Persistence.cs` | chats.json debounce, load persisted UI, suspend tail |
 | `WhatsAppService.Receipts.cs` | Receipt nodes → send state; receipt-path group metadata apply via `IGroupService` |
 | `WhatsAppService.IncomingPump.cs` | Decrypted-message queue, placeholders, offline replay summaries |

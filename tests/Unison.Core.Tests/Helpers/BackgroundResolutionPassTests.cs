@@ -143,6 +143,10 @@ namespace Unison.Core.Tests.Helpers
             public void Cancel()
             {
             }
+
+            public void ResetScheduleStreak()
+            {
+            }
         }
 
         private sealed class FakeGate : IBackgroundResolutionGate

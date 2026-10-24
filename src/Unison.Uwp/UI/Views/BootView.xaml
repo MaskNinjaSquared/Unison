@@ -6,18 +6,28 @@
     Background="#FF20C064">
 
     <!--
-      Page + RootGrid start #20C064 (no theme flash under splash).
-      When Unison wordmark begins (~1.20s), Page.Background → theme so exit wipe reveals it.
-      Frame 0: icon alone, centered — size tracks window short-side (~splash).
-      Intro: icon shrinks + slides left; one jump (same as empty-state); "nison" fades in (logo = U).
+      Start = package splash #20C064. When FadeBootLogoBackground (Legacy/WhatsApp), ColorAnimation
+      (Imgur ShutdownView) fades BootSurfaceFill → BootSurfaceColor (#04564A / Transparent).
+      Unison: no fade. When wordmark begins (~1.20s), Page.Background → theme for exit wipe.
       Exit: RootGrid floats up to reveal page theme background.
     -->
-    <Grid x:Name="RootGrid" Background="#FF20C064">
+    <Grid x:Name="RootGrid">
+        <Grid.Background>
+            <SolidColorBrush x:Name="BootSurfaceFill" Color="#FF20C064"/>
+        </Grid.Background>
         <Grid.RenderTransform>
             <TranslateTransform x:Name="RootGridTranslate" Y="0"/>
         </Grid.RenderTransform>
 
         <Grid.Resources>
+            <!-- Imgur shutdown-style color wash (From/To set in code from shell strategy). -->
+            <Storyboard x:Name="BootSurfaceFadeStoryboard">
+                <ColorAnimation x:Name="BootSurfaceFadeAnim"
+                                Storyboard.TargetName="BootSurfaceFill"
+                                Storyboard.TargetProperty="Color"
+                                Duration="0:0:3"/>
+            </Storyboard>
+
             <Storyboard x:Name="BootIntroStoryboard">
                 <DoubleAnimation x:Name="BootIconTranslateXAnim"
                                  Storyboard.TargetName="BootIconTranslate"

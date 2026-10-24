@@ -1036,7 +1036,10 @@ Nach der Diagnose deaktivieren: Wenn es aktiviert bleibt, wird die App langsamer
     <value>Nachricht</value>
   </data>
   <data name="MessageContact_Add.Text" xml:space="preserve">
-    <value>Kontakt hinzufügen</value>
+    <value>Kontakt hinzufï¿½gen</value>
+  </data>
+  <data name="Message_GroupJoin" xml:space="preserve">
+    <value>{0} ist der Gruppe beigetreten</value>
   </data>
   <data name="ChatDetail_AddContactLink.Content" xml:space="preserve">
     <value>Kontakt hinzufÃ¼gen</value>

@@ -175,6 +175,21 @@ namespace Unison.Core.ViewModels
             catch (Exception ex)
             {
                 Debug.WriteLine($"[ShellViewModel] Background connection failed: {ex}");
+                _diagnostics?.Write(
+                    "startup",
+                    "cold-start-ensure-failed",
+                    ex.Message);
+                try
+                {
+                    (_connectionService as IConnectionSoftReconnect)
+                        ?.RequestSoftReconnect("cold-start-ensure-failed");
+                }
+                catch (Exception reconnectEx)
+                {
+                    Debug.WriteLine(
+                        "[ShellViewModel] Soft reconnect after cold-start ensure failed: " +
+                        reconnectEx.Message);
+                }
             }
         }
 
