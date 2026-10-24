@@ -2,6 +2,13 @@
 
 Newest first.
 
+## Extract — ConnectionUpdateDispatch from WireSocketEventHandlers
+
+`ConnectionUpdateDispatch` + `IConnectionUpdateHost`. OnConnectionUpdate only
+checks current-socket then runs the helper; close disposition apply left the
+partial. Core tests cover shutdown / restart / pairing-pending / soft-reconnect /
+QR expired / fatal streak.
+
 ## App-state contact LID Store(1) coalesce
 
 `JidAliasTable.IsBulkImporting` + pending socket-alias queue in

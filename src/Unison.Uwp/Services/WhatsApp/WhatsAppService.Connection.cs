@@ -214,7 +214,7 @@ namespace Unison.Uwp.Services.WhatsApp
             await PersistAuthStateAsync(s as IWhatsAppSocket, "socket-auth-update");
         };
         
-        socket.OnConnectionUpdate += (s, status) => 
+        socket.OnConnectionUpdate += (s, status) =>
         {
             if (!IsCurrentSocket(s))
             {
@@ -222,52 +222,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 return;
             }
 
-            if (_suppressReconnect || _fatalSessionEnded)
-            {
-                Debug.WriteLine($"[WhatsAppService] Connection update '{status}' ignored during intentional shutdown");
-                PublishConnectionUpdate(status);
-                return;
-            }
-
-            bool registered = _authState != null && _authState.Registered;
-            switch (ConnectionUpdateRoute.Classify(status, registered))
-            {
-                case ConnectionUpdateRouteKind.Restart:
-                    // pair-success already set Registered=true; 515 close is expected.
-                    RuntimeDiagnosticsService.Instance.Write(
-                        "connection",
-                        "pairing-restart",
-                        "code=515");
-                    PairingTrace("connection status=restart → stage2");
-                    ApplyConnectionCloseAction(
-                        ConnectionCloseDisposition.ForRestartStatus(),
-                        "connection-update-restart");
-                    break;
-
-                case ConnectionUpdateRouteKind.RegisteredClose:
-                    StopConnectionHealthMonitor("socket-close");
-                    ConnectionCloseAction closeAction = ConnectionCloseDisposition.ForRegisteredClose(
-                        _pairingRestartPending,
-                        _sessionEstablishedThisConnection,
-                        _countPreSessionCloseAsFatal);
-                    if (ApplyConnectionCloseAction(closeAction, "socket-close"))
-                    {
-                        PublishConnectionUpdate(status);
-                        return;
-                    }
-
-                    break;
-
-                case ConnectionUpdateRouteKind.UnregisteredClose:
-                    ConnectionCloseAction qrAction = ConnectionCloseDisposition.ForUnregisteredClose(
-                        _qrDeliveredThisConnection,
-                        _pairingRestartPending,
-                        registered);
-                    ApplyConnectionCloseAction(qrAction, "socket-close");
-                    break;
-            }
-
-            PublishConnectionUpdate(status);
+            ConnectionUpdateDispatch.Handle(this, status);
         };
 
         socket.OnSessionInitialized += async (s, e) => 
@@ -621,87 +576,86 @@ namespace Unison.Uwp.Services.WhatsApp
             return ConnectionHealthMonitor.RunLegacy183Async(host, token);
         }
 
-        /// <summary>
-        /// Applies <see cref="ConnectionCloseDisposition"/> side effects. Returns true when the
-        /// connection-update handler should publish and return without falling through.
-        /// </summary>
-        private bool ApplyConnectionCloseAction(ConnectionCloseAction action, string trigger)
-        {
-            switch (action)
-            {
-                case ConnectionCloseAction.SkipPairingOwnsReconnect:
-                    RuntimeDiagnosticsService.Instance.Write(
-                        "connection",
-                        "pairing-restart-close",
-                        "ignored-pre-session-streak=true");
-                    PairingTrace(
-                        "close while pairingRestartPending → SKIP ScheduleAutoReconnect " +
-                        "(stage2 owner)");
-                    return true;
+        bool IConnectionUpdateHost.SuppressReconnect => _suppressReconnect;
 
-                case ConnectionCloseAction.ClaimPairingStage2:
-                    if (string.Equals(trigger, "connection-update-restart", StringComparison.Ordinal))
-                    {
-                        TryStartPairingStage2Reconnect(trigger);
-                        return false;
-                    }
+        bool IConnectionUpdateHost.FatalSessionEnded => _fatalSessionEnded;
 
-                    RuntimeDiagnosticsService.Instance.Write(
-                        "connection",
-                        "pairing-close-before-restart",
-                        "claiming-stage2=true");
-                    PairingTrace(
-                        "close BEFORE restart flag → claim stage2 (close-before-restart race)");
-                    TryStartPairingStage2Reconnect("close-before-restart");
-                    return true;
+        bool IConnectionUpdateHost.IsAuthRegistered =>
+            _authState != null && _authState.Registered;
 
-                case ConnectionCloseAction.CountPreSessionStreak:
-                {
-                    int streak = Interlocked.Increment(ref _preSessionCloseStreak);
-                    RuntimeDiagnosticsService.Instance.Write(
-                        "connection",
-                        "pre-session-close",
-                        "streak=" + streak + "; threshold=" + PreSessionCloseFatalThreshold);
-                    if (ConnectionCloseDisposition.PreSessionStreakReachedFatal(
-                            streak,
-                            PreSessionCloseFatalThreshold))
-                    {
-                        RaiseReport(
-                            () => OnInvalidSessionSuspected?.Invoke(this, "pre-session-close-streak"),
-                            nameof(OnInvalidSessionSuspected));
+        bool IConnectionUpdateHost.PairingRestartPending => _pairingRestartPending;
 
-                        if (_fatalSessionEnded)
-                        {
-                            return true;
-                        }
-                    }
+        bool IConnectionUpdateHost.SessionEstablishedThisConnection =>
+            _sessionEstablishedThisConnection;
 
-                    ScheduleAutoReconnect(trigger);
-                    return false;
-                }
+        bool IConnectionUpdateHost.CountPreSessionCloseAsFatal => _countPreSessionCloseAsFatal;
 
-                case ConnectionCloseAction.SoftReconnectAfterEstablished:
-                    Interlocked.Exchange(ref _preSessionCloseStreak, 0);
-                    ScheduleAutoReconnect(trigger);
-                    return false;
+        bool IConnectionUpdateHost.QrDeliveredThisConnection => _qrDeliveredThisConnection;
 
-                case ConnectionCloseAction.SoftReconnect:
-                    ScheduleAutoReconnect(trigger);
-                    return false;
+        int IConnectionUpdateHost.PreSessionCloseFatalThreshold => PreSessionCloseFatalThreshold;
 
-                case ConnectionCloseAction.QrExpired:
-                    RuntimeDiagnosticsService.Instance.Write(
-                        "connection",
-                        "qr-expired",
-                        "trigger=" + trigger);
-                    PairingTrace("socket closed while unregistered; QR expired");
-                    OnQrExpired?.Invoke(this, EventArgs.Empty);
-                    return false;
+        void IConnectionUpdateHost.LogIgnoredDuringShutdown(string status) =>
+            Debug.WriteLine(
+                "[WhatsAppService] Connection update '" + status +
+                "' ignored during intentional shutdown");
 
-                default:
-                    return false;
-            }
-        }
+        void IConnectionUpdateHost.PublishConnectionUpdate(string status) =>
+            PublishConnectionUpdate(status);
+
+        void IConnectionUpdateHost.WritePairingRestartDiagnostics() =>
+            RuntimeDiagnosticsService.Instance.Write(
+                "connection",
+                "pairing-restart",
+                "code=515");
+
+        void IConnectionUpdateHost.PairingTrace(string line) => PairingTrace(line);
+
+        void IConnectionUpdateHost.StopConnectionHealthMonitor(string reason) =>
+            StopConnectionHealthMonitor(reason);
+
+        void IConnectionUpdateHost.WritePairingRestartCloseIgnored() =>
+            RuntimeDiagnosticsService.Instance.Write(
+                "connection",
+                "pairing-restart-close",
+                "ignored-pre-session-streak=true");
+
+        void IConnectionUpdateHost.WritePairingCloseBeforeRestart() =>
+            RuntimeDiagnosticsService.Instance.Write(
+                "connection",
+                "pairing-close-before-restart",
+                "claiming-stage2=true");
+
+        void IConnectionUpdateHost.TryStartPairingStage2Reconnect(string trigger) =>
+            TryStartPairingStage2Reconnect(trigger);
+
+        int IConnectionUpdateHost.IncrementPreSessionCloseStreak() =>
+            Interlocked.Increment(ref _preSessionCloseStreak);
+
+        void IConnectionUpdateHost.WritePreSessionClose(int streak) =>
+            RuntimeDiagnosticsService.Instance.Write(
+                "connection",
+                "pre-session-close",
+                "streak=" + streak + "; threshold=" + PreSessionCloseFatalThreshold);
+
+        void IConnectionUpdateHost.RaiseInvalidSessionSuspected(string reason) =>
+            RaiseReport(
+                () => OnInvalidSessionSuspected?.Invoke(this, reason),
+                nameof(OnInvalidSessionSuspected));
+
+        void IConnectionUpdateHost.ResetPreSessionCloseStreak() =>
+            Interlocked.Exchange(ref _preSessionCloseStreak, 0);
+
+        void IConnectionUpdateHost.ScheduleAutoReconnect(string trigger) =>
+            ScheduleAutoReconnect(trigger);
+
+        void IConnectionUpdateHost.WriteQrExpired(string trigger) =>
+            RuntimeDiagnosticsService.Instance.Write(
+                "connection",
+                "qr-expired",
+                "trigger=" + trigger);
+
+        void IConnectionUpdateHost.RaiseQrExpired() =>
+            OnQrExpired?.Invoke(this, EventArgs.Empty);
 
         /// <summary>
         /// Binds one monitored socket into <see cref="IConnectionHealthMonitorHost"/> for
