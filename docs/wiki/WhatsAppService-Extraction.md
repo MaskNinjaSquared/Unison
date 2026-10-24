@@ -1388,8 +1388,14 @@ became `ApplyMessagePinAsync` (timeline, pending pin, SQLite and replay queue; n
 `Low` / `High`, from `DeviceCategory`) owns message caps, SQLite sub-batch size, whether history
 thumbs materialize during sync, chat-list release size, avatar batch size and the
 `HistorySyncConfig` storage quota, plus catch-up rounds, the finalize quiet window, group
-metadata/roster batches and `SyncPacing` (frugal and generous values; `SyncBudget` picks which).
+metadata/roster batches, `LidMappingPersistBatchSize` / `LidMappingPersistDelayMs` (Unsupported
+smallest lots), and `SyncPacing` (frugal and generous values; `SyncBudget` picks which).
 Unsupported is always frugal in `SyncBudget`.
+
+**LID disk writes are sequential after history.** `LidMappingStore` write-behind keeps pairs in
+cache + a pending queue while `ILidMappingDiskPersistGate` is held; `HistoryFacade` releases on
+initial-sync `IsCompleted` or when warm decides there is no first-sync hold. `LidMappingPersistHost`
+arms the tier debounce; suspend flushes the queue. Not in parallel with first history SQLite.
 
 **The first history sync holds the list on every platform.** `ChatListSyncHold` answers from
 `IHistoryService.IsAwaitingFirstHistorySync` alone. While it holds, the chat `ListView` is not

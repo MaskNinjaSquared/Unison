@@ -2,6 +2,21 @@
 
 Newest first.
 
+## App-state contact LID Store(1) coalesce
+
+`JidAliasTable.IsBulkImporting` + pending socket-alias queue in
+`WhatsAppService.Identity`: app-state ContactAction / PnForLid dual-writes become
+one `RegisterJidAliases` (one Bridge Store log) per collection apply instead of
+N× `Stored 1 LID… from app-state-contact`.
+
+## LID mapping disk persist — paced + after history
+
+`SyncWorkloadStrategy` owns `LidMappingPersistBatchSize` / `LidMappingPersistDelayMs`
+(Unsupported 8/3000, Low 40/1500, High 120/400). `LidMappingStore` write-behind caches
+immediately, queues disk until `ILidMappingDiskPersistGate` opens (HistoryFacade after
+quiet-finalize or warm with no hold). `LidMappingPersistHost` debounce + suspend flush.
+Not in parallel with first history sync.
+
 ## Extract — offline-replay release out of WireSocketEventHandlers
 
 `OfflineReplayRelease` + `OfflineReplayReleaseGates` + `IOfflineReplayReleaseHost`.

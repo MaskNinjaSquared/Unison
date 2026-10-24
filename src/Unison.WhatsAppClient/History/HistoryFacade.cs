@@ -84,6 +84,7 @@ namespace Unison.WhatsAppClient.History
         private readonly IAppVisibility _visibility;
         private readonly IHistoryMessageThumbnailMaterializer _messageThumbs;
         private readonly IStatusThumbnailMaterializer _statusThumbs;
+        private readonly ILidMappingDiskPersistGate _lidDiskPersist;
         private readonly Func<IMessageService> _resolveMessages;
 
         /// <summary>
@@ -130,7 +131,8 @@ namespace Unison.WhatsAppClient.History
             ChatListInitialPaintGate listPaintGate = null,
             IAppVisibility visibility = null,
             IHistoryMessageThumbnailMaterializer messageThumbs = null,
-            IStatusThumbnailMaterializer statusThumbs = null)
+            IStatusThumbnailMaterializer statusThumbs = null,
+            ILidMappingDiskPersistGate lidDiskPersist = null)
         {
             if (sessions == null)
             {
@@ -190,6 +192,7 @@ namespace Unison.WhatsAppClient.History
             _visibility = visibility;
             _messageThumbs = messageThumbs;
             _statusThumbs = statusThumbs;
+            _lidDiskPersist = lidDiskPersist;
 
             // Both live as long as the app does, so there is nothing to unhook from.
             _syncStatus.Changed += (s, status) =>
@@ -207,6 +210,8 @@ namespace Unison.WhatsAppClient.History
                     _displayKeepAwake?.Release("before-list-xload");
                     _firstHistorySyncCompletedThisSession = true;
                     _awaitingFirstHistorySync = false;
+                    // History SQLite is quiet: paced LID disk writes may start (not in parallel).
+                    _lidDiskPersist?.ReleaseAfterHistory("initial-sync-completed");
                 }
 
                 Relay(() => InitialSyncProgress?.Invoke(this, e), "InitialSyncProgress");
@@ -833,12 +838,15 @@ namespace Unison.WhatsAppClient.History
         {
             if (_migrationStore == null || _chatPreviewStore == null)
             {
+                // No SQLite warm path: do not strand LID pairs behind a hold that never opens.
+                _lidDiskPersist?.ReleaseAfterHistory("sqlite-warm-unavailable");
                 return;
             }
 
             HistoryMigrationState gate = await _migrationStore.GetAsync().ConfigureAwait(false);
             if (gate != null && gate.IsSucceeded)
             {
+                _lidDiskPersist?.ReleaseAfterHistory("history-migration-already-succeeded");
                 return;
             }
 
@@ -846,7 +854,11 @@ namespace Unison.WhatsAppClient.History
             if (storedPreviews == 0 && !_firstHistorySyncCompletedThisSession)
             {
                 BeginFirstSyncListHold("sqlite-warm-empty");
+                return;
             }
+
+            // Rows already on disk / hold not needed — LID flush may proceed.
+            _lidDiskPersist?.ReleaseAfterHistory("first-history-hold-not-required");
         }
 
         /// <summary>

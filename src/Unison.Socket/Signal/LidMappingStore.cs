@@ -41,9 +41,11 @@ namespace Unison.Socket.Signal
 
         private readonly ILidMappingStorage _storage;
         private readonly ISocketLog _log;
+        private readonly ILidMappingPersistPolicy _policy;
         private readonly TtlCache<string> _cache = new TtlCache<string>(CacheLifetime);
 
         private readonly object _inflightGate = new object();
+        private readonly object _pendingGate = new object();
 
         private readonly Dictionary<string, Task<IReadOnlyList<LidMapping>>> _inflightLidLookups =
             new Dictionary<string, Task<IReadOnlyList<LidMapping>>>(StringComparer.Ordinal);
@@ -51,7 +53,18 @@ namespace Unison.Socket.Signal
         private readonly Dictionary<string, Task<IReadOnlyList<LidMapping>>> _inflightPnLookups =
             new Dictionary<string, Task<IReadOnlyList<LidMapping>>>(StringComparer.Ordinal);
 
-        public LidMappingStore(ILidMappingStorage storage, ISocketLog log = null)
+        /// <summary>PN user → LID user waiting for the next disk flush.</summary>
+        private readonly Dictionary<string, string> _pendingDisk =
+            new Dictionary<string, string>(StringComparer.Ordinal);
+
+        private bool _diskPersistSuppressed;
+        private readonly object _flushGate = new object();
+        private Task _flushInFlight = Task.CompletedTask;
+
+        public LidMappingStore(
+            ILidMappingStorage storage,
+            ISocketLog log = null,
+            ILidMappingPersistPolicy policy = null)
         {
             if (storage == null)
             {
@@ -60,7 +73,19 @@ namespace Unison.Socket.Signal
 
             _storage = storage;
             _log = log ?? NullSocketLog.Instance;
+            _policy = policy;
+            // Write-behind starts held so history sync owns SQLite; host Releases after quiet-finalize.
+            _diskPersistSuppressed = UsesWriteBehind;
         }
+
+        /// <summary>
+        /// Host arms a debounce of this many ms. Null while tests use immediate write-through.
+        /// </summary>
+        public Action<int> ArmDebounce { get; set; }
+
+        /// <summary>True when a policy with positive batch and delay is driving write-behind.</summary>
+        private bool UsesWriteBehind =>
+            _policy != null && _policy.BatchSize > 0 && _policy.DelayMs > 0;
 
         /// <summary>
         /// Asks the server for the LIDs of phone numbers we have never seen. Set by the host once
@@ -138,14 +163,155 @@ namespace Unison.Socket.Signal
                 return;
             }
 
-            var batch = new Dictionary<string, string>(StringComparer.Ordinal);
-            foreach (var pair in toWrite)
+            if (!UsesWriteBehind)
             {
-                batch[pair.Key] = pair.Value;
-                batch[pair.Value + ReverseKeySuffix] = pair.Key;
+                await WriteThroughAsync(toWrite).ConfigureAwait(false);
+                return;
             }
 
-            await _storage.SetAsync(batch).ConfigureAwait(false);
+            // Decrypt/send need the pair before history releases disk; cache first, flush later.
+            foreach (var pair in toWrite)
+            {
+                CachePair(pair.Key, pair.Value);
+            }
+
+            int pendingCount;
+            bool suppressed;
+            lock (_pendingGate)
+            {
+                foreach (var pair in toWrite)
+                {
+                    _pendingDisk[pair.Key] = pair.Value;
+                }
+
+                pendingCount = _pendingDisk.Count;
+                suppressed = _diskPersistSuppressed;
+            }
+
+            if (suppressed)
+            {
+                _log.Trace(
+                    "[LidMapping] Queued " + toWrite.Count +
+                    " mapping(s) for disk (history gate held; pending=" + pendingCount + ")");
+                return;
+            }
+
+            if (pendingCount >= _policy.BatchSize)
+            {
+                await FlushPendingToDiskAsync().ConfigureAwait(false);
+                return;
+            }
+
+            Action<int> arm = ArmDebounce;
+            if (arm != null)
+            {
+                arm(_policy.DelayMs);
+            }
+            else
+            {
+                // No host timer yet: keep queued; Release/Flush will land them.
+                _log.Trace(
+                    "[LidMapping] Queued " + toWrite.Count +
+                    " mapping(s) pending host debounce (pending=" + pendingCount + ")");
+            }
+        }
+
+        /// <summary>
+        /// Opens paced disk writes after the first history sync (or when warm decides there
+        /// was no hold). Flushes debt immediately, then further stores use batch/delay.
+        /// </summary>
+        public Task EnableDiskPersistAsync(string reason = null)
+        {
+            if (!UsesWriteBehind)
+            {
+                return Task.CompletedTask;
+            }
+
+            bool alreadyOpen;
+            lock (_pendingGate)
+            {
+                alreadyOpen = !_diskPersistSuppressed;
+                _diskPersistSuppressed = false;
+            }
+
+            if (!alreadyOpen)
+            {
+                _log.Trace(
+                    "[LidMapping] Disk persist released" +
+                    (string.IsNullOrEmpty(reason) ? string.Empty : " (" + reason + ")"));
+            }
+
+            return FlushPendingToDiskAsync();
+        }
+
+        /// <summary>
+        /// Writes every queued pair now (suspend / dispose / batch full / gate release).
+        /// </summary>
+        public Task FlushPendingToDiskAsync()
+        {
+            if (!UsesWriteBehind)
+            {
+                return Task.CompletedTask;
+            }
+
+            Task flush;
+            lock (_flushGate)
+            {
+                flush = _flushInFlight = ContinueFlushAsync(_flushInFlight);
+            }
+
+            return flush;
+        }
+
+        private async Task ContinueFlushAsync(Task previous)
+        {
+            try
+            {
+                await previous.ConfigureAwait(false);
+            }
+            catch
+            {
+                // A prior flush failure must not block the next attempt.
+            }
+
+            Dictionary<string, string> toWrite;
+            lock (_pendingGate)
+            {
+                if (_pendingDisk.Count == 0)
+                {
+                    return;
+                }
+
+                toWrite = new Dictionary<string, string>(_pendingDisk, StringComparer.Ordinal);
+                _pendingDisk.Clear();
+            }
+
+            try
+            {
+                await WriteBatchAsync(toWrite).ConfigureAwait(false);
+                _log.Trace("[LidMapping] Flushed " + toWrite.Count + " mapping(s) to disk");
+            }
+            catch (Exception ex)
+            {
+                lock (_pendingGate)
+                {
+                    foreach (var pair in toWrite)
+                    {
+                        if (!_pendingDisk.ContainsKey(pair.Key))
+                        {
+                            _pendingDisk[pair.Key] = pair.Value;
+                        }
+                    }
+                }
+
+                _log.Warn("[LidMapping] Disk flush failed: " + ex.Message);
+                throw;
+            }
+        }
+
+        private async Task WriteThroughAsync(Dictionary<string, string> toWrite)
+        {
+            await WriteBatchAsync(toWrite).ConfigureAwait(false);
 
             // Cache only after the write succeeded, so a failed write is retried instead of
             // being masked by a memory hit.
@@ -155,6 +321,18 @@ namespace Unison.Socket.Signal
             }
 
             _log.Trace("[LidMapping] Stored " + toWrite.Count + " mapping(s)");
+        }
+
+        private Task WriteBatchAsync(Dictionary<string, string> pnToLid)
+        {
+            var batch = new Dictionary<string, string>(StringComparer.Ordinal);
+            foreach (var pair in pnToLid)
+            {
+                batch[pair.Key] = pair.Value;
+                batch[pair.Value + ReverseKeySuffix] = pair.Key;
+            }
+
+            return _storage.SetAsync(batch);
         }
 
         public async Task<string> GetLidForPnAsync(string pn)
@@ -510,6 +688,18 @@ namespace Unison.Socket.Signal
                 if (!string.IsNullOrEmpty(cached))
                 {
                     existing[pnUser] = cached;
+                    continue;
+                }
+
+                string pendingLid;
+                lock (_pendingGate)
+                {
+                    _pendingDisk.TryGetValue(pnUser, out pendingLid);
+                }
+
+                if (!string.IsNullOrEmpty(pendingLid))
+                {
+                    existing[pnUser] = pendingLid;
                 }
                 else
                 {

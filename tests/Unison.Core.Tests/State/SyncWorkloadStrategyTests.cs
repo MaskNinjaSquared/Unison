@@ -28,6 +28,25 @@ namespace Unison.Core.Tests.State
             Assert.Equal(0, s.MaxFullHistoryCatchUpRounds);
             Assert.Equal(6000, s.HistoryFinalizeQuietMs);
             Assert.Equal(2000, s.HistoryFullFinalizeDelayMs);
+            Assert.Equal(8, s.LidMappingPersistBatchSize);
+            Assert.Equal(3000, s.LidMappingPersistDelayMs);
+        }
+
+        [Fact]
+        public void Lid_mapping_disk_batches_shrink_with_the_device()
+        {
+            SyncWorkloadStrategy unsupported = UnsupportedSyncWorkload.Instance;
+            SyncWorkloadStrategy low = LowSyncWorkload.Instance;
+            SyncWorkloadStrategy high = HighSyncWorkload.Instance;
+
+            Assert.True(unsupported.LidMappingPersistBatchSize < low.LidMappingPersistBatchSize);
+            Assert.True(low.LidMappingPersistBatchSize < high.LidMappingPersistBatchSize);
+            Assert.True(unsupported.LidMappingPersistDelayMs > low.LidMappingPersistDelayMs);
+            Assert.True(low.LidMappingPersistDelayMs > high.LidMappingPersistDelayMs);
+            Assert.Equal(40, low.LidMappingPersistBatchSize);
+            Assert.Equal(1500, low.LidMappingPersistDelayMs);
+            Assert.Equal(120, high.LidMappingPersistBatchSize);
+            Assert.Equal(400, high.LidMappingPersistDelayMs);
         }
 
         [Fact]

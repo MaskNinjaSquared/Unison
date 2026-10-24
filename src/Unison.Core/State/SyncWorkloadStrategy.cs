@@ -96,6 +96,18 @@ namespace Unison.Core.State
         /// <summary>Pause between usync chunks so keep-alives can land on Mobile.</summary>
         public abstract int NameResolveInterChunkDelayMs { get; }
 
+        /// <summary>
+        /// How many new LID↔PN pairs one disk write may take after history has released
+        /// the gate. Smaller on constrained tiers so SQLite stays cheap.
+        /// </summary>
+        public abstract int LidMappingPersistBatchSize { get; }
+
+        /// <summary>
+        /// Quiet ms before a sub-batch LID disk flush (write-behind). Ignored while the
+        /// first history sync still holds disk persist.
+        /// </summary>
+        public abstract int LidMappingPersistDelayMs { get; }
+
         /// <summary>Pacing while <see cref="SyncBudget.IsFrugal"/> is true.</summary>
         protected abstract SyncPacing FrugalPacing { get; }
 
@@ -175,6 +187,11 @@ namespace Unison.Core.State
 
         public override int NameResolveInterChunkDelayMs => 800;
 
+        // Smallest disk lots: 512 MB class cannot afford large SQLite LID batches.
+        public override int LidMappingPersistBatchSize => 8;
+
+        public override int LidMappingPersistDelayMs => 3000;
+
         protected override SyncPacing FrugalPacing { get; } = new SyncPacing(4000, 8000, 45, 3);
 
         protected override SyncPacing GenerousPacing { get; } = new SyncPacing(1000, 1800, 35, 2);
@@ -245,6 +262,10 @@ namespace Unison.Core.State
 
         public override int NameResolveInterChunkDelayMs => 500;
 
+        public override int LidMappingPersistBatchSize => 40;
+
+        public override int LidMappingPersistDelayMs => 1500;
+
         protected override SyncPacing FrugalPacing { get; } = new SyncPacing(3000, 6000, 45, 3);
 
         protected override SyncPacing GenerousPacing { get; } = new SyncPacing(1000, 1800, 35, 2);
@@ -307,6 +328,10 @@ namespace Unison.Core.State
         public override int NameResolveChunkSize => 5;
 
         public override int NameResolveInterChunkDelayMs => 120;
+
+        public override int LidMappingPersistBatchSize => 120;
+
+        public override int LidMappingPersistDelayMs => 400;
 
         protected override SyncPacing FrugalPacing { get; } = new SyncPacing(3000, 6000, 45, 3);
 

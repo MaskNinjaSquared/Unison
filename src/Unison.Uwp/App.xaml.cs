@@ -253,8 +253,17 @@ namespace Unison.Uwp
             services.AddSingleton(sp => new MediaDerivationService(
                 sp.GetRequiredService<MediaCacheService>()));
             // LidMappingStore before the client: SocketBridge + JidAliasTable share one cache (3.7b).
+            // Write-behind policy needs the memory tier; resolve workload lazily (registered below).
             services.AddSingleton<ILidMappingStorage, SqliteLidMappingStorage>();
-            services.AddSingleton(sp => new LidMappingStore(sp.GetRequiredService<ILidMappingStorage>()));
+            services.AddSingleton<ILidMappingPersistPolicy>(sp =>
+                new SyncWorkloadLidMappingPersistPolicy(sp.GetRequiredService<SyncWorkloadStrategy>()));
+            services.AddSingleton(sp => new LidMappingStore(
+                sp.GetRequiredService<ILidMappingStorage>(),
+                log: null,
+                policy: sp.GetRequiredService<ILidMappingPersistPolicy>()));
+            services.AddSingleton(sp => new LidMappingPersistHost(sp.GetRequiredService<LidMappingStore>()));
+            services.AddSingleton<ILidMappingDiskPersistGate>(sp =>
+                sp.GetRequiredService<LidMappingPersistHost>());
             // Host owns WinRT transport construction; SocketBridge only asks the factory.
             services.AddSingleton<IWhatsAppTransportFactory, UwpWhatsAppTransportFactory>();
             services.AddSingleton<ILidMappingMemory>(sp =>
@@ -499,7 +508,8 @@ namespace Unison.Uwp
                 sp.GetRequiredService<ChatListInitialPaintGate>(),
                 sp.GetRequiredService<IAppVisibility>(),
                 sp.GetRequiredService<IHistoryMessageThumbnailMaterializer>(),
-                sp.GetRequiredService<IStatusThumbnailMaterializer>()));
+                sp.GetRequiredService<IStatusThumbnailMaterializer>(),
+                sp.GetRequiredService<ILidMappingDiskPersistGate>()));
             services.AddSingleton<IHistoryService>(sp => sp.GetRequiredService<HistoryFacade>());
 
             services.AddSingleton(sp => new StatusFacade(
@@ -1411,6 +1421,20 @@ namespace Unison.Uwp
             RuntimeDiagnosticsService.Instance.Write("lifecycle", "suspending-start");
             try
             {
+                try
+                {
+                    LidMappingPersistHost lidPersist = Services?.GetService<LidMappingPersistHost>();
+                    if (lidPersist != null)
+                    {
+                        await lidPersist.FlushAsync("suspending");
+                    }
+                }
+                catch (Exception lidEx)
+                {
+                    System.Diagnostics.Debug.WriteLine(
+                        "[App] LID mapping flush on suspend failed: " + lidEx.Message);
+                }
+
                 var connection = App.GetConnectionService();
                 string holdReason = ReasonToKeepSocketInProcess();
                 if (holdReason != null)

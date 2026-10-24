@@ -161,6 +161,8 @@
     <Compile Include="Services\WhatsApp\SocketBridgeRemoteHooks.cs" />
     <Compile Include="Services\WhatsApp\JidResolver.cs" />
     <Compile Include="Services\WhatsApp\LidMappingMemoryAdapter.cs" />
+    <Compile Include="Services\LidMappingPersistHost.cs" />
+    <Compile Include="Services\SyncWorkloadLidMappingPersistPolicy.cs" />
     <Compile Include="Services\WhatsApp\Contacts\ChatAvatarFetch.cs" />
     <Compile Include="Services\WhatsApp\Chats\BridgeChatAccountActions.cs" />
     <Compile Include="Services\WhatsApp\Groups\BridgeGroupWireActions.cs" />
