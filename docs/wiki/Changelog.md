@@ -2,6 +2,12 @@
 
 Newest first.
 
+## Extract — ForgetChatStorageDispatch
+
+`ForgetChatStorageDispatch` + `ForgetChatStorageKeys` + `IForgetChatStorageHost`.
+Durable chat-delete order (tombstone → history → RAM cache → catalogue) left the
+client; store I/O stays on the host. Core tests for key merge and run order.
+
 ## Extract — ChatCatalogPersistDispatch
 
 `ChatCatalogPersistDispatch` + `IChatCatalogPersistHost`. Debounced catalogue

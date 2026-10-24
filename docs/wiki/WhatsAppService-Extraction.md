@@ -178,8 +178,8 @@ on `MessageFacade` (host: IQ + recipient-count cache). Offline release /
 post-replay list repair / deferred-startup list repair / background resolution+listing
 are façade `Notify*` (host keeps quiet/memory/catch-up gates). Stanza `notify`
 push-name is `ContactFacade.NotifyInboundMessageNode`. Pump keeps queue lanes and
-session-only App State. Persistence flush timer / `ForgetChatStorage` / Connection
-lifecycle stay on the host (not this phase).
+session-only App State. Persistence flush timer / Connection lifecycle stay on the host.
+`ForgetChatStorage` orchestration is `ForgetChatStorageDispatch` (I/O on the host).
 
 ### Facades still depend on the client
 

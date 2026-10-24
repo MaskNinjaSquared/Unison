@@ -5,6 +5,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Models;
+using Unison.WhatsAppClient.Helpers;
 
 namespace Unison.Uwp.Services.WhatsApp
 {
@@ -17,49 +18,44 @@ namespace Unison.Uwp.Services.WhatsApp
         Task IAppStateLocalHost.ForgetChatStorageAsync(
             string canonicalJid,
             IReadOnlyList<string> storeKeys) =>
-            ForgetChatInStorageAsync(canonicalJid, storeKeys);
+            ForgetChatStorageDispatch.RunAsync(this, canonicalJid, storeKeys);
 
-        /// <summary>
-        /// The persistent half of a chat deletion: tombstone the list preview, drop the stored
-        /// messages, and take the chat out of the catalog the app rehydrates from.
-        /// </summary>
-        private async Task ForgetChatInStorageAsync(string canonical, IReadOnlyList<string> keys)
+        async Task IForgetChatStorageHost.MarkPreviewsDeletedAsync(IReadOnlyList<string> jids)
         {
-            var jids = new List<string>();
-            if (keys != null)
+            if (_chatPreviews == null)
             {
-                jids.AddRange(keys);
+                return;
             }
 
-            if (!jids.Any(k => string.Equals(k, canonical, StringComparison.OrdinalIgnoreCase)))
+            try
             {
-                jids.Add(canonical);
+                await _chatPreviews.MarkDeletedAsync(jids, DateTime.UtcNow).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[WhatsAppService] Chat preview tombstone failed: " + ex.Message);
+            }
+        }
+
+        async Task IForgetChatStorageHost.DeleteHistoryForKeysAsync(IReadOnlyList<string> jids)
+        {
+            if (_historyMessages == null)
+            {
+                return;
             }
 
-            if (_chatPreviews != null)
+            try
             {
-                try
-                {
-                    await _chatPreviews.MarkDeletedAsync(jids, DateTime.UtcNow).ConfigureAwait(false);
-                }
-                catch (Exception ex)
-                {
-                    Debug.WriteLine("[WhatsAppService] Chat preview tombstone failed: " + ex.Message);
-                }
+                await _historyMessages.DeleteForChatKeysAsync(jids).ConfigureAwait(false);
             }
-
-            if (_historyMessages != null)
+            catch (Exception ex)
             {
-                try
-                {
-                    await _historyMessages.DeleteForChatKeysAsync(jids).ConfigureAwait(false);
-                }
-                catch (Exception ex)
-                {
-                    Debug.WriteLine("[WhatsAppService] Chat message delete failed: " + ex.Message);
-                }
+                Debug.WriteLine("[WhatsAppService] Chat message delete failed: " + ex.Message);
             }
+        }
 
+        void IForgetChatStorageHost.ClearMessageMemoryCache()
+        {
             try
             {
                 _messageStore?.ClearMemoryCache();
@@ -68,7 +64,10 @@ namespace Unison.Uwp.Services.WhatsApp
             {
                 Debug.WriteLine("[WhatsAppService] Message cache clear failed: " + ex.Message);
             }
+        }
 
+        async Task IForgetChatStorageHost.PersistCatalogAfterForgetAsync()
+        {
             try
             {
                 List<ChatItem> snapshot = null;
