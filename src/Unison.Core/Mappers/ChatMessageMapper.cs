@@ -51,7 +51,8 @@ namespace Unison.Core.Mappers
                     snapshot.IsSticker,
                     snapshot.IsAudio,
                     snapshot.IsVoice,
-                    snapshot.IsDocument);
+                    snapshot.IsDocument,
+                    snapshot.IsContact);
 
             return new ChatMessage
             {

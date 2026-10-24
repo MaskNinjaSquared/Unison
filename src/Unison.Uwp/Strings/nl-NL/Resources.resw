@@ -257,6 +257,9 @@ Schakel uit na diagnostiseren: het ingeschakeld laten vertraagd de app.</value>
   <data name="ChatList_PreviewDocument" xml:space="preserve">
     <value>Document</value>
   </data>
+  <data name="ChatList_PreviewContact" xml:space="preserve">
+    <value>Contact</value>
+  </data>
   <data name="ChatList_PreviewReaction" xml:space="preserve">
     <value>Reactie</value>
   </data>
@@ -1024,6 +1027,12 @@ Schakel uit na diagnostiseren: het ingeschakeld laten vertraagd de app.</value>
     <value>Bellen</value>
   </data>
   <data name="ChatDetail_AddContact.Text" xml:space="preserve">
+    <value>Contact toevoegen</value>
+  </data>
+  <data name="MessageContact_Chat.Text" xml:space="preserve">
+    <value>Bericht</value>
+  </data>
+  <data name="MessageContact_Add.Text" xml:space="preserve">
     <value>Contact toevoegen</value>
   </data>
   <data name="ChatDetail_AddContactLink.Content" xml:space="preserve">

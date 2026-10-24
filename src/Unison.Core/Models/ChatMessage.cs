@@ -380,7 +380,7 @@ namespace Unison.Core.Models
         /// </summary>
         [JsonIgnore]
         public bool ShowTextContent =>
-            !IsRevoked && !IsAudio && !IsImage && !IsVideo && !IsGif && !IsSticker && !IsDocument;
+            !IsRevoked && !IsAudio && !IsImage && !IsVideo && !IsGif && !IsSticker && !IsDocument && !IsContact;
 
         /// <summary>Protocol video message (local file may still be pending download).</summary>
         [JsonIgnore]
@@ -444,6 +444,69 @@ namespace Unison.Core.Models
             _kind == ChatMessageKind.Document ||
             HasDocumentPayload ||
             HasDocumentPreviewTag(Content);
+
+        /// <summary>Shared contact card (<c>ContactMessage</c>).</summary>
+        [JsonIgnore]
+        public bool IsContact => _kind == ChatMessageKind.Contact;
+
+        private string _contactCardDisplayName;
+        /// <summary>Display name on the shared contact card (protocol / vCard FN).</summary>
+        public string ContactCardDisplayName
+        {
+            get => _contactCardDisplayName;
+            set
+            {
+                if (string.Equals(_contactCardDisplayName, value, StringComparison.Ordinal)) return;
+                _contactCardDisplayName = value;
+                OnPropertyChanged();
+            }
+        }
+
+        private string _contactCardJid;
+        /// <summary>PN JID of the shared contact when waid/phone is known.</summary>
+        public string ContactCardJid
+        {
+            get => _contactCardJid;
+            set
+            {
+                if (string.Equals(_contactCardJid, value, StringComparison.Ordinal)) return;
+                _contactCardJid = value;
+                OnPropertyChanged();
+            }
+        }
+
+        private string _contactCardPhone;
+        /// <summary>Phone digits from the vCard TEL (may match <see cref="ContactCardJid"/> user part).</summary>
+        public string ContactCardPhone
+        {
+            get => _contactCardPhone;
+            set
+            {
+                if (string.Equals(_contactCardPhone, value, StringComparison.Ordinal)) return;
+                _contactCardPhone = value;
+                OnPropertyChanged();
+            }
+        }
+
+        private string _contactCardPhotoUri;
+        /// <summary>
+        /// Local avatar for the shared card: vCard PHOTO when persisted, else Person/chat cache.
+        /// Distinct from group-author <see cref="ContactUri"/>.
+        /// </summary>
+        public string ContactCardPhotoUri
+        {
+            get => _contactCardPhotoUri;
+            set
+            {
+                if (string.Equals(_contactCardPhotoUri, value, StringComparison.Ordinal)) return;
+                _contactCardPhotoUri = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(HasContactCardPhoto));
+            }
+        }
+
+        [JsonIgnore]
+        public bool HasContactCardPhoto => !string.IsNullOrWhiteSpace(ContactCardPhotoUri);
 
         private bool _isStickerFailed;
         /// <summary>Sticker media could not be loaded — bubble shows "!Sticker Error".</summary>
@@ -1181,6 +1244,7 @@ namespace Unison.Core.Models
                 nameof(IsVoiceMessage),
                 nameof(IsSticker),
                 nameof(IsDocument),
+                nameof(IsContact),
                 nameof(ShowTextContent),
                 nameof(ShowStickerError),
                 nameof(ShowStickerLoading),

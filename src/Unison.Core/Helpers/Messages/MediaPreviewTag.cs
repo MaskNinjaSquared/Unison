@@ -24,6 +24,7 @@ namespace Unison.Core.Helpers
         public const string Gif = "[GIF]";
         public const string Sticker = "[Sticker]";
         public const string Document = "[Document]";
+        public const string Contact = "[Contact]";
 
         /// <summary>A recorded voice note.</summary>
         public const string Voice = "[Voice Message]";
@@ -71,6 +72,12 @@ namespace Unison.Core.Helpers
             return WithCaption(Document, fileName);
         }
 
+        /// <summary>Shared contact card preview, named when the display name is known.</summary>
+        public static string ForContact(string displayName)
+        {
+            return WithCaption(Contact, displayName);
+        }
+
         /// <summary>
         /// The bare marker for a message that carries no text of its own.
         /// </summary>
@@ -97,6 +104,8 @@ namespace Unison.Core.Helpers
                     return Sticker;
                 case ChatPreviewKind.Document:
                     return Document;
+                case ChatPreviewKind.Contact:
+                    return Contact;
                 case ChatPreviewKind.Voice:
                     return Voice;
                 default:

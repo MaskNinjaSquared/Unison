@@ -192,6 +192,14 @@ namespace Unison.WhatsAppClient.Helpers
                     message.DocumentFileLengthBytes = row.MediaFileLengthBytes;
                     message.NotifyDocumentDownloadStateChanged();
                     break;
+
+                case ChatPreviewKind.Contact:
+                    message.ContactCardJid = row.MediaUrl;
+                    message.ContactCardPhone = row.MediaDirectPath;
+                    message.ContactCardDisplayName = !string.IsNullOrWhiteSpace(row.MediaFileName)
+                        ? row.MediaFileName
+                        : body;
+                    break;
             }
         }
 
@@ -262,6 +270,9 @@ namespace Unison.WhatsAppClient.Helpers
                     }
 
                     message.NotifyDocumentDownloadStateChanged();
+                    break;
+                case ChatPreviewKind.Contact:
+                    message.ContactCardPhotoUri = row.MediaLocalUri;
                     break;
             }
         }

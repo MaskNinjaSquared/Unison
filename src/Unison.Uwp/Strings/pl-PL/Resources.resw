@@ -724,6 +724,9 @@ Wyłącz po zakończeniu diagnozy: pozostawienie włączonego spowalnia aplikacj
   <data name="ChatList_PreviewDocument" xml:space="preserve">
     <value>Dokument</value>
   </data>
+  <data name="ChatList_PreviewContact" xml:space="preserve">
+    <value>Kontakt</value>
+  </data>
   <data name="ChatList_PreviewReaction" xml:space="preserve">
     <value>Reakcja</value>
   </data>
@@ -1024,6 +1027,12 @@ Wyłącz po zakończeniu diagnozy: pozostawienie włączonego spowalnia aplikacj
     <value>Zadzwoń</value>
   </data>
   <data name="ChatDetail_AddContact.Text" xml:space="preserve">
+    <value>Dodaj kontakt</value>
+  </data>
+  <data name="MessageContact_Chat.Text" xml:space="preserve">
+    <value>Wiadomosc</value>
+  </data>
+  <data name="MessageContact_Add.Text" xml:space="preserve">
     <value>Dodaj kontakt</value>
   </data>
   <data name="ChatDetail_AddContactLink.Content" xml:space="preserve">

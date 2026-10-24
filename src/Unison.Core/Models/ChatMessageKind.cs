@@ -13,6 +13,8 @@ namespace Unison.Core.Models
         Audio = 5,
         Document = 6,
         /// <summary>WhatsApp GIF (<c>VideoMessage.GifPlayback</c>) — video bytes, animation UI.</summary>
-        Gif = 7
+        Gif = 7,
+        /// <summary>Shared contact card (<c>ContactMessage</c> / vCard).</summary>
+        Contact = 8
     }
 }

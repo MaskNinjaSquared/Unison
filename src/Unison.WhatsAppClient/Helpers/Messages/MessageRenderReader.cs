@@ -26,6 +26,11 @@ namespace Unison.WhatsAppClient.Helpers
         public bool IsDocument { get; set; }
         public Proto.Message.Types.DocumentMessage DocumentMessage { get; set; }
         public Proto.Message.Types.AudioMessage AudioMessage { get; set; }
+        public bool IsContact { get; set; }
+        public string ContactDisplayName { get; set; }
+        public string ContactVcard { get; set; }
+        public string ContactJid { get; set; }
+        public string ContactPhoneDigits { get; set; }
 
         // Filled in by the caller from the envelope's context info, which needs name resolution.
         public string QuotedText { get; set; }
@@ -41,6 +46,7 @@ namespace Unison.WhatsAppClient.Helpers
                 if (IsGif) return ChatPreviewKind.Gif;
                 if (IsVideo) return ChatPreviewKind.Video;
                 if (IsDocument) return ChatPreviewKind.Document;
+                if (IsContact) return ChatPreviewKind.Contact;
                 if (IsVoice || IsAudio) return ChatPreviewKind.Voice;
                 return ChatPreviewKind.Text;
             }
@@ -194,13 +200,25 @@ namespace Unison.WhatsAppClient.Helpers
 
             if (unwrapped.ContactMessage != null)
             {
+                ContactVcardInfo parsed = ContactVcardReader.Read(
+                    unwrapped.ContactMessage.DisplayName,
+                    unwrapped.ContactMessage.Vcard);
+                string name = !string.IsNullOrWhiteSpace(parsed.DisplayName)
+                    ? parsed.DisplayName
+                    : unwrapped.ContactMessage.DisplayName;
                 return new MessageRenderInfo
                 {
-                    Content = "[Contact] " + unwrapped.ContactMessage.DisplayName
+                    Content = MediaPreviewTag.ForContact(name),
+                    IsContact = true,
+                    ContactDisplayName = name ?? string.Empty,
+                    ContactVcard = unwrapped.ContactMessage.Vcard,
+                    ContactJid = parsed.Jid,
+                    ContactPhoneDigits = parsed.PhoneDigits
                 };
             }
 
             // Several cards at once: one envelope, no single name to put on it.
+            // MVP keeps array cards as a text preview; single-card Kind.Contact is enough for chrome.
             if (unwrapped.ContactsArrayMessage != null)
             {
                 return new MessageRenderInfo { Content = "[Contacts]" };

@@ -921,7 +921,7 @@ namespace Unison.Uwp.Data
 
             ChatPreviewKind kind = ChatPreviewKind.Text;
             if (row.LastMessageKind >= (int)ChatPreviewKind.Text &&
-                row.LastMessageKind <= (int)ChatPreviewKind.Gif)
+                row.LastMessageKind <= (int)ChatPreviewKind.Contact)
             {
                 kind = (ChatPreviewKind)row.LastMessageKind;
             }

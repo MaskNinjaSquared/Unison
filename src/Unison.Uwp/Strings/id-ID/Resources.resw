@@ -257,6 +257,9 @@ Matikan setelah diagnosa: menjaga aplikasi tetap lambat.</value>
   <data name="ChatList_PreviewDocument" xml:space="preserve">
     <value>Dokumen</value>
   </data>
+  <data name="ChatList_PreviewContact" xml:space="preserve">
+    <value>Kontak</value>
+  </data>
   <data name="ChatList_PreviewReaction" xml:space="preserve">
     <value>Reaksi</value>
   </data>
@@ -1024,6 +1027,12 @@ Matikan setelah diagnosa: menjaga aplikasi tetap lambat.</value>
     <value>Panggil</value>
   </data>
   <data name="ChatDetail_AddContact.Text" xml:space="preserve">
+    <value>Tambah kontak</value>
+  </data>
+  <data name="MessageContact_Chat.Text" xml:space="preserve">
+    <value>Pesan</value>
+  </data>
+  <data name="MessageContact_Add.Text" xml:space="preserve">
     <value>Tambah kontak</value>
   </data>
   <data name="ChatDetail_AddContactLink.Content" xml:space="preserve">

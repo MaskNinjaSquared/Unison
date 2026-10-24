@@ -49,6 +49,35 @@ namespace Unison.WhatsAppClient.Helpers
             {
                 ApplyDocument(target, renderInfo.DocumentMessage);
             }
+
+            if (renderInfo.IsContact)
+            {
+                ApplyContact(target, renderInfo);
+            }
+        }
+
+        public static void ApplyContact(ChatMessage target, MessageRenderInfo renderInfo)
+        {
+            if (target == null || renderInfo == null || !renderInfo.IsContact)
+            {
+                return;
+            }
+
+            target.Kind = ChatMessageKind.Contact;
+            if (!string.IsNullOrWhiteSpace(renderInfo.ContactDisplayName))
+            {
+                target.ContactCardDisplayName = renderInfo.ContactDisplayName.Trim();
+            }
+
+            if (!string.IsNullOrWhiteSpace(renderInfo.ContactJid))
+            {
+                target.ContactCardJid = JidHelper.Normalize(renderInfo.ContactJid);
+            }
+
+            if (!string.IsNullOrWhiteSpace(renderInfo.ContactPhoneDigits))
+            {
+                target.ContactCardPhone = renderInfo.ContactPhoneDigits.Trim();
+            }
         }
 
         public static void ApplyAudio(ChatMessage target, Message.Types.AudioMessage audio)

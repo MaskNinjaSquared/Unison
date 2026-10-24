@@ -70,6 +70,9 @@ namespace Unison.Core.Helpers
                 case ChatPreviewKind.Document:
                     ConsumeTag(ref s, "[Document]");
                     break;
+                case ChatPreviewKind.Contact:
+                    ConsumeTag(ref s, "[Contact]");
+                    break;
                 case ChatPreviewKind.Reaction:
                     ConsumeTag(ref s, "[Reaction]");
                     break;
@@ -183,6 +186,11 @@ namespace Unison.Core.Helpers
                 return ChatPreviewKind.Document;
             }
 
+            if (ContainsIgnoreCase(raw, "[Contact]"))
+            {
+                return ChatPreviewKind.Contact;
+            }
+
             if (ContainsIgnoreCase(raw, "[Reaction]"))
             {
                 return ChatPreviewKind.Reaction;
@@ -213,6 +221,8 @@ namespace Unison.Core.Helpers
                     return ChatPreviewKind.Voice;
                 case ChatMessageKind.Document:
                     return ChatPreviewKind.Document;
+                case ChatMessageKind.Contact:
+                    return ChatPreviewKind.Contact;
                 default:
                     return ChatPreviewKind.Text;
             }
@@ -234,6 +244,8 @@ namespace Unison.Core.Helpers
                     return ChatMessageKind.Voice;
                 case ChatPreviewKind.Document:
                     return ChatMessageKind.Document;
+                case ChatPreviewKind.Contact:
+                    return ChatMessageKind.Contact;
                 default:
                     return ChatMessageKind.Text;
             }
@@ -245,7 +257,8 @@ namespace Unison.Core.Helpers
             bool isSticker,
             bool isAudio,
             bool isVoice,
-            bool isDocument = false)
+            bool isDocument = false,
+            bool isContact = false)
         {
             if (isSticker)
             {
@@ -265,6 +278,11 @@ namespace Unison.Core.Helpers
             if (isDocument)
             {
                 return ChatMessageKind.Document;
+            }
+
+            if (isContact)
+            {
+                return ChatMessageKind.Contact;
             }
 
             if (isVoice)

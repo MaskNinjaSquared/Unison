@@ -257,6 +257,9 @@ Desative depois de diagnosticar: manter ligado deixa o app lento.</value>
   <data name="ChatList_PreviewDocument" xml:space="preserve">
     <value>Documento</value>
   </data>
+  <data name="ChatList_PreviewContact" xml:space="preserve">
+    <value>Contato</value>
+  </data>
   <data name="ChatList_PreviewReaction" xml:space="preserve">
     <value>Reação</value>
   </data>
@@ -1042,6 +1045,12 @@ Desative depois de diagnosticar: manter ligado deixa o app lento.</value>
     <value>Ligar</value>
   </data>
   <data name="ChatDetail_AddContact.Text" xml:space="preserve">
+    <value>Adicionar contato</value>
+  </data>
+  <data name="MessageContact_Chat.Text" xml:space="preserve">
+    <value>Conversar</value>
+  </data>
+  <data name="MessageContact_Add.Text" xml:space="preserve">
     <value>Adicionar contato</value>
   </data>
   <data name="ChatDetail_AddContactLink.Content" xml:space="preserve">

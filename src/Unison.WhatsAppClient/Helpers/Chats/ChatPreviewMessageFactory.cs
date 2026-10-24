@@ -105,6 +105,8 @@ namespace Unison.WhatsAppClient.Helpers
                     return MediaPreviewTag.Audio;
                 case ChatMessageKind.Document:
                     return MediaPreviewTag.Document;
+                case ChatMessageKind.Contact:
+                    return MediaPreviewTag.Contact;
                 default:
                     return string.Empty;
             }

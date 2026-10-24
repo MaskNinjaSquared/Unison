@@ -257,6 +257,9 @@ Nach der Diagnose deaktivieren: Wenn es aktiviert bleibt, wird die App langsamer
   <data name="ChatList_PreviewDocument" xml:space="preserve">
     <value>Dokument</value>
   </data>
+  <data name="ChatList_PreviewContact" xml:space="preserve">
+    <value>Kontakt</value>
+  </data>
   <data name="ChatList_PreviewReaction" xml:space="preserve">
     <value>Reaktion</value>
   </data>
@@ -1028,6 +1031,12 @@ Nach der Diagnose deaktivieren: Wenn es aktiviert bleibt, wird die App langsamer
   </data>
   <data name="ChatDetail_AddContact.Text" xml:space="preserve">
     <value>Kontakt hinzufügen</value>
+  </data>
+  <data name="MessageContact_Chat.Text" xml:space="preserve">
+    <value>Nachricht</value>
+  </data>
+  <data name="MessageContact_Add.Text" xml:space="preserve">
+    <value>Kontakt hinzuf�gen</value>
   </data>
   <data name="ChatDetail_AddContactLink.Content" xml:space="preserve">
     <value>Kontakt hinzufügen</value>

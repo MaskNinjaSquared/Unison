@@ -637,7 +637,13 @@ namespace Unison.Uwp
                 sp.GetService<ICopyService>(),
                 sp.GetRequiredService<AttachedUiDispatcher>(),
                 sp.GetRequiredService<ISystemInfoProvider>().GetDeviceCategory(),
-                sp.GetRequiredService<IGifPlaybackCoordinator>()));
+                sp.GetRequiredService<IGifPlaybackCoordinator>(),
+                sp.GetService<IContactService>(),
+                sp.GetService<IChatService>(),
+                sp.GetService<IPersonStore>(),
+                jid => sp.GetService<ShellViewModel>()?.QueueOpenChatFromActivation(
+                    "chat=" + Uri.EscapeDataString(jid),
+                    delayChatListUntilConversationReady: false)));
             services.AddSingleton<IChatDetailInfoViewModelFactory, ChatDetailInfoViewModelFactory>();
             services.AddSingleton<INewChatDialogViewModelFactory, NewChatDialogViewModelFactory>();
             services.AddSingleton<ILocalContactsService, LocalContactsService>();

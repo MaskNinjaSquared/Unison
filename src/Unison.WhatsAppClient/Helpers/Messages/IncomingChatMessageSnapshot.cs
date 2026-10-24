@@ -38,6 +38,10 @@ namespace Unison.WhatsAppClient.Helpers
                 IsAudio = renderInfo?.IsAudio == true,
                 IsVoice = renderInfo?.IsVoice == true,
                 IsDocument = renderInfo?.IsDocument == true,
+                IsContact = renderInfo?.IsContact == true,
+                Kind = renderInfo?.IsContact == true
+                    ? ChatMessageKind.Contact
+                    : ChatMessageKind.Text,
                 Caption = renderInfo?.Caption ?? string.Empty,
                 IsForwarded = isForwarded,
                 QuotedText = quotedText,

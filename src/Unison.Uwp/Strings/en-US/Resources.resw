@@ -257,6 +257,9 @@ Disable after diagnosing: keeping it on slows the app.</value>
   <data name="ChatList_PreviewDocument" xml:space="preserve">
     <value>Document</value>
   </data>
+  <data name="ChatList_PreviewContact" xml:space="preserve">
+    <value>Contact</value>
+  </data>
   <data name="ChatList_PreviewReaction" xml:space="preserve">
     <value>Reaction</value>
   </data>
@@ -1045,6 +1048,12 @@ Disable after diagnosing: keeping it on slows the app.</value>
     <value>Call</value>
   </data>
   <data name="ChatDetail_AddContact.Text" xml:space="preserve">
+    <value>Add contact</value>
+  </data>
+  <data name="MessageContact_Chat.Text" xml:space="preserve">
+    <value>Message</value>
+  </data>
+  <data name="MessageContact_Add.Text" xml:space="preserve">
     <value>Add contact</value>
   </data>
   <data name="ChatDetail_AddContactLink.Content" xml:space="preserve">

@@ -84,6 +84,13 @@ namespace Unison.WhatsAppClient.Helpers
                 // tag as Body or a reload shows as plain text when Kind is mis-applied.
                 body = string.Empty;
             }
+            else if (!revoked && kind == ChatPreviewKind.Contact)
+            {
+                // Display name on MediaFileName; Body keeps the name for list preview text.
+                body = !string.IsNullOrWhiteSpace(message.ContactCardDisplayName)
+                    ? message.ContactCardDisplayName.Trim()
+                    : body;
+            }
 
             if (!revoked)
             {
@@ -234,6 +241,13 @@ namespace Unison.WhatsAppClient.Helpers
                     row.MediaFileLengthBytes = message.DocumentFileLengthBytes;
                     row.MediaLocalUri = NullIfEmpty(message.DocumentUri)
                         ?? NullIfEmpty(message.ThumbnailUri);
+                    break;
+                case ChatPreviewKind.Contact:
+                    // Reuse media columns: Url=JID, DirectPath=phone, FileName=display name, LocalUri=photo.
+                    row.MediaUrl = NullIfEmpty(message.ContactCardJid);
+                    row.MediaDirectPath = NullIfEmpty(message.ContactCardPhone);
+                    row.MediaFileName = NullIfEmpty(message.ContactCardDisplayName);
+                    row.MediaLocalUri = NullIfEmpty(message.ContactCardPhotoUri);
                     break;
             }
         }

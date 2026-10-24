@@ -34,6 +34,12 @@ namespace Unison.Uwp.Client
                         Caption = text
                     };
                     break;
+                case ChatPreviewKind.Contact:
+                    message.ContactMessage = new global::Proto.Message.Types.ContactMessage
+                    {
+                        DisplayName = text
+                    };
+                    break;
                 default:
                     message.Conversation = text;
                     break;

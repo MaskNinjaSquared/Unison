@@ -1387,13 +1387,13 @@ namespace Unison.Uwp.Data
             }
 
             ChatPreviewKind kind = ChatPreviewKind.Text;
-            if (row.Kind >= (int)ChatPreviewKind.Text && row.Kind <= (int)ChatPreviewKind.Gif)
+            if (row.Kind >= (int)ChatPreviewKind.Text && row.Kind <= (int)ChatPreviewKind.Contact)
             {
                 kind = (ChatPreviewKind)row.Kind;
             }
 
             ChatPreviewKind quotedKind = ChatPreviewKind.Text;
-            if (row.QuotedKind >= (int)ChatPreviewKind.Text && row.QuotedKind <= (int)ChatPreviewKind.Gif)
+            if (row.QuotedKind >= (int)ChatPreviewKind.Text && row.QuotedKind <= (int)ChatPreviewKind.Contact)
             {
                 quotedKind = (ChatPreviewKind)row.QuotedKind;
             }

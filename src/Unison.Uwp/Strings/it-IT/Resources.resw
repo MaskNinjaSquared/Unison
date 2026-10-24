@@ -724,6 +724,9 @@ Disabilita dopo la diagnosi: lasciarlo attivo rallenta l'app.</value>
   <data name="ChatList_PreviewDocument" xml:space="preserve">
     <value>Documento</value>
   </data>
+  <data name="ChatList_PreviewContact" xml:space="preserve">
+    <value>Contatto</value>
+  </data>
   <data name="ChatList_PreviewReaction" xml:space="preserve">
     <value>Reazione</value>
   </data>
@@ -1024,6 +1027,12 @@ Disabilita dopo la diagnosi: lasciarlo attivo rallenta l'app.</value>
     <value>Chiama</value>
   </data>
   <data name="ChatDetail_AddContact.Text" xml:space="preserve">
+    <value>Aggiungi contatto</value>
+  </data>
+  <data name="MessageContact_Chat.Text" xml:space="preserve">
+    <value>Messaggio</value>
+  </data>
+  <data name="MessageContact_Add.Text" xml:space="preserve">
     <value>Aggiungi contatto</value>
   </data>
   <data name="ChatDetail_AddContactLink.Content" xml:space="preserve">

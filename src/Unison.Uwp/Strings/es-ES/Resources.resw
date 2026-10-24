@@ -198,6 +198,9 @@ Desact铆valo tras el diagn贸stico: mantenerlo activo ralentiza la aplicaci贸n.</
   <data name="ChatList_PreviewDocument" xml:space="preserve">
     <value>Documento</value>
   </data>
+  <data name="ChatList_PreviewContact" xml:space="preserve">
+    <value>Contacto</value>
+  </data>
   <data name="ChatList_PreviewReaction" xml:space="preserve">
     <value>Reacci贸n</value>
   </data>
@@ -966,6 +969,12 @@ Desact铆valo tras el diagn贸stico: mantenerlo activo ralentiza la aplicaci贸n.</
   </data>
   <data name="ChatDetail_AddContact.Text" xml:space="preserve">
     <value>A帽adir contacto</value>
+  </data>
+  <data name="MessageContact_Chat.Text" xml:space="preserve">
+    <value>Mensaje</value>
+  </data>
+  <data name="MessageContact_Add.Text" xml:space="preserve">
+    <value>A馻dir contacto</value>
   </data>
   <data name="ChatDetail_AddContactLink.Content" xml:space="preserve">
     <value>A帽adir contacto</value>

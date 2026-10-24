@@ -1,3 +1,4 @@
+using System;
 using Unison.Core.Contracts;
 using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Models;
@@ -20,6 +21,10 @@ namespace Unison.Core.Factories
         private readonly IDispatcher _ui;
         private readonly DeviceCategory _deviceCategory;
         private readonly IGifPlaybackCoordinator _gifPlayback;
+        private readonly IContactService _contacts;
+        private readonly IChatService _chats;
+        private readonly IPersonStore _people;
+        private readonly Action<string> _openChat;
 
         public ChatMessageVmFactory(
             IStringResources strings = null,
@@ -34,7 +39,11 @@ namespace Unison.Core.Factories
             ICopyService copy = null,
             IDispatcher ui = null,
             DeviceCategory? deviceCategory = null,
-            IGifPlaybackCoordinator gifPlayback = null)
+            IGifPlaybackCoordinator gifPlayback = null,
+            IContactService contacts = null,
+            IChatService chats = null,
+            IPersonStore people = null,
+            Action<string> openChat = null)
         {
             _strings = strings;
             _messages = messages;
@@ -49,6 +58,10 @@ namespace Unison.Core.Factories
             _ui = ui;
             _deviceCategory = deviceCategory ?? DeviceCategory.High;
             _gifPlayback = gifPlayback;
+            _contacts = contacts;
+            _chats = chats;
+            _people = people;
+            _openChat = openChat;
         }
 
         public ChatMessageViewModel Create(ChatMessage model) =>
@@ -66,6 +79,10 @@ namespace Unison.Core.Factories
                 _copy,
                 _ui,
                 _deviceCategory,
-                _gifPlayback);
+                _gifPlayback,
+                _contacts,
+                _chats,
+                _people,
+                _openChat);
     }
 }
