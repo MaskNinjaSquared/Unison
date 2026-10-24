@@ -14,6 +14,8 @@ namespace Unison.Core.State
     {
         public abstract DeviceCategory Category { get; }
 
+        // --- History persist / UI windows ------------------------------------
+
         /// <summary>Newest bodies kept per conversation when a history chunk is written.</summary>
         public abstract int MaxMessagesPerConversation { get; }
 
@@ -38,6 +40,8 @@ namespace Unison.Core.State
         /// <summary>How many SQLite preview rows merge into the store per UI tick.</summary>
         public abstract int PreviewHydrateBatchSize { get; }
 
+        // --- Avatars / post-sync enrichment ---------------------------------
+
         /// <summary>Network avatar fetches in one background pass.</summary>
         public abstract int AvatarFetchBatchSize { get; }
 
@@ -56,12 +60,22 @@ namespace Unison.Core.State
         /// <summary>Quiet gap between serial enrichment steps.</summary>
         public abstract int PostSyncEnrichmentQuietSeconds { get; }
 
+        // --- Catch-up / FULL_HISTORY ----------------------------------------
+
         /// <summary>
         /// Adjacent FULL_HISTORY_SYNC_ON_DEMAND pages after the first quiet lot. Zero means the
         /// first lot is enough — no soft-reconnect cascade that would refill SQLite on a tiny
         /// device after MaxMessagesPerConversation already capped each chunk.
         /// </summary>
         public abstract int MaxFullHistoryCatchUpRounds { get; }
+
+        /// <summary>
+        /// After stagnant / max-continues catch-up while tips still look stale: latch force
+        /// repair, run hydration→FULL_HISTORY, and let periodic safety re-solicit. Low /
+        /// Unsupported keep this false — otherwise Mobile burns minutes in idle-continue
+        /// loops when Meta acks but never advances the tip.
+        /// </summary>
+        public abstract bool AllowStagnantHistoryRepairCascade { get; }
 
         /// <summary>
         /// Quiet ms after a non-Full history chunk before the list treats sync as complete.
@@ -71,6 +85,8 @@ namespace Unison.Core.State
 
         /// <summary>Quiet ms after a Full history chunk before finalize (shorter than non-Full).</summary>
         public abstract int HistoryFullFinalizeDelayMs { get; }
+
+        // --- Groups / names / LID -------------------------------------------
 
         /// <summary>Per-group metadata queries in one fallback pass (groups the listing missed).</summary>
         public abstract int GroupMetadataBatchSize { get; }
@@ -107,6 +123,42 @@ namespace Unison.Core.State
         /// first history sync still holds disk persist.
         /// </summary>
         public abstract int LidMappingPersistDelayMs { get; }
+
+        /// <summary>
+        /// Max PN↔LID <em>pairs</em> kept in the in-memory LRU. Each pair occupies two
+        /// cache keys (forward + reverse). Mobile stays on-demand with a hard cap;
+        /// High may hold more for sync peeks.
+        /// </summary>
+        public abstract int LidMappingMemoryCacheMaxPairs { get; }
+
+        /// <summary>
+        /// Forward pairs to seed from SQLite at session start. Always <c>0</c>:
+        /// no warm on boot (any tier). RAM fills on demand; High only gets a
+        /// larger <see cref="LidMappingMemoryCacheMaxPairs"/> LRU.
+        /// </summary>
+        public abstract int LidMappingWarmMaxPairs { get; }
+
+        /// <summary>
+        /// Cache key budget for <see cref="LidMappingMemoryCacheMaxPairs"/> (pair × 2).
+        /// </summary>
+        public int LidMappingMemoryCacheMaxEntries =>
+            LidMappingMemoryCacheMaxPairs > 0
+                ? LidMappingMemoryCacheMaxPairs * 2
+                : 0;
+
+        // --- Deferred avatar wake + pacing ----------------------------------
+
+        /// <summary>
+        /// Seconds before a deferred avatar retry fires. Longer on constrained tiers so
+        /// catch-up / tip paint can finish without a 20s wake loop.
+        /// </summary>
+        public abstract int DeferredAvatarRetryDelaySeconds { get; }
+
+        /// <summary>
+        /// Max consecutive deferred-avatar schedules before giving up. Zero disables the
+        /// timer entirely (viewport / on-demand only).
+        /// </summary>
+        public abstract int DeferredAvatarMaxRetries { get; }
 
         /// <summary>Pacing while <see cref="SyncBudget.IsFrugal"/> is true.</summary>
         protected abstract SyncPacing FrugalPacing { get; }
@@ -157,15 +209,17 @@ namespace Unison.Core.State
 
         public override int AvatarFetchBatchSize => 1;
 
-        public override int AvatarFetchInterRequestDelayMs => 1200;
+        public override int AvatarFetchInterRequestDelayMs => 1500;
 
         public override uint HistoryStorageQuotaMb => 256;
 
         public override bool SerializePostSyncEnrichment => true;
 
-        public override int PostSyncEnrichmentQuietSeconds => 12;
+        public override int PostSyncEnrichmentQuietSeconds => 15;
 
         public override int MaxFullHistoryCatchUpRounds => 0;
+
+        public override bool AllowStagnantHistoryRepairCascade => false;
 
         public override int HistoryFinalizeQuietMs => 6000;
 
@@ -185,16 +239,26 @@ namespace Unison.Core.State
 
         public override int NameResolveChunkSize => 2;
 
-        public override int NameResolveInterChunkDelayMs => 800;
+        public override int NameResolveInterChunkDelayMs => 1000;
 
         // Smallest disk lots: 512 MB class cannot afford large SQLite LID batches.
         public override int LidMappingPersistBatchSize => 8;
 
         public override int LidMappingPersistDelayMs => 3000;
 
-        protected override SyncPacing FrugalPacing { get; } = new SyncPacing(4000, 8000, 45, 3);
+        // On-demand only; tight LRU so warm dumps cannot pin RAM.
+        public override int LidMappingMemoryCacheMaxPairs => 512;
 
-        protected override SyncPacing GenerousPacing { get; } = new SyncPacing(1000, 1800, 35, 2);
+        public override int LidMappingWarmMaxPairs => 0;
+
+        // No background avatar wake loop — list viewport / open-chat fetch only.
+        public override int DeferredAvatarRetryDelaySeconds => 60;
+
+        public override int DeferredAvatarMaxRetries => 0;
+
+        protected override SyncPacing FrugalPacing { get; } = new SyncPacing(5000, 10000, 50, 3);
+
+        protected override SyncPacing GenerousPacing { get; } = new SyncPacing(1500, 2500, 40, 2);
     }
 
     /// <summary>1 GB class (~390 MB app limit): economical, not extreme.</summary>
@@ -219,32 +283,35 @@ namespace Unison.Core.State
         // SQLite round-trips without approaching High's 500-row transactions.
         public override int HistoryPersistSubBatchSize => 220;
 
-        public override bool MaterializeHistoryThumbsDuringSync => true;
+        // Thumbs during FULL_HISTORY compete with tip paint + SQLite on 1 GB Mobile.
+        // Decode on open / media pass instead.
+        public override bool MaterializeHistoryThumbsDuringSync => false;
 
-        public override int ChatListReleaseBatchSize => 12;
+        public override int ChatListReleaseBatchSize => 8;
 
-        public override int PreviewHydrateBatchSize => 15;
+        public override int PreviewHydrateBatchSize => 10;
 
-        public override int AvatarFetchBatchSize => 2;
+        public override int AvatarFetchBatchSize => 1;
 
-        public override int AvatarFetchInterRequestDelayMs => 900;
+        public override int AvatarFetchInterRequestDelayMs => 1200;
 
         public override uint HistoryStorageQuotaMb => 1024;
 
         public override bool SerializePostSyncEnrichment => true;
 
-        public override int PostSyncEnrichmentQuietSeconds => 8;
+        public override int PostSyncEnrichmentQuietSeconds => 12;
 
-        // Limited adjacent FULL_HISTORY pages on Mobile / 1 GB. Zero stopped catch-up after the
-        // first quiet lot while Meta still owed days of history. Cap well below High's 60 and
-        // rely on HistoryCatchUpLocalWorkPolicy deferring usync/avatars while the banner is up.
-        public override int MaxFullHistoryCatchUpRounds => 12;
+        // A few adjacent FULL_HISTORY pages — enough for Meta's near days, not the old
+        // 12-round idle-continue burn while signals stay 0. Catch-up still defers usync
+        // via HistoryCatchUpLocalWorkPolicy while the banner is up.
+        public override int MaxFullHistoryCatchUpRounds => 4;
 
-        // Shorter than the old 4.5s: Meta gaps are usually sub-second; 2s still covers a
-        // late chunk on slow Mobile without leaving the banner up for dead time.
-        public override int HistoryFinalizeQuietMs => 2000;
+        public override bool AllowStagnantHistoryRepairCascade => false;
 
-        public override int HistoryFullFinalizeDelayMs => 1000;
+        // Slightly longer than High so a late chunk on slow Mobile is not mistaken for end.
+        public override int HistoryFinalizeQuietMs => 2500;
+
+        public override int HistoryFullFinalizeDelayMs => 1200;
 
         public override int GroupMetadataBatchSize => 12;
 
@@ -254,21 +321,30 @@ namespace Unison.Core.State
 
         public override int GroupRosterInterRequestDelayMs => 900;
 
-        public override int GroupRosterNextBatchDelaySeconds => 30;
+        public override int GroupRosterNextBatchDelaySeconds => 35;
 
-        public override int NameResolveMaxPerPass => 6;
+        public override int NameResolveMaxPerPass => 4;
 
-        public override int NameResolveChunkSize => 3;
+        public override int NameResolveChunkSize => 2;
 
-        public override int NameResolveInterChunkDelayMs => 500;
+        public override int NameResolveInterChunkDelayMs => 700;
 
         public override int LidMappingPersistBatchSize => 40;
 
         public override int LidMappingPersistDelayMs => 1500;
 
-        protected override SyncPacing FrugalPacing { get; } = new SyncPacing(3000, 6000, 45, 3);
+        // Mobile 1 GB: on-demand only; larger LRU than Unsupported.
+        public override int LidMappingMemoryCacheMaxPairs => 1024;
 
-        protected override SyncPacing GenerousPacing { get; } = new SyncPacing(1000, 1800, 35, 2);
+        public override int LidMappingWarmMaxPairs => 0;
+
+        public override int DeferredAvatarRetryDelaySeconds => 40;
+
+        public override int DeferredAvatarMaxRetries => 2;
+
+        protected override SyncPacing FrugalPacing { get; } = new SyncPacing(4000, 7000, 50, 3);
+
+        protected override SyncPacing GenerousPacing { get; } = new SyncPacing(1200, 2000, 40, 2);
     }
 
     /// <summary>2 GB+ / desktop: current generous defaults.</summary>
@@ -309,6 +385,8 @@ namespace Unison.Core.State
 
         public override int MaxFullHistoryCatchUpRounds => 60;
 
+        public override bool AllowStagnantHistoryRepairCascade => true;
+
         public override int HistoryFinalizeQuietMs => 1000;
 
         public override int HistoryFullFinalizeDelayMs => 700;
@@ -332,6 +410,15 @@ namespace Unison.Core.State
         public override int LidMappingPersistBatchSize => 120;
 
         public override int LidMappingPersistDelayMs => 400;
+
+        // Desktop: larger LRU only — still on-demand (no boot seed).
+        public override int LidMappingMemoryCacheMaxPairs => 2048;
+
+        public override int LidMappingWarmMaxPairs => 0;
+
+        public override int DeferredAvatarRetryDelaySeconds => 20;
+
+        public override int DeferredAvatarMaxRetries => 6;
 
         protected override SyncPacing FrugalPacing { get; } = new SyncPacing(3000, 6000, 45, 3);
 

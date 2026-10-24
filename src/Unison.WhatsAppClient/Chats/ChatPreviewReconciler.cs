@@ -37,6 +37,11 @@ namespace Unison.WhatsAppClient.Chats
 
         private const int UiSliceSizeFrugal = 10;
 
+        /// <summary>
+        /// Pause between frugal UI slices so Mobile can paint before the next tip batch.
+        /// </summary>
+        private const int FrugalSliceGapMs = 48;
+
         private readonly IHistoryMessageStore _historyMessages;
         private readonly JidAliasTable _aliases;
         private readonly ChatStateStore _chatState;
@@ -45,6 +50,13 @@ namespace Unison.WhatsAppClient.Chats
         private readonly IStringResources _strings;
         private readonly IRuntimeDiagnostics _diagnostics;
         private readonly Func<bool> _preferFrugal;
+        private readonly Func<bool> _shouldPauseUiSlices;
+
+        /// <summary>
+        /// Poll while toast/deep-link or active chat-open owns the dispatcher so
+        /// tip-swapped PropertyChanged does not starve LoadMessages.
+        /// </summary>
+        private const int UiPausePollMs = 40;
 
         public ChatPreviewReconciler(
             IHistoryMessageStore historyMessages,
@@ -54,7 +66,8 @@ namespace Unison.WhatsAppClient.Chats
             IDispatcher ui,
             IStringResources strings,
             IRuntimeDiagnostics diagnostics = null,
-            Func<bool> preferFrugal = null)
+            Func<bool> preferFrugal = null,
+            Func<bool> shouldPauseUiSlices = null)
         {
             _historyMessages = historyMessages ?? throw new ArgumentNullException(nameof(historyMessages));
             _aliases = aliases ?? throw new ArgumentNullException(nameof(aliases));
@@ -64,6 +77,7 @@ namespace Unison.WhatsAppClient.Chats
             _strings = strings ?? throw new ArgumentNullException(nameof(strings));
             _diagnostics = diagnostics;
             _preferFrugal = preferFrugal ?? (() => false);
+            _shouldPauseUiSlices = shouldPauseUiSlices ?? (() => false);
         }
 
         /// <summary>
@@ -156,10 +170,13 @@ namespace Unison.WhatsAppClient.Chats
                 newestByCanonical.Add(Tuple.Create(canonical, keys, page));
             }
 
-            int uiSlice = _preferFrugal() ? UiSliceSizeFrugal : UiSliceSizeGenerous;
+            bool frugal = _preferFrugal();
+            int uiSlice = frugal ? UiSliceSizeFrugal : UiSliceSizeGenerous;
             int updated = 0;
             for (int start = 0; start < newestByCanonical.Count; start += uiSlice)
             {
+                await WaitWhileUiSlicesPausedAsync(tag).ConfigureAwait(false);
+
                 int sliceStart = start;
                 int sliceEnd = Math.Min(newestByCanonical.Count, start + uiSlice);
                 int sliceSwapped = 0;
@@ -196,6 +213,12 @@ namespace Unison.WhatsAppClient.Chats
                         "kept-old-tip:" + sliceKept,
                         "reason=" + tag + "; slice=" + sliceStart + "-" + sliceEnd);
                 }
+
+                // Let the dispatcher paint swapped rows before the next frugal batch.
+                if (frugal && sliceEnd < newestByCanonical.Count)
+                {
+                    await Task.Delay(FrugalSliceGapMs).ConfigureAwait(false);
+                }
             }
 
             if (updated > 0)
@@ -207,6 +230,24 @@ namespace Unison.WhatsAppClient.Chats
             }
 
             return updated;
+        }
+
+        private async Task WaitWhileUiSlicesPausedAsync(string reason)
+        {
+            if (!_shouldPauseUiSlices())
+            {
+                return;
+            }
+
+            DiagWrite(
+                "preview-tip",
+                "ui-slice-paused",
+                "reason=" + reason + "; waiting=timeline-priority");
+
+            while (_shouldPauseUiSlices())
+            {
+                await Task.Delay(UiPausePollMs).ConfigureAwait(false);
+            }
         }
 
         private async Task<List<HistoryMessage>> ReadStoredPageAsync(string canonical, List<string> keys)

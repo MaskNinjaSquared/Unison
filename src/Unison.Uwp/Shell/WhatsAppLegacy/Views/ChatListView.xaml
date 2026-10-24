@@ -191,7 +191,8 @@
 
         <!-- List-side only: collapses with the list in NarrowDetail (chat fullscreen).
              The grid paints the full 54. The CommandBar template only paints its content strip. -->
-        <Grid Grid.Row="3"
+        <Grid x:Name="ListCommandBarHost"
+              Grid.Row="3"
               MinHeight="{StaticResource LegacyCommandBarCompactHeight}"
               Background="{ThemeResource LegacyCommandBarBackgroundBrush}">
         <CommandBar x:Name="ListCommandBar"
@@ -258,20 +259,22 @@
         </CommandBar>
         </Grid>
 
-        <!-- Hold on a row: MessageActions-style chrome. Transparent scrim dismisses (bar stays hit-testable below).
+        <!-- Hold on a row: same layout as ChatDetail MessageActions —
+             scrim over list (rows 0–2), actions bar on row 3 above ListCommandBar.
              Desktop right-click uses MenuFlyout at the pointer (see code-behind). -->
-        <Grid x:Name="ChatActionsHost"
-              Grid.RowSpan="4"
+        <Border x:Name="ChatActionsScrim"
+                Grid.Row="0"
+                Grid.RowSpan="3"
+                Canvas.ZIndex="20"
+                Background="Transparent"
+                Visibility="Collapsed"
+                Tapped="ChatActionsScrim_Tapped"/>
+        <Grid x:Name="ChatActionsBarHost"
+              Grid.Row="3"
+              Canvas.ZIndex="21"
               Visibility="Collapsed"
-              Canvas.ZIndex="20">
-            <Border x:Name="ChatActionsScrim"
-                    Background="Transparent"
-                    HorizontalAlignment="Stretch"
-                    VerticalAlignment="Stretch"
-                    Tapped="ChatActionsScrim_Tapped"/>
-            <Grid VerticalAlignment="Bottom"
-                  MinHeight="{StaticResource LegacyCommandBarCompactHeight}"
-                  Background="{ThemeResource LegacyCommandBarBackgroundBrush}">
+              MinHeight="{StaticResource LegacyCommandBarCompactHeight}"
+              Background="{ThemeResource LegacyCommandBarBackgroundBrush}">
                 <CommandBar x:Name="ChatActionsBar"
                             Style="{StaticResource LegacyCommandBarStyle}"
                             Loaded="ChatActionsBar_Loaded">
@@ -341,8 +344,9 @@
                                 <FontIcon FontFamily="{StaticResource IconFont}" Glyph="&#xE8FA;"/>
                             </AppBarButton.Icon>
                         </AppBarButton>
+                        <!-- Label set in ApplyChatActionsChrome (Add/Remove). No x:Uid —
+                             AppBarButton has Label, not Text; ChatList_AddFavorite.Text is for MenuFlyoutItem. -->
                         <AppBarButton x:Name="ChatActionsFavoriteButton"
-                                      x:Uid="ChatList_AddFavorite"
                                       Label="Add to favorites"
                                       Click="ChatActionsFavorite_Click">
                             <AppBarButton.Icon>
@@ -361,7 +365,6 @@
                                       Click="ChatActionsMuteForever_Click"/>
                     </CommandBar.SecondaryCommands>
                 </CommandBar>
-            </Grid>
         </Grid>
     </Grid>
 </UserControl>

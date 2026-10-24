@@ -36,6 +36,7 @@ namespace Unison.WhatsAppClient.Abstractions
 
         void ClearSqliteHistoryConversationsAccumulated();
 
+        /// <summary>Deferred avatar wake after list unlock (host owns the quiet delay).</summary>
         void ScheduleDeferredAvatarsAfterUnlock(string stage);
 
         void ClearEnrichmentAwaitingHeavyHistory();

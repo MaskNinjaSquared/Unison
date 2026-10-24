@@ -44,11 +44,26 @@ namespace Unison.Core.Tests.Helpers
             Assert.True(host.FreshnessRepair);
         }
 
+        [Fact]
+        public async Task Skips_when_cascade_disabled_even_if_tip_stale()
+        {
+            var host = new FakeHost
+            {
+                SocketReady = true,
+                TipStale = true,
+                StaleDetail = "tip-old",
+                AllowCascade = false
+            };
+            await PeriodicFullHistorySafetyDispatch.RunAsync(host);
+            Assert.False(host.Requested);
+        }
+
         private sealed class FakeHost : IPeriodicFullHistorySafetyHost
         {
             public bool SocketReady;
             public bool TipStale;
             public bool ForceRepair;
+            public bool AllowCascade = true;
             public string StaleDetail;
             public bool Requested;
             public string RequestReason;
@@ -57,6 +72,7 @@ namespace Unison.Core.Tests.Helpers
             public bool IsSocketReadyForPeriodicFullSafety => SocketReady;
             public bool IsHistoryCatchUpActive => false;
             public bool IsFullHistoryClaimed => false;
+            public bool AllowStagnantHistoryRepairCascade => AllowCascade;
 
             public bool TryReadForceHistoryRepairPending() => ForceRepair;
 

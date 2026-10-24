@@ -123,6 +123,8 @@ namespace Unison.Core.Tests.Helpers
                 maxRounds: 0);
 
             Assert.Equal(HistoryCatchUpContinueAction.FinishMaxContinues, r.Action);
+            // MinValue watermark seed is not tipAdvanced — MadeProgress is signals-only.
+            Assert.False(r.TipAdvanced);
             Assert.True(r.MadeProgress);
             Assert.Equal(0, r.NextContinueRound);
         }
@@ -141,6 +143,8 @@ namespace Unison.Core.Tests.Helpers
                 maxRounds: 12);
 
             Assert.Equal(HistoryCatchUpContinueAction.Continue, r.Action);
+            Assert.False(r.TipAdvanced);
+            Assert.True(r.MadeProgress);
             Assert.Equal(1, r.NextContinueRound);
         }
 
@@ -180,5 +184,29 @@ namespace Unison.Core.Tests.Helpers
             Assert.True(r.MadeProgress);
             Assert.Equal(DateTime.MinValue, r.NextWatermarkUtc);
         }
+
+        [Fact]
+        public void Seeding_watermark_from_min_value_is_not_tip_progress()
+        {
+            // First quiet lot after catch-up start: tip exists, watermark still MinValue.
+            // Seed NextWatermarkUtc but do not reset stagnant as if the tip advanced.
+            HistoryCatchUpContinueResult r = HistoryCatchUpContinueDecision.Decide(
+                newestUtc: Noon,
+                watermarkUtc: DateTime.MinValue,
+                progressSignals: 0,
+                stillStale: true,
+                stagnantCycles: 0,
+                stagnantStop: 2,
+                continueRound: 0,
+                maxRounds: 4);
+
+            Assert.Equal(HistoryCatchUpContinueAction.Continue, r.Action);
+            Assert.False(r.TipAdvanced);
+            Assert.False(r.MadeProgress);
+            Assert.Equal(1, r.NextStagnantCycles);
+            Assert.Equal(Noon, r.NextWatermarkUtc);
+            Assert.Equal(1, r.NextContinueRound);
+        }
     }
 }
+

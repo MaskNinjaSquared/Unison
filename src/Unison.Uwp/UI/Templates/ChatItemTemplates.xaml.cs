@@ -1,4 +1,5 @@
 using System;
+using System.Runtime.CompilerServices;
 using Unison.Core.Contracts;
 using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Helpers;
@@ -17,6 +18,13 @@ namespace Unison.Uwp.UI.Templates
     public sealed partial class ChatItemTemplates : ResourceDictionary
     {
         private const string RowMenuName = "ChatRowMenu";
+
+        /// <summary>
+        /// Legacy Mobile Hold must not let the platform auto-open Grid.ContextFlyout.
+        /// Flyouts are stashed here so mouse ShowAt still works.
+        /// </summary>
+        private static readonly ConditionalWeakTable<FrameworkElement, MenuFlyout> DetachedRowMenus =
+            new ConditionalWeakTable<FrameworkElement, MenuFlyout>();
 
         public ChatItemTemplates()
         {
@@ -88,8 +96,53 @@ namespace Unison.Uwp.UI.Templates
                 return null;
             }
 
+            MenuFlyout detached;
+            if (DetachedRowMenus.TryGetValue(root, out detached) && detached != null)
+            {
+                return detached;
+            }
+
             return root.ContextFlyout as MenuFlyout
                 ?? root.FindName(RowMenuName) as MenuFlyout;
+        }
+
+        /// <summary>
+        /// Legacy only: clear template <see cref="UIElement.ContextFlyout"/> so touch Hold
+        /// cannot auto-open the MenuFlyout while CommandBar actions open. Mouse still
+        /// <see cref="ShowRowContextMenu"/> via the stashed flyout.
+        /// </summary>
+        public static void DetachRowContextFlyoutForLegacyHold(FrameworkElement anchor)
+        {
+            FrameworkElement root = ResolveTemplateRoot(anchor);
+            if (root == null)
+            {
+                return;
+            }
+
+            MenuFlyout existing;
+            if (DetachedRowMenus.TryGetValue(root, out existing) && existing != null)
+            {
+                root.ContextFlyout = null;
+                return;
+            }
+
+            var flyout = root.ContextFlyout as MenuFlyout
+                ?? root.FindName(RowMenuName) as MenuFlyout;
+            if (flyout == null)
+            {
+                return;
+            }
+
+            try
+            {
+                DetachedRowMenus.Add(root, flyout);
+            }
+            catch (ArgumentException)
+            {
+                // Already tracked for this root instance.
+            }
+
+            root.ContextFlyout = null;
         }
 
         /// <summary>

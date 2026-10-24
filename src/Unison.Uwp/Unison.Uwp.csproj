@@ -272,6 +272,8 @@
     <Compile Include="Services\AudioExportService.cs" />
     <Compile Include="UI\Controls\ChatAudioOverflowMenu.cs" />
     <Compile Include="Services\ShareService.cs" />
+    <Compile Include="Services\ShareTargetSession.cs" />
+    <Compile Include="Services\ShareActivationMaterializer.cs" />
     <Compile Include="Services\AudioRecordingService.cs" />
     <Compile Include="Services\UiSoundService.cs" />
     <Compile Include="Services\VoicePlaybackRoutingService.cs" />
@@ -467,6 +469,11 @@
     </Compile>
     <Compile Include="UI\Triggers\WindowWidthRangeTrigger.cs" />
     <Compile Include="UI\Helpers\ChatPreviewKindPresentation.cs" />
+    <!-- Open-chat pane/paint helpers (Unison/WhatsApp/UI). Legacy Hold/scrim untouched. -->
+    <Compile Include="UI\Helpers\ChatPaneLayoutApply.cs" />
+    <Compile Include="UI\Helpers\ChatPaneWideBothChrome.cs" />
+    <Compile Include="UI\Helpers\ChatOpenPaintSchedule.cs" />
+    <Compile Include="UI\Helpers\ChatOpenHostSequence.cs" />
     <Compile Include="UI\Helpers\CommentRichService.cs" />
     <Compile Include="UI\Helpers\MentionComposerInput.cs" />
     <Compile Include="UI\Helpers\MessageBubbleContextActions.cs" />

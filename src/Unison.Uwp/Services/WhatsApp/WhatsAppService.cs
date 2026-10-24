@@ -41,11 +41,12 @@ using Unison.Socket.UseCases.Contacts;
 using Unison.Uwp.Helpers;
 using Microsoft.Extensions.DependencyInjection;
 using Unison.WhatsAppClient.Abstractions;
+using Unison.WhatsAppClient.Connection;
 using Unison.WhatsAppClient.Helpers;
 
 namespace Unison.Uwp.Services.WhatsApp
 {
-    public partial class WhatsAppService : INotifyPropertyChanged, IWhatsAppService, IConnectionEventSource, IConnectionSessionHost, IOfflineReplayHost, IOfflineReplayReleaseHost, IOfflineReplayFlushHost, IIncomingPumpDrainHost, IChatCatalogPersistHost, IChatCatalogFullPersistHost, ILoadPersistedChatCatalogHost, IForgetChatStorageHost, IConnectionUpdateHost, ISocketErrorHost, IHistorySyncWireHost, ISessionInitializedHost, IQrCodeWireHost, IAuthStateWireHost, IInboundWireNodeHost, IDecryptedMessageWireHost, ISocketFacadeWireHost, IPostReplayMaintenanceHost, IPostMessageEnrichmentHost, IPlaceholderResendSocket, IHistoryOnDemandSocket, IRuntimeSnapshotSource, IBackgroundResolutionGate, IAppStateLocalHost, IConversationResyncHost, IHistorySyncHost, IHistoryCatchUpHost, IConnectionEnsureHost, IConnectionResumeHost, IConnectionPairingStage2Host, IConnectionBrokerTransferHost, IConnectionSoftReconnectHost, IConnectionLifecycleHost, IConnectionConnectGateSource, IConnectionConnectPrepareHost, IConnectionConnectOpenHost, ISocketAliasRegistrar, IStartupUiHost, IJidAliasPersistence, IIncomingMessageEnqueueHost, IResolvedNameApplyHost, IHistoryHydrationBackfillHost, ISqliteHistoryQuietFinalizeHost, IHistoryPostOfflineFreshnessHost, IDeferredStartupMaintenanceHost, IHistoryCatchUpFinishHost, IUserResyncFullHistoryHost, IFreshnessReconnectFallbackHost, ICatchUpContinueReconnectHost, IFirstSyncListReleaseHost, IFullHistoryCatchUpProgressHost, IHistorySqliteChunkAppliedHost, IAcceptedHistoryRequestTimeoutHost, IAutoReconnectLoopHost, IConversationResyncWaitHost, IFullHistoryOnDemandClearHost, IInitializeConnectionStateHost, IHistorySqliteChunkStartedHost, IFullHistoryCatchUpWatchdogHost, IPeriodicFullHistorySafetyHost, IReconnectHistoryCatchUpHost, IHydrationFallbackPipelineHost, IHydrationDayRetryHost, IScheduleAutoReconnectHost, IReleaseEnrichmentAfterHeavyHistoryHost, IClearSessionHost, IRaiseSessionClearedHost, IRequestFullHistoryOnDemandTrackedHost, IBrokerReconnectConsumeHost, IPostMessageEnrichmentScheduleHost, IForceHistoryRepairConsumeHost, IForceHistoryRepairPendingHost, IPublishInitialSyncProgressHost, IPublishConnectionUpdateHost, IPersistChatIdentityStateHost, IHandleDecryptedMessageHost, IEndHistoryCatchUpBannerHost, IBeginHistoryCatchUpBannerHost, IResetFirstSyncListHoldFlagsHost, ICompleteUserResyncHistoryWaitHost, IScheduleOfflineReplayFlushTimerHost, ITearDownSocketForSoftReconnectHost, INoteHydrationDayAttemptHost, IUnloadMessageCacheIfInactiveHost, IOnActiveChatChangedHost, IMarkPairingRestartPendingHost, IDropCurrentSocketForFastResumeHost, IPersistAuthStateHost, IWaitForSessionEstablishedHost, IStopPeriodicFullHistorySafetyHost, IStartPeriodicFullHistorySafetyHost, IInvalidateCurrentSocketHost, IStopConnectionHealthMonitorHost, IStartConnectionHealthMonitorHost, ITryStartPairingStage2ReconnectHost, IIsCurrentSocketHealthyHost, IReleaseMemoryHost, IConnectAsyncHost, IResyncConversationsHost, ISyncSelfProfileFromAuthHost, ILoadPersistedUiStateHost, ITryRecordAliasMappingHost, IRegisterAliasMappingsHost, IPersistJidAliasesHost, IFlushPendingSocketAliasesHost, IPersistLiveMessagesHost, IPersistBackgroundDisplayNamesHost, INotifyServerLogoutHost, ISchedulePostReplayMaintenanceHost, IBuildHistoryHydrationCandidatesHost, IStartBackgroundHistoryBackfillHost, IEnsureSelfPhonePersistedHost, IPersistSelfAvatarUrlHost, ILoadHistoryFreshnessRepairStateHost, IPersistFullHistoryRepairCompletedUtcHost, IPersistFreshnessReconnectFallbackUtcHost, IFindPersistedChatMessageHost, IResolveSentMessageForRetryHost, IPeriodicFullHistorySafetyLoopHost, IWaitForHistoryHydrationSettleHost
+    public partial class WhatsAppService : INotifyPropertyChanged, IWhatsAppService, IConnectionEventSource, IConnectionSessionHost, IOfflineReplayHost, IOfflineReplayReleaseHost, IOfflineReplayFlushHost, IIncomingPumpDrainHost, IChatCatalogPersistHost, IChatCatalogFullPersistHost, ILoadPersistedChatCatalogHost, IForgetChatStorageHost, IConnectionUpdateHost, ISocketErrorHost, IHistorySyncWireHost, ISessionInitializedHost, IQrCodeWireHost, IAuthStateWireHost, IInboundWireNodeHost, IDecryptedMessageWireHost, ISocketFacadeWireHost, IPostReplayMaintenanceHost, IPostMessageEnrichmentHost, IPlaceholderResendSocket, IHistoryOnDemandSocket, IRuntimeSnapshotSource, IBackgroundResolutionGate, IAppStateLocalHost, IConversationResyncHost, IHistorySyncHost, IHistoryCatchUpHost, IConnectionEnsureHost, IConnectionResumeHost, IConnectionPairingStage2Host, IConnectionBrokerTransferHost, IConnectionSoftReconnectHost, IConnectionLifecycleHost, IConnectionConnectGateSource, IConnectionConnectPrepareHost, IConnectionSocketAssignment, IConnectionAssignedSocketClearHost, ISocketAliasRegistrar, IStartupUiHost, IJidAliasPersistence, IIncomingMessageEnqueueHost, IResolvedNameApplyHost, IHistoryHydrationBackfillHost, ISqliteHistoryQuietFinalizeHost, IHistoryPostOfflineFreshnessHost, IDeferredStartupMaintenanceHost, IHistoryCatchUpFinishHost, IUserResyncFullHistoryHost, IFreshnessReconnectFallbackHost, ICatchUpContinueReconnectHost, IFirstSyncListReleaseHost, IFullHistoryCatchUpProgressHost, IHistorySqliteChunkAppliedHost, IAcceptedHistoryRequestTimeoutHost, IAutoReconnectLoopHost, IConversationResyncWaitHost, IFullHistoryOnDemandClearHost, IInitializeConnectionStateHost, IHistorySqliteChunkStartedHost, IFullHistoryCatchUpWatchdogHost, IPeriodicFullHistorySafetyHost, IReconnectHistoryCatchUpHost, IHydrationFallbackPipelineHost, IHydrationDayRetryHost, IScheduleAutoReconnectHost, IReleaseEnrichmentAfterHeavyHistoryHost, IClearSessionHost, IRaiseSessionClearedHost, IRequestFullHistoryOnDemandTrackedHost, IBrokerReconnectConsumeHost, IPostMessageEnrichmentScheduleHost, IForceHistoryRepairConsumeHost, IForceHistoryRepairPendingHost, IPublishInitialSyncProgressHost, IPublishConnectionUpdateHost, IPersistChatIdentityStateHost, IHandleDecryptedMessageHost, IEndHistoryCatchUpBannerHost, IBeginHistoryCatchUpBannerHost, IResetFirstSyncListHoldFlagsHost, ICompleteUserResyncHistoryWaitHost, IScheduleOfflineReplayFlushTimerHost, ITearDownSocketForSoftReconnectHost, INoteHydrationDayAttemptHost, IUnloadMessageCacheIfInactiveHost, IOnActiveChatChangedHost, IMarkPairingRestartPendingHost, IDropCurrentSocketForFastResumeHost, IPersistAuthStateHost, IWaitForSessionEstablishedHost, IStopPeriodicFullHistorySafetyHost, IStartPeriodicFullHistorySafetyHost, IInvalidateCurrentSocketHost, IStopConnectionHealthMonitorHost, IStartConnectionHealthMonitorHost, ITryStartPairingStage2ReconnectHost, IIsCurrentSocketHealthyHost, IReleaseMemoryHost, IConnectAsyncHost, IResyncConversationsHost, ISyncSelfProfileFromAuthHost, ILoadPersistedUiStateHost, ITryRecordAliasMappingHost, IRegisterAliasMappingsHost, IPersistJidAliasesHost, IFlushPendingSocketAliasesHost, IPersistLiveMessagesHost, IPersistBackgroundDisplayNamesHost, INotifyServerLogoutHost, ISchedulePostReplayMaintenanceHost, IBuildHistoryHydrationCandidatesHost, IStartBackgroundHistoryBackfillHost, IEnsureSelfPhonePersistedHost, IPersistSelfAvatarUrlHost, ILoadHistoryFreshnessRepairStateHost, IPersistFullHistoryRepairCompletedUtcHost, IPersistFreshnessReconnectFallbackUtcHost, IFindPersistedChatMessageHost, IResolveSentMessageForRetryHost, IPeriodicFullHistorySafetyLoopHost, IWaitForHistoryHydrationSettleHost
     {
         public event PropertyChangedEventHandler PropertyChanged;
         protected void OnPropertyChanged([CallerMemberName] string propertyName = null)
@@ -72,6 +73,13 @@ namespace Unison.Uwp.Services.WhatsApp
         private static volatile bool _suppressReplayDiagnostics;
 
         public static bool SuppressReplayDiagnostics => _suppressReplayDiagnostics;
+
+        /// <summary>
+        /// Host-visible window flag via <see cref="IAppVisibility"/> (Phase A); falls back to App.
+        /// </summary>
+        private bool IsAppWindowVisible =>
+            Unison.Uwp.App.Services?.GetService<IAppVisibility>()?.IsWindowVisible
+            ?? Unison.Uwp.App.IsWindowVisible;
         
         private static WhatsAppService _instance;
 
@@ -143,6 +151,7 @@ namespace Unison.Uwp.Services.WhatsApp
         private IWhatsAppSocket _socket;
         private readonly LidMappingStore _lidMappings;
         private readonly IConnectionSocketSessionFactory _socketSessions;
+        private readonly ConnectionOpenHost _connectionOpen;
         private AuthStore _authStore = new AuthStore();
         private IMessageStore _messageStore = new MessageStore();
         private readonly IHistoryMessageStore _historyMessages;
@@ -943,6 +952,7 @@ namespace Unison.Uwp.Services.WhatsApp
             _lidMappings = lidMappings;
             _socketSessions = socketSessions
                 ?? throw new ArgumentNullException(nameof(socketSessions));
+            _connectionOpen = new ConnectionOpenHost(this);
 
             if (systemInfo == null)
             {
@@ -1407,7 +1417,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
         bool IPostReplayMaintenanceHost.IsConnected => IsConnected;
 
-        bool IPostReplayMaintenanceHost.IsWindowVisible => Unison.Uwp.App.IsWindowVisible;
+        bool IPostReplayMaintenanceHost.IsWindowVisible => IsAppWindowVisible;
 
         bool IPostReplayMaintenanceHost.IsHistoryCatchUpActive => IsHistoryCatchUpActive();
 
@@ -1566,7 +1576,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
         bool IPostMessageEnrichmentHost.IsConnected => IsConnected;
 
-        bool IPostMessageEnrichmentHost.IsWindowVisible => Unison.Uwp.App.IsWindowVisible;
+        bool IPostMessageEnrichmentHost.IsWindowVisible => IsAppWindowVisible;
 
         bool IPostMessageEnrichmentHost.SerializePostSyncEnrichment =>
             _workload.SerializePostSyncEnrichment;
@@ -1650,7 +1660,7 @@ namespace Unison.Uwp.Services.WhatsApp
             _syncWork.ShouldDeferAvatarFetch(out reason);
 
         void IPostMessageEnrichmentHost.ScheduleDeferredAvatars(string reason) =>
-            DeferredAvatars?.Schedule(reason);
+            ScheduleDeferredAvatarsCore(reason, delay: null);
 
         async Task IPostMessageEnrichmentHost.RetrieveContactPicturesAsync(CancellationToken token)
         {
@@ -1960,8 +1970,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
         bool IDeferredStartupMaintenanceHost.UseFrugalSyncBudget => UseFrugalSyncBudget;
 
-        bool IDeferredStartupMaintenanceHost.IsWindowVisible =>
-            Unison.Uwp.App.IsWindowVisible;
+        bool IDeferredStartupMaintenanceHost.IsWindowVisible => IsAppWindowVisible;
 
         int IDeferredStartupMaintenanceHost.ChatCount => Chats.Count;
 
@@ -2371,7 +2380,7 @@ namespace Unison.Uwp.Services.WhatsApp
             RequestFirstSyncListReleaseAfterNames(reason, processed, total);
 
         void IHistoryCatchUpFinishHost.ScheduleDeferredAvatars(string reason, TimeSpan delay) =>
-            DeferredAvatars?.Schedule(reason, delay);
+            ScheduleDeferredAvatarsCore(reason, delay);
 
         void IHistoryCatchUpFinishHost.ClearEnrichmentAwaitingHeavyHistory() =>
             Interlocked.Exchange(ref _enrichmentAwaitingHeavyHistory, 0);
@@ -2611,9 +2620,33 @@ namespace Unison.Uwp.Services.WhatsApp
             _sqliteHistoryConversationsAccumulated = 0;
 
         void IFirstSyncListReleaseHost.ScheduleDeferredAvatarsAfterUnlock(string stage) =>
-            DeferredAvatars?.Schedule(
+            ScheduleDeferredAvatarsCore(
                 "after-first-sync-unlock:" + (stage ?? string.Empty),
-                TimeSpan.FromSeconds(2));
+                FirstSyncUnlockDeferredAvatarDelay);
+
+        /// <summary>Quiet gap after first-sync list unlock before deferred avatar wake.</summary>
+        private static readonly TimeSpan FirstSyncUnlockDeferredAvatarDelay = TimeSpan.FromSeconds(2);
+
+        /// <summary>
+        /// Single forward to <see cref="IDeferredAvatarResolution"/> for enrichment / catch-up /
+        /// first-sync unlock hosts (was three near-identical Schedule lines).
+        /// </summary>
+        private void ScheduleDeferredAvatarsCore(string reason, TimeSpan? delay)
+        {
+            IDeferredAvatarResolution deferred = DeferredAvatars;
+            if (deferred == null)
+            {
+                return;
+            }
+
+            if (delay.HasValue)
+            {
+                deferred.Schedule(reason, delay.Value);
+                return;
+            }
+
+            deferred.Schedule(reason);
+        }
 
         void IFirstSyncListReleaseHost.ClearEnrichmentAwaitingHeavyHistory() =>
             Interlocked.Exchange(ref _enrichmentAwaitingHeavyHistory, 0);
@@ -2854,6 +2887,9 @@ namespace Unison.Uwp.Services.WhatsApp
 
         bool IPeriodicFullHistorySafetyHost.IsFullHistoryClaimed =>
             _historyRequests != null && _historyRequests.IsFullClaimed;
+
+        bool IPeriodicFullHistorySafetyHost.AllowStagnantHistoryRepairCascade =>
+            _workload.AllowStagnantHistoryRepairCascade;
 
         bool IPeriodicFullHistorySafetyHost.TryReadForceHistoryRepairPending()
         {
@@ -3131,8 +3167,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
         bool IReconnectHistoryCatchUpHost.IsConnected => IsConnected;
 
-        bool IReconnectHistoryCatchUpHost.IsWindowVisible =>
-            Unison.Uwp.App.IsWindowVisible;
+        bool IReconnectHistoryCatchUpHost.IsWindowVisible => IsAppWindowVisible;
 
         Task<bool> IReconnectHistoryCatchUpHost.WaitForStartupQuietAsync(
             TimeSpan timeout,

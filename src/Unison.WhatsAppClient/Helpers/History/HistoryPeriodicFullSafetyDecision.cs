@@ -18,12 +18,17 @@ namespace Unison.WhatsAppClient.Helpers
         /// <summary>
         /// True when a FULL_HISTORY on-demand should go out. <paramref name="reason"/> is always set.
         /// </summary>
+        /// <param name="allowStagnantRepairCascade">
+        /// When false (Low / Unsupported), never re-solicit from this tick — catch-up already
+        /// finished stagnant without hydration / force-repair latch.
+        /// </param>
         public static bool ShouldRequest(
             bool socketReady,
             bool catchUpActive,
             bool fullClaimed,
             bool forceHistoryRepairPending,
             bool tipStale,
+            bool allowStagnantRepairCascade,
             out string reason)
         {
             if (!socketReady)
@@ -47,6 +52,12 @@ namespace Unison.WhatsAppClient.Helpers
             if (!forceHistoryRepairPending && !tipStale)
             {
                 reason = "no-debt";
+                return false;
+            }
+
+            if (!allowStagnantRepairCascade)
+            {
+                reason = "cascade-disabled";
                 return false;
             }
 

@@ -13,10 +13,11 @@ using Unison.Core.Contracts;
 using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Models;
 using Unison.Core.ViewModels;
+using Unison.Uwp.UI.Helpers;
 
 namespace Unison.Uwp.UI.Views
 {
-    /// <summary>Shell content: chat list + detail (master-detail VisualStates).</summary>
+    /// <summary>Shell content: chat list + detail (direct pane geometry, no VSM hitch).</summary>
     public partial class ChatsView : Page, IConversationShellPage
     {
         private ShellViewModel _shell;
@@ -27,6 +28,7 @@ namespace Unison.Uwp.UI.Views
         private double _dragStartX;
         private double _dragStartListWidth;
         private CoreCursor _previousCursor;
+        private string _appliedChatPane;
 
         public event EventHandler MenuClicked;
 
@@ -265,7 +267,8 @@ namespace Unison.Uwp.UI.Views
                     _shell.SelectChat(chat);
                     ApplyChatPaneState();
                     _shell.ReportActiveChat(true);
-                    await ChatDetailPart.CompleteActiveChatLoadAsync();
+                    await ChatOpenHostSequence.CompleteListTapOpenAsync(ChatDetailPart);
+                    await TryApplyPendingShareAsync();
                 }
                 else
                 {
@@ -285,6 +288,25 @@ namespace Unison.Uwp.UI.Views
             }
         }
 
+        private async Task TryApplyPendingShareAsync()
+        {
+            IncomingSharePayload share = _shell?.TakeShareAwaitingChatApply();
+            if (share == null || share.IsEmpty || ChatDetailPart?.ViewModel == null)
+            {
+                return;
+            }
+
+            try
+            {
+                await ChatDetailPart.ViewModel.ApplyIncomingShareAsync(share);
+                _shell?.NotifyShareContentApplied(share);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[ChatsView] ApplyIncomingShare failed: " + ex.Message);
+            }
+        }
+
         private void ApplyChatPaneState()
         {
             if (_shell == null)
@@ -295,22 +317,31 @@ namespace Unison.Uwp.UI.Views
             ReconcileMinimalEmptyDetail();
 
             string pane = _shell.ChatPane;
-            VisualStateManager.GoToState(this, pane, false);
+            bool paneChanged = ChatPaneLayoutApply.ApplyIfChanged(
+                ref _appliedChatPane,
+                pane,
+                Column0,
+                Column1,
+                ChatListPart,
+                ChatDetailPart,
+                PaneSplitter);
 
-            bool wideBoth = string.Equals(pane, ShellViewModel.PaneWideBoth, StringComparison.Ordinal);
-            if (wideBoth)
-            {
-                ApplyListWidth(_shell.ChatListPaneWidth);
-                UpdateSplitterPosition();
-                UpdateSplitterChrome();
-            }
-            else
-            {
-                _splitterDragging = false;
-                _splitterHover = false;
-                SplitterChrome.Opacity = 0;
-                RestoreCursor();
-            }
+            ChatPaneWideBothChrome.AfterPaneApplied(
+                wideBoth: string.Equals(pane, ShellViewModel.PaneWideBoth, StringComparison.Ordinal),
+                paneChanged: paneChanged,
+                applyWideChrome: () =>
+                {
+                    ApplyListWidth(_shell.ChatListPaneWidth);
+                    UpdateSplitterPosition();
+                    UpdateSplitterChrome();
+                },
+                resetNarrowSplitter: () =>
+                {
+                    _splitterDragging = false;
+                    _splitterHover = false;
+                    SplitterChrome.Opacity = 0;
+                    RestoreCursor();
+                });
         }
 
         private void RootContentGrid_SizeChanged(object sender, SizeChangedEventArgs e)
@@ -588,7 +619,7 @@ namespace Unison.Uwp.UI.Views
                     _shell?.SelectChat(selected);
                     _shell?.ReportActiveChat(true);
                     ApplyChatPaneState();
-                    await ChatDetailPart.CompleteActiveChatLoadAsync();
+                    await ChatOpenHostSequence.CompleteListTapOpenAsync(ChatDetailPart);
                 }
                 else if (ChatDetailPart.HasActiveChat)
                 {

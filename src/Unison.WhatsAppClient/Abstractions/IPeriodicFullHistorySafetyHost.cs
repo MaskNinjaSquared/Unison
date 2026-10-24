@@ -16,6 +16,11 @@ namespace Unison.WhatsAppClient.Abstractions
 
         bool IsFullHistoryClaimed { get; }
 
+        /// <summary>
+        /// When false, periodic safety must not re-solicit FULL_HISTORY after stagnant catch-up.
+        /// </summary>
+        bool AllowStagnantHistoryRepairCascade { get; }
+
         bool TryReadForceHistoryRepairPending();
 
         bool TryGetFreshnessStaleReason(DateTime nowUtc, out string staleDetail);

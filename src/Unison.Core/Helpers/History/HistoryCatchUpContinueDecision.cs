@@ -63,12 +63,21 @@ namespace Unison.Core.Helpers
             int continueRound,
             int maxRounds)
         {
-            bool tipAdvanced = newestUtc != DateTime.MinValue && newestUtc > watermarkUtc;
+            // Seeding the watermark from MinValue is not lot progress — otherwise the
+            // first quiet ack with signals=0 always looks like tipAdvanced and resets
+            // stagnant, burning an extra Continue round on Mobile before Finish.
+            bool tipAdvanced = watermarkUtc != DateTime.MinValue
+                && newestUtc != DateTime.MinValue
+                && newestUtc > watermarkUtc;
             bool madeProgress = tipAdvanced || progressSignals > 0;
 
             int nextStagnant = madeProgress ? 0 : stagnantCycles + 1;
             DateTime nextWatermark = watermarkUtc;
-            if (madeProgress && tipAdvanced)
+            if (tipAdvanced)
+            {
+                nextWatermark = newestUtc;
+            }
+            else if (nextWatermark == DateTime.MinValue && newestUtc != DateTime.MinValue)
             {
                 nextWatermark = newestUtc;
             }

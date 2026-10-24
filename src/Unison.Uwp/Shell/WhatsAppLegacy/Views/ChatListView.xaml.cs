@@ -588,8 +588,11 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                 return;
             }
 
-            // Hold → CommandBar (HideRowContextMenu in Holding). Mouse → ShowAt(Grid) like feature/2.1.
+            // Hold → CommandBar. Detach template Grid.ContextFlyout so the platform cannot
+            // auto-open MenuFlyout on Mobile Hold (Hide() races and loses). Mouse ShowAt
+            // uses the stashed flyout (ChatItemTemplates.DetachRowContextFlyoutForLegacyHold).
             container.ContextFlyout = null;
+            ChatItemTemplates.DetachRowContextFlyoutForLegacyHold(container);
             container.IsHoldingEnabled = true;
             container.Holding -= ChatRow_Holding;
 
@@ -598,6 +601,8 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                 return;
             }
 
+            // Recycled roots may get a fresh template with ContextFlyout again.
+            ChatItemTemplates.DetachRowContextFlyoutForLegacyHold(container);
             container.Holding += ChatRow_Holding;
 
             if (trace)
@@ -750,7 +755,7 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
 
         private void OpenChatActions(ChatItem chat)
         {
-            if (chat == null || ChatActionsHost == null)
+            if (chat == null || ChatActionsScrim == null || ChatActionsBarHost == null)
             {
                 return;
             }
@@ -765,16 +770,33 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
 
             _actionsChat = chat;
             ApplyChatActionsChrome(chat);
-            ChatActionsHost.Visibility = Visibility.Visible;
+            // Same as ChatDetail MessageActions: scrim over list, bar on row 3 above ListCommandBar.
+            if (ListCommandBarHost != null)
+            {
+                ListCommandBarHost.IsHitTestVisible = false;
+            }
+
+            ChatActionsScrim.Visibility = Visibility.Visible;
+            ChatActionsBarHost.Visibility = Visibility.Visible;
             LegacyCommandBarLayout.CenterPrimaryCommands(ChatActionsBar);
         }
 
         private void DismissChatActions()
         {
             _actionsChat = null;
-            if (ChatActionsHost != null)
+            if (ChatActionsScrim != null)
             {
-                ChatActionsHost.Visibility = Visibility.Collapsed;
+                ChatActionsScrim.Visibility = Visibility.Collapsed;
+            }
+
+            if (ChatActionsBarHost != null)
+            {
+                ChatActionsBarHost.Visibility = Visibility.Collapsed;
+            }
+
+            if (ListCommandBarHost != null)
+            {
+                ListCommandBarHost.IsHitTestVisible = true;
             }
         }
 
@@ -842,8 +864,8 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             if (ChatActionsFavoriteButton != null)
             {
                 ChatActionsFavoriteButton.Label = chat.IsFavorite
-                    ? LocalizedStrings.Get("ChatList_RemoveFavorite", "Remove from favorites")
-                    : LocalizedStrings.Get("ChatList_AddFavorite", "Add to favorites");
+                    ? LocalizedStrings.Get("ChatList_RemoveFavorite.Text", "Remove from favorites")
+                    : LocalizedStrings.Get("ChatList_AddFavorite.Text", "Add to favorites");
                 SetAppBarVisibility(ChatActionsFavoriteButton, true);
             }
 

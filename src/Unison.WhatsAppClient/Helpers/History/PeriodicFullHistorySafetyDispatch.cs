@@ -28,6 +28,7 @@ namespace Unison.WhatsAppClient.Helpers
                     host.IsFullHistoryClaimed,
                     forceRepair,
                     tipStale,
+                    host.AllowStagnantHistoryRepairCascade,
                     out string gateReason))
             {
                 return;
