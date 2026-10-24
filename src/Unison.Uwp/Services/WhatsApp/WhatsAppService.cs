@@ -45,7 +45,7 @@ using Unison.WhatsAppClient.Helpers;
 
 namespace Unison.Uwp.Services.WhatsApp
 {
-    public partial class WhatsAppService : INotifyPropertyChanged, IWhatsAppService, IConnectionEventSource, IConnectionSessionHost, IOfflineReplayHost, IOfflineReplayReleaseHost, IOfflineReplayFlushHost, IIncomingPumpDrainHost, IChatCatalogPersistHost, IChatCatalogFullPersistHost, ILoadPersistedChatCatalogHost, IForgetChatStorageHost, IConnectionUpdateHost, ISocketErrorHost, IHistorySyncWireHost, ISessionInitializedHost, IQrCodeWireHost, IAuthStateWireHost, IInboundWireNodeHost, IDecryptedMessageWireHost, ISocketFacadeWireHost, IPostReplayMaintenanceHost, IPostMessageEnrichmentHost, IPlaceholderResendSocket, IHistoryOnDemandSocket, IRuntimeSnapshotSource, IBackgroundResolutionGate, IAppStateLocalHost, IConversationResyncHost, IHistorySyncHost, IHistoryCatchUpHost, IConnectionEnsureHost, IConnectionResumeHost, IConnectionPairingStage2Host, IConnectionBrokerTransferHost, IConnectionSoftReconnectHost, IConnectionLifecycleHost, IConnectionConnectGateSource, IConnectionConnectPrepareHost, IConnectionConnectOpenHost, ISocketAliasRegistrar, IStartupUiHost, IJidAliasPersistence, IIncomingMessageEnqueueHost, IResolvedNameApplyHost, IHistoryHydrationBackfillHost, ISqliteHistoryQuietFinalizeHost, IHistoryPostOfflineFreshnessHost, IDeferredStartupMaintenanceHost, IHistoryCatchUpFinishHost, IUserResyncFullHistoryHost, IFreshnessReconnectFallbackHost
+    public partial class WhatsAppService : INotifyPropertyChanged, IWhatsAppService, IConnectionEventSource, IConnectionSessionHost, IOfflineReplayHost, IOfflineReplayReleaseHost, IOfflineReplayFlushHost, IIncomingPumpDrainHost, IChatCatalogPersistHost, IChatCatalogFullPersistHost, ILoadPersistedChatCatalogHost, IForgetChatStorageHost, IConnectionUpdateHost, ISocketErrorHost, IHistorySyncWireHost, ISessionInitializedHost, IQrCodeWireHost, IAuthStateWireHost, IInboundWireNodeHost, IDecryptedMessageWireHost, ISocketFacadeWireHost, IPostReplayMaintenanceHost, IPostMessageEnrichmentHost, IPlaceholderResendSocket, IHistoryOnDemandSocket, IRuntimeSnapshotSource, IBackgroundResolutionGate, IAppStateLocalHost, IConversationResyncHost, IHistorySyncHost, IHistoryCatchUpHost, IConnectionEnsureHost, IConnectionResumeHost, IConnectionPairingStage2Host, IConnectionBrokerTransferHost, IConnectionSoftReconnectHost, IConnectionLifecycleHost, IConnectionConnectGateSource, IConnectionConnectPrepareHost, IConnectionConnectOpenHost, ISocketAliasRegistrar, IStartupUiHost, IJidAliasPersistence, IIncomingMessageEnqueueHost, IResolvedNameApplyHost, IHistoryHydrationBackfillHost, ISqliteHistoryQuietFinalizeHost, IHistoryPostOfflineFreshnessHost, IDeferredStartupMaintenanceHost, IHistoryCatchUpFinishHost, IUserResyncFullHistoryHost, IFreshnessReconnectFallbackHost, ICatchUpContinueReconnectHost
     {
         public event PropertyChangedEventHandler PropertyChanged;
         protected void OnPropertyChanged([CallerMemberName] string propertyName = null)
@@ -2449,131 +2449,8 @@ namespace Unison.Uwp.Services.WhatsApp
         /// Soft-reconnect to pull another offline catch-up lot while the history banner stays up.
         /// Distinct from the long-cooldown freshness failure fallback.
         /// </summary>
-        private void ScheduleCatchUpContinueReconnect(string triggerReason)
-        {
-            DateTime nowUtc = DateTime.UtcNow;
-            CatchUpContinueScheduleAction schedule =
-                CatchUpContinueReconnectGates.DecideSchedule(
-                    _freshnessReconnectFallbackInProgress,
-                    _suppressReconnect,
-                    _authState != null && _authState.Registered);
-
-            if (schedule == CatchUpContinueScheduleAction.FinishBusy)
-            {
-                Debug.WriteLine(
-                    "[WhatsAppService] Catch-up continue skipped: reconnect already in progress, trigger=" +
-                    triggerReason);
-                FinishHistoryCatchUpContinue("continue-busy", releaseEnrichment: true);
-                return;
-            }
-
-            if (schedule == CatchUpContinueScheduleAction.FinishSuppress)
-            {
-                FinishHistoryCatchUpContinue("continue-suppress", releaseEnrichment: true);
-                return;
-            }
-
-            if (schedule == CatchUpContinueScheduleAction.FinishUnregistered)
-            {
-                FinishHistoryCatchUpContinue("continue-unregistered", releaseEnrichment: true);
-                return;
-            }
-
-            if (CatchUpContinueReconnectGates.IsWithinCooldown(
-                    _lastCatchUpContinueUtc,
-                    nowUtc,
-                    CatchUpContinueReconnectCooldown))
-            {
-                Debug.WriteLine(
-                    "[WhatsAppService] Catch-up continue delayed for cooldown, trigger=" +
-                    triggerReason);
-            }
-
-            _lastCatchUpContinueUtc = nowUtc;
-            _freshnessReconnectFallbackInProgress = true;
-            Interlocked.Exchange(ref _enrichmentAwaitingHeavyHistory, 1);
-            // Keep Synchronizing history… across the soft reconnect.
-            if (!IsHistoryCatchUpBannerActive)
-            {
-                BeginHistoryCatchUpBanner("catch-up-continue");
-            }
-            else
-            {
-                PublishSyncStatus(SyncPhaseStatus.Format(SyncPhaseStatus.HistoryCatchUp));
-            }
-
-            RuntimeDiagnosticsService.Instance.Write(
-                "history",
-                "catch-up-continue-reconnect",
-                "trigger=" + (triggerReason ?? string.Empty) +
-                "; round=" + _catchUp.Snapshot().Round +
-                "; delayMs=" + (int)CatchUpContinueReconnectDelay.TotalMilliseconds);
-
-            Debug.WriteLine(
-                "[WhatsAppService] Scheduling catch-up continue reconnect: " + triggerReason);
-
-            _ = Task.Run(async () =>
-            {
-                try
-                {
-                    await Task.Delay(CatchUpContinueReconnectDelay).ConfigureAwait(false);
-
-                    string currentStaleReason;
-                    bool tipLooksFresh = !TryGetHistoryFreshnessStaleReason(
-                        DateTime.UtcNow,
-                        out currentStaleReason);
-                    // Mid catch-up: tip freshness must not cancel soft-reconnect. Older history
-                    // lots do not move the newest tip; aborting here stops pagination.
-                    bool catchUpActive = IsHistoryCatchUpActive();
-                    if (CatchUpContinueReconnectGates.ShouldAbortAfterDelay(
-                            _suppressReconnect,
-                            _authState != null && _authState.Registered,
-                            tipLooksFresh,
-                            catchUpActive))
-                    {
-                        FinishHistoryCatchUpContinue(
-                            CatchUpContinueReconnectGates.AbortFinishReason(
-                                _suppressReconnect,
-                                _authState != null && _authState.Registered,
-                                tipLooksFresh,
-                                catchUpActive),
-                            releaseEnrichment: true);
-                        return;
-                    }
-
-                    Debug.WriteLine(
-                        "[WhatsAppService] Starting catch-up continue reconnect: staleReason=" +
-                        (currentStaleReason ?? (tipLooksFresh ? "tip-fresh-continue" : "<none>")) +
-                        ", catchUpActive=" + catchUpActive +
-                        ", trigger=" + triggerReason);
-                    StopConnectionHealthMonitor("catch-up-continue");
-                    var staleSocket = _socket;
-                    _socket = null;
-                    if (staleSocket != null)
-                    {
-                        try { staleSocket.Disconnect(); } catch { }
-                        try { staleSocket.Dispose(); } catch { }
-                    }
-
-                    ScheduleAutoReconnect("catch-up-continue:" + triggerReason);
-                }
-                catch (Exception ex)
-                {
-                    Debug.WriteLine(
-                        "[WhatsAppService] Catch-up continue reconnect failed: " + ex.Message);
-                    RuntimeDiagnosticsService.Instance.RecordException(
-                        "history",
-                        "catch-up-continue-failed",
-                        ex,
-                        triggerReason);
-                    FinishHistoryCatchUpContinue("continue-error", releaseEnrichment: true);
-                }
-                finally
-                {
-                    _freshnessReconnectFallbackInProgress = false;
-                }
-            });
-        }
+        private void ScheduleCatchUpContinueReconnect(string triggerReason) =>
+            CatchUpContinueReconnectDispatch.Schedule(this, triggerReason);
 
         private void ScheduleFreshnessReconnectFallback(string triggerReason) =>
             FreshnessReconnectFallbackDispatch.Schedule(this, triggerReason);
@@ -2620,7 +2497,104 @@ namespace Unison.Uwp.Services.WhatsApp
         void IFreshnessReconnectFallbackHost.StopConnectionHealthMonitor(string reason) =>
             StopConnectionHealthMonitor(reason);
 
-        void IFreshnessReconnectFallbackHost.TearDownSocketForReconnect()
+        void IFreshnessReconnectFallbackHost.TearDownSocketForReconnect() =>
+            TearDownSocketForSoftReconnect();
+
+        void IFreshnessReconnectFallbackHost.ScheduleAutoReconnect(string reason) =>
+            ScheduleAutoReconnect(reason);
+
+        void IFreshnessReconnectFallbackHost.RaiseFreshnessFallbackError(Exception error) =>
+            OnError?.Invoke(this, error);
+
+        void IFreshnessReconnectFallbackHost.FireAndForgetFreshnessReconnect(Func<Task> work) =>
+            _ = Task.Run(work);
+
+        // --- ICatchUpContinueReconnectHost -----------------------------------
+
+        bool ICatchUpContinueReconnectHost.FreshnessReconnectFallbackInProgress
+        {
+            get => _freshnessReconnectFallbackInProgress;
+            set => _freshnessReconnectFallbackInProgress = value;
+        }
+
+        bool ICatchUpContinueReconnectHost.SuppressReconnect => _suppressReconnect;
+
+        bool ICatchUpContinueReconnectHost.IsAuthRegistered =>
+            _authState != null && _authState.Registered;
+
+        DateTime ICatchUpContinueReconnectHost.LastCatchUpContinueUtc
+        {
+            get => _lastCatchUpContinueUtc;
+            set => _lastCatchUpContinueUtc = value;
+        }
+
+        TimeSpan ICatchUpContinueReconnectHost.CatchUpContinueReconnectCooldown =>
+            CatchUpContinueReconnectCooldown;
+
+        TimeSpan ICatchUpContinueReconnectHost.CatchUpContinueReconnectDelay =>
+            CatchUpContinueReconnectDelay;
+
+        int ICatchUpContinueReconnectHost.CatchUpRound => _catchUp.Snapshot().Round;
+
+        bool ICatchUpContinueReconnectHost.IsHistoryCatchUpBannerActive =>
+            IsHistoryCatchUpBannerActive;
+
+        bool ICatchUpContinueReconnectHost.IsHistoryCatchUpActive() => IsHistoryCatchUpActive();
+
+        bool ICatchUpContinueReconnectHost.TryGetFreshnessStaleReason(
+            DateTime nowUtc,
+            out string staleReason) =>
+            TryGetHistoryFreshnessStaleReason(nowUtc, out staleReason);
+
+        void ICatchUpContinueReconnectHost.FinishHistoryCatchUpContinue(
+            string reason,
+            bool releaseEnrichment) =>
+            FinishHistoryCatchUpContinue(reason, releaseEnrichment);
+
+        void ICatchUpContinueReconnectHost.MarkEnrichmentAwaitingHeavyHistory() =>
+            Interlocked.Exchange(ref _enrichmentAwaitingHeavyHistory, 1);
+
+        void ICatchUpContinueReconnectHost.BeginHistoryCatchUpBanner(string reason) =>
+            BeginHistoryCatchUpBanner(reason);
+
+        void ICatchUpContinueReconnectHost.PublishHistoryCatchUpStatus() =>
+            PublishSyncStatus(SyncPhaseStatus.Format(SyncPhaseStatus.HistoryCatchUp));
+
+        void ICatchUpContinueReconnectHost.WriteCatchUpContinueJournal(
+            string triggerReason,
+            int delayMs) =>
+            RuntimeDiagnosticsService.Instance.Write(
+                "history",
+                "catch-up-continue-reconnect",
+                "trigger=" + (triggerReason ?? string.Empty) +
+                "; round=" + _catchUp.Snapshot().Round +
+                "; delayMs=" + delayMs);
+
+        void ICatchUpContinueReconnectHost.LogCatchUpContinue(string message) =>
+            Debug.WriteLine("[WhatsAppService] " + message);
+
+        void ICatchUpContinueReconnectHost.StopConnectionHealthMonitor(string reason) =>
+            StopConnectionHealthMonitor(reason);
+
+        void ICatchUpContinueReconnectHost.TearDownSocketForReconnect() =>
+            TearDownSocketForSoftReconnect();
+
+        void ICatchUpContinueReconnectHost.ScheduleAutoReconnect(string reason) =>
+            ScheduleAutoReconnect(reason);
+
+        void ICatchUpContinueReconnectHost.RecordCatchUpContinueException(
+            Exception error,
+            string triggerReason) =>
+            RuntimeDiagnosticsService.Instance.RecordException(
+                "history",
+                "catch-up-continue-failed",
+                error,
+                triggerReason);
+
+        void ICatchUpContinueReconnectHost.FireAndForgetCatchUpContinue(Func<Task> work) =>
+            _ = Task.Run(work);
+
+        private void TearDownSocketForSoftReconnect()
         {
             var staleSocket = _socket;
             _socket = null;
@@ -2632,15 +2606,6 @@ namespace Unison.Uwp.Services.WhatsApp
             try { staleSocket.Disconnect(); } catch { }
             try { staleSocket.Dispose(); } catch { }
         }
-
-        void IFreshnessReconnectFallbackHost.ScheduleAutoReconnect(string reason) =>
-            ScheduleAutoReconnect(reason);
-
-        void IFreshnessReconnectFallbackHost.RaiseFreshnessFallbackError(Exception error) =>
-            OnError?.Invoke(this, error);
-
-        void IFreshnessReconnectFallbackHost.FireAndForgetFreshnessReconnect(Func<Task> work) =>
-            _ = Task.Run(work);
 
         void IHistorySyncHost.NoteFullHistoryCatchUpProgress(string reason) =>
             NoteFullHistoryCatchUpProgress(reason);
