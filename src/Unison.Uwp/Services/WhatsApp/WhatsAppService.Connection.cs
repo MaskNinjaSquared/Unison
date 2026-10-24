@@ -175,43 +175,19 @@ namespace Unison.Uwp.Services.WhatsApp
         private void WireSocketEventHandlers(IWhatsAppSocket socket)
         {
             socket.OnQRCodeReceived += (s, qr) =>
-            {
-                if (!IsCurrentSocket(s))
-                {
-                    try
-                    {
-                        SessionLogger.Instance.WriteAlways(
-                            "[Pairing] Ignoring QR from stale socket");
-                    }
-                    catch { }
-                    return;
-                }
+                QrCodeWireDispatch.Handle(this, qr, IsCurrentSocket(s));
 
-                try
-                {
-                    SessionLogger.Instance.WriteAlways(
-                        "[Pairing] WhatsAppService raising OnQRCodeReceived len=" +
-                        (qr?.Length ?? 0));
-                }
-                catch { }
-
-                _qrDeliveredThisConnection = true;
-                OnQRCodeReceived?.Invoke(this, qr);
-            };
             socket.OnPresenceUpdate += (s, e) =>
             {
                 if (!IsCurrentSocket(s)) return;
-                Messages?.NotifyPresenceUpdated(e);
+                SocketFacadeWireDispatch.HandlePresence(this, e);
             };
             RegisterSocketAliases("service-known-aliases");
 
-        
         socket.OnAuthStateUpdate += async (s, e) =>
         {
             if (!IsCurrentSocket(s)) return;
-            Debug.WriteLine("[WhatsAppService] Auth state updated, saving...");
-            FileSelfIdentityAliases("auth-update-identity");
-            await PersistAuthStateAsync(s as IWhatsAppSocket, "socket-auth-update");
+            await AuthStateWireDispatch.RunAsync(this).ConfigureAwait(false);
         };
         
         socket.OnConnectionUpdate += (s, status) =>
@@ -249,27 +225,12 @@ namespace Unison.Uwp.Services.WhatsApp
 
         socket.OnMessage += (s, node) =>
         {
-            if (!IsCurrentSocket(s) || node == null)
+            if (!IsCurrentSocket(s))
             {
                 return;
             }
 
-            if (string.Equals(node.Tag, "ack", StringComparison.OrdinalIgnoreCase) &&
-                node.Attrs != null)
-            {
-                node.Attrs.TryGetValue("class", out var ackClass);
-                node.Attrs.TryGetValue("id", out var ackId);
-                node.Attrs.TryGetValue("error", out var ackError);
-                Messages?.NotifyInboundWireAck(ackClass, ackId, ackError);
-            }
-
-            if (node.Attrs != null)
-            {
-                node.Attrs.TryGetValue("from", out var from);
-                node.Attrs.TryGetValue("notify", out var notify);
-                node.Attrs.TryGetValue("participant", out var participantFromNode);
-                Contacts?.NotifyInboundMessageNode(from, notify, participantFromNode);
-            }
+            InboundWireNodeDispatch.Handle(this, node);
         };
 
         // Not gated on current socket — see HistorySyncWireApply header.
@@ -279,42 +240,58 @@ namespace Unison.Uwp.Services.WhatsApp
         // Handle real-time decrypted messages (not history sync)
         socket.OnDecryptedMessageReceived += (s, e) =>
         {
-            if (!IsCurrentSocket(s)) return Task.CompletedTask;
-            Interlocked.Increment(ref _diagnosticsDecryptedEventCount);
-            Interlocked.Exchange(ref _diagnosticsLastDecryptedEventUtcTicks, DateTime.UtcNow.Ticks);
-            EnqueueDecryptedMessage(e);
+            if (!IsCurrentSocket(s) || e == null) return Task.CompletedTask;
+            DecryptedMessageWireDispatch.Handle(
+                this,
+                e.FromJid,
+                e.Participant,
+                e.ParticipantAlt,
+                e.AddressingMode,
+                e.MessageId,
+                e.Message,
+                e.Timestamp,
+                e.IsFromMe,
+                e.PushName,
+                e.VerifiedName,
+                e.SenderLid,
+                e.PeerRecipientPn,
+                e.PeerRecipientLid,
+                e.RecipientJid,
+                e.IsOffline);
             return Task.CompletedTask;
         };
 
         socket.OnMissingMessageDetected += (s, e) =>
         {
-            if (!IsCurrentSocket(s) || Messages == null) return;
-            _ = Messages.NoteMissingMessageAndRequestResendAsync(
+            if (!IsCurrentSocket(s) || e == null) return;
+            SocketFacadeWireDispatch.HandleMissingMessage(
+                this,
                 e.ChatJid,
                 e.Participant,
                 e.MessageId,
                 e.IsFromMe,
                 e.Timestamp,
-                e.Reason,
-                "socket:" + (e.Reason ?? string.Empty));
+                e.Reason);
         };
 
         socket.OnOutgoingMessageStatusChanged += (s, e) =>
         {
-            if (!IsCurrentSocket(s) || Messages == null) return;
-            _ = Messages.NotifyOutgoingStatusAsync(e?.MessageId, e?.Status, e?.Error);
+            if (!IsCurrentSocket(s)) return;
+            _ = SocketFacadeWireDispatch.HandleOutgoingStatusAsync(
+                this,
+                e?.MessageId,
+                e?.Status,
+                e?.Error);
         };
 
         socket.OnReceiptReceived += (s, node) =>
         {
-            if (!IsCurrentSocket(s) || Messages == null) return;
-            _ = Messages.NotifyReceiptAsync(node);
+            if (!IsCurrentSocket(s)) return;
+            _ = SocketFacadeWireDispatch.HandleReceiptAsync(this, node);
         };
 
         socket.OnLinkCodeCompanionReg += (s, node) =>
-        {
-            if (IsCurrentSocket(s)) OnLinkCodeCompanionReg?.Invoke(this, node);
-        };
+            SocketFacadeWireDispatch.HandleLinkCodeCompanion(this, node, IsCurrentSocket(s));
 
         // Handle replay release after server offline completion or the long safety timeout.
         socket.OnReceivedPendingNotifications += async (s, offlineCount) =>
@@ -616,6 +593,154 @@ namespace Unison.Uwp.Services.WhatsApp
         void ISessionInitializedHost.LogSessionInitialized() =>
             Debug.WriteLine(
                 "[WhatsAppService] Session initialized - triggering missing name resolution");
+
+        void IQrCodeWireHost.LogStaleQrIgnored()
+        {
+            try
+            {
+                SessionLogger.Instance.WriteAlways(
+                    "[Pairing] Ignoring QR from stale socket");
+            }
+            catch
+            {
+            }
+        }
+
+        void IQrCodeWireHost.LogQrRaising(int length)
+        {
+            try
+            {
+                SessionLogger.Instance.WriteAlways(
+                    "[Pairing] WhatsAppService raising OnQRCodeReceived len=" + length);
+            }
+            catch
+            {
+            }
+        }
+
+        void IQrCodeWireHost.MarkQrDelivered() =>
+            _qrDeliveredThisConnection = true;
+
+        void IQrCodeWireHost.RaiseQrCodeReceived(string qr) =>
+            OnQRCodeReceived?.Invoke(this, qr);
+
+        void IAuthStateWireHost.LogAuthStateUpdated() =>
+            Debug.WriteLine("[WhatsAppService] Auth state updated, saving...");
+
+        void IAuthStateWireHost.FileSelfIdentityAliases(string source) =>
+            FileSelfIdentityAliases(source);
+
+        Task IAuthStateWireHost.PersistAuthStateFromWireAsync() =>
+            PersistAuthStateAsync(_socket, "socket-auth-update");
+
+        void IInboundWireNodeHost.NotifyInboundWireAck(
+            string ackClass,
+            string ackId,
+            string ackError) =>
+            Messages?.NotifyInboundWireAck(ackClass, ackId, ackError);
+
+        void IInboundWireNodeHost.NotifyInboundMessageNode(
+            string fromJid,
+            string notify,
+            string participantJid) =>
+            Contacts?.NotifyInboundMessageNode(fromJid, notify, participantJid);
+
+        void IDecryptedMessageWireHost.ObserveDecryptedDiagnostics()
+        {
+            Interlocked.Increment(ref _diagnosticsDecryptedEventCount);
+            Interlocked.Exchange(
+                ref _diagnosticsLastDecryptedEventUtcTicks,
+                DateTime.UtcNow.Ticks);
+        }
+
+        void IDecryptedMessageWireHost.EnqueueDecryptedFromWire(
+            string fromJid,
+            string participant,
+            string participantAlt,
+            string addressingMode,
+            string messageId,
+            Message message,
+            DateTime timestamp,
+            bool isFromMe,
+            string pushName,
+            string verifiedName,
+            string senderLid,
+            string peerRecipientPn,
+            string peerRecipientLid,
+            string recipientJid,
+            bool isOffline)
+        {
+            EnqueueDecryptedMessage(new DecryptedMessageEventArgs
+            {
+                FromJid = fromJid,
+                Participant = participant,
+                ParticipantAlt = participantAlt,
+                AddressingMode = addressingMode,
+                MessageId = messageId,
+                Message = message,
+                Timestamp = timestamp,
+                IsFromMe = isFromMe,
+                PushName = pushName,
+                VerifiedName = verifiedName,
+                SenderLid = senderLid,
+                PeerRecipientPn = peerRecipientPn,
+                PeerRecipientLid = peerRecipientLid,
+                RecipientJid = recipientJid,
+                IsOffline = isOffline
+            });
+        }
+
+        void ISocketFacadeWireHost.NotifyPresenceUpdated(PresenceUpdateEventArgs args) =>
+            Messages?.NotifyPresenceUpdated(args);
+
+        void ISocketFacadeWireHost.NoteMissingMessageFromWire(
+            string chatJid,
+            string participant,
+            string messageId,
+            bool isFromMe,
+            DateTime timestamp,
+            string reason)
+        {
+            if (Messages == null)
+            {
+                return;
+            }
+
+            _ = Messages.NoteMissingMessageAndRequestResendAsync(
+                chatJid,
+                participant,
+                messageId,
+                isFromMe,
+                timestamp,
+                reason,
+                "socket:" + (reason ?? string.Empty));
+        }
+
+        Task ISocketFacadeWireHost.NotifyOutgoingStatusAsync(
+            string messageId,
+            string status,
+            string error)
+        {
+            if (Messages == null)
+            {
+                return Task.CompletedTask;
+            }
+
+            return Messages.NotifyOutgoingStatusAsync(messageId, status, error);
+        }
+
+        Task ISocketFacadeWireHost.NotifyReceiptAsync(BinaryNode node)
+        {
+            if (Messages == null)
+            {
+                return Task.CompletedTask;
+            }
+
+            return Messages.NotifyReceiptAsync(node);
+        }
+
+        void ISocketFacadeWireHost.RaiseLinkCodeCompanionReg(BinaryNode node) =>
+            OnLinkCodeCompanionReg?.Invoke(this, node);
 
         /// <summary>
         /// Binds one monitored socket into <see cref="IConnectionHealthMonitorHost"/> for

@@ -1287,7 +1287,9 @@ and the incoming pump stay on the client until Netstandard D. Offline pending-
 notification release is `OfflineReplayRelease` over `IOfflineReplayReleaseHost`
 (wire still attaches the event on the client). Thin-wire dispatches:
 `ConnectionUpdateDispatch`, `SocketErrorDispatch`, `HistorySyncWireApply`,
-`SessionInitializedDispatch`, and `OfflineReplayRelease` (each over a host port).
+`SessionInitializedDispatch`, `OfflineReplayRelease`, `QrCodeWireDispatch`,
+`AuthStateWireDispatch`, `InboundWireNodeDispatch`, `DecryptedMessageWireDispatch`,
+and `SocketFacadeWireDispatch` (each over a host port).
 
 **The open conversation is shared state.** `ActiveChat` (`Unison.Core/State`, DI singleton over
 `JidAliasTable.GetCanonicalJid`) holds the conversation the user has open by its canonical

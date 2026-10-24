@@ -2,6 +2,13 @@
 
 Newest first.
 
+## Extract — remaining WireSocketEventHandlers thin-wires
+
+`QrCodeWireDispatch`, `AuthStateWireDispatch`, `InboundWireNodeDispatch`,
+`DecryptedMessageWireDispatch`, `SocketFacadeWireDispatch` (presence / missing /
+outgoing status / receipt / link-code) over host ports. Wire handlers only gate
+current-socket then call the helper. Core tests for each.
+
 ## Extract — SocketError / HistorySyncWire / SessionInitialized dispatches
 
 Thin-wire trio after ConnectionUpdate: `SocketErrorDispatch` + `ISocketErrorHost`
