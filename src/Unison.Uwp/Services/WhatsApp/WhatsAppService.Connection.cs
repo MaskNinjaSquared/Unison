@@ -760,17 +760,25 @@ namespace Unison.Uwp.Services.WhatsApp
         /// transport often closes with 1006 BEFORE the "restart" status is published, and that
         /// premature close must not schedule the generic AutoReconnect loop.
         /// </summary>
-        private void MarkPairingRestartPending(string reason)
+        private void MarkPairingRestartPending(string reason) =>
+            MarkPairingRestartPendingDispatch.Run(this, reason);
+
+        // --- IMarkPairingRestartPendingHost ----------------------------------
+
+        bool IMarkPairingRestartPendingHost.PairingRestartPending
         {
-            bool wasPending = _pairingRestartPending;
-            _pairingRestartPending = true;
-            _countPreSessionCloseAsFatal = false;
-            Interlocked.Exchange(ref _preSessionCloseStreak, 0);
-            if (!wasPending)
-            {
-                PairingTrace("pairingRestartPending=true reason=" + (reason ?? string.Empty));
-            }
+            get => _pairingRestartPending;
+            set => _pairingRestartPending = value;
         }
+
+        void IMarkPairingRestartPendingHost.ClearPreSessionCloseAsFatal() =>
+            _countPreSessionCloseAsFatal = false;
+
+        void IMarkPairingRestartPendingHost.ResetPreSessionCloseStreak() =>
+            Interlocked.Exchange(ref _preSessionCloseStreak, 0);
+
+        void IMarkPairingRestartPendingHost.TracePairingRestartPending(string reason) =>
+            PairingTrace("pairingRestartPending=true reason=" + (reason ?? string.Empty));
 
         /// <summary>
         /// Owns stage-2 reconnect after pair-success / 515. Idempotent under <see cref="_isReconnecting"/>.
@@ -1639,28 +1647,39 @@ namespace Unison.Uwp.Services.WhatsApp
             }
         }
 
-        private void DropCurrentSocketForFastResume()
+        private void DropCurrentSocketForFastResume() =>
+            DropCurrentSocketForFastResumeDispatch.Run(this);
+
+        // --- IDropCurrentSocketForFastResumeHost -----------------------------
+
+        object IDropCurrentSocketForFastResumeHost.TakeCurrentSocketOrNull()
         {
             var socket = _socket;
-            if (socket == null)
+            _socket = null;
+            return socket;
+        }
+
+        bool IDropCurrentSocketForFastResumeHost.SuppressReconnect
+        {
+            get => _suppressReconnect;
+            set => _suppressReconnect = value;
+        }
+
+        void IDropCurrentSocketForFastResumeHost.DisconnectAndDisposeSocket(object socket)
+        {
+            var typed = socket as IWhatsAppSocket;
+            if (typed == null)
             {
                 return;
             }
 
-            bool previousSuppress = _suppressReconnect;
-            _suppressReconnect = true;
             try
             {
-                _socket = null;
-                socket.Disconnect();
-                socket.Dispose();
+                typed.Disconnect();
+                typed.Dispose();
             }
             catch
             {
-            }
-            finally
-            {
-                _suppressReconnect = previousSuppress;
             }
         }
 
