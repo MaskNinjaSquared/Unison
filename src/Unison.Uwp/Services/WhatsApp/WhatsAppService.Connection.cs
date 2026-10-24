@@ -76,32 +76,49 @@ namespace Unison.Uwp.Services.WhatsApp
             }
         }
 
-        private void PublishConnectionUpdate(string status)
+        private void PublishConnectionUpdate(string status) =>
+            PublishConnectionUpdateDispatch.Run(this, status);
+
+        // --- IPublishConnectionUpdateHost ------------------------------------
+
+        string IPublishConnectionUpdateHost.CurrentConnectionStatus
         {
-            CurrentConnectionStatus = status ?? string.Empty;
-            if (ConnectionStatusNotifyPolicy.ShouldClearReconnectRequiredToast(
-                    CurrentConnectionStatus))
-            {
-                SetSuppressReconnectToast(false);
-                string clearError;
-                bool cleared =
-                    BackgroundToastPresenter.ClearReconnectRequired(
-                        out clearError);
-                RuntimeDiagnosticsService.Instance.Write(
-                    "notifications",
-                    "reconnect-required-toast-cleared",
-                    "status=" + CurrentConnectionStatus +
-                    "; succeeded=" + cleared +
-                    "; error=" + (clearError ?? string.Empty));
-            }
+            get => CurrentConnectionStatus;
+            set => CurrentConnectionStatus = value;
+        }
+
+        bool IPublishConnectionUpdateHost.ShouldClearReconnectRequiredToast(string status) =>
+            ConnectionStatusNotifyPolicy.ShouldClearReconnectRequiredToast(status);
+
+        void IPublishConnectionUpdateHost.SetSuppressReconnectToast(bool suppress) =>
+            SetSuppressReconnectToast(suppress);
+
+        void IPublishConnectionUpdateHost.ClearReconnectRequiredToast(string status)
+        {
+            string clearError;
+            bool cleared = BackgroundToastPresenter.ClearReconnectRequired(out clearError);
+            RuntimeDiagnosticsService.Instance.Write(
+                "notifications",
+                "reconnect-required-toast-cleared",
+                "status=" + status +
+                "; succeeded=" + cleared +
+                "; error=" + (clearError ?? string.Empty));
+        }
+
+        void IPublishConnectionUpdateHost.StampLastConnectionEventUtc() =>
             Interlocked.Exchange(ref _diagnosticsLastConnectionEventUtcTicks, DateTime.UtcNow.Ticks);
+
+        void IPublishConnectionUpdateHost.WriteConnectionStatusJournal(string status) =>
             RuntimeDiagnosticsService.Instance.Write(
                 "connection",
                 "status",
-                "value=" + CurrentConnectionStatus + "; serviceReady=" + IsConnected);
-            Debug.WriteLine($"[WhatsAppService] Connection status -> {CurrentConnectionStatus}");
-            OnConnectionUpdate?.Invoke(this, CurrentConnectionStatus);
-        }
+                "value=" + status + "; serviceReady=" + IsConnected);
+
+        void IPublishConnectionUpdateHost.LogConnectionStatus(string status) =>
+            Debug.WriteLine("[WhatsAppService] Connection status -> " + status);
+
+        void IPublishConnectionUpdateHost.RaiseConnectionUpdate(string status) =>
+            OnConnectionUpdate?.Invoke(this, status);
 
         /// <summary>
         /// Writes the suppress flag used by the background toast presenter (winmd cannot
@@ -1342,85 +1359,92 @@ namespace Unison.Uwp.Services.WhatsApp
                 (error != null ? error.Message : string.Empty));
         }
 
-        private async Task<bool> ConsumeBrokerReconnectRequestAsync()
+        private Task<bool> ConsumeBrokerReconnectRequestAsync() =>
+            BrokerReconnectConsumeDispatch.RunAsync(this);
+
+        // --- IBrokerReconnectConsumeHost -------------------------------------
+
+        private BrokerInterprocessLease _brokerReconnectConsumeLease;
+
+        async Task<bool> IBrokerReconnectConsumeHost.TryAcquireBrokerReconnectLeaseAsync()
         {
-            BrokerInterprocessLease lease = null;
-            try
+            _brokerReconnectConsumeLease = await BrokerInterprocessLock.AcquireAsync(
+                "foreground:consume-reconnect",
+                TimeSpan.FromSeconds(8),
+                CancellationToken.None).ConfigureAwait(false);
+            return _brokerReconnectConsumeLease != null;
+        }
+
+        async Task IBrokerReconnectConsumeHost.ReleaseBrokerReconnectLeaseAsync()
+        {
+            BrokerInterprocessLease lease = _brokerReconnectConsumeLease;
+            _brokerReconnectConsumeLease = null;
+            if (lease != null)
             {
-                lease = await BrokerInterprocessLock.AcquireAsync(
-                    "foreground:consume-reconnect",
-                    TimeSpan.FromSeconds(8),
-                    CancellationToken.None);
-                if (lease == null)
-                {
-                    RuntimeDiagnosticsService.Instance.Write(
-                        "socket-broker",
-                        "reconnect-request-lock-timeout");
-                    return false;
-                }
-
-                BrokerOwnershipState state = await BrokerOwnershipStore.LoadAsync();
-                if (state == null)
-                {
-                    return false;
-                }
-
-                DateTime nowUtc = DateTime.UtcNow;
-                bool ownerIsBroker = string.Equals(state.Owner, "broker", StringComparison.Ordinal);
-                bool brokerSocketStillRegistered =
-                    SocketActivityInformation.AllSockets.ContainsKey(state.SocketId);
-                bool brokerEntryMissing =
-                    ownerIsBroker &&
-                    nowUtc - state.UpdatedUtc > BrokerReconnectConsumePolicy.StaleBrokerGrace &&
-                    !brokerSocketStillRegistered;
-                if (!BrokerReconnectConsumePolicy.ShouldConsume(
-                    state.ReconnectRequired,
-                    ownerIsBroker,
-                    state.UpdatedUtc,
-                    nowUtc,
-                    brokerSocketStillRegistered))
-                {
-                    return false;
-                }
-
-                RuntimeDiagnosticsService.Instance.Write(
-                    "socket-broker",
-                    "reconnect-request-consumed",
-                    "id=" + state.SocketId +
-                    "; closeCount=" + state.SocketClosedCount +
-                    "; reason=" + state.LastReason +
-                    "; brokerEntryMissing=" + brokerEntryMissing);
-
-                StopConnectionHealthMonitor("broker-reconnect-request");
-                await SocketBrokerCoordinator.DisposeBrokerSocketAsync(state.SocketId);
-
-                IWhatsAppSocket staleSocket = _socket;
-                _socket = null;
-                if (staleSocket != null)
-                {
-                    try { staleSocket.Disconnect(); } catch { }
-                    try { staleSocket.Dispose(); } catch { }
-                }
-
-                await NoiseSessionStore.ClearAsync();
-                return true;
-            }
-            catch (Exception ex)
-            {
-                RuntimeDiagnosticsService.Instance.RecordException(
-                    "socket-broker",
-                    "reconnect-request-consume-failed",
-                    ex);
-                return false;
-            }
-            finally
-            {
-                if (lease != null)
-                {
-                    await lease.ReleaseAsync();
-                }
+                await lease.ReleaseAsync().ConfigureAwait(false);
             }
         }
+
+        void IBrokerReconnectConsumeHost.WriteBrokerReconnectLockTimeout() =>
+            RuntimeDiagnosticsService.Instance.Write(
+                "socket-broker",
+                "reconnect-request-lock-timeout");
+
+        async Task<BrokerReconnectOwnershipSnapshot> IBrokerReconnectConsumeHost.LoadBrokerOwnershipSnapshotAsync()
+        {
+            BrokerOwnershipState state = await BrokerOwnershipStore.LoadAsync().ConfigureAwait(false);
+            if (state == null)
+            {
+                return null;
+            }
+
+            return new BrokerReconnectOwnershipSnapshot
+            {
+                ReconnectRequired = state.ReconnectRequired,
+                OwnerIsBroker = string.Equals(state.Owner, "broker", StringComparison.Ordinal),
+                UpdatedUtc = state.UpdatedUtc,
+                BrokerSocketStillRegistered =
+                    SocketActivityInformation.AllSockets.ContainsKey(state.SocketId),
+                SocketId = state.SocketId,
+                SocketClosedCount = state.SocketClosedCount,
+                LastReason = state.LastReason
+            };
+        }
+
+        void IBrokerReconnectConsumeHost.WriteBrokerReconnectConsumed(
+            BrokerReconnectOwnershipSnapshot snapshot,
+            bool brokerEntryMissing) =>
+            RuntimeDiagnosticsService.Instance.Write(
+                "socket-broker",
+                "reconnect-request-consumed",
+                "id=" + snapshot.SocketId +
+                "; closeCount=" + snapshot.SocketClosedCount +
+                "; reason=" + snapshot.LastReason +
+                "; brokerEntryMissing=" + brokerEntryMissing);
+
+        async Task IBrokerReconnectConsumeHost.TearDownAfterBrokerReconnectConsumeAsync(
+            BrokerReconnectOwnershipSnapshot snapshot)
+        {
+            StopConnectionHealthMonitor("broker-reconnect-request");
+            await SocketBrokerCoordinator.DisposeBrokerSocketAsync(snapshot.SocketId)
+                .ConfigureAwait(false);
+
+            IWhatsAppSocket staleSocket = _socket;
+            _socket = null;
+            if (staleSocket != null)
+            {
+                try { staleSocket.Disconnect(); } catch { }
+                try { staleSocket.Dispose(); } catch { }
+            }
+
+            await NoiseSessionStore.ClearAsync().ConfigureAwait(false);
+        }
+
+        void IBrokerReconnectConsumeHost.RecordBrokerReconnectConsumeFailed(Exception error) =>
+            RuntimeDiagnosticsService.Instance.RecordException(
+                "socket-broker",
+                "reconnect-request-consume-failed",
+                error);
 
         /// <summary>
         /// Orchestration lives in <see cref="ConnectionBrokerTransfer"/>. Answers true

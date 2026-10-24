@@ -263,46 +263,53 @@ namespace Unison.Uwp.Services.WhatsApp
         /// Handles one drained Core envelope (queue item is already
         /// <see cref="IncomingDecryptedNotifyRequest"/>).
         /// </summary>
-        private async Task HandleDecryptedMessageAsync(IncomingDecryptedNotifyRequest request)
+        private Task HandleDecryptedMessageAsync(IncomingDecryptedNotifyRequest request) =>
+            HandleDecryptedMessageDispatch.RunAsync(this, request);
+
+        // --- IHandleDecryptedMessageHost -------------------------------------
+
+        void IHandleDecryptedMessageHost.SetIncomingMessagePumpStage(
+            string stage,
+            IncomingDecryptedNotifyRequest request) =>
+            SetIncomingMessagePumpStage(stage, request);
+
+        void IHandleDecryptedMessageHost.LogLiveInboundHandle(
+            IncomingDecryptedNotifyRequest request) =>
+            Log(
+                "[WhatsAppService] HandleDecryptedMessageAsync from " + request.FromJid +
+                ", participant=" + request.ParticipantJid +
+                ", id=" + request.MessageId);
+
+        bool IHandleDecryptedMessageHost.HasMessageFacade => Messages != null;
+
+        void IHandleDecryptedMessageHost.WriteMessageFacadeMissing(string messageId)
         {
-            // ProcessIncomingMessageQueueAsync is the sole caller and already guarantees
-            // one-at-a-time ingestion. A second non-reentrant semaphore here caused a
-            // permanent self-deadlock when recovered messages re-entered the pipeline.
-            try
-            {
-                SetIncomingMessagePumpStage("routing", request);
-                if (request != null && !request.IsOffline)
-                {
-                    Log(
-                        "[WhatsAppService] HandleDecryptedMessageAsync from " + request.FromJid +
-                        ", participant=" + request.ParticipantJid +
-                        ", id=" + request.MessageId);
-                }
-
-                if (Messages == null)
-                {
-                    Debug.WriteLine("[WhatsAppService] Dropping inbound message: MessageFacade is not attached.");
-                    RuntimeDiagnosticsService.Instance.Write(
-                        "messages",
-                        "message-facade-missing",
-                        "messageId=" + (request?.MessageId ?? string.Empty));
-                    return;
-                }
-
-                SetIncomingMessagePumpStage("route", request);
-                await Messages.NotifyIncomingDecryptedAsync(request).ConfigureAwait(false);
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine("[WhatsAppService] HandleDecryptedMessageAsync error: " + ex.Message);
-                RuntimeDiagnosticsService.Instance.RecordException(
-                    "messages",
-                    "handle-decrypted-failed",
-                    ex,
-                    "id=" + (request?.MessageId ?? "<none>") + "; stage=" + _incoming.Stage);
-                throw;
-            }
+            Debug.WriteLine("[WhatsAppService] Dropping inbound message: MessageFacade is not attached.");
+            RuntimeDiagnosticsService.Instance.Write(
+                "messages",
+                "message-facade-missing",
+                "messageId=" + (messageId ?? string.Empty));
         }
+
+        Task IHandleDecryptedMessageHost.NotifyIncomingDecryptedAsync(
+            IncomingDecryptedNotifyRequest request) =>
+            Messages.NotifyIncomingDecryptedAsync(request);
+
+        void IHandleDecryptedMessageHost.LogHandleDecryptedError(
+            Exception error,
+            IncomingDecryptedNotifyRequest request) =>
+            Debug.WriteLine("[WhatsAppService] HandleDecryptedMessageAsync error: " + error.Message);
+
+        void IHandleDecryptedMessageHost.RecordHandleDecryptedFailed(
+            Exception error,
+            IncomingDecryptedNotifyRequest request) =>
+            RuntimeDiagnosticsService.Instance.RecordException(
+                "messages",
+                "handle-decrypted-failed",
+                error,
+                "id=" + (request?.MessageId ?? "<none>") + "; stage=" + _incoming.Stage);
+
+        string IHandleDecryptedMessageHost.IncomingPumpStage => _incoming.Stage;
 
         void IPendingMessageFlushHost.ApplyFlushAction(PendingFlushAction action) =>
             OfflineReplayFlushDispatch.ApplyAction(this, action);

@@ -33,6 +33,7 @@ using Unison.Core.State;
 using Unison.Socket.UseCases.Contacts;
 using Unison.Uwp.Helpers;
 using Microsoft.Extensions.DependencyInjection;
+using Unison.WhatsAppClient.Abstractions;
 using Unison.WhatsAppClient.Helpers;
 
 namespace Unison.Uwp.Services.WhatsApp
@@ -172,39 +173,61 @@ namespace Unison.Uwp.Services.WhatsApp
             }
         }
 
-        private async Task PersistChatIdentityStateAsync(string reason)
+        private Task PersistChatIdentityStateAsync(string reason) =>
+            PersistChatIdentityStateDispatch.RunAsync(this, reason);
+
+        // --- IPersistChatIdentityStateHost -----------------------------------
+
+        async Task<ChatIdentityCapture> IPersistChatIdentityStateHost.CaptureChatIdentitySnapshotsAsync()
         {
-            try
+            ChatCatalogSnapshot catalog = null;
+            Dictionary<string, string> contactSnapshot = null;
+            Dictionary<string, string> phoneSnapshot = null;
+            Dictionary<string, string> aliasSnapshot = null;
+
+            await _ui.RunAsync(() =>
             {
-                ChatCatalogSnapshot catalog = null;
-                Dictionary<string, string> contactSnapshot = null;
-                Dictionary<string, string> phoneSnapshot = null;
-                Dictionary<string, string> aliasSnapshot = null;
+                catalog = ChatCatalogSnapshot.Take(Chats);
+                contactSnapshot = ContactNames.Snapshot();
+                phoneSnapshot = PhoneContactNamesByJid.Snapshot();
+                aliasSnapshot = JidAlias.Snapshot();
+            }).ConfigureAwait(false);
 
-                await _ui.RunAsync(() =>
-                    {
-                        catalog = ChatCatalogSnapshot.Take(Chats);
-                        contactSnapshot = ContactNames.Snapshot();
-                        phoneSnapshot = PhoneContactNamesByJid.Snapshot();
-                        aliasSnapshot = JidAlias.Snapshot();
-                    });
-
-                if (catalog == null || catalog.ChatJids.Count == 0)
-                {
-                    return;
-                }
-
-                await PersistChatCatalogAsync(catalog);
-                await _messageStore.SaveContactNamesAsync(contactSnapshot ?? new Dictionary<string, string>(), catalog.ChatJids);
-                await _messageStore.SavePhoneContactNamesAsync(phoneSnapshot ?? new Dictionary<string, string>(), catalog.ChatJids);
-                await _messageStore.SaveJidAliasesAsync(aliasSnapshot ?? new Dictionary<string, string>(), catalog.ChatJids);
-                Debug.WriteLine($"[WhatsAppService] Persisted chat identity state immediately ({reason})");
-            }
-            catch (Exception ex)
+            return new ChatIdentityCapture
             {
-                Debug.WriteLine($"[WhatsAppService] Failed to persist chat identity state immediately ({reason}): {ex.Message}");
-            }
+                Catalog = catalog,
+                ContactNames = contactSnapshot,
+                PhoneNames = phoneSnapshot,
+                Aliases = aliasSnapshot
+            };
         }
+
+        Task IPersistChatIdentityStateHost.PersistChatCatalogAsync(ChatCatalogSnapshot catalog) =>
+            PersistChatCatalogAsync(catalog);
+
+        Task IPersistChatIdentityStateHost.SaveContactNamesAsync(
+            IReadOnlyDictionary<string, string> names,
+            IReadOnlyList<string> chatJids) =>
+            _messageStore.SaveContactNamesAsync(
+                names as Dictionary<string, string> ?? new Dictionary<string, string>(names),
+                chatJids);
+
+        Task IPersistChatIdentityStateHost.SavePhoneContactNamesAsync(
+            IReadOnlyDictionary<string, string> names,
+            IReadOnlyList<string> chatJids) =>
+            _messageStore.SavePhoneContactNamesAsync(
+                names as Dictionary<string, string> ?? new Dictionary<string, string>(names),
+                chatJids);
+
+        Task IPersistChatIdentityStateHost.SaveJidAliasesAsync(
+            IReadOnlyDictionary<string, string> aliases,
+            IReadOnlyList<string> chatJids) =>
+            _messageStore.SaveJidAliasesAsync(
+                aliases as Dictionary<string, string> ?? new Dictionary<string, string>(aliases),
+                chatJids);
+
+        void IPersistChatIdentityStateHost.LogPersistChatIdentity(string message) =>
+            Debug.WriteLine("[WhatsAppService] " + message);
 
         public string ResolveDisplayName(string jid, string context = null) =>
             _displayNames.Resolve(jid, context);
