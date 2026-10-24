@@ -668,7 +668,9 @@ namespace Unison.Uwp.Services.WhatsApp
         /// Binds one monitored socket into <see cref="IConnectionHealthMonitorHost"/> for
         /// <see cref="ConnectionHealthMonitor"/>.
         /// </summary>
-        private sealed class ConnectionHealthMonitorHost : IConnectionHealthMonitorHost
+        private sealed class ConnectionHealthMonitorHost :
+            IConnectionHealthMonitorHost,
+            IForceDisconnectMonitoredSocketHost
         {
             private readonly WhatsAppService _owner;
             private readonly IWhatsAppSocket _socket;
@@ -724,13 +726,14 @@ namespace Unison.Uwp.Services.WhatsApp
 
             public int PendingQueryCount => _socket.PendingQueryCount;
 
-            public void ForceDisconnectMonitoredSocket()
-            {
-                if (!ReferenceEquals(_owner._socket, _socket))
-                {
-                    return;
-                }
+            public void ForceDisconnectMonitoredSocket() =>
+                ForceDisconnectMonitoredSocketDispatch.Run(this);
 
+            bool IForceDisconnectMonitoredSocketHost.IsMonitoredSocketCurrent =>
+                ReferenceEquals(_owner._socket, _socket);
+
+            void IForceDisconnectMonitoredSocketHost.DisconnectMonitoredSocketBestEffort()
+            {
                 try
                 {
                     _socket.Disconnect();
@@ -738,7 +741,10 @@ namespace Unison.Uwp.Services.WhatsApp
                 catch
                 {
                 }
+            }
 
+            void IForceDisconnectMonitoredSocketHost.ClearCurrentSocketReferenceIfStillMonitored()
+            {
                 if (ReferenceEquals(_owner._socket, _socket))
                 {
                     _owner._socket = null;

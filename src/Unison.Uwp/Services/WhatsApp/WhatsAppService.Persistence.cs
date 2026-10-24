@@ -41,62 +41,81 @@ namespace Unison.Uwp.Services.WhatsApp
     public partial class WhatsAppService : IChatCatalogPersistence, IChatIdentityPersistence, IChatCatalogFullPersistHost, ILoadPersistedChatCatalogHost
     {
 
-        private void LoadHistoryFreshnessRepairState()
-        {
-            try
-            {
-                var settings = LocalSettingsAccess.Current;
-                string rawText = settings.Get<string>(LocalSettingsConstants.LastFullHistoryRepairCompletedUtc);
-                if (!string.IsNullOrEmpty(rawText) &&
-                    DateTime.TryParse(rawText, null, System.Globalization.DateTimeStyles.RoundtripKind, out var parsed))
-                {
-                    _lastFullHistoryRepairCompletedUtc = parsed.Kind == DateTimeKind.Utc ? parsed : parsed.ToUniversalTime();
-                    Debug.WriteLine($"[WhatsAppService] Loaded full-history repair completed timestamp: {_lastFullHistoryRepairCompletedUtc:O}");
-                }
+        private void LoadHistoryFreshnessRepairState() =>
+            LoadHistoryFreshnessRepairStateDispatch.Run(this);
 
-                string reconnectRawText = settings.Get<string>(LocalSettingsConstants.LastFreshnessReconnectFallbackUtc);
-                if (!string.IsNullOrEmpty(reconnectRawText) &&
-                    DateTime.TryParse(reconnectRawText, null, System.Globalization.DateTimeStyles.RoundtripKind, out var reconnectParsed))
-                {
-                    _lastFreshnessReconnectFallbackUtc = reconnectParsed.Kind == DateTimeKind.Utc ? reconnectParsed : reconnectParsed.ToUniversalTime();
-                    Debug.WriteLine($"[WhatsAppService] Loaded freshness reconnect fallback timestamp: {_lastFreshnessReconnectFallbackUtc:O}");
-                }
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"[WhatsAppService] Failed to load history freshness repair state: {ex.Message}");
-            }
-        }
+        // --- ILoadHistoryFreshnessRepairStateHost ----------------------------
 
-        private void PersistFullHistoryRepairCompletedUtc(DateTime timestampUtc)
-        {
+        string ILoadHistoryFreshnessRepairStateHost.ReadLastFullHistoryRepairCompletedUtcRaw() =>
+            LocalSettingsAccess.Current.Get<string>(
+                LocalSettingsConstants.LastFullHistoryRepairCompletedUtc);
+
+        string ILoadHistoryFreshnessRepairStateHost.ReadLastFreshnessReconnectFallbackUtcRaw() =>
+            LocalSettingsAccess.Current.Get<string>(
+                LocalSettingsConstants.LastFreshnessReconnectFallbackUtc);
+
+        void ILoadHistoryFreshnessRepairStateHost.SetLastFullHistoryRepairCompletedUtc(
+            DateTime timestampUtc) =>
             _lastFullHistoryRepairCompletedUtc = timestampUtc;
-            try
-            {
-                LocalSettingsAccess.Current.Set(
-                    LocalSettingsConstants.LastFullHistoryRepairCompletedUtc,
-                    timestampUtc.ToString("O"));
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"[WhatsAppService] Failed to persist full-history repair completed timestamp: {ex.Message}");
-            }
-        }
 
-        private void PersistFreshnessReconnectFallbackUtc(DateTime timestampUtc)
-        {
+        void ILoadHistoryFreshnessRepairStateHost.SetLastFreshnessReconnectFallbackUtc(
+            DateTime timestampUtc) =>
             _lastFreshnessReconnectFallbackUtc = timestampUtc;
-            try
-            {
-                LocalSettingsAccess.Current.Set(
-                    LocalSettingsConstants.LastFreshnessReconnectFallbackUtc,
-                    timestampUtc.ToString("O"));
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"[WhatsAppService] Failed to persist freshness reconnect fallback timestamp: {ex.Message}");
-            }
-        }
+
+        void ILoadHistoryFreshnessRepairStateHost.LogLoadedFullHistoryRepairCompleted(
+            DateTime timestampUtc) =>
+            Debug.WriteLine(
+                $"[WhatsAppService] Loaded full-history repair completed timestamp: {timestampUtc:O}");
+
+        void ILoadHistoryFreshnessRepairStateHost.LogLoadedFreshnessReconnectFallback(
+            DateTime timestampUtc) =>
+            Debug.WriteLine(
+                $"[WhatsAppService] Loaded freshness reconnect fallback timestamp: {timestampUtc:O}");
+
+        void ILoadHistoryFreshnessRepairStateHost.LogLoadHistoryFreshnessRepairStateFailed(
+            string message) =>
+            Debug.WriteLine(
+                $"[WhatsAppService] Failed to load history freshness repair state: {message}");
+
+        private void PersistFullHistoryRepairCompletedUtc(DateTime timestampUtc) =>
+            PersistFullHistoryRepairCompletedUtcDispatch.Run(this, timestampUtc);
+
+        // --- IPersistFullHistoryRepairCompletedUtcHost -----------------------
+
+        void IPersistFullHistoryRepairCompletedUtcHost.SetLastFullHistoryRepairCompletedUtc(
+            DateTime timestampUtc) =>
+            _lastFullHistoryRepairCompletedUtc = timestampUtc;
+
+        void IPersistFullHistoryRepairCompletedUtcHost.WriteLastFullHistoryRepairCompletedUtc(
+            string roundtripText) =>
+            LocalSettingsAccess.Current.Set(
+                LocalSettingsConstants.LastFullHistoryRepairCompletedUtc,
+                roundtripText);
+
+        void IPersistFullHistoryRepairCompletedUtcHost.LogPersistFullHistoryRepairCompletedFailed(
+            string message) =>
+            Debug.WriteLine(
+                $"[WhatsAppService] Failed to persist full-history repair completed timestamp: {message}");
+
+        private void PersistFreshnessReconnectFallbackUtc(DateTime timestampUtc) =>
+            PersistFreshnessReconnectFallbackUtcDispatch.Run(this, timestampUtc);
+
+        // --- IPersistFreshnessReconnectFallbackUtcHost -----------------------
+
+        void IPersistFreshnessReconnectFallbackUtcHost.SetLastFreshnessReconnectFallbackUtc(
+            DateTime timestampUtc) =>
+            _lastFreshnessReconnectFallbackUtc = timestampUtc;
+
+        void IPersistFreshnessReconnectFallbackUtcHost.WriteLastFreshnessReconnectFallbackUtc(
+            string roundtripText) =>
+            LocalSettingsAccess.Current.Set(
+                LocalSettingsConstants.LastFreshnessReconnectFallbackUtc,
+                roundtripText);
+
+        void IPersistFreshnessReconnectFallbackUtcHost.LogPersistFreshnessReconnectFallbackFailed(
+            string message) =>
+            Debug.WriteLine(
+                $"[WhatsAppService] Failed to persist freshness reconnect fallback timestamp: {message}");
 
         internal void EnableScheduledPersist(string reason) =>
             ChatCatalogPersistDispatch.EnableAfterStartup(this, reason);

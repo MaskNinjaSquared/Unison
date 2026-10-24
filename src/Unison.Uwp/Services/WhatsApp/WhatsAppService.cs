@@ -45,7 +45,7 @@ using Unison.WhatsAppClient.Helpers;
 
 namespace Unison.Uwp.Services.WhatsApp
 {
-    public partial class WhatsAppService : INotifyPropertyChanged, IWhatsAppService, IConnectionEventSource, IConnectionSessionHost, IOfflineReplayHost, IOfflineReplayReleaseHost, IOfflineReplayFlushHost, IIncomingPumpDrainHost, IChatCatalogPersistHost, IChatCatalogFullPersistHost, ILoadPersistedChatCatalogHost, IForgetChatStorageHost, IConnectionUpdateHost, ISocketErrorHost, IHistorySyncWireHost, ISessionInitializedHost, IQrCodeWireHost, IAuthStateWireHost, IInboundWireNodeHost, IDecryptedMessageWireHost, ISocketFacadeWireHost, IPostReplayMaintenanceHost, IPostMessageEnrichmentHost, IPlaceholderResendSocket, IHistoryOnDemandSocket, IRuntimeSnapshotSource, IBackgroundResolutionGate, IAppStateLocalHost, IConversationResyncHost, IHistorySyncHost, IHistoryCatchUpHost, IConnectionEnsureHost, IConnectionResumeHost, IConnectionPairingStage2Host, IConnectionBrokerTransferHost, IConnectionSoftReconnectHost, IConnectionLifecycleHost, IConnectionConnectGateSource, IConnectionConnectPrepareHost, IConnectionConnectOpenHost, ISocketAliasRegistrar, IStartupUiHost, IJidAliasPersistence, IIncomingMessageEnqueueHost, IResolvedNameApplyHost, IHistoryHydrationBackfillHost, ISqliteHistoryQuietFinalizeHost, IHistoryPostOfflineFreshnessHost, IDeferredStartupMaintenanceHost, IHistoryCatchUpFinishHost, IUserResyncFullHistoryHost, IFreshnessReconnectFallbackHost, ICatchUpContinueReconnectHost, IFirstSyncListReleaseHost, IFullHistoryCatchUpProgressHost, IHistorySqliteChunkAppliedHost, IAcceptedHistoryRequestTimeoutHost, IAutoReconnectLoopHost, IConversationResyncWaitHost, IFullHistoryOnDemandClearHost, IInitializeConnectionStateHost, IHistorySqliteChunkStartedHost, IFullHistoryCatchUpWatchdogHost, IPeriodicFullHistorySafetyHost, IReconnectHistoryCatchUpHost, IHydrationFallbackPipelineHost, IHydrationDayRetryHost, IScheduleAutoReconnectHost, IReleaseEnrichmentAfterHeavyHistoryHost, IClearSessionHost, IRaiseSessionClearedHost, IRequestFullHistoryOnDemandTrackedHost, IBrokerReconnectConsumeHost, IPostMessageEnrichmentScheduleHost, IForceHistoryRepairConsumeHost, IForceHistoryRepairPendingHost, IPublishInitialSyncProgressHost, IPublishConnectionUpdateHost, IPersistChatIdentityStateHost, IHandleDecryptedMessageHost, IEndHistoryCatchUpBannerHost, IBeginHistoryCatchUpBannerHost, IResetFirstSyncListHoldFlagsHost, ICompleteUserResyncHistoryWaitHost, IScheduleOfflineReplayFlushTimerHost, ITearDownSocketForSoftReconnectHost, INoteHydrationDayAttemptHost, IUnloadMessageCacheIfInactiveHost, IOnActiveChatChangedHost, IMarkPairingRestartPendingHost, IDropCurrentSocketForFastResumeHost, IPersistAuthStateHost, IWaitForSessionEstablishedHost, IStopPeriodicFullHistorySafetyHost, IStartPeriodicFullHistorySafetyHost, IInvalidateCurrentSocketHost, IStopConnectionHealthMonitorHost, IStartConnectionHealthMonitorHost, ITryStartPairingStage2ReconnectHost, IIsCurrentSocketHealthyHost, IReleaseMemoryHost, IConnectAsyncHost, IResyncConversationsHost, ISyncSelfProfileFromAuthHost, ILoadPersistedUiStateHost, ITryRecordAliasMappingHost, IRegisterAliasMappingsHost, IPersistJidAliasesHost, IFlushPendingSocketAliasesHost, IPersistLiveMessagesHost, IPersistBackgroundDisplayNamesHost, INotifyServerLogoutHost, ISchedulePostReplayMaintenanceHost, IBuildHistoryHydrationCandidatesHost, IStartBackgroundHistoryBackfillHost, IEnsureSelfPhonePersistedHost
+    public partial class WhatsAppService : INotifyPropertyChanged, IWhatsAppService, IConnectionEventSource, IConnectionSessionHost, IOfflineReplayHost, IOfflineReplayReleaseHost, IOfflineReplayFlushHost, IIncomingPumpDrainHost, IChatCatalogPersistHost, IChatCatalogFullPersistHost, ILoadPersistedChatCatalogHost, IForgetChatStorageHost, IConnectionUpdateHost, ISocketErrorHost, IHistorySyncWireHost, ISessionInitializedHost, IQrCodeWireHost, IAuthStateWireHost, IInboundWireNodeHost, IDecryptedMessageWireHost, ISocketFacadeWireHost, IPostReplayMaintenanceHost, IPostMessageEnrichmentHost, IPlaceholderResendSocket, IHistoryOnDemandSocket, IRuntimeSnapshotSource, IBackgroundResolutionGate, IAppStateLocalHost, IConversationResyncHost, IHistorySyncHost, IHistoryCatchUpHost, IConnectionEnsureHost, IConnectionResumeHost, IConnectionPairingStage2Host, IConnectionBrokerTransferHost, IConnectionSoftReconnectHost, IConnectionLifecycleHost, IConnectionConnectGateSource, IConnectionConnectPrepareHost, IConnectionConnectOpenHost, ISocketAliasRegistrar, IStartupUiHost, IJidAliasPersistence, IIncomingMessageEnqueueHost, IResolvedNameApplyHost, IHistoryHydrationBackfillHost, ISqliteHistoryQuietFinalizeHost, IHistoryPostOfflineFreshnessHost, IDeferredStartupMaintenanceHost, IHistoryCatchUpFinishHost, IUserResyncFullHistoryHost, IFreshnessReconnectFallbackHost, ICatchUpContinueReconnectHost, IFirstSyncListReleaseHost, IFullHistoryCatchUpProgressHost, IHistorySqliteChunkAppliedHost, IAcceptedHistoryRequestTimeoutHost, IAutoReconnectLoopHost, IConversationResyncWaitHost, IFullHistoryOnDemandClearHost, IInitializeConnectionStateHost, IHistorySqliteChunkStartedHost, IFullHistoryCatchUpWatchdogHost, IPeriodicFullHistorySafetyHost, IReconnectHistoryCatchUpHost, IHydrationFallbackPipelineHost, IHydrationDayRetryHost, IScheduleAutoReconnectHost, IReleaseEnrichmentAfterHeavyHistoryHost, IClearSessionHost, IRaiseSessionClearedHost, IRequestFullHistoryOnDemandTrackedHost, IBrokerReconnectConsumeHost, IPostMessageEnrichmentScheduleHost, IForceHistoryRepairConsumeHost, IForceHistoryRepairPendingHost, IPublishInitialSyncProgressHost, IPublishConnectionUpdateHost, IPersistChatIdentityStateHost, IHandleDecryptedMessageHost, IEndHistoryCatchUpBannerHost, IBeginHistoryCatchUpBannerHost, IResetFirstSyncListHoldFlagsHost, ICompleteUserResyncHistoryWaitHost, IScheduleOfflineReplayFlushTimerHost, ITearDownSocketForSoftReconnectHost, INoteHydrationDayAttemptHost, IUnloadMessageCacheIfInactiveHost, IOnActiveChatChangedHost, IMarkPairingRestartPendingHost, IDropCurrentSocketForFastResumeHost, IPersistAuthStateHost, IWaitForSessionEstablishedHost, IStopPeriodicFullHistorySafetyHost, IStartPeriodicFullHistorySafetyHost, IInvalidateCurrentSocketHost, IStopConnectionHealthMonitorHost, IStartConnectionHealthMonitorHost, ITryStartPairingStage2ReconnectHost, IIsCurrentSocketHealthyHost, IReleaseMemoryHost, IConnectAsyncHost, IResyncConversationsHost, ISyncSelfProfileFromAuthHost, ILoadPersistedUiStateHost, ITryRecordAliasMappingHost, IRegisterAliasMappingsHost, IPersistJidAliasesHost, IFlushPendingSocketAliasesHost, IPersistLiveMessagesHost, IPersistBackgroundDisplayNamesHost, INotifyServerLogoutHost, ISchedulePostReplayMaintenanceHost, IBuildHistoryHydrationCandidatesHost, IStartBackgroundHistoryBackfillHost, IEnsureSelfPhonePersistedHost, IPersistSelfAvatarUrlHost, ILoadHistoryFreshnessRepairStateHost, IPersistFullHistoryRepairCompletedUtcHost, IPersistFreshnessReconnectFallbackUtcHost, IFindPersistedChatMessageHost, IResolveSentMessageForRetryHost, IPeriodicFullHistorySafetyLoopHost, IWaitForHistoryHydrationSettleHost
     {
         public event PropertyChangedEventHandler PropertyChanged;
         protected void OnPropertyChanged([CallerMemberName] string propertyName = null)
@@ -1134,40 +1134,26 @@ namespace Unison.Uwp.Services.WhatsApp
         void IEnsureSelfPhonePersistedHost.PersistAuthStateForSelfPhone() =>
             _ = PersistAuthStateAsync(null, "self-phone");
 
-        private void PersistSelfAvatarUrl(string avatarUrl)
-        {
-            if (_authState?.Me == null)
-            {
-                return;
-            }
+        private void PersistSelfAvatarUrl(string avatarUrl) =>
+            PersistSelfAvatarUrlDispatch.Run(this, avatarUrl);
 
-            if (string.Equals(_authState.Me.AvatarUrl, avatarUrl, StringComparison.Ordinal))
-            {
-                return;
-            }
+        // --- IPersistSelfAvatarUrlHost ---------------------------------------
 
+        bool IPersistSelfAvatarUrlHost.HasSelfMe => _authState?.Me != null;
+
+        string IPersistSelfAvatarUrlHost.SelfMeAvatarUrl => _authState?.Me?.AvatarUrl;
+
+        void IPersistSelfAvatarUrlHost.SetSelfMeAvatarUrl(string avatarUrl) =>
             _authState.Me.AvatarUrl = avatarUrl;
-            var state = _authState;
-            var store = _authStore;
-            if (store == null || state == null)
-            {
-                return;
-            }
 
-            _ = PersistSelfAvatarUrlAsync(store, state);
-        }
+        bool IPersistSelfAvatarUrlHost.CanPersistAuth =>
+            _authStore != null && _authState != null;
 
-        private static async Task PersistSelfAvatarUrlAsync(AuthStore store, AuthState state)
-        {
-            try
-            {
-                await store.SaveAsync(state);
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"[WhatsAppService] Failed to persist self avatar URI: {ex.Message}");
-            }
-        }
+        Task IPersistSelfAvatarUrlHost.SaveAuthStateAsync() =>
+            _authStore.SaveAsync(_authState);
+
+        void IPersistSelfAvatarUrlHost.LogSelfAvatarPersistFailed(string message) =>
+            Debug.WriteLine($"[WhatsAppService] Failed to persist self avatar URI: {message}");
 
         /// <summary>
         /// Clears local chats/messages and asks WhatsApp for a fresh history sync.
@@ -2095,26 +2081,22 @@ namespace Unison.Uwp.Services.WhatsApp
             }
         }
 
-        private async Task<ChatMessage> FindPersistedChatMessageAsync(string chatJid, string messageId)
-        {
-            if (_historyMessages == null || string.IsNullOrWhiteSpace(chatJid) || string.IsNullOrWhiteSpace(messageId))
-            {
-                return null;
-            }
+        private Task<ChatMessage> FindPersistedChatMessageAsync(string chatJid, string messageId) =>
+            FindPersistedChatMessageDispatch.RunAsync(this, chatJid, messageId);
 
-            List<string> keys = new List<string>(ChatPinStoreKeys.For(chatJid, _jids));
-            for (int i = 0; i < keys.Count; i++)
-            {
-                HistoryMessage row = await _historyMessages.GetAsync(keys[i], messageId).ConfigureAwait(false);
-                ChatMessage mapped = HistoryMessageMapper.ToChatMessage(row);
-                if (mapped != null)
-                {
-                    return mapped;
-                }
-            }
+        // --- IFindPersistedChatMessageHost -----------------------------------
 
-            return null;
-        }
+        bool IFindPersistedChatMessageHost.HasHistoryMessageStore => _historyMessages != null;
+
+        IJidResolver IFindPersistedChatMessageHost.JidResolver => _jids;
+
+        async Task<object> IFindPersistedChatMessageHost.GetHistoryMessageRowAsync(
+            string storeKey,
+            string messageId) =>
+            await _historyMessages.GetAsync(storeKey, messageId).ConfigureAwait(false);
+
+        ChatMessage IFindPersistedChatMessageHost.MapHistoryRowToChatMessage(object row) =>
+            HistoryMessageMapper.ToChatMessage(row as HistoryMessage);
 
 
         Task<bool> IBackgroundResolutionGate.WaitForQuietAsync(
@@ -2825,29 +2807,26 @@ namespace Unison.Uwp.Services.WhatsApp
             Debug.WriteLine(
                 "[WhatsAppService] Periodic FULL_HISTORY safety stopped: " + (reason ?? string.Empty));
 
-        private async Task PeriodicFullHistorySafetyLoopAsync(CancellationToken token)
-        {
-            while (!token.IsCancellationRequested)
-            {
-                try
-                {
-                    await Task.Delay(HistoryPeriodicFullSafetyDecision.Interval, token).ConfigureAwait(false);
-                }
-                catch (OperationCanceledException)
-                {
-                    return;
-                }
+        private Task PeriodicFullHistorySafetyLoopAsync(CancellationToken token) =>
+            PeriodicFullHistorySafetyLoopDispatch.RunAsync(this, token);
 
-                try
-                {
-                    await TryPeriodicFullHistorySafetyAsync().ConfigureAwait(false);
-                }
-                catch (Exception ex)
-                {
-                    Debug.WriteLine("[WhatsAppService] Periodic FULL_HISTORY safety tick failed: " + ex.Message);
-                }
-            }
-        }
+        // --- IPeriodicFullHistorySafetyLoopHost ------------------------------
+
+        TimeSpan IPeriodicFullHistorySafetyLoopHost.PeriodicFullHistorySafetyInterval =>
+            HistoryPeriodicFullSafetyDecision.Interval;
+
+        Task IPeriodicFullHistorySafetyLoopHost.DelayAsync(
+            TimeSpan delay,
+            CancellationToken token) =>
+            Task.Delay(delay, token);
+
+        Task IPeriodicFullHistorySafetyLoopHost.RunPeriodicFullHistorySafetyTickAsync() =>
+            TryPeriodicFullHistorySafetyAsync();
+
+        void IPeriodicFullHistorySafetyLoopHost.LogPeriodicFullHistorySafetyTickFailed(
+            string message) =>
+            Debug.WriteLine(
+                "[WhatsAppService] Periodic FULL_HISTORY safety tick failed: " + message);
 
         /// <summary>
         /// Standby safety: if tips still look owed (or a force-repair latch is set) and no
@@ -3605,23 +3584,21 @@ namespace Unison.Uwp.Services.WhatsApp
             return MessagesByChat.TryGet(jid, out var list) && list != null ? list.Count : 0;
         }
 
-        private async Task WaitForHistoryHydrationSettleAsync()
-        {
-            var elapsed = Stopwatch.StartNew();
-            while (elapsed.Elapsed < HistoryHydrationSettleBudget && IsConnected)
-            {
-                if (_historyRequests.ChatsInFlight == 0)
-                {
-                    await Task.Delay(400).ConfigureAwait(false);
-                    if (_historyRequests.ChatsInFlight == 0)
-                    {
-                        return;
-                    }
-                }
+        private Task WaitForHistoryHydrationSettleAsync() =>
+            WaitForHistoryHydrationSettleDispatch.RunAsync(this);
 
-                await Task.Delay(500).ConfigureAwait(false);
-            }
-        }
+        // --- IWaitForHistoryHydrationSettleHost ------------------------------
+
+        TimeSpan IWaitForHistoryHydrationSettleHost.HydrationSettleBudget =>
+            HistoryHydrationSettleBudget;
+
+        bool IWaitForHistoryHydrationSettleHost.IsConnected => IsConnected;
+
+        int IWaitForHistoryHydrationSettleHost.HistoryChatsInFlight =>
+            _historyRequests.ChatsInFlight;
+
+        Task IWaitForHistoryHydrationSettleHost.DelayAsync(TimeSpan delay) =>
+            Task.Delay(delay);
 
         /// <summary>
         /// Builds the connection over the rewritten socket stack.
@@ -3664,33 +3641,35 @@ namespace Unison.Uwp.Services.WhatsApp
         /// asking to see again - so it declines instead, and the peer falls back to asking our
         /// phone. Answering with the wrong bytes is worse than not answering.
         /// </summary>
-        private async Task<global::Proto.Message> ResolveSentMessageForRetryAsync(string remoteJid, string messageId)
-        {
-            if (string.IsNullOrEmpty(remoteJid) || string.IsNullOrEmpty(messageId) || _messageStore == null)
-            {
-                return null;
-            }
+        private Task<global::Proto.Message> ResolveSentMessageForRetryAsync(
+            string remoteJid,
+            string messageId) =>
+            ResolveSentMessageForRetryDispatch.RunAsync(this, remoteJid, messageId);
 
-            try
-            {
-                var stored = await FindPersistedChatMessageAsync(NormalizeJid(remoteJid), messageId)
-                    .ConfigureAwait(false);
+        // --- IResolveSentMessageForRetryHost ---------------------------------
 
-                global::Proto.Message rebuilt = SentMessageRetryRebuild.TryCreate(stored);
-                if (rebuilt == null && stored != null && stored.IsFromMe && stored.Kind != ChatMessageKind.Text)
-                {
-                    Debug.WriteLine(
-                        "[WhatsAppService] Retry lookup declined " + messageId + ": " + stored.Kind + " cannot be rebuilt");
-                }
+        bool IResolveSentMessageForRetryHost.HasMessageStore => _messageStore != null;
 
-                return rebuilt;
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine("[WhatsAppService] Retry lookup failed for " + messageId + ": " + ex.Message);
-                return null;
-            }
-        }
+        string IResolveSentMessageForRetryHost.NormalizeJid(string remoteJid) =>
+            NormalizeJid(remoteJid);
+
+        Task<ChatMessage> IResolveSentMessageForRetryHost.FindPersistedChatMessageAsync(
+            string chatJid,
+            string messageId) =>
+            FindPersistedChatMessageAsync(chatJid, messageId);
+
+        void IResolveSentMessageForRetryHost.LogRetryLookupDeclined(
+            string messageId,
+            ChatMessageKind kind) =>
+            Debug.WriteLine(
+                "[WhatsAppService] Retry lookup declined " + messageId + ": " + kind +
+                " cannot be rebuilt");
+
+        void IResolveSentMessageForRetryHost.LogRetryLookupFailed(
+            string messageId,
+            string message) =>
+            Debug.WriteLine(
+                "[WhatsAppService] Retry lookup failed for " + messageId + ": " + message);
 
         /// <summary>
         /// Stops the reconnect loop before the close handler or a ping waiter can schedule
