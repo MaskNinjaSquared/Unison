@@ -45,7 +45,7 @@ using Unison.WhatsAppClient.Helpers;
 
 namespace Unison.Uwp.Services.WhatsApp
 {
-    public partial class WhatsAppService : INotifyPropertyChanged, IWhatsAppService, IConnectionEventSource, IConnectionSessionHost, IOfflineReplayHost, IOfflineReplayReleaseHost, IOfflineReplayFlushHost, IIncomingPumpDrainHost, IChatCatalogPersistHost, IChatCatalogFullPersistHost, ILoadPersistedChatCatalogHost, IForgetChatStorageHost, IConnectionUpdateHost, ISocketErrorHost, IHistorySyncWireHost, ISessionInitializedHost, IQrCodeWireHost, IAuthStateWireHost, IInboundWireNodeHost, IDecryptedMessageWireHost, ISocketFacadeWireHost, IPostReplayMaintenanceHost, IPostMessageEnrichmentHost, IPlaceholderResendSocket, IHistoryOnDemandSocket, IRuntimeSnapshotSource, IBackgroundResolutionGate, IAppStateLocalHost, IConversationResyncHost, IHistorySyncHost, IHistoryCatchUpHost, IConnectionEnsureHost, IConnectionResumeHost, IConnectionPairingStage2Host, IConnectionBrokerTransferHost, IConnectionSoftReconnectHost, IConnectionLifecycleHost, IConnectionConnectGateSource, IConnectionConnectPrepareHost, IConnectionConnectOpenHost, ISocketAliasRegistrar, IStartupUiHost, IJidAliasPersistence, IIncomingMessageEnqueueHost, IResolvedNameApplyHost, IHistoryHydrationBackfillHost, ISqliteHistoryQuietFinalizeHost, IHistoryPostOfflineFreshnessHost, IDeferredStartupMaintenanceHost, IHistoryCatchUpFinishHost, IUserResyncFullHistoryHost
+    public partial class WhatsAppService : INotifyPropertyChanged, IWhatsAppService, IConnectionEventSource, IConnectionSessionHost, IOfflineReplayHost, IOfflineReplayReleaseHost, IOfflineReplayFlushHost, IIncomingPumpDrainHost, IChatCatalogPersistHost, IChatCatalogFullPersistHost, ILoadPersistedChatCatalogHost, IForgetChatStorageHost, IConnectionUpdateHost, ISocketErrorHost, IHistorySyncWireHost, ISessionInitializedHost, IQrCodeWireHost, IAuthStateWireHost, IInboundWireNodeHost, IDecryptedMessageWireHost, ISocketFacadeWireHost, IPostReplayMaintenanceHost, IPostMessageEnrichmentHost, IPlaceholderResendSocket, IHistoryOnDemandSocket, IRuntimeSnapshotSource, IBackgroundResolutionGate, IAppStateLocalHost, IConversationResyncHost, IHistorySyncHost, IHistoryCatchUpHost, IConnectionEnsureHost, IConnectionResumeHost, IConnectionPairingStage2Host, IConnectionBrokerTransferHost, IConnectionSoftReconnectHost, IConnectionLifecycleHost, IConnectionConnectGateSource, IConnectionConnectPrepareHost, IConnectionConnectOpenHost, ISocketAliasRegistrar, IStartupUiHost, IJidAliasPersistence, IIncomingMessageEnqueueHost, IResolvedNameApplyHost, IHistoryHydrationBackfillHost, ISqliteHistoryQuietFinalizeHost, IHistoryPostOfflineFreshnessHost, IDeferredStartupMaintenanceHost, IHistoryCatchUpFinishHost, IUserResyncFullHistoryHost, IFreshnessReconnectFallbackHost
     {
         public event PropertyChangedEventHandler PropertyChanged;
         protected void OnPropertyChanged([CallerMemberName] string propertyName = null)
@@ -2575,126 +2575,72 @@ namespace Unison.Uwp.Services.WhatsApp
             });
         }
 
-        private void ScheduleFreshnessReconnectFallback(string triggerReason)
-        {
-            DateTime nowUtc = DateTime.UtcNow;
-            string staleReason;
-            bool tipsAreStale = TryGetHistoryFreshnessStaleReason(nowUtc, out staleReason);
-            FreshnessReconnectScheduleAction schedule =
-                FreshnessReconnectFallbackGates.DecideSchedule(
-                    _freshnessReconnectFallbackInProgress,
-                    _suppressReconnect,
-                    _authState != null && _authState.Registered,
-                    _lastFreshnessReconnectFallbackUtc,
-                    nowUtc,
-                    FreshnessReconnectFallbackCooldown,
-                    tipsAreStale);
+        private void ScheduleFreshnessReconnectFallback(string triggerReason) =>
+            FreshnessReconnectFallbackDispatch.Schedule(this, triggerReason);
 
-            switch (schedule)
+        // --- IFreshnessReconnectFallbackHost ---------------------------------
+
+        bool IFreshnessReconnectFallbackHost.FreshnessReconnectFallbackInProgress
+        {
+            get => _freshnessReconnectFallbackInProgress;
+            set => _freshnessReconnectFallbackInProgress = value;
+        }
+
+        bool IFreshnessReconnectFallbackHost.SuppressReconnect => _suppressReconnect;
+
+        bool IFreshnessReconnectFallbackHost.IsAuthRegistered =>
+            _authState != null && _authState.Registered;
+
+        DateTime IFreshnessReconnectFallbackHost.LastFreshnessReconnectFallbackUtc =>
+            _lastFreshnessReconnectFallbackUtc;
+
+        TimeSpan IFreshnessReconnectFallbackHost.FreshnessReconnectFallbackCooldown =>
+            FreshnessReconnectFallbackCooldown;
+
+        TimeSpan IFreshnessReconnectFallbackHost.FreshnessReconnectDelay =>
+            FreshnessReconnectFallbackGates.ReconnectDelay;
+
+        bool IFreshnessReconnectFallbackHost.TryGetFreshnessStaleReason(
+            DateTime nowUtc,
+            out string staleReason) =>
+            TryGetHistoryFreshnessStaleReason(nowUtc, out staleReason);
+
+        void IFreshnessReconnectFallbackHost.PersistFreshnessReconnectFallbackUtc(DateTime utc) =>
+            PersistFreshnessReconnectFallbackUtc(utc);
+
+        void IFreshnessReconnectFallbackHost.LogFreshnessFallback(string message) =>
+            Debug.WriteLine("[WhatsAppService] " + message);
+
+        void IFreshnessReconnectFallbackHost.StartHydrationFallbackPipeline(string reason) =>
+            _ = RunHydrationFallbackPipelineAsync(reason);
+
+        void IFreshnessReconnectFallbackHost.PublishFreshnessReconnectStatus(string status) =>
+            PublishConnectionUpdate(status);
+
+        void IFreshnessReconnectFallbackHost.StopConnectionHealthMonitor(string reason) =>
+            StopConnectionHealthMonitor(reason);
+
+        void IFreshnessReconnectFallbackHost.TearDownSocketForReconnect()
+        {
+            var staleSocket = _socket;
+            _socket = null;
+            if (staleSocket == null)
             {
-                case FreshnessReconnectScheduleAction.SkipInProgress:
-                    Debug.WriteLine(
-                        "[WhatsAppService] Freshness reconnect fallback skipped: already in progress, trigger=" +
-                        triggerReason);
-                    return;
-                case FreshnessReconnectScheduleAction.SkipSuppress:
-                    Debug.WriteLine(
-                        "[WhatsAppService] Freshness reconnect fallback skipped: reconnect suppressed, trigger=" +
-                        triggerReason);
-                    return;
-                case FreshnessReconnectScheduleAction.SkipNotRegistered:
-                    Debug.WriteLine(
-                        "[WhatsAppService] Freshness reconnect fallback skipped: auth is not registered, trigger=" +
-                        triggerReason);
-                    return;
-                case FreshnessReconnectScheduleAction.HydrateOnCooldown:
-                    Debug.WriteLine(
-                        "[WhatsAppService] Freshness reconnect fallback skipped: cooldown active, last=" +
-                        _lastFreshnessReconnectFallbackUtc.ToString("O") +
-                        ", cooldownMinutes=" +
-                        FreshnessReconnectFallbackCooldown.TotalMinutes.ToString("F0") +
-                        ", trigger=" + triggerReason);
-                    // High FULL/reconnect cooldown and nothing arrived — hydrate per-JID, then retry FULL.
-                    _ = RunHydrationFallbackPipelineAsync("freshness-cooldown:" + triggerReason);
-                    return;
-                case FreshnessReconnectScheduleAction.SkipFresh:
-                    Debug.WriteLine(
-                        "[WhatsAppService] Freshness reconnect fallback skipped: stored messages are fresh, trigger=" +
-                        triggerReason);
-                    return;
+                return;
             }
 
-            PersistFreshnessReconnectFallbackUtc(nowUtc);
-            _freshnessReconnectFallbackInProgress = true;
-            Debug.WriteLine(
-                "[WhatsAppService] Scheduling freshness reconnect fallback after full-history no-payload: staleReason=" +
-                staleReason + ", trigger=" + triggerReason);
-
-            _ = Task.Run(async () =>
-            {
-                try
-                {
-                    await Task.Delay(FreshnessReconnectFallbackGates.ReconnectDelay);
-
-                    string currentStaleReason;
-                    bool stillStale =
-                        TryGetHistoryFreshnessStaleReason(DateTime.UtcNow, out currentStaleReason);
-                    if (FreshnessReconnectFallbackGates.ShouldAbortAfterDelay(
-                            _suppressReconnect,
-                            _authState != null && _authState.Registered,
-                            stillStale))
-                    {
-                        if (_suppressReconnect)
-                        {
-                            Debug.WriteLine(
-                                "[WhatsAppService] Freshness reconnect fallback aborted: reconnect suppressed, trigger=" +
-                                triggerReason);
-                        }
-                        else if (_authState == null || !_authState.Registered)
-                        {
-                            Debug.WriteLine(
-                                "[WhatsAppService] Freshness reconnect fallback aborted: auth is not registered, trigger=" +
-                                triggerReason);
-                        }
-                        else
-                        {
-                            Debug.WriteLine(
-                                "[WhatsAppService] Freshness reconnect fallback aborted: messages became fresh before reconnect, trigger=" +
-                                triggerReason);
-                        }
-                        return;
-                    }
-
-                    Debug.WriteLine(
-                        "[WhatsAppService] Starting freshness reconnect fallback: staleReason=" +
-                        currentStaleReason + ", trigger=" + triggerReason);
-                    PublishConnectionUpdate("Reconnecting for latest messages...");
-                    StopConnectionHealthMonitor("freshness-reconnect");
-                    var staleSocket = _socket;
-                    _socket = null;
-                    if (staleSocket != null)
-                    {
-                        try { staleSocket.Disconnect(); } catch { }
-                        try { staleSocket.Dispose(); } catch { }
-                    }
-                    ScheduleAutoReconnect("freshness:" + triggerReason);
-                    Debug.WriteLine(
-                        "[WhatsAppService] Freshness reconnect fallback scheduled: trigger=" +
-                        triggerReason);
-                }
-                catch (Exception ex)
-                {
-                    Debug.WriteLine(
-                        "[WhatsAppService] Freshness reconnect fallback failed: trigger=" +
-                        triggerReason + ", error=" + ex.Message);
-                    OnError?.Invoke(this, ex);
-                }
-                finally
-                {
-                    _freshnessReconnectFallbackInProgress = false;
-                }
-            });
+            try { staleSocket.Disconnect(); } catch { }
+            try { staleSocket.Dispose(); } catch { }
         }
+
+        void IFreshnessReconnectFallbackHost.ScheduleAutoReconnect(string reason) =>
+            ScheduleAutoReconnect(reason);
+
+        void IFreshnessReconnectFallbackHost.RaiseFreshnessFallbackError(Exception error) =>
+            OnError?.Invoke(this, error);
+
+        void IFreshnessReconnectFallbackHost.FireAndForgetFreshnessReconnect(Func<Task> work) =>
+            _ = Task.Run(work);
 
         void IHistorySyncHost.NoteFullHistoryCatchUpProgress(string reason) =>
             NoteFullHistoryCatchUpProgress(reason);
