@@ -793,7 +793,13 @@ namespace Unison.Uwp.Services.WhatsApp
             _ = ReconnectForPairingAsync();
         }
 
-        private void ScheduleAutoReconnect(string reason)
+        private void ScheduleAutoReconnect(string reason) =>
+            ScheduleAutoReconnectDispatch.Schedule(this, reason);
+
+        // --- IScheduleAutoReconnectHost --------------------------------------
+
+        SoftReconnectScheduleAction IScheduleAutoReconnectHost.TryClaimAutoReconnectSlot(
+            out bool skippedForPairing)
         {
             lock (_reconnectStateLock)
             {
@@ -803,22 +809,30 @@ namespace Unison.Uwp.Services.WhatsApp
                         _fatalSessionEnded,
                         _isReconnecting,
                         _pairingRestartPending);
-                if (schedule == SoftReconnectScheduleAction.Skip)
+                skippedForPairing = schedule == SoftReconnectScheduleAction.Skip &&
+                                    _pairingRestartPending;
+                if (schedule == SoftReconnectScheduleAction.StartLoop)
                 {
-                    if (_pairingRestartPending)
-                    {
-                        PairingTrace(
-                            "ScheduleAutoReconnect SKIPPED (pairingRestartPending) reason=" +
-                            (reason ?? string.Empty));
-                    }
-                    return;
+                    _isReconnecting = true;
                 }
 
-                _isReconnecting = true;
+                return schedule;
             }
+        }
 
-            Debug.WriteLine($"[WhatsAppService] Scheduling persistent reconnect: {reason}");
+        void IScheduleAutoReconnectHost.LogAutoReconnectScheduled(string reason) =>
+            Debug.WriteLine("[WhatsAppService] Scheduling persistent reconnect: " + reason);
+
+        void IScheduleAutoReconnectHost.WriteAutoReconnectScheduled(string reason) =>
             RuntimeDiagnosticsService.Instance.Write("connection", "reconnect-scheduled", reason);
+
+        void IScheduleAutoReconnectHost.TracePairingSkippedForPending(string reason) =>
+            PairingTrace(
+                "ScheduleAutoReconnect SKIPPED (pairingRestartPending) reason=" +
+                (reason ?? string.Empty));
+
+        void IScheduleAutoReconnectHost.TraceScheduleAutoReconnectReason(string reason)
+        {
             try
             {
                 if (SessionLogger.Instance.PairingTraceActive)
@@ -830,40 +844,34 @@ namespace Unison.Uwp.Services.WhatsApp
             catch
             {
             }
-
-            _ = Task.Run(async () =>
-            {
-                try
-                {
-                    await AutoReconnectLoopAsync(reason);
-                }
-                finally
-                {
-                    SoftReconnectPostLoopAction postLoop;
-                    lock (_reconnectStateLock)
-                    {
-                        _isReconnecting = false;
-                        postLoop = ConnectionSoftReconnectGates.DecidePostLoop(
-                            _suppressReconnect,
-                            _fatalSessionEnded,
-                            _pairingRestartPending,
-                            _authState != null,
-                            _authState != null && _authState.Registered,
-                            IsConnected);
-                    }
-
-                    if (postLoop == SoftReconnectPostLoopAction.Reschedule)
-                    {
-                        ScheduleAutoReconnect("post-loop-disconnected");
-                    }
-                    else if (postLoop == SoftReconnectPostLoopAction.PairingStage2Fallback)
-                    {
-                        // Generic loop exited / was racing — ensure stage-2 still runs.
-                        TryStartPairingStage2Reconnect("post-generic-loop-pairing-pending");
-                    }
-                }
-            });
         }
+
+        void IScheduleAutoReconnectHost.FireAndForgetAutoReconnect(Func<Task> work) =>
+            _ = Task.Run(work);
+
+        Task IScheduleAutoReconnectHost.RunAutoReconnectLoopAsync(string reason) =>
+            AutoReconnectLoopAsync(reason);
+
+        SoftReconnectPostLoopAction IScheduleAutoReconnectHost.CompleteAutoReconnectLoop()
+        {
+            lock (_reconnectStateLock)
+            {
+                _isReconnecting = false;
+                return ConnectionSoftReconnectGates.DecidePostLoop(
+                    _suppressReconnect,
+                    _fatalSessionEnded,
+                    _pairingRestartPending,
+                    _authState != null,
+                    _authState != null && _authState.Registered,
+                    IsConnected);
+            }
+        }
+
+        void IScheduleAutoReconnectHost.ScheduleAutoReconnect(string reason) =>
+            ScheduleAutoReconnect(reason);
+
+        void IScheduleAutoReconnectHost.TryStartPairingStage2Reconnect(string reason) =>
+            TryStartPairingStage2Reconnect(reason);
 
 
 
@@ -1060,36 +1068,56 @@ namespace Unison.Uwp.Services.WhatsApp
             }
         }
 
-        public async Task ClearSessionAsync()
-        {
-            Log("[WhatsAppService] Hardening session wipe...");
-            var keyStore = _socket?.KeyStore;
+        public Task ClearSessionAsync() => ClearSessionDispatch.RunAsync(this);
 
-            // Block “Unison desconectado” before tearing the socket down — otherwise the
-            // background broker sees close while AuthStore still says Registered+MeId.
+        // --- IClearSessionHost -----------------------------------------------
+
+        private IKeyStore _pendingClearSessionKeyStore;
+
+        void IClearSessionHost.LogClearSession(string message) =>
+            Log("[WhatsAppService] " + message);
+
+        void IClearSessionHost.CaptureKeyStoreBeforeDisconnect() =>
+            _pendingClearSessionKeyStore = _socket?.KeyStore;
+
+        void IClearSessionHost.SuppressReconnectToastForClear() =>
             SetSuppressReconnectToast(true);
+
+        void IClearSessionHost.ClearReconnectRequiredToast()
+        {
             string clearToastError;
             BackgroundToastPresenter.ClearReconnectRequired(out clearToastError);
+        }
 
+        async Task IClearSessionHost.ClearAuthStoreEarlyAsync()
+        {
             try
             {
                 await _authStore.ClearAsync().ConfigureAwait(false);
             }
             catch (Exception ex)
             {
-                Log($"[WhatsAppService] Warning: early AuthStore clear failed: {ex.Message}");
+                Log("[WhatsAppService] Warning: early AuthStore clear failed: " + ex.Message);
             }
+        }
 
-            _authState = null;
+        void IClearSessionHost.NullAuthState() => _authState = null;
 
-            // 1. Stop traffic quickly (sync) so UI can leave Connected without waiting on disk.
+        void IClearSessionHost.ArmFatalDisconnectFlagsForClear()
+        {
             _suppressReconnect = true;
             _fatalSessionEnded = true;
             _pairingRestartPending = false;
             _countPreSessionCloseAsFatal = false;
             Interlocked.Exchange(ref _preSessionCloseStreak, 0);
             _sessionEstablishedThisConnection = false;
-            StopConnectionHealthMonitor("clear-session");
+        }
+
+        void IClearSessionHost.StopConnectionHealthMonitor(string reason) =>
+            StopConnectionHealthMonitor(reason);
+
+        void IClearSessionHost.DisconnectAndDisposeSocket()
+        {
             if (_socket != null)
             {
                 var socket = _socket;
@@ -1097,74 +1125,87 @@ namespace Unison.Uwp.Services.WhatsApp
                 try { socket.Disconnect(); } catch { /* ignore */ }
                 try { socket.Dispose(); } catch { /* ignore */ }
             }
+        }
+
+        void IClearSessionHost.ResetSessionEstablishedSignal()
+        {
             _sessionEstablishedTcs.TrySetCanceled();
             _sessionEstablishedTcs = CreateSessionEstablishedTcs();
+        }
 
-            // Show Login surface immediately — do NOT start Connect/QR until keys are gone.
-            Log("[WhatsAppService] Switching UI to Login before auth wipe.");
-            await RaiseSessionClearedAsync(startPairing: false).ConfigureAwait(false);
-            await Task.Yield();
+        Task IClearSessionHost.RaiseSessionClearedAsync(bool startPairing) =>
+            RaiseSessionClearedAsync(startPairing);
 
-            // 2. Clear the FileKeyStore so reset is a true zero-state wipe.
+        async Task IClearSessionHost.YieldAsync() => await Task.Yield();
+
+        async Task IClearSessionHost.ClearFileKeyStoreAsync()
+        {
             try
             {
-                keyStore = keyStore ?? new FileKeyStore();
-                await keyStore.InitializeAsync();
-                await keyStore.ClearAllAsync();
+                IKeyStore keyStore = _pendingClearSessionKeyStore ?? new FileKeyStore();
+                _pendingClearSessionKeyStore = null;
+                await keyStore.InitializeAsync().ConfigureAwait(false);
+                await keyStore.ClearAllAsync().ConfigureAwait(false);
                 Log("[WhatsAppService] Cleared FileKeyStore / SignalKeys.");
             }
             catch (Exception ex)
             {
-                Log($"[WhatsAppService] Warning: failed to clear FileKeyStore / SignalKeys: {ex.Message}");
+                Log("[WhatsAppService] Warning: failed to clear FileKeyStore / SignalKeys: " +
+                    ex.Message);
             }
+        }
 
-            // 3. AuthStore already cleared above (before disconnect); keep idempotent clear.
-            await _authStore.ClearAsync();
+        Task IClearSessionHost.ClearAuthStoreIdempotentAsync() =>
+            _authStore.ClearAsync();
 
-            // 4. The auth state was already dropped before the socket came down. It is
-            // deliberately not nulled again here: switching the UI to Login above starts a
-            // pairing attempt, and that attempt builds a fresh state to show a QR with. A
-            // second null at this point lands in the middle of it and is what the connect
-            // then dereferences.
+        void IClearSessionHost.DropSharedKeyStoreAndResumeFlags()
+        {
             _sharedKeyStore = null;
             _persistedUiStateLoaded = false;
             Interlocked.Exchange(ref _forceFreshConnectOnResume, 0);
+        }
 
-            // 5. Drop Noise session material before pairing so Connect is a clean path.
+        async Task IClearSessionHost.ClearNoiseSessionAsync()
+        {
             try
             {
-                await NoiseSessionStore.ClearAsync();
+                await NoiseSessionStore.ClearAsync().ConfigureAwait(false);
             }
             catch (Exception ex)
             {
-                Log($"[WhatsAppService] Warning: failed to clear NoiseSessionStore: {ex.Message}");
+                Log("[WhatsAppService] Warning: failed to clear NoiseSessionStore: " +
+                    ex.Message);
             }
+        }
 
-            // Auth gone — restart pairing / QR now.
-            // Clear the fatal latch so ConnectAsync for QR is allowed.
+        void IClearSessionHost.AllowPairingAfterAuthWipe()
+        {
             _fatalSessionEnded = false;
             _suppressReconnect = false;
-            Log("[WhatsAppService] Auth wiped; starting pairing/QR.");
-            await RaiseSessionClearedAsync(startPairing: true).ConfigureAwait(false);
-            await Task.Yield();
+        }
 
-            // 6. Wipe messages, chats, and contact names from disk (epoch rotate — non-blocking for QR).
-            await _messageStore.WipeAllDataAsync();
-            // history_migration / history_chat_preview: HistoryFacade via NotifySessionCleared.
-            if (_groupRosterStore != null)
+        Task IClearSessionHost.WipeMessageStoreAsync() =>
+            _messageStore.WipeAllDataAsync();
+
+        async Task IClearSessionHost.ClearGroupRosterAsync()
+        {
+            if (_groupRosterStore == null)
             {
-                try
-                {
-                    await _groupRosterStore.ClearAllAsync().ConfigureAwait(false);
-                }
-                catch (Exception ex)
-                {
-                    Log("[WhatsAppService] Warning: group roster wipe failed: " + ex.Message);
-                }
+                return;
             }
 
-            // 7. Clear in-memory state
-            await _ui.RunAsync(() =>
+            try
+            {
+                await _groupRosterStore.ClearAllAsync().ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                Log("[WhatsAppService] Warning: group roster wipe failed: " + ex.Message);
+            }
+        }
+
+        Task IClearSessionHost.ClearInMemorySessionStateAsync() =>
+            _ui.RunAsync(() =>
             {
                 Chats.Clear();
                 MessagesByChat.Clear();
@@ -1174,32 +1215,37 @@ namespace Unison.Uwp.Services.WhatsApp
                 JidAlias.Clear();
             });
 
+        void IClearSessionHost.ClearNotifications()
+        {
             try
             {
                 NotificationService.Instance.ClearAll();
             }
             catch (Exception ex)
             {
-                Log($"[WhatsAppService] Warning: failed to clear notifications/tiles: {ex.Message}");
+                Log("[WhatsAppService] Warning: failed to clear notifications/tiles: " +
+                    ex.Message);
             }
-
-            Log("[WhatsAppService] Session wipe complete.");
         }
 
-        private async Task RaiseSessionClearedAsync(bool startPairing)
-        {
-            ResetFirstSyncListHoldFlags("session-cleared");
-            var args = new SessionClearedEventArgs(startPairing);
-            try
-            {
-                History?.NotifySessionCleared();
-            }
-            catch (Exception ex)
-            {
-                Log($"[WhatsAppService] NotifySessionCleared failed: {ex.Message}");
-            }
+        private Task RaiseSessionClearedAsync(bool startPairing) =>
+            RaiseSessionClearedDispatch.RunAsync(this, startPairing);
 
-            await _ui.RunAsync(() =>
+        // --- IRaiseSessionClearedHost ----------------------------------------
+
+        void IRaiseSessionClearedHost.ResetFirstSyncListHoldFlags(string reason) =>
+            ResetFirstSyncListHoldFlags(reason);
+
+        void IRaiseSessionClearedHost.NotifyHistorySessionCleared() =>
+            History?.NotifySessionCleared();
+
+        void IRaiseSessionClearedHost.LogSessionCleared(string message) =>
+            Log("[WhatsAppService] " + message);
+
+        Task IRaiseSessionClearedHost.RaiseOnSessionClearedOnUiAsync(bool startPairing)
+        {
+            var args = new SessionClearedEventArgs(startPairing);
+            return _ui.RunAsync(() =>
             {
                 try
                 {
@@ -1207,9 +1253,9 @@ namespace Unison.Uwp.Services.WhatsApp
                 }
                 catch (Exception ex)
                 {
-                    Log($"[WhatsAppService] OnSessionCleared handler failed: {ex.Message}");
+                    Log("[WhatsAppService] OnSessionCleared handler failed: " + ex.Message);
                 }
-            }).ConfigureAwait(false);
+            });
         }
 
         /// <summary>
