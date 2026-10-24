@@ -33,6 +33,7 @@ using Unison.Core.State;
 using Unison.Socket.UseCases.Contacts;
 using Unison.Uwp.Helpers;
 using Microsoft.Extensions.DependencyInjection;
+using Unison.WhatsAppClient.Abstractions;
 using Unison.WhatsAppClient.Helpers;
 
 namespace Unison.Uwp.Services.WhatsApp
@@ -104,65 +105,75 @@ namespace Unison.Uwp.Services.WhatsApp
         /// Loads compact chat metadata for the UI. Safe to run after the connection has
         /// already started; only one caller performs the disk read.
         /// </summary>
-        public async Task LoadPersistedUiStateAsync()
-        {
-            await InitializeConnectionStateAsync();
-            if (_persistedUiStateLoaded || _authState?.Registered != true)
-            {
-                return;
-            }
+        public Task LoadPersistedUiStateAsync() =>
+            LoadPersistedUiStateDispatch.RunAsync(this);
 
-            await _persistedUiLoadLock.WaitAsync();
+        // --- ILoadPersistedUiStateHost ---------------------------------------
+
+        Task ILoadPersistedUiStateHost.InitializeConnectionStateAsync() =>
+            InitializeConnectionStateAsync();
+
+        bool ILoadPersistedUiStateHost.PersistedUiStateLoaded => _persistedUiStateLoaded;
+
+        bool ILoadPersistedUiStateHost.IsAuthRegistered =>
+            _authState?.Registered == true;
+
+        Task ILoadPersistedUiStateHost.EnterPersistedUiLoadLockAsync() =>
+            _persistedUiLoadLock.WaitAsync();
+
+        void ILoadPersistedUiStateHost.ExitPersistedUiLoadLock() =>
+            _persistedUiLoadLock.Release();
+
+        Task ILoadPersistedUiStateHost.LoadPersistedChatsAsync() =>
+            LoadPersistedChatsAsync();
+
+        void ILoadPersistedUiStateHost.MarkPersistedUiStateLoaded() =>
+            _persistedUiStateLoaded = true;
+
+        void ILoadPersistedUiStateHost.WritePersistedUiLoadedJournal(int chatRowCount) =>
+            RuntimeDiagnosticsService.Instance.Write(
+                "startup",
+                "persisted-ui-loaded",
+                "chatRows=" + chatRowCount);
+
+        int ILoadPersistedUiStateHost.ChatRowCount => Chats.Count;
+
+        async Task ILoadPersistedUiStateHost.HydrateCachedAvatarsBestEffortAsync()
+        {
             try
             {
-                if (_persistedUiStateLoaded) return;
-                await LoadPersistedChatsAsync();
-                _persistedUiStateLoaded = true;
-                RuntimeDiagnosticsService.Instance.Write(
-                    "startup",
-                    "persisted-ui-loaded",
-                    "chatRows=" + Chats.Count);
-
-                // Local avatar files are free for the socket; bind them before history catch-up
-                // or enrichment so the list shows faces while tips/names settle.
-                try
-                {
-                    if (Contacts == null)
-                    {
-                        Debug.WriteLine(
-                            "[WhatsAppService] Avatar hydrate skipped (persisted-ui-loaded): contact facade missing");
-                    }
-                    else
-                    {
-                        await Contacts.HydrateCachedAvatarUrisAsync("persisted-ui-loaded")
-                            .ConfigureAwait(false);
-                    }
-                }
-                catch (Exception exHydrate)
+                if (Contacts == null)
                 {
                     Debug.WriteLine(
-                        "[WhatsAppService] Startup avatar hydrate failed: " + exHydrate.Message);
+                        "[WhatsAppService] Avatar hydrate skipped (persisted-ui-loaded): contact facade missing");
                 }
-
-                // Catalog came from history_chat_preview; fix Last Message from history_message
-                // when the preview row is stale (deferred maintenance may have run with empty Chats).
-                try
+                else
                 {
-                    if (ChatFacade != null)
-                    {
-                        await ChatFacade.ReconcileChatPreviewsFromSqliteAsync(null, "persisted-ui-loaded")
-                            .ConfigureAwait(false);
-                    }
-                }
-                catch (Exception exReconcile)
-                {
-                    Debug.WriteLine(
-                        "[WhatsAppService] Startup preview reconcile failed: " + exReconcile.Message);
+                    await Contacts.HydrateCachedAvatarUrisAsync("persisted-ui-loaded")
+                        .ConfigureAwait(false);
                 }
             }
-            finally
+            catch (Exception exHydrate)
             {
-                _persistedUiLoadLock.Release();
+                Debug.WriteLine(
+                    "[WhatsAppService] Startup avatar hydrate failed: " + exHydrate.Message);
+            }
+        }
+
+        async Task ILoadPersistedUiStateHost.ReconcileChatPreviewsBestEffortAsync()
+        {
+            try
+            {
+                if (ChatFacade != null)
+                {
+                    await ChatFacade.ReconcileChatPreviewsFromSqliteAsync(null, "persisted-ui-loaded")
+                        .ConfigureAwait(false);
+                }
+            }
+            catch (Exception exReconcile)
+            {
+                Debug.WriteLine(
+                    "[WhatsAppService] Startup preview reconcile failed: " + exReconcile.Message);
             }
         }
 

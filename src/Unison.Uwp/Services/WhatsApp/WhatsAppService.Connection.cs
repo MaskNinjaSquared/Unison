@@ -1735,95 +1735,85 @@ namespace Unison.Uwp.Services.WhatsApp
             }
         }
 
-        public async Task ConnectAsync()
+        public Task ConnectAsync() => ConnectAsyncDispatch.RunAsync(this);
+
+        // --- IConnectAsyncHost -----------------------------------------------
+
+        Task IConnectAsyncHost.EnterConnectLockAsync() => _connectLock.WaitAsync();
+
+        void IConnectAsyncHost.ExitConnectLock()
         {
-            // Serialize connection attempts. More than one lifecycle callback can fire
-            // during launch/resume on Windows 10 Mobile. The old implementation let each
-            // caller replace a socket that had just become healthy, producing connection
-            // storms and stale send/receive tasks.
-            await _connectLock.WaitAsync();
+            _isConnecting = false;
+            _connectLock.Release();
+        }
+
+        void IConnectAsyncHost.WriteConnectSkippedAlreadyHealthy() =>
+            RuntimeDiagnosticsService.Instance.Write(
+                "connection",
+                "connect-skipped",
+                "reason=already-healthy");
+
+        void IConnectAsyncHost.WriteConnectAbortedFatal() =>
+            RuntimeDiagnosticsService.Instance.Write(
+                "connection",
+                "connect-aborted",
+                "reason=fatal-session-ended");
+
+        void IConnectAsyncHost.WriteConnectForceFreshForQr() =>
+            RuntimeDiagnosticsService.Instance.Write(
+                "connection",
+                "connect-force-fresh-for-qr",
+                "reason=unregistered-reconnect");
+
+        void IConnectAsyncHost.TraceForceFreshPairingForQr()
+        {
             try
             {
-                // Early gates (healthy skip / fatal abort / QR force-fresh journal) live in
-                // ConnectionConnectGates — opening the transport stays below.
-                ConnectionConnectGate gate = ConnectionConnectGates.Decide(this);
-                if (gate == ConnectionConnectGate.SkipAlreadyHealthy)
-                {
-                    RuntimeDiagnosticsService.Instance.Write(
-                        "connection",
-                        "connect-skipped",
-                        "reason=already-healthy");
-                    return;
-                }
-
-                if (gate == ConnectionConnectGate.AbortFatalSession)
-                {
-                    RuntimeDiagnosticsService.Instance.Write(
-                        "connection",
-                        "connect-aborted",
-                        "reason=fatal-session-ended");
-                    return;
-                }
-
-                if (ConnectionConnectGates.ShouldJournalForceFreshForQr(this))
-                {
-                    RuntimeDiagnosticsService.Instance.Write(
-                        "connection",
-                        "connect-force-fresh-for-qr",
-                        "reason=unregistered-reconnect");
-                    try
-                    {
-                        SessionLogger.Instance.WriteAlways(
-                            "[Pairing] ConnectAsync forcing fresh socket for QR refresh");
-                    }
-                    catch
-                    {
-                    }
-                }
-
-                // Drop previous socket + load auth. Transport build stays below.
-                ConnectionConnectPrepareResult prepare =
-                    await ConnectionConnectPrepare.RunAsync(this).ConfigureAwait(false);
-                if (prepare == ConnectionConnectPrepareResult.AbortSessionWipeInFlight)
-                {
-                    RuntimeDiagnosticsService.Instance.Write(
-                        "connection",
-                        "connect-aborted",
-                        "reason=session-wipe-in-flight");
-                    return;
-                }
-
-                if (prepare == ConnectionConnectPrepareResult.AbortFatalAfterAuth)
-                {
-                    RuntimeDiagnosticsService.Instance.Write(
-                        "connection",
-                        "connect-aborted",
-                        "reason=fatal-session-ended-after-auth-load");
-                    return;
-                }
-
-                var auth = _authState;
-                Debug.WriteLine(
-                    "[WhatsAppService] ConnectAsync using AuthState (ObjID: " +
-                    auth.GetHashCode() +
-                    "), Registered: " +
-                    auth.Registered +
-                    ", Me: " +
-                    auth.Me?.Id);
-
-                bool reuseLoadedKeyState = ConnectionConnectPrepare.ShouldReuseLoadedKeyStore(
-                    _sharedKeyStore != null,
-                    auth.Sessions.Count,
-                    auth.PreKeys.Count);
-
-                await ConnectionConnectOpen.RunAsync(this, reuseLoadedKeyState).ConfigureAwait(false);
+                SessionLogger.Instance.WriteAlways(
+                    "[Pairing] ConnectAsync forcing fresh socket for QR refresh");
             }
-            finally
+            catch
             {
-                _isConnecting = false;
-                _connectLock.Release();
             }
         }
+
+        Task<ConnectionConnectPrepareResult> IConnectAsyncHost.PrepareConnectAsync() =>
+            ConnectionConnectPrepare.RunAsync(this);
+
+        void IConnectAsyncHost.WriteConnectPrepareAbort(ConnectionConnectPrepareResult result)
+        {
+            string reason = result == ConnectionConnectPrepareResult.AbortSessionWipeInFlight
+                ? "session-wipe-in-flight"
+                : "fatal-session-ended-after-auth-load";
+            RuntimeDiagnosticsService.Instance.Write(
+                "connection",
+                "connect-aborted",
+                "reason=" + reason);
+        }
+
+        void IConnectAsyncHost.LogConnectAuthState()
+        {
+            var auth = _authState;
+            Debug.WriteLine(
+                "[WhatsAppService] ConnectAsync using AuthState (ObjID: " +
+                auth.GetHashCode() +
+                "), Registered: " +
+                auth.Registered +
+                ", Me: " +
+                auth.Me?.Id);
+        }
+
+        bool IConnectAsyncHost.ComputeReuseLoadedKeyStore()
+        {
+            var auth = _authState;
+            return ConnectionConnectPrepare.ShouldReuseLoadedKeyStore(
+                _sharedKeyStore != null,
+                auth.Sessions.Count,
+                auth.PreKeys.Count);
+        }
+
+        Task IConnectAsyncHost.OpenConnectAsync(bool reuseLoadedKeyState) =>
+            ConnectionConnectOpen.RunAsync(this, reuseLoadedKeyState);
 
         public Task AutoReconnectAsync()
         {

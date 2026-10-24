@@ -302,43 +302,48 @@ namespace Unison.Uwp.Services.WhatsApp
         /// The bookkeeping half: validates the pair, files it both ways, and reports whether it
         /// told us anything we did not already know. No UI, no disk, no scans.
         /// </summary>
-        private bool TryRecordAliasMapping(string lidJid, string pnJid, string source)
-        {
-            string lid = NormalizeJid(lidJid);
-            string pn = NormalizeJid(pnJid);
-            if (!AliasPairPolicy.IsWellFormedPair(lid, pn, JidAlias))
-            {
-                return false;
-            }
+        private bool TryRecordAliasMapping(string lidJid, string pnJid, string source) =>
+            TryRecordAliasMappingDispatch.Run(this, lidJid, pnJid, source);
 
-            if (AliasPairPolicy.WouldPutAContactUnderOurIdentity(lid, pn, JidAlias))
-            {
-                Debug.WriteLine($"[WhatsAppService] Skipping suspicious alias from {source}: {lid} -> {pn}");
-                return false;
-            }
+        // --- ITryRecordAliasMappingHost --------------------------------------
 
-            bool changed = AliasPairFiling.FileBothWays(JidAlias, lid, pn);
-            if (!changed)
-            {
-                // Live traffic re-states the same pair on every message. Recognising that costs a
-                // dictionary lookup and saves everything below — including a Bridge Store(1).
-                return false;
-            }
+        string ITryRecordAliasMappingHost.NormalizeJid(string jid) => NormalizeJid(jid);
 
-            if (JidAlias.IsBulkImporting)
-            {
-                QueuePendingSocketAlias(lid, pn);
-            }
-            else
-            {
-                RegisterSocketAlias(lid, pn, source);
-            }
+        bool ITryRecordAliasMappingHost.IsWellFormedAliasPair(string lid, string pn) =>
+            AliasPairPolicy.IsWellFormedPair(lid, pn, JidAlias);
 
+        bool ITryRecordAliasMappingHost.WouldPutContactUnderOurIdentity(string lid, string pn) =>
+            AliasPairPolicy.WouldPutAContactUnderOurIdentity(lid, pn, JidAlias);
+
+        void ITryRecordAliasMappingHost.LogSuspiciousAliasSkipped(
+            string source,
+            string lid,
+            string pn) =>
+            Debug.WriteLine(
+                $"[WhatsAppService] Skipping suspicious alias from {source}: {lid} -> {pn}");
+
+        bool ITryRecordAliasMappingHost.FileAliasBothWays(string lid, string pn) =>
+            AliasPairFiling.FileBothWays(JidAlias, lid, pn);
+
+        bool ITryRecordAliasMappingHost.IsBulkImportingAliases =>
+            JidAlias.IsBulkImporting;
+
+        void ITryRecordAliasMappingHost.QueuePendingSocketAlias(string lid, string pn) =>
+            QueuePendingSocketAlias(lid, pn);
+
+        void ITryRecordAliasMappingHost.RegisterSocketAlias(
+            string lid,
+            string pn,
+            string source) =>
+            RegisterSocketAlias(lid, pn, source);
+
+        void ITryRecordAliasMappingHost.NotifyJidAliasResolved(
+            string pn,
+            string lid,
+            string source) =>
             RaiseReport(
                 () => Contacts?.NotifyJidAliasResolved(pn, lid, source),
                 nameof(IContactService.NotifyJidAliasResolved));
-            return true;
-        }
 
         Task IJidAliasPersistence.PersistAliasesAsync(string reason) => PersistJidAliasesAsync(reason);
 
