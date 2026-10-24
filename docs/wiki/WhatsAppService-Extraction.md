@@ -83,9 +83,9 @@ Two deviations from the original plan, both deliberate:
 `WhatsAppService.Instance` is gone from `ChatAvatarControl`. Note there are **two** compiled
 `ChatDetailView` code-behinds (`UI/Views` and `Shell/Unison/Views`); both were converted.
 
-**Verified:** `IWhatsAppService` appears in `src/Unison.Core` only as its own contract,
-`IConnectionService.AttachWhatsAppService` (stays until phase 4) and two doc comments. Zero hits
-under `src/Unison.Uwp/UI` and `src/Unison.Uwp/Shell`.
+**Verified:** `IWhatsAppService` appears in `src/Unison.Core` only as its own contract
+and doc comments. `ConnectionFacade` uses `IConnectionEventSource` /
+`IConnectionSessionHost`. Zero hits under `src/Unison.Uwp/UI` and `src/Unison.Uwp/Shell`.
 
 ---
 
@@ -183,7 +183,14 @@ lifecycle stay on the host (not this phase).
 
 ### Facades still depend on the client
 
-`ConnectionFacade` still takes `IWhatsAppService` where raw client connection events remain. **`ProfileFacade`, `ChatFacade`, `MessageFacade`, `ContactFacade`, `GroupFacade`, `HistoryFacade`, and `StatusFacade` no longer do** for event wiring — Profile uses `IConnectionService`; chats reach local pin/delete through `IAppStateLocalHost`; messages use hosts + lazy `IConnectionService` / other façades; history/contact/group inbound signals are `Notify*` methods the host calls. `ChatMessagesChanged` / `PresenceUpdated` / history sync / avatar cache / alias / group listing are raised via façade `Notify*` (no client events for those). Policy is already on the façades; **primitives** (fetch a chat avatar, send bytes, persist, canonical JID) still run inside the client for the others. Group send-permission refresh and roster restore are the exception: they run in Core, and nothing in them calls back into the client. The full-size group picture and member pictures are fetched by `GroupFacade`.
+`ConnectionFacade` takes `IConnectionEventSource` + `IConnectionSessionHost` (+ ensure /
+resume / broker / lifecycle hosts) — **not** `IWhatsAppService`. **`ProfileFacade`,
+`ChatFacade`, `MessageFacade`, `ContactFacade`, `GroupFacade`, `HistoryFacade`, and
+`StatusFacade` likewise** do not take the client for event wiring. Policy is already
+on the façades; **primitives** (fetch a chat avatar, send bytes, persist, canonical
+JID) still run inside the client for some hosts. Group send-permission refresh and
+roster restore run in Core. The full-size group picture and member pictures are
+fetched by `GroupFacade`.
 
 Helpers under `Contacts/` (`ContactNameResolver`, `ChatAvatarPolicy`, `GroupRosterPolicy`,
 `AddressBookOverlay`) no longer take the god client — they use `SyncStatusChannel`,

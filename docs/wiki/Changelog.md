@@ -2,6 +2,12 @@
 
 Newest first.
 
+## ConnectionFacade — drop IWhatsAppService
+
+`IConnectionEventSource` + `IConnectionSessionHost` (WhatsAppService). Facade
+hooks events in the ctor; `AttachWhatsAppService` left `IConnectionService`.
+Ensure / resume / lifecycle / session wipe no longer null-check a late attach.
+
 ## Extract — IncomingPumpDrainDispatch (Netstandard D)
 
 `IncomingPumpDrainDispatch` + `IIncomingPumpDrainHost`. Live-first drain loop,

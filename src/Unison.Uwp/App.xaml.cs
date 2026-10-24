@@ -544,6 +544,10 @@ namespace Unison.Uwp
                 sp => (WhatsAppService)sp.GetRequiredService<IWhatsAppService>());
             services.AddSingleton<IConnectionBrokerTransferHost>(
                 sp => (WhatsAppService)sp.GetRequiredService<IWhatsAppService>());
+            services.AddSingleton<IConnectionEventSource>(
+                sp => (WhatsAppService)sp.GetRequiredService<IWhatsAppService>());
+            services.AddSingleton<IConnectionSessionHost>(
+                sp => (WhatsAppService)sp.GetRequiredService<IWhatsAppService>());
             services.AddSingleton<IUsyncAliasHost>(sp => new UsyncAliasHost(
                 sp.GetRequiredService<UsyncAliasFiling>(),
                 sp.GetRequiredService<ISocketAliasRegistrar>()));
@@ -831,6 +835,8 @@ namespace Unison.Uwp
                 sp.GetRequiredService<IConnectionBrokerTransferHost>(),
                 sp.GetRequiredService<IConnectionSoftReconnectHost>(),
                 sp.GetRequiredService<IConnectionLifecycleHost>(),
+                sp.GetRequiredService<IConnectionEventSource>(),
+                sp.GetRequiredService<IConnectionSessionHost>(),
                 sp.GetRequiredService<IRuntimeDiagnostics>()));
             services.AddSingleton<IConnectionService>(sp => sp.GetRequiredService<ConnectionFacade>());
             services.AddSingleton<IConnectionSoftReconnect>(sp => sp.GetRequiredService<ConnectionFacade>());
@@ -874,7 +880,8 @@ namespace Unison.Uwp
             // already built by then.
             Services.GetRequiredService<AttachedUiDispatcher>().Attach(rootFrame?.Dispatcher);
             // Message/Chat/Contact façades resolve lazily via Func in WhatsAppService.Create.
-            Services.GetRequiredService<IConnectionService>().AttachWhatsAppService(whatsApp);
+            // ConnectionFacade hooks IConnectionEventSource in its ctor (same WhatsAppService).
+            Services.GetRequiredService<IConnectionService>();
             // The remaining facades subscribe to client events in their constructors, and they can
             // only hear what they were around for. Build them now rather than when a screen first asks.
             Services.GetRequiredService<IGroupService>();

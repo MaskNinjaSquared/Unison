@@ -85,11 +85,6 @@ namespace Unison.Core.Contracts.WhatsApp
         /// </summary>
         bool AutoUnlinkOnLogoutEnabled { get; }
 
-        /// <summary>
-        /// Wire the WhatsApp client after DI build (avoids ctor cycle with WhatsAppService).
-        /// </summary>
-        void AttachWhatsAppService(IWhatsAppService whatsApp);
-
         /// <summary>Map Baileys/stream codes to <see cref="DisconnectReason"/>.</summary>
         DisconnectReason ClassifyStreamError(string code);
 

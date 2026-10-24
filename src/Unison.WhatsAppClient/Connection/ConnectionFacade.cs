@@ -34,7 +34,8 @@ namespace Unison.WhatsAppClient.Connection
         private readonly IConnectionBrokerTransferHost _brokerTransferHost;
         private readonly IConnectionSoftReconnectHost _softReconnectHost;
         private readonly IConnectionLifecycleHost _lifecycleHost;
-        private IWhatsAppService _whatsApp;
+        private readonly IConnectionEventSource _events;
+        private readonly IConnectionSessionHost _session;
         private int _handlingRelink;
 
         public ConnectionFacade(
@@ -53,6 +54,8 @@ namespace Unison.WhatsAppClient.Connection
             IConnectionBrokerTransferHost brokerTransferHost,
             IConnectionSoftReconnectHost softReconnectHost,
             IConnectionLifecycleHost lifecycleHost,
+            IConnectionEventSource events,
+            IConnectionSessionHost session,
             IRuntimeDiagnostics diagnostics = null)
         {
             _localSettings = localSettings ?? throw new ArgumentNullException(nameof(localSettings));
@@ -72,7 +75,18 @@ namespace Unison.WhatsAppClient.Connection
             _softReconnectHost = softReconnectHost
                 ?? throw new ArgumentNullException(nameof(softReconnectHost));
             _lifecycleHost = lifecycleHost ?? throw new ArgumentNullException(nameof(lifecycleHost));
+            _events = events ?? throw new ArgumentNullException(nameof(events));
+            _session = session ?? throw new ArgumentNullException(nameof(session));
             _diagnostics = diagnostics;
+
+            _events.OnQRCodeReceived += Client_OnQrCodeReceived;
+            _events.OnQrExpired += Client_OnQrExpired;
+            _events.OnConnectionUpdate += Client_OnConnectionUpdate;
+            _events.OnSessionInitialized += Client_OnSessionInitialized;
+            _events.OnSessionCleared += Client_OnSessionCleared;
+            _events.OnError += Client_OnError;
+            _events.OnStreamError += Client_OnStreamError;
+            _events.OnInvalidSessionSuspected += Client_OnInvalidSessionSuspected;
         }
 
         public void RequestSoftReconnect(string reason) =>
@@ -92,116 +106,40 @@ namespace Unison.WhatsAppClient.Connection
         // Startup
         //
         // Forwarding, and deliberately so: the shell drives launch in a fixed order and needs one
-        // thing to drive it through. Until the socket moves here (phase 4) the client is still
-        // what answers, but the shell no longer has to know that.
-        //
-        // A missing client is treated as "not connected, not registered, nothing saved" rather
-        // than as an error. The facade is built before the client is attached, and a screen that
-        // asks in that window should fall through to pairing, not throw.
+        // thing to drive it through. Hosts answer; the shell never names the compatibility client.
         // ---------------------------------------------------------------------
 
-        public bool IsConnected
-        {
-            get
-            {
-                var whatsApp = _whatsApp;
-                return whatsApp != null && whatsApp.IsConnected;
-            }
-        }
+        public bool IsConnected => _ensureHost.IsConnected;
 
-        public Task InitializeConnectionStateAsync()
-        {
-            var whatsApp = _whatsApp;
-            return whatsApp == null ? Task.CompletedTask : whatsApp.InitializeConnectionStateAsync();
-        }
+        public Task InitializeConnectionStateAsync() =>
+            _session.InitializeConnectionStateAsync();
 
-        public Task<bool> IsRegisteredAsync()
-        {
-            var whatsApp = _whatsApp;
-            return whatsApp == null ? Task.FromResult(false) : whatsApp.IsRegisteredAsync();
-        }
+        public Task<bool> IsRegisteredAsync() =>
+            _ensureHost.IsRegisteredAsync();
 
-        public Task EnsureConnectedAsync(int timeoutMs = 35000, bool forceFreshTransport = false)
-        {
-            if (_whatsApp == null)
-            {
-                return Task.CompletedTask;
-            }
+        public Task EnsureConnectedAsync(int timeoutMs = 35000, bool forceFreshTransport = false) =>
+            _ensureHost.EnsureConnectedAsync(timeoutMs, forceFreshTransport);
 
-            // Policy is ConnectionEnsure on the client; this is the shell/App entry so callers
-            // never name IWhatsAppService for connect.
-            return _ensureHost.EnsureConnectedAsync(timeoutMs, forceFreshTransport);
-        }
+        public Task LoadPersistedUiStateAsync() =>
+            _startupUi.LoadPersistedUiStateAsync();
 
-        public Task LoadPersistedUiStateAsync()
-        {
-            return _startupUi == null ? Task.CompletedTask : _startupUi.LoadPersistedUiStateAsync();
-        }
+        public void StartDeferredStartupMaintenance() =>
+            _startupUi.StartDeferredStartupMaintenance();
 
-        public void StartDeferredStartupMaintenance()
-        {
-            _startupUi?.StartDeferredStartupMaintenance();
-        }
+        public Task ResumeAsync() =>
+            ConnectionResume.RunAsync(_resumeHost);
 
-        public Task ResumeAsync()
-        {
-            if (_whatsApp == null)
-            {
-                return Task.CompletedTask;
-            }
+        public Task ReleaseMemoryAsync() =>
+            _session.ReleaseMemoryAsync();
 
-            // Policy is ConnectionResume on the client; App/shell never name IWhatsAppService.
-            return ConnectionResume.RunAsync(_resumeHost);
-        }
+        public Task<bool> TransferActiveSocketToBrokerAsync(string reason) =>
+            ConnectionBrokerTransfer.RunAsync(_brokerTransferHost, reason);
 
-        public Task ReleaseMemoryAsync()
-        {
-            var whatsApp = _whatsApp;
-            return whatsApp == null ? Task.CompletedTask : whatsApp.ReleaseMemoryAsync();
-        }
+        public Task PrepareForSuspendAsync() =>
+            ConnectionLifecycle.PrepareForSuspendAsync(_lifecycleHost);
 
-        public Task<bool> TransferActiveSocketToBrokerAsync(string reason)
-        {
-            if (_whatsApp == null)
-            {
-                return Task.FromResult(false);
-            }
-
-            // Policy is ConnectionBrokerTransfer; answers true only when ownership moved.
-            return ConnectionBrokerTransfer.RunAsync(_brokerTransferHost, reason);
-        }
-
-        public Task PrepareForSuspendAsync()
-        {
-            if (_whatsApp == null)
-            {
-                return Task.CompletedTask;
-            }
-
-            return ConnectionLifecycle.PrepareForSuspendAsync(_lifecycleHost);
-        }
-
-        public Task ShutdownAsync(bool persist = true)
-        {
-            if (_whatsApp == null)
-            {
-                return Task.CompletedTask;
-            }
-
-            return ConnectionLifecycle.ShutdownAsync(_lifecycleHost, persist);
-        }
-
-        public void AttachWhatsAppService(IWhatsAppService whatsApp)
-        {
-            if (ReferenceEquals(_whatsApp, whatsApp))
-            {
-                return;
-            }
-
-            UnhookClient(_whatsApp);
-            _whatsApp = whatsApp;
-            HookClient(whatsApp);
-        }
+        public Task ShutdownAsync(bool persist = true) =>
+            ConnectionLifecycle.ShutdownAsync(_lifecycleHost, persist);
 
         private void NotifyStreamError(string code)
         {
@@ -252,19 +190,13 @@ namespace Unison.WhatsAppClient.Connection
 
         public async Task LogoutAsync(string reason = null)
         {
-            var whatsApp = _whatsApp;
-            if (whatsApp == null)
-            {
-                return;
-            }
-
             _diagnostics?.Write(
                 "connection",
                 "logout-requested",
                 "reason=" + (reason ?? "user-initiated"));
 
-            await whatsApp.NotifyServerLogoutAsync(reason).ConfigureAwait(false);
-            await whatsApp.ClearSessionAsync().ConfigureAwait(false);
+            await _session.NotifyServerLogoutAsync(reason).ConfigureAwait(false);
+            await _session.ClearSessionAsync().ConfigureAwait(false);
             if (_localContacts != null)
             {
                 try
@@ -357,7 +289,7 @@ namespace Unison.WhatsAppClient.Connection
             // 401 / device_removed is the opposite: the phone already removed this companion.
             if (args.ShouldStopReconnecting)
             {
-                _whatsApp?.SuppressReconnectFromPolicy(trigger + ":" + (code ?? ""));
+                _session.SuppressReconnectFromPolicy(trigger + ":" + (code ?? ""));
             }
 
             if (args.RequiresRelink)
@@ -403,10 +335,7 @@ namespace Unison.WhatsAppClient.Connection
             {
                 Debug.WriteLine("[ConnectionFacade] Auto-unlink executing reason=" + e.Reason + " code=" + e.Code);
 
-                if (_whatsApp != null)
-                {
-                    await _whatsApp.ClearSessionAsync().ConfigureAwait(false);
-                }
+                await _session.ClearSessionAsync().ConfigureAwait(false);
 
                 string title = _strings.Get("Toast_LoggedOutTitle", "Session unlinked");
                 string body = e.Reason == DisconnectReason.ConnectionReplaced
@@ -461,20 +390,10 @@ namespace Unison.WhatsAppClient.Connection
 
         public event EventHandler<Exception> Failed;
 
-        public string CurrentStatus
-        {
-            get
-            {
-                var whatsApp = _whatsApp;
-                return whatsApp == null ? null : whatsApp.CurrentConnectionStatus;
-            }
-        }
+        public string CurrentStatus => _events.CurrentConnectionStatus;
 
-        public Task StartPairingAsync()
-        {
-            var whatsApp = _whatsApp;
-            return whatsApp == null ? Task.CompletedTask : whatsApp.ConnectAsync();
-        }
+        public Task StartPairingAsync() =>
+            _ensureHost.ConnectAsync();
 
         public async Task<string> RequestPairingCodeAsync(string phoneNumber)
         {
@@ -517,45 +436,8 @@ namespace Unison.WhatsAppClient.Connection
             return _sessions.Current;
         }
 
-        public Task ClearLocalSessionAsync()
-        {
-            var whatsApp = _whatsApp;
-            return whatsApp == null ? Task.CompletedTask : whatsApp.ClearSessionAsync();
-        }
-
-        private void HookClient(IWhatsAppService whatsApp)
-        {
-            if (whatsApp == null)
-            {
-                return;
-            }
-
-            whatsApp.OnQRCodeReceived += Client_OnQrCodeReceived;
-            whatsApp.OnQrExpired += Client_OnQrExpired;
-            whatsApp.OnConnectionUpdate += Client_OnConnectionUpdate;
-            whatsApp.OnSessionInitialized += Client_OnSessionInitialized;
-            whatsApp.OnSessionCleared += Client_OnSessionCleared;
-            whatsApp.OnError += Client_OnError;
-            whatsApp.OnStreamError += Client_OnStreamError;
-            whatsApp.OnInvalidSessionSuspected += Client_OnInvalidSessionSuspected;
-        }
-
-        private void UnhookClient(IWhatsAppService whatsApp)
-        {
-            if (whatsApp == null)
-            {
-                return;
-            }
-
-            whatsApp.OnQRCodeReceived -= Client_OnQrCodeReceived;
-            whatsApp.OnQrExpired -= Client_OnQrExpired;
-            whatsApp.OnConnectionUpdate -= Client_OnConnectionUpdate;
-            whatsApp.OnSessionInitialized -= Client_OnSessionInitialized;
-            whatsApp.OnSessionCleared -= Client_OnSessionCleared;
-            whatsApp.OnError -= Client_OnError;
-            whatsApp.OnStreamError -= Client_OnStreamError;
-            whatsApp.OnInvalidSessionSuspected -= Client_OnInvalidSessionSuspected;
-        }
+        public Task ClearLocalSessionAsync() =>
+            _session.ClearSessionAsync();
 
         private void Client_OnStreamError(object sender, string code)
         {
