@@ -2,6 +2,13 @@
 
 Newest first.
 
+## Extraction 3.10 — HistoryHydrationBackfill owns lock / start
+
+Background ON_DEMAND hydration lock and active flag moved from
+`WhatsAppService` into `HistoryHydrationBackfill` (WhatsAppClient). The client
+only implements `IHistoryHydrationBackfillHost` (candidates, socket request,
+settle, diagnostics). Same ownership shape as `OfflineReplayFlush`.
+
 ## Mobile — large-group open: skip roster parse + no full name refresh + 5s settle
 
 After flags-only apply, open still lagged until the process died: (1)

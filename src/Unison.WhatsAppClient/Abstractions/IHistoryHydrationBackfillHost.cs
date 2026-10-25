@@ -2,7 +2,7 @@
 // IHistoryHydrationBackfillHost
 //
 // Side effects for HistoryHydrationBackfillDispatch (per-JID ON_DEMAND hydration).
-// Lock / CAS stay on the host around RunAsync.
+// Lock / active flag live on HistoryHydrationBackfill; this host is I/O only.
 // =============================================================================
 using System;
 using System.Collections.Generic;

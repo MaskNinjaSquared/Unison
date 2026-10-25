@@ -218,7 +218,8 @@ pairing abort / can-schedule / loop-error raise live on
 `ConnectionSoftReconnectGates`. On-demand healthy/probe/teardown is
 `ConnectionHealthPolicy.DecideOnDemand` (`OnDemandSocketHealthStep`).
 History hydration batch loop is `HistoryHydrationBackfillDispatch`
-(`IHistoryHydrationBackfillHost`; lock/CAS stay on host). Freshness reconnect
+(`IHistoryHydrationBackfillHost` I/O on the client; lock/active owned by
+`HistoryHydrationBackfill`). Freshness reconnect
 schedule/abort gates are `FreshnessReconnectFallbackGates`. SQLite quiet
 finalize body is `SqliteHistoryQuietFinalizeDispatch`
 (`ISqliteHistoryQuietFinalizeHost`; delay/generation CAS stay on host).
