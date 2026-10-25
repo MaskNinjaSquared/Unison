@@ -1,10 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using Unison.Background;
 using Unison.Core.Contracts;
 using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Models;
@@ -106,44 +104,7 @@ namespace Unison.Uwp.Services.WhatsApp
         }
 
         private Task PersistBackgroundDisplayNamesAsync() =>
-            PersistBackgroundDisplayNamesDispatch.RunAsync(this);
-
-        // --- IPersistBackgroundDisplayNamesHost ------------------------------
-
-        IReadOnlyDictionary<string, string> IPersistBackgroundDisplayNamesHost.BuildBackgroundDisplayNamesTable() =>
-            BackgroundDisplayNameTable.Build(
-                Chats.ToList(),
-                ContactNames.ToList(),
-                PhoneContactNamesByJid.ToList(),
-                JidAlias.ToList());
-
-        string IPersistBackgroundDisplayNamesHost.BackgroundSelfMeId =>
-            _authState?.Me?.Id;
-
-        string IPersistBackgroundDisplayNamesHost.BackgroundSelfMeLid =>
-            _authState?.Me?.Lid;
-
-        Task IPersistBackgroundDisplayNamesHost.SaveBackgroundDisplayNamesAsync(
-            IReadOnlyDictionary<string, string> displayNames,
-            string meId,
-            string meLid) =>
-            BackgroundDisplayNameStore.SaveAsync(
-                displayNames as Dictionary<string, string> ??
-                    new Dictionary<string, string>(displayNames),
-                meId,
-                meLid);
-
-        void IPersistBackgroundDisplayNamesHost.WriteBackgroundDisplayNamesPersisted(int count) =>
-            RuntimeDiagnosticsService.Instance.Write(
-                "socket-broker",
-                "display-name-snapshot-persisted",
-                "count=" + count);
-
-        void IPersistBackgroundDisplayNamesHost.RecordBackgroundDisplayNamesFailed(Exception error) =>
-            RuntimeDiagnosticsService.Instance.RecordException(
-                "socket-broker",
-                "display-name-snapshot-failed",
-                error);
+            _backgroundDisplayNames.PersistAsync();
 
         private void QueueOfflineReplayMessageForPersist(string jid, ChatMessage message)
         {

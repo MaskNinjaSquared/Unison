@@ -188,7 +188,8 @@ Full catalogue persist, preview-slice persist, and suspend-tail orchestration ar
 (`ILoadPersistedChatCatalogHost`). Debounce timer / `IChatCatalogPersistHost`
 stay on the client. Heavy-history enrichment release is
 `ReleaseEnrichmentAfterHeavyHistoryCoordinator`; self push-name / phone / avatar
-auth sync is `SelfProfileAuthSync`.
+auth sync is `SelfProfileAuthSync`. Broker toast-name snapshot is
+`BackgroundDisplayNamesPersistence` (save port stays on UWP).
 
 ### Facades still depend on the client
 

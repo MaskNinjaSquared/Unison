@@ -2,6 +2,12 @@
 
 Newest first.
 
+## Extraction 4 — BackgroundDisplayNamesPersistence owns broker name snapshot
+
+`IPersistBackgroundDisplayNamesHost` left `WhatsAppService`. New
+`BackgroundDisplayNamesPersistence` (WhatsAppClient) builds the table and
+journals; `BackgroundDisplayNameStore.SaveAsync` stays a UWP ctor port
+(InternalsVisibleTo Background). Same ownership shape as catalog disk.
 ## Extraction 4 — enrichment / self-profile / catalog disk owners
 
 `ReleaseEnrichmentAfterHeavyHistoryCoordinator` owns the awaiting-heavy-history
