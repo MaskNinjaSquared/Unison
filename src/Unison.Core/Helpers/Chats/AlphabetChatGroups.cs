@@ -123,7 +123,14 @@ namespace Unison.Core.Helpers
                 return "#";
             }
 
-            char c = char.ToUpper(name.Trim()[0], CultureInfo.CurrentCulture);
+            // Persisted / legacy "~pushname" must not land every unsaved 1:1 under "~".
+            string trimmed = DisplayNameResolution.StripContactIndicator(name.Trim());
+            if (string.IsNullOrWhiteSpace(trimmed))
+            {
+                return "#";
+            }
+
+            char c = char.ToUpper(trimmed[0], CultureInfo.CurrentCulture);
             if (c >= 'A' && c <= 'Z')
             {
                 return c.ToString();

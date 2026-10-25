@@ -42,8 +42,10 @@ namespace Unison.Core.Models
             get => _name;
             set
             {
-                if (_name == value) return;
-                _name = value;
+                // Titles / favourites / SemanticZoom never keep a leading "~" (strip-only mark).
+                string next = DisplayNameResolution.StripContactIndicator(value);
+                if (_name == next) return;
+                _name = next;
                 OnPropertyChanged();
                 OnPropertyChanged(nameof(Initial));
             }
@@ -346,6 +348,38 @@ namespace Unison.Core.Models
             OnPropertyChanged(nameof(MentionLookup));
         }
 
+        private string _avatarPictureId;
+        /// <summary>
+        /// Server picture id from the last successful IQ. Used to skip CDN download when
+        /// a later open-chat refresh returns the same id.
+        /// </summary>
+        public string AvatarPictureId
+        {
+            get => _avatarPictureId;
+            set
+            {
+                if (_avatarPictureId == value) return;
+                _avatarPictureId = value;
+                OnPropertyChanged();
+            }
+        }
+
+        private string _avatarRemoteUrl;
+        /// <summary>
+        /// Last remote preview URL when <see cref="AvatarPictureId"/> was missing. Fallback
+        /// equality key before downloading again.
+        /// </summary>
+        public string AvatarRemoteUrl
+        {
+            get => _avatarRemoteUrl;
+            set
+            {
+                if (_avatarRemoteUrl == value) return;
+                _avatarRemoteUrl = value;
+                OnPropertyChanged();
+            }
+        }
+
         private DateTime? _avatarFetchedAtUtc;
         public DateTime? AvatarFetchedAtUtc
         {
@@ -465,7 +499,8 @@ namespace Unison.Core.Models
 
                 case ChatKind.Direct:
                 default:
-                    return Name ?? string.Empty;
+                    // Never surface a leading "~" in titles / favourites / SemanticZoom keys.
+                    return DisplayNameResolution.StripContactIndicator(Name) ?? string.Empty;
             }
         }
 

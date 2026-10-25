@@ -12,7 +12,8 @@
 // could only win on a stamp of its own.
 //
 // Rows are edited in place, so the host runs this on the UI thread and removes
-// the reported rows from the list itself.
+// the reported rows from the list itself. FoldGroups takes groups planned
+// elsewhere, so the per-row canonical lookups need not share that thread.
 // =============================================================================
 using System;
 using System.Collections.Generic;
@@ -63,6 +64,29 @@ namespace Unison.Core.State
             foreach (var group in groups)
             {
                 FoldGroup(group, removed);
+            }
+
+            return new DuplicateChatFoldResult(removed);
+        }
+
+        /// <summary>
+        /// Folds groups the caller already resolved to one canonical address each, so the
+        /// canonical lookups can run off the UI thread and only the edits run on it.
+        /// </summary>
+        public DuplicateChatFoldResult FoldGroups(IEnumerable<IReadOnlyList<ChatItem>> groups)
+        {
+            var removed = new List<ChatItem>();
+            if (groups == null)
+            {
+                return new DuplicateChatFoldResult(removed);
+            }
+
+            foreach (IReadOnlyList<ChatItem> group in groups)
+            {
+                if (group != null && group.Count > 1)
+                {
+                    FoldGroup(group, removed);
+                }
             }
 
             return new DuplicateChatFoldResult(removed);

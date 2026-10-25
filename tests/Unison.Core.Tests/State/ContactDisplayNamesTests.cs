@@ -80,15 +80,24 @@ namespace Unison.Core.Tests.State
             _addressBook.Set(Ana, "5511988887777");
             _pushNames.Set(Ana, "aninha");
 
-            Assert.Equal("~aninha", Build().Resolve(Ana, "chat"));
+            Assert.Equal("aninha", Build().Resolve(Ana, "chat"));
         }
 
         [Fact]
-        public void A_push_name_is_marked_as_unsaved()
+        public void A_push_name_is_unmarked_on_chat_titles()
         {
             _pushNames.Set(Ana, "aninha");
 
-            Assert.Equal("~aninha", Build().Resolve(Ana, "chat"));
+            Assert.Equal("aninha", Build().Resolve(Ana, "chat"));
+        }
+
+        [Fact]
+        public void A_push_name_is_marked_only_on_the_list_strip()
+        {
+            _pushNames.Set(Ana, "aninha");
+
+            Assert.Equal("~aninha", Build().Resolve(Ana, "strip"));
+            Assert.Equal("aninha", Build().Resolve(Ana, "sender"));
         }
 
         [Fact]

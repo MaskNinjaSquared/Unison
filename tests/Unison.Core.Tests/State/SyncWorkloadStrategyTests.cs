@@ -150,6 +150,8 @@ namespace Unison.Core.Tests.State
             Assert.True(low.GroupMetadataBatchSize < high.GroupMetadataBatchSize);
             Assert.True(unsupported.GroupMetadataPauseMs > low.GroupMetadataPauseMs);
             Assert.True(low.GroupMetadataPauseMs > high.GroupMetadataPauseMs);
+            Assert.True(unsupported.GroupListingResumeSettleMs >= low.GroupListingResumeSettleMs);
+            Assert.True(low.GroupListingResumeSettleMs > high.GroupListingResumeSettleMs);
             Assert.True(unsupported.GroupRosterBatchSize < low.GroupRosterBatchSize);
             Assert.True(low.GroupRosterBatchSize < high.GroupRosterBatchSize);
             Assert.True(unsupported.GroupRosterNextBatchDelaySeconds > high.GroupRosterNextBatchDelaySeconds);

@@ -921,6 +921,14 @@ namespace Unison.Core.ViewModels
 
                 if (!applied)
                 {
+                    // Incremental Move failed (community-shaped row / missing visible). Mark
+                    // dirty or RefreshVisibleChats no-ops with reason=order-clean and the tip
+                    // stays buried under older chats.
+                    _visibleOrderDirty = true;
+                    TraceListLifecycle(
+                        "incremental-move-miss",
+                        BuildListSnapshot("action=" + args.Action),
+                        flush: true);
                     ScheduleRefreshVisibleChats();
                     return;
                 }

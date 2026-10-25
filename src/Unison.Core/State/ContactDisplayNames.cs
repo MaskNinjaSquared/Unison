@@ -122,7 +122,9 @@ namespace Unison.Core.State
                 WhatsAppName = _pushNames.FindBest(canonical, normalized),
                 CanonicalJid = canonical,
                 IsGroup = isGroup,
-                IsSenderContext = string.Equals(context, "sender", StringComparison.OrdinalIgnoreCase)
+                // Strip only: chat titles / favourites / bubbles must stay unmarked so
+                // SemanticZoom letter keys stay A–Z (not a "~" bucket).
+                WithContactIndicator = string.Equals(context, "strip", StringComparison.OrdinalIgnoreCase)
             });
         }
 

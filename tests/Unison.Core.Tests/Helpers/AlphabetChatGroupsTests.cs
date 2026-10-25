@@ -22,5 +22,12 @@ namespace Unison.Core.Tests.Helpers
             Assert.Equal(new[] { "A", "B", "Z", "#" }, groups.Select(g => g.Key).ToArray());
             Assert.Equal("Alice", groups[0][0].Name);
         }
+
+        [Fact]
+        public void Leading_contact_indicator_does_not_create_a_tilde_bucket()
+        {
+            Assert.Equal("A", AlphabetChatGroups.LetterKey("~aninha"));
+            Assert.Equal("B", AlphabetChatGroups.LetterKey("~~Bob"));
+        }
     }
 }

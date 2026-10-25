@@ -2,8 +2,8 @@
 // PeopleContactDisplayName
 //
 // Names written into the Windows People account. The "~" unsaved-contact marker
-// is useful inside Unison; in People it sorts every unsaved push name under "~".
-// Strip it only at the People boundary — in-app list/bubbles keep the marker.
+// is strip-only inside Unison; in People it would sort every unsaved push name
+// under "~". Strip it at the People boundary as a safety net.
 // =============================================================================
 using System;
 using Unison.Core.Helpers;

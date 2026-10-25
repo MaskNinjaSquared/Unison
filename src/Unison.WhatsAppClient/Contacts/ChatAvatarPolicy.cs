@@ -4,10 +4,11 @@
 // When a chat picture is worth fetching, and when asking again would only cost.
 //
 // The fetch itself lives in ChatAvatarFetch; what lives here is the
-// deciding. Two callers ask - the background batch and a row scrolling into
-// view - and both consult the same in-flight and already-attempted sets, which
-// is why they are one class: a row that arrives while the batch is fetching it
-// must see that, or the same picture is downloaded twice.
+// deciding. Callers ask from the background batch, a Desktop row scrolling
+// into view, or a Mobile chat open - and all consult the same in-flight and
+// already-attempted sets, which is why they are one class: a row that arrives
+// while the batch is fetching it must see that, or the same picture is
+// downloaded twice.
 //
 // The rules are ordinary except for one: a group with no picture and a failure
 // reason from the older code is retried anyway, because those reasons were

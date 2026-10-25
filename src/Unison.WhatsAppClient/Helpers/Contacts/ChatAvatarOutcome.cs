@@ -80,5 +80,21 @@ namespace Unison.WhatsAppClient.Helpers
             subject.AvatarFetchFailedAtUtc = nowUtc;
             subject.AvatarFetchFailureReason = reason;
         }
+
+        /// <summary>
+        /// The IQ answered with the same picture we already have on disk. Keep the local
+        /// URI; refresh the fetch stamp so background batches leave this row alone.
+        /// </summary>
+        public static void RecordUnchanged(IAvatarSubject subject, DateTime nowUtc)
+        {
+            if (subject == null)
+            {
+                return;
+            }
+
+            subject.AvatarFetchedAtUtc = nowUtc;
+            subject.AvatarFetchFailedAtUtc = null;
+            subject.AvatarFetchFailureReason = null;
+        }
     }
 }

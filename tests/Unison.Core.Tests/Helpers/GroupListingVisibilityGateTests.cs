@@ -25,5 +25,33 @@ namespace Unison.Core.Tests.Helpers
                 isWindowVisible: true,
                 abortRequested: false));
         }
+
+        [Fact]
+        public void Resume_retry_only_when_settle_generation_still_current()
+        {
+            Assert.True(GroupListingVisibilityGate.ShouldFireResumeRetry(
+                isWindowVisible: true,
+                listingRetryPending: true,
+                armedGeneration: 3,
+                currentGeneration: 3));
+
+            Assert.False(GroupListingVisibilityGate.ShouldFireResumeRetry(
+                isWindowVisible: true,
+                listingRetryPending: true,
+                armedGeneration: 3,
+                currentGeneration: 4));
+
+            Assert.False(GroupListingVisibilityGate.ShouldFireResumeRetry(
+                isWindowVisible: false,
+                listingRetryPending: true,
+                armedGeneration: 3,
+                currentGeneration: 3));
+
+            Assert.False(GroupListingVisibilityGate.ShouldFireResumeRetry(
+                isWindowVisible: true,
+                listingRetryPending: false,
+                armedGeneration: 3,
+                currentGeneration: 3));
+        }
     }
 }

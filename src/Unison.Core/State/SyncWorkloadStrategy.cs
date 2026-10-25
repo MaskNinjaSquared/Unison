@@ -94,6 +94,12 @@ namespace Unison.Core.State
         /// <summary>Pause between those metadata queries.</summary>
         public abstract int GroupMetadataPauseMs { get; }
 
+        /// <summary>
+        /// Quiet ms after the window becomes visible again before arming a deferred
+        /// participating-groups listing (resume must not slam metadata on the UI thread).
+        /// </summary>
+        public abstract int GroupListingResumeSettleMs { get; }
+
         /// <summary>Member pictures fetched per roster batch when a group is open.</summary>
         public abstract int GroupRosterBatchSize { get; }
 
@@ -229,6 +235,8 @@ namespace Unison.Core.State
 
         public override int GroupMetadataPauseMs => 400;
 
+        public override int GroupListingResumeSettleMs => 3000;
+
         public override int GroupRosterBatchSize => 4;
 
         public override int GroupRosterInterRequestDelayMs => 1200;
@@ -317,6 +325,8 @@ namespace Unison.Core.State
 
         public override int GroupMetadataPauseMs => 200;
 
+        public override int GroupListingResumeSettleMs => 2500;
+
         public override int GroupRosterBatchSize => 8;
 
         public override int GroupRosterInterRequestDelayMs => 900;
@@ -394,6 +404,8 @@ namespace Unison.Core.State
         public override int GroupMetadataBatchSize => 25;
 
         public override int GroupMetadataPauseMs => 120;
+
+        public override int GroupListingResumeSettleMs => 1200;
 
         public override int GroupRosterBatchSize => 16;
 

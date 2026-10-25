@@ -12,10 +12,15 @@ namespace Unison.Core.Contracts
         void Start();
 
         /// <summary>
-        /// Asks for another pass without a name having changed. Used when a screen that resolves
-        /// senders itself opens (a group chat), so the list agrees with what the bubbles show.
-        /// Passes are coalesced, so calling this per navigation is cheap.
+        /// Asks for another full pass without a name having changed. Desktop may recompute every
+        /// group strip; Mobile treats this as a no-op (use <see cref="RefreshChat"/> instead).
         /// </summary>
         void Refresh();
+
+        /// <summary>
+        /// Recomputes the author strip for one group chat only. Prefer this on Mobile so a name
+        /// change never walks the whole catalogue.
+        /// </summary>
+        void RefreshChat(string chatJid);
     }
 }

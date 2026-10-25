@@ -157,6 +157,9 @@ namespace Unison.Core.ViewModels
                     : VisibleRefreshMoveBudgetFrugal)
                 : VisibleRefreshMoveBudgetGenerous;
 
+            var refreshSw = Stopwatch.StartNew();
+            long buildMs = 0;
+            long reconcileMs = 0;
             IsRefreshing = true;
             try
             {
@@ -168,10 +171,13 @@ namespace Unison.Core.ViewModels
                 {
                     // A full rebuild supersedes any in-flight continue slice.
                     _refreshContinueCts?.Cancel();
+                    long buildStart = refreshSw.ElapsedMilliseconds;
                     source = BuildVisibleRefreshSource();
+                    buildMs = refreshSw.ElapsedMilliseconds - buildStart;
                     _pendingVisibleRefreshSource = source;
                 }
 
+                long reconcileStart = refreshSw.ElapsedMilliseconds;
                 if (ChatListVisibleReconcile.IsAlreadyAligned(VisibleChats, source))
                 {
                     reconcile = new ChatListVisibleReconcileResult(0, false);
@@ -181,6 +187,8 @@ namespace Unison.Core.ViewModels
                 {
                     reconcile = ChatListVisibleReconcile.Apply(VisibleChats, source, moveBudget);
                 }
+
+                reconcileMs = refreshSw.ElapsedMilliseconds - reconcileStart;
             }
             finally
             {
@@ -198,7 +206,10 @@ namespace Unison.Core.ViewModels
                     "; incomplete=" + reconcile.Incomplete +
                     "; budget=" + moveBudget +
                     "; reused=" + reusedSource +
-                    "; cold=" + coldPopulate),
+                    "; cold=" + coldPopulate +
+                    "; buildMs=" + buildMs +
+                    "; reconcileMs=" + reconcileMs +
+                    "; totalMs=" + refreshSw.ElapsedMilliseconds),
                 flush: true);
 
             if (reconcile.Incomplete)
@@ -634,40 +645,48 @@ namespace Unison.Core.ViewModels
                 return false;
             }
 
-            if (!MatchesScope(chat))
+            // PN/LID: catalogue Move may carry a different instance than the visible row.
+            ChatItem visible = FindVisibleRowForMove(chat);
+            if (visible == null)
             {
-                int hiddenIndex = VisibleChats.IndexOf(chat);
+                if (!MatchesScope(chat))
+                {
+                    return true;
+                }
+
+                return false;
+            }
+
+            if (!MatchesScope(visible))
+            {
+                int hiddenIndex = VisibleChats.IndexOf(visible);
                 if (hiddenIndex >= 0)
                 {
                     VisibleChats.RemoveAt(hiddenIndex);
                 }
+
                 return true;
             }
 
-            // Pin-aware index â€” mirroring raw Chats order after Move(0) put unpinned tips on top.
-            if (_chatService == null)
+            // Only the moved row needs CommunityListProjector (invent parent / hide child).
+            // Gating on *any* community in the catalogue forced every live tip into a full
+            // refresh (or order-clean skip) — freeze / tip buried with hubs present.
+            if (IsCommunityShapedRow(visible) || IsCommunityShapedRow(chat))
             {
                 return false;
             }
 
-            var ordered = _chatService.SortChatsForDisplay(
-                _chatState.Chats.Where(c => c != null && MatchesScope(c)));
-            int targetIndex = -1;
-            for (int i = 0; i < ordered.Count; i++)
-            {
-                if (ReferenceEquals(ordered[i], chat))
-                {
-                    targetIndex = i;
-                    break;
-                }
-            }
-
-            int visibleIndex = VisibleChats.IndexOf(chat);
-            if (targetIndex < 0 || visibleIndex < 0)
+            // Unigram-style: walk only what is on screen. Do not re-sort the full catalogue
+            // and do not trust raw Chats index (dedupe / SortForDisplay diverge from it).
+            int visibleIndex = VisibleChats.IndexOf(visible);
+            if (visibleIndex < 0)
             {
                 return false;
             }
 
+            // PN/LID: catalogue may hold the newer tip while Visible is a different instance.
+            ChatItem orderProbe = PreferTipForOrder(visible, chat);
+            int targetIndex = ChatListRowOrder.TargetIndex(VisibleChats, visible, orderProbe);
             targetIndex = Math.Min(targetIndex, VisibleChats.Count - 1);
             if (targetIndex < 0)
             {
@@ -680,6 +699,68 @@ namespace Unison.Core.ViewModels
             }
 
             return true;
+        }
+
+        private static bool IsCommunityShapedRow(ChatItem chat)
+        {
+            return chat != null &&
+                   (chat.IsCommunityParent ||
+                    chat.IsCommunity ||
+                    !string.IsNullOrWhiteSpace(chat.LinkedParentJid));
+        }
+
+        /// <summary>
+        /// When the catalogue row and the on-screen row differ, order by the fresher tip.
+        /// </summary>
+        private static ChatItem PreferTipForOrder(ChatItem visible, ChatItem catalogue)
+        {
+            if (catalogue == null || ReferenceEquals(visible, catalogue))
+            {
+                return visible;
+            }
+
+            DateTime visibleTip = visible.LastMessageTimestampUtc ?? DateTime.MinValue;
+            DateTime catalogueTip = catalogue.LastMessageTimestampUtc ?? DateTime.MinValue;
+            return catalogueTip > visibleTip ? catalogue : visible;
+        }
+
+        /// <summary>
+        /// Same conversation on screen as the catalogue row that just moved (ref or canonical).
+        /// </summary>
+        private ChatItem FindVisibleRowForMove(ChatItem chat)
+        {
+            if (chat == null)
+            {
+                return null;
+            }
+
+            int byRef = VisibleChats.IndexOf(chat);
+            if (byRef >= 0)
+            {
+                return VisibleChats[byRef];
+            }
+
+            string key = GetCanonical(chat.JID);
+            if (string.IsNullOrWhiteSpace(key))
+            {
+                return null;
+            }
+
+            for (int i = 0; i < VisibleChats.Count; i++)
+            {
+                ChatItem row = VisibleChats[i];
+                if (row == null || string.IsNullOrWhiteSpace(row.JID))
+                {
+                    continue;
+                }
+
+                if (string.Equals(GetCanonical(row.JID), key, StringComparison.OrdinalIgnoreCase))
+                {
+                    return row;
+                }
+            }
+
+            return null;
         }
 
         /// <summary>
@@ -805,8 +886,10 @@ namespace Unison.Core.ViewModels
 
             if (IsWindowHidden)
             {
+                // Defer only — do not force dirty. Marking dirty on every hide forced a full
+                // BuildVisibleRefreshSource on resume (~24s on ARM for mutations=1) even when
+                // the catalogue never moved while location-keepalive held the process.
                 _refreshDeferredForWindowHidden = true;
-                _visibleOrderDirty = true;
                 _refreshCts?.Cancel();
                 _refreshContinueCts?.Cancel();
                 return;
@@ -817,7 +900,17 @@ namespace Unison.Core.ViewModels
                 return;
             }
 
+            bool wasDeferred = _refreshDeferredForWindowHidden;
             _refreshDeferredForWindowHidden = false;
+            if (!_visibleOrderDirty)
+            {
+                TraceListLifecycle(
+                    "refresh-visible-skip",
+                    BuildListSnapshot("reason=resume-order-clean; deferred=" + wasDeferred),
+                    flush: false);
+                return;
+            }
+
             if (_batchRendering || IsInSafeMode || IsListHeldForSync)
             {
                 return;

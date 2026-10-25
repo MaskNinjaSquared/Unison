@@ -24,5 +24,19 @@ namespace Unison.WhatsAppClient.Helpers
             bool isWindowVisible,
             bool abortRequested) =>
             !isWindowVisible || abortRequested;
+
+        /// <summary>
+        /// After keepalive, listing retry must not arm on the same turn as
+        /// <c>visible=True</c> (list refresh / fast-resume need the dispatcher first).
+        /// Fire only when the settle generation still matches and the window stayed up.
+        /// </summary>
+        public static bool ShouldFireResumeRetry(
+            bool isWindowVisible,
+            bool listingRetryPending,
+            int armedGeneration,
+            int currentGeneration) =>
+            isWindowVisible &&
+            listingRetryPending &&
+            armedGeneration == currentGeneration;
     }
 }

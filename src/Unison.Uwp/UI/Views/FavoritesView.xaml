@@ -128,14 +128,18 @@
                 x:Name="EmptyState"
                 AddCommand="{x:Bind ViewModel.OpenPickerCommand}"/>
 
-            <SemanticZoom x:Name="FavoritesZoom" Visibility="Collapsed">
+            <SemanticZoom x:Name="FavoritesZoom"
+                          Visibility="Collapsed"
+                          ViewChangeStarted="FavoritesZoom_ViewChangeStarted"
+                          ViewChangeCompleted="FavoritesZoom_ViewChangeCompleted">
                 <SemanticZoom.ZoomedInView>
                     <ListView x:Name="FavoritesList"
                               IsItemClickEnabled="True"
                               ItemClick="FavoritesList_ItemClick"
                               SelectionMode="None"
                               Background="Transparent"
-                              ItemTemplate="{StaticResource ChatItemTemplate}">
+                              ItemTemplate="{StaticResource ChatItemTemplate}"
+                              ScrollViewer.IsVerticalScrollChainingEnabled="False">
                         <ListView.GroupStyle>
                             <GroupStyle HeaderTemplate="{StaticResource FavoriteGroupHeaderTemplate}"
                                         HeaderContainerStyle="{StaticResource FavoriteGroupHeaderContainerStyle}"/>
@@ -158,7 +162,9 @@
                               IsItemClickEnabled="True"
                               ItemClick="FavoritesJumpList_ItemClick"
                               SelectionMode="None"
-                              Background="Transparent">
+                              Background="Transparent"
+                              ScrollViewer.IsHorizontalScrollChainingEnabled="False"
+                              ScrollViewer.IsVerticalScrollChainingEnabled="False">
                         <GridView.ItemsPanel>
                             <ItemsPanelTemplate>
                                 <ItemsWrapGrid Orientation="Horizontal"

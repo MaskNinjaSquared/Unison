@@ -38,17 +38,18 @@ namespace Unison.Core.Helpers
         public bool IsGroup;
 
         /// <summary>
-        /// True when the name labels the author of a message rather than a chat in the
-        /// list. Suppresses the tilde, which would be noise repeated on every bubble.
+        /// When true, a push-name winner is prefixed with <see cref="DisplayNameResolution.UnsavedContactPrefix"/>.
+        /// Opt-in for the chat-list author strip only — titles, favourites, SemanticZoom and
+        /// bubbles stay unmarked (a leading ~ sorts every unsaved 1:1 under "~").
         /// </summary>
-        public bool IsSenderContext;
+        public bool WithContactIndicator;
     }
 
     public static class DisplayNameResolution
     {
         /// <summary>
         /// Marks a name the contact chose for themselves rather than one the user saved,
-        /// which is the same convention WhatsApp itself uses.
+        /// which is the same convention WhatsApp itself uses on the group tip strip.
         /// </summary>
         public const string UnsavedContactPrefix = "~";
 
@@ -68,8 +69,27 @@ namespace Unison.Core.Helpers
             }
 
             return source.IsChosenByContact()
-                ? FormatUnsavedContactName(name.Trim(), sources.IsGroup, sources.IsSenderContext)
-                : name;
+                ? FormatUnsavedContactName(name.Trim(), sources.IsGroup, sources.WithContactIndicator)
+                : StripContactIndicator(name.Trim());
+        }
+
+        /// <summary>
+        /// Removes a leading unsaved-contact marker. Safe for titles, favourites and letter keys.
+        /// </summary>
+        public static string StripContactIndicator(string name)
+        {
+            if (string.IsNullOrWhiteSpace(name))
+            {
+                return name;
+            }
+
+            string trimmed = name.Trim();
+            while (trimmed.StartsWith(UnsavedContactPrefix, StringComparison.Ordinal))
+            {
+                trimmed = trimmed.Substring(UnsavedContactPrefix.Length).TrimStart();
+            }
+
+            return trimmed;
         }
 
         private static void Offer(string candidate, NameSource candidateSource, ref string name, ref NameSource source)
@@ -86,14 +106,21 @@ namespace Unison.Core.Helpers
             }
         }
 
-        private static string FormatUnsavedContactName(string name, bool isGroup, bool isSenderContext)
+        private static string FormatUnsavedContactName(string name, bool isGroup, bool withContactIndicator)
         {
-            if (isGroup || isSenderContext || name.StartsWith(UnsavedContactPrefix, StringComparison.Ordinal))
+            string trimmed = StripContactIndicator(name) ?? string.Empty;
+            if (string.IsNullOrEmpty(trimmed))
             {
-                return name;
+                return trimmed;
             }
 
-            return UnsavedContactPrefix + name;
+            // Groups and default UI surfaces never carry the mark.
+            if (isGroup || !withContactIndicator)
+            {
+                return trimmed;
+            }
+
+            return UnsavedContactPrefix + trimmed;
         }
 
         /// <summary>

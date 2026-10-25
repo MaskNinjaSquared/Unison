@@ -193,6 +193,24 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             DateTime nowUtc = DateTime.UtcNow;
             if (!string.IsNullOrWhiteSpace(result.Url))
             {
+                bool hasLocal = !string.IsNullOrWhiteSpace(chat.GetAvatarUrl(preferHigh: false));
+                if (hasLocal &&
+                    AvatarPictureIdentity.IsUnchanged(
+                        chat.AvatarPictureId,
+                        chat.AvatarRemoteUrl,
+                        result.Id,
+                        result.Url))
+                {
+                    await _ui.RunAsync(() =>
+                    {
+                        ChatAvatarOutcome.RecordUnchanged(chat, nowUtc);
+                        RememberPictureIdentity(chat, result.Id, result.Url);
+                    });
+                    Debug.WriteLine(
+                        $"[WhatsAppService] Avatar unchanged for {chat.JID}: id={result.Id}, skipped CDN");
+                    return;
+                }
+
                 string localUri = null;
                 try
                 {
@@ -216,6 +234,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
                 await _ui.RunAsync(() =>
                 {
                     ChatAvatarOutcome.RecordCached(chat, localUri, nowUtc);
+                    RememberPictureIdentity(chat, result.Id, result.Url);
                     _groups.ApplyGroupMemberAvatarOutcome(
                         chat.JID,
                         new GroupMemberAvatarFetchResult { LocalUri = localUri });
@@ -238,7 +257,10 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
                 }
 
                 await _ui.RunAsync(() =>
-                    ChatAvatarOutcome.RecordAbsent(chat, failureReason, nowUtc));
+                {
+                    ChatAvatarOutcome.RecordAbsent(chat, failureReason, nowUtc);
+                    RememberPictureIdentity(chat, null, null);
+                });
                 Debug.WriteLine($"[WhatsAppService] Avatar confirmed absent for {chat.JID}: target={result.TargetJid}, reason={failureReason}");
                 return;
             }
@@ -335,6 +357,8 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             string sourceJid = source.JID;
             string sourceAvatar = source.AvatarUrl;
             string sourceAvatarHigh = source.AvatarHighUrl;
+            string sourcePictureId = source.AvatarPictureId;
+            string sourceRemoteUrl = source.AvatarRemoteUrl;
             DateTime nowUtc = DateTime.UtcNow;
 
             await _ui.RunAsync(() =>
@@ -345,6 +369,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
                     chat.AvatarHighUrl = sourceAvatarHigh;
                 }
 
+                RememberPictureIdentity(chat, sourcePictureId, sourceRemoteUrl);
                 chat.AvatarFetchedAtUtc = nowUtc;
                 chat.AvatarFetchFailedAtUtc = null;
                 chat.AvatarFetchFailureReason = null;
@@ -370,6 +395,17 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
                 Debug.WriteLine(
                     "[ChatAvatarFetch] NotifyAvatarCached failed: " + ex.Message);
             }
+        }
+
+        private static void RememberPictureIdentity(ChatItem chat, string pictureId, string remoteUrl)
+        {
+            if (chat == null)
+            {
+                return;
+            }
+
+            chat.AvatarPictureId = string.IsNullOrWhiteSpace(pictureId) ? null : pictureId.Trim();
+            chat.AvatarRemoteUrl = string.IsNullOrWhiteSpace(remoteUrl) ? null : remoteUrl.Trim();
         }
 
         private static bool ShouldTry(ProfilePictureResult result)

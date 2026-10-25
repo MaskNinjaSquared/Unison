@@ -20,7 +20,7 @@ namespace Unison.Core.Tests.Helpers
             string? whatsApp = null,
             string? jid = Ana,
             bool isGroup = false,
-            bool isSender = false,
+            bool withContactIndicator = false,
             PersonSource personSource = PersonSource.Observed) =>
             new DisplayNameSources
             {
@@ -30,7 +30,7 @@ namespace Unison.Core.Tests.Helpers
                 WhatsAppName = whatsApp,
                 CanonicalJid = jid,
                 IsGroup = isGroup,
-                IsSenderContext = isSender
+                WithContactIndicator = withContactIndicator
             };
 
         // --- Precedence --------------------------------------------------------
@@ -83,7 +83,7 @@ namespace Unison.Core.Tests.Helpers
         [Fact]
         public void The_contacts_own_name_is_used_when_nothing_better_exists()
         {
-            Assert.Equal("~aninha", DisplayNameResolution.Resolve(Sources(whatsApp: "aninha")));
+            Assert.Equal("aninha", DisplayNameResolution.Resolve(Sources(whatsApp: "aninha")));
         }
 
         [Fact]
@@ -99,18 +99,34 @@ namespace Unison.Core.Tests.Helpers
             Assert.Equal("Ana Trabalho", DisplayNameResolution.Resolve(Sources(person: "   ", phone: "Ana Trabalho")));
         }
 
-        // --- The tilde ---------------------------------------------------------
+        // --- The tilde (strip opt-in) -------------------------------------------
 
         [Fact]
-        public void A_name_the_contact_chose_is_marked_as_unsaved()
+        public void A_name_the_contact_chose_is_unmarked_by_default()
         {
-            Assert.Equal("~aninha", DisplayNameResolution.Resolve(Sources(whatsApp: "aninha")));
+            Assert.Equal("aninha", DisplayNameResolution.Resolve(Sources(whatsApp: "aninha")));
         }
 
         [Fact]
-        public void A_name_that_already_carries_the_mark_is_not_marked_twice()
+        public void Strip_context_marks_a_push_name_as_unsaved()
         {
-            Assert.Equal("~aninha", DisplayNameResolution.Resolve(Sources(whatsApp: "~aninha")));
+            Assert.Equal(
+                "~aninha",
+                DisplayNameResolution.Resolve(Sources(whatsApp: "aninha", withContactIndicator: true)));
+        }
+
+        [Fact]
+        public void A_name_that_already_carries_the_mark_is_not_marked_twice_on_strip()
+        {
+            Assert.Equal(
+                "~aninha",
+                DisplayNameResolution.Resolve(Sources(whatsApp: "~aninha", withContactIndicator: true)));
+        }
+
+        [Fact]
+        public void Default_resolve_strips_a_legacy_leading_mark()
+        {
+            Assert.Equal("aninha", DisplayNameResolution.Resolve(Sources(whatsApp: "~aninha")));
         }
 
         [Fact]
@@ -118,28 +134,35 @@ namespace Unison.Core.Tests.Helpers
         {
             // A group's subject is not somebody's unsaved push name.
             Assert.Equal("Futebol", DisplayNameResolution.Resolve(
-                Sources(whatsApp: "Futebol", jid: Group, isGroup: true)));
+                Sources(whatsApp: "Futebol", jid: Group, isGroup: true, withContactIndicator: true)));
         }
 
         [Fact]
-        public void Message_authors_are_never_marked()
-        {
-            // The tilde belongs in the chat list, not repeated above every bubble.
-            Assert.Equal("aninha", DisplayNameResolution.Resolve(Sources(whatsApp: "aninha", isSender: true)));
-        }
-
-        [Fact]
-        public void Only_the_contacts_own_name_gets_marked()
+        public void Only_the_contacts_own_name_gets_marked_on_strip()
         {
             // A saved name is saved; marking it would claim otherwise.
-            Assert.Equal("Ana Trabalho", DisplayNameResolution.Resolve(Sources(phone: "Ana Trabalho")));
-            Assert.Equal("Ana Paula", DisplayNameResolution.Resolve(Sources(person: "Ana Paula")));
+            Assert.Equal(
+                "Ana Trabalho",
+                DisplayNameResolution.Resolve(Sources(phone: "Ana Trabalho", withContactIndicator: true)));
+            Assert.Equal(
+                "Ana Paula",
+                DisplayNameResolution.Resolve(Sources(person: "Ana Paula", withContactIndicator: true)));
         }
 
         [Fact]
-        public void Surrounding_whitespace_is_dropped_before_marking()
+        public void Surrounding_whitespace_is_dropped_before_marking_on_strip()
         {
-            Assert.Equal("~aninha", DisplayNameResolution.Resolve(Sources(whatsApp: "  aninha  ")));
+            Assert.Equal(
+                "~aninha",
+                DisplayNameResolution.Resolve(Sources(whatsApp: "  aninha  ", withContactIndicator: true)));
+        }
+
+        [Fact]
+        public void StripContactIndicator_removes_leading_marks()
+        {
+            Assert.Equal("aninha", DisplayNameResolution.StripContactIndicator("~aninha"));
+            Assert.Equal("aninha", DisplayNameResolution.StripContactIndicator("~~aninha"));
+            Assert.Equal("Ana", DisplayNameResolution.StripContactIndicator("Ana"));
         }
 
         // --- The fallback ------------------------------------------------------
