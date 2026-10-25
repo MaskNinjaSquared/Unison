@@ -2,6 +2,13 @@
 
 Newest first.
 
+## Extraction 3.10 — OfflineReplayFlush owns pending drain
+
+Flush lock, idle timer, and `PendingMessageQueue` claim/drain moved from
+`WhatsAppService` into `OfflineReplayFlush` (WhatsAppClient). The client only
+implements `IOfflineReplayFlushIoHost` (live upsert, remove pending, catalogue
+schedule, diagnostics). `IPendingMessageFlushHost` resolves to the flush owner.
+
 ## Mobile — background location-keepalive no longer paints a black list
 
 With `location-keepalive`, the process stays alive while CoreWindow is hidden.

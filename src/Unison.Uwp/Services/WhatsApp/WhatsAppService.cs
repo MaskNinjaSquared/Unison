@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
@@ -47,7 +47,7 @@ using Unison.WhatsAppClient.Messages;
 
 namespace Unison.Uwp.Services.WhatsApp
 {
-    public partial class WhatsAppService : INotifyPropertyChanged, IWhatsAppService, IConnectionEventSource, IConnectionSessionHost, IOfflineReplayHost, IOfflineReplayReleaseHost, IOfflineReplayFlushHost, IChatCatalogPersistHost, IChatCatalogFullPersistHost, ILoadPersistedChatCatalogHost, IForgetChatStorageHost, IConnectionUpdateHost, ISocketErrorHost, IHistorySyncWireHost, ISessionInitializedHost, IQrCodeWireHost, IAuthStateWireHost, IInboundWireNodeHost, IDecryptedMessageWireHost, ISocketFacadeWireHost, IPostReplayMaintenanceHost, IPostMessageEnrichmentHost, IPlaceholderResendSocket, IHistoryOnDemandSocket, IRuntimeSnapshotSource, IBackgroundResolutionGate, IAppStateLocalHost, IConversationResyncHost, IHistorySyncHost, IHistoryCatchUpHost, IConnectionEnsureHost, IConnectionResumeHost, IConnectionPairingStage2Host, IConnectionBrokerTransferHost, IConnectionSoftReconnectHost, IConnectionLifecycleHost, IConnectionConnectGateSource, IConnectionConnectPrepareHost, IConnectionSocketAssignment, IConnectionAssignedSocketClearHost, ISocketAliasRegistrar, IStartupUiHost, IJidAliasPersistence, IIncomingMessageEnqueueHost, IResolvedNameApplyHost, IHistoryHydrationBackfillHost, ISqliteHistoryQuietFinalizeHost, IHistoryPostOfflineFreshnessHost, IDeferredStartupMaintenanceHost, IHistoryCatchUpFinishHost, IUserResyncFullHistoryHost, IFreshnessReconnectFallbackHost, ICatchUpContinueReconnectHost, IFirstSyncListReleaseHost, IFullHistoryCatchUpProgressHost, IHistorySqliteChunkAppliedHost, IAcceptedHistoryRequestTimeoutHost, IAutoReconnectLoopHost, IConversationResyncWaitHost, IFullHistoryOnDemandClearHost, IInitializeConnectionStateHost, IHistorySqliteChunkStartedHost, IFullHistoryCatchUpWatchdogHost, IPeriodicFullHistorySafetyHost, IReconnectHistoryCatchUpHost, IHydrationFallbackPipelineHost, IHydrationDayRetryHost, IScheduleAutoReconnectHost, IReleaseEnrichmentAfterHeavyHistoryHost, IClearSessionHost, IRaiseSessionClearedHost, IRequestFullHistoryOnDemandTrackedHost, IBrokerReconnectConsumeHost, IPostMessageEnrichmentScheduleHost, IForceHistoryRepairConsumeHost, IForceHistoryRepairPendingHost, IPublishInitialSyncProgressHost, IPublishConnectionUpdateHost, IPersistChatIdentityStateHost, IEndHistoryCatchUpBannerHost, IBeginHistoryCatchUpBannerHost, IResetFirstSyncListHoldFlagsHost, ICompleteUserResyncHistoryWaitHost, IScheduleOfflineReplayFlushTimerHost, ITearDownSocketForSoftReconnectHost, INoteHydrationDayAttemptHost, IUnloadMessageCacheIfInactiveHost, IOnActiveChatChangedHost, IMarkPairingRestartPendingHost, IDropCurrentSocketForFastResumeHost, IPersistAuthStateHost, IWaitForSessionEstablishedHost, IStopPeriodicFullHistorySafetyHost, IStartPeriodicFullHistorySafetyHost, IInvalidateCurrentSocketHost, IStopConnectionHealthMonitorHost, IStartConnectionHealthMonitorHost, ITryStartPairingStage2ReconnectHost, IIsCurrentSocketHealthyHost, IReleaseMemoryHost, IConnectAsyncHost, IResyncConversationsHost, ISyncSelfProfileFromAuthHost, ILoadPersistedUiStateHost, ITryRecordAliasMappingHost, IRegisterAliasMappingsHost, IPersistJidAliasesHost, IFlushPendingSocketAliasesHost, IPersistLiveMessagesHost, IPersistBackgroundDisplayNamesHost, INotifyServerLogoutHost, ISchedulePostReplayMaintenanceHost, IBuildHistoryHydrationCandidatesHost, IStartBackgroundHistoryBackfillHost, IEnsureSelfPhonePersistedHost, IPersistSelfAvatarUrlHost, ILoadHistoryFreshnessRepairStateHost, IPersistFullHistoryRepairCompletedUtcHost, IPersistFreshnessReconnectFallbackUtcHost, IFindPersistedChatMessageHost, IResolveSentMessageForRetryHost, IPeriodicFullHistorySafetyLoopHost, IWaitForHistoryHydrationSettleHost
+    public partial class WhatsAppService : INotifyPropertyChanged, IWhatsAppService, IConnectionEventSource, IConnectionSessionHost, IOfflineReplayHost, IOfflineReplayReleaseHost, IOfflineReplayFlushIoHost, IChatCatalogPersistHost, IChatCatalogFullPersistHost, ILoadPersistedChatCatalogHost, IForgetChatStorageHost, IConnectionUpdateHost, ISocketErrorHost, IHistorySyncWireHost, ISessionInitializedHost, IQrCodeWireHost, IAuthStateWireHost, IInboundWireNodeHost, IDecryptedMessageWireHost, ISocketFacadeWireHost, IPostReplayMaintenanceHost, IPostMessageEnrichmentHost, IPlaceholderResendSocket, IHistoryOnDemandSocket, IRuntimeSnapshotSource, IBackgroundResolutionGate, IAppStateLocalHost, IConversationResyncHost, IHistorySyncHost, IHistoryCatchUpHost, IConnectionEnsureHost, IConnectionResumeHost, IConnectionPairingStage2Host, IConnectionBrokerTransferHost, IConnectionSoftReconnectHost, IConnectionLifecycleHost, IConnectionConnectGateSource, IConnectionConnectPrepareHost, IConnectionSocketAssignment, IConnectionAssignedSocketClearHost, ISocketAliasRegistrar, IStartupUiHost, IJidAliasPersistence, IIncomingMessageEnqueueHost, IResolvedNameApplyHost, IHistoryHydrationBackfillHost, ISqliteHistoryQuietFinalizeHost, IHistoryPostOfflineFreshnessHost, IDeferredStartupMaintenanceHost, IHistoryCatchUpFinishHost, IUserResyncFullHistoryHost, IFreshnessReconnectFallbackHost, ICatchUpContinueReconnectHost, IFirstSyncListReleaseHost, IFullHistoryCatchUpProgressHost, IHistorySqliteChunkAppliedHost, IAcceptedHistoryRequestTimeoutHost, IAutoReconnectLoopHost, IConversationResyncWaitHost, IFullHistoryOnDemandClearHost, IInitializeConnectionStateHost, IHistorySqliteChunkStartedHost, IFullHistoryCatchUpWatchdogHost, IPeriodicFullHistorySafetyHost, IReconnectHistoryCatchUpHost, IHydrationFallbackPipelineHost, IHydrationDayRetryHost, IScheduleAutoReconnectHost, IReleaseEnrichmentAfterHeavyHistoryHost, IClearSessionHost, IRaiseSessionClearedHost, IRequestFullHistoryOnDemandTrackedHost, IBrokerReconnectConsumeHost, IPostMessageEnrichmentScheduleHost, IForceHistoryRepairConsumeHost, IForceHistoryRepairPendingHost, IPublishInitialSyncProgressHost, IPublishConnectionUpdateHost, IPersistChatIdentityStateHost, IEndHistoryCatchUpBannerHost, IBeginHistoryCatchUpBannerHost, IResetFirstSyncListHoldFlagsHost, ICompleteUserResyncHistoryWaitHost, ITearDownSocketForSoftReconnectHost, INoteHydrationDayAttemptHost, IUnloadMessageCacheIfInactiveHost, IOnActiveChatChangedHost, IMarkPairingRestartPendingHost, IDropCurrentSocketForFastResumeHost, IPersistAuthStateHost, IWaitForSessionEstablishedHost, IStopPeriodicFullHistorySafetyHost, IStartPeriodicFullHistorySafetyHost, IInvalidateCurrentSocketHost, IStopConnectionHealthMonitorHost, IStartConnectionHealthMonitorHost, ITryStartPairingStage2ReconnectHost, IIsCurrentSocketHealthyHost, IReleaseMemoryHost, IConnectAsyncHost, IResyncConversationsHost, ISyncSelfProfileFromAuthHost, ILoadPersistedUiStateHost, ITryRecordAliasMappingHost, IRegisterAliasMappingsHost, IPersistJidAliasesHost, IFlushPendingSocketAliasesHost, IPersistLiveMessagesHost, IPersistBackgroundDisplayNamesHost, INotifyServerLogoutHost, ISchedulePostReplayMaintenanceHost, IBuildHistoryHydrationCandidatesHost, IStartBackgroundHistoryBackfillHost, IEnsureSelfPhonePersistedHost, IPersistSelfAvatarUrlHost, ILoadHistoryFreshnessRepairStateHost, IPersistFullHistoryRepairCompletedUtcHost, IPersistFreshnessReconnectFallbackUtcHost, IFindPersistedChatMessageHost, IResolveSentMessageForRetryHost, IPeriodicFullHistorySafetyLoopHost, IWaitForHistoryHydrationSettleHost
     {
         public event PropertyChangedEventHandler PropertyChanged;
         protected void OnPropertyChanged([CallerMemberName] string propertyName = null)
@@ -61,7 +61,7 @@ namespace Unison.Uwp.Services.WhatsApp
             var args = new PropertyChangedEventArgs(propertyName);
             try
             {
-                // AttachedUiDispatcher runs inline on the UI thread and posts otherwise —
+                // AttachedUiDispatcher runs inline on the UI thread and posts otherwise â€”
                 // same contract as CoreApplication.MainView.Dispatcher without naming WinRT here.
                 _ui.Post(() => handler(this, args));
             }
@@ -326,7 +326,7 @@ namespace Unison.Uwp.Services.WhatsApp
         private const int PreSessionCloseFatalThreshold = 5;
         /// <summary>
         /// True between stream:error 515 (pair stage 1 done) and session-initialized (stage 2).
-        /// During this window Registered is already true but closes are expected — never treat as logout.
+        /// During this window Registered is already true but closes are expected â€” never treat as logout.
         /// </summary>
         private volatile bool _pairingRestartPending = false;
         /// <summary>
@@ -347,7 +347,7 @@ namespace Unison.Uwp.Services.WhatsApp
         private readonly SemaphoreSlim _connectLock = new SemaphoreSlim(1, 1);
         private readonly SemaphoreSlim _resumeConnectionLock = new SemaphoreSlim(1, 1);
 
-        // Live/offline decrypted drain — owned by IncomingMessagePump (WhatsAppClient).
+        // Live/offline decrypted drain â€” owned by IncomingMessagePump (WhatsAppClient).
         private IncomingMessagePump _incomingPump;
         private readonly AttachedUiDispatcher _ui;
         private readonly ChatStateStore _chatState;
@@ -396,18 +396,17 @@ namespace Unison.Uwp.Services.WhatsApp
         /// <summary>Whether the catalogue owes a save, and whether startup is still warming up.</summary>
         private readonly PersistScheduler _persistScheduler = new PersistScheduler();
         private readonly SemaphoreSlim _persistRunLock = new SemaphoreSlim(1, 1);
-        private readonly SemaphoreSlim _offlineReplayFlushLock = new SemaphoreSlim(1, 1);
-        private readonly object _offlineReplayTimerLock = new object();
-        private System.Threading.Timer _offlineReplayFlushTimer;
-        private const int OfflineReplayFlushMessageThreshold = 12;
-        private const int MaxPersistMessagesPerChatBatch = 1500;
-        private static readonly TimeSpan OfflineReplayFlushInterval = TimeSpan.FromMilliseconds(750);
-
         /// <summary>
         /// Messages accepted but not yet written. Shared DI singleton with
         /// <c>MessageFacade.QueueIncomingPersist</c> so enqueue and flush see one queue.
         /// </summary>
         private readonly PendingMessageQueue _pendingMessages;
+
+        /// <summary>
+        /// Owns flush lock / idle timer / claim-drain. SQLite I/O stays on this client
+        /// via <see cref="IOfflineReplayFlushIoHost"/>.
+        /// </summary>
+        private readonly OfflineReplayFlush _offlineReplayFlush;
         private CancellationTokenSource _postReplayMaintenanceCts;
         private CancellationTokenSource _postMessageEnrichmentCts;
         private int _postMessageEnrichmentStarted;
@@ -435,12 +434,12 @@ namespace Unison.Uwp.Services.WhatsApp
         private int _sqliteHistoryFinalizeGeneration;
         /// <summary>
         /// First-sync quiet deferred <c>IsCompleted</c> because FULL_HISTORY catch-up still
-        /// owes pages — list hold / DisplayRequest stay until catch-up finishes and names resolve.
+        /// owes pages â€” list hold / DisplayRequest stay until catch-up finishes and names resolve.
         /// </summary>
         private bool _firstSyncListReleaseDeferred;
         /// <summary>True from the first active initial-sync publish until list <c>IsCompleted</c>.</summary>
         private bool _firstSyncListHoldOwned;
-        /// <summary>After the first-sync list unlock this session — reconnect chunks must not re-arm it.</summary>
+        /// <summary>After the first-sync list unlock this session â€” reconnect chunks must not re-arm it.</summary>
         private bool _firstSyncListAlreadyReleased;
         private int _firstSyncUnlockInFlight;
         private int SqliteHistoryFinalizeQuietMs =>
@@ -587,8 +586,8 @@ namespace Unison.Uwp.Services.WhatsApp
 
             snapshot.PersistPending = _persistScheduler.IsPending;
 
-            snapshot.OfflinePersistPendingMessageCount = _pendingMessages.PendingCount;
-            snapshot.OfflineReplayFlushRequested = _pendingMessages.IsFlushClaimed;
+            snapshot.OfflinePersistPendingMessageCount = _offlineReplayFlush.PendingCount;
+            snapshot.OfflineReplayFlushRequested = _offlineReplayFlush.IsFlushClaimed;
 
             var socket = _socket;
             if (socket != null)
@@ -633,7 +632,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
 
         // The chat list lives in ChatStateStore. This property hands out the same instance so
-        // existing bindings keep working; message timelines are read through the store / façades
+        // existing bindings keep working; message timelines are read through the store / faÃ§ades
         // (no MessagesByChat alias on the client).
         public ObservableCollection<ChatItem> Chats => _chatState.Chats;
 
@@ -763,7 +762,7 @@ namespace Unison.Uwp.Services.WhatsApp
             };
         }
 
-        /// <summary>Account phone digits — UI placeholder when the push name is unknown.</summary>
+        /// <summary>Account phone digits â€” UI placeholder when the push name is unknown.</summary>
         public string CurrentUserPhone
         {
             get
@@ -874,8 +873,8 @@ namespace Unison.Uwp.Services.WhatsApp
             (_initialSync.IsActive || _firstSyncListReleaseDeferred || _firstSyncListHoldOwned);
 
         /// <summary>
-        /// First-sync unlock order: persist/catch-up already idle → resolve names →
-        /// <c>IsCompleted</c> (list x:Load) → network photos. Never paints the list on raw JIDs.
+        /// First-sync unlock order: persist/catch-up already idle â†’ resolve names â†’
+        /// <c>IsCompleted</c> (list x:Load) â†’ network photos. Never paints the list on raw JIDs.
         /// </summary>
         private void RequestFirstSyncListReleaseAfterNames(string stage, int processed, int total) =>
             FirstSyncListReleaseDispatch.Schedule(this, stage, processed, total);
@@ -953,6 +952,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
             _pendingMessages = pendingMessages
                 ?? throw new ArgumentNullException(nameof(pendingMessages));
+            _offlineReplayFlush = new OfflineReplayFlush(_pendingMessages, this);
             _chatState = chatState;
             _personStore = personStore ?? throw new ArgumentNullException(nameof(personStore));
             _groupRosterStore = groupRosterStore ?? throw new ArgumentNullException(nameof(groupRosterStore));
@@ -1298,7 +1298,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
         /// <summary>
         /// Sends FULL_HISTORY_SYNC_ON_DEMAND after a manual wipe. Retries once on a
-        /// forced fresh transport — a live socket that already completed pull will not
+        /// forced fresh transport â€” a live socket that already completed pull will not
         /// spontaneously re-bootstrap like pairing.
         /// </summary>
         private Task<bool> EnsureFullHistoryRequestedForUserResyncAsync(string reason) =>
@@ -1719,71 +1719,27 @@ namespace Unison.Uwp.Services.WhatsApp
                 "reason=" + (reason ?? string.Empty) + "; catchUp=True");
 
         /// <summary>
-        /// Restarts the idle timer. Serialized on its own lock: the queue no longer holds one
-        /// while the caller does this, and two threads swapping the field could otherwise
-        /// dispose a timer that is mid-callback.
+        /// Flush lock / idle timer / claim-drain owner (DI exposes
+        /// <see cref="IPendingMessageFlushHost"/> from this instance).
         /// </summary>
-        private void ScheduleOfflineReplayFlushTimer() =>
-            ScheduleOfflineReplayFlushTimerDispatch.Run(
-                this,
-                () => _ = OfflineReplayFlushDispatch.OnIdleTimerAsync(this));
+        internal OfflineReplayFlush OfflineReplayFlush => _offlineReplayFlush;
 
-        // --- IScheduleOfflineReplayFlushTimerHost ----------------------------
+        // --- IOfflineReplayFlushIoHost ---------------------------------------
 
-        int IScheduleOfflineReplayFlushTimerHost.OfflineReplayFlushDueMs =>
-            (int)OfflineReplayFlushInterval.TotalMilliseconds;
-
-        void IScheduleOfflineReplayFlushTimerHost.ReplaceOfflineReplayFlushTimer(
-            Action callback,
-            int dueMs)
-        {
-            lock (_offlineReplayTimerLock)
-            {
-                _offlineReplayFlushTimer?.Dispose();
-                _offlineReplayFlushTimer = new System.Threading.Timer(
-                    _ => callback(),
-                    null,
-                    dueMs,
-                    Timeout.Infinite);
-            }
-        }
-
-        Task IOfflineReplayFlushHost.EnterFlushLockAsync() =>
-            _offlineReplayFlushLock.WaitAsync();
-
-        void IOfflineReplayFlushHost.ReleaseFlushLock() =>
-            _offlineReplayFlushLock.Release();
-
-        PendingMessageDrain IOfflineReplayFlushHost.DrainPending(DateTime utcNow) =>
-            _pendingMessages.Drain(utcNow);
-
-        void IOfflineReplayFlushHost.ClearFlushTimer()
-        {
-            lock (_offlineReplayTimerLock)
-            {
-                _offlineReplayFlushTimer?.Dispose();
-                _offlineReplayFlushTimer = null;
-            }
-        }
-
-        List<ChatMessage> IOfflineReplayFlushHost.SelectBatch(IEnumerable<ChatMessage> queued) =>
-            _pendingMessages.SelectBatch(queued);
-
-        Task IOfflineReplayFlushHost.PersistLiveMessagesAsync(
+        Task IOfflineReplayFlushIoHost.PersistLiveMessagesAsync(
             string chatJid,
             IList<ChatMessage> messages) =>
             PersistLiveMessagesAsync(chatJid, messages);
 
-        Task IOfflineReplayFlushHost.RemovePendingOutgoingAsync(IEnumerable<string> ids) =>
+        Task IOfflineReplayFlushIoHost.RemovePendingOutgoingAsync(IEnumerable<string> ids) =>
             _messageStore.RemovePendingOutgoingAsync(ids);
 
-        Task IOfflineReplayFlushHost.RemovePendingIncomingAsync(IEnumerable<string> ids) =>
+        Task IOfflineReplayFlushIoHost.RemovePendingIncomingAsync(IEnumerable<string> ids) =>
             _messageStore.RemovePendingIncomingAsync(ids);
 
-        void IOfflineReplayFlushHost.RestoreDrain(PendingMessageDrain drain) =>
-            _pendingMessages.Restore(drain);
+        void IOfflineReplayFlushIoHost.ScheduleCatalogPersist() => SchedulePersist();
 
-        void IOfflineReplayFlushHost.LogFlushed(
+        void IOfflineReplayFlushIoHost.LogFlushed(
             int saved,
             int chatCount,
             int dirtyChatCount,
@@ -1792,9 +1748,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 "[WhatsAppService] Flushed " + saved + " queued message(s) across " +
                 chatCount + " chat(s), dirtyChats=" + dirtyChatCount + ", reason=" + reason);
 
-        void IOfflineReplayFlushHost.ScheduleCatalogPersist() => SchedulePersist();
-
-        void IOfflineReplayFlushHost.RecordFlushDeferred(
+        void IOfflineReplayFlushIoHost.RecordFlushDeferred(
             Exception ex,
             string reason,
             int chatCount) =>
@@ -1804,21 +1758,9 @@ namespace Unison.Uwp.Services.WhatsApp
                 ex,
                 "reason=" + reason + "; chats=" + chatCount);
 
-        bool IOfflineReplayFlushHost.CompleteFlush() =>
-            _pendingMessages.CompleteFlush();
-
-        void IOfflineReplayFlushHost.ScheduleFlushTimer() =>
-            ScheduleOfflineReplayFlushTimer();
-
-        bool IOfflineReplayFlushHost.TryClaimFlush() =>
-            _pendingMessages.TryClaimFlush();
-
-        void IOfflineReplayFlushHost.LogNonFatalIdleFlushFailure(Exception ex) =>
+        void IOfflineReplayFlushIoHost.LogNonFatalIdleFlushFailure(Exception ex) =>
             Debug.WriteLine(
                 "[WhatsAppService] Non-fatal message batch flush failure: " + ex.Message);
-
-        void IOfflineReplayFlushHost.StartFlush(string reason) =>
-            _ = FlushOfflineReplayMessagesAsync(reason);
 
         /// <inheritdoc />
         public void NotifyHistorySqliteChunkApplied(string syncType, int conversationCount) =>
@@ -1930,7 +1872,7 @@ namespace Unison.Uwp.Services.WhatsApp
             int processedAtSchedule)
         {
             // Paginated FULL_HISTORY catch-up: a quiet SQLite lot must not clear the
-            // in-flight request and kill the banner — hand the lot to continue instead.
+            // in-flight request and kill the banner â€” hand the lot to continue instead.
             // Do not Publish IsCompleted while first-sync hold is up and catch-up owes work.
             await Task.Delay(Math.Max(200, delayMs)).ConfigureAwait(false);
             if (generation != Volatile.Read(ref _sqliteHistoryFinalizeGeneration))
@@ -1980,7 +1922,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
         async Task IDeferredStartupMaintenanceHost.HydrateCachedAvatarsEarlyAsync()
         {
-            // Disk avatars first — no quiet/memory gate.
+            // Disk avatars first â€” no quiet/memory gate.
             if (Contacts == null)
             {
                 Debug.WriteLine(
@@ -2137,7 +2079,7 @@ namespace Unison.Uwp.Services.WhatsApp
         /// <summary>
         /// Watches an accepted FULL_HISTORY request and aborts only after a stretch with
         /// no catch-up progress (tips / SQLite chunks / offline apply). Progress resets
-        /// the idle clock — Mobile often needs several minutes of slow peer delivery.
+        /// the idle clock â€” Mobile often needs several minutes of slow peer delivery.
         /// </summary>
         private void ScheduleFullHistoryCatchUpWatchdog(HistoryOnDemandRequest state) =>
             FullHistoryCatchUpWatchdogDispatch.Schedule(this, state);
@@ -2277,7 +2219,7 @@ namespace Unison.Uwp.Services.WhatsApp
         /// <summary>
         /// After a FULL_HISTORY request goes quiet: soft-reconnect for the next offline lot while
         /// the lot still made progress (chunk signals or tip watermark). Tip freshness alone must
-        /// not stop catch-up — older conversations often arrive without moving the newest tip.
+        /// not stop catch-up â€” older conversations often arrive without moving the newest tip.
         /// Keep insisting until several idle cycles show no progress, or max rounds is hit.
         /// </summary>
         DateTime IHistoryCatchUpHost.GetNewestStoredMessageUtc() => GetNewestStoredMessageUtc();
@@ -3198,7 +3140,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
         /// <summary>
         /// After FULL_HISTORY quiet fails while tips stay stale: per-JID ON_DEMAND hydration
-        /// (Pending → syncing → HasMore/Synced), then natural FULL_HISTORY again. Day retries
+        /// (Pending â†’ syncing â†’ HasMore/Synced), then natural FULL_HISTORY again. Day retries
         /// keep going until tips look fresh (max 5 / day, every 3h).
         /// </summary>
         private Task RunHydrationFallbackPipelineAsync(string reason) =>

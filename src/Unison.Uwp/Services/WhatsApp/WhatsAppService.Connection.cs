@@ -2247,6 +2247,7 @@ namespace Unison.Uwp.Services.WhatsApp
             _postReplayMaintenanceCts = null;
             DeferredAvatars?.Cancel();
             Contacts?.CancelAliasFollowUp();
+            _offlineReplayFlush?.ClearTimer();
         }
 
         void IConnectionLifecycleHost.ResetPersistScheduler()

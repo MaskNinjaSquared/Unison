@@ -1,7 +1,8 @@
 // =============================================================================
 // ScheduleOfflineReplayFlushTimerDispatch
 //
-// Body of ScheduleOfflineReplayFlushTimer. Timer field swap stays on the host.
+// Body of ScheduleOfflineReplayFlushTimer. Timer field swap lives on
+// OfflineReplayFlush (IScheduleOfflineReplayFlushTimerHost).
 // =============================================================================
 using System;
 using Unison.WhatsAppClient.Abstractions;

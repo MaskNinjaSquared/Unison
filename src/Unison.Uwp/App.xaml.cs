@@ -592,8 +592,9 @@ namespace Unison.Uwp
                 sp => sp.GetRequiredService<WhatsAppService>());
             services.AddSingleton<IBoundMutationGate>(
                 sp => sp.GetRequiredService<WhatsAppService>());
+            services.AddSingleton(sp => sp.GetRequiredService<WhatsAppService>().OfflineReplayFlush);
             services.AddSingleton<IPendingMessageFlushHost>(
-                sp => sp.GetRequiredService<WhatsAppService>());
+                sp => sp.GetRequiredService<OfflineReplayFlush>());
             services.AddSingleton<IMessageService>(sp => new MessageFacade(
                 sp.GetRequiredService<IPersonStore>(),
                 sp.GetRequiredService<IChatMessageMapper>(),

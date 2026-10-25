@@ -1,8 +1,9 @@
 // =============================================================================
 // IPendingMessageFlushHost
 //
-// What PendingMessageQueue.Add decides next (idle timer vs flush-now). The
-// façade owns the queue; the client still owns the timer and the SQLite drain.
+// What PendingMessageQueue.Add decides next (idle timer vs flush-now).
+// OfflineReplayFlush owns the timer / claim / drain; the client only supplies
+// SQLite / catalogue I/O via IOfflineReplayFlushIoHost.
 // =============================================================================
 using System.Threading.Tasks;
 using Unison.Core.State;

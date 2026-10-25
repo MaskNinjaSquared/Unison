@@ -11,10 +11,11 @@ using Proto;
 namespace Unison.Uwp.Services.WhatsApp
 {
     /// <summary>
-    /// Thin host ports for offline-replay flush / placeholder resend. The decrypted
-    /// queue and drain live on <see cref="Unison.WhatsAppClient.Messages.IncomingMessagePump"/>.
+    /// Thin host ports for placeholder resend and bound mutation. The decrypted
+    /// queue/drain live on <see cref="IncomingMessagePump"/>; offline-replay flush
+    /// ownership is <see cref="OfflineReplayFlush"/>.
     /// </summary>
-    public partial class WhatsAppService : IBoundMutationGate, IPendingMessageFlushHost
+    public partial class WhatsAppService : IBoundMutationGate
     {
         void IIncomingMessageEnqueueHost.EnqueueRecoveredDecryptedMessage(
             string fromJid,
@@ -76,12 +77,6 @@ namespace Unison.Uwp.Services.WhatsApp
         /// <summary>Stage string for connection-health stall diagnostics.</summary>
         internal string IncomingPumpStage =>
             _incomingPump != null ? _incomingPump.Stage : "idle";
-
-        void IPendingMessageFlushHost.ApplyFlushAction(PendingFlushAction action) =>
-            OfflineReplayFlushDispatch.ApplyAction(this, action);
-
-        Task IPendingMessageFlushHost.FlushOfflineReplayAsync(string reason) =>
-            FlushOfflineReplayMessagesAsync(reason);
 
         bool IOfflineReplayHost.IsActiveChat(string canonicalJid) => IsActiveChatJid(canonicalJid);
 

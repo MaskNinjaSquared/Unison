@@ -277,8 +277,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 return;
             }
 
-            var action = _pendingMessages.Add(jid, messages, DateTime.UtcNow, scheduleFlush);
-            OfflineReplayFlushDispatch.ApplyAction(this, action);
+            _offlineReplayFlush.Enqueue(jid, messages, DateTime.UtcNow, scheduleFlush);
         }
 
         /// <summary>
@@ -287,7 +286,7 @@ namespace Unison.Uwp.Services.WhatsApp
         /// blow the suspend deadline.
         /// </summary>
         private Task FlushOfflineReplayMessagesAsync(string reason) =>
-            OfflineReplayFlushDispatch.FlushAsync(this, reason);
+            _offlineReplayFlush.FlushOfflineReplayAsync(reason);
 
         /// <summary>
         /// Persists current chats and contact metadata to disk.

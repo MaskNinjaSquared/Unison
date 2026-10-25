@@ -2,7 +2,8 @@
 // OfflineReplayFlushDispatch
 //
 // FlushOfflineReplayMessagesAsync body + ApplyFlushAction + idle-timer claim.
-// Timer field / lock / SQLite ports stay on the host.
+// OfflineReplayFlush owns timer / lock / queue claim; SQLite ports go through
+// IOfflineReplayFlushIoHost on the host.
 // =============================================================================
 using System;
 using System.Collections.Generic;
