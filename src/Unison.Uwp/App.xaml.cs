@@ -537,8 +537,12 @@ namespace Unison.Uwp
             // façades reach it only through this port.
             services.AddSingleton<IChatCatalogPersistence>(
                 sp => sp.GetRequiredService<WhatsAppService>());
-            services.AddSingleton<IChatIdentityPersistence>(
-                sp => sp.GetRequiredService<WhatsAppService>());
+            services.AddSingleton<IChatIdentityPersistence>(sp => new ChatIdentityPersistence(
+                sp.GetRequiredService<ChatStateStore>(),
+                sp.GetRequiredService<JidAliasTable>(),
+                sp.GetRequiredService<IMessageStore>(),
+                sp.GetRequiredService<IHistoryChatPreviewStore>(),
+                sp.GetRequiredService<AttachedUiDispatcher>()));
             services.AddSingleton<IDeferredAvatarResolution>(sp =>
             {
                 SyncWorkloadStrategy workload = sp.GetRequiredService<SyncWorkloadStrategy>();

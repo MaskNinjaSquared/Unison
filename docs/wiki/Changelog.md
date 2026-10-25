@@ -2,6 +2,12 @@
 
 Newest first.
 
+## Extraction 4 — ChatIdentityPersistence owns immediate identity flush
+
+`IChatIdentityPersistence` plus `IPersistChatIdentityStateHost` left
+`WhatsAppService`. New `ChatIdentityPersistence` (WhatsAppClient) runs
+`PersistChatIdentityStateDispatch`; catalogue preview upsert shared via
+`ChatCatalogPreviewPersist`. Same ownership shape as `JidAliasPersistence`.
 ## Extraction 4 — JidAliasPersistence owns alias table I/O
 
 `IJidAliasPersistence` plus `ITryRecordAliasMappingHost` /

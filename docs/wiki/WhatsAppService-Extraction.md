@@ -1355,7 +1355,11 @@ day attempts / day-anchor** is `HydrationDayRetryOwner` over
 `PersistedUiLoadGate`. **Deferred-startup once-per-session CAS** is
 `DeferredStartupOnce`. **JID alias persistence** (register / try-record / persist /
 pending-socket flush) is `JidAliasPersistence` over the four alias dispatch hosts;
-`ISocketAliasRegistrar` stays on the client (pair + bulk + identity heal). The incoming pump drain loop is
+`ISocketAliasRegistrar` stays on the client (pair + bulk + identity heal).
+**Immediate chat-identity flush** (catalogue preview + contact/phone names +
+aliases after list fold) is `ChatIdentityPersistence` over
+`IPersistChatIdentityStateHost`; preview upsert is shared
+`ChatCatalogPreviewPersist` until full catalogue persist leaves. The incoming pump drain loop is
 `IncomingPumpDrainDispatch` (host still owns typed queue + handle). Offline pending-
 notification release is `OfflineReplayRelease` over `IOfflineReplayReleaseHost`
 (wire still attaches the event on the client). Thin-wire dispatches:
@@ -1521,9 +1525,9 @@ owns both members on `IChatService`; the client calls the helper after a large o
 `DuplicateChatFold`, removes the folded rows, re-keys `MessagesByChat` and invalidates the
 row index in one UI pass. `IChatService.RequestChatListDedup` lives on `ChatFacade`, which
 schedules the catalogue save, raises display-name listeners through `IContactService` and
-asks `IChatIdentityPersistence` (the client) to write names and aliases immediately when
-rows merged. The member left `IWhatsAppService`; the client still runs the helper from its
-own alias and startup paths.
+asks `IChatIdentityPersistence` (`ChatIdentityPersistence`) to write names and aliases
+immediately when rows merged. The member left `IWhatsAppService`; catalogue debounce
+and full persist still sit on the client.
 
 **Alias-row merge is `ChatListAliasMerge`.** (Core, DI singleton over the UI dispatcher,
 `ChatStateStore`, `JidAliasTable` and `ChatListDeduper`.) When a LID and a phone already

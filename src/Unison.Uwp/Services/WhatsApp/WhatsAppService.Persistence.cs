@@ -38,7 +38,7 @@ using Unison.WhatsAppClient.Helpers;
 
 namespace Unison.Uwp.Services.WhatsApp
 {
-    public partial class WhatsAppService : IChatCatalogPersistence, IChatIdentityPersistence, IChatCatalogFullPersistHost, ILoadPersistedChatCatalogHost
+    public partial class WhatsAppService : IChatCatalogPersistence, IChatCatalogFullPersistHost, ILoadPersistedChatCatalogHost
     {
 
         private void LoadHistoryFreshnessRepairState() =>
@@ -429,9 +429,6 @@ namespace Unison.Uwp.Services.WhatsApp
                 reason);
 
         void IChatCatalogPersistence.Schedule() => SchedulePersist();
-        void IChatIdentityPersistence.PersistNow(string reason) =>
-            _ = PersistChatIdentityStateAsync(reason ?? "facade");
-
 
         void IChatCatalogPersistence.PersistRows(IList<ChatItem> chats)
         {
@@ -463,15 +460,8 @@ namespace Unison.Uwp.Services.WhatsApp
             return PersistChatCatalogAsync(ChatCatalogSnapshot.Take(chats));
         }
 
-        private async Task PersistChatCatalogAsync(ChatCatalogSnapshot snapshot)
-        {
-            if (_chatPreviews == null || snapshot == null || snapshot.Rows.Count == 0)
-            {
-                return;
-            }
-
-            await _chatPreviews.UpsertManyAsync(snapshot.Rows, notifyChunk: false).ConfigureAwait(false);
-        }
+        private Task PersistChatCatalogAsync(ChatCatalogSnapshot snapshot) =>
+            ChatCatalogPreviewPersist.UpsertAsync(_chatPreviews, snapshot);
 
         /// <summary>
         /// Loads persisted chats from disk on startup.
