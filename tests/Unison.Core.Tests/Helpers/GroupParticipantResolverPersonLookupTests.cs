@@ -138,7 +138,8 @@ namespace Unison.Core.Tests.Helpers
 
             public bool IsContactRefreshOnCooldown => false;
 
-            public Task ResolveMissingNamesAsync(bool force = false) => Task.CompletedTask;
+            public Task ResolveMissingNamesAsync(bool force = false, bool includeGroupListing = true) =>
+                Task.CompletedTask;
 
             public Task RunBackgroundResolutionAsync(CancellationToken cancellationToken = default) =>
                 Task.CompletedTask;

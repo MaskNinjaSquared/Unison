@@ -26,6 +26,35 @@ namespace Unison.Core.Helpers
 
     public static class ChatListVisibleReconcile
     {
+        /// <summary>
+        /// True when every visible slot already holds the desired row by reference — callers
+        /// can skip Move/Insert work (and its ListView churn) after a no-op rebuild.
+        /// </summary>
+        public static bool IsAlreadyAligned(
+            ObservableCollection<ChatItem> visible,
+            IList<ChatItem> desired)
+        {
+            if (visible == null || desired == null)
+            {
+                return false;
+            }
+
+            if (visible.Count != desired.Count)
+            {
+                return false;
+            }
+
+            for (int i = 0; i < desired.Count; i++)
+            {
+                if (!ReferenceEquals(visible[i], desired[i]))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
         public static ChatListVisibleReconcileResult Apply(
             ObservableCollection<ChatItem> visible,
             IList<ChatItem> desired,
@@ -39,6 +68,11 @@ namespace Unison.Core.Helpers
             if (moveBudget < 0)
             {
                 moveBudget = 0;
+            }
+
+            if (IsAlreadyAligned(visible, desired))
+            {
+                return new ChatListVisibleReconcileResult(0, false);
             }
 
             int mutations = 0;

@@ -965,11 +965,18 @@ namespace Unison.Core.ViewModels
                 // batch loop re-sorts in place; otherwise the pin only reaches the top of the list
                 // after the sync ends.
                 _visibleOrderDirty = true;
+                // While RefreshVisibleChats builds/applies, pin ApplyTo must not nest another
+                // ScheduleRefresh (that stacked Continues until enter→exit spanned tens of seconds).
+                if (IsRefreshing || _batchRendering)
+                {
+                    return;
+                }
+
                 // While the first sync holds the list, the release builds it sorted from scratch;
                 // a dispatcher post per preview hydrate would only queue no-ops on the UI thread.
                 if (!IsListHeldForSync)
-            {
-                _ = _dispatcher.RunAsync(() => ScheduleRefreshVisibleChats());
+                {
+                    _ = _dispatcher.RunAsync(() => ScheduleRefreshVisibleChats());
                 }
 
                 return;

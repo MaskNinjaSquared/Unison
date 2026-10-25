@@ -2,6 +2,24 @@
 
 Newest first.
 
+## Mobile — list rematerialize + names-phase group listing
+
+Returning to the chat list (and idle refreshes) still closed the process:
+`post-replay-names` embedded `QueryAllGroups(force)` (~200s on Low) while
+enrichment already owns a groups phase; `refresh-visible` rebuilt aligned
+249-row lists for 18–26s and cold reattach Continues every 40ms starved
+`incoming-pump` route. Fix: enrichment/background names skip group listing;
+`IsRefreshing` covers source build + suppress nested pin refreshes; aligned
+lists short-circuit; frugal cold fill uses budget 20 and 120ms Continue gaps.
+
+## Mobile — Debug live paint + name-refresh coalesce
+
+Debug overlay starved Back during FULL_HISTORY catch-up + `list-names-applied`
+storms: 250ms log rebinds (up to 60k) and 2s full snapshot+recent. Frugal budget
+now uses 1s / 8s timers, 12k log cap, timer health without recent dump, throttled
+auto-scroll. `ChatNameRefresh.ApplyAsync` coalesces overlapping callers into one
+catalogue walk (+ one follow-up if tickets arrived mid-pass).
+
 ## i18n — Legacy Mobile command bar + missing Settings/Debug keys
 
 Chat-actions AppBar labels now resolve `Shell_LegacyChatActions_*.Label`

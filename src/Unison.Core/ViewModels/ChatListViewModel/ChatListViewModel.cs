@@ -164,6 +164,8 @@ namespace Unison.Core.ViewModels
         private static readonly TimeSpan NamesAppliedRefreshDebounceFrugal = TimeSpan.FromMilliseconds(480);
         private const int VisibleRefreshMoveBudgetGenerous = 24;
         private const int VisibleRefreshMoveBudgetFrugal = 10;
+        /// <summary>Empty VisibleChats → full store: fewer Continue rounds on reattach.</summary>
+        private const int VisibleRefreshMoveBudgetFrugalCold = 20;
         private static readonly TimeSpan PreviewHydrateInterval = TimeSpan.FromMilliseconds(40);
         private static readonly TimeSpan MessagePreviewReconcileDebounce = TimeSpan.FromMilliseconds(350);
         private readonly object _messagePreviewReconcileGate = new object();
@@ -191,6 +193,11 @@ namespace Unison.Core.ViewModels
         /// refresh when the phase clears.
         /// </summary>
         private bool _refreshDeferredForEnrichment;
+
+        /// <summary>
+        /// Reattach started with VisibleChats empty — keep cold budget/Continue gaps until filled.
+        /// </summary>
+        private bool _visibleColdPopulate;
 
         private bool _previewHydrateLoopRunning;
         private readonly object _previewHydrateGate = new object();

@@ -1639,7 +1639,10 @@ namespace Unison.Uwp.Services.WhatsApp
         {
             using (TraceStartupPhase("post-replay-names"))
             {
-                await (Contacts?.ResolveMissingNamesAsync() ?? Task.CompletedTask)
+                // Serialized enrichment owns groups later (post-replay-groups). Embedding
+                // QueryAllGroups(force) here held the names phase ~200s on Mobile Low.
+                await (Contacts?.ResolveMissingNamesAsync(includeGroupListing: false)
+                    ?? Task.CompletedTask)
                     .ConfigureAwait(false);
             }
         }

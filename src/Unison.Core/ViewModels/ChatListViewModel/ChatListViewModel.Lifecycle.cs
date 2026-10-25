@@ -215,6 +215,7 @@ namespace Unison.Core.ViewModels
             _refreshCts?.Cancel();
             _refreshContinueCts?.Cancel();
             _pendingVisibleRefreshSource = null;
+            _visibleColdPopulate = false;
             _batchRendering = false;
             lock (_previewHydrateGate)
             {

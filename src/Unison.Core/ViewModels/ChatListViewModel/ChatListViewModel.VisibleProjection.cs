@@ -116,6 +116,12 @@ namespace Unison.Core.ViewModels
             }
 
             int visibleBefore = VisibleChats.Count;
+            if (visibleBefore == 0)
+            {
+                _visibleColdPopulate = true;
+            }
+
+            bool coldPopulate = PreferFrugalUi && _visibleColdPopulate;
             TraceListLifecycle(
                 "refresh-visible-enter",
                 BuildListSnapshot("before=" + visibleBefore),
@@ -123,29 +129,42 @@ namespace Unison.Core.ViewModels
 
             _visibleOrderDirty = false;
 
+            // Hold IsRefreshing across BuildVisibleRefreshSource: ApplyLocalChatFields can
+            // touch pin/mute and must not schedule nested refreshes mid-build (Mobile saw
+            // enter→exit gaps of 18–26s on already-aligned 249-row lists).
             List<ChatItem> source = null;
             bool reusedSource = reusePendingSource && _pendingVisibleRefreshSource != null;
-            if (reusedSource)
-            {
-                source = _pendingVisibleRefreshSource;
-            }
-            else
-            {
-                // A full rebuild supersedes any in-flight continue slice.
-                _refreshContinueCts?.Cancel();
-                source = BuildVisibleRefreshSource();
-                _pendingVisibleRefreshSource = source;
-            }
-
+            ChatListVisibleReconcileResult reconcile;
             int moveBudget = PreferFrugalUi
-                ? VisibleRefreshMoveBudgetFrugal
+                ? (coldPopulate
+                    ? VisibleRefreshMoveBudgetFrugalCold
+                    : VisibleRefreshMoveBudgetFrugal)
                 : VisibleRefreshMoveBudgetGenerous;
 
-            ChatListVisibleReconcileResult reconcile;
             IsRefreshing = true;
             try
             {
-                reconcile = ChatListVisibleReconcile.Apply(VisibleChats, source, moveBudget);
+                if (reusedSource)
+                {
+                    source = _pendingVisibleRefreshSource;
+                }
+                else
+                {
+                    // A full rebuild supersedes any in-flight continue slice.
+                    _refreshContinueCts?.Cancel();
+                    source = BuildVisibleRefreshSource();
+                    _pendingVisibleRefreshSource = source;
+                }
+
+                if (ChatListVisibleReconcile.IsAlreadyAligned(VisibleChats, source))
+                {
+                    reconcile = new ChatListVisibleReconcileResult(0, false);
+                    _pendingVisibleRefreshSource = null;
+                }
+                else
+                {
+                    reconcile = ChatListVisibleReconcile.Apply(VisibleChats, source, moveBudget);
+                }
             }
             finally
             {
@@ -158,20 +177,22 @@ namespace Unison.Core.ViewModels
                 "refresh-visible-exit",
                 BuildListSnapshot(
                     "before=" + visibleBefore +
-                    "; source=" + source.Count +
+                    "; source=" + (source?.Count ?? 0) +
                     "; mutations=" + reconcile.Mutations +
                     "; incomplete=" + reconcile.Incomplete +
                     "; budget=" + moveBudget +
-                    "; reused=" + reusedSource),
+                    "; reused=" + reusedSource +
+                    "; cold=" + coldPopulate),
                 flush: true);
 
             if (reconcile.Incomplete)
             {
-                ScheduleRefreshVisibleChatsContinue();
+                ScheduleRefreshVisibleChatsContinue(coldPopulate);
             }
             else
             {
                 _pendingVisibleRefreshSource = null;
+                _visibleColdPopulate = false;
             }
         }
 
@@ -236,7 +257,7 @@ namespace Unison.Core.ViewModels
         /// Continues a budgeted refresh on the next dispatcher turn so one sync chunk cannot
         /// hold the UI thread for hundreds of Moves.
         /// </summary>
-        private void ScheduleRefreshVisibleChatsContinue()
+        private void ScheduleRefreshVisibleChatsContinue(bool coldPopulate = false)
         {
             if (_timelinePriority != null && _timelinePriority.IsHeld)
             {
@@ -255,8 +276,12 @@ namespace Unison.Core.ViewModels
             _refreshContinueCts?.Cancel();
             _refreshContinueCts = new CancellationTokenSource();
             var token = _refreshContinueCts.Token;
+            // Cold reattach (0→~250) used to Continue every 40ms and starve incoming-pump
+            // route + Back. Wider gaps give the dispatcher room between ListView Insert slices.
             TimeSpan delay = PreferFrugalUi
-                ? TimeSpan.FromMilliseconds(40)
+                ? (coldPopulate
+                    ? TimeSpan.FromMilliseconds(120)
+                    : TimeSpan.FromMilliseconds(80))
                 : TimeSpan.FromMilliseconds(16);
 
             Task.Delay(delay, token).ContinueWith(t =>

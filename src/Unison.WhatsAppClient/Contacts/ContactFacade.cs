@@ -1202,9 +1202,9 @@ namespace Unison.WhatsAppClient.Contacts
             }
         }
 
-        public Task ResolveMissingNamesAsync(bool force = false)
+        public Task ResolveMissingNamesAsync(bool force = false, bool includeGroupListing = true)
         {
-            return _names.ResolveMissingAsync(force);
+            return _names.ResolveMissingAsync(force, includeGroupListing);
         }
 
         /// <inheritdoc />
@@ -1213,7 +1213,9 @@ namespace Unison.WhatsAppClient.Contacts
             _syncStatus.Raise(SyncPhaseStatus.Format(SyncPhaseStatus.Names));
             try
             {
-                await ResolveMissingNamesAsync().ConfigureAwait(false);
+                // Groups listing is raised by NotifyBackgroundResolutionDue / enrichment
+                // groups phase — do not embed QueryAllGroups inside names (Mobile 200s stall).
+                await ResolveMissingNamesAsync(includeGroupListing: false).ConfigureAwait(false);
 
                 string deferReason;
                 if (_syncWork.ShouldDeferAvatarFetch(out deferReason))

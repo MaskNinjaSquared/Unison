@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Input;
@@ -16,6 +16,22 @@ namespace Unison.Core.ViewModels
     public class DebugViewModel : Observable
     {
         private const int MaxDisplayedLogCharacters = 60000;
+        private const int FrugalMaxDisplayedLogCharacters = 12000;
+
+        /// <summary>Live log drain interval when the host is not on a frugal budget.</summary>
+        public static readonly TimeSpan GenerousLogFlushInterval = TimeSpan.FromMilliseconds(250);
+
+        /// <summary>
+        /// Live log drain on Mobile/frugal — avoids rebinding a huge TextBlock several times
+        /// per second while catch-up / name refresh storms the journal.
+        /// </summary>
+        public static readonly TimeSpan FrugalLogFlushInterval = TimeSpan.FromSeconds(1);
+
+        /// <summary>Runtime health rebuild interval (desktop / high).</summary>
+        public static readonly TimeSpan GenerousRuntimeRefreshInterval = TimeSpan.FromSeconds(2);
+
+        /// <summary>Runtime health rebuild on frugal — snapshot+recent is expensive on ARM.</summary>
+        public static readonly TimeSpan FrugalRuntimeRefreshInterval = TimeSpan.FromSeconds(8);
 
         private readonly IDiagnosticsConsole _console;
         private readonly IConnectionService _connectionService;
@@ -34,6 +50,7 @@ namespace Unison.Core.ViewModels
         private readonly object _pendingLogLock = new object();
         private readonly StringBuilder _pendingLogLines = new StringBuilder();
         private readonly StringBuilder _socketSliceLines = new StringBuilder();
+        private DateTimeOffset _lastAutoScrollUtc = DateTimeOffset.MinValue;
 
         public DebugViewModel(
             IDiagnosticsConsole console,
@@ -64,7 +81,7 @@ namespace Unison.Core.ViewModels
             });
             DeleteSessionCommand = new RelayCommand(async () => await ConfirmAndDeleteSessionAsync());
             BackCommand = new RelayCommand(() => BackRequested?.Invoke(this, EventArgs.Empty));
-            RefreshRuntimeCommand = new RelayCommand(RefreshRuntimeHealth);
+            RefreshRuntimeCommand = new RelayCommand(() => RefreshRuntimeHealth(includeRecentEvents: true));
             SaveRuntimeReportCommand = new RelayCommand(async () => await SaveRuntimeReportAsync());
             ClearRuntimeLogCommand = new RelayCommand(async () => await ClearRuntimeLogAsync());
             RequestFullHistoryCommand = new RelayCommand(async () => await RequestFullHistoryAsync());
@@ -78,6 +95,23 @@ namespace Unison.Core.ViewModels
 
         /// <summary>Raised when the displayed session log text changes (view may auto-scroll).</summary>
         public event EventHandler LogTextChanged;
+
+        /// <summary>
+        /// True on Mobile / Low sync budget — live debug paint must stay cheap so Back stays
+        /// responsive while catch-up and name refresh keep writing the journal.
+        /// </summary>
+        public bool PreferFrugalLivePaint =>
+            _history != null && _history.PreferFrugalSyncBudget;
+
+        /// <summary>Interval the view should use for <see cref="FlushPendingLogLines"/>.</summary>
+        public TimeSpan LogFlushInterval =>
+            PreferFrugalLivePaint ? FrugalLogFlushInterval : GenerousLogFlushInterval;
+
+        /// <summary>Interval the view should use for periodic <see cref="RefreshRuntimeHealth"/>.</summary>
+        public TimeSpan RuntimeRefreshInterval =>
+            PreferFrugalLivePaint
+                ? FrugalRuntimeRefreshInterval
+                : GenerousRuntimeRefreshInterval;
 
         /// <summary>Bind toggles / start timers when the debug pane becomes visible.</summary>
         public void Activate(string buildInfoText = null)
@@ -105,7 +139,7 @@ namespace Unison.Core.ViewModels
             _console.SocketSliceReported += Console_SocketSliceReported;
             _console.SocketSliceQrReceived -= Console_SocketSliceQrReceived;
             _console.SocketSliceQrReceived += Console_SocketSliceQrReceived;
-            RefreshRuntimeHealth();
+            RefreshRuntimeHealth(includeRecentEvents: true);
         }
 
         /// <summary>Stop live subscriptions when the pane is hidden.</summary>
@@ -149,7 +183,38 @@ namespace Unison.Core.ViewModels
                 _pendingLogLines.Clear();
             }
 
-            LogText = TrimDisplayedLog((LogText ?? string.Empty) + chunk);
+            // Rebuild from the pending tail only when the display is already near the cap —
+            // concatenating 60k + storm chunk then Substring is a GC spike on ARM.
+            int maxChars = MaxLogCharacters;
+            string current = LogText ?? string.Empty;
+            if (current.Length >= maxChars && chunk.Length >= maxChars / 4)
+            {
+                LogText = TrimDisplayedLog(chunk);
+                return;
+            }
+
+            LogText = TrimDisplayedLog(current + chunk);
+        }
+
+        /// <summary>
+        /// True when the view should auto-scroll after a log paint. Frugal hosts throttle so
+        /// ChangeView does not fight Back taps during journal storms.
+        /// </summary>
+        public bool ShouldAutoScrollLog()
+        {
+            if (!PreferFrugalLivePaint)
+            {
+                return true;
+            }
+
+            DateTimeOffset now = DateTimeOffset.UtcNow;
+            if ((now - _lastAutoScrollUtc) < FrugalLogFlushInterval)
+            {
+                return false;
+            }
+
+            _lastAutoScrollUtc = now;
+            return true;
         }
 
         public bool IsSessionLoggingEnabled
@@ -289,23 +354,36 @@ namespace Unison.Core.ViewModels
 
         private void Console_LogLineAppended(object sender, string line)
         {
+            int maxChars = MaxLogCharacters;
             lock (_pendingLogLock)
             {
                 _pendingLogLines.AppendLine(line ?? string.Empty);
-                if (_pendingLogLines.Length > MaxDisplayedLogCharacters)
+                if (_pendingLogLines.Length > maxChars)
                 {
                     string keep = _pendingLogLines.ToString();
                     _pendingLogLines.Clear();
-                    _pendingLogLines.Append(keep.Substring(keep.Length - MaxDisplayedLogCharacters));
+                    _pendingLogLines.Append(keep.Substring(keep.Length - maxChars));
                 }
             }
         }
 
-        public void RefreshRuntimeHealth()
+        /// <summary>
+        /// Rebuilds the runtime health text. Periodic timer on frugal skips the recent-events
+        /// dump (largest string); manual refresh and Activate keep the full report.
+        /// </summary>
+        public void RefreshRuntimeHealth() => RefreshRuntimeHealth(includeRecentEvents: !PreferFrugalLivePaint);
+
+        public void RefreshRuntimeHealth(bool includeRecentEvents)
         {
             try
             {
                 RuntimeDiagnosticsSnapshot snapshot = _console.CaptureRuntimeSnapshot();
+                if (!includeRecentEvents)
+                {
+                    RuntimeHealthText = snapshot.ToDisplayText();
+                    return;
+                }
+
                 string recent = _console.GetRecentRuntimeText();
                 RuntimeHealthText = snapshot.ToDisplayText() +
                     Environment.NewLine +
@@ -318,19 +396,22 @@ namespace Unison.Core.ViewModels
             }
         }
 
+        private int MaxLogCharacters =>
+            PreferFrugalLivePaint ? FrugalMaxDisplayedLogCharacters : MaxDisplayedLogCharacters;
+
         private async Task SaveRuntimeReportAsync()
         {
             RuntimeExportStatusText = _strings.Get("Debug_PreparingReport", "Preparing report…");
             string result = await _console.ExportRuntimeReportAsync();
             RuntimeExportStatusText = result;
-            RefreshRuntimeHealth();
+            RefreshRuntimeHealth(includeRecentEvents: true);
         }
 
         private async Task ClearRuntimeLogAsync()
         {
             await _console.ClearRuntimeLogAsync();
             RuntimeExportStatusText = _strings.Get("Debug_RuntimeCleared", "Runtime log cleared.");
-            RefreshRuntimeHealth();
+            RefreshRuntimeHealth(includeRecentEvents: true);
         }
 
         private async Task RequestFullHistoryAsync()
@@ -364,7 +445,7 @@ namespace Unison.Core.ViewModels
                     "Full history request failed: ") + ex.Message;
             }
 
-            RefreshRuntimeHealth();
+            RefreshRuntimeHealth(includeRecentEvents: true);
         }
 
         private async Task ConfirmAndDeleteSessionAsync()
@@ -381,14 +462,15 @@ namespace Unison.Core.ViewModels
             }
         }
 
-        private static string TrimDisplayedLog(string text)
+        private string TrimDisplayedLog(string text)
         {
-            if (string.IsNullOrEmpty(text) || text.Length <= MaxDisplayedLogCharacters)
+            int maxChars = MaxLogCharacters;
+            if (string.IsNullOrEmpty(text) || text.Length <= maxChars)
             {
                 return text ?? string.Empty;
             }
 
-            return text.Substring(text.Length - MaxDisplayedLogCharacters);
+            return text.Substring(text.Length - maxChars);
         }
     }
 }

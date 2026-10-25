@@ -21,11 +21,24 @@ namespace Unison.Core.Tests.Helpers
             var visible = new ObservableCollection<ChatItem> { a, b };
             var desired = new List<ChatItem> { a, b };
 
+            Assert.True(ChatListVisibleReconcile.IsAlreadyAligned(visible, desired));
+
             ChatListVisibleReconcileResult result = ChatListVisibleReconcile.Apply(visible, desired, 10);
 
             Assert.Equal(0, result.Mutations);
             Assert.False(result.Incomplete);
             Assert.Equal(new[] { a, b }, visible);
+        }
+
+        [Fact]
+        public void IsAlreadyAligned_false_when_order_differs()
+        {
+            ChatItem a = Row("a");
+            ChatItem b = Row("b");
+            var visible = new ObservableCollection<ChatItem> { b, a };
+            var desired = new List<ChatItem> { a, b };
+
+            Assert.False(ChatListVisibleReconcile.IsAlreadyAligned(visible, desired));
         }
 
         [Fact]

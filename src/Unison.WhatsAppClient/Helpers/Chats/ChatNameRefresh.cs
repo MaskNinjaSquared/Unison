@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Threading;
 using System.Threading.Tasks;
 using Unison.Core.Contracts;
 using Unison.Core.Contracts.WhatsApp;
@@ -17,7 +18,9 @@ namespace Unison.WhatsAppClient.Helpers
     /// Group titles go through <see cref="IGroupNaming"/> so a cached subject wins over the
     /// address book. On frugal devices the work is sliced across dispatcher turns so a single
     /// apply cannot hold the UI thread for hundreds of PropertyChanged notifications.
-    /// <see cref="Applied"/> is raised once inside the last UI pass (never with zero).
+    /// Concurrent callers coalesce into one in-flight walk (plus at most one follow-up if more
+    /// tickets arrived while it ran) so usync / subject-cache storms do not stack full catalogue
+    /// walks. <see cref="Applied"/> is raised once inside the last UI pass (never with zero).
     /// </remarks>
     public sealed class ChatNameRefresh
     {
@@ -32,6 +35,8 @@ namespace Unison.WhatsAppClient.Helpers
         private readonly IGroupNaming _groupNaming;
         private readonly ISelfMarkerNaming _markers;
         private readonly Func<bool> _preferFrugal;
+        private readonly SemaphoreSlim _applyGate = new SemaphoreSlim(1, 1);
+        private int _applyTickets;
 
         public ChatNameRefresh(
             IDispatcher ui,
@@ -53,6 +58,25 @@ namespace Unison.WhatsAppClient.Helpers
         public event EventHandler<int> Applied;
 
         public async Task ApplyAsync()
+        {
+            Interlocked.Increment(ref _applyTickets);
+            await _applyGate.WaitAsync().ConfigureAwait(false);
+            try
+            {
+                // One walk covers every ticket that arrived before we started; if more land
+                // during the walk, Exchange sees them and we do a single follow-up pass.
+                while (Interlocked.Exchange(ref _applyTickets, 0) > 0)
+                {
+                    await ApplyCoreAsync().ConfigureAwait(false);
+                }
+            }
+            finally
+            {
+                _applyGate.Release();
+            }
+        }
+
+        private async Task ApplyCoreAsync()
         {
             bool frugal = _preferFrugal();
             int sliceSize = frugal ? FrugalUiSliceSize : int.MaxValue;

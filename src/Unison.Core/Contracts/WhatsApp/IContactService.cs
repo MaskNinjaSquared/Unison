@@ -130,7 +130,12 @@ namespace Unison.Core.Contracts.WhatsApp
         /// <param name="force">
         /// When true, run even while sync traffic would normally defer usync (first-sync list unlock).
         /// </param>
-        Task ResolveMissingNamesAsync(bool force = false);
+        /// <param name="includeGroupListing">
+        /// When true, unnamed groups may trigger <c>QueryAllGroups</c>. Pass false when a dedicated
+        /// groups phase / <see cref="NotifyBackgroundResolutionDueAsync"/> follows — embedding a
+        /// forced listing inside names held Mobile ~200s and starved the list dispatcher.
+        /// </param>
+        Task ResolveMissingNamesAsync(bool force = false, bool includeGroupListing = true);
 
         /// <summary>
         /// Background names then pictures (or schedules a deferred retry). Quiet-wait /

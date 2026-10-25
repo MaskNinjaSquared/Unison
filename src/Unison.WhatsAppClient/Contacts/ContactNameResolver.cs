@@ -199,7 +199,7 @@ namespace Unison.WhatsAppClient.Contacts
         /// The opportunistic pass, triggered while live messages arrive: finds chats still showing
         /// a bare number and resolves a handful of them.
         /// </summary>
-        public async Task ResolveMissingAsync(bool force = false)
+        public async Task ResolveMissingAsync(bool force = false, bool includeGroupListing = true)
         {
             // Names already on file come first and need no network. Every exit below (refresh
             // running, cooldown, nothing left to ask) used to skip them, so after a sync the list
@@ -241,7 +241,13 @@ namespace Unison.WhatsAppClient.Contacts
             // have no second source: a contact still shows up named by a push name on the next
             // message, a group subject only ever arrives by asking. Its own window is what keeps
             // this from becoming a query per message.
-            if (needsGroupQuery && DateTime.UtcNow - _lastForcedGroupPassUtc >= ForcedGroupPassWindow)
+            //
+            // Enrichment / background-resolution callers pass includeGroupListing: false —
+            // a dedicated groups phase follows. Embedding QueryAllGroups(force) inside names
+            // held post-replay-names ~200s on Mobile Low and starved refresh-visible Continues.
+            if (includeGroupListing &&
+                needsGroupQuery &&
+                DateTime.UtcNow - _lastForcedGroupPassUtc >= ForcedGroupPassWindow)
             {
                 _lastForcedGroupPassUtc = DateTime.UtcNow;
                 _syncStatus.Raise(SyncPhaseStatus.Format(SyncPhaseStatus.Groups));
@@ -261,6 +267,11 @@ namespace Unison.WhatsAppClient.Contacts
                 {
                     Debug.WriteLine($"[ContactNameResolver] ResolveMissing group query failed: {exGroup.Message}");
                 }
+            }
+            else if (!includeGroupListing && needsGroupQuery)
+            {
+                Debug.WriteLine(
+                    "[ContactNameResolver] ResolveMissing deferred group listing to dedicated phase");
             }
 
             if (jidsToResolve.Count == 0)
