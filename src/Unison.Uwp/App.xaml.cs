@@ -826,7 +826,8 @@ namespace Unison.Uwp
                 sp.GetRequiredService<AttachedUiDispatcher>(),
                 sp.GetRequiredService<IChatCatalogPersistence>(),
                 sp.GetRequiredService<ChatNameRefresh>(),
-                sp.GetRequiredService<IRuntimeDiagnostics>()));
+                sp.GetRequiredService<IRuntimeDiagnostics>(),
+                sp.GetRequiredService<IAppVisibility>()));
             services.AddSingleton<ILiveTilesService>(_ => LiveTilesService.Instance);
             services.AddSingleton<IShortcutService, ShortcutService>();
             services.AddSingleton<INotificationService>(sp =>

@@ -51,6 +51,7 @@ namespace Unison.WhatsAppClient.Groups
         private readonly SyncWorkGate _syncWork;
         private readonly SyncWorkloadStrategy _workload;
         private readonly IRuntimeDiagnostics _diagnostics;
+        private readonly IAppVisibility _visibility;
         private readonly GroupQueryWindow _queryWindow = new GroupQueryWindow();
 
         /// <summary>0 free / 1 busy — overlapping listings each burn a 60s IQ and starve chat open.</summary>
@@ -60,6 +61,12 @@ namespace Unison.WhatsAppClient.Groups
         /// Listing was skipped for catch-up / sync traffic; retry once the next due signal arrives.
         /// </summary>
         private int _listingRetryPending;
+
+        /// <summary>
+        /// Raised from <see cref="IAppVisibility.Changed"/> when the window hides so an
+        /// in-flight unresolved-metadata walk stops (1.8 aborted enrichment phases only).
+        /// </summary>
+        private int _listingAbortRequested;
 
         /// <summary>
         /// Groups already asked once this session for <c>linked_parent</c> / <c>parent</c>.
@@ -85,7 +92,8 @@ namespace Unison.WhatsAppClient.Groups
             IDispatcher ui,
             IChatCatalogPersistence catalog,
             ChatNameRefresh nameRefresh,
-            IRuntimeDiagnostics diagnostics = null)
+            IRuntimeDiagnostics diagnostics = null,
+            IAppVisibility visibility = null)
         {
             _workload = workload ?? throw new ArgumentNullException(nameof(workload));
             _syncStatus = syncStatus ?? throw new ArgumentNullException(nameof(syncStatus));
@@ -104,13 +112,54 @@ namespace Unison.WhatsAppClient.Groups
             _avatars = avatars ?? throw new ArgumentNullException(nameof(avatars));
             _usyncGate = usyncGate ?? throw new ArgumentNullException(nameof(usyncGate));
             _diagnostics = diagnostics;
+            _visibility = visibility;
             _reader = new GroupMetadataReader(jids);
+            if (_visibility != null)
+            {
+                _visibility.Changed += OnAppVisibilityChanged;
+            }
         }
 
         /// <inheritdoc />
         public void NotifyGroupListingDue()
         {
+            if (GroupListingVisibilityGate.ShouldDeferStart(IsWindowVisible))
+            {
+                Interlocked.Exchange(ref _listingRetryPending, 1);
+                _diagnostics?.Write(
+                    "startup-phase",
+                    "background-groups:deferred",
+                    "reason=window-hidden");
+                return;
+            }
+
             _ = RunBackgroundListingAsync();
+        }
+
+        private bool IsWindowVisible =>
+            _visibility == null || _visibility.IsWindowVisible;
+
+        private bool ListingAbortRequested =>
+            Interlocked.CompareExchange(ref _listingAbortRequested, 0, 0) == 1;
+
+        private void OnAppVisibilityChanged(object sender, EventArgs e)
+        {
+            if (_visibility == null)
+            {
+                return;
+            }
+
+            if (!_visibility.IsWindowVisible)
+            {
+                Interlocked.Exchange(ref _listingAbortRequested, 1);
+                return;
+            }
+
+            Interlocked.Exchange(ref _listingAbortRequested, 0);
+            if (Interlocked.CompareExchange(ref _listingRetryPending, 0, 0) == 1)
+            {
+                NotifyGroupListingDue();
+            }
         }
 
         private async Task RunBackgroundListingAsync()
@@ -456,6 +505,14 @@ namespace Unison.WhatsAppClient.Groups
 
         public async Task QueryAllGroupsAsync(bool force)
         {
+            if (GroupListingVisibilityGate.ShouldDeferStart(IsWindowVisible))
+            {
+                Interlocked.Exchange(ref _listingRetryPending, 1);
+                Debug.WriteLine(
+                    "[GroupFacade] QueryAllGroupsAsync deferred (window hidden); retry armed");
+                return;
+            }
+
             string heavyDeferReason;
             if (_syncWork.ShouldDeferHeavyLocalWork(out heavyDeferReason))
             {
@@ -501,16 +558,30 @@ namespace Unison.WhatsAppClient.Groups
                 return;
             }
 
+            Interlocked.Exchange(ref _listingAbortRequested, 0);
+
             // Armed on the way out: full reuse when the listing answered; short failure backoff
             // when it timed out, so callers cannot stack another 60s IQ on top of a dead one.
             bool listingAnswered = false;
+            bool abortedForVisibility = false;
             try
             {
                 try
                 {
                     Debug.WriteLine("[GroupFacade] Fetching all participating groups...");
                     BinaryNode response = await _wire.QueryParticipatingGroupsAsync();
-                    if (response != null)
+                    if (GroupListingVisibilityGate.ShouldAbortInFlight(
+                            IsWindowVisible,
+                            ListingAbortRequested))
+                    {
+                        abortedForVisibility = true;
+                        Interlocked.Exchange(ref _listingRetryPending, 1);
+                        _diagnostics?.Write(
+                            "startup-phase",
+                            "background-groups:aborted",
+                            "reason=window-hidden;stage=after-listing-iq");
+                    }
+                    else if (response != null)
                     {
                         listingAnswered = true;
                         var groupNodes = response.FindAllDescendants("group");
@@ -525,16 +596,32 @@ namespace Unison.WhatsAppClient.Groups
 
                 // Outside the try above. The per-group fallback names the groups the listing missed,
                 // so a listing that failed is the case it exists for.
-                try
+                if (!abortedForVisibility)
                 {
-                    await QueryUnresolvedGroupMetadataAsync(_workload.GroupMetadataBatchSize);
-                }
-                catch (Exception ex)
-                {
-                    Debug.WriteLine("[GroupFacade] Group metadata fallback failed: " + ex.Message);
+                    try
+                    {
+                        abortedForVisibility = await QueryUnresolvedGroupMetadataAsync(
+                            _workload.GroupMetadataBatchSize);
+                        if (abortedForVisibility)
+                        {
+                            Interlocked.Exchange(ref _listingRetryPending, 1);
+                            _diagnostics?.Write(
+                                "startup-phase",
+                                "background-groups:aborted",
+                                "reason=window-hidden;stage=unresolved-metadata");
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.WriteLine("[GroupFacade] Group metadata fallback failed: " + ex.Message);
+                    }
                 }
 
-                if (listingAnswered)
+                if (abortedForVisibility)
+                {
+                    _queryWindow.ArmFailure(DateTime.UtcNow);
+                }
+                else if (listingAnswered)
                 {
                     _queryWindow.Arm(DateTime.UtcNow);
                 }
@@ -549,11 +636,12 @@ namespace Unison.WhatsAppClient.Groups
             }
         }
 
-        private async Task QueryUnresolvedGroupMetadataAsync(int limit)
+        /// <returns>True when aborted because the window hid mid-pass.</returns>
+        private async Task<bool> QueryUnresolvedGroupMetadataAsync(int limit)
         {
             if (!_wire.IsHandshakeComplete)
             {
-                return;
+                return false;
             }
 
             var unresolved = new List<ChatItem>();
@@ -586,14 +674,25 @@ namespace Unison.WhatsAppClient.Groups
 
             if (unresolved.Count == 0)
             {
-                return;
+                return false;
             }
 
             int attempts = 0;
             int resolved = 0;
+            bool abortedForVisibility = false;
             var pending = unresolved.Take(Math.Max(1, limit)).ToList();
             foreach (var chat in pending)
             {
+                if (GroupListingVisibilityGate.ShouldAbortInFlight(
+                        IsWindowVisible,
+                        ListingAbortRequested))
+                {
+                    abortedForVisibility = true;
+                    Debug.WriteLine(
+                        "[GroupFacade] QueryUnresolvedGroupMetadataAsync aborted (window hidden)");
+                    break;
+                }
+
                 if (string.IsNullOrWhiteSpace(chat.JID))
                 {
                     continue;
@@ -642,6 +741,7 @@ namespace Unison.WhatsAppClient.Groups
             }
 
             Debug.WriteLine("[GroupFacade] Group metadata fallback: resolved " + resolved + "/" + attempts + " unresolved group names");
+            return abortedForVisibility;
         }
     }
 }

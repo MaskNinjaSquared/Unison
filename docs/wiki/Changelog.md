@@ -2,6 +2,14 @@
 
 Newest first.
 
+## Mobile — abort group listing when window hides (keepalive)
+
+1.8 aborted enrichment phases when CoreWindow hid; `QueryAllGroups` already in
+flight still burned IQs for minutes under `location-keepalive` (journal
+`background-groups` 182–256s) and the process died on unlock (black screen).
+`GroupListingVisibilityGate` defers `NotifyGroupListingDue` / listing start
+while hidden, aborts unresolved-metadata mid-pass, arms retry, and flushes on
+`IAppVisibility.Changed` when visible again. Package 2.2.23.
 ## Extraction 4 — DeferredStartupOnce owns deferred-startup CAS
 
 `_deferredStartupMaintenanceStarted` moved out of `WhatsAppService` into
