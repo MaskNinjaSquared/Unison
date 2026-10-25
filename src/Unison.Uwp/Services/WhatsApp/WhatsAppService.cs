@@ -357,7 +357,11 @@ namespace Unison.Uwp.Services.WhatsApp
         private volatile bool _persistedUiStateLoaded;
         private FileKeyStore _sharedKeyStore;
         private int _forceFreshConnectOnResume;
-        private int _deferredStartupMaintenanceStarted;
+        /// <summary>
+        /// Once-per-session deferred-startup CAS — owned by
+        /// <see cref="DeferredStartupOnce"/>.
+        /// </summary>
+        private readonly DeferredStartupOnce _deferredStartupOnce = new DeferredStartupOnce();
         /// <summary>
         /// Connect + resume/ensure SemaphoreSlim gates — owned by
         /// <see cref="ConnectionGateLocks"/>.
@@ -1852,7 +1856,7 @@ namespace Unison.Uwp.Services.WhatsApp
         /// </summary>
         public void StartDeferredStartupMaintenance()
         {
-            if (Interlocked.Exchange(ref _deferredStartupMaintenanceStarted, 1) != 0)
+            if (!_deferredStartupOnce.TryStart())
             {
                 return;
             }

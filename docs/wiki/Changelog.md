@@ -2,6 +2,11 @@
 
 Newest first.
 
+## Extraction 4 — DeferredStartupOnce owns deferred-startup CAS
+
+`_deferredStartupMaintenanceStarted` moved out of `WhatsAppService` into
+`DeferredStartupOnce`. `StartDeferredStartupMaintenance` claims via
+`TryStart`; a second call is a no-op.
 ## Extraction 4 — PersistedUiLoadGate owns persisted-UI load lock
 
 `LoadPersistedUiState` `SemaphoreSlim` moved out of `WhatsAppService` into
