@@ -33,6 +33,27 @@ namespace Unison.Core.ViewModels
                 return;
             }
 
+            // Chat open owns the dispatcher: do not start (or continue) list Moves until Release.
+            if (_timelinePriority != null && _timelinePriority.IsHeld)
+            {
+                _refreshDeferredForTimelinePriority = true;
+                _visibleOrderDirty = true;
+                _refreshCts?.Cancel();
+                _refreshContinueCts?.Cancel();
+                return;
+            }
+
+            // location-keepalive keeps the process alive with CoreWindow hidden — list Moves
+            // and tip-swapped paint a black surface and look like a hang.
+            if (IsWindowHidden)
+            {
+                _refreshDeferredForWindowHidden = true;
+                _visibleOrderDirty = true;
+                _refreshCts?.Cancel();
+                _refreshContinueCts?.Cancel();
+                return;
+            }
+
             // Frugal Mobile: hold reshuffles while background names/avatars/groups enrich so
             // Move/Insert thrash does not stack on top of PropertyChanged storms. Search and
             // explicit list-filter changes still refresh so the UI stays responsive.
@@ -75,6 +96,22 @@ namespace Unison.Core.ViewModels
         {
             if (_batchRendering || IsInSafeMode || IsListHeldForSync)
             {
+                return;
+            }
+
+            if (_timelinePriority != null && _timelinePriority.IsHeld)
+            {
+                _refreshDeferredForTimelinePriority = true;
+                _visibleOrderDirty = true;
+                _refreshContinueCts?.Cancel();
+                return;
+            }
+
+            if (IsWindowHidden)
+            {
+                _refreshDeferredForWindowHidden = true;
+                _visibleOrderDirty = true;
+                _refreshContinueCts?.Cancel();
                 return;
             }
 
@@ -201,6 +238,20 @@ namespace Unison.Core.ViewModels
         /// </summary>
         private void ScheduleRefreshVisibleChatsContinue()
         {
+            if (_timelinePriority != null && _timelinePriority.IsHeld)
+            {
+                _refreshDeferredForTimelinePriority = true;
+                _visibleOrderDirty = true;
+                return;
+            }
+
+            if (IsWindowHidden)
+            {
+                _refreshDeferredForWindowHidden = true;
+                _visibleOrderDirty = true;
+                return;
+            }
+
             _refreshContinueCts?.Cancel();
             _refreshContinueCts = new CancellationTokenSource();
             var token = _refreshContinueCts.Token;
@@ -645,6 +696,81 @@ namespace Unison.Core.ViewModels
 
         private bool IsDeepLinkHeldPreferLoading =>
             _chatService.ShouldPreferDeepLinkLoadingOverlay(IsDeepLinkHeld, _listEverMaterialized);
+
+        private bool IsWindowHidden =>
+            _appVisibility != null && !_appVisibility.IsWindowVisible;
+
+        private void TimelinePriority_Changed(object sender, EventArgs e)
+        {
+            if (!_attached)
+            {
+                return;
+            }
+
+            if (_timelinePriority != null && _timelinePriority.IsHeld)
+            {
+                _refreshDeferredForTimelinePriority = true;
+                _visibleOrderDirty = true;
+                _refreshCts?.Cancel();
+                _refreshContinueCts?.Cancel();
+                return;
+            }
+
+            if (!_refreshDeferredForTimelinePriority && !_visibleOrderDirty)
+            {
+                return;
+            }
+
+            _refreshDeferredForTimelinePriority = false;
+            if (_batchRendering || IsInSafeMode || IsListHeldForSync)
+            {
+                return;
+            }
+
+            if (IsWindowHidden)
+            {
+                _refreshDeferredForWindowHidden = true;
+                return;
+            }
+
+            ScheduleRefreshVisibleChats();
+        }
+
+        private void AppVisibility_Changed(object sender, EventArgs e)
+        {
+            if (!_attached)
+            {
+                return;
+            }
+
+            if (IsWindowHidden)
+            {
+                _refreshDeferredForWindowHidden = true;
+                _visibleOrderDirty = true;
+                _refreshCts?.Cancel();
+                _refreshContinueCts?.Cancel();
+                return;
+            }
+
+            if (!_refreshDeferredForWindowHidden && !_visibleOrderDirty)
+            {
+                return;
+            }
+
+            _refreshDeferredForWindowHidden = false;
+            if (_batchRendering || IsInSafeMode || IsListHeldForSync)
+            {
+                return;
+            }
+
+            if (_timelinePriority != null && _timelinePriority.IsHeld)
+            {
+                _refreshDeferredForTimelinePriority = true;
+                return;
+            }
+
+            ScheduleRefreshVisibleChats();
+        }
 
         private void DeepLinkHold_Changed(object sender, EventArgs e)
         {

@@ -2,6 +2,13 @@
 
 Newest first.
 
+## Mobile — background location-keepalive no longer paints a black list
+
+With `location-keepalive`, the process stays alive while CoreWindow is hidden.
+`refresh-visible` and `tip-swapped` kept mutating the list on that black surface.
+`IAppVisibility.Changed` now defers `ChatListViewModel` visible refresh and pauses
+`ChatPreviewReconciler` UI slices until the window is visible again.
+
 ## Extraction 3.10 — IncomingMessagePump owns the decrypted drain
 
 Queue, Task.Run drain, live timeout / stall bookkeeping, and handle→façade

@@ -75,7 +75,18 @@ namespace Unison.Core.Tests.Helpers
             Assert.False(
                 ChatTimelineOpenPriority.ShouldPauseTipReconcileUi(
                     deepLinkListHeld: false,
-                    timelineLoadPriorityHeld: false));
+                    timelineLoadPriorityHeld: false,
+                    windowVisible: true));
+        }
+
+        [Fact]
+        public void Tip_reconcile_ui_pauses_while_window_hidden()
+        {
+            Assert.True(
+                ChatTimelineOpenPriority.ShouldPauseTipReconcileUi(
+                    deepLinkListHeld: false,
+                    timelineLoadPriorityHeld: false,
+                    windowVisible: false));
         }
     }
 }

@@ -373,7 +373,8 @@ namespace Unison.Uwp
                 () => sp.GetRequiredService<SyncBudget>().IsFrugal,
                 () => Unison.Core.Helpers.Chats.ChatTimelineOpenPriority.ShouldPauseTipReconcileUi(
                     sp.GetRequiredService<ChatListDeepLinkHoldGate>().IsHeld,
-                    sp.GetRequiredService<ChatTimelineLoadPriorityGate>().IsHeld)));
+                    sp.GetRequiredService<ChatTimelineLoadPriorityGate>().IsHeld,
+                    sp.GetRequiredService<IAppVisibility>().IsWindowVisible)));
             services.AddSingleton(sp => new ChatNameRefresh(
                 sp.GetRequiredService<AttachedUiDispatcher>(),
                 sp.GetRequiredService<IChatStateStore>(),
@@ -779,19 +780,26 @@ namespace Unison.Uwp
             services.AddSingleton<IGroupAvatarActions>(sp => new BridgeGroupAvatarActions(
                 sp.GetRequiredService<AvatarFetcher>()));
             // One applier for GroupFacade and the receipt path (lazy Func on WhatsAppService).
-            services.AddSingleton(sp => new GroupMetadataApply(
-                sp.GetRequiredService<IGroupNaming>(),
-                sp.GetRequiredService<AttachedUiDispatcher>(),
-                sp.GetRequiredService<IChatCatalogPersistence>(),
-                new GroupRosterWriter(
-                    sp.GetRequiredService<IGroupRosterStore>(),
-                    sp.GetRequiredService<IPersonStore>()),
-                sp.GetRequiredService<IJidResolver>(),
-                sp.GetRequiredService<IChatStateStore>(),
-                sp.GetRequiredService<ChatRowIndex>(),
-                sp.GetRequiredService<ChatStateStore>().GroupSubjects,
-                utcNow: null,
-                timelinePriority: sp.GetRequiredService<ChatTimelineLoadPriorityGate>()));
+            services.AddSingleton(sp =>
+            {
+                SyncWorkloadStrategy workload = sp.GetRequiredService<SyncWorkloadStrategy>();
+                // Build chunks = roster batch × 8 so Mobile yields often without tiny commits.
+                int rosterChunk = Math.Max(1, workload.GroupRosterBatchSize) * 8;
+                return new GroupMetadataApply(
+                    sp.GetRequiredService<IGroupNaming>(),
+                    sp.GetRequiredService<AttachedUiDispatcher>(),
+                    sp.GetRequiredService<IChatCatalogPersistence>(),
+                    new GroupRosterWriter(
+                        sp.GetRequiredService<IGroupRosterStore>(),
+                        sp.GetRequiredService<IPersonStore>()),
+                    sp.GetRequiredService<IJidResolver>(),
+                    sp.GetRequiredService<IChatStateStore>(),
+                    sp.GetRequiredService<ChatRowIndex>(),
+                    sp.GetRequiredService<ChatStateStore>().GroupSubjects,
+                    utcNow: null,
+                    timelinePriority: sp.GetRequiredService<ChatTimelineLoadPriorityGate>(),
+                    rosterBuildChunkSize: rosterChunk);
+            });
             services.AddSingleton<IGroupService>(sp => new GroupFacade(
                 sp.GetRequiredService<IGroupWireActions>(),
                 sp.GetRequiredService<IGroupNaming>(),
@@ -1294,6 +1302,7 @@ namespace Unison.Uwp
         private void CoreWindow_VisibilityChanged(CoreWindow sender, VisibilityChangedEventArgs args)
         {
             IsWindowVisible = args.Visible;
+            (Services?.GetService<IAppVisibility>() as AppVisibilityService)?.RaiseChanged();
             RuntimeDiagnosticsService.Instance.Write(
                 "lifecycle",
                 "visibility-changed",

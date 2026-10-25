@@ -78,6 +78,8 @@ namespace Unison.Core.ViewModels
         private readonly SyncWorkloadStrategy _workload;
         private readonly ChatListInitialPaintGate _listPaintGate;
         private readonly ChatListDeepLinkHoldGate _deepLinkHold;
+        private readonly ChatTimelineLoadPriorityGate _timelinePriority;
+        private readonly IAppVisibility _appVisibility;
         /// <summary>True after the ListView has painted once this attach cycle (warm toast must not unload it).</summary>
         private bool _listEverMaterialized;
 
@@ -105,6 +107,16 @@ namespace Unison.Core.ViewModels
         /// </summary>
         private string _pendingDeepLinkSyncMessage;
         private bool _pendingDeepLinkSyncVisible;
+
+        /// <summary>
+        /// Visible refresh deferred while chat-open owns the timeline priority gate.
+        /// </summary>
+        private bool _refreshDeferredForTimelinePriority;
+
+        /// <summary>
+        /// Visible refresh deferred while CoreWindow is hidden (location-keepalive background).
+        /// </summary>
+        private bool _refreshDeferredForWindowHidden;
 
         /// <summary>Breadcrumbs for Mobile post-sync ListView materialize crashes (flushed to disk).</summary>
         private int _postSyncReleaseTicks;
@@ -214,7 +226,9 @@ namespace Unison.Core.ViewModels
             SyncWorkloadStrategy workload = null,
             ChatListInitialPaintGate listPaintGate = null,
             ChatListDeepLinkHoldGate deepLinkHold = null,
-            ISystemInfoProvider systemInfo = null)
+            ChatTimelineLoadPriorityGate timelineLoadPriority = null,
+            ISystemInfoProvider systemInfo = null,
+            IAppVisibility appVisibility = null)
         {
             _jids = jids ?? throw new ArgumentNullException(nameof(jids));
             _chatService = chatService;
@@ -227,6 +241,8 @@ namespace Unison.Core.ViewModels
             _workload = workload ?? HighSyncWorkload.Instance;
             _listPaintGate = listPaintGate;
             _deepLinkHold = deepLinkHold;
+            _timelinePriority = timelineLoadPriority;
+            _appVisibility = appVisibility;
             _chatState = chatState ?? throw new ArgumentNullException(nameof(chatState));
             _messageService = messageService ?? throw new ArgumentNullException(nameof(messageService));
             _contactService = contactService ?? throw new ArgumentNullException(nameof(contactService));

@@ -242,7 +242,7 @@ namespace Unison.WhatsAppClient.Chats
             DiagWrite(
                 "preview-tip",
                 "ui-slice-paused",
-                "reason=" + reason + "; waiting=timeline-priority");
+                "reason=" + reason + "; waiting=priority-or-hidden");
 
             while (_shouldPauseUiSlices())
             {
