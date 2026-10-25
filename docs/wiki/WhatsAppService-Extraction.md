@@ -1349,7 +1349,8 @@ CAS** is `PostSyncMaintenanceOwner` over `IPostSyncMaintenanceIoHost` (quiet /
 memory / façade bodies only; `ShutdownAsync` calls `CancelAll`). **Connect +
 resume/ensure locks** are `ConnectionGateLocks`. **Hydration day-retry CTS /
 day attempts / day-anchor** is `HydrationDayRetryOwner` over
-`IHydrationDayRetryIoHost`. **Init connection-state lock** is `InitGateOwner`. The incoming pump drain loop is
+`IHydrationDayRetryIoHost`. **Init connection-state lock** is `InitGateOwner`. **Persisted-UI load lock** is
+`PersistedUiLoadGate`. The incoming pump drain loop is
 `IncomingPumpDrainDispatch` (host still owns typed queue + handle). Offline pending-
 notification release is `OfflineReplayRelease` over `IOfflineReplayReleaseHost`
 (wire still attaches the event on the client). Thin-wire dispatches:

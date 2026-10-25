@@ -138,10 +138,10 @@ namespace Unison.Uwp.Services.WhatsApp
             _authState?.Registered == true;
 
         Task ILoadPersistedUiStateHost.EnterPersistedUiLoadLockAsync() =>
-            _persistedUiLoadLock.WaitAsync();
+            _persistedUiLoadGate.EnterAsync();
 
         void ILoadPersistedUiStateHost.ExitPersistedUiLoadLock() =>
-            _persistedUiLoadLock.Release();
+            _persistedUiLoadGate.Exit();
 
         Task ILoadPersistedUiStateHost.LoadPersistedChatsAsync() =>
             LoadPersistedChatsAsync();

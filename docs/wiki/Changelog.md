@@ -2,6 +2,10 @@
 
 Newest first.
 
+## Extraction 4 — PersistedUiLoadGate owns persisted-UI load lock
+
+`LoadPersistedUiState` `SemaphoreSlim` moved out of `WhatsAppService` into
+`PersistedUiLoadGate`. Host enter/exit forwards to the gate.
 ## Extraction 4 — InitGateOwner owns connection-state init lock
 
 `InitializeConnectionStateAsync` `SemaphoreSlim` moved out of `WhatsAppService`

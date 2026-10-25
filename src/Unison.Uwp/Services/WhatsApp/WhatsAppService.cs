@@ -349,7 +349,11 @@ namespace Unison.Uwp.Services.WhatsApp
         /// <see cref="InitGateOwner"/>.
         /// </summary>
         private readonly InitGateOwner _initGate = new InitGateOwner();
-        private readonly SemaphoreSlim _persistedUiLoadLock = new SemaphoreSlim(1, 1);
+        /// <summary>
+        /// LoadPersistedUiState SemaphoreSlim — owned by
+        /// <see cref="PersistedUiLoadGate"/>.
+        /// </summary>
+        private readonly PersistedUiLoadGate _persistedUiLoadGate = new PersistedUiLoadGate();
         private volatile bool _persistedUiStateLoaded;
         private FileKeyStore _sharedKeyStore;
         private int _forceFreshConnectOnResume;
