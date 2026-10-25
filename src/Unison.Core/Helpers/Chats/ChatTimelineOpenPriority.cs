@@ -60,5 +60,21 @@ namespace Unison.Core.Helpers.Chats
         /// scroll gestures before the chat-list resumes budgeted Moves.
         /// </summary>
         public static bool ShouldDelayTimelinePriorityRelease(bool isMobile) => isMobile;
+
+        /// <summary>
+        /// Hold must not force a full list rebuild on Release. Only mark dirty when a
+        /// budgeted continue or in-flight refresh was interrupted mid-way.
+        /// </summary>
+        public static bool ShouldMarkVisibleOrderDirtyOnTimelineHold(
+            bool hasPendingContinueSource,
+            bool isRefreshing) =>
+            hasPendingContinueSource || isRefreshing;
+
+        /// <summary>
+        /// After Release: only schedule refresh-visible when the catalogue order actually
+        /// changed (or a continue was interrupted). Deferred-only is not enough.
+        /// </summary>
+        public static bool ShouldScheduleVisibleRefreshOnTimelineRelease(bool orderDirty) =>
+            orderDirty;
     }
 }

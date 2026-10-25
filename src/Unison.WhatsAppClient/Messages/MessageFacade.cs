@@ -604,6 +604,9 @@ namespace Unison.WhatsAppClient.Messages
                 return new List<ChatMessage>();
             }
 
+            var loadClock = Stopwatch.StartNew();
+            WriteChatOpenLoadStage(jid, "load-begin", "t=0");
+
             List<ChatMessage> fromClient = null;
             string clientError = null;
             try
@@ -616,6 +619,12 @@ namespace Unison.WhatsAppClient.Messages
                 Debug.WriteLine("[MessageFacade] Client LoadMessagesForChat failed: " + ex.Message);
             }
 
+            long liveMs = loadClock.ElapsedMilliseconds;
+            WriteChatOpenLoadStage(
+                jid,
+                "load-live",
+                "ms=" + liveMs + "; ram=" + (fromClient?.Count ?? 0));
+
             IReadOnlyList<HistoryMessage> fromSql = null;
             string sqlError = null;
             try
@@ -627,6 +636,13 @@ namespace Unison.WhatsAppClient.Messages
                 sqlError = ex.GetType().Name + ": " + ex.Message;
                 Debug.WriteLine("[MessageFacade] SQLite history message load failed: " + ex.Message);
             }
+
+            long sqlMs = loadClock.ElapsedMilliseconds;
+            WriteChatOpenLoadStage(
+                jid,
+                "load-sql",
+                "ms=" + sqlMs + "; sql=" + (fromSql?.Count ?? 0) +
+                "; liveMs=" + liveMs);
 
             List<ChatMessage> fromSqlMapped = MapHistoryRows(fromSql);
             List<ChatMessage> merged = OpenChatMessageMerge.Merge(fromSqlMapped, fromClient);
@@ -643,6 +659,13 @@ namespace Unison.WhatsAppClient.Messages
                     Debug.WriteLine("[MessageFacade] SeedChatMessagesInMemory failed: " + ex.Message);
                 }
             }
+
+            long seedMs = loadClock.ElapsedMilliseconds;
+            WriteChatOpenLoadStage(
+                jid,
+                "load-seed",
+                "ms=" + seedMs + "; merged=" + merged.Count +
+                "; sqlMs=" + sqlMs);
 
             // RECENT history often leaves a single listable message — pull older on open.
             bool onDemandPending = IsHistoryOnDemandPending(jid);
@@ -663,6 +686,20 @@ namespace Unison.WhatsAppClient.Messages
                 sqlError).ConfigureAwait(false);
 
             return merged;
+        }
+
+        private void WriteChatOpenLoadStage(string jid, string eventName, string details)
+        {
+            try
+            {
+                _diagnostics?.Write(
+                    "chat-open",
+                    eventName,
+                    "chat=" + DiagnosticJidMask.Apply(jid) + "; " + details);
+            }
+            catch
+            {
+            }
         }
 
         /// <summary>

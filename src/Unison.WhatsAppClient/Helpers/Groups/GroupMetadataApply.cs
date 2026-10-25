@@ -137,7 +137,8 @@ namespace Unison.WhatsAppClient.Helpers
             string groupJid,
             GroupMetadataSnapshot metadata,
             bool includeRoster = true,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken = default,
+            string wireSubject = null)
         {
             if (metadata == null || string.IsNullOrWhiteSpace(groupJid))
             {
@@ -156,12 +157,21 @@ namespace Unison.WhatsAppClient.Helpers
             IList<GroupMemberDraft> drafts = null;
             await _ui.RunAsync(() =>
             {
-                chat = _chats.Chats.FirstOrDefault(c =>
-                    c != null &&
-                    string.Equals(_jids.GetCanonicalJid(c.JID), canonical, StringComparison.OrdinalIgnoreCase));
+                // Index lookup — do not walk Chats with GetCanonicalJid per row on the UI
+                // thread while LoadMessages is also waiting for a dispatcher turn.
+                List<ChatItem> rows = _rows.FindConversation(canonical);
+                chat = rows != null && rows.Count > 0 ? rows[0] : null;
                 if (chat == null)
                 {
                     return;
+                }
+
+                if (!string.IsNullOrWhiteSpace(wireSubject))
+                {
+                    TryCacheSyncedSubject(
+                        canonical,
+                        wireSubject,
+                        DuplicateChatRowPick.FirstNonBlankName(rows));
                 }
 
                 ApplyToRow(chat, metadata, includeRoster: false);

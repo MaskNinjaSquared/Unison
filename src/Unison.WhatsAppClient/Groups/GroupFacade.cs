@@ -218,21 +218,9 @@ namespace Unison.WhatsAppClient.Groups
                 GroupMetadataSnapshot metadata = _reader.ReadMetadata(response, canonical, includeRoster);
                 _communityLinkProbed.Add(canonical);
 
-                // ReadMetadata leaves Subject null by design — extract + cache so community hubs
-                // and ordinary groups leave the "Community" / id placeholder after this refresh.
+                // ReadMetadata leaves Subject null by design — extract and hand to Apply so
+                // subject cache runs AFTER WaitWhileHeld (never steal UI from LoadMessages).
                 string subject = _reader.ExtractSubject(response, canonical);
-                string priorName = null;
-                await _ui.RunAsync(() =>
-                {
-                    ChatItem row = _chats.Chats.FirstOrDefault(c =>
-                        c != null &&
-                        string.Equals(
-                            _jids.GetCanonicalJid(c.JID),
-                            canonical,
-                            StringComparison.OrdinalIgnoreCase));
-                    priorName = row?.Name;
-                });
-                bool cachedSubject = _apply.TryCacheSyncedSubject(canonical, subject, priorName);
 
                 Debug.WriteLine(
                     "[GroupFacade] RefreshGroupSendPermissions " + canonical +
@@ -250,13 +238,18 @@ namespace Unison.WhatsAppClient.Groups
                     "; isCommunityAnnounce=" + (metadata != null && metadata.IsCommunityAnnounce) +
                     "; announceOnly=" + (metadata != null && metadata.AnnounceOnly) +
                     "; includeRoster=" + includeRoster +
-                    "; subjectCached=" + cachedSubject);
+                    "; subject=" + (string.IsNullOrWhiteSpace(subject) ? "-" : "yes"));
                 // Default flags-only: open-path ApplyMembers(500+) froze Mobile after paint.
                 // Members pivot passes includeRoster: true (chunked off UI).
                 // ApplyMetadataAsync already ApplySyncedLabel on the single row — do not call
                 // ChatNameRefresh.ApplyAsync() here (full catalogue walk → list-names-applied
                 // storms that starve the timeline after a large-group open).
-                await _apply.ApplyMetadataAsync(canonical, metadata, includeRoster, cancellationToken);
+                await _apply.ApplyMetadataAsync(
+                    canonical,
+                    metadata,
+                    includeRoster,
+                    cancellationToken,
+                    subject);
             }
             catch (OperationCanceledException)
             {

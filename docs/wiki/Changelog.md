@@ -2,6 +2,14 @@
 
 Newest first.
 
+## Mobile — large-group open: no UI steal before timeline gate + no false list rebuild
+
+`RefreshGroupSendPermissions` queued a Chats walk on the dispatcher before
+`WaitWhileHeld`, racing `LoadMessages` (journal gap ~95s on FullStack 568).
+Subject cache now runs inside `ApplyMetadataAsync` after the gate, via
+`ChatRowIndex`. Timeline Hold no longer marks `visibleOrderDirty` by itself, so
+Release after settle does not force `refresh-visible` on every back-to-list.
+`chat-open` gains `load-begin` / `load-live` / `load-sql` / `load-seed` timings.
 ## Extraction 4 — BackgroundDisplayNamesPersistence owns broker name snapshot
 
 `IPersistBackgroundDisplayNamesHost` left `WhatsAppService`. New

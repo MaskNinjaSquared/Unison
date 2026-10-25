@@ -13,6 +13,7 @@ using Unison.Core.Contracts;
 using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Factories;
 using Unison.Core.Helpers;
+using Unison.Core.Helpers.Chats;
 using Unison.Core.Models;
 using Unison.Core.State;
 
@@ -753,8 +754,17 @@ namespace Unison.Core.ViewModels
 
             if (_timelinePriority != null && _timelinePriority.IsHeld)
             {
+                // Defer only — do not mark order dirty just because open held the gate.
+                // Marking dirty here forced refresh-visible on every Release (Mobile list→
+                // detail→back lag after large-group open) even when the catalogue never moved.
                 _refreshDeferredForTimelinePriority = true;
-                _visibleOrderDirty = true;
+                if (ChatTimelineOpenPriority.ShouldMarkVisibleOrderDirtyOnTimelineHold(
+                        _pendingVisibleRefreshSource != null,
+                        IsRefreshing))
+                {
+                    _visibleOrderDirty = true;
+                }
+
                 _refreshCts?.Cancel();
                 _refreshContinueCts?.Cancel();
                 return;
@@ -766,6 +776,12 @@ namespace Unison.Core.ViewModels
             }
 
             _refreshDeferredForTimelinePriority = false;
+            if (!ChatTimelineOpenPriority.ShouldScheduleVisibleRefreshOnTimelineRelease(
+                    _visibleOrderDirty))
+            {
+                return;
+            }
+
             if (_batchRendering || IsInSafeMode || IsListHeldForSync)
             {
                 return;

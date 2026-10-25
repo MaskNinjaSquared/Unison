@@ -108,5 +108,38 @@ namespace Unison.Core.Tests.Helpers
             Assert.True(
                 ChatTimelineOpenPriority.MobileScrollSettleHold >= TimeSpan.FromSeconds(5));
         }
+
+        [Fact]
+        public void Timeline_hold_does_not_dirty_order_when_idle()
+        {
+            Assert.False(
+                ChatTimelineOpenPriority.ShouldMarkVisibleOrderDirtyOnTimelineHold(
+                    hasPendingContinueSource: false,
+                    isRefreshing: false));
+        }
+
+        [Fact]
+        public void Timeline_hold_dirties_order_when_continue_or_refresh_interrupted()
+        {
+            Assert.True(
+                ChatTimelineOpenPriority.ShouldMarkVisibleOrderDirtyOnTimelineHold(
+                    hasPendingContinueSource: true,
+                    isRefreshing: false));
+            Assert.True(
+                ChatTimelineOpenPriority.ShouldMarkVisibleOrderDirtyOnTimelineHold(
+                    hasPendingContinueSource: false,
+                    isRefreshing: true));
+        }
+
+        [Fact]
+        public void Timeline_release_skips_refresh_when_order_clean()
+        {
+            Assert.False(
+                ChatTimelineOpenPriority.ShouldScheduleVisibleRefreshOnTimelineRelease(
+                    orderDirty: false));
+            Assert.True(
+                ChatTimelineOpenPriority.ShouldScheduleVisibleRefreshOnTimelineRelease(
+                    orderDirty: true));
+        }
     }
 }
