@@ -2,7 +2,7 @@
 // IConnectionSessionHost
 //
 // Session wipe / logout / memory / reconnect-suppress the ConnectionFacade
-// needs without naming IWhatsAppService.
+// needs without naming the concrete client.
 // =============================================================================
 using System.Threading.Tasks;
 

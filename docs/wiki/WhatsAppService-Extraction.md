@@ -110,7 +110,8 @@ raises and the façade subscribes to in its own constructor.
 That let the push-in doors close on the contracts too. `NotifyStreamError`,
 `NotifySuspectedInvalidSession`, `TryIngestLiveAsync`, `NoteBackgroundHistorySyncBounce` and
 `ClearAvatarAttempted` are private to their façades now, because the client was their only caller.
-`ConnectionFacade` still takes `IWhatsAppService` for remaining raw connection events.
+`ConnectionFacade` takes connection host ports (`IConnectionEventSource`, session /
+ensure / resume / broker / lifecycle) — not an aggregating client contract.
 `ProfileFacade` uses `IConnectionService` only (`SessionEstablished` / `EnsureConnectedAsync`).
 Contact / Group / History / Message / Chat / Status façades no longer subscribe to moved subjects.
 
@@ -1299,7 +1300,8 @@ to `DecideCatchUpAfterIdleBatch`.
 `ConnectionHealthPolicy` already left; connect / resume / pairing / broker / suspend are lifecycle
 orchestration. Do not nibble that partial until the rest of phase 3 stops needing the god client.
 
-Rename-able to `IWhatsAppConnection` / keep `IWhatsAppService` until the last caller dies. Target surface:
+`IWhatsAppService` is gone (last DI alias retired). UI stays on `IConnectionService`;
+the client remains the concrete host for wire ports. Target connection surface:
 
 - `InitializeAsync` / `ConnectAsync` / `ResumeAsync` / `EnsureConnectedAsync` / `Disconnect`
 - `IsConnected` / `IsTransportReady`

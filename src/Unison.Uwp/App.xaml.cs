@@ -413,7 +413,7 @@ namespace Unison.Uwp
                 maxMessagesPerChatBatch: 1500));
             // Shared by send/receipt/pin/open — one hold table for statuses and pins.
             services.AddSingleton(_ => new PendingMessageState());
-            // Concrete first so host ports resolve without casting IWhatsAppService → WhatsAppService.
+            // Concrete first so host ports resolve WhatsAppService without an aggregating façade contract.
             services.AddSingleton(sp => WhatsAppService.Create(
                 sp.GetRequiredService<ChatStateStore>(),
                 sp.GetRequiredService<ChatRowIndex>(),
@@ -450,7 +450,6 @@ namespace Unison.Uwp
                 () => sp.GetRequiredService<IGroupService>(),
                 () => sp.GetRequiredService<IHistoryService>(),
                 () => sp.GetRequiredService<IDeferredAvatarResolution>()));
-            services.AddSingleton<IWhatsAppService>(sp => sp.GetRequiredService<WhatsAppService>());
             // The send flow lives on MessageFacade; the timeline caches and the socket it writes
             // through are still the client's, reached only through this narrow port.
             services.AddSingleton<IOutgoingMessageHost>(

@@ -2,6 +2,12 @@
 
 Newest first.
 
+## Extraction 4 — retire IWhatsAppService
+
+Last DI alias and `implements` removed. No ViewModel/façade resolved it;
+`ConnectionFacade` already uses connection host ports. Concrete
+`WhatsAppService` stays for wire hosts. Doc target surface no longer names
+`IWhatsAppConnection` as a rename of that aggregating contract.
 ## Mobile — abort group listing when window hides (keepalive)
 
 1.8 aborted enrichment phases when CoreWindow hid; `QueryAllGroups` already in

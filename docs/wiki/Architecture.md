@@ -129,7 +129,8 @@ Broker transfer and reclaim go through `ConnectionHandler` and answer `true` onl
 
 ## WhatsAppService today
 
-Still the singleton `IWhatsAppService` registered in `App.ConfigureServices`. It still owns:
+Still the concrete singleton registered in `App.ConfigureServices` (host ports + lifecycle).
+`IWhatsAppService` is gone — UI uses façades (`IConnectionService`, …). It still owns:
 
 - Connect / resume / persist
 - In-memory `Chats` collection and message caches
@@ -138,9 +139,9 @@ Still the singleton `IWhatsAppService` registered in `App.ConfigureServices`. It
 - Presence subscribe
 - Memory-pressure and suspend hooks
 
-The type is `partial` (`WhatsAppService.Connection.cs`, `.Media.cs`, `.Groups.cs`, …) so cluster extractions stay reviewable. **Partials are the same class** — façades still inject `IWhatsAppService`. Moving a cluster means cutting methods onto a façade, not calling the partial file. Plan and leftover UI leaks: [WhatsAppService extraction](WhatsAppService-Extraction).
+The type is `partial` (`WhatsAppService.Connection.cs`, `.Media.cs`, `.Groups.cs`, …) so cluster extractions stay reviewable. **Partials are the same class** — façades talk to host ports / domain contracts, not an aggregating client interface. Moving a cluster means cutting methods onto a façade, not calling the partial file. Plan and leftover UI leaks: [WhatsAppService extraction](WhatsAppService-Extraction).
 
-Facades extracted **policy** around it (pairing/logout, pin/mark-read, contact overlay, profile picture IQ, history resync that waits for the phone). Screens should not subscribe to its raw events; those are for facades only (stated on `IWhatsAppService`).
+Facades extracted **policy** around it (pairing/logout, pin/mark-read, contact overlay, profile picture IQ, history resync that waits for the phone). Screens should not subscribe to raw client events; those are for façades only (`IConnectionEventSource` and peers).
 
 ## Data that persists
 

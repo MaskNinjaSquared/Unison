@@ -2,7 +2,8 @@
 // IConnectionEventSource
 //
 // Connection facts the ConnectionFacade relays to UI (QR, status, session,
-// stream errors). Same event names as IWhatsAppService so one field satisfies
+// stream errors). Same event names the client used to expose on the aggregating
+// contract so one field satisfies
 // both; the façade must not take the full client contract.
 // =============================================================================
 using System;

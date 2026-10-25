@@ -35,11 +35,11 @@ Unison.Core/
 | `IHistoryService` | `HistoryFacade` (WhatsAppClient) | Sync status, chunks, on-demand full resync, initial-sync counters + frugal budget |
 | `IStatusService` | `StatusFacade` (WhatsAppClient) | Active Status authors/items, live status@broadcast ingest, on-demand media |
 | `IDebugSendService` | `DebugSendService` (UWP) | File-watch test send (`#if DEBUG`) |
-| `IWhatsAppService` | `WhatsAppService` (UWP) | Compatibility client (socket, in-memory chats, persist) |
+| *(concrete)* | `WhatsAppService` (UWP) | Compatibility client + host ports (socket, persist); not registered as an aggregating façade contract |
 
 `IPairingService` stays in `Contracts/` (not under `WhatsApp/`). Login talks to `IConnectionService`, which owns pairing.
 
-Raw events on `IWhatsAppService` are **for facades only**. Each facade re-publishes the subject it owns. A ViewModel that subscribes to the client directly is coupling itself to the class that happens to produce the event today.
+Raw connection events live on `IConnectionEventSource` / other host ports and are **for façades only**. Each façade re-publishes the subject it owns. A ViewModel that subscribes to the client directly is coupling itself to the class that happens to produce the event today.
 
 ### Platform contracts (implemented in UWP)
 

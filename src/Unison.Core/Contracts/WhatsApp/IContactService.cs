@@ -71,7 +71,7 @@ namespace Unison.Core.Contracts.WhatsApp
 
         /// <summary>
         /// Owns the avatar batch/backoff policy (which chats need a picture, how often to retry).
-        /// Uses <see cref="IWhatsAppService"/> only for the raw fetch/apply primitives.
+        /// Uses host/wire ports only for the raw fetch/apply primitives.
         /// </summary>
         Task RetrieveContactPicturesAsync(CancellationToken cancellationToken = default(CancellationToken));
 
