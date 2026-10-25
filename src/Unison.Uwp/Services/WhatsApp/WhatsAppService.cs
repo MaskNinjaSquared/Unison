@@ -259,12 +259,12 @@ namespace Unison.Uwp.Services.WhatsApp
         string IReleaseMemoryHost.ActiveChatJid => _activeChat.Jid;
 
         IReadOnlyList<string> IReleaseMemoryHost.MessageCacheChatJids() =>
-            MessagesByChat.ChatJids();
+            _chatState.MessagesByChat.ChatJids();
 
         string IReleaseMemoryHost.GetCanonicalJid(string jid) => GetCanonicalJid(jid);
 
         void IReleaseMemoryHost.RemoveMessagesByChatKey(string key) =>
-            MessagesByChat.Remove(key);
+            _chatState.MessagesByChat.Remove(key);
 
         void IReleaseMemoryHost.LogMemoryReleased() =>
             Debug.WriteLine("[Memoria] Caches inativos de mensagens liberados");
@@ -296,10 +296,8 @@ namespace Unison.Uwp.Services.WhatsApp
             NormalizeJid(jid);
 
         void IUnloadMessageCacheIfInactiveHost.RemoveMessagesByChatKey(string key) =>
-            MessagesByChat.Remove(key);
+            _chatState.MessagesByChat.Remove(key);
 
-        private void TrimInMemoryMessageWindow(string jid) =>
-            MessagesByChat.Trim(jid, MaxActiveChatMessagesInMemory, DateTime.UtcNow);
         private AuthState _authState;
 
         private bool _isReconnecting = false;
@@ -427,10 +425,8 @@ namespace Unison.Uwp.Services.WhatsApp
         // Offline messages are intentionally kept off the UI thread while a large replay
         // is draining. Keep a compact per-chat summary so the chat list can still be
         // updated after the in-memory message cache is released for inactive chats.
-        // Somente a conversa aberta deve manter uma janela grande de mensagens em RAM.
-        // O historico completo continua no MessageStore.
+        // Active-chat window size / trim lives on MessageFacade (store cache), not here.
         private readonly ActiveChat _activeChat;
-        private const int MaxActiveChatMessagesInMemory = 300;
         private readonly InitialSyncProgressState _initialSync;
         private readonly SyncBudget _syncBudget;
         private readonly SyncWorkloadStrategy _workload;
@@ -615,7 +611,7 @@ namespace Unison.Uwp.Services.WhatsApp
             try
             {
                 snapshot.LoadedChatCount = Chats.Count;
-                snapshot.LoadedMessageCount = MessagesByChat.TotalMessageCount();
+                snapshot.LoadedMessageCount = _chatState.MessagesByChat.TotalMessageCount();
             }
             catch
             {
@@ -639,11 +635,10 @@ namespace Unison.Uwp.Services.WhatsApp
         }
 
 
-        // The chat list and the per-chat messages now live in ChatStateStore. These properties
-        // hand out the very same instances, so existing code keeps working unchanged while new
-        // consumers can read the store directly instead of coming through this class.
+        // The chat list lives in ChatStateStore. This property hands out the same instance so
+        // existing bindings keep working; message timelines are read through the store / façades
+        // (no MessagesByChat alias on the client).
         public ObservableCollection<ChatItem> Chats => _chatState.Chats;
-        public ChatMessageCache MessagesByChat => _chatState.MessagesByChat;
 
         private readonly ChatRowIndex _chatRows;
 
@@ -690,7 +685,7 @@ namespace Unison.Uwp.Services.WhatsApp
         }
 
         private DateTime GetNewestStoredMessageUtc(Func<string, bool> includeChat) =>
-            NewestStoredMessage.FindUtc(MessagesByChat.Snapshot(), Chats, includeChat);
+            NewestStoredMessage.FindUtc(_chatState.MessagesByChat.Snapshot(), Chats, includeChat);
 
 
         private bool TryGetHistoryFreshnessStaleReason(DateTime nowUtc, out string reason)
@@ -714,7 +709,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 out reason);
         }
 
-        private int GetStoredMessageCount() => MessagesByChat.TotalMessageCount();
+        private int GetStoredMessageCount() => _chatState.MessagesByChat.TotalMessageCount();
 
         private static readonly TimeSpan HistoryBackfillStaleThreshold = TimeSpan.FromHours(8);
         private static readonly TimeSpan HistoryFreshnessStaleThreshold = TimeSpan.FromMinutes(30);
@@ -1277,7 +1272,7 @@ namespace Unison.Uwp.Services.WhatsApp
             return _ui.RunAsync(() =>
             {
                 Chats.Clear();
-                MessagesByChat.Clear();
+                _chatState.MessagesByChat.Clear();
                 _historyRequests.ClearRequests();
                 _historyRequests.ReleaseFull();
             });
@@ -2076,7 +2071,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 (ex != null ? ex.Message : string.Empty));
 
         /// <summary>
-        /// Saves a single message to disk (call after adding to MessagesByChat).
+        /// Saves a single message to disk (call after the timeline store accepted it).
         /// </summary>
         public async Task SaveMessageAsync(string chatJid, ChatMessage message)
         {
@@ -2224,9 +2219,7 @@ namespace Unison.Uwp.Services.WhatsApp
             GetStoredMessageCount();
 
         int IAcceptedHistoryRequestTimeoutHost.GetChatMessageCount(string chatJid) =>
-            MessagesByChat.TryGet(chatJid, out var currentMessages) && currentMessages != null
-                ? currentMessages.Count
-                : 0;
+            _chatState.GetMessageCount(chatJid);
 
         void IAcceptedHistoryRequestTimeoutHost.LogHistoryRequestTimeout(string message) =>
             Debug.WriteLine("[WhatsAppService] " + message);
@@ -2777,13 +2770,18 @@ namespace Unison.Uwp.Services.WhatsApp
 
         private Task<bool> RequestHistoryOnDemandIfNeededAsync(string normJid, int count, string triggerReason = null)
         {
-            if (string.IsNullOrWhiteSpace(normJid) ||
-                !MessagesByChat.TryGet(normJid, out var cached))
+            if (string.IsNullOrWhiteSpace(normJid))
             {
                 return Task.FromResult(false);
             }
 
-            return HistoryDispatch.RequestChatPageAsync(normJid, cached, count, triggerReason, DateTime.UtcNow);
+            // Same seam as HistoryFacade: store snapshot, not the live cache list.
+            return HistoryDispatch.RequestChatPageAsync(
+                normJid,
+                _chatState.GetMessages(normJid),
+                count,
+                triggerReason,
+                DateTime.UtcNow);
         }
 
         private void StartPeriodicFullHistorySafety() =>
@@ -3609,15 +3607,8 @@ namespace Unison.Uwp.Services.WhatsApp
         int IBuildHistoryHydrationCandidatesHost.HistoryBackfillMaxStaleTopChats =>
             HistoryBackfillMaxStaleTopChats;
 
-        private int GetHistoryHydrationMessageCount(string jid)
-        {
-            if (string.IsNullOrWhiteSpace(jid))
-            {
-                return 0;
-            }
-
-            return MessagesByChat.TryGet(jid, out var list) && list != null ? list.Count : 0;
-        }
+        private int GetHistoryHydrationMessageCount(string jid) =>
+            string.IsNullOrWhiteSpace(jid) ? 0 : _chatState.GetMessageCount(jid);
 
         private Task WaitForHistoryHydrationSettleAsync() =>
             WaitForHistoryHydrationSettleDispatch.RunAsync(this);

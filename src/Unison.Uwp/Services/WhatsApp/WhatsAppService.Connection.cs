@@ -1348,7 +1348,7 @@ namespace Unison.Uwp.Services.WhatsApp
             _ui.RunAsync(() =>
             {
                 Chats.Clear();
-                MessagesByChat.Clear();
+                _chatState.MessagesByChat.Clear();
                 _historyRequests.ClearRequests();
                 ContactNames.Clear();
                 PhoneContactNamesByJid.Clear();

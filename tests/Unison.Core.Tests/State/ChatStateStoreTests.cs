@@ -120,6 +120,21 @@ public class ChatStateStoreTests
         Assert.Equal(new[] { Ana }, raised);
     }
 
+    [Fact]
+    public async Task GetMessageCount_matches_held_timeline_and_is_zero_for_unknown()
+    {
+        IChatStateStore store = NewStore();
+
+        Assert.Equal(0, store.GetMessageCount(Ana));
+        Assert.Equal(0, store.GetMessageCount(" "));
+        Assert.Equal(0, store.GetMessageCount(null));
+
+        await store.UpsertMessagesAsync(Ana, new[] { At("A", 1), At("B", 2) });
+
+        Assert.Equal(2, store.GetMessageCount(Ana));
+        Assert.Equal(store.GetMessages(Ana).Count, store.GetMessageCount(Ana));
+    }
+
     private sealed class InlineDispatcher : IDispatcher
     {
         public Task RunAsync(Action action)
