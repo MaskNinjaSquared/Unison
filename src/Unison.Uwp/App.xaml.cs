@@ -715,9 +715,9 @@ namespace Unison.Uwp
                 sp.GetRequiredService<IAppLifecycle>(),
                 sp.GetRequiredService<ChatListDeduper>(),
                 sp.GetRequiredService<ChatRowIndex>(),
-                sp.GetRequiredService<WhatsAppService>(),
+                sp.GetRequiredService<IJidAliasPersistence>(),
                 sp.GetRequiredService<IChatIdentityPersistence>(),
-                sp.GetRequiredService<WhatsAppService>(),
+                sp.GetRequiredService<IResolvedNameApplyHost>(),
                 sp.GetRequiredService<IRuntimeDiagnostics>()));
             services.AddSingleton<IJidAliasPersistence>(sp => new JidAliasPersistence(
                 sp.GetRequiredService<JidAliasTable>(),
