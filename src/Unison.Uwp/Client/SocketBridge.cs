@@ -883,45 +883,54 @@ namespace Unison.Uwp.Client
             return MessageContent.GenerateMessageId(_authState.Me != null ? _authState.Me.Id : null);
         }
 
-        public async Task<BinaryNode> QueryGroupMetadataAsync(string groupJid)
+        public async Task<BinaryNode> QueryGroupMetadataAsync(
+            string groupJid,
+            CancellationToken cancellationToken = default(CancellationToken))
         {
-            var response = await QueryAsync(new BinaryNode(
-                "iq",
-                new Dictionary<string, string>
-                {
-                    { "id", NextTag() },
-                    { "type", "get" },
-                    { "xmlns", "w:g2" },
-                    { "to", groupJid }
-                },
-                new List<BinaryNode>
-                {
-                    new BinaryNode("query", new Dictionary<string, string> { { "request", "interactive" } })
-                })).ConfigureAwait(false);
+            var response = await QueryAsync(
+                new BinaryNode(
+                    "iq",
+                    new Dictionary<string, string>
+                    {
+                        { "id", NextTag() },
+                        { "type", "get" },
+                        { "xmlns", "w:g2" },
+                        { "to", groupJid }
+                    },
+                    new List<BinaryNode>
+                    {
+                        new BinaryNode("query", new Dictionary<string, string> { { "request", "interactive" } })
+                    }),
+                timeout: null,
+                cancellationToken).ConfigureAwait(false);
 
             await HarvestGroupMappingsAsync(response, "group-metadata").ConfigureAwait(false);
             return response;
         }
 
-        public async Task<BinaryNode> QueryParticipatingGroupsAsync()
+        public async Task<BinaryNode> QueryParticipatingGroupsAsync(
+            CancellationToken cancellationToken = default(CancellationToken))
         {
-            var response = await QueryAsync(new BinaryNode(
-                "iq",
-                new Dictionary<string, string>
-                {
-                    { "id", NextTag() },
-                    { "to", "@g.us" },
-                    { "xmlns", "w:g2" },
-                    { "type", "get" }
-                },
-                new List<BinaryNode>
-                {
-                    new BinaryNode("participating", null, new List<BinaryNode>
+            var response = await QueryAsync(
+                new BinaryNode(
+                    "iq",
+                    new Dictionary<string, string>
                     {
-                        new BinaryNode("participants", null),
-                        new BinaryNode("description", null)
-                    })
-                })).ConfigureAwait(false);
+                        { "id", NextTag() },
+                        { "to", "@g.us" },
+                        { "xmlns", "w:g2" },
+                        { "type", "get" }
+                    },
+                    new List<BinaryNode>
+                    {
+                        new BinaryNode("participating", null, new List<BinaryNode>
+                        {
+                            new BinaryNode("participants", null),
+                            new BinaryNode("description", null)
+                        })
+                    }),
+                timeout: null,
+                cancellationToken).ConfigureAwait(false);
 
             await HarvestGroupMappingsAsync(response, "participating-groups").ConfigureAwait(false);
             return response;
@@ -2268,9 +2277,12 @@ namespace Unison.Uwp.Client
         /// Connection-level failures still throw, because those come from the transport rather
         /// than from the stanza.
         /// </summary>
-        private Task<BinaryNode> QueryAsync(BinaryNode node, TimeSpan? timeout = null)
+        private Task<BinaryNode> QueryAsync(
+            BinaryNode node,
+            TimeSpan? timeout = null,
+            CancellationToken cancellationToken = default(CancellationToken))
         {
-            return Require().Connection.QueryAllowingErrorAsync(node, timeout);
+            return Require().Connection.QueryAllowingErrorAsync(node, timeout, cancellationToken);
         }
 
         /// <summary>

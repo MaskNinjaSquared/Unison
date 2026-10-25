@@ -360,11 +360,12 @@ namespace Unison.Socket.Session
         /// <summary>
         /// Sends a node and waits for the reply carrying the same id, generating one when absent.
         /// </summary>
-        public async Task<BinaryNode> QueryAsync(BinaryNode node, TimeSpan? timeout = null)
+        public Task<BinaryNode> QueryAsync(
+            BinaryNode node,
+            TimeSpan? timeout = null,
+            CancellationToken cancellationToken = default(CancellationToken))
         {
-            var result = await QueryAllowingErrorAsync(node, timeout).ConfigureAwait(false);
-            AssertNodeErrorFree(result);
-            return result;
+            return QueryAsyncCore(node, timeout, cancellationToken, assertErrorFree: true);
         }
 
         /// <summary>
@@ -374,13 +375,28 @@ namespace Unison.Socket.Session
         /// For the queries whose refusal is an answer rather than a fault - an account with no
         /// picture, a group we left - where turning every one into an exception would cost more
         /// than reading the code off the node. Losing the connection still throws.
+        /// Cancel drops the IQ waiter (the stanza may still arrive; we ignore it).
         /// </remarks>
-        public async Task<BinaryNode> QueryAllowingErrorAsync(BinaryNode node, TimeSpan? timeout = null)
+        public Task<BinaryNode> QueryAllowingErrorAsync(
+            BinaryNode node,
+            TimeSpan? timeout = null,
+            CancellationToken cancellationToken = default(CancellationToken))
+        {
+            return QueryAsyncCore(node, timeout, cancellationToken, assertErrorFree: false);
+        }
+
+        private async Task<BinaryNode> QueryAsyncCore(
+            BinaryNode node,
+            TimeSpan? timeout,
+            CancellationToken cancellationToken,
+            bool assertErrorFree)
         {
             if (node == null)
             {
                 throw new ArgumentNullException(nameof(node));
             }
+
+            cancellationToken.ThrowIfCancellationRequested();
 
             if (node.Attrs == null)
             {
@@ -396,13 +412,42 @@ namespace Unison.Socket.Session
 
             // The waiter is armed before sending so a fast reply cannot be missed.
             var waiter = ArmWaiter(msgId);
+            CancellationTokenRegistration cancelReg = default(CancellationTokenRegistration);
             try
             {
+                if (cancellationToken.CanBeCanceled)
+                {
+                    cancelReg = cancellationToken.Register(
+                        state =>
+                        {
+                            string id = (string)state;
+                            TaskCompletionSource<BinaryNode> pending;
+                            if (_waiters.TryRemove(id, out pending))
+                            {
+                                pending.TrySetCanceled();
+                            }
+                        },
+                        msgId);
+                }
+
                 await SendNodeAsync(node).ConfigureAwait(false);
-                return await AwaitWaiterAsync(msgId, waiter, timeout, Describe(node)).ConfigureAwait(false);
+                BinaryNode result = await AwaitWaiterAsync(
+                        msgId,
+                        waiter,
+                        timeout,
+                        Describe(node),
+                        cancellationToken)
+                    .ConfigureAwait(false);
+                if (assertErrorFree)
+                {
+                    AssertNodeErrorFree(result);
+                }
+
+                return result;
             }
             finally
             {
+                cancelReg.Dispose();
                 TaskCompletionSource<BinaryNode> removed;
                 _waiters.TryRemove(msgId, out removed);
             }
@@ -945,42 +990,54 @@ namespace Unison.Socket.Session
             string msgId,
             TaskCompletionSource<BinaryNode> waiter,
             TimeSpan? timeout,
-            string description = null)
+            string description = null,
+            CancellationToken cancellationToken = default(CancellationToken))
         {
             var effectiveTimeout = timeout ?? _config.DefaultQueryTimeout;
 
-            using (var cts = new CancellationTokenSource())
+            using (var timeoutCts = new CancellationTokenSource())
             {
-                var delay = Task.Delay(effectiveTimeout, cts.Token);
-                var completed = await Task.WhenAny(waiter.Task, delay).ConfigureAwait(false);
+                Task delay = Task.Delay(effectiveTimeout, timeoutCts.Token);
+                Task cancelWatch = cancellationToken.CanBeCanceled
+                    ? Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken)
+                    : null;
 
-                if (completed != waiter.Task)
+                Task completed = cancelWatch != null
+                    ? await Task.WhenAny(waiter.Task, delay, cancelWatch).ConfigureAwait(false)
+                    : await Task.WhenAny(waiter.Task, delay).ConfigureAwait(false);
+
+                if (completed == waiter.Task)
                 {
-                    // A bare id says nothing about what was asked, and by the time one of these
-                    // shows up the interesting part is usually whether the whole connection went
-                    // quiet: a lone timeout is a refused query, a pile of them with a stale last
-                    // frame is a socket that stopped being read.
-                    var lastFrame = GetLastReceived();
-                    var silence = lastFrame.HasValue
-                        ? (DateTimeOffset.UtcNow - lastFrame.Value).TotalSeconds.ToString("F1") + "s ago"
-                        : "never";
-
-                    DisconnectReason timeoutReason = _config.TreatQueryTimeoutAsConnectionLost
-                        ? DisconnectReason.ConnectionLost
-                        : DisconnectReason.ConnectionClosed;
-
-                    throw new WaConnectionException(
-                        "Timed out after " + effectiveTimeout.TotalSeconds.ToString("F0") + "s waiting for a reply to " +
-                        (description ?? "'" + msgId + "'") +
-                        " [id=" + msgId +
-                        "; pendingQueries=" + _waiters.Count +
-                        "; lastFrame=" + silence +
-                        "; connected=" + IsConnected + "]",
-                        timeoutReason);
+                    timeoutCts.Cancel();
+                    return await waiter.Task.ConfigureAwait(false);
                 }
 
-                cts.Cancel();
-                return await waiter.Task.ConfigureAwait(false);
+                if (cancellationToken.IsCancellationRequested)
+                {
+                    throw new OperationCanceledException(cancellationToken);
+                }
+
+                // A bare id says nothing about what was asked, and by the time one of these
+                // shows up the interesting part is usually whether the whole connection went
+                // quiet: a lone timeout is a refused query, a pile of them with a stale last
+                // frame is a socket that stopped being read.
+                var lastFrame = GetLastReceived();
+                var silence = lastFrame.HasValue
+                    ? (DateTimeOffset.UtcNow - lastFrame.Value).TotalSeconds.ToString("F1") + "s ago"
+                    : "never";
+
+                DisconnectReason timeoutReason = _config.TreatQueryTimeoutAsConnectionLost
+                    ? DisconnectReason.ConnectionLost
+                    : DisconnectReason.ConnectionClosed;
+
+                throw new WaConnectionException(
+                    "Timed out after " + effectiveTimeout.TotalSeconds.ToString("F0") + "s waiting for a reply to " +
+                    (description ?? "'" + msgId + "'") +
+                    " [id=" + msgId +
+                    "; pendingQueries=" + _waiters.Count +
+                    "; lastFrame=" + silence +
+                    "; connected=" + IsConnected + "]",
+                    timeoutReason);
             }
         }
 

@@ -4,6 +4,7 @@
 // Forwards IGroupWireActions to the live IWhatsAppSocket from the bridge.
 // =============================================================================
 using System;
+using System.Threading;
 using System.Threading.Tasks;
 using Unison.Baileys.Protocol;
 using Unison.Uwp.Client;
@@ -34,7 +35,9 @@ namespace Unison.Uwp.Services.WhatsApp.Groups
             }
         }
 
-        public Task<BinaryNode> QueryGroupMetadataAsync(string groupJid)
+        public Task<BinaryNode> QueryGroupMetadataAsync(
+            string groupJid,
+            CancellationToken cancellationToken = default(CancellationToken))
         {
             IWhatsAppSocket socket = _sessions.Socket;
             if (socket == null || !socket.IsHandshakeComplete)
@@ -42,10 +45,11 @@ namespace Unison.Uwp.Services.WhatsApp.Groups
                 return Task.FromResult<BinaryNode>(null);
             }
 
-            return socket.QueryGroupMetadataAsync(groupJid);
+            return socket.QueryGroupMetadataAsync(groupJid, cancellationToken);
         }
 
-        public Task<BinaryNode> QueryParticipatingGroupsAsync()
+        public Task<BinaryNode> QueryParticipatingGroupsAsync(
+            CancellationToken cancellationToken = default(CancellationToken))
         {
             IWhatsAppSocket socket = _sessions.Socket;
             if (socket == null || !socket.IsHandshakeComplete)
@@ -53,7 +57,7 @@ namespace Unison.Uwp.Services.WhatsApp.Groups
                 return Task.FromResult<BinaryNode>(null);
             }
 
-            return socket.QueryParticipatingGroupsAsync();
+            return socket.QueryParticipatingGroupsAsync(cancellationToken);
         }
 
         public async Task<GroupProfilePictureResult> GetPreviewPictureAsync(string jid)

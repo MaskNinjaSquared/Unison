@@ -134,9 +134,12 @@ namespace Unison.Uwp.Client
 
         string GenerateMessageId();
 
-        Task<BinaryNode> QueryGroupMetadataAsync(string groupJid);
+        Task<BinaryNode> QueryGroupMetadataAsync(
+            string groupJid,
+            System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken));
 
-        Task<BinaryNode> QueryParticipatingGroupsAsync();
+        Task<BinaryNode> QueryParticipatingGroupsAsync(
+            System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken));
 
         Task<ProfilePictureResult> GetProfilePictureUrlResultAsync(string jid, string type = "preview");
 

@@ -63,10 +63,10 @@ namespace Unison.WhatsAppClient.Groups
         private int _listingRetryPending;
 
         /// <summary>
-        /// Raised from <see cref="IAppVisibility.Changed"/> when the window hides so an
-        /// in-flight unresolved-metadata walk stops (1.8 aborted enrichment phases only).
+        /// Cancels in-flight listing IQs when the window hides (keepalive). Wire waiters
+        /// drop via <see cref="CancellationToken"/>; the stanza may still arrive ignored.
         /// </summary>
-        private int _listingAbortRequested;
+        private readonly GroupListingCancellation _listingCancel = new GroupListingCancellation();
 
         /// <summary>
         /// Groups already asked once this session for <c>linked_parent</c> / <c>parent</c>.
@@ -139,9 +139,6 @@ namespace Unison.WhatsAppClient.Groups
         private bool IsWindowVisible =>
             _visibility == null || _visibility.IsWindowVisible;
 
-        private bool ListingAbortRequested =>
-            Interlocked.CompareExchange(ref _listingAbortRequested, 0, 0) == 1;
-
         private void OnAppVisibilityChanged(object sender, EventArgs e)
         {
             if (_visibility == null)
@@ -151,11 +148,10 @@ namespace Unison.WhatsAppClient.Groups
 
             if (!_visibility.IsWindowVisible)
             {
-                Interlocked.Exchange(ref _listingAbortRequested, 1);
+                _listingCancel.Cancel();
                 return;
             }
 
-            Interlocked.Exchange(ref _listingAbortRequested, 0);
             if (Interlocked.CompareExchange(ref _listingRetryPending, 0, 0) == 1)
             {
                 NotifyGroupListingDue();
@@ -551,7 +547,7 @@ namespace Unison.WhatsAppClient.Groups
                 return;
             }
 
-            Interlocked.Exchange(ref _listingAbortRequested, 0);
+            CancellationToken listingToken = _listingCancel.Begin();
 
             // Armed on the way out: full reuse when the listing answered; short failure backoff
             // when it timed out, so callers cannot stack another 60s IQ on top of a dead one.
@@ -562,10 +558,12 @@ namespace Unison.WhatsAppClient.Groups
                 try
                 {
                     Debug.WriteLine("[GroupFacade] Fetching all participating groups...");
-                    BinaryNode response = await _wire.QueryParticipatingGroupsAsync();
+                    BinaryNode response = await _wire
+                        .QueryParticipatingGroupsAsync(listingToken)
+                        .ConfigureAwait(false);
                     if (GroupListingVisibilityGate.ShouldAbortInFlight(
                             IsWindowVisible,
-                            ListingAbortRequested))
+                            listingToken.IsCancellationRequested))
                     {
                         abortedForVisibility = true;
                         Interlocked.Exchange(ref _listingRetryPending, 1);
@@ -582,6 +580,15 @@ namespace Unison.WhatsAppClient.Groups
                         await _apply.ApplyListingAsync(_reader.ReadListing(groupNodes));
                     }
                 }
+                catch (OperationCanceledException)
+                {
+                    abortedForVisibility = true;
+                    Interlocked.Exchange(ref _listingRetryPending, 1);
+                    _diagnostics?.Write(
+                        "startup-phase",
+                        "background-groups:aborted",
+                        "reason=cancelled;stage=listing-iq");
+                }
                 catch (Exception ex)
                 {
                     Debug.WriteLine("[GroupFacade] Group query failed: " + ex.Message);
@@ -594,7 +601,8 @@ namespace Unison.WhatsAppClient.Groups
                     try
                     {
                         abortedForVisibility = await QueryUnresolvedGroupMetadataAsync(
-                            _workload.GroupMetadataBatchSize);
+                            _workload.GroupMetadataBatchSize,
+                            listingToken);
                         if (abortedForVisibility)
                         {
                             Interlocked.Exchange(ref _listingRetryPending, 1);
@@ -603,6 +611,15 @@ namespace Unison.WhatsAppClient.Groups
                                 "background-groups:aborted",
                                 "reason=window-hidden;stage=unresolved-metadata");
                         }
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        abortedForVisibility = true;
+                        Interlocked.Exchange(ref _listingRetryPending, 1);
+                        _diagnostics?.Write(
+                            "startup-phase",
+                            "background-groups:aborted",
+                            "reason=cancelled;stage=unresolved-metadata");
                     }
                     catch (Exception ex)
                     {
@@ -630,7 +647,9 @@ namespace Unison.WhatsAppClient.Groups
         }
 
         /// <returns>True when aborted because the window hid mid-pass.</returns>
-        private async Task<bool> QueryUnresolvedGroupMetadataAsync(int limit)
+        private async Task<bool> QueryUnresolvedGroupMetadataAsync(
+            int limit,
+            CancellationToken cancellationToken)
         {
             if (!_wire.IsHandshakeComplete)
             {
@@ -678,7 +697,7 @@ namespace Unison.WhatsAppClient.Groups
             {
                 if (GroupListingVisibilityGate.ShouldAbortInFlight(
                         IsWindowVisible,
-                        ListingAbortRequested))
+                        cancellationToken.IsCancellationRequested))
                 {
                     abortedForVisibility = true;
                     Debug.WriteLine(
@@ -708,7 +727,9 @@ namespace Unison.WhatsAppClient.Groups
 
                 try
                 {
-                    BinaryNode response = await _wire.QueryGroupMetadataAsync(chat.JID);
+                    BinaryNode response = await _wire
+                        .QueryGroupMetadataAsync(chat.JID, cancellationToken)
+                        .ConfigureAwait(false);
                     string subject = _reader.ExtractSubject(response, chat.JID);
                     if (_apply.TryCacheSyncedSubject(chat.JID, subject, chat.Name))
                     {
@@ -716,6 +737,11 @@ namespace Unison.WhatsAppClient.Groups
                     }
 
                     await _apply.ApplyMetadataAsync(chat.JID, _reader.ReadMetadata(response, chat.JID));
+                }
+                catch (OperationCanceledException)
+                {
+                    abortedForVisibility = true;
+                    break;
                 }
                 catch (Exception ex)
                 {
