@@ -41,7 +41,7 @@ No behaviour change for users. Prep so later diffs are one cluster, not a 16k-li
 | `WhatsAppService.Media.cs` | On-demand decrypt + cache (`Ensure*AvailableAsync`) |
 | `WhatsAppService.StartupPhases.cs` | Quiet-wait / memory-headroom host wiring (`StartupQuietGate`) |
 | `WhatsAppService.Identity.cs` | Canonical JID, alias LID/PN, `ResolveDisplayName`, usync |
-| `WhatsAppService.AppState.cs` | ForgetChatStorage host only (name historical; appliers live on façades) |
+| ~~`WhatsAppService.AppState.cs`~~ | Removed — `ForgetChatStorageHost` + `AppStateLocalHost` |
 | `WhatsAppService.Persistence.cs` | chats.json debounce, load persisted UI, suspend tail |
 | `WhatsAppService.Receipts.cs` | Receipt nodes → send state; receipt-path group metadata apply via `IGroupService` |
 | `WhatsAppService.IncomingPump.cs` | Decrypted-message queue, placeholders, offline replay summaries |
@@ -180,7 +180,7 @@ post-replay list repair / deferred-startup list repair / background resolution+l
 are façade `Notify*` (host keeps quiet/memory/catch-up gates). Stanza `notify`
 push-name is `ContactFacade.NotifyInboundMessageNode`. Pump keeps queue lanes and
 session-only App State. Persistence debounce timer / Connection lifecycle stay on the host.
-`ForgetChatStorage` orchestration is `ForgetChatStorageDispatch` (I/O on the host).
+`ForgetChatStorage` orchestration is `ForgetChatStorageDispatch` (`ForgetChatStorageHost` I/O).
 Full catalogue persist, preview-slice persist, and suspend-tail orchestration are
 `ChatCatalogFullPersistDispatch` (`IChatCatalogFullPersistHost`); startup catalogue
 hydrate is `LoadPersistedChatCatalogDispatch` (`ILoadPersistedChatCatalogHost`).
@@ -1359,7 +1359,10 @@ pending-socket flush) is `JidAliasPersistence` over the four alias dispatch host
 **Immediate chat-identity flush** (catalogue preview + contact/phone names +
 aliases after list fold) is `ChatIdentityPersistence` over
 `IPersistChatIdentityStateHost`; preview upsert is shared
-`ChatCatalogPreviewPersist` until full catalogue persist leaves. The incoming pump drain loop is
+`ChatCatalogPreviewPersist` until full catalogue persist leaves.
+**Durable chat-delete I/O** (preview tombstone / history delete / RAM cache /
+catalogue persist) is `ForgetChatStorageHost` + `AppStateLocalHost` over
+`ForgetChatStorageDispatch`. The incoming pump drain loop is
 `IncomingPumpDrainDispatch` (host still owns typed queue + handle). Offline pending-
 notification release is `OfflineReplayRelease` over `IOfflineReplayReleaseHost`
 (wire still attaches the event on the client). Thin-wire dispatches:
@@ -1578,7 +1581,8 @@ capture policy is `ContactFacade.CaptureSelfPushName`. The client no longer hold
 fires `TriggerBackgroundResolution` after the delay; the client only cancels it on
 shutdown / socket replace. `ScheduleDeferredAvatarResolution` left `IWhatsAppService`.
 
-**Chat-delete durable I/O is `IAppStateLocalHost.ForgetChatStorageAsync`.** RAM delete,
+**Chat-delete durable I/O is `IAppStateLocalHost.ForgetChatStorageAsync`**
+(`AppStateLocalHost` → `ForgetChatStorageHost`). RAM delete,
 badge, missing-message / on-demand forget live on `IChatService.ApplyAppStateDeleteChatAsync`.
 Message delete and message pin live on `IMessageService` (`ApplyAppStateDeleteMessageAsync` /
 `ApplyPinnedMessageStateAsync`). Archive / chat pin / mute / read live on `ChatFacade`.

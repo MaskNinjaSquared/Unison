@@ -2,6 +2,11 @@
 
 Newest first.
 
+## Extraction 4 — ForgetChatStorageHost owns durable chat-delete I/O
+
+`IForgetChatStorageHost` and `IAppStateLocalHost` left `WhatsAppService`.
+New `ForgetChatStorageHost` + `AppStateLocalHost` (WhatsAppClient) run
+`ForgetChatStorageDispatch`; catalogue upsert via `ChatCatalogPreviewPersist`.
 ## Mobile — journal ExtendedExecution keepalive revoke
 
 `LocationKeepAliveService` writes `keepalive|allowed|denied|revoked|retry-*`

@@ -574,8 +574,14 @@ namespace Unison.Uwp
                 sp.GetRequiredService<ISocketAliasRegistrar>()));
             services.AddSingleton<IStartupUiHost>(
                 sp => sp.GetRequiredService<WhatsAppService>());
-            services.AddSingleton<IAppStateLocalHost>(
-                sp => sp.GetRequiredService<WhatsAppService>());
+            services.AddSingleton<IForgetChatStorageHost>(sp => new ForgetChatStorageHost(
+                sp.GetRequiredService<IHistoryChatPreviewStore>(),
+                sp.GetRequiredService<IHistoryMessageStore>(),
+                sp.GetRequiredService<IMessageStore>(),
+                sp.GetRequiredService<ChatStateStore>(),
+                sp.GetRequiredService<AttachedUiDispatcher>()));
+            services.AddSingleton<IAppStateLocalHost>(sp => new AppStateLocalHost(
+                sp.GetRequiredService<IForgetChatStorageHost>()));
             services.AddSingleton<IEncryptedMediaDownloader>(_ => new HttpEncryptedMediaDownloader(
                 new DelegateSocketLog(line => Diag.W("[Media] " + line))));
             services.AddSingleton(sp => new MediaDownloadGate(

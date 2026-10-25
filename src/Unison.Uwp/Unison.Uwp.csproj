@@ -281,7 +281,6 @@
     <Compile Include="Services\WhatsApp\WhatsAppService.Connection.cs" />
     <Compile Include="Services\WhatsApp\WhatsAppService.StartupPhases.cs" />
     <Compile Include="Services\WhatsApp\WhatsAppService.Identity.cs" />
-    <Compile Include="Services\WhatsApp\WhatsAppService.AppState.cs" />
     <Compile Include="Services\WhatsApp\WhatsAppService.Persistence.cs" />
     <Compile Include="Services\WhatsApp\WhatsAppService.Receipts.cs" />
     <Compile Include="Services\WhatsApp\WhatsAppService.IncomingPump.cs" />
