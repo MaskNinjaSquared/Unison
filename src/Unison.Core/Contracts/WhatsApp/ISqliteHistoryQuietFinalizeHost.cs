@@ -2,7 +2,7 @@
 // ISqliteHistoryQuietFinalizeHost
 //
 // Side effects for SqliteHistoryQuietFinalizeDispatch after a non-on-demand
-// SQLite history quiet timer. Delay / generation CAS stay on the host entry.
+// SQLite history quiet timer. Delay / generation live on SqliteHistoryQuietFinalize.
 // =============================================================================
 using System;
 using System.Threading.Tasks;

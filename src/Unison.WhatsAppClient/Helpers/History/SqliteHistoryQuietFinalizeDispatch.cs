@@ -1,8 +1,8 @@
 // =============================================================================
 // SqliteHistoryQuietFinalizeDispatch
 //
-// Body of FinalizeSqliteHistoryProgressAfterQuietAsync after the quiet delay
-// and generation check. Timer / generation CAS stay on the host entry.
+// Body of the quiet finalize after delay + generation check.
+// Generation / delay entry are owned by SqliteHistoryQuietFinalize.
 // =============================================================================
 using System;
 using System.Threading.Tasks;

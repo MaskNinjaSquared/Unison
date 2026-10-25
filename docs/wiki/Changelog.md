@@ -2,6 +2,14 @@
 
 Newest first.
 
+## Extraction 3.10 — SqliteHistoryQuietFinalize owns generation / delay
+
+Quiet-finalize generation counter and the delayed entry that stamps it before
+`SqliteHistoryQuietFinalizeDispatch` moved out of `WhatsAppService` into
+`SqliteHistoryQuietFinalize` (WhatsAppClient). The client only implements
+`ISqliteHistoryQuietFinalizeHost` I/O. Same ownership shape as
+`HistoryHydrationBackfill` / `OfflineReplayFlush`.
+
 ## Mobile — list rematerialize + names-phase group listing
 
 Returning to the chat list (and idle refreshes) still closed the process:

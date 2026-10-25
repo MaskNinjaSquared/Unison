@@ -222,7 +222,8 @@ History hydration batch loop is `HistoryHydrationBackfillDispatch`
 `HistoryHydrationBackfill`). Freshness reconnect
 schedule/abort gates are `FreshnessReconnectFallbackGates`. SQLite quiet
 finalize body is `SqliteHistoryQuietFinalizeDispatch`
-(`ISqliteHistoryQuietFinalizeHost`; delay/generation CAS stay on host).
+(`ISqliteHistoryQuietFinalizeHost` I/O; delay/generation owned by
+`SqliteHistoryQuietFinalize`).
 Catch-up continue soft-reconnect gates are `CatchUpContinueReconnectGates`.
 SQLite chunk type/progress numbers are `HistorySqliteChunkClassify`.
 Post-offline freshness orchestration is `HistoryPostOfflineFreshnessDispatch`

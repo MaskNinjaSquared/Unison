@@ -385,6 +385,13 @@ namespace Unison.Uwp.Services.WhatsApp
         /// <see cref="IHistoryHydrationBackfillHost"/> I/O.
         /// </summary>
         private readonly HistoryHydrationBackfill _historyHydrationBackfill;
+
+        /// <summary>
+        /// SQLite history quiet-finalize generation + delayed entry — owned by
+        /// <see cref="SqliteHistoryQuietFinalize"/>. Client only implements
+        /// <see cref="ISqliteHistoryQuietFinalizeHost"/> I/O.
+        /// </summary>
+        private readonly SqliteHistoryQuietFinalize _sqliteHistoryQuietFinalize;
         private DateTime _lastHydrationFallbackUtc = DateTime.MinValue;
         private DateTime _hydrationDayAnchorUtc = DateTime.MinValue;
         private int _hydrationDayAttempts;
@@ -435,7 +442,6 @@ namespace Unison.Uwp.Services.WhatsApp
         /// progress instead of flashing complete on every write.
         /// </summary>
         private int _sqliteHistoryConversationsAccumulated;
-        private int _sqliteHistoryFinalizeGeneration;
         /// <summary>
         /// First-sync quiet deferred <c>IsCompleted</c> because FULL_HISTORY catch-up still
         /// owes pages â€” list hold / DisplayRequest stay until catch-up finishes and names resolve.
@@ -958,6 +964,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 ?? throw new ArgumentNullException(nameof(pendingMessages));
             _offlineReplayFlush = new OfflineReplayFlush(_pendingMessages, this);
             _historyHydrationBackfill = new HistoryHydrationBackfill(this);
+            _sqliteHistoryQuietFinalize = new SqliteHistoryQuietFinalize(this);
             _chatState = chatState;
             _personStore = personStore ?? throw new ArgumentNullException(nameof(personStore));
             _groupRosterStore = groupRosterStore ?? throw new ArgumentNullException(nameof(groupRosterStore));
@@ -1810,13 +1817,13 @@ namespace Unison.Uwp.Services.WhatsApp
             PublishInitialSyncProgress(isActive, isCompleted, processed, total, stage);
 
         int IHistorySqliteChunkAppliedHost.NextSqliteHistoryFinalizeGeneration() =>
-            Interlocked.Increment(ref _sqliteHistoryFinalizeGeneration);
+            _sqliteHistoryQuietFinalize.NextGeneration();
 
         void IHistorySqliteChunkAppliedHost.FinalizeSqliteHistoryAfterQuiet(
             int generation,
             int delayMs,
             int processed) =>
-            _ = FinalizeSqliteHistoryProgressAfterQuietAsync(generation, delayMs, processed);
+            _sqliteHistoryQuietFinalize.ScheduleAfterQuiet(generation, delayMs, processed);
 
         void IHistorySqliteChunkAppliedHost.CompleteUserResyncHistoryWait(string reason) =>
             CompleteUserResyncHistoryWait(reason);
@@ -1864,7 +1871,7 @@ namespace Unison.Uwp.Services.WhatsApp
             NoteFullHistoryCatchUpProgress(reason);
 
         void IHistorySqliteChunkStartedHost.BumpSqliteHistoryFinalizeGeneration() =>
-            Interlocked.Increment(ref _sqliteHistoryFinalizeGeneration);
+            _sqliteHistoryQuietFinalize.BumpGeneration();
 
         void IHistorySqliteChunkStartedHost.PublishInitialSyncProgress(
             bool isActive,
@@ -1873,24 +1880,6 @@ namespace Unison.Uwp.Services.WhatsApp
             int total,
             string stage) =>
             PublishInitialSyncProgress(isActive, isCompleted, processed, total, stage);
-
-        private async Task FinalizeSqliteHistoryProgressAfterQuietAsync(
-            int generation,
-            int delayMs,
-            int processedAtSchedule)
-        {
-            // Paginated FULL_HISTORY catch-up: a quiet SQLite lot must not clear the
-            // in-flight request and kill the banner â€” hand the lot to continue instead.
-            // Do not Publish IsCompleted while first-sync hold is up and catch-up owes work.
-            await Task.Delay(Math.Max(200, delayMs)).ConfigureAwait(false);
-            if (generation != Volatile.Read(ref _sqliteHistoryFinalizeGeneration))
-            {
-                return;
-            }
-
-            await SqliteHistoryQuietFinalizeDispatch.RunAsync(this, delayMs, processedAtSchedule)
-                .ConfigureAwait(false);
-        }
 
         /// <summary>
         /// PN + LID (+ canonical) keys for SQLite history reads and avatar lookups.
