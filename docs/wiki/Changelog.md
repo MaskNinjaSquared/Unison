@@ -2,6 +2,14 @@
 
 Newest first.
 
+## Extraction 4 — ClearSession + Qr/Auth wire owners
+
+`IClearSessionHost` / `IRaiseSessionClearedHost` left `WhatsAppService`.
+`ClearSessionOwner` + `RaiseSessionClearedOwner` (WhatsAppClient) own the wipe /
+UI-cleared sequence; store / socket / toast I/O stay as ctor ports.
+`IQrCodeWireHost` / `IAuthStateWireHost` left too — `QrCodeWireOwner` /
+`AuthStateWireOwner`; `SocketEventHandlerWiring` calls the owners, not the
+client as host.
 ## Extraction 4 — NotifyServerLogoutOwner
 
 `INotifyServerLogoutHost` left `WhatsAppService`. New `NotifyServerLogoutOwner`

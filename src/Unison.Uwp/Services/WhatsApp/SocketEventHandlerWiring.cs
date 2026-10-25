@@ -27,7 +27,7 @@ namespace Unison.Uwp.Services.WhatsApp
             }
 
             socket.OnQRCodeReceived += (s, qr) =>
-                QrCodeWireDispatch.Handle(owner, qr, owner.IsCurrentSocket(s));
+                owner.QrCodeWire.Handle(qr, owner.IsCurrentSocket(s));
 
             socket.OnPresenceUpdate += (s, e) =>
             {
@@ -47,7 +47,7 @@ namespace Unison.Uwp.Services.WhatsApp
                     return;
                 }
 
-                await AuthStateWireDispatch.RunAsync(owner).ConfigureAwait(false);
+                await owner.AuthStateWire.RunAsync().ConfigureAwait(false);
             };
 
             socket.OnConnectionUpdate += (s, status) =>

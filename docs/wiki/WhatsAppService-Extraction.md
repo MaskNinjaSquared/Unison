@@ -190,7 +190,10 @@ stay on the client. Heavy-history enrichment release is
 `ReleaseEnrichmentAfterHeavyHistoryCoordinator`; self push-name / phone / avatar
 auth sync is `SelfProfileAuthSync`. Broker toast-name snapshot is
 `BackgroundDisplayNamesPersistence` (save port stays on UWP). Server unlink
-notice is `NotifyServerLogoutOwner`. Group listing hide-abort is a real CTS
+notice is `NotifyServerLogoutOwner`. Hard session wipe is `ClearSessionOwner`
+(+ `RaiseSessionClearedOwner` for the UI/history notify step). QR and auth-state
+socket wire are `QrCodeWireOwner` / `AuthStateWireOwner` (wired from
+`SocketEventHandlerWiring`). Group listing hide-abort is a real CTS
 (`GroupListingCancellation`) through `IGroupWireActions` /
 `ConnectionHandler.QueryAllowingErrorAsync` (cancels the waiter, not the
 stanza on the wire).

@@ -47,7 +47,7 @@ using Unison.WhatsAppClient.Helpers;
 
 namespace Unison.Uwp.Services.WhatsApp
 {
-    public partial class WhatsAppService : INotifyPropertyChanged, IConnectionEventSource, IConnectionSessionHost, IOfflineReplayHost, IOfflineReplayReleaseHost, IOfflineReplayFlushIoHost, IChatCatalogPersistHost, IConnectionUpdateHost, ISocketErrorHost, IHistorySyncWireHost, ISessionInitializedHost, IQrCodeWireHost, IAuthStateWireHost, IInboundWireNodeHost, IDecryptedMessageWireHost, ISocketFacadeWireHost, IPostReplayMaintenanceHost, IPostMessageEnrichmentHost, IPlaceholderResendSocket, IHistoryOnDemandSocket, IRuntimeSnapshotSource, IBackgroundResolutionGate, IConversationResyncHost, IHistorySyncHost, IHistoryCatchUpHost, IConnectionEnsureHost, IConnectionResumeHost, IConnectionPairingStage2Host, IConnectionBrokerTransferHost, IConnectionSoftReconnectHost, IConnectionLifecycleHost, IConnectionConnectGateSource, IConnectionConnectPrepareHost, IConnectionSocketAssignment, IConnectionAssignedSocketClearHost, ISocketAliasRegistrar, IStartupUiHost, IIncomingMessageEnqueueHost, IResolvedNameApplyHost, IHistoryHydrationBackfillHost, ISqliteHistoryQuietFinalizeHost, IHistoryPostOfflineFreshnessHost, IDeferredStartupMaintenanceHost, IHistoryCatchUpFinishHost, IUserResyncFullHistoryHost, IFreshnessReconnectFallbackHost, ICatchUpContinueReconnectHost, IFirstSyncListReleaseHost, IFullHistoryCatchUpProgressHost, IHistorySqliteChunkAppliedHost, IAcceptedHistoryRequestTimeoutHost, IAutoReconnectLoopHost, IConversationResyncWaitHost, IFullHistoryOnDemandClearHost, IInitializeConnectionStateHost, IHistorySqliteChunkStartedHost, IFullHistoryCatchUpWatchdogHost, IPeriodicFullHistorySafetyHost, IReconnectHistoryCatchUpHost, IHydrationFallbackPipelineHost, IHydrationDayRetryIoHost, ISoftReconnectIoHost, IClearSessionHost, IRaiseSessionClearedHost, IRequestFullHistoryOnDemandTrackedHost, IBrokerReconnectConsumeHost, IForceHistoryRepairConsumeHost, IForceHistoryRepairPendingHost, IPublishInitialSyncProgressHost, IPublishConnectionUpdateHost, IEndHistoryCatchUpBannerHost, IBeginHistoryCatchUpBannerHost, IResetFirstSyncListHoldFlagsHost, ICompleteUserResyncHistoryWaitHost, ITearDownSocketForSoftReconnectHost, IMarkPairingRestartPendingHost, IDropCurrentSocketForFastResumeHost, IPersistAuthStateHost, IWaitForSessionEstablishedHost, IInvalidateCurrentSocketHost, IConnectionHealthMonitorIoHost, ITryStartPairingStage2ReconnectHost, IIsCurrentSocketHealthyHost, IReleaseMemoryHost, IConnectAsyncHost, IResyncConversationsHost, ILoadPersistedUiStateHost, IPostSyncMaintenanceIoHost, IBuildHistoryHydrationCandidatesHost, IPeriodicFullHistorySafetyLoopHost, IWaitForHistoryHydrationSettleHost
+    public partial class WhatsAppService : INotifyPropertyChanged, IConnectionEventSource, IConnectionSessionHost, IOfflineReplayHost, IOfflineReplayReleaseHost, IOfflineReplayFlushIoHost, IChatCatalogPersistHost, IConnectionUpdateHost, ISocketErrorHost, IHistorySyncWireHost, ISessionInitializedHost, IInboundWireNodeHost, IDecryptedMessageWireHost, ISocketFacadeWireHost, IPostReplayMaintenanceHost, IPostMessageEnrichmentHost, IPlaceholderResendSocket, IHistoryOnDemandSocket, IRuntimeSnapshotSource, IBackgroundResolutionGate, IConversationResyncHost, IHistorySyncHost, IHistoryCatchUpHost, IConnectionEnsureHost, IConnectionResumeHost, IConnectionPairingStage2Host, IConnectionBrokerTransferHost, IConnectionSoftReconnectHost, IConnectionLifecycleHost, IConnectionConnectGateSource, IConnectionConnectPrepareHost, IConnectionSocketAssignment, IConnectionAssignedSocketClearHost, ISocketAliasRegistrar, IStartupUiHost, IIncomingMessageEnqueueHost, IResolvedNameApplyHost, IHistoryHydrationBackfillHost, ISqliteHistoryQuietFinalizeHost, IHistoryPostOfflineFreshnessHost, IDeferredStartupMaintenanceHost, IHistoryCatchUpFinishHost, IUserResyncFullHistoryHost, IFreshnessReconnectFallbackHost, ICatchUpContinueReconnectHost, IFirstSyncListReleaseHost, IFullHistoryCatchUpProgressHost, IHistorySqliteChunkAppliedHost, IAcceptedHistoryRequestTimeoutHost, IAutoReconnectLoopHost, IConversationResyncWaitHost, IFullHistoryOnDemandClearHost, IInitializeConnectionStateHost, IHistorySqliteChunkStartedHost, IFullHistoryCatchUpWatchdogHost, IPeriodicFullHistorySafetyHost, IReconnectHistoryCatchUpHost, IHydrationFallbackPipelineHost, IHydrationDayRetryIoHost, ISoftReconnectIoHost, IRequestFullHistoryOnDemandTrackedHost, IBrokerReconnectConsumeHost, IForceHistoryRepairConsumeHost, IForceHistoryRepairPendingHost, IPublishInitialSyncProgressHost, IPublishConnectionUpdateHost, IEndHistoryCatchUpBannerHost, IBeginHistoryCatchUpBannerHost, IResetFirstSyncListHoldFlagsHost, ICompleteUserResyncHistoryWaitHost, ITearDownSocketForSoftReconnectHost, IMarkPairingRestartPendingHost, IDropCurrentSocketForFastResumeHost, IPersistAuthStateHost, IWaitForSessionEstablishedHost, IInvalidateCurrentSocketHost, IConnectionHealthMonitorIoHost, ITryStartPairingStage2ReconnectHost, IIsCurrentSocketHealthyHost, IReleaseMemoryHost, IConnectAsyncHost, IResyncConversationsHost, ILoadPersistedUiStateHost, IPostSyncMaintenanceIoHost, IBuildHistoryHydrationCandidatesHost, IPeriodicFullHistorySafetyLoopHost, IWaitForHistoryHydrationSettleHost
     {
         public event PropertyChangedEventHandler PropertyChanged;
         protected void OnPropertyChanged([CallerMemberName] string propertyName = null)
@@ -431,6 +431,11 @@ namespace Unison.Uwp.Services.WhatsApp
         private readonly ChatCatalogDiskPersistence _catalogDisk;
         private readonly BackgroundDisplayNamesPersistence _backgroundDisplayNames;
         private readonly NotifyServerLogoutOwner _serverLogout;
+        private readonly RaiseSessionClearedOwner _sessionCleared;
+        private readonly ClearSessionOwner _clearSession;
+        private readonly QrCodeWireOwner _qrCodeWire;
+        private readonly AuthStateWireOwner _authStateWire;
+        private IKeyStore _pendingClearSessionKeyStore;
         private int _enrichmentAwaitingListPaint;
         private ChatListInitialPaintGate _listPaintGate;
         private readonly SyncStatusChannel _syncStatus;
@@ -1094,6 +1099,184 @@ namespace Unison.Uwp.Services.WhatsApp
                     "connection",
                     "logout-notice-failed",
                     error));
+            _sessionCleared = new RaiseSessionClearedOwner(
+                ResetFirstSyncListHoldFlags,
+                () => History?.NotifySessionCleared(),
+                message => Log("[WhatsAppService] " + message),
+                startPairing =>
+                {
+                    var args = new SessionClearedEventArgs(startPairing);
+                    return _ui.RunAsync(() =>
+                    {
+                        try
+                        {
+                            OnSessionCleared?.Invoke(this, args);
+                        }
+                        catch (Exception ex)
+                        {
+                            Log("[WhatsAppService] OnSessionCleared handler failed: " +
+                                ex.Message);
+                        }
+                    });
+                });
+            _clearSession = new ClearSessionOwner(
+                message => Log("[WhatsAppService] " + message),
+                () => _pendingClearSessionKeyStore = _socket?.KeyStore,
+                () => SetSuppressReconnectToast(true),
+                () =>
+                {
+                    string clearToastError;
+                    BackgroundToastPresenter.ClearReconnectRequired(out clearToastError);
+                },
+                async () =>
+                {
+                    try
+                    {
+                        await _authStore.ClearAsync().ConfigureAwait(false);
+                    }
+                    catch (Exception ex)
+                    {
+                        Log("[WhatsAppService] Warning: early AuthStore clear failed: " +
+                            ex.Message);
+                    }
+                },
+                () => _authState = null,
+                () =>
+                {
+                    _suppressReconnect = true;
+                    _fatalSessionEnded = true;
+                    _pairingRestartPending = false;
+                    _countPreSessionCloseAsFatal = false;
+                    Interlocked.Exchange(ref _preSessionCloseStreak, 0);
+                    _sessionEstablishedThisConnection = false;
+                },
+                StopConnectionHealthMonitor,
+                () =>
+                {
+                    if (_socket != null)
+                    {
+                        var socket = _socket;
+                        _socket = null;
+                        try { socket.Disconnect(); } catch { /* ignore */ }
+                        try { socket.Dispose(); } catch { /* ignore */ }
+                    }
+                },
+                () =>
+                {
+                    _sessionEstablishedTcs.TrySetCanceled();
+                    _sessionEstablishedTcs = CreateSessionEstablishedTcs();
+                },
+                startPairing => _sessionCleared.RunAsync(startPairing),
+                async () => await Task.Yield(),
+                async () =>
+                {
+                    try
+                    {
+                        IKeyStore keyStore = _pendingClearSessionKeyStore ?? new FileKeyStore();
+                        _pendingClearSessionKeyStore = null;
+                        await keyStore.InitializeAsync().ConfigureAwait(false);
+                        await keyStore.ClearAllAsync().ConfigureAwait(false);
+                        Log("[WhatsAppService] Cleared FileKeyStore / SignalKeys.");
+                    }
+                    catch (Exception ex)
+                    {
+                        Log("[WhatsAppService] Warning: failed to clear FileKeyStore / SignalKeys: " +
+                            ex.Message);
+                    }
+                },
+                () => _authStore.ClearAsync(),
+                () =>
+                {
+                    _sharedKeyStore = null;
+                    _persistedUiStateLoaded = false;
+                    Interlocked.Exchange(ref _forceFreshConnectOnResume, 0);
+                },
+                async () =>
+                {
+                    try
+                    {
+                        await NoiseSessionStore.ClearAsync().ConfigureAwait(false);
+                    }
+                    catch (Exception ex)
+                    {
+                        Log("[WhatsAppService] Warning: failed to clear NoiseSessionStore: " +
+                            ex.Message);
+                    }
+                },
+                () =>
+                {
+                    _fatalSessionEnded = false;
+                    _suppressReconnect = false;
+                },
+                () => _messageStore.WipeAllDataAsync(),
+                async () =>
+                {
+                    if (_groupRosterStore == null)
+                    {
+                        return;
+                    }
+
+                    try
+                    {
+                        await _groupRosterStore.ClearAllAsync().ConfigureAwait(false);
+                    }
+                    catch (Exception ex)
+                    {
+                        Log("[WhatsAppService] Warning: group roster wipe failed: " +
+                            ex.Message);
+                    }
+                },
+                () => _ui.RunAsync(() =>
+                {
+                    Chats.Clear();
+                    _chatState.MessagesByChat.Clear();
+                    _historyRequests.ClearRequests();
+                    ContactNames.Clear();
+                    PhoneContactNamesByJid.Clear();
+                    JidAlias.Clear();
+                }),
+                () =>
+                {
+                    try
+                    {
+                        NotificationService.Instance.ClearAll();
+                    }
+                    catch (Exception ex)
+                    {
+                        Log("[WhatsAppService] Warning: failed to clear notifications/tiles: " +
+                            ex.Message);
+                    }
+                });
+            _qrCodeWire = new QrCodeWireOwner(
+                () =>
+                {
+                    try
+                    {
+                        SessionLogger.Instance.WriteAlways(
+                            "[Pairing] Ignoring QR from stale socket");
+                    }
+                    catch
+                    {
+                    }
+                },
+                length =>
+                {
+                    try
+                    {
+                        SessionLogger.Instance.WriteAlways(
+                            "[Pairing] WhatsAppService raising OnQRCodeReceived len=" +
+                            length);
+                    }
+                    catch
+                    {
+                    }
+                },
+                () => _qrDeliveredThisConnection = true,
+                qr => OnQRCodeReceived?.Invoke(this, qr));
+            _authStateWire = new AuthStateWireOwner(
+                () => Debug.WriteLine("[WhatsAppService] Auth state updated, saving..."),
+                FileSelfIdentityAliases,
+                () => PersistAuthStateAsync(_socket, "socket-auth-update"));
             _chatState.Chats.CollectionChanged += (s, e) => InvalidateChatRowIndex();
 
             Debug.WriteLine(
@@ -1647,6 +1830,10 @@ namespace Unison.Uwp.Services.WhatsApp
         /// <see cref="IPendingMessageFlushHost"/> from this instance).
         /// </summary>
         internal OfflineReplayFlush OfflineReplayFlush => _offlineReplayFlush;
+
+        internal QrCodeWireOwner QrCodeWire => _qrCodeWire;
+
+        internal AuthStateWireOwner AuthStateWire => _authStateWire;
 
         // --- IOfflineReplayFlushIoHost ---------------------------------------
 
