@@ -143,6 +143,7 @@
     <Compile Include="Services\DispatcherService.cs" />
     <Compile Include="Services\UiThreadDispatcherService.cs" />
     <Compile Include="Services\AttachedUiDispatcher.cs" />
+    <Compile Include="Services\UiStallWatchdog.cs" />
     <Compile Include="Services\DialogService.cs" />
     <Compile Include="Services\MediaDiskUsageService.cs" />
     <Compile Include="Services\StartTileMarkAssets.cs" />
@@ -475,6 +476,9 @@
     <Compile Include="UI\Helpers\ChatOpenHostSequence.cs" />
     <Compile Include="UI\Helpers\CommentRichService.cs" />
     <Compile Include="UI\Helpers\MentionComposerInput.cs" />
+    <Compile Include="UI\Helpers\ChatDetailClipboardPaste.cs" />
+    <Compile Include="UI\Helpers\ViewerEscapeKey.cs" />
+
     <Compile Include="UI\Helpers\MessageBubbleContextActions.cs" />
     <Compile Include="UI\Helpers\DesktopCursor.cs" />
     <Compile Include="UI\Helpers\CommunityChatDetailHeader.cs" />
@@ -641,17 +645,44 @@
     <Content Include="Assets\Sounds\voice_note_error.wav" />
     <Content Include="Properties\Default.rd.xml" />
   </ItemGroup>
-  <!-- libwebp for W10M (ARM) only â€” must land at package root for DllImport("libwebp.dll"). -->
+  <!-- libwebp for W10M (ARM): DllImport("libwebp.dll") needs package root.
+       Do not use Content+Link on in-tree files — VS rejects that
+       ("file is inside the project directory tree"). Stage via AppxPackagePayload. -->
   <ItemGroup Condition="'$(Platform)' == 'ARM'">
-    <Content Include="Native\WebP\ARM\libwebp.dll">
-      <Link>libwebp.dll</Link>
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-    <Content Include="Native\WebP\ARM\libsharpyuv.dll">
-      <Link>libsharpyuv.dll</Link>
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
+    <None Include="Native\WebP\ARM\libwebp.dll" />
+    <None Include="Native\WebP\ARM\libsharpyuv.dll" />
   </ItemGroup>
+  <Target Name="CopyWebPDllsToOutputRoot"
+          AfterTargets="Build"
+          Condition="'$(Platform)' == 'ARM'">
+    <Copy SourceFiles="$(MSBuildProjectDirectory)\Native\WebP\ARM\libwebp.dll"
+          DestinationFiles="$(OutDir)libwebp.dll"
+          SkipUnchangedFiles="true" />
+    <Copy SourceFiles="$(MSBuildProjectDirectory)\Native\WebP\ARM\libsharpyuv.dll"
+          DestinationFiles="$(OutDir)libsharpyuv.dll"
+          SkipUnchangedFiles="true" />
+    <!-- Deploy layout root (same folder AppX reads for local deploy). -->
+    <Copy SourceFiles="$(MSBuildProjectDirectory)\Native\WebP\ARM\libwebp.dll"
+          DestinationFiles="$(OutDir)Core\libwebp.dll"
+          SkipUnchangedFiles="true"
+          Condition="Exists('$(OutDir)Core')" />
+    <Copy SourceFiles="$(MSBuildProjectDirectory)\Native\WebP\ARM\libsharpyuv.dll"
+          DestinationFiles="$(OutDir)Core\libsharpyuv.dll"
+          SkipUnchangedFiles="true"
+          Condition="Exists('$(OutDir)Core')" />
+  </Target>
+  <Target Name="IncludeWebPDllsInAppx"
+          BeforeTargets="_ComputeAppxPackagePayload"
+          Condition="'$(Platform)' == 'ARM'">
+    <ItemGroup>
+      <AppxPackagePayload Include="$(MSBuildProjectDirectory)\Native\WebP\ARM\libwebp.dll">
+        <TargetPath>libwebp.dll</TargetPath>
+      </AppxPackagePayload>
+      <AppxPackagePayload Include="$(MSBuildProjectDirectory)\Native\WebP\ARM\libsharpyuv.dll">
+        <TargetPath>libsharpyuv.dll</TargetPath>
+      </AppxPackagePayload>
+    </ItemGroup>
+  </Target>
   <ItemGroup>
     <Content Include="Assets\BadgeLogo.scale-100.png" />
     <Content Include="Assets\BadgeLogo.scale-125.png" />

@@ -2475,6 +2475,11 @@ namespace Unison.Uwp.Shell.WhatsApp.Views
                 return;
             }
 
+            if (ChatDetailClipboardPaste.OnKeyDown(ViewModel, e))
+            {
+                return;
+            }
+
             if (e.Key != Windows.System.VirtualKey.Enter)
             {
                 return;

@@ -2659,6 +2659,11 @@ namespace Unison.Uwp.Shell.Unison.Views
                 return;
             }
 
+            if (ChatDetailClipboardPaste.OnKeyDown(ViewModel, e))
+            {
+                return;
+            }
+
             if (e.Key != Windows.System.VirtualKey.Enter)
             {
                 return;

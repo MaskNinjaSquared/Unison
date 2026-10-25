@@ -2839,6 +2839,11 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                 return;
             }
 
+            if (ChatDetailClipboardPaste.OnKeyDown(ViewModel, e))
+            {
+                return;
+            }
+
             if (e.Key != Windows.System.VirtualKey.Enter)
             {
                 return;
@@ -3231,11 +3236,23 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
         {
             CopyMessageButton.Label = LocalizedStrings.Get("ChatDetail_CopyMessage", "Copy");
             ReplyMessageButton.Label = LocalizedStrings.Get("ChatDetail_ReplyMessage", "Reply");
+            ForwardMessageButton.Label = LocalizedStrings.Get("ChatDetail_ForwardMessage", "Forward");
             PinFor24HoursButton.Label = LocalizedStrings.Get("ChatDetail_PinFor24Hours", "Pin for 24 hours");
             PinFor7DaysButton.Label = LocalizedStrings.Get("ChatDetail_PinFor7Days", "Pin for 7 days");
             PinFor30DaysButton.Label = LocalizedStrings.Get("ChatDetail_PinFor30Days", "Pin for 30 days");
             UnpinMessageButton.Label = LocalizedStrings.Get("ChatDetail_UnpinMessage", "Unpin message");
+            ForwardMessageButton.Click -= ForwardMessageButton_Click;
+            ForwardMessageButton.Click += ForwardMessageButton_Click;
             LegacyCommandBarLayout.CenterPrimaryCommands(sender as CommandBar);
+        }
+
+        private void ForwardMessageButton_Click(object sender, RoutedEventArgs e)
+        {
+            bool? can = ViewModel?.ForwardSelectedMessageCommand?.CanExecute(null);
+            System.Diagnostics.Debug.WriteLine(
+                "[Forward] Legacy ForwardMessageButton.Click; CanExecute=" + can +
+                "; selected=" + (ViewModel?.SelectedMessage?.Model?.Id ?? "(null)") +
+                "; actionsOpen=" + (ViewModel?.IsMessageActionsOpen ?? false));
         }
 
         /// <summary>Play / resume / pause for a ready local audio bubble + SMTC.</summary>

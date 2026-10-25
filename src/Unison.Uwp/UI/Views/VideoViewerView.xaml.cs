@@ -2,6 +2,7 @@ using System;
 using System.ComponentModel;
 using System.Diagnostics;
 using Unison.Core.ViewModels;
+using Unison.Uwp.UI.Helpers;
 using Windows.Media;
 using Windows.Media.Core;
 using Windows.Media.Playback;
@@ -24,6 +25,7 @@ namespace Unison.Uwp.UI.Views
     {
         private readonly DispatcherTimer _positionTimer;
         private readonly DispatcherTimer _chromeTimer;
+        private readonly ViewerEscapeKey _escapeKey;
         private Storyboard _seekFeedbackStoryboard;
         private VideoViewerViewModel _viewModel;
         private MediaPlayer _mediaPlayer;
@@ -42,6 +44,9 @@ namespace Unison.Uwp.UI.Views
         {
             InitializeComponent();
             DataContext = ClosedDataContext;
+            _escapeKey = new ViewerEscapeKey(
+                () => Visibility == Visibility.Visible && _viewModel != null,
+                () => _viewModel?.CloseCommand);
             Unloaded += VideoViewerView_Unloaded;
 
             _positionTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(250) };
@@ -69,6 +74,7 @@ namespace Unison.Uwp.UI.Views
                 {
                     _viewModel.CloseRequested -= ViewModel_CloseRequested;
                     _viewModel.PropertyChanged -= ViewModel_PropertyChanged;
+                    _escapeKey.Unhook();
                 }
 
                 TearDownPlayer();
@@ -84,12 +90,14 @@ namespace Unison.Uwp.UI.Views
                     ApplyChromeVisibility(_viewModel.IsChromeVisible);
                     StartPlayback(_viewModel);
                     ShowChrome();
+                    _escapeKey.Hook();
                 }
             }
         }
 
         private void VideoViewerView_Unloaded(object sender, RoutedEventArgs e)
         {
+            _escapeKey.Unhook();
             ViewModel = null;
         }
 
