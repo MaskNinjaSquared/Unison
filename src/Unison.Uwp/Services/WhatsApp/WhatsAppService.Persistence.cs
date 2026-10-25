@@ -1,46 +1,22 @@
 using System;
 using System.Collections.Generic;
-using System.Collections.ObjectModel;
 using System.Diagnostics;
-using System.IO;
 using System.Linq;
-using System.Reflection;
-using System.Threading.Tasks;
-using Unison.Uwp.Client;
-using Unison.Core.Helpers;
-using Unison.Core.Mappers;
-using Unison.Core.Models;
-using Unison.Baileys.Protocol;
-using Unison.Uwp.Data;
-using Unison.Baileys.Crypto;
-using Unison.Uwp.Transport;
-using Proto;
-using Google.Protobuf;
 using System.Threading;
-using System.Runtime.InteropServices.WindowsRuntime;
-
-using System.ComponentModel;
-using System.Runtime.CompilerServices;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
+using System.Threading.Tasks;
 using Unison.Background;
-using Unison.Baileys.Diagnostics;
-using Unison.Baileys.Client;
-using Unison.Core.Constants;
 using Unison.Core.Contracts;
 using Unison.Core.Contracts.WhatsApp;
+using Unison.Core.Models;
 using Unison.Core.State;
-using Unison.Socket.UseCases.Contacts;
-using Unison.Uwp.Helpers;
-using Microsoft.Extensions.DependencyInjection;
+using Unison.Uwp.Services;
 using Unison.WhatsAppClient.Abstractions;
 using Unison.WhatsAppClient.Helpers;
 
 namespace Unison.Uwp.Services.WhatsApp
 {
-    public partial class WhatsAppService : IChatCatalogPersistence, IChatCatalogFullPersistHost, ILoadPersistedChatCatalogHost
+    public partial class WhatsAppService : IChatCatalogPersistence
     {
-
         private void LoadHistoryFreshnessRepairState() =>
             _freshnessRepair.Load();
 
@@ -135,7 +111,6 @@ namespace Unison.Uwp.Services.WhatsApp
         // --- IPersistBackgroundDisplayNamesHost ------------------------------
 
         IReadOnlyDictionary<string, string> IPersistBackgroundDisplayNamesHost.BuildBackgroundDisplayNamesTable() =>
-            // Copies first: these are live UI-thread collections.
             BackgroundDisplayNameTable.Build(
                 Chats.ToList(),
                 ContactNames.ToList(),
@@ -210,95 +185,14 @@ namespace Unison.Uwp.Services.WhatsApp
         /// Persists current chats and contact metadata to disk.
         /// </summary>
         public Task<bool> PersistDataAsync() =>
-            ChatCatalogFullPersistDispatch.RunFullAsync(this);
-
-        Task IChatCatalogFullPersistHost.EnterPersistLockAsync() =>
-            _persistRunLock.WaitAsync();
-
-        void IChatCatalogFullPersistHost.ExitPersistLock() =>
-            _persistRunLock.Release();
-
-        async Task IChatCatalogFullPersistHost.PersistFullCatalogAndNameMapsAsync()
-        {
-            // No sync line here: mark-read and avatar/name enrichment used to surface
-            // "Saving chats..." on the Mobile status bar for the whole catalog rewrite, which
-            // looked like opening a chat was blocked on disk. Sync stages already report
-            // through SyncPhaseStatus; this path is housekeeping.
-
-            // Messages are persisted by the batched message queue. Rewriting every
-            // loaded chat file here caused long UI stalls and large allocation spikes.
-            ChatCatalogSnapshot catalog = null;
-            Dictionary<string, string> contactSnapshot = null;
-            Dictionary<string, string> phoneContactSnapshot = null;
-            Dictionary<string, string> aliasSnapshot = null;
-            await _ui.RunAsync(() =>
-            {
-                catalog = ChatCatalogSnapshot.Take(Chats);
-                contactSnapshot = ContactNames.Snapshot();
-                phoneContactSnapshot = PhoneContactNamesByJid.Snapshot();
-                aliasSnapshot = JidAlias.Snapshot();
-            });
-
-            IEnumerable<string> chatJids = catalog?.ChatJids ?? (IEnumerable<string>)new string[0];
-            await PersistChatCatalogAsync(catalog).ConfigureAwait(false);
-            await _messageStore.SaveContactNamesAsync(contactSnapshot ?? new Dictionary<string, string>(), chatJids);
-            await _messageStore.SavePhoneContactNamesAsync(phoneContactSnapshot ?? new Dictionary<string, string>(), chatJids);
-            await _messageStore.SaveJidAliasesAsync(aliasSnapshot ?? new Dictionary<string, string>(), chatJids);
-
-            Debug.WriteLine(
-                "[WhatsAppService] Persisted " + (catalog?.Rows.Count ?? 0) +
-                " chat rows and contact metadata");
-        }
-
-        void IChatCatalogFullPersistHost.LogFullPersistFailed(Exception error) =>
-            Debug.WriteLine(
-                "[WhatsAppService] Failed to persist data: " +
-                (error != null ? error.Message : string.Empty));
-
-        async Task IChatCatalogFullPersistHost.PersistCriticalSuspendStateAsync()
-        {
-            ChatCatalogSnapshot catalog = null;
-            Dictionary<string, string> aliasSnapshot = null;
-            await _ui.RunAsync(() =>
-            {
-                catalog = ChatCatalogSnapshot.Take(Chats);
-                aliasSnapshot = JidAlias.Snapshot();
-            });
-
-            await PersistChatCatalogAsync(catalog).ConfigureAwait(false);
-            await _messageStore.SaveJidAliasesAsync(
-                aliasSnapshot ?? new Dictionary<string, string>(),
-                catalog?.ChatJids ?? (IEnumerable<string>)new string[0]);
-
-            RuntimeDiagnosticsService.Instance.Write(
-                "lifecycle",
-                "fast-suspend-persisted",
-                "chatRows=" + (catalog?.Rows.Count ?? 0));
-        }
-
-        void IChatCatalogFullPersistHost.LogSuspendPersistFailed(Exception error) =>
-            RuntimeDiagnosticsService.Instance.RecordException(
-                "lifecycle",
-                "suspend-persist-tail-failed",
-                error);
+            _catalogDisk.PersistFullAsync();
 
         /// <summary>
         /// Writes only the given chat-list rows to <c>history_chat_preview</c>. Used after
         /// mark-read so clearing a badge does not rewrite the whole catalogue and contact maps.
         /// </summary>
         private Task PersistChatCatalogSliceAsync(IList<ChatItem> chats) =>
-            ChatCatalogFullPersistDispatch.RunSliceAsync(this, chats);
-
-        Task IChatCatalogFullPersistHost.PersistCatalogSliceAsync(IList<ChatItem> chats) =>
-            PersistChatCatalogAsync(chats);
-
-        void IChatCatalogFullPersistHost.LogCatalogSliceSucceeded(int rowCount) =>
-            Debug.WriteLine("[WhatsAppService] Persisted chat-preview slice rows=" + rowCount);
-
-        void IChatCatalogFullPersistHost.LogCatalogSliceFailed(Exception error) =>
-            Debug.WriteLine(
-                "[WhatsAppService] Chat-preview slice persist failed: " +
-                (error != null ? error.Message : string.Empty));
+            _catalogDisk.PersistSliceAsync(chats);
 
         /// <summary>
         /// Schedules a debounced persist operation. Multiple calls within 3 seconds will batch into one save.
@@ -355,7 +249,6 @@ namespace Unison.Uwp.Services.WhatsApp
                 return;
             }
 
-            // Copy: callers often pass live UI rows that may mutate before the write runs.
             var slice = new List<ChatItem>(chats.Count);
             for (int i = 0; i < chats.Count; i++)
             {
@@ -373,72 +266,16 @@ namespace Unison.Uwp.Services.WhatsApp
             _ = PersistChatCatalogSliceAsync(slice);
         }
 
-        private Task PersistChatCatalogAsync(IList<ChatItem> chats)
-        {
-            return PersistChatCatalogAsync(ChatCatalogSnapshot.Take(chats));
-        }
+        private Task PersistChatCatalogAsync(IList<ChatItem> chats) =>
+            PersistChatCatalogAsync(ChatCatalogSnapshot.Take(chats));
 
         private Task PersistChatCatalogAsync(ChatCatalogSnapshot snapshot) =>
             ChatCatalogPreviewPersist.UpsertAsync(_chatPreviews, snapshot);
 
-        /// <summary>
-        /// Loads persisted chats from disk on startup.
-        /// </summary>
         private Task LoadPersistedChatsAsync() =>
-            LoadPersistedChatCatalogDispatch.RunAsync(this);
-
-        IDisposable ILoadPersistedChatCatalogHost.BeginPersistedChatsLoad() =>
-            _chatState.BeginPersistedChatsLoad();
-
-        Task<IReadOnlyList<HistoryChatPreview>> ILoadPersistedChatCatalogHost.ReadAllPreviewsAsync() =>
-            _chatPreviews.GetAllAsync();
-
-        Task ILoadPersistedChatCatalogHost.ApplyPreviewsToChatListAsync(
-            IReadOnlyList<HistoryChatPreview> stored)
-        {
-            return _ui.RunAsync(() =>
-            {
-                var existing = new HashSet<string>(
-                    Chats.Where(c => c != null && !string.IsNullOrWhiteSpace(c.JID))
-                         .Select(c => NormalizeJid(c.JID)),
-                    StringComparer.OrdinalIgnoreCase);
-
-                foreach (var preview in stored)
-                {
-                    ChatItem chat = HistoryChatPreviewApplier.ToChatItemForCatalog(preview);
-                    if (chat == null || string.IsNullOrWhiteSpace(chat.JID))
-                    {
-                        continue;
-                    }
-
-                    string normJid = NormalizeJid(chat.JID);
-                    chat.JID = normJid;
-                    ChatPreviewNormalizer.ApplyToChatItem(chat);
-                    ApplyChatKind(chat);
-                    if (existing.Add(normJid))
-                    {
-                        Chats.Add(chat);
-                    }
-                }
-
-                ApplyChatKindsToAll();
-                ChatDisplayOrder.SortInPlace(Chats);
-            });
-        }
-
-        void ILoadPersistedChatCatalogHost.LogLoaded(int previewCount) =>
-            Debug.WriteLine(
-                "[WhatsAppService] Fast startup loaded " + previewCount + " chat preview rows");
-
-        void ILoadPersistedChatCatalogHost.NotifyHistorySyncAfterLoad() =>
-            History?.NotifyHistorySyncReceived(null);
-
-        void ILoadPersistedChatCatalogHost.LogLoadFailed(Exception error) =>
-            Debug.WriteLine(
-                "[WhatsAppService] Failed to load persisted chat metadata: " +
-                (error != null ? error.Message : string.Empty));
+            _catalogDisk.LoadPersistedChatsAsync();
 
         private Task PersistSuspendTailAsync() =>
-            ChatCatalogFullPersistDispatch.RunSuspendTailAsync(this);
+            _catalogDisk.PersistSuspendTailAsync();
     }
 }

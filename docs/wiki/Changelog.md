@@ -2,6 +2,14 @@
 
 Newest first.
 
+## Extraction 4 — enrichment / self-profile / catalog disk owners
+
+`ReleaseEnrichmentAfterHeavyHistoryCoordinator` owns the awaiting-heavy-history
+flag + release dispatch. `SelfProfileAuthSync` owns sync-from-auth / self-phone /
+avatar persist hosts. `ChatCatalogDiskPersistence` owns full / slice / suspend-tail
+persist and startup catalogue hydrate (`IChatCatalogFullPersistHost` /
+`ILoadPersistedChatCatalogHost`). Debounce timer stays on the client
+(`IChatCatalogPersistHost`). Background display-names host deferred.
 ## Extraction 4 — four message/freshness owners leave WhatsAppService
 
 `HistoryFreshnessRepairPersistence` (repair/reconnect UTC stamps),

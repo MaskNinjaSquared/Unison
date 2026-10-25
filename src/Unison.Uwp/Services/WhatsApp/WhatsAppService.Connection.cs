@@ -2000,7 +2000,7 @@ namespace Unison.Uwp.Services.WhatsApp
             _historyIdentityRefreshTriggeredThisSession = false;
             _qrDeliveredThisConnection = false;
             _postSyncMaintenance.ResetEnrichmentStarted();
-            Interlocked.Exchange(ref _enrichmentAwaitingHeavyHistory, 0);
+            _heavyHistoryEnrichment.SetAwaitingHeavyHistory(false);
         }
 
         void IConnectionConnectPrepareHost.MarkConnecting() => _isConnecting = true;

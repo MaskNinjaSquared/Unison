@@ -182,9 +182,13 @@ push-name is `ContactFacade.NotifyInboundMessageNode`. Pump keeps queue lanes an
 session-only App State. Persistence debounce timer / Connection lifecycle stay on the host.
 `ForgetChatStorage` orchestration is `ForgetChatStorageDispatch` (`ForgetChatStorageHost` I/O).
 Full catalogue persist, preview-slice persist, and suspend-tail orchestration are
-`ChatCatalogFullPersistDispatch` (`IChatCatalogFullPersistHost`); startup catalogue
-hydrate is `LoadPersistedChatCatalogDispatch` (`ILoadPersistedChatCatalogHost`).
-SQLite writes and UI snapshots remain on the host.
+`ChatCatalogFullPersistDispatch` via `ChatCatalogDiskPersistence`
+(`IChatCatalogFullPersistHost`); startup catalogue hydrate is
+`LoadPersistedChatCatalogDispatch` on the same owner
+(`ILoadPersistedChatCatalogHost`). Debounce timer / `IChatCatalogPersistHost`
+stay on the client. Heavy-history enrichment release is
+`ReleaseEnrichmentAfterHeavyHistoryCoordinator`; self push-name / phone / avatar
+auth sync is `SelfProfileAuthSync`.
 
 ### Facades still depend on the client
 
