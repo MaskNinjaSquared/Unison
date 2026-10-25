@@ -2,6 +2,280 @@
 
 Newest first.
 
+## Legacy Mobile — accent StatusBar; delete chat always confirms
+
+WhatsApp Legacy Mobile StatusBar uses the shell accent (`#04564A`) in portrait
+(no ProgressIndicator brand text — Unison still shows “Unison”). Landscape hides
+the bar like Unison. `ChatDeletionPrompt` never deletes when `IDialogService` is
+missing; confirmation is mandatory for list / detail / info delete.
+
+## Keyboard — ESC closes media viewer; Ctrl+V pastes attach media
+
+Escape on the image/video overlays runs `CloseCommand` (same as chrome close /
+system Back). Ctrl+V on an open chat: when the clipboard has Bitmap or
+StorageItems, `ICopyService.ReadPasteAsync` materializes Image / Audio /
+Document and `ChatDetailViewModel.PasteClipboardCommand` sends via the existing
+`SendPicked*` paths (no file picker; video ignored). Plain-text Ctrl+V stays on
+the composer TextBox.
+
+## Message Forward — text/caption send end-to-end
+
+Picker choice now calls `IMessageService.ForwardMessageAsync` (source chat +
+message id + target). MVP sends the text body or media caption with
+`ContextInfo.isForwarded` / `forwardingScore` via the existing text path
+(`OutgoingTextMentions.MarkAsForwarded` → Socket `MessageFactory`). Full media
+re-upload (Baileys `generateForwardMessageContent`) still later.
+`IForwardMessagePicker.OpenForwardPicker(sourceChatJid, messageId)`;
+`ShellViewModel` injects `IMessageService` for the send. After a successful
+forward the destination chat opens (same activation path as Share Target).
+
+## Contacts picker — row loading ring before every click command
+
+`ContactsVisualizerControl` (Favourites / Share / Forward): on item click,
+paint `RowClickBusyRing` on the compact row (+ scrim) **this** turn, then run
+`ItemClickCommand` on the next dispatcher turn. Order is mandatory so Share /
+Favourite / Forward never look dead after a tap.
+
+## Mobile — group subject once during timeline load + Unison ring
+
+Open deferred strip still after Yield, but the w:g2 subject/flags IQ now starts
+from `BeginLoadingMessages` (once per open, only when the row still looks like a
+JID placeholder). New groups that arrived without a subject get a name while
+messages load instead of relying on Prepare-time handshake. Unison chat detail
+shows a centre `ModernProgressRing` while `IsTimelineBusy` (keeps the 2px header
+bar).
+
+## Message Forward — people picker (menu + Legacy bar)
+
+Bubble context menu (`MessageBubbleContextActions`) and the Legacy
+`MessageActionsBar` gain **Forward**. The command opens the shell
+`ContactsVisualizer` overlay with title `ChatDetail_ForwardMessage`
+(Forward / Encaminhar) and holds source chat + message id on
+`ShellViewModel`.
+
+## Legacy chat list — mouse context menu + Hold CommandBar dismiss
+
+Right-click on PC did nothing for two reasons: (1) `PointerPressed` with
+`Handled=true` killed `RightTapped`; removing that handler left (2) ListView
+selecting on right-button `PointerPressed` so `SelectionChanged` opened the chat
+before `RightTapped`/`ContextRequested` could `ShowAt`. Fix: arm
+`_ignoreNextSelectionFromContext` on right-button `PointerPressed` **without**
+marking Handled; mouse still opens the row `MenuFlyout`; touch Hold still opens
+the bottom CommandBar (mouse Holding is ignored). Scrim dismisses the bar on
+press/tap outside (opening finger-up still swallowed; the 500ms grace no longer
+blocks the next click).
+
+`ResolveRowContextMenu null` after that: Legacy Detach cleared
+`Grid.ContextFlyout` and stashed the `MenuFlyout` on the template Grid; recycle
+could drop that Grid-keyed entry so right-click found nothing. Stash is now on
+the stable `ListViewItem`, with deferred Detach after template realize and a
+`ChatItemTemplate` rehydrate if the flyout was already lost.
+
+## Contacts picker — click busy ring + SemanticZoom jump scroll
+
+`ContactsVisualizerControl` (Favourites add + Share): centre `ModernProgressRing`
+on row click before the command runs so the tap is never silent. SemanticZoom
+letter jump no longer calls `ScrollIntoView(AlphabetChatGroup)` mid-transition
+(docs require `MakeVisible` on a real list item inside SemanticZoom). Now:
+`ViewChangeStarted` maps the tile → first `ChatItem`, then `MakeVisible` /
+`ScrollIntoView` after `ViewChangeCompleted` + Loaded. Same jump fix on
+`FavoritesView`.
+
+## Contacts — `~` only on the chat-list author strip
+
+The unsaved-contact marker was applied globally on push-name winners
+(`DisplayNameResolution` / `chat` context), so 1:1 titles and Favourites
+landed under a `~` SemanticZoom bucket. Default resolve is now unmarked;
+`WithContactIndicator` is true only for context `strip` (list tip / live
+group author). `ChatItem.Name` strips a leading `~` on set;
+`AlphabetChatGroups.LetterKey` and `GetNameResolved` also strip for safety.
+`ContactsVisualizerControl` (Favourites picker + Share overlay) always uses
+A–Z SemanticZoom like Favourites — no category headers.
+
+## Mobile — first group open: defer on-demand cold work
+
+First open of a large group froze ARM; 2nd open was fine (unread already 0,
+DirectChatIndex / strip warm). Open path was stacking ClearUnread tile+slice
+persist, ChatAuthorProjection BeginSweep, and group-meta apply on the same
+turns as Prepare/Hold.
+
+- `ClearUnreadForChatAsync`: badge stays sync; `SecondaryTile` + `PersistRows`
+  run on the thread pool (`chat-open|clear-unread` /
+  `clear-unread-side-effects` / `persist-rows` / `mark-read`).
+- `ChatAuthorProjection` waits `ChatTimelineLoadPriorityGate` before BeginSweep;
+  strip PersistRows is off the UI hop. DI passes the gate.
+- Group open: `RefreshChat` + send-permissions after `Task.Yield` (not inside
+  `SyncActiveChat`); participant maps use `EnsureFresh`.
+- Background unresolved groups: `ApplyMetadata` flags-only (`includeRoster:false`).
+- Resume: hiding the window no longer forces `_visibleOrderDirty` (resume used
+  to rebuild ~24s for mutations=1). `refresh-visible-exit` logs buildMs /
+  reconcileMs / totalMs.
+
+## Mobile — ChatListDeduper plans off the UI thread
+
+Every alias follow-up ran the whole dedupe (canonical lookup per row and per
+message-cache key, fold, re-key) in one UI hop; ARM froze 6–24s
+(`sync:ChatListDeduper.RunAsync`, runs `06f9cb95` / `d1289eeb`, 259 chats).
+Now: one snapshot hop → plan on the thread pool → apply only the found
+groups/keys in UI batches of 8. A clean list costs a single cheap hop.
+Concurrent requests coalesce into one follow-up pass, and rows re-addressed
+mid-pass are left for the next one. New journal line
+`chat-list-dedupe|pass` (reason, requests, rows, dupGroups, aliasKeys,
+merged, normalized, snapshotMs/planMs/applyMs, applyHops) when a pass
+changes something or takes ≥300ms.
+
+## Mobile — defer background-groups on resume settle
+
+Returning from keepalive armed `background-groups:begin` on the same turn as
+`visible=True`, competing with list refresh / fast-resume (hitch in run
+`06f9cb95`). Visibility restore now waits
+`SyncWorkloadStrategy.GroupListingResumeSettleMs` (3s / 2.5s / 1.2s by tier)
+and only fires if the window stayed visible (`GroupListingVisibilityGate.ShouldFireResumeRetry`).
+
+## Mobile — Windows People publish: heavy collect off the UI thread
+
+`PublishWindowsContactsCoreAsync` stalled ARM ~13s because
+`CollectWindowsContactExports` (name/avatar/phone per DM) ran inside
+`_ui.RunAsync`. The dispatcher hop now only snapshots `ChatItem` refs;
+`WindowsContactExportBuilder.Build` + `PublishAppContactsAsync` run after
+`ConfigureAwait(false)`.
+
+## Mobile — ChatAuthorProjection strip is on-demand (per chat / tip)
+
+Mass `ScheduleSweep` on every `DisplayNamesChanged` / Start / open-chat still froze
+ARM after the index fix. Mobile now sets `onDemand: true`:
+
+- Start / `Refresh` / broad `DisplayNamesChanged` do **not** walk the catalogue.
+- `PersonChanged` → only groups whose tip matches that JID (and aliases).
+- `GroupRosterChanged` / `RefreshChat` → only that group.
+- Opening a group calls `RefreshChat(jid)`, not full `Refresh`.
+
+Desktop keeps the full pass for Start / display-name bursts.
+
+## Mobile — ChatAuthorProjection strip sweep uses bubble-style indexes
+
+`ui-watchdog` on ARM showed `vm:ChatAuthorProjection.ScheduleSweep` holding the
+UI for 18–112s after group-metadata bursts: each group tip re-walked the whole
+chat list (and roster) inside one dispatcher hop. The open-chat path already
+builds `_directChatNames` / `_rosterByCanonical` once for bubbles.
+
+- `ChatAuthorStripMaps`: one-shot 1:1 name map + roster tip / direct-name helpers
+  for the list strip (same contract `GroupParticipantResolver` already accepts).
+- `ChatAuthorProjection` builds the 1:1 map once per coalesced pass, prefers
+  roster tip / DM name as `nameHint` (skips the contacts hop when possible), and
+  chunks 8 groups per hop. `IDispatcher.RunAsync` runs **inline** on the UI
+  thread, so the next chunk is queued with `Task.Yield` — without that, 2.2.35
+  still logged `ScheduleSweep` for ~38s with nested `ContinueSweep`. In-flight
+  passes set `_sweepAgain` instead of stacking.
+
+## Mobile — diagnostics: UI stall watchdog + route steps
+
+The frozen-list logs showed the pump as the victim, not the cause: the list froze
+with `decrypted` flat (no message), the retry of a timed-out live message goes
+through `ApplyIncomingDuplicateAsync` (awaits a UI hop), and the toast only
+fires after the strip ran on the UI — so "a notification unblocks the list" is
+the UI freeing up and releasing the toast. Nothing logged what the UI was doing.
+
+- `UiStallWatchdog` (UWP, DI): a worker timer posts a Normal probe every 1s;
+  `ui-watchdog|ui-stall` after 2s with the active dispatcher hop, then
+  `ui-stall-ongoing` every 10s and `ui-stall-end` with the total. Hops ≥300ms
+  log `ui-slow-work`. Hidden windows drop the probe (no false stalls on resume).
+- `IDispatcher.RunAsync` / `IUrgentDispatcher.RunUrgentAsync` take
+  `[CallerMemberName]` + `[CallerFilePath]` so hops are named
+  (`urgent:ChatFacade.RunLiveStripAsync`). .NET Native strips lambda metadata, so
+  no reflection. `AttachedUiDispatcher`, `DispatcherService`,
+  `UiThreadDispatcherService` track the hop; `active=none` means XAML layout,
+  input, or an `await` continuation outside these dispatchers.
+- `IncomingRouteTrace`: fresh per handle attempt; `MessageFacade` marks steps
+  (`alias-hints`, `timeline`, `duplicate-preview`, `inserted`, …). Timeout and
+  health log `stage=route:<step>`. The queue stage is untouched, so a zombie
+  route cannot overwrite the retry.
+
+## Extraction 4 — four startup/sync/socket owners leave WhatsAppService
+
+`DeferredStartupMaintenanceOwner`, `PublishInitialSyncProgressOwner`,
+`HistoryCatchUpBannerOwner` (begin+end), `ResetFirstSyncListHoldFlagsOwner`, and
+`InvalidateCurrentSocketOwner` own their dispatches. Quiet/memory/name/façade
+ports, first-sync flags/channel, banner latch/journal, and socket
+stop/clear/dispose stay as ctor ports on the client.
+
+## Extraction 4 — ReleaseMemoryOwner leaves WhatsAppService
+
+`IReleaseMemoryHost` left the client. `ReleaseMemoryOwner` (WhatsAppClient) owns
+the dispatch; message-store clear / UI hop / inactive-cache remove stay as ctor
+ports. `ReleaseMemoryAsync` forwards to the owner.
+
+## Mobile — incoming pump: ignore stale drain timeouts
+
+After `Reset` (health-stall / timeout), the old drain's 12s `Delay` could still
+fire and `Reset` again with `_current==null` → `message-timeout-retry` /
+`qLive=0` and no `incoming-pump-start` (pump stuck until the next enqueue;
+toast arrived ~85s later from the orphan handle). Timeout now no-ops when the
+drain generation is retired (`stale-drain:…`); null current never retries.
+
+## Mobile — live route: strip+toast detached from pump
+
+`ApplyIncomingInsertedAsync` no longer awaits `ApplyLiveIncomingChatListAsync`
+on `stage=route`. A busy UI dispatcher (scroll/reshuffle) used to hold the pump
+past 12s (`health-stall` → `message-timeout-skip`) and freeze list scroll until
+the next notification. Strip still runs urgent; toast follows when it finishes
+(`live-strip-slow` / `live-strip-ui-slow` when ≥1s).
+
+## Extraction 4 — LoadPersistedUiStateOwner leaves WhatsAppService
+
+`ILoadPersistedUiStateHost` left the client. `LoadPersistedUiStateOwner`
+(WhatsAppClient) owns the dispatch; init / catalogue load / avatar hydrate /
+preview reconcile stay as ctor ports. `LoadPersistedUiStateAsync` forwards to
+the owner.
+
+## Mobile — live list Move: community gate + alias tip probe
+
+`MoveToMatchSource` no longer aborts when *any* community exists in the
+catalogue (that forced every tip into full refresh / `order-clean`). Only the
+moved row's community shape falls back. PN/LID: order by the fresher catalogue
+tip while moving the on-screen instance. Failed incremental still sets
+`_visibleOrderDirty` and logs `incremental-move-miss`.
+
+## Mobile — live list Move: Visible NextIndexOf (fix tip not rising)
+
+Mirroring raw `Chats` index broke when Visible was deduped/sorted differently
+(or PN/LID instance ≠ visible row): Move no-oped and fallback refresh skipped
+(`order-clean`). `MoveToMatchSource` now finds the on-screen row (ref/canonical)
+and uses `ChatListRowOrder.TargetIndex` over VisibleChats only. Failed
+incremental apply sets `_visibleOrderDirty` before ScheduleRefresh.
+
+## Mobile — live inbound: toast off pump + urgent strip hop
+
+`NotifyLiveIncoming` snapshots mute/avatar/unread into `IncomingLiveAnnouncePayload`
+and runs toast / Live Tile / Start-tile on `Task.Run`, so WinRT notify no longer
+holds incoming-pump `stage=route`. Live list strip apply uses
+`IUrgentDispatcher` (`AttachedUiDispatcher.RunUrgentAsync` = High) so Normal
+list reshuffles cannot starve the 12s route timeout.
+
+## Extraction 4 — remaining socket wire owners leave WhatsAppService
+
+`ISocketFacadeWireHost` / `IInboundWireNodeHost` / `IDecryptedMessageWireHost` /
+`IHistorySyncWireHost` / `IOfflineReplayReleaseHost` left `WhatsAppService`.
+`SocketFacadeWireOwner`, `InboundWireNodeOwner`, `DecryptedMessageWireOwner`,
+`HistorySyncWireOwner`, and `OfflineReplayReleaseOwner` own the dispatches;
+façade notify / pump enqueue / history apply / flush stay as ctor ports.
+`SocketEventHandlerWiring` calls the owners, not the client as host.
+
+## Mobile — chat-list avatars: batch + open, not scroll
+
+Mobile no longer calls `RequestAvatarRefresh` from `OnRowRealized` (ListView
+realize storms). First pictures still come from the post-history avatar batch +
+disk hydrate. Opening a chat on Mobile force-revalidates; `ChatAvatarFetch`
+skips the CDN download when picture id (else remote URL) matches what was
+cached (`AvatarPictureId` / `AvatarRemoteUrl`). Desktop keeps row-realize refresh.
+
+## Extraction 4 — SessionInitialized / SocketError / ConnectionUpdate wire owners
+
+`ISessionInitializedHost` / `ISocketErrorHost` / `IConnectionUpdateHost` left
+`WhatsAppService`. `SessionInitializedOwner`, `SocketErrorOwner`, and
+`ConnectionUpdateOwner` (WhatsAppClient) own the dispatches; pairing flags /
+persist / reconnect / diagnostics stay as ctor ports. `SocketEventHandlerWiring`
+calls the owners, not the client as host.
 ## Extraction 4 — ClearSession + Qr/Auth wire owners
 
 `IClearSessionHost` / `IRaiseSessionClearedHost` left `WhatsAppService`.
