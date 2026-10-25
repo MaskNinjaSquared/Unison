@@ -1362,7 +1362,11 @@ aliases after list fold) is `ChatIdentityPersistence` over
 `ChatCatalogPreviewPersist` until full catalogue persist leaves.
 **Durable chat-delete I/O** (preview tombstone / history delete / RAM cache /
 catalogue persist) is `ForgetChatStorageHost` + `AppStateLocalHost` over
-`ForgetChatStorageDispatch`. The incoming pump drain loop is
+`ForgetChatStorageDispatch`. **Freshness repair stamps** are
+`HistoryFreshnessRepairPersistence`. **Live SQLite upsert** is
+`LiveMessagePersist`. **Persisted find + sent-retry rebuild** is
+`PersistedMessageLookup`. **Active-chat cache unload + sync clear** is
+`ActiveChatCacheSideEffects`. The incoming pump drain loop is
 `IncomingPumpDrainDispatch` (host still owns typed queue + handle). Offline pending-
 notification release is `OfflineReplayRelease` over `IOfflineReplayReleaseHost`
 (wire still attaches the event on the client). Thin-wire dispatches:

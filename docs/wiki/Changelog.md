@@ -2,6 +2,13 @@
 
 Newest first.
 
+## Extraction 4 — four message/freshness owners leave WhatsAppService
+
+`HistoryFreshnessRepairPersistence` (repair/reconnect UTC stamps),
+`LiveMessagePersist`, `PersistedMessageLookup` (find + retry rebuild),
+and `ActiveChatCacheSideEffects` (cache unload + sync clear) now own the
+matching dispatch hosts. Eight `I*Host` interfaces left the client implements
+list.
 ## Extraction 4 — ForgetChatStorageHost owns durable chat-delete I/O
 
 `IForgetChatStorageHost` and `IAppStateLocalHost` left `WhatsAppService`.

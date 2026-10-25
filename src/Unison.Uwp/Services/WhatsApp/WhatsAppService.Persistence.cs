@@ -42,80 +42,13 @@ namespace Unison.Uwp.Services.WhatsApp
     {
 
         private void LoadHistoryFreshnessRepairState() =>
-            LoadHistoryFreshnessRepairStateDispatch.Run(this);
-
-        // --- ILoadHistoryFreshnessRepairStateHost ----------------------------
-
-        string ILoadHistoryFreshnessRepairStateHost.ReadLastFullHistoryRepairCompletedUtcRaw() =>
-            LocalSettingsAccess.Current.Get<string>(
-                LocalSettingsConstants.LastFullHistoryRepairCompletedUtc);
-
-        string ILoadHistoryFreshnessRepairStateHost.ReadLastFreshnessReconnectFallbackUtcRaw() =>
-            LocalSettingsAccess.Current.Get<string>(
-                LocalSettingsConstants.LastFreshnessReconnectFallbackUtc);
-
-        void ILoadHistoryFreshnessRepairStateHost.SetLastFullHistoryRepairCompletedUtc(
-            DateTime timestampUtc) =>
-            _lastFullHistoryRepairCompletedUtc = timestampUtc;
-
-        void ILoadHistoryFreshnessRepairStateHost.SetLastFreshnessReconnectFallbackUtc(
-            DateTime timestampUtc) =>
-            _lastFreshnessReconnectFallbackUtc = timestampUtc;
-
-        void ILoadHistoryFreshnessRepairStateHost.LogLoadedFullHistoryRepairCompleted(
-            DateTime timestampUtc) =>
-            Debug.WriteLine(
-                $"[WhatsAppService] Loaded full-history repair completed timestamp: {timestampUtc:O}");
-
-        void ILoadHistoryFreshnessRepairStateHost.LogLoadedFreshnessReconnectFallback(
-            DateTime timestampUtc) =>
-            Debug.WriteLine(
-                $"[WhatsAppService] Loaded freshness reconnect fallback timestamp: {timestampUtc:O}");
-
-        void ILoadHistoryFreshnessRepairStateHost.LogLoadHistoryFreshnessRepairStateFailed(
-            string message) =>
-            Debug.WriteLine(
-                $"[WhatsAppService] Failed to load history freshness repair state: {message}");
+            _freshnessRepair.Load();
 
         private void PersistFullHistoryRepairCompletedUtc(DateTime timestampUtc) =>
-            PersistFullHistoryRepairCompletedUtcDispatch.Run(this, timestampUtc);
-
-        // --- IPersistFullHistoryRepairCompletedUtcHost -----------------------
-
-        void IPersistFullHistoryRepairCompletedUtcHost.SetLastFullHistoryRepairCompletedUtc(
-            DateTime timestampUtc) =>
-            _lastFullHistoryRepairCompletedUtc = timestampUtc;
-
-        void IPersistFullHistoryRepairCompletedUtcHost.WriteLastFullHistoryRepairCompletedUtc(
-            string roundtripText) =>
-            LocalSettingsAccess.Current.Set(
-                LocalSettingsConstants.LastFullHistoryRepairCompletedUtc,
-                roundtripText);
-
-        void IPersistFullHistoryRepairCompletedUtcHost.LogPersistFullHistoryRepairCompletedFailed(
-            string message) =>
-            Debug.WriteLine(
-                $"[WhatsAppService] Failed to persist full-history repair completed timestamp: {message}");
+            _freshnessRepair.PersistFullHistoryRepairCompletedUtc(timestampUtc);
 
         private void PersistFreshnessReconnectFallbackUtc(DateTime timestampUtc) =>
-            PersistFreshnessReconnectFallbackUtcDispatch.Run(this, timestampUtc);
-
-        // --- IPersistFreshnessReconnectFallbackUtcHost -----------------------
-
-        void IPersistFreshnessReconnectFallbackUtcHost.SetLastFreshnessReconnectFallbackUtc(
-            DateTime timestampUtc) =>
-            _lastFreshnessReconnectFallbackUtc = timestampUtc;
-
-        void IPersistFreshnessReconnectFallbackUtcHost.WriteLastFreshnessReconnectFallbackUtc(
-            string roundtripText) =>
-            LocalSettingsAccess.Current.Set(
-                LocalSettingsConstants.LastFreshnessReconnectFallbackUtc,
-                roundtripText);
-
-        void IPersistFreshnessReconnectFallbackUtcHost.LogPersistFreshnessReconnectFallbackFailed(
-            string message) =>
-            Debug.WriteLine(
-                $"[WhatsAppService] Failed to persist freshness reconnect fallback timestamp: {message}");
+            _freshnessRepair.PersistFreshnessReconnectFallbackUtc(timestampUtc);
 
         internal void EnableScheduledPersist(string reason) =>
             ChatCatalogPersistDispatch.EnableAfterStartup(this, reason);
@@ -253,22 +186,7 @@ namespace Unison.Uwp.Services.WhatsApp
         }
 
         private Task PersistLiveMessagesAsync(string chatJid, IList<ChatMessage> messages) =>
-            PersistLiveMessagesDispatch.RunAsync(this, chatJid, messages);
-
-        // --- IPersistLiveMessagesHost ----------------------------------------
-
-        bool IPersistLiveMessagesHost.HasHistoryMessageStore => _historyMessages != null;
-
-        string IPersistLiveMessagesHost.NormalizeChatJid(string chatJid) =>
-            NormalizeJid(chatJid);
-
-        Task IPersistLiveMessagesHost.UpsertLiveMessagesAsync(
-            string normalizedChatJid,
-            IReadOnlyList<ChatMessage> messages) =>
-            _historyMessages.UpsertLiveMessagesAsync(normalizedChatJid, messages);
-
-        void IPersistLiveMessagesHost.LogLivePersistFailed(string message) =>
-            Debug.WriteLine("[WhatsAppService] SQLite live persist failed: " + message);
+            _liveMessages.PersistAsync(chatJid, messages);
 
         private void QueueMessagesForPersist(string jid, IEnumerable<ChatMessage> messages, bool queueIncomingJournal = true, bool scheduleFlush = true)
         {
