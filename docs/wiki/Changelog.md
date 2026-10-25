@@ -2,6 +2,10 @@
 
 Newest first.
 
+## Extraction 4 — InitGateOwner owns connection-state init lock
+
+`InitializeConnectionStateAsync` `SemaphoreSlim` moved out of `WhatsAppService`
+into `InitGateOwner` (WhatsAppClient). Same gate shape as `ConnectionGateLocks`.
 ## Extraction 4 — ConnectionGateLocks + HydrationDayRetryOwner
 
 Connect and resume/ensure `SemaphoreSlim` gates moved to `ConnectionGateLocks`

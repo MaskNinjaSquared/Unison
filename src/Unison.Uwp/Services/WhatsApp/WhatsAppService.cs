@@ -344,7 +344,11 @@ namespace Unison.Uwp.Services.WhatsApp
         /// <see cref="IConnectionHealthMonitorIoHost"/> loop bodies.
         /// </summary>
         private readonly ConnectionHealthMonitorOwner _healthMonitors;
-        private readonly SemaphoreSlim _initLock = new SemaphoreSlim(1, 1);
+        /// <summary>
+        /// InitializeConnectionStateAsync SemaphoreSlim — owned by
+        /// <see cref="InitGateOwner"/>.
+        /// </summary>
+        private readonly InitGateOwner _initGate = new InitGateOwner();
         private readonly SemaphoreSlim _persistedUiLoadLock = new SemaphoreSlim(1, 1);
         private volatile bool _persistedUiStateLoaded;
         private FileKeyStore _sharedKeyStore;

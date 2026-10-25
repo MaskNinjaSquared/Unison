@@ -874,7 +874,7 @@ namespace Unison.Uwp.Services.WhatsApp
         /// </summary>
         public async Task InitializeConnectionStateAsync()
         {
-            await _initLock.WaitAsync().ConfigureAwait(false);
+            await _initGate.EnterAsync().ConfigureAwait(false);
             try
             {
                 RuntimeDiagnosticsService.Instance.Write(
@@ -889,7 +889,7 @@ namespace Unison.Uwp.Services.WhatsApp
             }
             finally
             {
-                _initLock.Release();
+                _initGate.Exit();
             }
         }
 
