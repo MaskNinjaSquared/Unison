@@ -69,10 +69,10 @@
                             <FontIcon Glyph="&#xE77B;" FontFamily="{StaticResource IconFont}" FontSize="26"
                                       Foreground="{ThemeResource WhatsAppTextHighBrush}" VerticalAlignment="Center" Margin="0,0,16,0"/>
                             <StackPanel Grid.Column="1">
-                                <TextBlock x:Uid="Settings_Profile" Text="Perfil" FontSize="22"
+                                <TextBlock x:Uid="Settings_Profile" Text="Profile" FontSize="22"
                                            FontFamily="{StaticResource MainFontLight}"
                                            Foreground="{ThemeResource WhatsAppTextHighBrush}"/>
-                                <TextBlock x:Uid="Settings_ProfileHint" Text="Seu nome e foto" FontSize="14"
+                                <TextBlock x:Uid="Settings_ProfileHint" Text="Your name and photo" FontSize="14"
                                            FontFamily="{StaticResource MainFontLight}"
                                            Foreground="{ThemeResource WhatsAppTextMediumBrush}"/>
                             </StackPanel>
@@ -87,10 +87,10 @@
                             <FontIcon Glyph="&#xE713;" FontFamily="{StaticResource IconFont}" FontSize="26"
                                       Foreground="{ThemeResource WhatsAppTextHighBrush}" VerticalAlignment="Center" Margin="0,0,16,0"/>
                             <StackPanel Grid.Column="1">
-                                <TextBlock x:Uid="Settings_General" Text="Geral" FontSize="22"
+                                <TextBlock x:Uid="Settings_General" Text="General" FontSize="22"
                                            FontFamily="{StaticResource MainFontLight}"
                                            Foreground="{ThemeResource WhatsAppTextHighBrush}"/>
-                                <TextBlock x:Uid="Settings_GeneralHint" Text="Live tiles, sessão e contatos" FontSize="14"
+                                <TextBlock x:Uid="Settings_GeneralHint" Text="Live tiles, session, and contacts" FontSize="14"
                                            FontFamily="{StaticResource MainFontLight}"
                                            Foreground="{ThemeResource WhatsAppTextMediumBrush}"/>
                             </StackPanel>
@@ -105,10 +105,10 @@
                             <FontIcon Glyph="&#xEA8F;" FontFamily="{StaticResource IconFont}" FontSize="26"
                                       Foreground="{ThemeResource WhatsAppTextHighBrush}" VerticalAlignment="Center" Margin="0,0,16,0"/>
                             <StackPanel Grid.Column="1">
-                                <TextBlock x:Uid="Settings_NotificationsSection" Text="Notificações" FontSize="22"
+                                <TextBlock x:Uid="Settings_NotificationsSection" Text="Notifications" FontSize="22"
                                            FontFamily="{StaticResource MainFontLight}"
                                            Foreground="{ThemeResource WhatsAppTextHighBrush}"/>
-                                <TextBlock x:Uid="Settings_NotificationsHint" Text="Toasts e selo de mensagens" FontSize="14"
+                                <TextBlock x:Uid="Settings_NotificationsHint" Text="Toasts and message badge" FontSize="14"
                                            FontFamily="{StaticResource MainFontLight}"
                                            Foreground="{ThemeResource WhatsAppTextMediumBrush}"/>
                             </StackPanel>
@@ -123,10 +123,10 @@
                             <FontIcon Glyph="&#xE771;" FontFamily="{StaticResource IconFont}" FontSize="26"
                                       Foreground="{ThemeResource WhatsAppTextHighBrush}" VerticalAlignment="Center" Margin="0,0,16,0"/>
                             <StackPanel Grid.Column="1">
-                                <TextBlock x:Uid="Settings_Customization" Text="Personalização" FontSize="22"
+                                <TextBlock x:Uid="Settings_Customization" Text="Customization" FontSize="22"
                                            FontFamily="{StaticResource MainFontLight}"
                                            Foreground="{ThemeResource WhatsAppTextHighBrush}"/>
-                                <TextBlock x:Uid="Settings_CustomizationHint" Text="Tema e idioma" FontSize="14"
+                                <TextBlock x:Uid="Settings_CustomizationHint" Text="Theme and language" FontSize="14"
                                            FontFamily="{StaticResource MainFontLight}"
                                            Foreground="{ThemeResource WhatsAppTextMediumBrush}"/>
                             </StackPanel>
@@ -141,10 +141,10 @@
                             <FontIcon Glyph="&#xE7BA;" FontFamily="{StaticResource IconFont}" FontSize="26"
                                       Foreground="{ThemeResource WhatsAppTextHighBrush}" VerticalAlignment="Center" Margin="0,0,16,0"/>
                             <StackPanel Grid.Column="1">
-                                <TextBlock x:Uid="Settings_Advanced" Text="Conta" FontSize="22"
+                                <TextBlock x:Uid="Settings_Advanced" Text="Account" FontSize="22"
                                            FontFamily="{StaticResource MainFontLight}"
                                            Foreground="{ThemeResource WhatsAppTextHighBrush}"/>
-                                <TextBlock x:Uid="Settings_AccountHint" Text="Desligar este aparelho" FontSize="14"
+                                <TextBlock x:Uid="Settings_AccountHint" Text="Unlink this device" FontSize="14"
                                            FontFamily="{StaticResource MainFontLight}"
                                            Foreground="{ThemeResource WhatsAppTextMediumBrush}"/>
                             </StackPanel>
@@ -156,7 +156,7 @@
                 <StackPanel x:Name="ProfileCategory"
                             Visibility="Collapsed"
                             HorizontalAlignment="Stretch">
-                    <TextBlock x:Uid="Settings_Profile" Text="Perfil" FontSize="32" Margin="20,8,10,16"
+                    <TextBlock x:Uid="Settings_Profile" Text="Profile" FontSize="32" Margin="20,8,10,16"
                                FontFamily="{StaticResource MainFontLight}"
                                Foreground="{ThemeResource WhatsAppTextHighBrush}"/>
                     <controls:WhatsAppProfileControl/>
@@ -165,7 +165,7 @@
                 <StackPanel x:Name="GeneralCategory"
                             Visibility="Collapsed"
                             HorizontalAlignment="Stretch">
-                    <TextBlock x:Uid="Settings_General" Text="Geral" FontSize="32" Margin="20,8,10,16"
+                    <TextBlock x:Uid="Settings_General" Text="General" FontSize="32" Margin="20,8,10,16"
                                FontFamily="{StaticResource MainFontLight}"
                                Foreground="{ThemeResource WhatsAppTextHighBrush}"/>
                     <controls:SettingBox LocalizationUid="Settings_LiveTiles" Margin="10,0,10,4"
@@ -197,7 +197,7 @@
                 <StackPanel x:Name="NotificationsCategory"
                             Visibility="Collapsed"
                             HorizontalAlignment="Stretch">
-                    <TextBlock x:Uid="Settings_NotificationsSection" Text="Notificações" FontSize="32" Margin="20,8,10,16"
+                    <TextBlock x:Uid="Settings_NotificationsSection" Text="Notifications" FontSize="32" Margin="20,8,10,16"
                                FontFamily="{StaticResource MainFontLight}"
                                Foreground="{ThemeResource WhatsAppTextHighBrush}"/>
                     <controls:SettingBox LocalizationUid="Settings_Notifications" Margin="10,0,10,4"
@@ -249,7 +249,7 @@
                 <StackPanel x:Name="CustomizationCategory"
                             Visibility="Collapsed"
                             HorizontalAlignment="Stretch">
-                    <TextBlock x:Uid="Settings_Customization" Text="Personalização" FontSize="32" Margin="20,8,10,16"
+                    <TextBlock x:Uid="Settings_Customization" Text="Customization" FontSize="32" Margin="20,8,10,16"
                                FontFamily="{StaticResource MainFontLight}"
                                Foreground="{ThemeResource WhatsAppTextHighBrush}"/>
                     <controls:SettingBox LocalizationUid="Settings_Shell" Margin="10,0,10,4"
@@ -318,7 +318,7 @@
                 <StackPanel x:Name="AccountCategory"
                             Visibility="Collapsed"
                             HorizontalAlignment="Stretch">
-                    <TextBlock x:Uid="Settings_Advanced" Text="Conta" FontSize="32" Margin="20,8,10,16"
+                    <TextBlock x:Uid="Settings_Advanced" Text="Account" FontSize="32" Margin="20,8,10,16"
                                FontFamily="{StaticResource MainFontLight}"
                                Foreground="{ThemeResource WhatsAppTextHighBrush}"/>
                     <controls:SettingBox LocalizationUid="Settings_ShowSyncStatus" Margin="10,0,10,4"

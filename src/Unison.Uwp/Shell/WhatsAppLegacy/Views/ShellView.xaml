@@ -109,19 +109,19 @@
                                        Padding="16,0"/>
                         </DataTemplate>
                     </Pivot.HeaderTemplate>
-                    <PivotItem Header="chats" Tag="chats">
+                    <PivotItem x:Uid="Shell_LegacyPivot_Chats" Header="chats" Tag="chats">
                         <ContentPresenter x:Name="ChatsPresenter"/>
                     </PivotItem>
                     <PivotItem x:Uid="Shell_LegacyPivot_Calls" Header="calls" Tag="calls">
                         <ContentPresenter x:Name="CallsPresenter"/>
                     </PivotItem>
-                    <PivotItem Header="status" Tag="status">
+                    <PivotItem x:Uid="Shell_LegacyPivot_Status" Header="status" Tag="status">
                         <ContentPresenter x:Name="StatusPresenter"/>
                     </PivotItem>
                     <PivotItem x:Uid="Shell_LegacyPivot_Favorites" Header="favorites" Tag="favorites">
                         <ContentPresenter x:Name="FavoritesPresenter"/>
                     </PivotItem>
-                    <PivotItem Header="archived" Tag="archived">
+                    <PivotItem x:Uid="Shell_LegacyPivot_Archived" Header="archived" Tag="archived">
                         <ContentPresenter x:Name="ArchivedPresenter"/>
                     </PivotItem>
                 </Pivot>

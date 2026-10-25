@@ -2,6 +2,14 @@
 
 Newest first.
 
+## i18n — Legacy Mobile command bar + missing Settings/Debug keys
+
+Chat-actions AppBar labels now resolve `Shell_LegacyChatActions_*.Label`
+(was bare keys without `.Text`/`.Label`, so non-EN always fell back). Pivot
+chats/status/archived got `x:Uid`. Added English strings for Settings section
+hints and Debug Socket slice. English values shipped in every locale pack
+except `pt-BR` (held for translators).
+
 ## Extraction 3.10 — HistoryHydrationBackfill owns lock / start
 
 Background ON_DEMAND hydration lock and active flag moved from

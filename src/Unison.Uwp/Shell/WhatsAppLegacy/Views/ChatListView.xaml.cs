@@ -826,22 +826,22 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             if (ChatActionsPinButton != null)
             {
                 ChatActionsPinButton.Label = pinned
-                    ? LocalizedStrings.Get("ChatList_UnpinChat", "Unpin")
-                    : LocalizedStrings.Get("ChatList_PinChat", "Pin");
+                    ? LocalizedStrings.Get("Shell_LegacyChatActions_Unpin.Label", "Unpin")
+                    : LocalizedStrings.Get("Shell_LegacyChatActions_Pin.Label", "Pin");
             }
 
             if (ChatActionsMuteButton != null)
             {
                 ChatActionsMuteButton.Label = muted
-                    ? LocalizedStrings.Get("ChatDetail_UnmuteNotifications", "Unmute")
-                    : LocalizedStrings.Get("ChatDetail_MuteNotifications", "Mute");
+                    ? LocalizedStrings.Get("Shell_LegacyChatActions_Unmute.Label", "Unmute")
+                    : LocalizedStrings.Get("Shell_LegacyChatActions_Mute.Label", "Mute");
             }
 
             if (ChatActionsArchiveButton != null)
             {
                 ChatActionsArchiveButton.Label = archived
-                    ? LocalizedStrings.Get("ChatList_UnarchiveChat", "Unarchive")
-                    : LocalizedStrings.Get("ChatList_ArchiveChat", "Archive");
+                    ? LocalizedStrings.Get("Shell_LegacyChatActions_Unarchive.Label", "Unarchive")
+                    : LocalizedStrings.Get("Shell_LegacyChatActions_Archive.Label", "Archive");
             }
 
             bool canViewProfile = !chat.IsGroup &&
@@ -864,16 +864,16 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             if (ChatActionsFavoriteButton != null)
             {
                 ChatActionsFavoriteButton.Label = chat.IsFavorite
-                    ? LocalizedStrings.Get("ChatList_RemoveFavorite.Text", "Remove from favorites")
-                    : LocalizedStrings.Get("ChatList_AddFavorite.Text", "Add to favorites");
+                    ? LocalizedStrings.Get("Shell_LegacyChatActions_RemoveFavorite.Label", "Remove from favorites")
+                    : LocalizedStrings.Get("Shell_LegacyChatActions_AddFavorite.Label", "Add to favorites");
                 SetAppBarVisibility(ChatActionsFavoriteButton, true);
             }
 
             if (ChatActionsPinToStartButton != null)
             {
                 ChatActionsPinToStartButton.Label = chat.IsWidgetPinned
-                    ? LocalizedStrings.Get("ChatDetail_UnpinFromStart", "Unpin from Start")
-                    : LocalizedStrings.Get("ChatDetail_PinToStart", "Pin to Start");
+                    ? LocalizedStrings.Get("Shell_LegacyChatActions_UnpinFromStart.Label", "Unpin from Start")
+                    : LocalizedStrings.Get("Shell_LegacyChatActions_PinToStart.Label", "Pin to Start");
                 SetAppBarVisibility(ChatActionsPinToStartButton, liveTiles);
             }
 
@@ -894,32 +894,38 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
         {
             if (ChatActionsDeleteButton != null)
             {
-                ChatActionsDeleteButton.Label = LocalizedStrings.Get("ChatList_DeleteChat", "Delete");
+                ChatActionsDeleteButton.Label = LocalizedStrings.Get(
+                    "Shell_LegacyChatActions_Delete.Label", "Delete");
             }
 
             if (ChatActionsViewProfileButton != null)
             {
-                ChatActionsViewProfileButton.Label = LocalizedStrings.Get("ChatList_ViewProfile", "View profile");
+                ChatActionsViewProfileButton.Label = LocalizedStrings.Get(
+                    "Shell_LegacyChatActions_ViewProfile.Label", "View profile");
             }
 
             if (ChatActionsAddContactButton != null)
             {
-                ChatActionsAddContactButton.Label = LocalizedStrings.Get("ChatDetail_AddContact", "Add contact");
+                ChatActionsAddContactButton.Label = LocalizedStrings.Get(
+                    "Shell_LegacyChatActions_AddContact.Label", "Add contact");
             }
 
             if (ChatActionsMute8hButton != null)
             {
-                ChatActionsMute8hButton.Label = LocalizedStrings.Get("ChatDetail_MuteFor8Hours", "8 hours");
+                ChatActionsMute8hButton.Label = LocalizedStrings.Get(
+                    "Shell_LegacyChatActions_Mute8Hours.Label", "8 hours");
             }
 
             if (ChatActionsMute1wButton != null)
             {
-                ChatActionsMute1wButton.Label = LocalizedStrings.Get("ChatDetail_MuteFor1Week", "1 week");
+                ChatActionsMute1wButton.Label = LocalizedStrings.Get(
+                    "Shell_LegacyChatActions_Mute1Week.Label", "1 week");
             }
 
             if (ChatActionsMuteForeverButton != null)
             {
-                ChatActionsMuteForeverButton.Label = LocalizedStrings.Get("ChatDetail_MuteForever", "Always");
+                ChatActionsMuteForeverButton.Label = LocalizedStrings.Get(
+                    "Shell_LegacyChatActions_MuteAlways.Label", "Always");
             }
 
             LegacyCommandBarLayout.CenterPrimaryCommands(sender as CommandBar);

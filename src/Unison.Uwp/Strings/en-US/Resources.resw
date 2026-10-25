@@ -1389,4 +1389,88 @@ Disable after diagnosing: keeping it on slows the app.</value>
   <data name="ChatDetail_Back.ToolTip" xml:space="preserve">
     <value>Back</value>
   </data>
+  <data name="Shell_LegacyPivot_Chats.Header" xml:space="preserve">
+    <value>chats</value>
+  </data>
+  <data name="Shell_LegacyPivot_Status.Header" xml:space="preserve">
+    <value>status</value>
+  </data>
+  <data name="Shell_LegacyPivot_Archived.Header" xml:space="preserve">
+    <value>archived</value>
+  </data>
+  <data name="Shell_LegacyChatActions_Pin.Label" xml:space="preserve">
+    <value>Pin</value>
+  </data>
+  <data name="Shell_LegacyChatActions_Unpin.Label" xml:space="preserve">
+    <value>Unpin</value>
+  </data>
+  <data name="Shell_LegacyChatActions_Mute.Label" xml:space="preserve">
+    <value>Mute</value>
+  </data>
+  <data name="Shell_LegacyChatActions_Unmute.Label" xml:space="preserve">
+    <value>Unmute</value>
+  </data>
+  <data name="Shell_LegacyChatActions_Archive.Label" xml:space="preserve">
+    <value>Archive</value>
+  </data>
+  <data name="Shell_LegacyChatActions_Unarchive.Label" xml:space="preserve">
+    <value>Unarchive</value>
+  </data>
+  <data name="Shell_LegacyChatActions_Delete.Label" xml:space="preserve">
+    <value>Delete</value>
+  </data>
+  <data name="Shell_LegacyChatActions_ViewProfile.Label" xml:space="preserve">
+    <value>View profile</value>
+  </data>
+  <data name="Shell_LegacyChatActions_PinToStart.Label" xml:space="preserve">
+    <value>Pin to Start</value>
+  </data>
+  <data name="Shell_LegacyChatActions_UnpinFromStart.Label" xml:space="preserve">
+    <value>Unpin from Start</value>
+  </data>
+  <data name="Shell_LegacyChatActions_AddContact.Label" xml:space="preserve">
+    <value>Add contact</value>
+  </data>
+  <data name="Shell_LegacyChatActions_AddFavorite.Label" xml:space="preserve">
+    <value>Add to favorites</value>
+  </data>
+  <data name="Shell_LegacyChatActions_RemoveFavorite.Label" xml:space="preserve">
+    <value>Remove from favorites</value>
+  </data>
+  <data name="Shell_LegacyChatActions_Mute8Hours.Label" xml:space="preserve">
+    <value>8 hours</value>
+  </data>
+  <data name="Shell_LegacyChatActions_Mute1Week.Label" xml:space="preserve">
+    <value>1 week</value>
+  </data>
+  <data name="Shell_LegacyChatActions_MuteAlways.Label" xml:space="preserve">
+    <value>Always</value>
+  </data>
+  <data name="Settings_ProfileHint.Text" xml:space="preserve">
+    <value>Your name and photo</value>
+  </data>
+  <data name="Settings_GeneralHint.Text" xml:space="preserve">
+    <value>Live tiles, session, and contacts</value>
+  </data>
+  <data name="Settings_NotificationsHint.Text" xml:space="preserve">
+    <value>Toasts and message badge</value>
+  </data>
+  <data name="Settings_CustomizationHint.Text" xml:space="preserve">
+    <value>Theme and language</value>
+  </data>
+  <data name="Settings_AccountHint.Text" xml:space="preserve">
+    <value>Unlink this device</value>
+  </data>
+  <data name="Debug_SocketSlice.Text" xml:space="preserve">
+    <value>Socket Rewrite (experimental)</value>
+  </data>
+  <data name="Debug_SocketSliceDesc.Text" xml:space="preserve">
+    <value>Connects with the new Unison.Socket stack using throwaway credentials, so your signed-in session is never touched. Scan the QR to validate pairing.</value>
+  </data>
+  <data name="Debug_SocketSliceRun.Content" xml:space="preserve">
+    <value>Run Slice</value>
+  </data>
+  <data name="Debug_SocketSliceStop.Content" xml:space="preserve">
+    <value>Stop</value>
+  </data>
 </root>
