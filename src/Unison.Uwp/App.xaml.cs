@@ -715,8 +715,13 @@ namespace Unison.Uwp
                 sp.GetRequiredService<IChatIdentityPersistence>(),
                 sp.GetRequiredService<WhatsAppService>(),
                 sp.GetRequiredService<IRuntimeDiagnostics>()));
-            services.AddSingleton<IJidAliasPersistence>(
-                sp => sp.GetRequiredService<WhatsAppService>());
+            services.AddSingleton<IJidAliasPersistence>(sp => new JidAliasPersistence(
+                sp.GetRequiredService<JidAliasTable>(),
+                sp.GetRequiredService<ISocketAliasRegistrar>(),
+                sp.GetRequiredService<IMessageStore>(),
+                sp.GetRequiredService<ChatStateStore>(),
+                sp.GetRequiredService<AttachedUiDispatcher>(),
+                () => sp.GetRequiredService<IContactService>()));
             services.AddSingleton<IResolvedNameApplyHost>(
                 sp => sp.GetRequiredService<WhatsAppService>());
             services.AddSingleton<IOfflineReplayHost>(

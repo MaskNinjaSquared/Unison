@@ -57,6 +57,13 @@ namespace Unison.Core.Tests.Helpers
                 LastSource = source;
             }
 
+            public void RegisterPairs(
+                System.Collections.Generic.IReadOnlyDictionary<string, string> aliases,
+                string source)
+            {
+                LastSource = source;
+            }
+
             public void HealOwnIdentityAfterUsync(string normalizedPn, string normalizedLid)
             {
                 Heals++;

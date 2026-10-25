@@ -1353,7 +1353,9 @@ resume/ensure locks** are `ConnectionGateLocks`. **Hydration day-retry CTS /
 day attempts / day-anchor** is `HydrationDayRetryOwner` over
 `IHydrationDayRetryIoHost`. **Init connection-state lock** is `InitGateOwner`. **Persisted-UI load lock** is
 `PersistedUiLoadGate`. **Deferred-startup once-per-session CAS** is
-`DeferredStartupOnce`. The incoming pump drain loop is
+`DeferredStartupOnce`. **JID alias persistence** (register / try-record / persist /
+pending-socket flush) is `JidAliasPersistence` over the four alias dispatch hosts;
+`ISocketAliasRegistrar` stays on the client (pair + bulk + identity heal). The incoming pump drain loop is
 `IncomingPumpDrainDispatch` (host still owns typed queue + handle). Offline pending-
 notification release is `OfflineReplayRelease` over `IOfflineReplayReleaseHost`
 (wire still attaches the event on the client). Thin-wire dispatches:

@@ -2,6 +2,14 @@
 
 Newest first.
 
+## Extraction 4 — JidAliasPersistence owns alias table I/O
+
+`IJidAliasPersistence` plus `ITryRecordAliasMappingHost` /
+`IRegisterAliasMappingsHost` / `IPersistJidAliasesHost` /
+`IFlushPendingSocketAliasesHost` left `WhatsAppService`. New
+`JidAliasPersistence` (WhatsAppClient) runs the existing dispatches;
+`ISocketAliasRegistrar` gained `RegisterPairs` for bulk flush. Same ownership
+shape as `UsyncAliasHost`.
 ## Extraction 4 — retire IWhatsAppService
 
 Last DI alias and `implements` removed. No ViewModel/façade resolved it;
