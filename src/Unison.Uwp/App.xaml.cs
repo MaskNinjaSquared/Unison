@@ -339,6 +339,7 @@ namespace Unison.Uwp
             services.AddSingleton<ChatListInitialPaintGate>();
             // Toast/tile: hold chat-list x:Load until the conversation pane has loaded.
             services.AddSingleton<ChatListDeepLinkHoldGate>();
+            services.AddSingleton<ChatListColdPopulateGate>();
             // Toast/deep-link chat open: pause tip-swapped UI while timeline SQLite loads.
             services.AddSingleton<ChatTimelineLoadPriorityGate>();
             // Hold DisplayRequest for the first-sync list hold; HistoryFacade calls Hold/Release.
@@ -374,7 +375,8 @@ namespace Unison.Uwp
                 () => Unison.Core.Helpers.Chats.ChatTimelineOpenPriority.ShouldPauseTipReconcileUi(
                     sp.GetRequiredService<ChatListDeepLinkHoldGate>().IsHeld,
                     sp.GetRequiredService<ChatTimelineLoadPriorityGate>().IsHeld,
-                    sp.GetRequiredService<IAppVisibility>().IsWindowVisible)));
+                    sp.GetRequiredService<IAppVisibility>().IsWindowVisible,
+                    sp.GetRequiredService<ChatListColdPopulateGate>().IsHeld)));
             services.AddSingleton(sp => new ChatNameRefresh(
                 sp.GetRequiredService<AttachedUiDispatcher>(),
                 sp.GetRequiredService<IChatStateStore>(),

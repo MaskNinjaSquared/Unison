@@ -90,6 +90,17 @@ namespace Unison.Core.Tests.Helpers
         }
 
         [Fact]
+        public void Tip_reconcile_ui_pauses_while_list_cold_populate()
+        {
+            Assert.True(
+                ChatTimelineOpenPriority.ShouldPauseTipReconcileUi(
+                    deepLinkListHeld: false,
+                    timelineLoadPriorityHeld: false,
+                    windowVisible: true,
+                    listColdPopulate: true));
+        }
+
+        [Fact]
         public void Mobile_scroll_settle_hold_covers_large_group_open_window()
         {
             // Must outlast the post-paint Continues storm on a ~250-row list after

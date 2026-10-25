@@ -78,6 +78,7 @@ namespace Unison.Core.ViewModels
         private readonly SyncWorkloadStrategy _workload;
         private readonly ChatListInitialPaintGate _listPaintGate;
         private readonly ChatListDeepLinkHoldGate _deepLinkHold;
+        private readonly ChatListColdPopulateGate _coldPopulateGate;
         private readonly ChatTimelineLoadPriorityGate _timelinePriority;
         private readonly IAppVisibility _appVisibility;
         /// <summary>True after the ListView has painted once this attach cycle (warm toast must not unload it).</summary>
@@ -233,6 +234,7 @@ namespace Unison.Core.ViewModels
             SyncWorkloadStrategy workload = null,
             ChatListInitialPaintGate listPaintGate = null,
             ChatListDeepLinkHoldGate deepLinkHold = null,
+            ChatListColdPopulateGate coldPopulateGate = null,
             ChatTimelineLoadPriorityGate timelineLoadPriority = null,
             ISystemInfoProvider systemInfo = null,
             IAppVisibility appVisibility = null)
@@ -248,6 +250,7 @@ namespace Unison.Core.ViewModels
             _workload = workload ?? HighSyncWorkload.Instance;
             _listPaintGate = listPaintGate;
             _deepLinkHold = deepLinkHold;
+            _coldPopulateGate = coldPopulateGate;
             _timelinePriority = timelineLoadPriority;
             _appVisibility = appVisibility;
             _chatState = chatState ?? throw new ArgumentNullException(nameof(chatState));

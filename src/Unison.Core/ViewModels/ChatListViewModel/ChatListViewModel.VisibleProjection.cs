@@ -115,10 +115,25 @@ namespace Unison.Core.ViewModels
                 return;
             }
 
+            // Enrichment phase clear / soft status used to ScheduleRefresh with a clean
+            // order — BuildVisibleRefreshSource still cost ~0.6s on Mobile for mutations=0.
+            if (!reusePendingSource &&
+                !_visibleOrderDirty &&
+                VisibleChats.Count > 0 &&
+                string.IsNullOrWhiteSpace(SearchQuery))
+            {
+                TraceListLifecycle(
+                    "refresh-visible-skip",
+                    BuildListSnapshot("reason=order-clean"),
+                    flush: false);
+                return;
+            }
+
             int visibleBefore = VisibleChats.Count;
             if (visibleBefore == 0)
             {
                 _visibleColdPopulate = true;
+                _coldPopulateGate?.Hold();
             }
 
             bool coldPopulate = PreferFrugalUi && _visibleColdPopulate;
@@ -192,7 +207,11 @@ namespace Unison.Core.ViewModels
             else
             {
                 _pendingVisibleRefreshSource = null;
-                _visibleColdPopulate = false;
+                if (_visibleColdPopulate)
+                {
+                    _visibleColdPopulate = false;
+                    _coldPopulateGate?.Release();
+                }
             }
         }
 

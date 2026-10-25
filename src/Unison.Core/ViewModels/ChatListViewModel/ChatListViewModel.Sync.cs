@@ -268,10 +268,14 @@ namespace Unison.Core.ViewModels
                     _ = PresentSyncStatusAsync(null, visible: false, source: "IHistoryService:SyncStatus");
 
                 // One coalesced reshuffle after names/avatars/groups stop fighting the dispatcher.
+                // Skip when nothing touched pin/order during the hold — full rebuild was a hitch.
                 if (_refreshDeferredForEnrichment && !_chatService.MatchesListEnrichmentPhase(message))
                 {
                     _refreshDeferredForEnrichment = false;
-                    ScheduleRefreshVisibleChats();
+                    if (_visibleOrderDirty)
+                    {
+                        ScheduleRefreshVisibleChats();
+                    }
                 }
             });
         }
