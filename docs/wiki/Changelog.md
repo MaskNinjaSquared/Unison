@@ -2,6 +2,14 @@
 
 Newest first.
 
+## Extraction 3.10 — IncomingMessagePump owns the decrypted drain
+
+Queue, Task.Run drain, live timeout / stall bookkeeping, and handle→façade
+notify moved from `WhatsAppService.IncomingPump` into
+`IncomingMessagePump` (WhatsAppClient). The client only enqueues from the wire,
+forwards recovered placeholders, and asks for restart/reset/drain on health /
+suspend / resume. Applied-message diagnostics counters live on the pump.
+
 ## Mobile — group open skips full roster apply (post-paint lag)
 
 Paint was already gated; after Release, `RefreshGroupSendPermissions` still ran

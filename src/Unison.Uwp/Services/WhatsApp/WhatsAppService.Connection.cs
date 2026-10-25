@@ -701,7 +701,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 RuntimeDiagnosticsService.Instance.Write(
                     "messages",
                     "incoming-pump-health-restart",
-                    "stage=" + _owner._incoming.Stage);
+                    "stage=" + _owner.IncomingPumpStage);
                 _owner.ResetIncomingMessagePump("health-stall", requeueCurrent: true);
                 _owner.RestartIncomingMessagePumpIfNeeded();
             }
