@@ -2,6 +2,17 @@
 
 Newest first.
 
+## Extraction 4 — NotifyServerLogoutOwner
+
+`INotifyServerLogoutHost` left `WhatsAppService`. New `NotifyServerLogoutOwner`
+(WhatsAppClient) runs the dispatch; socket logout / reconnect flags stay as
+ctor ports.
+## Mobile — group listing cancels IQ waiters on hide
+
+`GroupListingCancellation` CTS cancels in-flight participating-groups /
+unresolved-metadata waits. `IGroupWireActions` + `ConnectionHandler.Query*`
+take `CancellationToken` and drop the IQ waiter (stanza may still arrive,
+ignored). Replaces the abort flag that only stopped *after* the IQ returned.
 ## Mobile — large-group open: no UI steal before timeline gate + no false list rebuild
 
 `RefreshGroupSendPermissions` queued a Chats walk on the dispatcher before

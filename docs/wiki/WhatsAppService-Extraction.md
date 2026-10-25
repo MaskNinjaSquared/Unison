@@ -189,7 +189,11 @@ Full catalogue persist, preview-slice persist, and suspend-tail orchestration ar
 stay on the client. Heavy-history enrichment release is
 `ReleaseEnrichmentAfterHeavyHistoryCoordinator`; self push-name / phone / avatar
 auth sync is `SelfProfileAuthSync`. Broker toast-name snapshot is
-`BackgroundDisplayNamesPersistence` (save port stays on UWP).
+`BackgroundDisplayNamesPersistence` (save port stays on UWP). Server unlink
+notice is `NotifyServerLogoutOwner`. Group listing hide-abort is a real CTS
+(`GroupListingCancellation`) through `IGroupWireActions` /
+`ConnectionHandler.QueryAllowingErrorAsync` (cancels the waiter, not the
+stanza on the wire).
 
 ### Facades still depend on the client
 
