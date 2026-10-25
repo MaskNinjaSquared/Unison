@@ -8,6 +8,7 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using Unison.Core.Helpers.Chats;
+using Unison.Core.State;
 using Windows.UI.Core;
 
 namespace Unison.Uwp.UI.Helpers
@@ -17,6 +18,47 @@ namespace Unison.Uwp.UI.Helpers
         public static readonly TimeSpan TimelineMaterializeDelay = TimeSpan.FromSeconds(2);
 
         public static readonly TimeSpan MobileSurfacePaintDelay = TimeSpan.FromMilliseconds(48);
+
+        /// <summary>
+        /// After Complete paints bubbles, keep timeline priority held on Mobile so the
+        /// list cannot resume refresh-visible Continues during the first scroll seconds.
+        /// </summary>
+        public static readonly TimeSpan MobileScrollSettleHold =
+            ChatTimelineOpenPriority.MobileScrollSettleHold;
+
+        /// <summary>
+        /// Releases the prepare→complete hold. On Mobile waits
+        /// <see cref="MobileScrollSettleHold"/> first so scroll stays smooth after a heavy open.
+        /// </summary>
+        public static async Task ReleaseTimelinePriorityAfterSettleAsync(
+            ChatTimelineLoadPriorityGate gate,
+            bool isWindowsMobile,
+            string reason = "prepare-active-chat")
+        {
+            if (gate == null)
+            {
+                return;
+            }
+
+            if (!ChatTimelineOpenPriority.ShouldDelayTimelinePriorityRelease(isWindowsMobile))
+            {
+                gate.Release(reason);
+                return;
+            }
+
+            try
+            {
+                await Task.Delay(MobileScrollSettleHold).ConfigureAwait(false);
+            }
+            catch (TaskCanceledException)
+            {
+                // Still pair Release — gate is ref-counted and must not leak.
+            }
+            finally
+            {
+                gate.Release(reason);
+            }
+        }
 
         /// <summary>
         /// One Normal dispatcher turn (+ 48 ms on Mobile) so header/pane can paint

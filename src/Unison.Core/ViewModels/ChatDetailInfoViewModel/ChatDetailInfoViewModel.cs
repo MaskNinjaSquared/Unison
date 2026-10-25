@@ -57,6 +57,7 @@ namespace Unison.Core.ViewModels
         private bool _isMembersAvatarsLoading;
         private bool _isMembersRosterLoading;
         private Task _membersRosterEnsureTask;
+        private CancellationTokenSource _membersRosterCts;
 
         /// <summary>Tiles materialized per page. Groups hold hundreds of media rows.</summary>
         private const int MediaPageSize = 30;
@@ -450,10 +451,16 @@ namespace Unison.Core.ViewModels
             _isMembersAvatarsLoading = false;
             _isMembersRosterLoading = false;
             _membersRosterEnsureTask = null;
-        }
+            try
+            {
+                _membersRosterCts?.Cancel();
+            }
+            catch
+            {
+            }
 
-        /// <summary>
-        /// Starts the media/files SQLite index on first Media or Files pivot open.
-        /// Live message events only rebuild after this has run once.
+            _membersRosterCts?.Dispose();
+            _membersRosterCts = null;
+        }
     }
 }

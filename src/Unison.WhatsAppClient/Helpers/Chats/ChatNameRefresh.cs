@@ -90,11 +90,14 @@ namespace Unison.WhatsAppClient.Helpers
                         batch.Add(chats[i]);
                     }
 
+                    // Frugal (Mobile): never walk GroupMembers during list name refresh —
+                    // 500+ member chats made scroll freeze after open. Member names stay on
+                    // roster apply / Members pivot.
                     totalUpdated += ResolvedNameApply.Apply(
                         batch,
                         ResolveForApply,
                         IsMeaningful,
-                        membersToo: true);
+                        membersToo: !_preferFrugal());
 
                     if (!more)
                     {

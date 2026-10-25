@@ -1742,7 +1742,9 @@ namespace Unison.Uwp.Shell.Unison.Views
             {
                 PreferFastTimelineLoad = false;
                 // Prepare may have Held; always pair a Release on the complete path.
-                timelinePriority?.Release("prepare-active-chat");
+                await ChatOpenPaintSchedule.ReleaseTimelinePriorityAfterSettleAsync(
+                    timelinePriority,
+                    _isWindowsMobile).ConfigureAwait(false);
                 return;
             }
 
@@ -1874,7 +1876,9 @@ namespace Unison.Uwp.Shell.Unison.Views
             finally
             {
                 PreferFastTimelineLoad = false;
-                timelinePriority?.Release("prepare-active-chat");
+                await ChatOpenPaintSchedule.ReleaseTimelinePriorityAfterSettleAsync(
+                    timelinePriority,
+                    _isWindowsMobile).ConfigureAwait(false);
             }
         }
 

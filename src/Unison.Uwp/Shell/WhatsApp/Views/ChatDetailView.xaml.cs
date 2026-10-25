@@ -1559,7 +1559,9 @@ namespace Unison.Uwp.Shell.WhatsApp.Views
             if (chat == null || ViewModel == null)
             {
                 PreferFastTimelineLoad = false;
-                timelinePriority?.Release("prepare-active-chat");
+                await ChatOpenPaintSchedule.ReleaseTimelinePriorityAfterSettleAsync(
+                    timelinePriority,
+                    _isWindowsMobile).ConfigureAwait(false);
                 return;
             }
 
@@ -1691,7 +1693,9 @@ namespace Unison.Uwp.Shell.WhatsApp.Views
             finally
             {
                 PreferFastTimelineLoad = false;
-                timelinePriority?.Release("prepare-active-chat");
+                await ChatOpenPaintSchedule.ReleaseTimelinePriorityAfterSettleAsync(
+                    timelinePriority,
+                    _isWindowsMobile).ConfigureAwait(false);
             }
         }
 

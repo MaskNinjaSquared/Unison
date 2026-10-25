@@ -94,9 +94,15 @@ namespace Unison.Core.ViewModels
                 {
                     if (_groups != null)
                     {
-                        await _groups.RefreshGroupSendPermissionsAsync(_source.JID)
+                        await _groups.RefreshGroupSendPermissionsAsync(
+                                _source.JID,
+                                includeRoster: true,
+                                GetMembersRosterToken())
                             .ConfigureAwait(false);
                     }
+                }
+                catch (OperationCanceledException)
+                {
                 }
                 catch (Exception ex)
                 {
@@ -133,13 +139,30 @@ namespace Unison.Core.ViewModels
 
             try
             {
-                await _groups.RefreshGroupSendPermissionsAsync(_source.JID).ConfigureAwait(false);
+                await _groups.RefreshGroupSendPermissionsAsync(
+                        _source.JID,
+                        includeRoster: true,
+                        GetMembersRosterToken())
+                    .ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
             }
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine(
                     "[ChatDetailInfoViewModel] Members roster background sync failed: " + ex.Message);
             }
+        }
+
+        private CancellationToken GetMembersRosterToken()
+        {
+            if (_membersRosterCts == null)
+            {
+                _membersRosterCts = new CancellationTokenSource();
+            }
+
+            return _membersRosterCts.Token;
         }
 
         /// <summary>

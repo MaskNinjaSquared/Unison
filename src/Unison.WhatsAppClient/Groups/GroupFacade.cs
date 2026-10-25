@@ -137,7 +137,10 @@ namespace Unison.WhatsAppClient.Groups
             }
         }
 
-        public async Task RefreshGroupSendPermissionsAsync(string groupJid)
+        public async Task RefreshGroupSendPermissionsAsync(
+            string groupJid,
+            bool includeRoster = false,
+            CancellationToken cancellationToken = default)
         {
             if (string.IsNullOrWhiteSpace(groupJid))
             {
@@ -158,7 +161,9 @@ namespace Unison.WhatsAppClient.Groups
 
             try
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 BinaryNode response = await _wire.QueryGroupMetadataAsync(canonical);
+                cancellationToken.ThrowIfCancellationRequested();
                 GroupMetadataSnapshot metadata = _reader.ReadMetadata(response, canonical);
                 _communityLinkProbed.Add(canonical);
 
@@ -183,6 +188,7 @@ namespace Unison.WhatsAppClient.Groups
                     " linkedParent=" + (metadata?.LinkedParentJid ?? "-") +
                     " isCommunityParent=" + (metadata != null && metadata.IsCommunityParent) +
                     " isCommunityAnnounce=" + (metadata != null && metadata.IsCommunityAnnounce) +
+                    " includeRoster=" + includeRoster +
                     " subject=" + (string.IsNullOrWhiteSpace(subject) ? "-" : "yes"));
                 _diagnostics?.Write(
                     "group-meta",
@@ -192,12 +198,19 @@ namespace Unison.WhatsAppClient.Groups
                     "; isCommunityParent=" + (metadata != null && metadata.IsCommunityParent) +
                     "; isCommunityAnnounce=" + (metadata != null && metadata.IsCommunityAnnounce) +
                     "; announceOnly=" + (metadata != null && metadata.AnnounceOnly) +
+                    "; includeRoster=" + includeRoster +
                     "; subjectCached=" + cachedSubject);
-                await _apply.ApplyMetadataAsync(canonical, metadata);
+                // Default flags-only: open-path ApplyMembers(500+) froze Mobile after paint.
+                // Members pivot passes includeRoster: true (chunked off UI).
+                await _apply.ApplyMetadataAsync(canonical, metadata, includeRoster, cancellationToken);
                 if (cachedSubject)
                 {
                     await _nameRefresh.ApplyAsync();
                 }
+            }
+            catch (OperationCanceledException)
+            {
+                Debug.WriteLine($"[GroupFacade] RefreshGroupSendPermissionsAsync cancelled for {canonical}");
             }
             catch (Exception ex)
             {

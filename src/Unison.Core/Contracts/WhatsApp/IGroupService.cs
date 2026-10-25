@@ -22,7 +22,15 @@ namespace Unison.Core.Contracts.WhatsApp
         /// Refreshes announce-only and the signed-in user's admin rank from w:g2 metadata, and
         /// writes both onto the matching <see cref="ChatItem"/> so the composer can lock itself.
         /// </summary>
-        Task RefreshGroupSendPermissionsAsync(string groupJid);
+        /// <param name="includeRoster">
+        /// When true, also replaces <see cref="ChatItem.GroupMembers"/> from the IQ (Members pivot).
+        /// Default false: chat open only needs flags so a 500+ roster cannot freeze Mobile after paint.
+        /// </param>
+        /// <param name="cancellationToken">Cancel when leaving Info so a large roster build stops.</param>
+        Task RefreshGroupSendPermissionsAsync(
+            string groupJid,
+            bool includeRoster = false,
+            CancellationToken cancellationToken = default);
 
         /// <summary>
         /// Fills <see cref="ChatItem.GroupMembers"/> from the local roster when it is empty.

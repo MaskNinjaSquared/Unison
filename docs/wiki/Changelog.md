@@ -2,6 +2,17 @@
 
 Newest first.
 
+## Mobile — group open skips full roster apply (post-paint lag)
+
+Paint was already gated; after Release, `RefreshGroupSendPermissions` still ran
+`ApplyMembers` for 500+ rows and kicked a name refresh that froze the shell
+(and Debug). Open path now applies announce/role/count flags only
+(`includeRoster: false`); `EnsureGroupRosterLoadedFromStore` left SyncActiveChat.
+Full roster stays on the Members pivot (`includeRoster: true`). Also:
+`ApplyMembers` chunked off-UI (`rosterBuildChunkSize`), Info Detach cancels
+roster CT, frugal name refresh skips roster (`membersToo: false`), Mobile
+scroll-settle hold before releasing timeline priority.
+
 ## Mobile — group chat open no longer waits on 500+ roster apply
 
 Opening a large group (~568 members) held the UI ~40s between Prepare and

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using Unison.Core.Contracts;
 using Unison.Core.Contracts.WhatsApp;
@@ -17,9 +18,9 @@ namespace Unison.WhatsAppClient.Helpers
     /// </summary>
     /// <remarks>
     /// Stateless, so the client's query passes and <c>GroupFacade</c> can each hold one without
-    /// agreeing on who owns it. Every row write happens inside one UI pass per reply; the
-    /// listing answers for the whole account at once, and a hop per group was hundreds of hops
-    /// while the list was rendering the sync that asked for it.
+    /// agreeing on who owns it. Listing applies flags only (no full roster) so a 200-group
+    /// account cannot freeze Mobile. Full roster build yields between chunks off the UI thread,
+    /// then assigns once.
     /// </remarks>
     public sealed class GroupMetadataApply
     {
@@ -33,6 +34,7 @@ namespace Unison.WhatsAppClient.Helpers
         private readonly DisplayNameTable _subjects;
         private readonly Func<DateTime> _utcNow;
         private readonly ChatTimelineLoadPriorityGate _timelinePriority;
+        private readonly int _rosterBuildChunkSize;
 
         public GroupMetadataApply(
             IGroupNaming naming,
@@ -44,7 +46,8 @@ namespace Unison.WhatsAppClient.Helpers
             ChatRowIndex rows,
             DisplayNameTable subjects,
             Func<DateTime> utcNow = null,
-            ChatTimelineLoadPriorityGate timelinePriority = null)
+            ChatTimelineLoadPriorityGate timelinePriority = null,
+            int rosterBuildChunkSize = int.MaxValue)
         {
             _naming = naming ?? throw new ArgumentNullException(nameof(naming));
             _ui = ui ?? throw new ArgumentNullException(nameof(ui));
@@ -56,6 +59,7 @@ namespace Unison.WhatsAppClient.Helpers
             _subjects = subjects ?? throw new ArgumentNullException(nameof(subjects));
             _utcNow = utcNow ?? (() => DateTime.UtcNow);
             _timelinePriority = timelinePriority;
+            _rosterBuildChunkSize = rosterBuildChunkSize < 1 ? int.MaxValue : rosterBuildChunkSize;
         }
 
         /// <summary>
@@ -112,7 +116,8 @@ namespace Unison.WhatsAppClient.Helpers
                         ApplySyncedLabel(chat);
                     }
 
-                    ApplyToRow(chat, entry);
+                    // Listing never materializes full rosters — flags + count only.
+                    ApplyToRow(chat, entry, includeRoster: false);
                 }
 
                 _catalog.Schedule();
@@ -123,7 +128,16 @@ namespace Unison.WhatsAppClient.Helpers
         /// Applies one group's metadata reply to its canonical row. Nothing is saved when the
         /// row is not in the list.
         /// </summary>
-        public async Task ApplyMetadataAsync(string groupJid, GroupMetadataSnapshot metadata)
+        /// <param name="includeRoster">
+        /// When false, only announce/role/count/community flags are written — used on chat open
+        /// so a 500+ member roster cannot freeze Mobile after the timeline paints.
+        /// Full roster stays on the Members pivot / explicit apply paths (chunked off UI).
+        /// </param>
+        public async Task ApplyMetadataAsync(
+            string groupJid,
+            GroupMetadataSnapshot metadata,
+            bool includeRoster = true,
+            CancellationToken cancellationToken = default)
         {
             if (metadata == null || string.IsNullOrWhiteSpace(groupJid))
             {
@@ -136,9 +150,13 @@ namespace Unison.WhatsAppClient.Helpers
                 await _timelinePriority.WaitWhileHeldAsync().ConfigureAwait(false);
             }
 
+            cancellationToken.ThrowIfCancellationRequested();
+
+            ChatItem chat = null;
+            IList<GroupMemberDraft> drafts = null;
             await _ui.RunAsync(() =>
             {
-                ChatItem chat = _chats.Chats.FirstOrDefault(c =>
+                chat = _chats.Chats.FirstOrDefault(c =>
                     c != null &&
                     string.Equals(_jids.GetCanonicalJid(c.JID), canonical, StringComparison.OrdinalIgnoreCase));
                 if (chat == null)
@@ -146,22 +164,44 @@ namespace Unison.WhatsAppClient.Helpers
                     return;
                 }
 
-                ApplyToRow(chat, metadata);
-                // Subject is cached separately (ExtractSubject); pull it onto the row when usable.
+                ApplyToRow(chat, metadata, includeRoster: false);
                 ApplySyncedLabel(chat);
                 _catalog.Schedule();
-            });
+                if (includeRoster)
+                {
+                    drafts = metadata.Members;
+                }
+            }).ConfigureAwait(false);
+
+            if (includeRoster && chat != null && drafts != null && drafts.Count > 0)
+            {
+                await ApplyMembersAsync(chat, drafts, cancellationToken).ConfigureAwait(false);
+            }
         }
 
         /// <summary>
-        /// Replaces or merges the row's roster from a reply's participants, then saves the roster
-        /// and the membership rows and announces it. UI thread only.
+        /// Sync roster apply for tests / callers that already own the UI thread.
+        /// Prefer <see cref="ApplyMembersAsync"/> on Mobile when the draft list is large.
         /// </summary>
-        /// <remarks>
-        /// When nobody joined or left, the reply's fields are merged onto the existing member
-        /// instances so the Members list does not relayout.
-        /// </remarks>
         public void ApplyMembers(ChatItem chat, IList<GroupMemberDraft> drafts)
+        {
+            if (chat == null || drafts == null || drafts.Count == 0)
+            {
+                return;
+            }
+
+            CapturePrevious(chat, out Dictionary<string, GroupMember> previous, out List<GroupMember> previousList);
+            List<GroupMember> next = BuildMembers(drafts, previous, previousList);
+            CommitBuiltRoster(chat, previous, previousList, next);
+        }
+
+        /// <summary>
+        /// Builds the roster off the UI thread in chunks (Mobile), then assigns once.
+        /// </summary>
+        public async Task ApplyMembersAsync(
+            ChatItem chat,
+            IList<GroupMemberDraft> drafts,
+            CancellationToken cancellationToken = default)
         {
             if (chat == null || drafts == null || drafts.Count == 0)
             {
@@ -170,24 +210,57 @@ namespace Unison.WhatsAppClient.Helpers
 
             Dictionary<string, GroupMember> previous = null;
             List<GroupMember> previousList = null;
-            if (chat.GroupMembers != null && chat.GroupMembers.Count > 0)
-            {
-                previous = new Dictionary<string, GroupMember>(StringComparer.OrdinalIgnoreCase);
-                previousList = new List<GroupMember>(chat.GroupMembers.Count);
-                foreach (var existing in chat.GroupMembers)
-                {
-                    if (existing == null || string.IsNullOrWhiteSpace(existing.Jid))
-                    {
-                        continue;
-                    }
+            await _ui.RunAsync(() => CapturePrevious(chat, out previous, out previousList))
+                .ConfigureAwait(false);
 
-                    previous[existing.Jid] = existing;
-                    previousList.Add(existing);
-                }
+            cancellationToken.ThrowIfCancellationRequested();
+
+            List<GroupMember> next = await BuildMembersAsync(drafts, previous, previousList, cancellationToken)
+                .ConfigureAwait(false);
+            if (next.Count == 0)
+            {
+                return;
             }
 
-            List<GroupMember> next = BuildMembers(drafts, previous, previousList);
-            if (next.Count == 0)
+            cancellationToken.ThrowIfCancellationRequested();
+
+            await _ui.RunAsync(() => CommitBuiltRoster(chat, previous, previousList, next))
+                .ConfigureAwait(false);
+        }
+
+        private static void CapturePrevious(
+            ChatItem chat,
+            out Dictionary<string, GroupMember> previous,
+            out List<GroupMember> previousList)
+        {
+            previous = null;
+            previousList = null;
+            if (chat.GroupMembers == null || chat.GroupMembers.Count == 0)
+            {
+                return;
+            }
+
+            previous = new Dictionary<string, GroupMember>(StringComparer.OrdinalIgnoreCase);
+            previousList = new List<GroupMember>(chat.GroupMembers.Count);
+            foreach (var existing in chat.GroupMembers)
+            {
+                if (existing == null || string.IsNullOrWhiteSpace(existing.Jid))
+                {
+                    continue;
+                }
+
+                previous[existing.Jid] = existing;
+                previousList.Add(existing);
+            }
+        }
+
+        private void CommitBuiltRoster(
+            ChatItem chat,
+            Dictionary<string, GroupMember> previous,
+            List<GroupMember> previousList,
+            List<GroupMember> next)
+        {
+            if (next == null || next.Count == 0)
             {
                 return;
             }
@@ -235,39 +308,79 @@ namespace Unison.WhatsAppClient.Helpers
             var next = new List<GroupMember>(drafts.Count);
             foreach (var draft in drafts)
             {
-                if (draft == null || string.IsNullOrWhiteSpace(draft.Jid))
+                GroupMember built = TryBuildMember(draft, previous, previousList);
+                if (built != null)
                 {
-                    continue;
+                    next.Add(built);
                 }
-
-                GroupMember prior = GroupRosterRules.FindPrevious(
-                    previous, previousList, draft.Jid, draft.Lid, draft.PhoneNumber, _jids);
-                string avatarUrl = prior?.AvatarUrl ??
-                                   ChatRowAvatarLookup.Find(_rows, draft.Jid, draft.PhoneNumber, draft.Lid);
-                DateTime? fetchedAt = prior?.AvatarFetchedAtUtc;
-                if (!string.IsNullOrWhiteSpace(avatarUrl) && !fetchedAt.HasValue)
-                {
-                    fetchedAt = _utcNow();
-                }
-
-                next.Add(new GroupMember
-                {
-                    Jid = draft.Jid,
-                    PhoneNumber = string.IsNullOrWhiteSpace(draft.PhoneNumber) ? null : draft.PhoneNumber,
-                    Lid = string.IsNullOrWhiteSpace(draft.Lid) ? null : draft.Lid,
-                    Role = draft.Role,
-                    DisplayName = _naming.ResolveMemberDisplayName(draft.Jid),
-                    AvatarUrl = avatarUrl,
-                    AvatarFetchedAtUtc = fetchedAt,
-                    AvatarFetchFailedAtUtc = prior?.AvatarFetchFailedAtUtc,
-                    AvatarFetchFailureReason = prior?.AvatarFetchFailureReason
-                });
             }
 
             return next;
         }
 
-        private void ApplyToRow(ChatItem chat, GroupMetadataSnapshot metadata)
+        private async Task<List<GroupMember>> BuildMembersAsync(
+            IList<GroupMemberDraft> drafts,
+            Dictionary<string, GroupMember> previous,
+            List<GroupMember> previousList,
+            CancellationToken cancellationToken)
+        {
+            var next = new List<GroupMember>(drafts.Count);
+            int sinceYield = 0;
+            for (int i = 0; i < drafts.Count; i++)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                GroupMember built = TryBuildMember(drafts[i], previous, previousList);
+                if (built != null)
+                {
+                    next.Add(built);
+                }
+
+                sinceYield++;
+                if (_rosterBuildChunkSize < int.MaxValue && sinceYield >= _rosterBuildChunkSize)
+                {
+                    sinceYield = 0;
+                    await Task.Yield();
+                }
+            }
+
+            return next;
+        }
+
+        private GroupMember TryBuildMember(
+            GroupMemberDraft draft,
+            Dictionary<string, GroupMember> previous,
+            List<GroupMember> previousList)
+        {
+            if (draft == null || string.IsNullOrWhiteSpace(draft.Jid))
+            {
+                return null;
+            }
+
+            GroupMember prior = GroupRosterRules.FindPrevious(
+                previous, previousList, draft.Jid, draft.Lid, draft.PhoneNumber, _jids);
+            string avatarUrl = prior?.AvatarUrl ??
+                               ChatRowAvatarLookup.Find(_rows, draft.Jid, draft.PhoneNumber, draft.Lid);
+            DateTime? fetchedAt = prior?.AvatarFetchedAtUtc;
+            if (!string.IsNullOrWhiteSpace(avatarUrl) && !fetchedAt.HasValue)
+            {
+                fetchedAt = _utcNow();
+            }
+
+            return new GroupMember
+            {
+                Jid = draft.Jid,
+                PhoneNumber = string.IsNullOrWhiteSpace(draft.PhoneNumber) ? null : draft.PhoneNumber,
+                Lid = string.IsNullOrWhiteSpace(draft.Lid) ? null : draft.Lid,
+                Role = draft.Role,
+                DisplayName = _naming.ResolveMemberDisplayName(draft.Jid),
+                AvatarUrl = avatarUrl,
+                AvatarFetchedAtUtc = fetchedAt,
+                AvatarFetchFailedAtUtc = prior?.AvatarFetchFailedAtUtc,
+                AvatarFetchFailureReason = prior?.AvatarFetchFailureReason
+            };
+        }
+
+        private void ApplyToRow(ChatItem chat, GroupMetadataSnapshot metadata, bool includeRoster = true)
         {
             chat.IsCommunityParent = metadata.IsCommunityParent;
             if (!metadata.IsCommunityParent && !chat.IsGroup)
@@ -288,7 +401,10 @@ namespace Unison.WhatsAppClient.Helpers
                 chat.GroupMemberCount = metadata.MemberCount;
             }
 
-            ApplyMembers(chat, metadata.Members);
+            if (includeRoster)
+            {
+                ApplyMembers(chat, metadata.Members);
+            }
         }
 
         private void ApplySyncedLabel(ChatItem chat)

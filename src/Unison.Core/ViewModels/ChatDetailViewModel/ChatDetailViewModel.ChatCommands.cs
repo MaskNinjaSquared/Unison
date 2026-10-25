@@ -137,8 +137,8 @@ namespace Unison.Core.ViewModels
 
             try
             {
-                await _groupService.EnsureGroupRosterLoadedFromStoreAsync(groupJid)
-                    .ConfigureAwait(false);
+                // Do not EnsureGroupRosterLoadedFromStore here: restoring hundreds of members
+                // on open freezes Mobile after paint. Members pivot loads the roster on demand.
                 await _groupService.RefreshGroupSendPermissionsAsync(groupJid)
                     .ConfigureAwait(false);
             }
