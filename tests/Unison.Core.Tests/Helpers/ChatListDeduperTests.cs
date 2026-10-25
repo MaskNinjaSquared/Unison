@@ -44,7 +44,81 @@ namespace Unison.Core.Tests.Helpers
 
             Assert.Equal(Pn, chat.JID);
             Assert.Equal(0, result.Merged);
+        }
+
+        [Fact]
+        public async Task A_clean_list_costs_one_ui_hop()
+        {
+            PairLidWithPn();
+            _chats.Chats.Add(new ChatItem { JID = Pn });
+            _chats.Chats.Add(new ChatItem { JID = Other });
+            _chats.MessagesByChat.GetOrAdd(Pn).Add(new ChatMessage { Id = "P1" });
+
+            ChatListDeduperResult result = await Build().RunAsync("test");
+
+            Assert.Equal(0, result.Merged);
+            Assert.Equal(0, result.NormalizedKeys);
             Assert.Equal(1, _ui.Passes);
+        }
+
+        [Fact]
+        public async Task Requests_during_a_pass_share_one_follow_up_pass()
+        {
+            _chats.Chats.Add(new ChatItem { JID = Pn });
+            _chats.Chats.Add(new ChatItem { JID = Other });
+            var deduper = Build();
+
+            Task<ChatListDeduperResult> first = deduper.RunAsync("a");
+            Task<ChatListDeduperResult> second = deduper.RunAsync("b");
+            Task<ChatListDeduperResult> third = deduper.RunAsync("c");
+            await Task.WhenAll(first, second, third);
+
+            Assert.Same(second, third);
+            Assert.Equal(2, _ui.Passes);
+        }
+
+        [Fact]
+        public async Task A_row_readdressed_after_planning_is_not_folded()
+        {
+            PairLidWithPn();
+            var lidRow = new ChatItem { JID = Lid };
+            var pnRow = new ChatItem { JID = Pn };
+            _chats.Chats.Add(lidRow);
+            _chats.Chats.Add(pnRow);
+            var ui = new HookedDispatcher();
+            var deduper = new ChatListDeduper(
+                ui,
+                _chats,
+                new ChatRowIndex(() => _chats.Chats, _aliases.GetCanonicalJid),
+                _aliases,
+                _pushNames);
+            ui.BeforePass = pass =>
+            {
+                if (pass == 2)
+                {
+                    lidRow.JID = Other;
+                }
+            };
+
+            ChatListDeduperResult result = await deduper.RunAsync("test");
+
+            Assert.Equal(0, result.Merged);
+            Assert.Equal(2, _chats.Chats.Count);
+        }
+
+        private sealed class HookedDispatcher : IDispatcher
+        {
+            private int _passes;
+
+            public System.Action<int> BeforePass { get; set; }
+
+            public Task RunAsync(System.Action action, string caller = null, string callerFile = null)
+            {
+                _passes++;
+                BeforePass?.Invoke(_passes);
+                action();
+                return Task.CompletedTask;
+            }
         }
 
         [Fact]

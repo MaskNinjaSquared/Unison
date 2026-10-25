@@ -24,5 +24,8 @@ namespace Unison.Core.Models
         public bool IsOffline { get; set; }
         public bool IsFromMe { get; set; }
         public string SelfDisplayName { get; set; }
+
+        /// <summary>Replaced by the pump on every handle attempt (diagnostics only).</summary>
+        public IncomingRouteTrace RouteTrace { get; set; }
     }
 }

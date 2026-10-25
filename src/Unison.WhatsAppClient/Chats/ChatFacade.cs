@@ -63,6 +63,7 @@ namespace Unison.WhatsAppClient.Chats
         private readonly IContactService _contacts;
         private readonly INotificationService _notifications;
         private readonly IDispatcher _ui;
+        private readonly IUrgentDispatcher _urgentUi;
         private readonly IChatCatalogPersistence _catalog;
         private readonly IChatStore _chatStore;
         private readonly IShortcutService _shortcuts;
@@ -132,6 +133,7 @@ namespace Unison.WhatsAppClient.Chats
             _contacts = contacts ?? throw new ArgumentNullException(nameof(contacts));
             _notifications = notifications;
             _ui = ui ?? throw new ArgumentNullException(nameof(ui));
+            _urgentUi = ui as IUrgentDispatcher;
             _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
             _chatStore = chatStore ?? throw new ArgumentNullException(nameof(chatStore));
             _shortcuts = shortcuts ?? throw new ArgumentNullException(nameof(shortcuts));
@@ -557,24 +559,18 @@ namespace Unison.WhatsAppClient.Chats
                 return;
             }
 
-            ChatUnreadSideEffects.AfterConversationUnreadChanged(
-                GetTotalUnreadCount(),
-                canonical,
-                resolved,
-                dirty,
-                total => _notifications?.UpdateBadge(total),
-                (shortcutJid, unread) =>
-                {
-                    try
-                    {
-                        _shortcuts.UpdateChatUnread(shortcutJid, unread);
-                    }
-                    catch (Exception ex)
-                    {
-                        Debug.WriteLine("[ChatFacade] Shortcut unread update failed: " + ex.Message);
-                    }
-                },
-                rows => _catalog.PersistRows(rows));
+            int total = GetTotalUnreadCount();
+            try
+            {
+                _notifications?.UpdateBadge(total);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[ChatFacade] Badge update failed: " + ex.Message);
+            }
+
+            // Same deferred tile/disk policy as ClearUnread — app-state read must not fight open.
+            ScheduleDeferredUnreadDiskAndShortcuts(canonical, resolved, dirty, total);
         }
 
         /// <summary>
@@ -699,20 +695,36 @@ namespace Unison.WhatsAppClient.Chats
 
             var unread = chat.UnreadCount;
             var jid = _jids.GetCanonicalJid(chat.JID);
+            var openSw = Stopwatch.StartNew();
 
             // Cleared first, and unconditionally: the badge is the part the user is looking at, it
             // should not wait for a round trip to disappear, and a PN/LID alias can leave a second
             // row carrying a count this one no longer has.
             await ClearUnreadForChatAsync(jid).ConfigureAwait(false);
+            long clearMs = openSw.ElapsedMilliseconds;
 
             if (!_account.IsAvailable || unread <= 0)
             {
+                DiagWrite(
+                    "chat-open",
+                    "mark-read",
+                    "chat=" + DiagnosticJidMask.Apply(jid) +
+                    "; unreadWas=" + unread +
+                    "; clearMs=" + clearMs +
+                    "; receipts=skipped");
                 return;
             }
 
             var recent = CollectTail(jid, Math.Min(MaxMarkReadMessages, Math.Max(unread + 1, 1)));
             if (recent.Count == 0)
             {
+                DiagWrite(
+                    "chat-open",
+                    "mark-read",
+                    "chat=" + DiagnosticJidMask.Apply(jid) +
+                    "; unreadWas=" + unread +
+                    "; clearMs=" + clearMs +
+                    "; receipts=no-tail");
                 return;
             }
 
@@ -725,6 +737,15 @@ namespace Unison.WhatsAppClient.Chats
                 }
 
                 await _account.MarkChatReadAsync(jid, recent.Select(m => ToRangeMessage(jid, m))).ConfigureAwait(false);
+                DiagWrite(
+                    "chat-open",
+                    "mark-read",
+                    "chat=" + DiagnosticJidMask.Apply(jid) +
+                    "; unreadWas=" + unread +
+                    "; clearMs=" + clearMs +
+                    "; receiptMs=" + (openSw.ElapsedMilliseconds - clearMs) +
+                    "; totalMs=" + openSw.ElapsedMilliseconds +
+                    "; receipts=" + recent.Count);
             }
             catch (Exception ex)
             {
@@ -732,6 +753,14 @@ namespace Unison.WhatsAppClient.Chats
                 // acted on, and putting it back because the network was busy would be worse than
                 // being briefly out of step with the phone.
                 Debug.WriteLine("[ChatFacade] Mark read failed: " + ex.GetBaseException().Message);
+                DiagWrite(
+                    "chat-open",
+                    "mark-read",
+                    "chat=" + DiagnosticJidMask.Apply(jid) +
+                    "; unreadWas=" + unread +
+                    "; clearMs=" + clearMs +
+                    "; totalMs=" + openSw.ElapsedMilliseconds +
+                    "; receipts=failed");
             }
         }
 
@@ -872,8 +901,10 @@ namespace Unison.WhatsAppClient.Chats
         }
 
         /// <remarks>
-        /// Memory first, then only the rows that changed go to disk: a full catalogue save here
-        /// rewrote every chat preview, which took seconds on Mobile eMMC.
+        /// Memory + badge first. Shortcuts and the preview-slice write are deferred: first group
+        /// open used to pay SecondaryTile.Exists + PersistRows on the same UI turn as paint
+        /// (2nd open is warm / unread already 0). A full catalogue save here rewrote every
+        /// chat preview and took seconds on Mobile eMMC.
         /// </remarks>
         public async Task ClearUnreadForChatAsync(string jid)
         {
@@ -888,31 +919,93 @@ namespace Unison.WhatsAppClient.Chats
                 return;
             }
 
+            var sw = Stopwatch.StartNew();
             List<ChatItem> changed = null;
-            await _ui.RunAsync(() => changed = ChatUnreadTally.Clear(_chatRows.FindConversation(canonical)));
+            await _ui.RunAsync(() => changed = ChatUnreadTally.Clear(_chatRows.FindConversation(canonical)))
+                .ConfigureAwait(false);
+            long clearMs = sw.ElapsedMilliseconds;
             if (changed == null || changed.Count == 0)
             {
                 return;
             }
 
-            ChatUnreadSideEffects.AfterConversationUnreadChanged(
-                GetTotalUnreadCount(),
-                canonical,
-                chatUnread: 0,
-                changed,
-                total => _notifications?.UpdateBadge(total),
-                (shortcutJid, unread) =>
+            int total = GetTotalUnreadCount();
+            try
+            {
+                _notifications?.UpdateBadge(total);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[ChatFacade] Badge update failed: " + ex.Message);
+            }
+
+            DiagWrite(
+                "chat-open",
+                "clear-unread",
+                "chat=" + DiagnosticJidMask.Apply(canonical) +
+                "; rows=" + changed.Count +
+                "; clearMs=" + clearMs +
+                "; deferredSideEffects=True");
+
+            ScheduleDeferredUnreadDiskAndShortcuts(canonical, chatUnread: 0, changed, total);
+        }
+
+        /// <summary>
+        /// Tile + preview-slice after the open critical path. First SecondaryTile.Exists and a
+        /// contended catalog lock were freezing the first group open on Mobile ARM.
+        /// </summary>
+        private void ScheduleDeferredUnreadDiskAndShortcuts(
+            string canonical,
+            int chatUnread,
+            IList<ChatItem> dirtyRows,
+            int totalUnread)
+        {
+            if (dirtyRows == null || dirtyRows.Count == 0)
+            {
+                return;
+            }
+
+            List<ChatItem> rows = dirtyRows as List<ChatItem> ?? new List<ChatItem>(dirtyRows);
+            string chatKey = canonical;
+            int unread = chatUnread;
+            int total = totalUnread;
+            _ = Task.Run(() =>
+            {
+                var sideSw = Stopwatch.StartNew();
+                try
                 {
-                    try
-                    {
-                        _shortcuts.UpdateChatUnread(shortcutJid, unread);
-                    }
-                    catch (Exception ex)
-                    {
-                        Debug.WriteLine("[ChatFacade] Shortcut unread update failed: " + ex.Message);
-                    }
-                },
-                rows => _catalog.PersistRows(rows));
+                    ChatUnreadSideEffects.AfterConversationUnreadChanged(
+                        total,
+                        chatKey,
+                        unread,
+                        rows,
+                        updateBadge: null,
+                        updateShortcutUnread: (shortcutJid, count) =>
+                        {
+                            try
+                            {
+                                _shortcuts.UpdateChatUnread(shortcutJid, count);
+                            }
+                            catch (Exception ex)
+                            {
+                                Debug.WriteLine(
+                                    "[ChatFacade] Shortcut unread update failed: " + ex.Message);
+                            }
+                        },
+                        persistRows: slice => _catalog.PersistRows(slice));
+                    DiagWrite(
+                        "chat-open",
+                        "clear-unread-side-effects",
+                        "chat=" + DiagnosticJidMask.Apply(chatKey) +
+                        "; rows=" + rows.Count +
+                        "; elapsedMs=" + sideSw.ElapsedMilliseconds);
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine(
+                        "[ChatFacade] Deferred unread side effects failed: " + ex.Message);
+                }
+            });
         }
 
         public int GetTotalUnreadCount()
@@ -1543,7 +1636,10 @@ namespace Unison.WhatsAppClient.Chats
             }
 
             LiveIncomingChatListApplyResult result = new LiveIncomingChatListApplyResult();
-            await _ui.RunAsync(() =>
+            // High priority so Normal reshuffles do not starve the tip Move. Callers on the
+            // live pump must not await this for stage=route — MessageFacade detaches strip+toast.
+            var stripElapsed = Stopwatch.StartNew();
+            await RunLiveStripAsync(() =>
             {
                 ChatItem chat = ApplyStripOnUiThread(
                     request.ChatJid,
@@ -1568,8 +1664,27 @@ namespace Unison.WhatsAppClient.Chats
                 result.DisplayName = chat != null ? chat.Name : null;
                 result.TotalUnread = GetTotalUnreadCount();
             }).ConfigureAwait(false);
+            stripElapsed.Stop();
+            if (stripElapsed.ElapsedMilliseconds >= 1000)
+            {
+                DiagWrite(
+                    "messages",
+                    "live-strip-ui-slow",
+                    "jid=" + request.ChatJid +
+                    "; elapsedMs=" + stripElapsed.ElapsedMilliseconds);
+            }
 
             return result;
+        }
+
+        private Task RunLiveStripAsync(Action action)
+        {
+            if (_urgentUi != null)
+            {
+                return _urgentUi.RunUrgentAsync(action);
+            }
+
+            return _ui.RunAsync(action);
         }
 
         /// <summary>Applies tips whose unread was already decided at record time.</summary>

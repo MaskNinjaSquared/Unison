@@ -103,10 +103,24 @@ namespace Unison.WhatsAppClient.Helpers
                 "[ChatCatalogDiskPersistence] Failed to persist data: " +
                 (error != null ? error.Message : string.Empty));
 
-        Task IChatCatalogFullPersistHost.PersistCatalogSliceAsync(IList<ChatItem> chats) =>
-            ChatCatalogPreviewPersist.UpsertAsync(
-                _previews,
-                ChatCatalogSnapshot.Take(chats));
+        async Task IChatCatalogFullPersistHost.PersistCatalogSliceAsync(IList<ChatItem> chats)
+        {
+            var sw = Stopwatch.StartNew();
+            await ChatCatalogPreviewPersist.UpsertAsync(
+                    _previews,
+                    ChatCatalogSnapshot.Take(chats))
+                .ConfigureAwait(false);
+            try
+            {
+                _diagnostics?.Write(
+                    "chat-open",
+                    "persist-rows",
+                    "rows=" + (chats?.Count ?? 0) + "; elapsedMs=" + sw.ElapsedMilliseconds);
+            }
+            catch
+            {
+            }
+        }
 
         void IChatCatalogFullPersistHost.LogCatalogSliceSucceeded(int rowCount) =>
             Debug.WriteLine(

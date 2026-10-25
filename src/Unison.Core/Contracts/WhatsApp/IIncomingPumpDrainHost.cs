@@ -17,6 +17,12 @@ namespace Unison.Core.Contracts.WhatsApp
         /// <summary>Takes the next item into the host's current slot. False when idle/retired.</summary>
         bool TryTakeNext(int generation, DateTime utcNow);
 
+        /// <summary>
+        /// False when a newer Reset retired this drain — a late timeout Delay must not
+        /// Reset/restart again (zombie <c>message-timeout-*</c> with empty queues).
+        /// </summary>
+        bool IsDrainGenerationCurrent(int generation);
+
         bool IsCurrentOffline { get; }
 
         string CurrentMessageId { get; }

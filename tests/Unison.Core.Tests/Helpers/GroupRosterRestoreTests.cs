@@ -167,7 +167,7 @@ namespace Unison.Core.Tests.Helpers
 
         private sealed class InlineDispatcher : IDispatcher
         {
-            public Task RunAsync(Action action)
+            public Task RunAsync(Action action, string caller = null, string callerFile = null)
             {
                 action();
                 return Task.CompletedTask;

@@ -32,76 +32,7 @@ namespace Unison.Uwp.Services.WhatsApp
         /// already started; only one caller performs the disk read.
         /// </summary>
         public Task LoadPersistedUiStateAsync() =>
-            LoadPersistedUiStateDispatch.RunAsync(this);
-
-        // --- ILoadPersistedUiStateHost ---------------------------------------
-
-        Task ILoadPersistedUiStateHost.InitializeConnectionStateAsync() =>
-            InitializeConnectionStateAsync();
-
-        bool ILoadPersistedUiStateHost.PersistedUiStateLoaded => _persistedUiStateLoaded;
-
-        bool ILoadPersistedUiStateHost.IsAuthRegistered =>
-            _authState?.Registered == true;
-
-        Task ILoadPersistedUiStateHost.EnterPersistedUiLoadLockAsync() =>
-            _persistedUiLoadGate.EnterAsync();
-
-        void ILoadPersistedUiStateHost.ExitPersistedUiLoadLock() =>
-            _persistedUiLoadGate.Exit();
-
-        Task ILoadPersistedUiStateHost.LoadPersistedChatsAsync() =>
-            LoadPersistedChatsAsync();
-
-        void ILoadPersistedUiStateHost.MarkPersistedUiStateLoaded() =>
-            _persistedUiStateLoaded = true;
-
-        void ILoadPersistedUiStateHost.WritePersistedUiLoadedJournal(int chatRowCount) =>
-            RuntimeDiagnosticsService.Instance.Write(
-                "startup",
-                "persisted-ui-loaded",
-                "chatRows=" + chatRowCount);
-
-        int ILoadPersistedUiStateHost.ChatRowCount => Chats.Count;
-
-        async Task ILoadPersistedUiStateHost.HydrateCachedAvatarsBestEffortAsync()
-        {
-            try
-            {
-                if (Contacts == null)
-                {
-                    Debug.WriteLine(
-                        "[WhatsAppService] Avatar hydrate skipped (persisted-ui-loaded): contact facade missing");
-                }
-                else
-                {
-                    await Contacts.HydrateCachedAvatarUrisAsync("persisted-ui-loaded")
-                        .ConfigureAwait(false);
-                }
-            }
-            catch (Exception exHydrate)
-            {
-                Debug.WriteLine(
-                    "[WhatsAppService] Startup avatar hydrate failed: " + exHydrate.Message);
-            }
-        }
-
-        async Task ILoadPersistedUiStateHost.ReconcileChatPreviewsBestEffortAsync()
-        {
-            try
-            {
-                if (ChatFacade != null)
-                {
-                    await ChatFacade.ReconcileChatPreviewsFromSqliteAsync(null, "persisted-ui-loaded")
-                        .ConfigureAwait(false);
-                }
-            }
-            catch (Exception exReconcile)
-            {
-                Debug.WriteLine(
-                    "[WhatsAppService] Startup preview reconcile failed: " + exReconcile.Message);
-            }
-        }
+            _persistedUiState.RunAsync();
 
         private Task PersistBackgroundDisplayNamesAsync() =>
             _backgroundDisplayNames.PersistAsync();

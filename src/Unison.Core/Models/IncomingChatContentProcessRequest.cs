@@ -25,5 +25,6 @@ namespace Unison.Core.Models
         public bool QuietForSync { get; set; }
         public bool IsActiveChat { get; set; }
         public bool IsWindowVisible { get; set; }
+        public IncomingRouteTrace RouteTrace { get; set; }
     }
 }

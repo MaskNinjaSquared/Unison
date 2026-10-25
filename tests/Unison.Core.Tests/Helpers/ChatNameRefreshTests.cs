@@ -158,7 +158,7 @@ namespace Unison.Core.Tests.Helpers
         {
             public bool InPass { get; private set; }
 
-            public Task RunAsync(System.Action action)
+            public Task RunAsync(System.Action action, string caller = null, string callerFile = null)
             {
                 InPass = true;
                 try
@@ -194,7 +194,7 @@ namespace Unison.Core.Tests.Helpers
 
             public int Passes => _passes;
 
-            public async Task RunAsync(System.Action action)
+            public async Task RunAsync(System.Action action, string caller = null, string callerFile = null)
             {
                 int pass = Interlocked.Increment(ref _passes);
                 if (pass == 1)

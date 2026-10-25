@@ -103,6 +103,8 @@ namespace Unison.Uwp.Client
     public sealed class ProfilePictureResult
     {
         public string Url { get; set; }
+        /// <summary>Server picture id; compare before re-downloading CDN bytes.</summary>
+        public string Id { get; set; }
         public string TargetJid { get; set; }
         public string TokenLookupJid { get; set; }
         public bool IsNotFound { get; set; }

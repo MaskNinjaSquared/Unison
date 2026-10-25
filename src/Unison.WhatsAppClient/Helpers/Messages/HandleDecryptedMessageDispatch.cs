@@ -35,6 +35,11 @@ namespace Unison.WhatsAppClient.Helpers
                     return;
                 }
 
+                if (request != null)
+                {
+                    request.RouteTrace = new IncomingRouteTrace();
+                }
+
                 host.SetIncomingMessagePumpStage("route", request);
                 await host.NotifyIncomingDecryptedAsync(request).ConfigureAwait(false);
             }

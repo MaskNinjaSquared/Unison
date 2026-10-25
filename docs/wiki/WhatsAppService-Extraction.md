@@ -189,14 +189,24 @@ Full catalogue persist, preview-slice persist, and suspend-tail orchestration ar
 stay on the client. Heavy-history enrichment release is
 `ReleaseEnrichmentAfterHeavyHistoryCoordinator`; self push-name / phone / avatar
 auth sync is `SelfProfileAuthSync`. Broker toast-name snapshot is
-`BackgroundDisplayNamesPersistence` (save port stays on UWP). Server unlink
-notice is `NotifyServerLogoutOwner`. Hard session wipe is `ClearSessionOwner`
+`BackgroundDisplayNamesPersistence` (save port stays on UWP). Startup persisted-UI
+load is `LoadPersistedUiStateOwner` (gate + loaded flag stay on the client).
+Suspend memory release is `ReleaseMemoryOwner`. Deferred startup maintenance is
+`DeferredStartupMaintenanceOwner`. First-sync progress publish /
+hold-flag reset are `PublishInitialSyncProgressOwner` /
+`ResetFirstSyncListHoldFlagsOwner`. Catch-up banner begin+end is
+`HistoryCatchUpBannerOwner`. Socket invalidate is `InvalidateCurrentSocketOwner`.
+Server unlink notice is `NotifyServerLogoutOwner`. Hard session wipe is `ClearSessionOwner`
 (+ `RaiseSessionClearedOwner` for the UI/history notify step). QR and auth-state
-socket wire are `QrCodeWireOwner` / `AuthStateWireOwner` (wired from
-`SocketEventHandlerWiring`). Group listing hide-abort is a real CTS
-(`GroupListingCancellation`) through `IGroupWireActions` /
-`ConnectionHandler.QueryAllowingErrorAsync` (cancels the waiter, not the
-stanza on the wire).
+socket wire are `QrCodeWireOwner` / `AuthStateWireOwner`; session-initialized /
+stream-error / connection-update wire are `SessionInitializedOwner` /
+`SocketErrorOwner` / `ConnectionUpdateOwner`; remaining inbound wire /
+history-sync / offline-release are `SocketFacadeWireOwner` /
+`InboundWireNodeOwner` / `DecryptedMessageWireOwner` / `HistorySyncWireOwner` /
+`OfflineReplayReleaseOwner` (all wired from `SocketEventHandlerWiring`).
+Group listing hide-abort is a real CTS (`GroupListingCancellation`) through
+`IGroupWireActions` / `ConnectionHandler.QueryAllowingErrorAsync` (cancels the
+waiter, not the stanza on the wire).
 
 ### Facades still depend on the client
 
@@ -1382,12 +1392,24 @@ catalogue persist) is `ForgetChatStorageHost` + `AppStateLocalHost` over
 `IncomingPumpDrainDispatch` (host still owns typed queue + handle). Offline pending-
 notification release is `OfflineReplayRelease` over `IOfflineReplayReleaseHost`
 (wire still attaches the event on the client). Thin-wire dispatches:
-`ConnectionUpdateDispatch`, `SocketErrorDispatch`, `HistorySyncWireApply`,
-`SessionInitializedDispatch`, `OfflineReplayRelease`, `QrCodeWireDispatch`,
-`AuthStateWireDispatch`, `InboundWireNodeDispatch`, `DecryptedMessageWireDispatch`,
-`SocketFacadeWireDispatch`, `PostReplayMaintenanceDispatch`,
-`PostMessageEnrichmentDispatch`, and `OfflineReplayFlushDispatch` (each over a
-host port).
+`ConnectionUpdateDispatch` / `ConnectionUpdateOwner`, `SocketErrorDispatch` /
+`SocketErrorOwner`, `HistorySyncWireApply` / `HistorySyncWireOwner`,
+`SessionInitializedDispatch` / `SessionInitializedOwner`,
+`OfflineReplayRelease` / `OfflineReplayReleaseOwner`, `QrCodeWireDispatch` /
+`QrCodeWireOwner`, `AuthStateWireDispatch` / `AuthStateWireOwner`,
+`InboundWireNodeDispatch` / `InboundWireNodeOwner`,
+`DecryptedMessageWireDispatch` / `DecryptedMessageWireOwner`,
+`SocketFacadeWireDispatch` / `SocketFacadeWireOwner`,
+`PostReplayMaintenanceDispatch`, `PostMessageEnrichmentDispatch`, and
+`OfflineReplayFlushDispatch` (each over a host port; wire owners leave the
+client as `I*Host`). **Persisted-UI load** is `LoadPersistedUiStateOwner` over
+`ILoadPersistedUiStateHost` ports (init / catalogue / hydrate / reconcile).
+**Suspend memory release** is `ReleaseMemoryOwner` over `IReleaseMemoryHost`
+ports (store clear / UI hop / inactive cache keys). **Deferred startup** is
+`DeferredStartupMaintenanceOwner`. **First-sync progress / hold reset** are
+`PublishInitialSyncProgressOwner` / `ResetFirstSyncListHoldFlagsOwner`.
+**Catch-up banner** is `HistoryCatchUpBannerOwner`. **Socket invalidate** is
+`InvalidateCurrentSocketOwner`.
 
 **The open conversation is shared state.** `ActiveChat` (`Unison.Core/State`, DI singleton over
 `JidAliasTable.GetCanonicalJid`) holds the conversation the user has open by its canonical
@@ -1540,9 +1562,13 @@ owns both members on `IChatService`; the client calls the helper after a large o
 `IWhatsAppService`.
 
 **Chat-list dedupe is `ChatListDeduper`.** (Core, DI singleton over the UI dispatcher,
-`ChatStateStore`, `ChatRowIndex`, `JidAliasTable` and the push-name table.) It runs
-`DuplicateChatFold`, removes the folded rows, re-keys `MessagesByChat` and invalidates the
-row index in one UI pass. `IChatService.RequestChatListDedup` lives on `ChatFacade`, which
+`ChatStateStore`, `ChatRowIndex`, `JidAliasTable` and the push-name table.) A pass is one
+short UI hop that copies row addresses, a plan built off the UI thread (every canonical
+lookup over rows and `MessagesByChat` keys), then UI hops of at most eight folds / key merges
+for what the plan found (`DuplicateChatFold.FoldGroups`); a clean list never returns to the
+UI. Rows re-addressed between plan and apply are skipped. Requests during a pass share one
+follow-up pass. Slow or changing passes write `chat-list-dedupe|pass` to the runtime journal
+with per-phase timings. `IChatService.RequestChatListDedup` lives on `ChatFacade`, which
 schedules the catalogue save, raises display-name listeners through `IContactService` and
 asks `IChatIdentityPersistence` (`ChatIdentityPersistence`) to write names and aliases
 immediately when rows merged. The member left `IWhatsAppService`; catalogue debounce

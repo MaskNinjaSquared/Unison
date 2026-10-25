@@ -32,6 +32,23 @@ namespace Unison.Core.Tests.Helpers
         }
 
         [Fact]
+        public async Task Each_attempt_gets_a_fresh_route_trace()
+        {
+            var host = new FakeHost { HasFacade = true };
+            var request = new IncomingDecryptedNotifyRequest { MessageId = "m1" };
+
+            await HandleDecryptedMessageDispatch.RunAsync(host, request);
+            IncomingRouteTrace first = request.RouteTrace;
+            first.Mark("timeline");
+
+            await HandleDecryptedMessageDispatch.RunAsync(host, request);
+
+            Assert.NotNull(request.RouteTrace);
+            Assert.NotSame(first, request.RouteTrace);
+            Assert.Null(request.RouteTrace.Step);
+        }
+
+        [Fact]
         public async Task Facade_fault_is_recorded_and_rethrows()
         {
             var host = new FakeHost { HasFacade = true, ThrowOnNotify = true };

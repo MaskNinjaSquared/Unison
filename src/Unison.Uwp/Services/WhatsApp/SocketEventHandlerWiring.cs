@@ -2,13 +2,13 @@
 // SocketEventHandlerWiring
 //
 // Event wiring body. Called from UwpConnectionSocketSessionFactory so portable
-// ConnectionConnectOpen never names IWhatsAppSocket; UWP-only.
+// ConnectionConnectOpen never names IWhatsAppSocket; UWP-only. Wire owners on
+// WhatsAppService own the dispatches; this file only gates stale sockets.
 // =============================================================================
 using System;
 using System.Diagnostics;
 using System.Threading.Tasks;
 using Unison.Uwp.Client;
-using Unison.WhatsAppClient.Helpers;
 
 namespace Unison.Uwp.Services.WhatsApp
 {
@@ -36,7 +36,7 @@ namespace Unison.Uwp.Services.WhatsApp
                     return;
                 }
 
-                SocketFacadeWireDispatch.HandlePresence(owner, e);
+                owner.SocketFacadeWire.HandlePresence(e);
             };
             owner.RegisterSocketAliases("service-known-aliases");
 
@@ -58,7 +58,7 @@ namespace Unison.Uwp.Services.WhatsApp
                     return;
                 }
 
-                ConnectionUpdateDispatch.Handle(owner, status);
+                owner.ConnectionUpdateWire.Handle(status);
             };
 
             socket.OnSessionInitialized += async (s, e) =>
@@ -69,15 +69,14 @@ namespace Unison.Uwp.Services.WhatsApp
                     return;
                 }
 
-                await SessionInitializedDispatch.RunAsync(owner).ConfigureAwait(false);
+                await owner.SessionInitializedWire.RunAsync().ConfigureAwait(false);
             };
 
             socket.OnStreamError += (s, code) =>
-                SocketErrorDispatch.HandleStreamError(owner, code, owner.IsCurrentSocket(s));
+                owner.SocketErrorWire.HandleStreamError(code, owner.IsCurrentSocket(s));
 
             socket.OnError += async (s, ex) =>
-                await SocketErrorDispatch.HandleErrorAsync(
-                    owner,
+                await owner.SocketErrorWire.HandleErrorAsync(
                     ex,
                     owner.IsCurrentSocket(s),
                     socket.IsConnected,
@@ -90,12 +89,12 @@ namespace Unison.Uwp.Services.WhatsApp
                     return;
                 }
 
-                InboundWireNodeDispatch.Handle(owner, node);
+                owner.InboundWireNode.Handle(node);
             };
 
             // Not gated on current socket — see HistorySyncWireApply header.
             socket.OnHistorySyncReceived += (s, sync) =>
-                HistorySyncWireApply.Run(owner, sync);
+                owner.HistorySyncWire.Run(sync);
 
             socket.OnDecryptedMessageReceived += (s, e) =>
             {
@@ -104,8 +103,7 @@ namespace Unison.Uwp.Services.WhatsApp
                     return Task.CompletedTask;
                 }
 
-                DecryptedMessageWireDispatch.Handle(
-                    owner,
+                owner.DecryptedMessageWire.Handle(
                     e.FromJid,
                     e.Participant,
                     e.ParticipantAlt,
@@ -131,8 +129,7 @@ namespace Unison.Uwp.Services.WhatsApp
                     return;
                 }
 
-                SocketFacadeWireDispatch.HandleMissingMessage(
-                    owner,
+                owner.SocketFacadeWire.HandleMissingMessage(
                     e.ChatJid,
                     e.Participant,
                     e.MessageId,
@@ -148,8 +145,7 @@ namespace Unison.Uwp.Services.WhatsApp
                     return;
                 }
 
-                _ = SocketFacadeWireDispatch.HandleOutgoingStatusAsync(
-                    owner,
+                _ = owner.SocketFacadeWire.HandleOutgoingStatusAsync(
                     e?.MessageId,
                     e?.Status,
                     e?.Error);
@@ -162,12 +158,11 @@ namespace Unison.Uwp.Services.WhatsApp
                     return;
                 }
 
-                _ = SocketFacadeWireDispatch.HandleReceiptAsync(owner, node);
+                _ = owner.SocketFacadeWire.HandleReceiptAsync(node);
             };
 
             socket.OnLinkCodeCompanionReg += (s, node) =>
-                SocketFacadeWireDispatch.HandleLinkCodeCompanion(
-                    owner,
+                owner.SocketFacadeWire.HandleLinkCodeCompanion(
                     node,
                     owner.IsCurrentSocket(s));
 
@@ -178,7 +173,7 @@ namespace Unison.Uwp.Services.WhatsApp
                     return;
                 }
 
-                await OfflineReplayRelease.RunAsync(owner, offlineCount).ConfigureAwait(false);
+                await owner.OfflineReplayReleaseWire.RunAsync(offlineCount).ConfigureAwait(false);
             };
 
             // Dirty bits and server_sync are answered inside the session now: the socket layer

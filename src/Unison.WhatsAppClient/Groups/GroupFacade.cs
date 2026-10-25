@@ -63,6 +63,12 @@ namespace Unison.WhatsAppClient.Groups
         private int _listingRetryPending;
 
         /// <summary>
+        /// Bumped when the window hides (or a newer resume settle arms) so a delayed
+        /// post-keepalive listing retry does not fire after the user left again.
+        /// </summary>
+        private int _resumeSettleGeneration;
+
+        /// <summary>
         /// Cancels in-flight listing IQs when the window hides (keepalive). Wire waiters
         /// drop via <see cref="CancellationToken"/>; the stanza may still arrive ignored.
         /// </summary>
@@ -148,14 +154,47 @@ namespace Unison.WhatsAppClient.Groups
 
             if (!_visibility.IsWindowVisible)
             {
+                Interlocked.Increment(ref _resumeSettleGeneration);
                 _listingCancel.Cancel();
                 return;
             }
 
+            // Do not arm listing on the same turn as visible=True — resume paint +
+            // fast-resume already saturate the dispatcher (Mobile hitch in 06f9cb95).
             if (Interlocked.CompareExchange(ref _listingRetryPending, 0, 0) == 1)
             {
-                NotifyGroupListingDue();
+                _ = RunResumeListingAfterSettleAsync();
             }
+        }
+
+        private async Task RunResumeListingAfterSettleAsync()
+        {
+            int armed = Interlocked.Increment(ref _resumeSettleGeneration);
+            int delayMs = Math.Max(0, _workload.GroupListingResumeSettleMs);
+            _diagnostics?.Write(
+                "startup-phase",
+                "background-groups:deferred",
+                "reason=resume-settle; delayMs=" + delayMs);
+
+            try
+            {
+                await Task.Delay(delayMs).ConfigureAwait(false);
+            }
+            catch (Exception)
+            {
+                return;
+            }
+
+            if (!GroupListingVisibilityGate.ShouldFireResumeRetry(
+                    IsWindowVisible,
+                    Interlocked.CompareExchange(ref _listingRetryPending, 0, 0) == 1,
+                    armed,
+                    Volatile.Read(ref _resumeSettleGeneration)))
+            {
+                return;
+            }
+
+            NotifyGroupListingDue();
         }
 
         private async Task RunBackgroundListingAsync()
@@ -736,7 +775,15 @@ namespace Unison.WhatsAppClient.Groups
                         resolved++;
                     }
 
-                    await _apply.ApplyMetadataAsync(chat.JID, _reader.ReadMetadata(response, chat.JID));
+                    // Flags-only — same as open-path. Default ApplyMetadata includeRoster=true
+                    // would materialize drafts for every unresolved group and freeze the first
+                    // open that then RebuildParticipantLookup'd a 500+ roster.
+                    await _apply.ApplyMetadataAsync(
+                        chat.JID,
+                        _reader.ReadMetadata(response, chat.JID, includeRoster: false),
+                        includeRoster: false,
+                        cancellationToken,
+                        subject);
                 }
                 catch (OperationCanceledException)
                 {

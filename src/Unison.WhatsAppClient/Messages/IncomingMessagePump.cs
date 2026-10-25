@@ -49,7 +49,7 @@ namespace Unison.WhatsAppClient.Messages
 
         public long AppliedCount => Interlocked.Read(ref _appliedCount);
 
-        public string Stage => _queue.Stage;
+        public string Stage => IncomingRouteTrace.DescribeStage(_queue.Stage, _current?.RouteTrace);
 
         public IncomingQueueSnapshot Snapshot() => _queue.Snapshot();
 
@@ -169,13 +169,16 @@ namespace Unison.WhatsAppClient.Messages
             return true;
         }
 
+        bool IIncomingPumpDrainHost.IsDrainGenerationCurrent(int generation) =>
+            _queue.IsCurrentGeneration(generation);
+
         bool IIncomingPumpDrainHost.IsCurrentOffline =>
             _current != null && _current.IsOffline;
 
         string IIncomingPumpDrainHost.CurrentMessageId =>
             _current?.MessageId;
 
-        string IIncomingPumpDrainHost.CurrentStage => _queue.Stage;
+        string IIncomingPumpDrainHost.CurrentStage => Stage;
 
         Task IIncomingPumpDrainHost.HandleCurrentAsync() =>
             HandleDecryptedMessageDispatch.RunAsync(this, _current);

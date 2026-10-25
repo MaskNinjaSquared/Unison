@@ -78,6 +78,26 @@ namespace Unison.Core.Tests.Helpers
             Assert.Contains("finish", host.Log);
         }
 
+        [Fact]
+        public async Task Stale_drain_timeout_does_not_reset_again()
+        {
+            var host = new FakeHost
+            {
+                LiveTimeoutMilliseconds = 20,
+                HandleDelayMs = 200,
+                DrainGenerationCurrent = false
+            };
+            host.Enqueue(offline: false, id: "orphan");
+
+            await IncomingPumpDrainDispatch.RunAsync(host, generation: 1);
+
+            Assert.Contains("late:orphan", host.Log);
+            Assert.Contains("timeout:orphan", host.Log);
+            Assert.DoesNotContain(host.Log, line => line.StartsWith("reset:"));
+            Assert.DoesNotContain("restart", host.Log);
+            Assert.DoesNotContain("applied", host.Log);
+        }
+
         private sealed class FakeHost : IIncomingPumpDrainHost
         {
             private readonly Queue<(bool Offline, string Id)> _pending =
@@ -97,6 +117,9 @@ namespace Unison.Core.Tests.Helpers
             public bool RetryTimedOut { get; set; }
 
             public bool FailHandle { get; set; }
+
+            /// <summary>When false, simulates a newer Reset having retired this drain.</summary>
+            public bool DrainGenerationCurrent { get; set; } = true;
 
             public bool IsCurrentOffline => _currentOffline;
 
@@ -122,6 +145,9 @@ namespace Unison.Core.Tests.Helpers
                 _currentId = next.Id;
                 return true;
             }
+
+            public bool IsDrainGenerationCurrent(int generation) =>
+                DrainGenerationCurrent;
 
             public async Task HandleCurrentAsync()
             {

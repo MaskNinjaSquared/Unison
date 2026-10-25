@@ -1120,9 +1120,30 @@ namespace Unison.WhatsAppClient.Contacts
 
             try
             {
-                var exports = new List<AppContactExport>();
-                await _ui.RunAsync(() => CollectWindowsContactExports(exports))
-                    .ConfigureAwait(false);
+                // UI hop: copy ChatItem refs only. Resolve/name/phone/photo used to run inside
+                // RunAsync and stalled Mobile for 10+s (ui-watchdog: PublishWindowsContactsCoreAsync).
+                List<ChatItem> snapshot = null;
+                await _ui.RunAsync(() =>
+                {
+                    var source = _chatState.Chats;
+                    snapshot = new List<ChatItem>(source.Count);
+                    for (int i = 0; i < source.Count; i++)
+                    {
+                        ChatItem chat = source[i];
+                        if (chat != null)
+                        {
+                            snapshot.Add(chat);
+                        }
+                    }
+                }).ConfigureAwait(false);
+
+                List<AppContactExport> exports = WindowsContactExportBuilder.Build(
+                    snapshot,
+                    _jids,
+                    IsSelfJid,
+                    TryPerson,
+                    jid => ResolvePhone(jid, null));
+
                 await _localContacts.PublishAppContactsAsync(exports).ConfigureAwait(false);
                 _lastWindowsPublishUtc = DateTime.UtcNow;
                 _lastWindowsPublishCount = exports.Count;
@@ -1134,50 +1155,6 @@ namespace Unison.WhatsAppClient.Contacts
             finally
             {
                 Interlocked.Exchange(ref _windowsPublishBusy, 0);
-            }
-        }
-
-        private void CollectWindowsContactExports(List<AppContactExport> into)
-        {
-            if (into == null)
-            {
-                return;
-            }
-
-            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (ChatItem chat in _chatState.Chats)
-            {
-                if (chat == null ||
-                    chat.IsGroup ||
-                    chat.IsPersonal ||
-                    JidHelper.IsGroupJid(chat.JID) ||
-                    JidHelper.IsBroadcastJid(chat.JID) ||
-                    IsSelfJid(chat.JID))
-                {
-                    continue;
-                }
-
-                string remoteId = _jids.GetCanonicalJid(chat.JID) ?? chat.JID;
-                if (string.IsNullOrWhiteSpace(remoteId) || !seen.Add(remoteId))
-                {
-                    continue;
-                }
-
-                string name = chat.GetNameResolved(null);
-                string photo = chat.GetAvatarUrl(preferHigh: true);
-                if (string.IsNullOrWhiteSpace(photo))
-                {
-                    Person person = TryPerson(chat.JID);
-                    photo = person != null ? person.AvatarUrl : null;
-                }
-
-                into.Add(new AppContactExport
-                {
-                    RemoteId = remoteId,
-                    DisplayName = name,
-                    PhoneDigits = ResolvePhone(chat.JID, null),
-                    PhotoUri = photo
-                });
             }
         }
 

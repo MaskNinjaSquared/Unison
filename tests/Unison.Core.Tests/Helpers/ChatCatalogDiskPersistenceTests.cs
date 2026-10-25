@@ -80,7 +80,7 @@ namespace Unison.Core.Tests.Helpers
 
         private sealed class ImmediateDispatcher : IDispatcher
         {
-            public Task RunAsync(Action action)
+            public Task RunAsync(Action action, string caller = null, string callerFile = null)
             {
                 action?.Invoke();
                 return Task.CompletedTask;

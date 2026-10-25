@@ -50,12 +50,24 @@ namespace Unison.WhatsAppClient.Helpers
 
                         if (completed != handleTask)
                         {
+                            host.ObserveLateHandleFault(handleTask, messageId);
+
+                            // Health-stall / prior timeout already Reset and started a newer
+                            // drain; this Delay is leftover. Reset again with _current==null
+                            // left pumpStage=reset:* and qLive=0 with no restart.
+                            if (!host.IsDrainGenerationCurrent(generation))
+                            {
+                                host.LogLiveTimeout(
+                                    messageId,
+                                    "stale-drain:" + host.CurrentStage,
+                                    timeoutMs);
+                                return;
+                            }
+
                             host.LogLiveTimeout(
                                 messageId,
                                 host.CurrentStage,
                                 timeoutMs);
-
-                            host.ObserveLateHandleFault(handleTask, messageId);
 
                             bool requeueTimedOutMessage = host.ShouldRetryTimedOutCurrent();
                             host.ResetPump(
