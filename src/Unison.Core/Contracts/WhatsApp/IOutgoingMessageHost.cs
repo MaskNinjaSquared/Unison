@@ -22,6 +22,12 @@ namespace Unison.Core.Contracts.WhatsApp
         /// <summary>Reply target. Null when this send quotes nothing.</summary>
         public OutgoingQuote Quote { get; set; }
 
+        /// <summary>Stamp ContextInfo.isForwarded on the wire text.</summary>
+        public bool MarkAsForwarded { get; set; }
+
+        /// <summary>ContextInfo.forwardingScore; 0 with <see cref="MarkAsForwarded"/> means 1.</summary>
+        public uint ForwardingScore { get; set; }
+
         /// <summary>The same on every attempt, so a retry cannot mint a second bubble.</summary>
         public string MessageId { get; set; }
 

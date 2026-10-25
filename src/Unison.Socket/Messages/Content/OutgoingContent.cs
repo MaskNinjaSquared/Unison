@@ -50,6 +50,15 @@ namespace Unison.Socket.Messages.Content
 
         /// <summary>Seconds until the message disappears, or zero when the chat has no timer.</summary>
         public int EphemeralExpiration { get; set; }
+
+        /// <summary>
+        /// Baileys <c>generateForwardMessageContent</c>: stamp ContextInfo.isForwarded.
+        /// Score defaults to 1 when this is true and <see cref="ForwardingScore"/> is 0.
+        /// </summary>
+        public bool MarkAsForwarded { get; set; }
+
+        /// <summary>ContextInfo.forwardingScore (increments when re-forwarding).</summary>
+        public uint ForwardingScore { get; set; }
     }
 
     public sealed class TextContent : OutgoingContent

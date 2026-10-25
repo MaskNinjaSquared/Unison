@@ -1,12 +1,15 @@
 using System;
 using System.Collections;
+using System.Collections.Generic;
 using System.Windows.Input;
 using Microsoft.Extensions.DependencyInjection;
 using Unison.Core.Contracts;
+using Unison.Core.Helpers;
 using Unison.Core.Models;
 using Windows.UI.Core;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
+using Windows.UI.Xaml.Data;
 using Windows.UI.Xaml.Media.Animation;
 
 namespace Unison.Uwp.UI.Controls
@@ -14,6 +17,7 @@ namespace Unison.Uwp.UI.Controls
     /// <summary>
     /// Generic contact/chat picker overlay. Hosts pass a title, collection, and click command —
     /// open presentation (compact rows, deferred bind, fade) comes from the active shell theme strategy.
+    /// Always groups A–Z for SemanticZoom (no category) so jump letters match Favourites.
     /// </summary>
     public sealed partial class ContactsVisualizerControl : UserControl
     {
@@ -52,8 +56,18 @@ namespace Unison.Uwp.UI.Controls
                 typeof(ContactsVisualizerControl),
                 new PropertyMetadata(false, OnIsOpenChanged));
 
+        private readonly CollectionViewSource _groupedCvs = new CollectionViewSource
+        {
+            IsSourceGrouped = true
+        };
+
         private bool _backHooked;
         private bool _openInProgress;
+        private bool _clickBusy;
+        private ModernProgressRing _rowBusyRing;
+        private UIElement _rowBusyAvatar;
+        private UIElement _rowBusyName;
+        private AlphabetChatGroup _pendingJumpGroup;
 
         public ContactsVisualizerControl()
         {
@@ -104,7 +118,7 @@ namespace Unison.Uwp.UI.Controls
             // Share Target cold open often swaps ItemsSource while BeginOpen's deferred
             // Low bind is still in flight (_openInProgress). Still push the latest DP so
             // the deferred callback and the ListView both see the filled catalog.
-            control.ItemsList.ItemsSource = e.NewValue;
+            control.BindGroupedSource(e.NewValue as IEnumerable);
         }
 
         private static void OnIsOpenChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
@@ -128,7 +142,10 @@ namespace Unison.Uwp.UI.Controls
         private void BeginOpen()
         {
             _openInProgress = true;
+            _clickBusy = false;
+            HideClickBusy();
             ApplyPickerTemplate();
+            ContactsZoom.IsZoomedInViewActive = true;
 
             bool animate = ResolveTheme()?.ContactsPickerAnimatesOpen ?? true;
             bool defer = ResolveTheme()?.ContactsPickerDefersItemsUntilOpen ?? true;
@@ -152,7 +169,7 @@ namespace Unison.Uwp.UI.Controls
                         return;
                     }
 
-                    ItemsList.ItemsSource = ItemsSource;
+                    BindGroupedSource(ItemsSource);
                     _openInProgress = false;
                     if (animate)
                     {
@@ -166,7 +183,7 @@ namespace Unison.Uwp.UI.Controls
                 return;
             }
 
-            ItemsList.ItemsSource = ItemsSource;
+            BindGroupedSource(ItemsSource);
             _openInProgress = false;
             if (animate)
             {
@@ -181,10 +198,46 @@ namespace Unison.Uwp.UI.Controls
         private void BeginClose()
         {
             UnhookBack();
+            _pendingJumpGroup = null;
+            _clickBusy = false;
+            HideClickBusy();
+            _groupedCvs.Source = null;
             ItemsList.ItemsSource = null;
+            JumpList.ItemsSource = null;
             Opacity = 1;
             Visibility = Visibility.Collapsed;
             _openInProgress = false;
+        }
+
+        private void BindGroupedSource(IEnumerable source)
+        {
+            List<ChatItem> chats = EnumerateChats(source);
+            var groups = AlphabetChatGroups.Build(
+                chats,
+                c => c.GetNameResolved(null) ?? c.Name ?? c.JID ?? string.Empty);
+            _groupedCvs.Source = groups;
+            ItemsList.ItemsSource = _groupedCvs.View;
+            JumpList.ItemsSource = AlphabetChatGroups.BuildJumpTiles(groups);
+        }
+
+        private static List<ChatItem> EnumerateChats(IEnumerable source)
+        {
+            var list = new List<ChatItem>();
+            if (source == null)
+            {
+                return list;
+            }
+
+            foreach (object item in source)
+            {
+                var chat = item as ChatItem;
+                if (chat != null)
+                {
+                    list.Add(chat);
+                }
+            }
+
+            return list;
         }
 
         private void ApplyPickerTemplate()
@@ -259,6 +312,19 @@ namespace Unison.Uwp.UI.Controls
                 return;
             }
 
+            if (_clickBusy)
+            {
+                e.Handled = true;
+                return;
+            }
+
+            if (!ContactsZoom.IsZoomedInViewActive)
+            {
+                e.Handled = true;
+                ContactsZoom.IsZoomedInViewActive = true;
+                return;
+            }
+
             e.Handled = true;
             RequestClose();
         }
@@ -270,6 +336,17 @@ namespace Unison.Uwp.UI.Controls
 
         private void BackButton_Click(object sender, RoutedEventArgs e)
         {
+            if (_clickBusy)
+            {
+                return;
+            }
+
+            if (!ContactsZoom.IsZoomedInViewActive)
+            {
+                ContactsZoom.IsZoomedInViewActive = true;
+                return;
+            }
+
             RequestClose();
         }
 
@@ -284,17 +361,211 @@ namespace Unison.Uwp.UI.Controls
             IsOpen = false;
         }
 
-        private void ItemsList_ItemClick(object sender, ItemClickEventArgs e)
+        private void ShowClickBusy(ChatItem chat)
         {
-            var chat = e.ClickedItem as ChatItem;
-            if (chat == null || ItemClickCommand == null)
+            // Mandatory for every picker command: row ring (compact) + scrim so the tap
+            // never looks dead. Command runs only on the next dispatcher turn.
+            ShowRowClickBusy(chat);
+            ClickBusyOverlay.Visibility = Visibility.Visible;
+            ClickBusyRing.IsActive = true;
+        }
+
+        private void HideClickBusy()
+        {
+            HideRowClickBusy();
+            ClickBusyRing.IsActive = false;
+            ClickBusyOverlay.Visibility = Visibility.Collapsed;
+        }
+
+        private void ShowRowClickBusy(ChatItem chat)
+        {
+            HideRowClickBusy();
+            if (chat == null)
             {
                 return;
             }
 
-            if (ItemClickCommand.CanExecute(chat))
+            var container = ItemsList.ContainerFromItem(chat) as ListViewItem;
+            var root = container?.ContentTemplateRoot as FrameworkElement;
+            if (root == null)
             {
-                ItemClickCommand.Execute(chat);
+                return;
+            }
+
+            _rowBusyRing = root.FindName("RowClickBusyRing") as ModernProgressRing;
+            _rowBusyAvatar = root.FindName("RowAvatar") as UIElement;
+            _rowBusyName = root.FindName("RowName") as UIElement;
+            if (_rowBusyAvatar != null)
+            {
+                _rowBusyAvatar.Opacity = 0.25;
+            }
+
+            if (_rowBusyName != null)
+            {
+                _rowBusyName.Opacity = 0.25;
+            }
+
+            if (_rowBusyRing != null)
+            {
+                _rowBusyRing.Visibility = Visibility.Visible;
+                _rowBusyRing.IsActive = true;
+            }
+        }
+
+        private void HideRowClickBusy()
+        {
+            if (_rowBusyRing != null)
+            {
+                _rowBusyRing.IsActive = false;
+                _rowBusyRing.Visibility = Visibility.Collapsed;
+                _rowBusyRing = null;
+            }
+
+            if (_rowBusyAvatar != null)
+            {
+                _rowBusyAvatar.Opacity = 1;
+                _rowBusyAvatar = null;
+            }
+
+            if (_rowBusyName != null)
+            {
+                _rowBusyName.Opacity = 1;
+                _rowBusyName = null;
+            }
+        }
+
+        private void ItemsList_ItemClick(object sender, ItemClickEventArgs e)
+        {
+            var chat = e.ClickedItem as ChatItem;
+            if (_clickBusy || chat == null || ItemClickCommand == null)
+            {
+                return;
+            }
+
+            if (!ItemClickCommand.CanExecute(chat))
+            {
+                return;
+            }
+
+            // Contract: paint loading on the row (+ scrim) this turn, then run the host
+            // command (Share / Favourite / Forward stub / …) on the next. Never invert.
+            _clickBusy = true;
+            ShowClickBusy(chat);
+            ChatItem selected = chat;
+            _ = Dispatcher.RunAsync(CoreDispatcherPriority.Normal, () =>
+            {
+                try
+                {
+                    if (ItemClickCommand != null && ItemClickCommand.CanExecute(selected))
+                    {
+                        ItemClickCommand.Execute(selected);
+                    }
+                }
+                finally
+                {
+                    // Picker usually closes via IsOpen; if the command left it open, clear busy.
+                    if (IsOpen)
+                    {
+                        _clickBusy = false;
+                        HideClickBusy();
+                    }
+                }
+            });
+        }
+
+        private void JumpList_ItemClick(object sender, ItemClickEventArgs e)
+        {
+            var tile = e.ClickedItem as AlphabetJumpTile;
+            if (tile == null || !tile.IsEnabled || tile.Group == null || tile.Group.Count == 0)
+            {
+                return;
+            }
+
+            // ScrollIntoView(group) fails inside SemanticZoom: the zoomed-in list knows ChatItem
+            // rows (and MakeVisible), not the AlphabetChatGroup bucket. Defer until zoom settles.
+            _pendingJumpGroup = tile.Group;
+            if (!ContactsZoom.IsZoomedInViewActive)
+            {
+                ContactsZoom.IsZoomedInViewActive = true;
+                return;
+            }
+
+            ScheduleScrollToPendingGroup();
+        }
+
+        private void ContactsZoom_ViewChangeStarted(object sender, SemanticZoomViewChangedEventArgs e)
+        {
+            // Pinch / programmatic zoom-in: map the jump letter onto a real list row.
+            if (e == null || e.IsSourceZoomedInView)
+            {
+                return;
+            }
+
+            AlphabetChatGroup pending = _pendingJumpGroup;
+            if (pending != null && pending.Count > 0)
+            {
+                e.DestinationItem.Item = pending[0];
+                return;
+            }
+
+            var tile = e.SourceItem?.Item as AlphabetJumpTile;
+            if (tile?.Group != null && tile.Group.Count > 0)
+            {
+                e.DestinationItem.Item = tile.Group[0];
+                _pendingJumpGroup = tile.Group;
+            }
+        }
+
+        private void ContactsZoom_ViewChangeCompleted(object sender, SemanticZoomViewChangedEventArgs e)
+        {
+            if (e == null || e.IsSourceZoomedInView || _pendingJumpGroup == null)
+            {
+                return;
+            }
+
+            // After zoom settles, MakeVisible/ScrollIntoView can find the container.
+            ScheduleScrollToPendingGroup();
+        }
+
+        private void ScheduleScrollToPendingGroup()
+        {
+            AlphabetChatGroup group = _pendingJumpGroup;
+            if (group == null || group.Count == 0)
+            {
+                return;
+            }
+
+            // Low: after Normal UI from the zoom transition has drained.
+            _ = Dispatcher.RunAsync(CoreDispatcherPriority.Low, () =>
+            {
+                if (!IsOpen || !ReferenceEquals(_pendingJumpGroup, group))
+                {
+                    return;
+                }
+
+                ScrollToGroup(group);
+                _pendingJumpGroup = null;
+            });
+        }
+
+        private void ScrollToGroup(AlphabetChatGroup group)
+        {
+            if (group == null || group.Count == 0)
+            {
+                return;
+            }
+
+            ChatItem first = group[0];
+            try
+            {
+                ItemsList.UpdateLayout();
+                // Docs: use MakeVisible when the ListView is a SemanticZoom view.
+                ItemsList.MakeVisible(new SemanticZoomLocation { Item = first });
+                ItemsList.ScrollIntoView(first, ScrollIntoViewAlignment.Leading);
+            }
+            catch
+            {
+                // Container may still be unrealized; zoom-in alone is still useful.
             }
         }
     }

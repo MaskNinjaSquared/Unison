@@ -316,7 +316,8 @@ namespace Unison.WhatsAppClient.Messages
                 SelfDisplayName = request.SelfDisplayName,
                 QuietForSync = quietForSync,
                 IsWindowVisible = _visibility.IsWindowVisible,
-                IsActiveChat = jid => _activeChat.IsOpen(jid)
+                IsActiveChat = jid => _activeChat.IsOpen(jid),
+                RouteTrace = request.RouteTrace
             });
         }
 
@@ -1200,6 +1201,113 @@ namespace Unison.WhatsAppClient.Messages
             return _textSend.SendAsync(jid, message);
         }
 
+        /// <inheritdoc />
+        public async Task<ChatMessage> ForwardMessageAsync(
+            string sourceChatJid,
+            string messageId,
+            string targetJid)
+        {
+            if (string.IsNullOrWhiteSpace(sourceChatJid))
+            {
+                throw new ArgumentException("Source chat JID is required", nameof(sourceChatJid));
+            }
+
+            if (string.IsNullOrWhiteSpace(messageId))
+            {
+                throw new ArgumentException("Message id is required", nameof(messageId));
+            }
+
+            if (string.IsNullOrWhiteSpace(targetJid))
+            {
+                throw new ArgumentException("Target chat JID is required", nameof(targetJid));
+            }
+
+            string sourceCanonical = _jids.GetCanonicalJid(JidHelper.Normalize(sourceChatJid));
+            ChatMessage source = FindLiveMessage(sourceCanonical, messageId);
+            if (source == null)
+            {
+                source = await FindPersistedMessageAsync(sourceCanonical, messageId)
+                    .ConfigureAwait(false);
+            }
+
+            string body = ResolveForwardableText(source);
+            if (string.IsNullOrWhiteSpace(body))
+            {
+                throw new InvalidOperationException(
+                    "Forward supports text or a media caption for now.");
+            }
+
+            // Baileys: score += fromMe && !force ? 0 : 1; we always force the Forward UI path.
+            uint score = source.IsForwarded ? 2u : 1u;
+            Debug.WriteLine(
+                "[MessageFacade] ForwardMessage id=" + messageId +
+                "; to=" + targetJid +
+                "; score=" + score);
+
+            return await _textSend.SendAsync(
+                targetJid,
+                new OutgoingTextMentions
+                {
+                    Text = body,
+                    MarkAsForwarded = true,
+                    ForwardingScore = score
+                }).ConfigureAwait(false);
+        }
+
+        private ChatMessage FindLiveMessage(string chatJid, string messageId)
+        {
+            if (_chatState?.MessagesByChat == null ||
+                string.IsNullOrWhiteSpace(chatJid) ||
+                string.IsNullOrWhiteSpace(messageId))
+            {
+                return null;
+            }
+
+            if (!_chatState.MessagesByChat.TryGet(chatJid, out System.Collections.Generic.List<ChatMessage> messages) ||
+                messages == null)
+            {
+                return null;
+            }
+
+            for (int i = 0; i < messages.Count; i++)
+            {
+                ChatMessage row = messages[i];
+                if (row != null &&
+                    string.Equals(row.Id, messageId, StringComparison.Ordinal))
+                {
+                    return row;
+                }
+            }
+
+            return null;
+        }
+
+        private static string ResolveForwardableText(ChatMessage message)
+        {
+            if (message == null || message.IsRevoked)
+            {
+                return null;
+            }
+
+            if (message.Kind == ChatMessageKind.Text &&
+                !string.IsNullOrWhiteSpace(message.Content))
+            {
+                return message.Content.Trim();
+            }
+
+            if (!string.IsNullOrWhiteSpace(message.Caption))
+            {
+                return message.Caption.Trim();
+            }
+
+            if (message.ShowTextContent && !string.IsNullOrWhiteSpace(message.Content))
+            {
+                return message.Content.Trim();
+            }
+
+            return null;
+        }
+
         public Task SendImageAsync(string jid, byte[] imageBytes, string caption)
         {
             return _mediaSend.SendImageAsync(jid, imageBytes, caption);
@@ -1640,41 +1748,59 @@ namespace Unison.WhatsAppClient.Messages
             int totalUnread,
             ChatItem chat)
         {
-            if (!IncomingLiveNotifyGate.ShouldAnnounce(isFromMe))
-            {
-                return;
-            }
-
             if (chat != null)
             {
                 _chatStore?.ApplyTo(chat);
             }
 
-            bool isMuted = chat != null
-                ? chat.IsMutedLocally
-                : (_chatStore?.TryGetCached(chatJid)?.IsMutedLocally ?? false);
-
+            bool mutedFallback = _chatStore?.TryGetCached(chatJid)?.IsMutedLocally ?? false;
             // Belt with the pump: safe-mode history catch-up must not toast either.
             bool quietForSync = _history != null && _history.IsInitialSyncSafeMode;
-            bool hideToast = suppressToast || quietForSync;
 
-            string name = chatName;
-            if (string.IsNullOrWhiteSpace(name) && chat != null)
-            {
-                name = chat.Name;
-            }
-
-            _notifications.NotifyIncomingMessage(
+            IncomingLiveAnnouncePayload payload = IncomingLiveAnnouncePayload.TryCreateFromChat(
                 chatJid,
-                name,
+                chatName,
                 senderName,
                 preview,
                 isGroup,
-                isMuted,
-                hideToast,
+                isFromMe,
+                suppressToast,
+                quietForSync,
                 totalUnread,
-                chat != null ? chat.GetAvatarUrl(preferHigh: false) : null,
-                chat != null ? Math.Max(0, chat.UnreadCount) : 0);
+                chat,
+                mutedFallback);
+            if (payload == null || _notifications == null)
+            {
+                return;
+            }
+
+            // Toast / Live Tile / Start-tile work is WinRT and must not hold stage=route.
+            // Strip+announce are already detached from the pump; this Task.Run keeps WinRT off UI.
+            _ = Task.Run(() =>
+            {
+                try
+                {
+                    _notifications.NotifyIncomingMessage(
+                        payload.ChatJid,
+                        payload.ChatName,
+                        payload.SenderName,
+                        payload.Preview,
+                        payload.IsGroup,
+                        payload.IsMuted,
+                        payload.SuppressToast,
+                        payload.TotalUnread,
+                        payload.AvatarUrl,
+                        payload.ChatUnread);
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine("[MessageFacade] Live announce failed: " + ex.Message);
+                    _diagnostics?.Write(
+                        "notifications",
+                        "live-announce-failed",
+                        "jid=" + payload.ChatJid + "; error=" + ex.Message);
+                }
+            });
         }
 
         /// <inheritdoc />
@@ -2578,12 +2704,15 @@ namespace Unison.WhatsAppClient.Messages
                 return;
             }
 
+            IncomingRouteTrace trace = request.RouteTrace;
+
             // Session-control arms before alias registration / chat routing (same order the
             // pump used to branch on). App-state key share stays session-only here.
             IncomingEnvelopeKind sessionKind =
                 IncomingEnvelopeDisposition.ClassifySessionControl(request.Message);
             if (sessionKind == IncomingEnvelopeKind.PeerDataOperationResponse)
             {
+                trace?.Mark("peer-data");
                 var response = request.Message.ProtocolMessage.PeerDataOperationRequestResponseMessage;
                 await HandlePeerDataOperationResponseAsync(response).ConfigureAwait(false);
                 return;
@@ -2596,6 +2725,7 @@ namespace Unison.WhatsAppClient.Messages
 
             if (sessionKind == IncomingEnvelopeKind.Placeholder)
             {
+                trace?.Mark("placeholder");
                 string placeholderType = request.Message.PlaceholderMessage != null
                     ? request.Message.PlaceholderMessage.Type.ToString()
                     : null;
@@ -2609,6 +2739,7 @@ namespace Unison.WhatsAppClient.Messages
                 return;
             }
 
+            trace?.Mark("alias-hints");
             IContactService contacts = _resolveContacts();
             contacts?.RegisterIncomingEnvelopeAliasHints(
                 request.SenderLid,
@@ -2623,6 +2754,7 @@ namespace Unison.WhatsAppClient.Messages
             if (IncomingEnvelopeDisposition.ClassifyAddress(normalizedFromJid) == IncomingEnvelopeKind.StatusBroadcast ||
                 IncomingEnvelopeDisposition.ClassifyAddress(request.FromJid) == IncomingEnvelopeKind.StatusBroadcast)
             {
+                trace?.Mark("status");
                 IStatusService status = _resolveStatus();
                 if (status != null)
                 {
@@ -2708,6 +2840,7 @@ namespace Unison.WhatsAppClient.Messages
                 }
             }
 
+            trace?.Mark("control");
             if (await TryApplyIncomingEnvelopeControlAsync(
                     request.Message,
                     jid,
@@ -2740,7 +2873,8 @@ namespace Unison.WhatsAppClient.Messages
                 SelfDisplayName = request.SelfDisplayName,
                 QuietForSync = request.QuietForSync,
                 IsActiveChat = isActive,
-                IsWindowVisible = request.IsWindowVisible
+                IsWindowVisible = request.IsWindowVisible,
+                RouteTrace = trace
             }).ConfigureAwait(false);
         }
 
@@ -2806,10 +2940,12 @@ namespace Unison.WhatsAppClient.Messages
 
             string jid = request.ChatJid;
             bool isGroup = request.IsGroup;
+            IncomingRouteTrace trace = request.RouteTrace;
             string selfFallback = _strings != null
                 ? _strings.Get("Chat_SelfFallbackName", "You")
                 : "You";
 
+            trace?.Mark("render");
             MessageRenderInfo renderInfo = MessageRenderReader.Read(
                 request.Message,
                 line => Debug.WriteLine("[MessageFacade] " + line));
@@ -2834,6 +2970,7 @@ namespace Unison.WhatsAppClient.Messages
             string nameFromMsg = request.VerifiedName ?? request.PushName;
             if (!string.IsNullOrEmpty(nameFromMsg))
             {
+                trace?.Mark("push-name");
                 IContactService contacts = _resolveContacts();
                 contacts?.AcceptIncomingPushName(
                     nameFromMsg,
@@ -2843,6 +2980,7 @@ namespace Unison.WhatsAppClient.Messages
                     request.IsOffline);
             }
 
+            trace?.Mark("sender-names");
             string participantJid = JidHelper.Normalize(request.ParticipantJid);
             string participantAltJid = JidHelper.Normalize(request.ParticipantAltJid);
             string stripParticipantJid = ParticipantStripIdentity.PreferForDisplay(
@@ -2872,11 +3010,29 @@ namespace Unison.WhatsAppClient.Messages
                 request.IsWindowVisible,
                 suppressToastForSync: request.QuietForSync);
 
+            // Strip only: "~" on push-name winners. Bubble SenderName stays unmarked.
+            string stripSenderName = senderName;
+            if (isGroup && !isActuallyFromMe)
+            {
+                IContactService stripContacts = _resolveContacts();
+                string stripKey = !string.IsNullOrEmpty(stripParticipantJid)
+                    ? stripParticipantJid
+                    : participantJid;
+                if (stripContacts != null && !string.IsNullOrEmpty(stripKey))
+                {
+                    string marked = stripContacts.ResolveDisplayName(stripKey, "strip");
+                    if (!string.IsNullOrWhiteSpace(marked))
+                    {
+                        stripSenderName = marked.Trim();
+                    }
+                }
+            }
+
             string listAuthorPrefix = isGroup
                 ? ChatPreviewNormalizer.FormatListAuthorPrefix(
                     new ChatMessage
                     {
-                        SenderName = senderName,
+                        SenderName = stripSenderName,
                         IsFromMe = isActuallyFromMe,
                         ParticipantJid = participantJid
                     },
@@ -2925,10 +3081,12 @@ namespace Unison.WhatsAppClient.Messages
             ApplyHeldMessageState(jid, chatMessage);
 
             ChatPreviewKind previewKind = LiveChatPreviewApplier.ResolveKind(chatMessage, renderInfo);
+            trace?.Mark("timeline");
             IncomingTimelineAcceptResult timeline = AcceptIncomingTimeline(jid, chatMessage, isGroup);
 
             if (timeline.Kind == IncomingTimelineAcceptKind.AliasConsolidated)
             {
+                trace?.Mark("alias-consolidated");
                 await ApplyIncomingAliasConsolidatedAsync(new IncomingAliasConsolidatedApplyRequest
                 {
                     ChatJid = jid,
@@ -2949,6 +3107,7 @@ namespace Unison.WhatsAppClient.Messages
             if (timeline.Kind == IncomingTimelineAcceptKind.DuplicateSameChat ||
                 timeline.Kind == IncomingTimelineAcceptKind.AliasLinkedDuplicate)
             {
+                trace?.Mark("duplicate-preview");
                 await ApplyIncomingDuplicateAsync(new IncomingDuplicateApplyRequest
                 {
                     ChatJid = jid,
@@ -2967,6 +3126,7 @@ namespace Unison.WhatsAppClient.Messages
             }
 
             IncomingMediaHydrationPlan mediaPlan = IncomingMediaHydrationPlan.From(renderInfo);
+            trace?.Mark(request.IsOffline ? "inserted-offline-preview" : "inserted");
             await ApplyIncomingInsertedAsync(new IncomingInsertedApplyRequest
             {
                 ChatJid = jid,
@@ -3249,7 +3409,11 @@ namespace Unison.WhatsAppClient.Messages
                 return;
             }
 
-            LiveIncomingChatListApplyResult listApply = await chats.ApplyLiveIncomingChatListAsync(
+            // Do not await the UI strip on stage=route. When the dispatcher is busy
+            // (scroll / reshuffle), awaiting High for tip+Move held the pump past 12s
+            // (health-stall → message-timeout-skip) and the list felt frozen until the
+            // next toast. Strip + announce finish on their own; route returns after persist.
+            Task<LiveIncomingChatListApplyResult> stripTask = chats.ApplyLiveIncomingChatListAsync(
                 new LiveIncomingChatListApplyRequest
                 {
                     ChatJid = jid,
@@ -3268,15 +3432,72 @@ namespace Unison.WhatsAppClient.Messages
                     IsGroup = request.IsGroup,
                     AliasLid = aliasLid,
                     AliasPn = aliasPn
-                }).ConfigureAwait(false);
+                });
 
-            ChatItem notificationChat = listApply?.Chat;
+            _ = FinishLiveStripAnnounceAsync(
+                stripTask,
+                jid,
+                request.SenderName,
+                request.NotifyContent ?? request.DisplayContent,
+                request.IsGroup,
+                request.IsFromMe,
+                request.SuppressToast);
+
+            QueueIncomingPersist(jid, chatMessage);
+            UnloadMessageCacheIfInactive(jid);
+        }
+
+        /// <summary>
+        /// Waits for the urgent list strip, then fires toast. Never called with await from
+        /// the pump route — only fire-and-forget from <see cref="ApplyIncomingInsertedAsync"/>.
+        /// </summary>
+        private async Task FinishLiveStripAnnounceAsync(
+            Task<LiveIncomingChatListApplyResult> stripTask,
+            string jid,
+            string senderName,
+            string preview,
+            bool isGroup,
+            bool isFromMe,
+            bool suppressToast)
+        {
+            if (stripTask == null)
+            {
+                return;
+            }
+
+            LiveIncomingChatListApplyResult listApply = null;
+            var elapsed = Stopwatch.StartNew();
+            try
+            {
+                listApply = await stripTask.ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[MessageFacade] Live strip failed: " + ex.Message);
+                _diagnostics?.Write(
+                    "messages",
+                    "live-strip-failed",
+                    "jid=" + (jid ?? string.Empty) + "; error=" + ex.Message);
+            }
+            finally
+            {
+                elapsed.Stop();
+                if (elapsed.ElapsedMilliseconds >= 1000)
+                {
+                    _diagnostics?.Write(
+                        "messages",
+                        "live-strip-slow",
+                        "jid=" + (jid ?? string.Empty) +
+                        "; elapsedMs=" + elapsed.ElapsedMilliseconds);
+                }
+            }
+
+            ChatItem notificationChat = listApply != null ? listApply.Chat : null;
             int totalUnreadForNotify = listApply != null ? listApply.TotalUnread : 0;
-
-            string notificationName = notificationChat?.Name;
+            string notificationName = notificationChat != null ? notificationChat.Name : null;
             if (string.IsNullOrWhiteSpace(notificationName))
             {
-                notificationName = !string.IsNullOrWhiteSpace(listApply?.DisplayName)
+                notificationName = listApply != null && !string.IsNullOrWhiteSpace(listApply.DisplayName)
                     ? listApply.DisplayName
                     : _chatState.ResolveDisplayName(jid);
             }
@@ -3284,16 +3505,13 @@ namespace Unison.WhatsAppClient.Messages
             NotifyLiveIncoming(
                 jid,
                 notificationName,
-                request.SenderName,
-                request.NotifyContent ?? request.DisplayContent,
-                request.IsGroup,
-                request.IsFromMe,
-                request.SuppressToast,
+                senderName,
+                preview,
+                isGroup,
+                isFromMe,
+                suppressToast,
                 totalUnreadForNotify,
                 notificationChat);
-
-            QueueIncomingPersist(jid, chatMessage);
-            UnloadMessageCacheIfInactive(jid);
         }
 
         /// <inheritdoc />

@@ -2,6 +2,7 @@ using System;
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.Diagnostics;
+using System.Threading.Tasks;
 using System.Windows.Input;
 using Unison.Core.Constants;
 using Unison.Core.Helpers;
@@ -16,10 +17,12 @@ namespace Unison.Core.ViewModels
         private bool _sharePickerCatalogHooked;
         private IncomingSharePayload _pendingShare;
         private IncomingSharePayload _shareAwaitingChatApply;
+        private string _forwardSourceChatJid;
+        private string _forwardMessageId;
         private ObservableCollection<ChatItem> _sharePickerCandidates =
             new ObservableCollection<ChatItem>();
 
-        /// <summary>Share Target contact picker overlay visibility.</summary>
+        /// <summary>Share Target / Forward contact picker overlay visibility.</summary>
         public bool IsSharePickerOpen
         {
             get => _isSharePickerOpen;
@@ -40,6 +43,7 @@ namespace Unison.Core.ViewModels
                 else
                 {
                     UnhookSharePickerCatalog();
+                    ClearForwardPickerState();
                 }
             }
         }
@@ -59,8 +63,25 @@ namespace Unison.Core.ViewModels
             }
         }
 
+        /// <summary>
+        /// Share Target: "Send to…". Forward: localized Forward / Encaminhar
+        /// (<c>ChatDetail_ForwardMessage</c>).
+        /// </summary>
         public string SharePickerTitle =>
-            _strings?.Get("Share_PickChat.Text", "Send to…") ?? "Send to…";
+            IsForwardPickerOpen
+                ? (_strings?.Get("ChatDetail_ForwardMessage", "Forward") ?? "Forward")
+                : (_strings?.Get("Share_PickChat.Text", "Send to…") ?? "Send to…");
+
+        /// <summary>Message id held while the Forward people picker is open; null otherwise.</summary>
+        public string ForwardingMessageId => _forwardMessageId;
+
+        /// <summary>Source chat JID held with <see cref="ForwardingMessageId"/>.</summary>
+        public string ForwardingSourceChatJid => _forwardSourceChatJid;
+
+        /// <summary>True when the people overlay is open for Forward (not Share Target).</summary>
+        public bool IsForwardPickerOpen =>
+            !string.IsNullOrWhiteSpace(_forwardMessageId) &&
+            !string.IsNullOrWhiteSpace(_forwardSourceChatJid);
 
         /// <summary>Payload waiting for the user to pick a chat (picker open).</summary>
         public IncomingSharePayload PendingShare => _pendingShare;
@@ -73,6 +94,57 @@ namespace Unison.Core.ViewModels
         {
             CloseSharePickerCommand = new RelayCommand(CloseSharePicker);
             SelectShareChatCommand = new RelayCommand<ChatItem>(SelectShareChat);
+        }
+
+        /// <inheritdoc />
+        public void OpenForwardPicker(string sourceChatJid, string messageId)
+        {
+            Debug.WriteLine(
+                "[Forward] OpenForwardPicker enter; source=" + (sourceChatJid ?? "(null)") +
+                "; messageId=" + (messageId ?? "(null)") +
+                "; wasOpen=" + _isSharePickerOpen +
+                "; surface=" + AppSurface);
+
+            if (string.IsNullOrWhiteSpace(sourceChatJid) || string.IsNullOrWhiteSpace(messageId))
+            {
+                Debug.WriteLine("[Forward] OpenForwardPicker aborted: empty source/messageId");
+                return;
+            }
+
+            _pendingShare = null;
+            _shareAwaitingChatApply = null;
+            OnPropertyChanged(nameof(PendingShare));
+
+            _forwardSourceChatJid = sourceChatJid.Trim();
+            _forwardMessageId = messageId.Trim();
+            OnPropertyChanged(nameof(ForwardingSourceChatJid));
+            OnPropertyChanged(nameof(ForwardingMessageId));
+            OnPropertyChanged(nameof(IsForwardPickerOpen));
+            OnPropertyChanged(nameof(SharePickerTitle));
+
+            OpenSharePicker();
+            Debug.WriteLine(
+                "[Forward] OpenForwardPicker done; source=" + _forwardSourceChatJid +
+                "; messageId=" + _forwardMessageId +
+                "; IsSharePickerOpen=" + _isSharePickerOpen +
+                "; title=" + SharePickerTitle +
+                "; candidates=" + SharePickerCandidates.Count);
+        }
+
+        private void ClearForwardPickerState()
+        {
+            if (string.IsNullOrWhiteSpace(_forwardMessageId) &&
+                string.IsNullOrWhiteSpace(_forwardSourceChatJid))
+            {
+                return;
+            }
+
+            _forwardSourceChatJid = null;
+            _forwardMessageId = null;
+            OnPropertyChanged(nameof(ForwardingSourceChatJid));
+            OnPropertyChanged(nameof(ForwardingMessageId));
+            OnPropertyChanged(nameof(IsForwardPickerOpen));
+            OnPropertyChanged(nameof(SharePickerTitle));
         }
 
         /// <summary>
@@ -91,9 +163,11 @@ namespace Unison.Core.ViewModels
                 return;
             }
 
+            ClearForwardPickerState();
             _pendingShare = payload;
             _shareAwaitingChatApply = null;
             OnPropertyChanged(nameof(PendingShare));
+            OnPropertyChanged(nameof(SharePickerTitle));
 
             if (!string.Equals(AppSurface, SurfaceConnected, StringComparison.Ordinal))
             {
@@ -121,11 +195,16 @@ namespace Unison.Core.ViewModels
 
         public void CloseSharePicker()
         {
+            bool hadSharePayload = _pendingShare != null;
             IsSharePickerOpen = false;
             _pendingShare = null;
             OnPropertyChanged(nameof(PendingShare));
+            ClearForwardPickerState();
             // Cancel = Complete (WinRT success path), not Fail — dismisses Mobile share host.
-            _shareTarget?.Complete();
+            if (hadSharePayload)
+            {
+                _shareTarget?.Complete();
+            }
         }
 
         /// <summary>
@@ -185,9 +264,14 @@ namespace Unison.Core.ViewModels
 
         private void OpenSharePicker()
         {
+            Debug.WriteLine(
+                "[Forward/Share] OpenSharePicker; alreadyOpen=" + _isSharePickerOpen +
+                "; forward=" + IsForwardPickerOpen);
             if (!_isSharePickerOpen)
             {
                 IsSharePickerOpen = true;
+                Debug.WriteLine(
+                    "[Forward/Share] IsSharePickerOpen set true; now=" + _isSharePickerOpen);
                 return;
             }
 
@@ -200,6 +284,16 @@ namespace Unison.Core.ViewModels
         {
             if (chat == null || string.IsNullOrWhiteSpace(chat.JID))
             {
+                return;
+            }
+
+            if (IsForwardPickerOpen)
+            {
+                string sourceJid = _forwardSourceChatJid;
+                string messageId = _forwardMessageId;
+                string targetJid = chat.JID.Trim();
+                IsSharePickerOpen = false;
+                _ = ForwardSelectedAsync(sourceJid, messageId, targetJid);
                 return;
             }
 
@@ -217,6 +311,52 @@ namespace Unison.Core.ViewModels
 
             string arguments = "chat=" + Uri.EscapeDataString(chat.JID.Trim());
             QueueOpenChatFromActivation(arguments, delayChatListUntilConversationReady: false);
+        }
+
+        private async Task ForwardSelectedAsync(string sourceChatJid, string messageId, string targetJid)
+        {
+            if (_messageService == null)
+            {
+                Debug.WriteLine("[Forward] SelectShareChat aborted: IMessageService is NULL");
+                return;
+            }
+
+            try
+            {
+                Debug.WriteLine(
+                    "[Forward] SelectShareChat → ForwardMessageAsync source=" + sourceChatJid +
+                    "; id=" + messageId +
+                    "; to=" + targetJid);
+                await _messageService.ForwardMessageAsync(sourceChatJid, messageId, targetJid)
+                    .ConfigureAwait(false);
+
+                // Open the destination so the user sees the forwarded bubble (same deep-link path as Share).
+                await OpenChatAfterForwardAsync(targetJid).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[Forward] ForwardMessageAsync failed: " + ex.Message);
+            }
+        }
+
+        private Task OpenChatAfterForwardAsync(string targetJid)
+        {
+            if (string.IsNullOrWhiteSpace(targetJid))
+            {
+                return Task.CompletedTask;
+            }
+
+            string arguments = "chat=" + Uri.EscapeDataString(targetJid.Trim());
+            Action open = () =>
+                QueueOpenChatFromActivation(arguments, delayChatListUntilConversationReady: false);
+
+            if (_dispatcher != null)
+            {
+                return _dispatcher.RunAsync(open);
+            }
+
+            open();
+            return Task.CompletedTask;
         }
 
         private void HookSharePickerCatalog()

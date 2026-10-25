@@ -152,6 +152,12 @@ namespace Unison.Core.Contracts.WhatsApp
         /// <summary>Same send, with @mentions already turned into JIDs and the everyone flag.</summary>
         Task<ChatMessage> SendTextMessageAsync(string jid, OutgoingTextMentions message);
 
+        /// <summary>
+        /// Forwards a stored message to another chat (Baileys-style isForwarded).
+        /// MVP: text body or media caption only — full media re-upload lands later.
+        /// </summary>
+        Task<ChatMessage> ForwardMessageAsync(string sourceChatJid, string messageId, string targetJid);
+
         Task SendImageAsync(string jid, byte[] imageBytes, string caption);
 
         /// <summary>

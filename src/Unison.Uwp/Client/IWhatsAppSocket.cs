@@ -175,7 +175,9 @@ namespace Unison.Uwp.Client
             string explicitMessageId = null,
             IList<string> mentions = null,
             bool mentionAll = false,
-            OutgoingQuote quote = null);
+            OutgoingQuote quote = null,
+            bool markAsForwarded = false,
+            uint forwardingScore = 0);
 
         Task<string> SendImageMessageAsync(
             string jid,

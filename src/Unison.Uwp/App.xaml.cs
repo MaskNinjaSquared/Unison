@@ -203,6 +203,7 @@ namespace Unison.Uwp
         {
             var services = new ServiceCollection();
 
+            services.AddSingleton<UiStallWatchdog>();
             services.AddSingleton<IDispatcher, DispatcherService>();
             // Not the IDispatcher above: before a window exists this one drops work instead of
             // running it inline. The client and its façades marshal bound-list edits through it.
@@ -214,7 +215,8 @@ namespace Unison.Uwp
             //
             // The concrete type is registered too because WhatsAppService still reaches the
             // transitional dictionaries on it. That registration goes away with those.
-            services.AddSingleton<ChatStateStore>(_ => new ChatStateStore(new UiThreadDispatcherService()));
+            services.AddSingleton<ChatStateStore>(sp => new ChatStateStore(
+                new UiThreadDispatcherService(sp.GetRequiredService<UiStallWatchdog>())));
             services.AddSingleton<IChatStateStore>(sp => sp.GetRequiredService<ChatStateStore>());
             services.AddSingleton<IDialogService, DialogService>();
             services.AddSingleton<IStartTilePinService, StartTilePinService>();
@@ -396,7 +398,8 @@ namespace Unison.Uwp
                 sp.GetRequiredService<ChatStateStore>(),
                 sp.GetRequiredService<ChatRowIndex>(),
                 sp.GetRequiredService<JidAliasTable>(),
-                sp.GetRequiredService<ChatStateStore>().PushNames));
+                sp.GetRequiredService<ChatStateStore>().PushNames,
+                sp.GetRequiredService<IRuntimeDiagnostics>()));
             services.AddSingleton(sp => new ChatListAliasMerge(
                 sp.GetRequiredService<AttachedUiDispatcher>(),
                 sp.GetRequiredService<ChatStateStore>(),
@@ -783,7 +786,9 @@ namespace Unison.Uwp
                 sp.GetRequiredService<IStringResources>(),
                 sp.GetRequiredService<IDispatcher>(),
                 sp.GetRequiredService<IContactService>(),
-                sp.GetRequiredService<IChatService>()));
+                sp.GetRequiredService<IChatService>(),
+                onDemand: sp.GetRequiredService<ISystemInfoProvider>().IsMobile(),
+                timelinePriority: sp.GetRequiredService<ChatTimelineLoadPriorityGate>()));
             // The group apply and the roster restore live in Core and run from GroupFacade; they
             // label members and rows through the shared contact-name resolver.
             services.AddSingleton<IGroupNaming>(sp => new GroupNaming(
@@ -908,6 +913,8 @@ namespace Unison.Uwp
             services.AddTransient<LoginViewModel>();
             services.AddTransient<StartViewModel>();
             services.AddSingleton<ShellViewModel>();
+            services.AddSingleton<IForwardMessagePicker>(sp =>
+                sp.GetRequiredService<ShellViewModel>());
             services.AddSingleton<IAppActivationRouter>(sp => new AppActivationRouter(
                 sp.GetRequiredService<ShellViewModel>(),
                 sp.GetRequiredService<IChatService>(),
@@ -931,6 +938,7 @@ namespace Unison.Uwp
             // never without one: whichever surface happens to come up first, the container is
             // already built by then.
             Services.GetRequiredService<AttachedUiDispatcher>().Attach(rootFrame?.Dispatcher);
+            Services.GetRequiredService<UiStallWatchdog>().Start(rootFrame?.Dispatcher);
             // Message/Chat/Contact façades resolve lazily via Func in WhatsAppService.Create.
             // ConnectionFacade hooks IConnectionEventSource in its ctor (same WhatsAppService).
             Services.GetRequiredService<IConnectionService>();

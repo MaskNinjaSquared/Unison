@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using Unison.Core.Contracts;
 using Unison.Core.Contracts.WhatsApp;
@@ -21,7 +22,9 @@ namespace Unison.Uwp.UI.Templates
 
         /// <summary>
         /// Legacy Mobile Hold must not let the platform auto-open Grid.ContextFlyout.
-        /// Flyouts are stashed here so mouse ShowAt still works.
+        /// Stash is keyed by the stable <see cref="ListViewItem"/> (not the template Grid):
+        /// recycling can replace the Grid and drop a Grid-keyed ConditionalWeakTable entry,
+        /// which left ResolveRowContextMenu null on right-click.
         /// </summary>
         private static readonly ConditionalWeakTable<FrameworkElement, MenuFlyout> DetachedRowMenus =
             new ConditionalWeakTable<FrameworkElement, MenuFlyout>();
@@ -36,24 +39,43 @@ namespace Unison.Uwp.UI.Templates
         /// coordinates. Always opens against the template <c>Grid</c> (feature/2.1), so
         /// <see cref="FlyoutBase.Target"/>.DataContext is the <see cref="ChatItem"/>.
         /// </summary>
-        public static void ShowRowContextMenu(FrameworkElement anchor, Point position = default(Point))
+        public static bool TryShowRowContextMenu(FrameworkElement anchor, Point position = default(Point))
         {
             if (anchor == null)
             {
-                return;
+                Debug.WriteLine("[ChatListContext] Templates.TryShow: anchor null");
+                return false;
             }
 
-            FrameworkElement root = ResolveTemplateRoot(anchor);
+            // Recycle may have left ContextFlyout cleared without a ListViewItem stash — retry.
+            if (ResolveRowContextMenu(anchor) == null)
+            {
+                DetachRowContextFlyoutForLegacyHold(anchor);
+            }
+
+            if (ResolveRowContextMenu(anchor) == null)
+            {
+                EnsureRowContextMenuFromTemplate(anchor);
+            }
+
+            FrameworkElement root = ResolveMenuPlacementRoot(anchor);
             MenuFlyout flyout = ResolveRowContextMenu(anchor);
             if (root == null || flyout == null)
             {
-                return;
+                Debug.WriteLine(
+                    "[ChatListContext] Templates.TryShow: root=" + (root != null) +
+                    "; flyout=" + (flyout != null) +
+                    "; anchor=" + anchor.GetType().Name +
+                    "; container=" + (FindListViewItem(anchor)?.GetType().Name ?? "(null)"));
+                return false;
             }
 
             // ShowAt(root): Target is the row Grid → DataContext is ChatItem (feature/2.1).
 
             Point atRoot = position;
-            if (position != default(Point) && !ReferenceEquals(anchor, root))
+            if (!double.IsNaN(position.X) &&
+                !double.IsNaN(position.Y) &&
+                !ReferenceEquals(anchor, root))
             {
                 try
                 {
@@ -61,13 +83,13 @@ namespace Unison.Uwp.UI.Templates
                 }
                 catch
                 {
-                    atRoot = default(Point);
+                    atRoot = new Point(double.NaN, double.NaN);
                 }
             }
 
             try
             {
-                if (atRoot == default(Point))
+                if (double.IsNaN(atRoot.X) || double.IsNaN(atRoot.Y))
                 {
                     flyout.ShowAt(root);
                 }
@@ -75,74 +97,281 @@ namespace Unison.Uwp.UI.Templates
                 {
                     flyout.ShowAt(root, atRoot);
                 }
+
+                Debug.WriteLine(
+                    "[ChatListContext] Templates.ShowAt OK; root=" + root.GetType().Name);
+                return true;
             }
-            catch
+            catch (Exception ex)
             {
+                Debug.WriteLine("[ChatListContext] Templates.ShowAt failed: " + ex.Message);
                 try
                 {
                     flyout.ShowAt(root);
+                    Debug.WriteLine("[ChatListContext] Templates.ShowAt fallback OK");
+                    return true;
                 }
-                catch
+                catch (Exception ex2)
                 {
+                    Debug.WriteLine(
+                        "[ChatListContext] Templates.ShowAt fallback failed: " + ex2.Message);
+                    return false;
                 }
             }
         }
 
+        /// <summary>Legacy/callers that do not need a shown/failed result.</summary>
+        public static void ShowRowContextMenu(FrameworkElement anchor, Point position = default(Point))
+        {
+            TryShowRowContextMenu(anchor, position);
+        }
+
         public static MenuFlyout ResolveRowContextMenu(FrameworkElement anchor)
         {
+            ListViewItem container = FindListViewItem(anchor);
+            MenuFlyout fromContainer = TryGetDetached(container);
+            if (fromContainer != null)
+            {
+                return fromContainer;
+            }
+
+            FrameworkElement root = ResolveMenuPlacementRoot(anchor);
+            MenuFlyout fromRoot = TryMenuFromElement(root);
+            if (fromRoot != null)
+            {
+                // Promote Grid stash → container so recycle keeps the flyout.
+                StashDetached(container, fromRoot);
+                return fromRoot;
+            }
+
+            return FindMenuInSubtree(anchor);
+        }
+
+        private static FrameworkElement ResolveMenuPlacementRoot(FrameworkElement anchor)
+        {
             FrameworkElement root = ResolveTemplateRoot(anchor);
-            if (root == null)
+            if (TryMenuFromElement(root) != null)
+            {
+                return root;
+            }
+
+            FrameworkElement fromTree = FindMenuOwnerInSubtree(anchor);
+            return fromTree ?? root;
+        }
+
+        private static MenuFlyout TryMenuFromElement(FrameworkElement element)
+        {
+            if (element == null)
+            {
+                return null;
+            }
+
+            MenuFlyout detached = TryGetDetached(element);
+            if (detached != null)
+            {
+                return detached;
+            }
+
+            return element.ContextFlyout as MenuFlyout
+                ?? element.FindName(RowMenuName) as MenuFlyout;
+        }
+
+        private static MenuFlyout TryGetDetached(FrameworkElement element)
+        {
+            if (element == null)
             {
                 return null;
             }
 
             MenuFlyout detached;
-            if (DetachedRowMenus.TryGetValue(root, out detached) && detached != null)
-            {
-                return detached;
-            }
-
-            return root.ContextFlyout as MenuFlyout
-                ?? root.FindName(RowMenuName) as MenuFlyout;
+            return DetachedRowMenus.TryGetValue(element, out detached) && detached != null
+                ? detached
+                : null;
         }
 
-        /// <summary>
-        /// Legacy only: clear template <see cref="UIElement.ContextFlyout"/> so touch Hold
-        /// cannot auto-open the MenuFlyout while CommandBar actions open. Mouse still
-        /// <see cref="ShowRowContextMenu"/> via the stashed flyout.
-        /// </summary>
-        public static void DetachRowContextFlyoutForLegacyHold(FrameworkElement anchor)
+        private static void StashDetached(FrameworkElement key, MenuFlyout flyout)
         {
-            FrameworkElement root = ResolveTemplateRoot(anchor);
-            if (root == null)
-            {
-                return;
-            }
-
-            MenuFlyout existing;
-            if (DetachedRowMenus.TryGetValue(root, out existing) && existing != null)
-            {
-                root.ContextFlyout = null;
-                return;
-            }
-
-            var flyout = root.ContextFlyout as MenuFlyout
-                ?? root.FindName(RowMenuName) as MenuFlyout;
-            if (flyout == null)
+            if (key == null || flyout == null || TryGetDetached(key) != null)
             {
                 return;
             }
 
             try
             {
-                DetachedRowMenus.Add(root, flyout);
+                DetachedRowMenus.Add(key, flyout);
             }
             catch (ArgumentException)
             {
-                // Already tracked for this root instance.
+            }
+        }
+
+        private static MenuFlyout FindMenuInSubtree(DependencyObject start)
+        {
+            FrameworkElement owner = FindMenuOwnerInSubtree(start);
+            return owner == null ? null : TryMenuFromElement(owner);
+        }
+
+        private static FrameworkElement FindMenuOwnerInSubtree(DependencyObject start)
+        {
+            if (start == null)
+            {
+                return null;
             }
 
-            root.ContextFlyout = null;
+            int count = VisualTreeHelper.GetChildrenCount(start);
+            for (int i = 0; i < count; i++)
+            {
+                var child = VisualTreeHelper.GetChild(start, i) as FrameworkElement;
+                if (child == null)
+                {
+                    continue;
+                }
+
+                if (TryMenuFromElement(child) != null)
+                {
+                    return child;
+                }
+
+                FrameworkElement nested = FindMenuOwnerInSubtree(child);
+                if (nested != null)
+                {
+                    return nested;
+                }
+            }
+
+            return null;
+        }
+
+        private static ListViewItem FindListViewItem(DependencyObject start)
+        {
+            DependencyObject current = start;
+            while (current != null)
+            {
+                if (current is ListViewItem item)
+                {
+                    return item;
+                }
+
+                current = VisualTreeHelper.GetParent(current);
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// Legacy only: clear template <see cref="UIElement.ContextFlyout"/> so touch Hold
+        /// cannot auto-open the MenuFlyout while CommandBar actions open. Mouse still
+        /// <see cref="ShowRowContextMenu"/> via the stashed flyout on the <see cref="ListViewItem"/>.
+        /// </summary>
+        public static void DetachRowContextFlyoutForLegacyHold(FrameworkElement anchor)
+        {
+            ListViewItem container = FindListViewItem(anchor) ?? anchor as ListViewItem;
+            FrameworkElement root = ResolveMenuPlacementRoot(anchor);
+
+            MenuFlyout already = TryGetDetached(container) ?? TryGetDetached(root);
+            if (already != null)
+            {
+                StashDetached(container, already);
+                ClearContextFlyout(root);
+                ClearContextFlyout(FindMenuOwnerInSubtree(anchor));
+                Debug.WriteLine(
+                    "[ChatListContext] Detach: already stashed; container=" +
+                    (container != null));
+                return;
+            }
+
+            MenuFlyout flyout = TryMenuFromElement(root) ?? FindMenuInSubtree(anchor);
+            if (flyout == null)
+            {
+                Debug.WriteLine(
+                    "[ChatListContext] Detach: no flyout yet; root=" +
+                    (root?.GetType().Name ?? "(null)") +
+                    "; hasTemplateRoot=" +
+                    (container?.ContentTemplateRoot != null));
+                return;
+            }
+
+            FrameworkElement owner = root;
+            if (owner != null && !ReferenceEquals(owner.ContextFlyout, flyout))
+            {
+                owner = FindMenuOwnerInSubtree(anchor) ?? root;
+            }
+
+            StashDetached(container, flyout);
+            StashDetached(owner, flyout);
+            ClearContextFlyout(owner);
+            Debug.WriteLine(
+                "[ChatListContext] Detach: stashed on ListViewItem=" + (container != null) +
+                "; owner=" + (owner?.GetType().Name ?? "(null)"));
+        }
+
+        private static void ClearContextFlyout(FrameworkElement element)
+        {
+            if (element != null && element.ContextFlyout != null)
+            {
+                element.ContextFlyout = null;
+            }
+        }
+
+        /// <summary>
+        /// Rows detached under the old Grid-keyed stash can lose the MenuFlyout after recycle.
+        /// Inflate a fresh copy from the list's <see cref="ListView.ItemTemplate"/> and stash it
+        /// on the ListViewItem (template lives in page resources, not Application.Current).
+        /// </summary>
+        private static void EnsureRowContextMenuFromTemplate(FrameworkElement anchor)
+        {
+            ListViewItem container = FindListViewItem(anchor) ?? anchor as ListViewItem;
+            if (container == null || TryGetDetached(container) != null)
+            {
+                return;
+            }
+
+            DataTemplate template = null;
+            DependencyObject current = container;
+            while (current != null && template == null)
+            {
+                var list = current as ListView;
+                if (list != null)
+                {
+                    template = list.ItemTemplate;
+                    break;
+                }
+
+                current = VisualTreeHelper.GetParent(current);
+            }
+
+            if (template == null)
+            {
+                Debug.WriteLine("[ChatListContext] Ensure: ItemTemplate missing on ListView");
+                return;
+            }
+
+            FrameworkElement inflated = null;
+            try
+            {
+                inflated = template.LoadContent() as FrameworkElement;
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[ChatListContext] Ensure LoadContent failed: " + ex.Message);
+                return;
+            }
+
+            MenuFlyout flyout = inflated?.ContextFlyout as MenuFlyout
+                ?? inflated?.FindName(RowMenuName) as MenuFlyout;
+            if (flyout == null)
+            {
+                Debug.WriteLine("[ChatListContext] Ensure: inflated root has no MenuFlyout");
+                return;
+            }
+
+            if (inflated != null)
+            {
+                inflated.ContextFlyout = null;
+            }
+
+            StashDetached(container, flyout);
+            Debug.WriteLine("[ChatListContext] Ensure: rehydrated MenuFlyout onto ListViewItem");
         }
 
         /// <summary>

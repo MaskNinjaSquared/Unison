@@ -1001,6 +1001,7 @@ namespace Unison.Uwp.Client
                 return new ProfilePictureResult
                 {
                     Url = result.Url,
+                    Id = result.Id,
                     TargetJid = jid,
                     TokenLookupJid = jid,
                     IsNotFound = result.IsNotFound,
@@ -1286,9 +1287,16 @@ namespace Unison.Uwp.Client
             string explicitMessageId = null,
             System.Collections.Generic.IList<string> mentions = null,
             bool mentionAll = false,
-            OutgoingQuote quote = null)
+            OutgoingQuote quote = null,
+            bool markAsForwarded = false,
+            uint forwardingScore = 0)
         {
-            var content = new TextContent(text) { MentionAll = mentionAll };
+            var content = new TextContent(text)
+            {
+                MentionAll = mentionAll,
+                MarkAsForwarded = markAsForwarded,
+                ForwardingScore = forwardingScore
+            };
             if (mentions != null)
             {
                 for (int i = 0; i < mentions.Count; i++)

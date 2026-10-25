@@ -68,7 +68,7 @@ namespace Unison.Core.Helpers
         /// <summary>
         /// True when a scrim tap should dismiss the bar.
         /// </summary>
-        public bool ShouldDismissFromScrim(DateTime utcNow)
+        public bool ShouldDismissFromScrim(DateTime utcNow, bool ignoreGraceWindow = false)
         {
             if (_suppressScrimDismisses > 0)
             {
@@ -76,7 +76,8 @@ namespace Unison.Core.Helpers
                 return false;
             }
 
-            if (_openedUtc != DateTime.MinValue &&
+            if (!ignoreGraceWindow &&
+                _openedUtc != DateTime.MinValue &&
                 utcNow - _openedUtc < ScrimDismissGrace)
             {
                 return false;

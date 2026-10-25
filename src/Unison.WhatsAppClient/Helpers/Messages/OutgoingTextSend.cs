@@ -88,6 +88,10 @@ namespace Unison.WhatsAppClient.Helpers
                 message.Mentions,
                 message.MentionAll,
                 message.Quote);
+            if (message.MarkAsForwarded)
+            {
+                bubble.IsForwarded = true;
+            }
 
             _acceptOutgoing(chatJid, bubble);
             await _showLocalPreview(chatJid, bubble, ChatPreviewKind.Text);
@@ -132,6 +136,8 @@ namespace Unison.WhatsAppClient.Helpers
                     Mentions = message.Mentions,
                     MentionAll = message.MentionAll,
                     Quote = message.Quote,
+                    MarkAsForwarded = message.MarkAsForwarded,
+                    ForwardingScore = message.ForwardingScore,
                     MessageId = messageId,
                     Attempt = attempt,
                     ConnectTimeout = OutgoingTextSendRetry.ConnectTimeout(attempt),

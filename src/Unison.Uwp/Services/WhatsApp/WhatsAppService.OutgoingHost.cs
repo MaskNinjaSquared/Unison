@@ -88,7 +88,9 @@ namespace Unison.Uwp.Services.WhatsApp
                     request.MessageId,
                     request.Mentions,
                     request.MentionAll,
-                    request.Quote);
+                    request.Quote,
+                    request.MarkAsForwarded,
+                    request.ForwardingScore);
                 Task completed = await Task.WhenAny(sendTask, Task.Delay(request.WriteTimeout));
                 if (completed != sendTask)
                 {

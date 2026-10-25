@@ -103,8 +103,9 @@
                   Unloaded="ChatList_Unloaded"
                   SelectionChanged="ChatList_SelectionChanged"
                   ContainerContentChanging="ChatList_ContainerContentChanging"
-                  RightTapped="ChatList_RightTapped"
                   PointerPressed="ChatList_PointerPressed"
+                  RightTapped="ChatList_RightTapped"
+                  ContextRequested="ChatList_ContextRequested"
                   ShowsScrollingPlaceholders="False"
                   Margin="0,0,0,0">
         </ListView>
@@ -184,8 +185,9 @@
                       IsRightTapEnabled="True"
                       SelectionChanged="CommunityHubList_SelectionChanged"
                       ContainerContentChanging="CommunityHubList_ContainerContentChanging"
-                      RightTapped="ChatList_RightTapped"
                       PointerPressed="ChatList_PointerPressed"
+                      RightTapped="ChatList_RightTapped"
+                      ContextRequested="ChatList_ContextRequested"
                       ShowsScrollingPlaceholders="False"/>
         </Grid>
 
@@ -262,12 +264,15 @@
         <!-- Hold on a row: same layout as ChatDetail MessageActions —
              scrim over list (rows 0–2), actions bar on row 3 above ListCommandBar.
              Desktop right-click uses MenuFlyout at the pointer (see code-behind). -->
+        <!-- Invisible dismiss layer above the list (not the actions bar). Tap/press outside closes. -->
         <Border x:Name="ChatActionsScrim"
                 Grid.Row="0"
                 Grid.RowSpan="3"
                 Canvas.ZIndex="20"
                 Background="Transparent"
+                IsHitTestVisible="True"
                 Visibility="Collapsed"
+                PointerPressed="ChatActionsScrim_PointerPressed"
                 Tapped="ChatActionsScrim_Tapped"/>
         <Grid x:Name="ChatActionsBarHost"
               Grid.Row="3"

@@ -148,6 +148,15 @@ namespace Unison.Core.ViewModels
 
             CopyCommand = new RelayCommand(CopyText, () => !string.IsNullOrWhiteSpace(CopyableText));
             ReplyCommand = new RelayCommand(() => ReplyRequested?.Invoke(this, EventArgs.Empty));
+            ForwardCommand = new RelayCommand(
+                () =>
+                {
+                    System.Diagnostics.Debug.WriteLine(
+                        "[Forward] ChatMessageViewModel.ForwardCommand id=" + (Model?.Id ?? "(null)") +
+                        "; listeners=" + (ForwardRequested == null ? 0 : ForwardRequested.GetInvocationList().Length));
+                    ForwardRequested?.Invoke(this, EventArgs.Empty);
+                },
+                () => !string.IsNullOrWhiteSpace(Model?.Id));
 
             PlayGifCommand = new RelayCommand(
                 StartGifPlayback,
@@ -414,7 +423,12 @@ namespace Unison.Core.ViewModels
         /// <summary>Reply to this bubble. The conversation opens the composer bar.</summary>
         public ICommand ReplyCommand { get; }
 
+        /// <summary>Forward this bubble. The shell opens the people picker titled Forward.</summary>
+        public ICommand ForwardCommand { get; }
+
         public event EventHandler ReplyRequested;
+
+        public event EventHandler ForwardRequested;
 
         /// <summary>Download to cache if needed, then FileSavePicker to disk.</summary>
         public ICommand ExportDocumentCommand { get; }

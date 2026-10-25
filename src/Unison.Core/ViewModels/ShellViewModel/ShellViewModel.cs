@@ -15,7 +15,7 @@ namespace Unison.Core.ViewModels
     /// App shell surface (start / login / connected) and chat list/detail pane intent.
     /// Root navigation via <see cref="INavigator"/>; shell sections via NavigateInShell.
     /// </summary>
-    public partial class ShellViewModel : Observable
+    public partial class ShellViewModel : Observable, IForwardMessagePicker
     {
         public const string SurfaceStartup = "Startup";
         public const string SurfaceStart = "Start";
@@ -34,6 +34,9 @@ namespace Unison.Core.ViewModels
 
         /// <summary>Only for the unread total behind the tile badge.</summary>
         private readonly IChatService _chatService;
+
+        /// <summary>Forward send from the people picker (text/caption MVP).</summary>
+        private readonly IMessageService _messageService;
         private readonly IProfileService _profileService;
         private readonly IDispatcher _dispatcher;
         private readonly INotificationService _notificationService;
@@ -104,11 +107,13 @@ namespace Unison.Core.ViewModels
             IBackgroundAccessPrompt backgroundAccessPrompt = null,
             IContactService contactService = null,
             ChatListDeepLinkHoldGate deepLinkHold = null,
-            IShareTargetSession shareTarget = null)
+            IShareTargetSession shareTarget = null,
+            IMessageService messageService = null)
         {
             _chatState = chatState ?? throw new ArgumentNullException(nameof(chatState));
             _connectionService = connectionService ?? throw new ArgumentNullException(nameof(connectionService));
             _chatService = chatService;
+            _messageService = messageService;
             _profileService = profileService;
             _dispatcher = dispatcher;
             _notificationService = notificationService;

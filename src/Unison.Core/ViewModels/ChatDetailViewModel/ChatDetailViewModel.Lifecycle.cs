@@ -72,6 +72,8 @@ namespace Unison.Core.ViewModels
                 vm.PinnedChanged += OnBubblePinnedChanged;
                 vm.ReplyRequested -= OnBubbleReplyRequested;
                 vm.ReplyRequested += OnBubbleReplyRequested;
+                vm.ForwardRequested -= OnBubbleForwardRequested;
+                vm.ForwardRequested += OnBubbleForwardRequested;
                 vm.AttachMentionLookup(ActiveChat?.MentionLookup);
             }
 
@@ -188,6 +190,7 @@ namespace Unison.Core.ViewModels
 
             vm.PinnedChanged -= OnBubblePinnedChanged;
             vm.ReplyRequested -= OnBubbleReplyRequested;
+            vm.ForwardRequested -= OnBubbleForwardRequested;
             vm.Detach();
         }
 
@@ -197,6 +200,14 @@ namespace Unison.Core.ViewModels
         private void OnBubbleReplyRequested(object sender, EventArgs e)
         {
             BeginReply(sender as ChatMessageViewModel);
+        }
+
+        private void OnBubbleForwardRequested(object sender, EventArgs e)
+        {
+            System.Diagnostics.Debug.WriteLine(
+                "[Forward] OnBubbleForwardRequested id=" +
+                ((sender as ChatMessageViewModel)?.Model?.Id ?? "(null)"));
+            BeginForward(sender as ChatMessageViewModel);
         }
 
         private ChatMessageViewModel _composerReply;
@@ -237,6 +248,46 @@ namespace Unison.Core.ViewModels
         public void DismissReply()
         {
             ComposerReply = null;
+        }
+
+        /// <summary>
+        /// Opens the shell people picker titled Forward, holding source chat + message id.
+        /// Person click sends via <see cref="Contracts.WhatsApp.IMessageService.ForwardMessageAsync"/>.
+        /// </summary>
+        public void BeginForward(ChatMessageViewModel message)
+        {
+            if (message == null || message.Model == null || string.IsNullOrWhiteSpace(message.Model.Id))
+            {
+                System.Diagnostics.Debug.WriteLine(
+                    "[Forward] BeginForward aborted: missing message/id");
+                return;
+            }
+
+            string sourceJid = ActiveChat != null ? ActiveChat.JID : null;
+            if (string.IsNullOrWhiteSpace(sourceJid))
+            {
+                sourceJid = message.Model.RemoteJid;
+            }
+
+            if (string.IsNullOrWhiteSpace(sourceJid))
+            {
+                System.Diagnostics.Debug.WriteLine(
+                    "[Forward] BeginForward aborted: missing source chat JID");
+                return;
+            }
+
+            if (_forwardPicker == null)
+            {
+                System.Diagnostics.Debug.WriteLine(
+                    "[Forward] BeginForward aborted: IForwardMessagePicker is NULL (DI)");
+                return;
+            }
+
+            System.Diagnostics.Debug.WriteLine(
+                "[Forward] BeginForward → OpenForwardPicker source=" + sourceJid +
+                "; id=" + message.Model.Id);
+            DismissMessageActions();
+            _forwardPicker.OpenForwardPicker(sourceJid, message.Model.Id);
         }
 
     }
