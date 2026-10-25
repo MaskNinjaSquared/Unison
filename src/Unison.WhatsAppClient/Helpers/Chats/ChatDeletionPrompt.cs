@@ -36,23 +36,28 @@ namespace Unison.WhatsAppClient.Helpers
                 return false;
             }
 
-            if (dialogs != null)
+            // Never delete without an explicit yes — silent skip when dialogs is missing
+            // used to wipe the conversation with no prompt.
+            if (dialogs == null)
             {
-                bool confirmed = await dialogs.ShowConfirmAsync(
-                    title: Get(strings, "Chat_DeleteChatTitle", "Delete chat?"),
-                    content: string.Format(
-                        Get(
-                            strings,
-                            "Chat_DeleteChatBody",
-                            "\"{0}\" and its messages will be deleted on this phone and on your other devices. This cannot be undone."),
-                        DescribeChat(chat)),
-                    primaryButtonText: Get(strings, "Chat_DeleteChatConfirm", "Delete"),
-                    closeButtonText: Get(strings, "Common_Cancel", "Cancel"));
+                Debug.WriteLine("[ChatDeletionPrompt] IDialogService missing; delete aborted.");
+                return false;
+            }
 
-                if (!confirmed)
-                {
-                    return false;
-                }
+            bool confirmed = await dialogs.ShowConfirmAsync(
+                title: Get(strings, "Chat_DeleteChatTitle", "Delete chat?"),
+                content: string.Format(
+                    Get(
+                        strings,
+                        "Chat_DeleteChatBody",
+                        "\"{0}\" and its messages will be deleted on this phone and on your other devices. This cannot be undone."),
+                    DescribeChat(chat)),
+                primaryButtonText: Get(strings, "Chat_DeleteChatConfirm", "Delete"),
+                closeButtonText: Get(strings, "Common_Cancel", "Cancel"));
+
+            if (!confirmed)
+            {
+                return false;
             }
 
             try

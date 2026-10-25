@@ -2,6 +2,7 @@ using System;
 using System.Threading.Tasks;
 using Unison.Core.Models;
 using Windows.Foundation.Metadata;
+using Windows.Graphics.Display;
 using Windows.UI;
 using Windows.UI.ViewManagement;
 using Windows.UI.Xaml.Controls;
@@ -14,7 +15,6 @@ namespace Unison.Uwp.Services.Themes
     /// </summary>
     public sealed class WhatsAppLegacyThemeStrategy : ShellThemeStrategy
     {
-        private static readonly Color WpBlack = Color.FromArgb(0xFF, 0x00, 0x00, 0x00);
         private static readonly Color WpWhite = Color.FromArgb(0xFF, 0xFF, 0xFF, 0xFF);
         private static readonly Color WpAccent = Color.FromArgb(0xFF, 0x04, 0x56, 0x4A);
         private static readonly Color WpAccentHover = Color.FromArgb(0xFF, 0x06, 0x6E, 0x5F);
@@ -131,8 +131,20 @@ namespace Unison.Uwp.Services.Themes
                 }
 
                 var statusBar = StatusBar.GetForCurrentView();
-                // No brand strip on Mobile — black status bar only (WP8 chrome lives in-page).
-                statusBar.BackgroundColor = WpBlack;
+                var orientation = DisplayInformation.GetForCurrentView().CurrentOrientation;
+                bool portrait =
+                    orientation == DisplayOrientations.Portrait ||
+                    orientation == DisplayOrientations.PortraitFlipped;
+
+                if (!portrait)
+                {
+                    try { await statusBar.ProgressIndicator.HideAsync(); } catch { }
+                    await statusBar.HideAsync();
+                    return;
+                }
+
+                // Accent strip like desktop title bar; no ProgressIndicator label (Unison shows brand text).
+                statusBar.BackgroundColor = WpAccent;
                 statusBar.ForegroundColor = WpWhite;
                 statusBar.BackgroundOpacity = 1.0;
                 try { await statusBar.ProgressIndicator.HideAsync(); } catch { }
