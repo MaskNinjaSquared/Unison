@@ -12,9 +12,11 @@ namespace Unison.Core.Helpers.Chats
     {
         /// <summary>
         /// After timeline paint on Mobile, keep the priority gate held so list
-        /// refresh-visible Continues cannot steal the next 1–2s of scroll frames.
+        /// refresh-visible Continues cannot steal the next few seconds of scroll
+        /// frames (large-group open was releasing at 1.8s while Continues still
+        /// mutated ~250 rows and starved the dispatcher until the process died).
         /// </summary>
-        public static readonly TimeSpan MobileScrollSettleHold = TimeSpan.FromMilliseconds(1800);
+        public static readonly TimeSpan MobileScrollSettleHold = TimeSpan.FromMilliseconds(5000);
 
         /// <summary>
         /// Mobile's 2s post-ProgressBar pause was meant for list→detail paint breathing

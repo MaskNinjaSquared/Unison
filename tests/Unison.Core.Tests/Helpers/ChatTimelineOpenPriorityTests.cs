@@ -88,5 +88,14 @@ namespace Unison.Core.Tests.Helpers
                     timelineLoadPriorityHeld: false,
                     windowVisible: false));
         }
+
+        [Fact]
+        public void Mobile_scroll_settle_hold_covers_large_group_open_window()
+        {
+            // Must outlast the post-paint Continues storm on a ~250-row list after
+            // opening a 500+ member group (1.8s was releasing too early).
+            Assert.True(
+                ChatTimelineOpenPriority.MobileScrollSettleHold >= TimeSpan.FromSeconds(5));
+        }
     }
 }

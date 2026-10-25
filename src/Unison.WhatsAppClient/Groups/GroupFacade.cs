@@ -164,7 +164,9 @@ namespace Unison.WhatsAppClient.Groups
                 cancellationToken.ThrowIfCancellationRequested();
                 BinaryNode response = await _wire.QueryGroupMetadataAsync(canonical);
                 cancellationToken.ThrowIfCancellationRequested();
-                GroupMetadataSnapshot metadata = _reader.ReadMetadata(response, canonical);
+                // Pass includeRoster into the reader too — otherwise we still allocate up to 512
+                // drafts on every open refresh and discard them when ApplyMembers is gated off.
+                GroupMetadataSnapshot metadata = _reader.ReadMetadata(response, canonical, includeRoster);
                 _communityLinkProbed.Add(canonical);
 
                 // ReadMetadata leaves Subject null by design — extract + cache so community hubs
@@ -202,11 +204,10 @@ namespace Unison.WhatsAppClient.Groups
                     "; subjectCached=" + cachedSubject);
                 // Default flags-only: open-path ApplyMembers(500+) froze Mobile after paint.
                 // Members pivot passes includeRoster: true (chunked off UI).
+                // ApplyMetadataAsync already ApplySyncedLabel on the single row — do not call
+                // ChatNameRefresh.ApplyAsync() here (full catalogue walk → list-names-applied
+                // storms that starve the timeline after a large-group open).
                 await _apply.ApplyMetadataAsync(canonical, metadata, includeRoster, cancellationToken);
-                if (cachedSubject)
-                {
-                    await _nameRefresh.ApplyAsync();
-                }
             }
             catch (OperationCanceledException)
             {

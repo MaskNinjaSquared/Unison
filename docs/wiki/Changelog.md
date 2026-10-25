@@ -2,6 +2,16 @@
 
 Newest first.
 
+## Mobile — large-group open: skip roster parse + no full name refresh + 5s settle
+
+After flags-only apply, open still lagged until the process died: (1)
+`ReadMetadata` always ran `ReadMemberDrafts` (up to 512) then discarded them;
+(2) subject-cache kicked `ChatNameRefresh.ApplyAsync()` → `list-names-applied`
+~190 storms; (3) `MobileScrollSettleHold` released at 1.8s while list Continues
+kept mutating ~250 rows. Fix: `ReadMetadata(..., includeRoster)` / listing
+skips drafts; open path drops full name ApplyAsync (row already labeled);
+settle hold 5s.
+
 ## Extraction 3.10 — OfflineReplayFlush owns pending drain
 
 Flush lock, idle timer, and `PendingMessageQueue` claim/drain moved from

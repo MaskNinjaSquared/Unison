@@ -63,7 +63,9 @@ namespace Unison.WhatsAppClient.Groups
                 string subject;
                 node.Attrs.TryGetValue("subject", out subject);
 
-                parsed[_jids.GetCanonicalJid(JidHelper.Normalize(jid))] = ReadGroup(node, jid, subject);
+                // Listing is flags-only — never materialize 512 drafts per group on Mobile.
+                parsed[_jids.GetCanonicalJid(JidHelper.Normalize(jid))] =
+                    ReadGroup(node, jid, subject, includeRoster: false);
             }
 
             return parsed;
@@ -74,13 +76,25 @@ namespace Unison.WhatsAppClient.Groups
         /// subject is left out: a single-group reply is applied for its flags and roster, and
         /// its subject goes through <see cref="ExtractSubject"/> where it is wanted.
         /// </summary>
-        public GroupMetadataSnapshot ReadMetadata(BinaryNode response, string groupJid)
+        /// <param name="includeRoster">
+        /// When false (open / listing path), skip <see cref="ReadMemberDrafts"/> — MemberCount
+        /// and MyRole still come from the wire. A 500+ participant walk allocating drafts was
+        /// freezing Mobile after chat open even when ApplyMembers was already gated off.
+        /// </param>
+        public GroupMetadataSnapshot ReadMetadata(
+            BinaryNode response,
+            string groupJid,
+            bool includeRoster = false)
         {
             BinaryNode groupNode = FindGroupNode(response, groupJid);
-            return groupNode == null ? null : ReadGroup(groupNode, groupJid, null);
+            return groupNode == null ? null : ReadGroup(groupNode, groupJid, null, includeRoster);
         }
 
-        private GroupMetadataSnapshot ReadGroup(BinaryNode groupNode, string jid, string subject)
+        private GroupMetadataSnapshot ReadGroup(
+            BinaryNode groupNode,
+            string jid,
+            string subject,
+            bool includeRoster)
         {
             return new GroupMetadataSnapshot
             {
@@ -92,7 +106,9 @@ namespace Unison.WhatsAppClient.Groups
                 LinkedParentJid = ReadLinkedParentJid(groupNode),
                 MyRole = ResolveMyRole(groupNode),
                 MemberCount = CountMembers(groupNode),
-                Members = ReadMemberDrafts(groupNode)
+                Members = includeRoster
+                    ? ReadMemberDrafts(groupNode)
+                    : new List<GroupMemberDraft>()
             };
         }
 
