@@ -2,13 +2,20 @@
 
 Newest first.
 
-## Mobile � pause tip-swapped during list cold fill + skip clean refresh
+## Mobile — finish FULL_HISTORY on first empty-ack quiet lot (frugal)
+
+Freshness catch-up on Low could burn ~3×50s rounds after WA `ack-accepted`
+with `signals=0` (no history payload). Frugal idle decide now finishes
+`FinishStagnantProgress` on that empty-ack lot instead of Continues. Generous
+path unchanged. Journal: `emptyAckFinish=True`.
+## Mobile — pause tip-swapped during list cold fill + skip clean refresh
 
 Cold reattach still hitching: `tip-swapped` walked all 259 previews while
 `refresh-visible` Continues Inserted the list, and enrichment phase-clear
 scheduled a full rebuild for `mutations=0` (~0.6s). `ChatListColdPopulateGate`
 pauses tip UI slices until cold fill completes; order-clean refreshes skip
 `BuildVisibleRefreshSource`; enrichment release only reshuffles when dirty.
+
 ## Extraction 3.10 — SqliteHistoryQuietFinalize owns generation / delay
 
 Quiet-finalize generation counter and the delayed entry that stamps it before

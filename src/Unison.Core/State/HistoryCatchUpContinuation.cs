@@ -77,7 +77,9 @@ namespace Unison.Core.State
             bool stillStale,
             int stagnantStop,
             int maxRounds,
-            out HistoryCatchUpProgress before)
+            out HistoryCatchUpProgress before,
+            bool ackAccepted = false,
+            bool finishOnEmptyAckLot = false)
         {
             lock (_gate)
             {
@@ -90,7 +92,9 @@ namespace Unison.Core.State
                     _stagnantCycles,
                     stagnantStop,
                     _round,
-                    maxRounds);
+                    maxRounds,
+                    ackAccepted,
+                    finishOnEmptyAckLot);
 
                 _stagnantCycles = decision.NextStagnantCycles;
                 _watermarkUtc = decision.NextWatermarkUtc;

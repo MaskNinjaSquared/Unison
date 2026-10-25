@@ -207,6 +207,50 @@ namespace Unison.Core.Tests.Helpers
             Assert.Equal(Noon, r.NextWatermarkUtc);
             Assert.Equal(1, r.NextContinueRound);
         }
+
+        [Fact]
+        public void Frugal_empty_ack_lot_finishes_without_burning_extra_rounds()
+        {
+            // Mobile Low: WA accepted FULL_HISTORY but sent no chunks (signals=0).
+            // One quiet empty-ack lot is enough — do not burn stagnantStop × idleAbort.
+            HistoryCatchUpContinueResult r = HistoryCatchUpContinueDecision.Decide(
+                newestUtc: Noon,
+                watermarkUtc: DateTime.MinValue,
+                progressSignals: 0,
+                stillStale: true,
+                stagnantCycles: 0,
+                stagnantStop: 3,
+                continueRound: 0,
+                maxRounds: 4,
+                ackAccepted: true,
+                finishOnEmptyAckLot: true);
+
+            Assert.Equal(HistoryCatchUpContinueAction.FinishStagnantProgress, r.Action);
+            Assert.False(r.MadeProgress);
+            Assert.Equal(1, r.NextStagnantCycles);
+            Assert.Equal(Noon, r.NextWatermarkUtc);
+            Assert.Equal(0, r.NextContinueRound);
+        }
+
+        [Fact]
+        public void Frugal_empty_ack_still_continues_when_chunks_arrived()
+        {
+            HistoryCatchUpContinueResult r = HistoryCatchUpContinueDecision.Decide(
+                newestUtc: Noon,
+                watermarkUtc: Noon,
+                progressSignals: 2,
+                stillStale: true,
+                stagnantCycles: 0,
+                stagnantStop: 3,
+                continueRound: 0,
+                maxRounds: 4,
+                ackAccepted: true,
+                finishOnEmptyAckLot: true);
+
+            Assert.Equal(HistoryCatchUpContinueAction.Continue, r.Action);
+            Assert.True(r.MadeProgress);
+            Assert.Equal(1, r.NextContinueRound);
+        }
     }
 }
 

@@ -1223,7 +1223,8 @@ namespace Unison.WhatsAppClient.History
             bool stillStale = _catchUpHost.TryGetHistoryFreshnessStaleReason(
                 DateTime.UtcNow,
                 out staleReason);
-            int stagnantStop = _workload.PacingFor(_syncBudget.IsFrugal)
+            bool frugal = _syncBudget.IsFrugal;
+            int stagnantStop = _workload.PacingFor(frugal)
                 .CatchUpStagnantCyclesBeforeStop;
             int maxRounds = Math.Max(0, _workload.MaxFullHistoryCatchUpRounds);
 
@@ -1233,7 +1234,9 @@ namespace Unison.WhatsAppClient.History
                 stillStale,
                 stagnantStop,
                 maxRounds,
-                out HistoryCatchUpProgress before);
+                out HistoryCatchUpProgress before,
+                ackAccepted,
+                finishOnEmptyAckLot: frugal);
 
             _catchUpHost.WriteHistoryJournal(
                 "catch-up-idle-decide",
@@ -1249,7 +1252,8 @@ namespace Unison.WhatsAppClient.History
                 "; round=" + before.Round +
                 "; stagnant=" + before.StagnantCycles +
                 "; stagnantStop=" + stagnantStop +
-                "; frugal=" + _syncBudget.IsFrugal +
+                "; frugal=" + frugal +
+                "; emptyAckFinish=" + frugal +
                 "; action=" + decision.Action +
                 "; trigger=" + (triggerReason ?? string.Empty));
 
