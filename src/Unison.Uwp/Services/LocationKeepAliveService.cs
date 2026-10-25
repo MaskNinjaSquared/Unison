@@ -17,15 +17,19 @@ namespace Unison.Uwp.Services
     public sealed class LocationKeepAliveService : ILocationKeepAliveService
     {
         private readonly ILocalSettings _localSettings;
+        private readonly IRuntimeDiagnostics _diagnostics;
         private readonly object _gate = new object();
 
         private ExtendedExecutionSession _session;
         private Geolocator _geolocator;
         private bool _shuttingDown;
 
-        public LocationKeepAliveService(ILocalSettings localSettings)
+        public LocationKeepAliveService(
+            ILocalSettings localSettings,
+            IRuntimeDiagnostics diagnostics)
         {
             _localSettings = localSettings;
+            _diagnostics = diagnostics;
         }
 
         public bool IsActive
@@ -142,14 +146,17 @@ namespace Unison.Uwp.Services
                     }
 
                     Debug.WriteLine("[KeepAlive] ALLOWED (location tracking)");
+                    Journal("allowed", "location-tracking");
                     return true;
                 }
 
                 Debug.WriteLine("[KeepAlive] DENIED");
+                Journal("denied", null);
             }
             catch (Exception ex)
             {
                 Debug.WriteLine("[KeepAlive] RequestExtensionAsync failed: " + ex.Message);
+                Journal("request-failed", "message=" + ex.Message);
             }
 
             try
@@ -239,6 +246,19 @@ namespace Unison.Uwp.Services
         private async void OnSessionRevoked(object sender, ExtendedExecutionRevokedEventArgs args)
         {
             Debug.WriteLine("[KeepAlive] REVOKED " + args.Reason);
+            // Disk flush before Stop: revoke often precedes Suspend/tombstone under lock.
+            Journal("revoked", "reason=" + args.Reason);
+            try
+            {
+                if (_diagnostics != null)
+                {
+                    await _diagnostics.FlushAsync("keepalive-revoked").ConfigureAwait(true);
+                }
+            }
+            catch
+            {
+            }
+
             Stop();
 
             if (args.Reason == ExtendedExecutionRevokedReason.SystemPolicy
@@ -247,18 +267,32 @@ namespace Unison.Uwp.Services
             {
                 try
                 {
+                    Journal("retry-armed", "delayMinutes=1");
                     await Task.Delay(TimeSpan.FromMinutes(1));
                     if (!_shuttingDown
                         && !IsActive
                         && _localSettings.Get<bool>(LocalSettingsConstants.LocationKeepAliveEnabled))
                     {
+                        Journal("retry-start", null);
                         await StartAsync();
                     }
                 }
                 catch (Exception ex)
                 {
                     Debug.WriteLine("[KeepAlive] retry failed: " + ex.Message);
+                    Journal("retry-failed", "message=" + ex.Message);
                 }
+            }
+        }
+
+        private void Journal(string eventName, string details)
+        {
+            try
+            {
+                _diagnostics?.Write("keepalive", eventName, details);
+            }
+            catch
+            {
             }
         }
     }

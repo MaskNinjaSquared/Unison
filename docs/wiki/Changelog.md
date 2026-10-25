@@ -2,6 +2,11 @@
 
 Newest first.
 
+## Mobile — journal ExtendedExecution keepalive revoke
+
+`LocationKeepAliveService` writes `keepalive|allowed|denied|revoked|retry-*`
+to `IRuntimeDiagnostics` and flushes on revoke so the next lockscreen death
+can show OS `SystemPolicy` reclaim vs unlock UI storm. No behavior change.
 ## Extraction 4 — ChatIdentityPersistence owns immediate identity flush
 
 `IChatIdentityPersistence` plus `IPersistChatIdentityStateHost` left
