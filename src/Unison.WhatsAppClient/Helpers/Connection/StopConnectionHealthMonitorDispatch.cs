@@ -1,7 +1,7 @@
 // =============================================================================
 // StopConnectionHealthMonitorDispatch
 //
-// Body of StopConnectionHealthMonitor. CTS / periodic stop stay on the host.
+// Body of StopConnectionHealthMonitor. ConnectionHealthMonitorOwner owns CTS.
 // =============================================================================
 using System;
 using Unison.WhatsAppClient.Abstractions;

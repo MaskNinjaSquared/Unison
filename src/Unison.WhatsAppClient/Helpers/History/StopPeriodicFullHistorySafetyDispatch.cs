@@ -1,7 +1,7 @@
 // =============================================================================
 // StopPeriodicFullHistorySafetyDispatch
 //
-// Body of StopPeriodicFullHistorySafety. CTS field stays on the host.
+// Body of StopPeriodicFullHistorySafety. ConnectionHealthMonitorOwner owns CTS.
 // =============================================================================
 using System;
 using Unison.WhatsAppClient.Abstractions;

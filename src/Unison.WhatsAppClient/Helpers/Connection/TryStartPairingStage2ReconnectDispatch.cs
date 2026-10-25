@@ -1,7 +1,8 @@
 // =============================================================================
 // TryStartPairingStage2ReconnectDispatch
 //
-// Body of TryStartPairingStage2Reconnect. Lock / Task.Run stay on the host.
+// Body of TryStartPairingStage2Reconnect. SoftReconnectCoordinator owns the
+// slot claim; Task.Run / health-stop stay on the host.
 // =============================================================================
 using System;
 using Unison.WhatsAppClient.Abstractions;

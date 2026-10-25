@@ -1,7 +1,7 @@
 // =============================================================================
 // NoteHydrationDayAttemptDispatch
 //
-// Body of NoteHydrationDayAttempt. Day counters stay on the host.
+// Body of NoteHydrationDayAttempt. Day counters live on HydrationDayRetryOwner.
 // =============================================================================
 using System;
 using Unison.WhatsAppClient.Abstractions;

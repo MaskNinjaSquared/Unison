@@ -1340,7 +1340,16 @@ orchestration over those helpers; `BuildSocketBridge` /
 `SocketEventHandlerWiring` stay UWP (`IWhatsAppSocket`); broker consume gate is
 `BrokerReconnectConsumePolicy`; startup alias restore is `PersistedAliasRestore`;
 linked-account gates / on-demand health step / soft-reconnect pairing helpers
-as above. The incoming pump drain loop is
+as above. **Soft-reconnect slot state** (lock + `isReconnecting`, schedule/claim/
+complete/pairing-slot) is `SoftReconnectCoordinator` over `ISoftReconnectIoHost`
+(client I/O only). **Health-monitor + periodic FULL_HISTORY safety CTS /
+`Task.Run`** is `ConnectionHealthMonitorOwner` over `IConnectionHealthMonitorIoHost`
+(loop bodies only). **Post-replay + post-message enrichment CTS / once-per-session
+CAS** is `PostSyncMaintenanceOwner` over `IPostSyncMaintenanceIoHost` (quiet /
+memory / façade bodies only; `ShutdownAsync` calls `CancelAll`). **Connect +
+resume/ensure locks** are `ConnectionGateLocks`. **Hydration day-retry CTS /
+day attempts / day-anchor** is `HydrationDayRetryOwner` over
+`IHydrationDayRetryIoHost`. The incoming pump drain loop is
 `IncomingPumpDrainDispatch` (host still owns typed queue + handle). Offline pending-
 notification release is `OfflineReplayRelease` over `IOfflineReplayReleaseHost`
 (wire still attaches the event on the client). Thin-wire dispatches:

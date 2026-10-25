@@ -47,7 +47,7 @@ using Unison.WhatsAppClient.Helpers;
 
 namespace Unison.Uwp.Services.WhatsApp
 {
-    public partial class WhatsAppService : INotifyPropertyChanged, IWhatsAppService, IConnectionEventSource, IConnectionSessionHost, IOfflineReplayHost, IOfflineReplayReleaseHost, IOfflineReplayFlushIoHost, IChatCatalogPersistHost, IChatCatalogFullPersistHost, ILoadPersistedChatCatalogHost, IForgetChatStorageHost, IConnectionUpdateHost, ISocketErrorHost, IHistorySyncWireHost, ISessionInitializedHost, IQrCodeWireHost, IAuthStateWireHost, IInboundWireNodeHost, IDecryptedMessageWireHost, ISocketFacadeWireHost, IPostReplayMaintenanceHost, IPostMessageEnrichmentHost, IPlaceholderResendSocket, IHistoryOnDemandSocket, IRuntimeSnapshotSource, IBackgroundResolutionGate, IAppStateLocalHost, IConversationResyncHost, IHistorySyncHost, IHistoryCatchUpHost, IConnectionEnsureHost, IConnectionResumeHost, IConnectionPairingStage2Host, IConnectionBrokerTransferHost, IConnectionSoftReconnectHost, IConnectionLifecycleHost, IConnectionConnectGateSource, IConnectionConnectPrepareHost, IConnectionSocketAssignment, IConnectionAssignedSocketClearHost, ISocketAliasRegistrar, IStartupUiHost, IJidAliasPersistence, IIncomingMessageEnqueueHost, IResolvedNameApplyHost, IHistoryHydrationBackfillHost, ISqliteHistoryQuietFinalizeHost, IHistoryPostOfflineFreshnessHost, IDeferredStartupMaintenanceHost, IHistoryCatchUpFinishHost, IUserResyncFullHistoryHost, IFreshnessReconnectFallbackHost, ICatchUpContinueReconnectHost, IFirstSyncListReleaseHost, IFullHistoryCatchUpProgressHost, IHistorySqliteChunkAppliedHost, IAcceptedHistoryRequestTimeoutHost, IAutoReconnectLoopHost, IConversationResyncWaitHost, IFullHistoryOnDemandClearHost, IInitializeConnectionStateHost, IHistorySqliteChunkStartedHost, IFullHistoryCatchUpWatchdogHost, IPeriodicFullHistorySafetyHost, IReconnectHistoryCatchUpHost, IHydrationFallbackPipelineHost, IHydrationDayRetryHost, IScheduleAutoReconnectHost, IReleaseEnrichmentAfterHeavyHistoryHost, IClearSessionHost, IRaiseSessionClearedHost, IRequestFullHistoryOnDemandTrackedHost, IBrokerReconnectConsumeHost, IPostMessageEnrichmentScheduleHost, IForceHistoryRepairConsumeHost, IForceHistoryRepairPendingHost, IPublishInitialSyncProgressHost, IPublishConnectionUpdateHost, IPersistChatIdentityStateHost, IEndHistoryCatchUpBannerHost, IBeginHistoryCatchUpBannerHost, IResetFirstSyncListHoldFlagsHost, ICompleteUserResyncHistoryWaitHost, ITearDownSocketForSoftReconnectHost, INoteHydrationDayAttemptHost, IUnloadMessageCacheIfInactiveHost, IOnActiveChatChangedHost, IMarkPairingRestartPendingHost, IDropCurrentSocketForFastResumeHost, IPersistAuthStateHost, IWaitForSessionEstablishedHost, IStopPeriodicFullHistorySafetyHost, IStartPeriodicFullHistorySafetyHost, IInvalidateCurrentSocketHost, IStopConnectionHealthMonitorHost, IStartConnectionHealthMonitorHost, ITryStartPairingStage2ReconnectHost, IIsCurrentSocketHealthyHost, IReleaseMemoryHost, IConnectAsyncHost, IResyncConversationsHost, ISyncSelfProfileFromAuthHost, ILoadPersistedUiStateHost, ITryRecordAliasMappingHost, IRegisterAliasMappingsHost, IPersistJidAliasesHost, IFlushPendingSocketAliasesHost, IPersistLiveMessagesHost, IPersistBackgroundDisplayNamesHost, INotifyServerLogoutHost, ISchedulePostReplayMaintenanceHost, IBuildHistoryHydrationCandidatesHost, IEnsureSelfPhonePersistedHost, IPersistSelfAvatarUrlHost, ILoadHistoryFreshnessRepairStateHost, IPersistFullHistoryRepairCompletedUtcHost, IPersistFreshnessReconnectFallbackUtcHost, IFindPersistedChatMessageHost, IResolveSentMessageForRetryHost, IPeriodicFullHistorySafetyLoopHost, IWaitForHistoryHydrationSettleHost
+    public partial class WhatsAppService : INotifyPropertyChanged, IWhatsAppService, IConnectionEventSource, IConnectionSessionHost, IOfflineReplayHost, IOfflineReplayReleaseHost, IOfflineReplayFlushIoHost, IChatCatalogPersistHost, IChatCatalogFullPersistHost, ILoadPersistedChatCatalogHost, IForgetChatStorageHost, IConnectionUpdateHost, ISocketErrorHost, IHistorySyncWireHost, ISessionInitializedHost, IQrCodeWireHost, IAuthStateWireHost, IInboundWireNodeHost, IDecryptedMessageWireHost, ISocketFacadeWireHost, IPostReplayMaintenanceHost, IPostMessageEnrichmentHost, IPlaceholderResendSocket, IHistoryOnDemandSocket, IRuntimeSnapshotSource, IBackgroundResolutionGate, IAppStateLocalHost, IConversationResyncHost, IHistorySyncHost, IHistoryCatchUpHost, IConnectionEnsureHost, IConnectionResumeHost, IConnectionPairingStage2Host, IConnectionBrokerTransferHost, IConnectionSoftReconnectHost, IConnectionLifecycleHost, IConnectionConnectGateSource, IConnectionConnectPrepareHost, IConnectionSocketAssignment, IConnectionAssignedSocketClearHost, ISocketAliasRegistrar, IStartupUiHost, IJidAliasPersistence, IIncomingMessageEnqueueHost, IResolvedNameApplyHost, IHistoryHydrationBackfillHost, ISqliteHistoryQuietFinalizeHost, IHistoryPostOfflineFreshnessHost, IDeferredStartupMaintenanceHost, IHistoryCatchUpFinishHost, IUserResyncFullHistoryHost, IFreshnessReconnectFallbackHost, ICatchUpContinueReconnectHost, IFirstSyncListReleaseHost, IFullHistoryCatchUpProgressHost, IHistorySqliteChunkAppliedHost, IAcceptedHistoryRequestTimeoutHost, IAutoReconnectLoopHost, IConversationResyncWaitHost, IFullHistoryOnDemandClearHost, IInitializeConnectionStateHost, IHistorySqliteChunkStartedHost, IFullHistoryCatchUpWatchdogHost, IPeriodicFullHistorySafetyHost, IReconnectHistoryCatchUpHost, IHydrationFallbackPipelineHost, IHydrationDayRetryIoHost, ISoftReconnectIoHost, IReleaseEnrichmentAfterHeavyHistoryHost, IClearSessionHost, IRaiseSessionClearedHost, IRequestFullHistoryOnDemandTrackedHost, IBrokerReconnectConsumeHost, IForceHistoryRepairConsumeHost, IForceHistoryRepairPendingHost, IPublishInitialSyncProgressHost, IPublishConnectionUpdateHost, IPersistChatIdentityStateHost, IEndHistoryCatchUpBannerHost, IBeginHistoryCatchUpBannerHost, IResetFirstSyncListHoldFlagsHost, ICompleteUserResyncHistoryWaitHost, ITearDownSocketForSoftReconnectHost, IUnloadMessageCacheIfInactiveHost, IOnActiveChatChangedHost, IMarkPairingRestartPendingHost, IDropCurrentSocketForFastResumeHost, IPersistAuthStateHost, IWaitForSessionEstablishedHost, IInvalidateCurrentSocketHost, IConnectionHealthMonitorIoHost, ITryStartPairingStage2ReconnectHost, IIsCurrentSocketHealthyHost, IReleaseMemoryHost, IConnectAsyncHost, IResyncConversationsHost, ISyncSelfProfileFromAuthHost, ILoadPersistedUiStateHost, ITryRecordAliasMappingHost, IRegisterAliasMappingsHost, IPersistJidAliasesHost, IFlushPendingSocketAliasesHost, IPersistLiveMessagesHost, IPersistBackgroundDisplayNamesHost, INotifyServerLogoutHost, IPostSyncMaintenanceIoHost, IBuildHistoryHydrationCandidatesHost, IEnsureSelfPhonePersistedHost, IPersistSelfAvatarUrlHost, ILoadHistoryFreshnessRepairStateHost, IPersistFullHistoryRepairCompletedUtcHost, IPersistFreshnessReconnectFallbackUtcHost, IFindPersistedChatMessageHost, IResolveSentMessageForRetryHost, IPeriodicFullHistorySafetyLoopHost, IWaitForHistoryHydrationSettleHost
     {
         public event PropertyChangedEventHandler PropertyChanged;
         protected void OnPropertyChanged([CallerMemberName] string propertyName = null)
@@ -301,7 +301,6 @@ namespace Unison.Uwp.Services.WhatsApp
 
         private AuthState _authState;
 
-        private bool _isReconnecting = false;
         private bool _isConnecting = false;
         private volatile bool _suppressReconnect = false;
         /// <summary>
@@ -333,19 +332,29 @@ namespace Unison.Uwp.Services.WhatsApp
         /// When true, pre-session closes may escalate to fatal logout. False for QR / 515 stage-2.
         /// </summary>
         private volatile bool _countPreSessionCloseAsFatal = false;
-        private readonly object _reconnectStateLock = new object();
-        private CancellationTokenSource _connectionHealthCts;
-        private Task _connectionHealthTask = Task.CompletedTask;
-        private CancellationTokenSource _periodicFullSafetyCts;
-        private Task _periodicFullSafetyTask = Task.CompletedTask;
+        /// <summary>
+        /// Soft auto-reconnect slot (lock + isReconnecting) lives on
+        /// <see cref="SoftReconnectCoordinator"/>. Client only implements
+        /// <see cref="ISoftReconnectIoHost"/> I/O.
+        /// </summary>
+        private readonly SoftReconnectCoordinator _softReconnect;
+        /// <summary>
+        /// Health-monitor + periodic FULL_HISTORY safety CTS / Task.Run live on
+        /// <see cref="ConnectionHealthMonitorOwner"/>. Client only implements
+        /// <see cref="IConnectionHealthMonitorIoHost"/> loop bodies.
+        /// </summary>
+        private readonly ConnectionHealthMonitorOwner _healthMonitors;
         private readonly SemaphoreSlim _initLock = new SemaphoreSlim(1, 1);
         private readonly SemaphoreSlim _persistedUiLoadLock = new SemaphoreSlim(1, 1);
         private volatile bool _persistedUiStateLoaded;
         private FileKeyStore _sharedKeyStore;
         private int _forceFreshConnectOnResume;
         private int _deferredStartupMaintenanceStarted;
-        private readonly SemaphoreSlim _connectLock = new SemaphoreSlim(1, 1);
-        private readonly SemaphoreSlim _resumeConnectionLock = new SemaphoreSlim(1, 1);
+        /// <summary>
+        /// Connect + resume/ensure SemaphoreSlim gates — owned by
+        /// <see cref="ConnectionGateLocks"/>.
+        /// </summary>
+        private readonly ConnectionGateLocks _connectionGates = new ConnectionGateLocks();
 
         // Live/offline decrypted drain â€” owned by IncomingMessagePump (WhatsAppClient).
         private IncomingMessagePump _incomingPump;
@@ -393,9 +402,12 @@ namespace Unison.Uwp.Services.WhatsApp
         /// </summary>
         private readonly SqliteHistoryQuietFinalize _sqliteHistoryQuietFinalize;
         private DateTime _lastHydrationFallbackUtc = DateTime.MinValue;
-        private DateTime _hydrationDayAnchorUtc = DateTime.MinValue;
-        private int _hydrationDayAttempts;
-        private CancellationTokenSource _hydrationDayRetryCts;
+        /// <summary>
+        /// Hydration day-retry CTS + day attempts/anchor — owned by
+        /// <see cref="HydrationDayRetryOwner"/>. Client only implements
+        /// <see cref="IHydrationDayRetryIoHost"/>.
+        /// </summary>
+        private readonly HydrationDayRetryOwner _hydrationDayRetry;
         // Default retry delay for the deferred background-resolution pass (names+avatars+groups).
         private DateTime _replayDrainCompletedUtc = DateTime.MinValue;
         private DateTime _lastPostReplayLiveActivityUtc = DateTime.MinValue;
@@ -418,9 +430,12 @@ namespace Unison.Uwp.Services.WhatsApp
         /// via <see cref="IOfflineReplayFlushIoHost"/>.
         /// </summary>
         private readonly OfflineReplayFlush _offlineReplayFlush;
-        private CancellationTokenSource _postReplayMaintenanceCts;
-        private CancellationTokenSource _postMessageEnrichmentCts;
-        private int _postMessageEnrichmentStarted;
+        /// <summary>
+        /// Post-replay + post-message enrichment CTS / once-per-session CAS live on
+        /// <see cref="PostSyncMaintenanceOwner"/>. Client only implements
+        /// <see cref="IPostSyncMaintenanceIoHost"/> work.
+        /// </summary>
+        private readonly PostSyncMaintenanceOwner _postSyncMaintenance;
         private int _enrichmentAwaitingHeavyHistory;
         private int _enrichmentAwaitingListPaint;
         private ChatListInitialPaintGate _listPaintGate;
@@ -578,10 +593,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 WebPSharpYuvInPackage = Unison.Uwp.Helpers.WebPDecoder.LibSharpYuvInPackage
             };
 
-            lock (_reconnectStateLock)
-            {
-                snapshot.IsReconnecting = _isReconnecting;
-            }
+            snapshot.IsReconnecting = _softReconnect.IsReconnecting;
 
             IncomingQueueSnapshot incoming = _incomingPump != null
                 ? _incomingPump.Snapshot()
@@ -965,6 +977,10 @@ namespace Unison.Uwp.Services.WhatsApp
             _offlineReplayFlush = new OfflineReplayFlush(_pendingMessages, this);
             _historyHydrationBackfill = new HistoryHydrationBackfill(this);
             _sqliteHistoryQuietFinalize = new SqliteHistoryQuietFinalize(this);
+            _softReconnect = new SoftReconnectCoordinator(this);
+            _healthMonitors = new ConnectionHealthMonitorOwner(this);
+            _postSyncMaintenance = new PostSyncMaintenanceOwner(this);
+            _hydrationDayRetry = new HydrationDayRetryOwner(this);
             _chatState = chatState;
             _personStore = personStore ?? throw new ArgumentNullException(nameof(personStore));
             _groupRosterStore = groupRosterStore ?? throw new ArgumentNullException(nameof(groupRosterStore));
@@ -1381,44 +1397,33 @@ namespace Unison.Uwp.Services.WhatsApp
         }
 
         private void SchedulePostReplayMaintenance(int offlineCount) =>
-            SchedulePostReplayMaintenanceDispatch.Run(this, offlineCount);
+            _postSyncMaintenance.SchedulePostReplay(offlineCount);
 
-        // --- ISchedulePostReplayMaintenanceHost ------------------------------
+        // --- IPostSyncMaintenanceIoHost --------------------------------------
 
-        void ISchedulePostReplayMaintenanceHost.CancelPreviousPostReplayMaintenanceCts()
-        {
-            var previousCts = _postReplayMaintenanceCts;
-            if (previousCts != null)
-            {
-                try { previousCts.Cancel(); } catch { }
-            }
-        }
-
-        CancellationTokenSource ISchedulePostReplayMaintenanceHost.ReplacePostReplayMaintenanceCts()
-        {
-            var cts = new CancellationTokenSource();
-            _postReplayMaintenanceCts = cts;
-            return cts;
-        }
-
-        void ISchedulePostReplayMaintenanceHost.FireAndForgetPostReplayMaintenance(Func<Task> work) =>
-            _ = Task.Run(work);
-
-        Task ISchedulePostReplayMaintenanceHost.RunPostReplayMaintenanceAsync(
+        Task IPostSyncMaintenanceIoHost.RunPostReplayMaintenanceAsync(
             int offlineCount,
             CancellationToken token) =>
             // Messages first: keep the socket and UI free for live traffic and catch-up.
             // Names / groups / avatars wait for SchedulePostMessageEnrichment.
             PostReplayMaintenanceDispatch.RunAsync(this, offlineCount, token);
 
-        void ISchedulePostReplayMaintenanceHost.ClearPostReplayMaintenanceCtsIfCurrent(
-            CancellationTokenSource cts)
-        {
-            if (ReferenceEquals(_postReplayMaintenanceCts, cts))
-            {
-                _postReplayMaintenanceCts = null;
-            }
-        }
+        Task IPostSyncMaintenanceIoHost.RunPostMessageEnrichmentAsync(
+            string reason,
+            CancellationToken token) =>
+            PostMessageEnrichmentDispatch.RunAsync(this, reason, token);
+
+        void IPostSyncMaintenanceIoHost.ClearEnrichmentAwaitingHeavyHistory() =>
+            Interlocked.Exchange(ref _enrichmentAwaitingHeavyHistory, 0);
+
+        void IPostSyncMaintenanceIoHost.LogPostMessageEnrichment(string message) =>
+            Debug.WriteLine("[WhatsAppService] " + message);
+
+        void IPostSyncMaintenanceIoHost.WritePostMessageEnrichmentScheduled(string reason) =>
+            RuntimeDiagnosticsService.Instance.Write(
+                "startup",
+                "post-message-enrichment-scheduled",
+                "reason=" + reason);
 
         bool IPostReplayMaintenanceHost.UseFrugalSyncBudget => UseFrugalSyncBudget;
 
@@ -1521,54 +1526,7 @@ namespace Unison.Uwp.Services.WhatsApp
         }
 
         private void SchedulePostMessageEnrichment(string reason) =>
-            PostMessageEnrichmentScheduleDispatch.Schedule(this, reason);
-
-        // --- IPostMessageEnrichmentScheduleHost ------------------------------
-
-        bool IPostMessageEnrichmentScheduleHost.TryClaimPostMessageEnrichmentStarted() =>
-            Interlocked.Exchange(ref _postMessageEnrichmentStarted, 1) == 0;
-
-        void IPostMessageEnrichmentScheduleHost.ClearEnrichmentAwaitingHeavyHistory() =>
-            Interlocked.Exchange(ref _enrichmentAwaitingHeavyHistory, 0);
-
-        CancellationTokenSource IPostMessageEnrichmentScheduleHost.ReplacePostMessageEnrichmentCts()
-        {
-            var previousCts = _postMessageEnrichmentCts;
-            if (previousCts != null)
-            {
-                try { previousCts.Cancel(); } catch { }
-            }
-
-            var cts = new CancellationTokenSource();
-            _postMessageEnrichmentCts = cts;
-            return cts;
-        }
-
-        void IPostMessageEnrichmentScheduleHost.LogPostMessageEnrichment(string message) =>
-            Debug.WriteLine("[WhatsAppService] " + message);
-
-        void IPostMessageEnrichmentScheduleHost.WritePostMessageEnrichmentScheduled(string reason) =>
-            RuntimeDiagnosticsService.Instance.Write(
-                "startup",
-                "post-message-enrichment-scheduled",
-                "reason=" + reason);
-
-        void IPostMessageEnrichmentScheduleHost.FireAndForgetPostMessageEnrichment(Func<Task> work) =>
-            _ = Task.Run(work);
-
-        Task IPostMessageEnrichmentScheduleHost.RunPostMessageEnrichmentAsync(
-            string reason,
-            CancellationToken token) =>
-            PostMessageEnrichmentDispatch.RunAsync(this, reason, token);
-
-        void IPostMessageEnrichmentScheduleHost.ClearPostMessageEnrichmentCtsIfCurrent(
-            CancellationTokenSource cts)
-        {
-            if (ReferenceEquals(_postMessageEnrichmentCts, cts))
-            {
-                _postMessageEnrichmentCts = null;
-            }
-        }
+            _postSyncMaintenance.ScheduleEnrichment(reason);
 
         bool IPostMessageEnrichmentHost.EnrichmentAwaitingHeavyHistory =>
             Interlocked.CompareExchange(ref _enrichmentAwaitingHeavyHistory, 0, 0) == 1;
@@ -2724,58 +2682,10 @@ namespace Unison.Uwp.Services.WhatsApp
         }
 
         private void StartPeriodicFullHistorySafety() =>
-            StartPeriodicFullHistorySafetyDispatch.Run(this);
-
-        // --- IStartPeriodicFullHistorySafetyHost -----------------------------
-
-        void IStartPeriodicFullHistorySafetyHost.StopPeriodicFullHistorySafety(string reason) =>
-            StopPeriodicFullHistorySafety(reason);
-
-        void IStartPeriodicFullHistorySafetyHost.StartPeriodicFullHistorySafetyLoop()
-        {
-            var cts = new CancellationTokenSource();
-            _periodicFullSafetyCts = cts;
-            _periodicFullSafetyTask = Task.Run(() => PeriodicFullHistorySafetyLoopAsync(cts.Token));
-        }
-
-        double IStartPeriodicFullHistorySafetyHost.PeriodicFullHistorySafetyIntervalMinutes =>
-            HistoryPeriodicFullSafetyDecision.Interval.TotalMinutes;
-
-        void IStartPeriodicFullHistorySafetyHost.LogPeriodicFullHistorySafetyStarted(
-            double intervalMinutes) =>
-            Debug.WriteLine(
-                "[WhatsAppService] Periodic FULL_HISTORY safety started; intervalMinutes=" +
-                intervalMinutes.ToString("F0"));
+            _healthMonitors.StartPeriodicSafety();
 
         private void StopPeriodicFullHistorySafety(string reason) =>
-            StopPeriodicFullHistorySafetyDispatch.Run(this, reason);
-
-        // --- IStopPeriodicFullHistorySafetyHost ------------------------------
-
-        bool IStopPeriodicFullHistorySafetyHost.TryCancelPeriodicFullHistorySafety()
-        {
-            var cts = _periodicFullSafetyCts;
-            _periodicFullSafetyCts = null;
-            if (cts == null)
-            {
-                return false;
-            }
-
-            try
-            {
-                cts.Cancel();
-                cts.Dispose();
-            }
-            catch
-            {
-            }
-
-            return true;
-        }
-
-        void IStopPeriodicFullHistorySafetyHost.LogPeriodicFullHistorySafetyStopped(string reason) =>
-            Debug.WriteLine(
-                "[WhatsAppService] Periodic FULL_HISTORY safety stopped: " + (reason ?? string.Empty));
+            _healthMonitors.StopPeriodicSafety(reason);
 
         private Task PeriodicFullHistorySafetyLoopAsync(CancellationToken token) =>
             PeriodicFullHistorySafetyLoopDispatch.RunAsync(this, token);
@@ -3188,67 +3098,26 @@ namespace Unison.Uwp.Services.WhatsApp
                 reason);
 
         private void NoteHydrationDayAttempt(DateTime nowUtc) =>
-            NoteHydrationDayAttemptDispatch.Run(this, nowUtc);
-
-        // --- INoteHydrationDayAttemptHost ------------------------------------
-
-        DateTime INoteHydrationDayAttemptHost.HydrationDayAnchorUtc =>
-            _hydrationDayAnchorUtc;
-
-        void INoteHydrationDayAttemptHost.ResetHydrationDay(DateTime dayUtc)
-        {
-            _hydrationDayAnchorUtc = dayUtc;
-            _hydrationDayAttempts = 0;
-        }
-
-        void INoteHydrationDayAttemptHost.IncrementHydrationDayAttempts() =>
-            _hydrationDayAttempts++;
-
-        void INoteHydrationDayAttemptHost.StampLastHydrationFallbackUtc(DateTime nowUtc) =>
-            _lastHydrationFallbackUtc = nowUtc;
+            _hydrationDayRetry.NoteAttempt(nowUtc);
 
         private void ScheduleHydrationDayRetryIfNeeded(string reason) =>
-            HydrationDayRetryDispatch.Schedule(this, reason);
+            _hydrationDayRetry.ScheduleIfNeeded(reason);
 
-        // --- IHydrationDayRetryHost ------------------------------------------
+        // --- IHydrationDayRetryIoHost ----------------------------------------
 
-        int IHydrationDayRetryHost.HydrationDayAttempts => _hydrationDayAttempts;
-
-        int IHydrationDayRetryHost.MaxHydrationDayAttempts =>
-            HistoryHydrationFallbackDecision.DefaultMaxDayAttempts;
-
-        TimeSpan IHydrationDayRetryHost.HydrationDayRetryInterval =>
-            HistoryHydrationFallbackDecision.DefaultDayRetryInterval;
-
-        bool IHydrationDayRetryHost.TryGetFreshnessStaleReason(
+        bool IHydrationDayRetryIoHost.TryGetFreshnessStaleReason(
             DateTime nowUtc,
             out string staleReason) =>
             TryGetHistoryFreshnessStaleReason(nowUtc, out staleReason);
 
-        CancellationTokenSource IHydrationDayRetryHost.ReplaceHydrationDayRetryCts()
-        {
-            CancellationTokenSource prior = Interlocked.Exchange(ref _hydrationDayRetryCts, null);
-            try { prior?.Cancel(); } catch { }
-            try { prior?.Dispose(); } catch { }
-
-            var cts = new CancellationTokenSource();
-            _hydrationDayRetryCts = cts;
-            return cts;
-        }
-
-        void IHydrationDayRetryHost.LogHydrationDayRetry(string message) =>
-            Debug.WriteLine("[WhatsAppService] " + message);
-
-        void IHydrationDayRetryHost.FireAndForgetHydrationDayRetry(Func<Task> work) =>
-            _ = Task.Run(work);
-
-        Task IHydrationDayRetryHost.DelayHydrationDayRetryAsync(
-            TimeSpan delay,
-            CancellationToken token) =>
-            Task.Delay(delay, token);
-
-        Task IHydrationDayRetryHost.RunHydrationFallbackPipelineAsync(string reason) =>
+        Task IHydrationDayRetryIoHost.RunHydrationFallbackPipelineAsync(string reason) =>
             RunHydrationFallbackPipelineAsync(reason);
+
+        void IHydrationDayRetryIoHost.StampLastHydrationFallbackUtc(DateTime nowUtc) =>
+            _lastHydrationFallbackUtc = nowUtc;
+
+        void IHydrationDayRetryIoHost.LogHydrationDayRetry(string message) =>
+            Debug.WriteLine("[WhatsAppService] " + message);
 
         /// <summary>
         /// Per-JID HISTORY_SYNC_ON_DEMAND pass: ledger Pending/InFlight/HasMore/Synced until

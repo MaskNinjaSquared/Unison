@@ -1,8 +1,9 @@
 // =============================================================================
 // ConnectionSoftReconnectGates
 //
-// Schedule / loop / post-loop decisions for soft auto-reconnect. Locks, Task.Run,
-// ConnectAsync and pairing ownership stay on the host.
+// Schedule / loop / post-loop decisions for soft auto-reconnect.
+// SoftReconnectCoordinator owns the reconnect lock / isReconnecting;
+// ConnectAsync and pairing I/O stay on the host.
 // =============================================================================
 
 namespace Unison.WhatsAppClient.Helpers
@@ -12,7 +13,7 @@ namespace Unison.WhatsAppClient.Helpers
         /// <summary>Do not claim the reconnect slot.</summary>
         Skip,
 
-        /// <summary>Claim <c>_isReconnecting</c> and start the loop.</summary>
+        /// <summary>Claim the soft-reconnect slot and start the loop.</summary>
         StartLoop
     }
 

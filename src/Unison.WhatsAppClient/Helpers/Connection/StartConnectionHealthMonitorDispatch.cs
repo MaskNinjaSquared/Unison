@@ -1,7 +1,8 @@
 // =============================================================================
 // StartConnectionHealthMonitorDispatch
 //
-// Body of StartConnectionHealthMonitor. Loop Task.Run stays on the host.
+// Body of StartConnectionHealthMonitor. ConnectionHealthMonitorOwner owns
+// CTS / Task.Run; loop bodies stay on IConnectionHealthMonitorIoHost.
 // =============================================================================
 using System;
 using Unison.WhatsAppClient.Abstractions;

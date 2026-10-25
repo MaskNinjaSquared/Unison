@@ -1,8 +1,8 @@
 // =============================================================================
 // HydrationDayRetryDispatch
 //
-// Body of ScheduleHydrationDayRetryIfNeeded. Timer / Task.Run / pipeline I/O
-// stay on the host.
+// Body of ScheduleHydrationDayRetryIfNeeded. HydrationDayRetryOwner owns CTS /
+// day counters; pipeline I/O stays on IHydrationDayRetryIoHost.
 // =============================================================================
 using System;
 using System.Threading;

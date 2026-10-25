@@ -161,61 +161,29 @@ namespace Unison.Uwp.Services.WhatsApp
         }
 
         private void StopConnectionHealthMonitor(string reason) =>
-            StopConnectionHealthMonitorDispatch.Run(this, reason);
-
-        // --- IStopConnectionHealthMonitorHost --------------------------------
-
-        bool IStopConnectionHealthMonitorHost.TryCancelConnectionHealthMonitor()
-        {
-            var cts = _connectionHealthCts;
-            _connectionHealthCts = null;
-            if (cts == null)
-            {
-                return false;
-            }
-
-            try
-            {
-                cts.Cancel();
-                cts.Dispose();
-            }
-            catch
-            {
-            }
-
-            return true;
-        }
-
-        void IStopConnectionHealthMonitorHost.LogConnectionHealthMonitorStopped(string reason) =>
-            Debug.WriteLine($"[WhatsAppService] Connection health monitor stopped: {reason}");
-
-        void IStopConnectionHealthMonitorHost.StopPeriodicFullHistorySafety(string reason) =>
-            StopPeriodicFullHistorySafety(reason);
+            _healthMonitors.Stop(reason);
 
         private void StartConnectionHealthMonitor(IWhatsAppSocket socket) =>
-            StartConnectionHealthMonitorDispatch.Run(this, socket);
+            _healthMonitors.Start(socket);
 
-        // --- IStartConnectionHealthMonitorHost -------------------------------
+        // --- IConnectionHealthMonitorIoHost ----------------------------------
 
-        void IStartConnectionHealthMonitorHost.StopConnectionHealthMonitor(string reason) =>
-            StopConnectionHealthMonitor(reason);
-
-        void IStartConnectionHealthMonitorHost.StartConnectionHealthLoop(object socket)
+        Task IConnectionHealthMonitorIoHost.RunHealthLoopAsync(
+            object socket,
+            CancellationToken token)
         {
             var typed = socket as IWhatsAppSocket;
             if (typed == null)
             {
-                return;
+                return Task.CompletedTask;
             }
 
-            var cts = new CancellationTokenSource();
-            _connectionHealthCts = cts;
-            _connectionHealthTask = Task.Run(() => ConnectionHealthLoopAsync(typed, cts.Token));
+            return ConnectionHealthLoopAsync(typed, token);
         }
 
-        void IStartConnectionHealthMonitorHost.StartPeriodicFullHistorySafety() =>
-            StartPeriodicFullHistorySafety();
-
+        Task IConnectionHealthMonitorIoHost.RunPeriodicFullHistorySafetyLoopAsync(
+            CancellationToken token) =>
+            PeriodicFullHistorySafetyLoopAsync(token);
 
         bool IOfflineReplayReleaseHost.TryMarkFirstRelease() =>
             Interlocked.Exchange(ref _offlineReplayReleased, 1) == 0;
@@ -817,7 +785,8 @@ namespace Unison.Uwp.Services.WhatsApp
             PairingTrace("pairingRestartPending=true reason=" + (reason ?? string.Empty));
 
         /// <summary>
-        /// Owns stage-2 reconnect after pair-success / 515. Idempotent under <see cref="_isReconnecting"/>.
+        /// Owns stage-2 reconnect after pair-success / 515. Idempotent under
+        /// <see cref="SoftReconnectCoordinator"/>.
         /// </summary>
         private void TryStartPairingStage2Reconnect(string reason) =>
             TryStartPairingStage2ReconnectDispatch.Run(this, reason);
@@ -834,19 +803,8 @@ namespace Unison.Uwp.Services.WhatsApp
         void ITryStartPairingStage2ReconnectHost.MarkPairingRestartPending(string reason) =>
             MarkPairingRestartPending(reason);
 
-        bool ITryStartPairingStage2ReconnectHost.TryClaimReconnectSlot()
-        {
-            lock (_reconnectStateLock)
-            {
-                if (_isReconnecting)
-                {
-                    return false;
-                }
-
-                _isReconnecting = true;
-                return true;
-            }
-        }
+        bool ITryStartPairingStage2ReconnectHost.TryClaimReconnectSlot() =>
+            _softReconnect.TryClaimReconnectSlot();
 
         void ITryStartPairingStage2ReconnectHost.StopConnectionHealthMonitor(string reason) =>
             StopConnectionHealthMonitor(reason);
@@ -855,44 +813,35 @@ namespace Unison.Uwp.Services.WhatsApp
             _ = ReconnectForPairingAsync();
 
         private void ScheduleAutoReconnect(string reason) =>
-            ScheduleAutoReconnectDispatch.Schedule(this, reason);
+            _softReconnect.Schedule(reason);
 
-        // --- IScheduleAutoReconnectHost --------------------------------------
+        // --- ISoftReconnectIoHost --------------------------------------------
 
-        SoftReconnectScheduleAction IScheduleAutoReconnectHost.TryClaimAutoReconnectSlot(
-            out bool skippedForPairing)
-        {
-            lock (_reconnectStateLock)
-            {
-                SoftReconnectScheduleAction schedule =
-                    ConnectionSoftReconnectGates.DecideSchedule(
-                        _suppressReconnect,
-                        _fatalSessionEnded,
-                        _isReconnecting,
-                        _pairingRestartPending);
-                skippedForPairing = schedule == SoftReconnectScheduleAction.Skip &&
-                                    _pairingRestartPending;
-                if (schedule == SoftReconnectScheduleAction.StartLoop)
-                {
-                    _isReconnecting = true;
-                }
+        bool ISoftReconnectIoHost.SuppressReconnect => _suppressReconnect;
 
-                return schedule;
-            }
-        }
+        bool ISoftReconnectIoHost.FatalSessionEnded => _fatalSessionEnded;
 
-        void IScheduleAutoReconnectHost.LogAutoReconnectScheduled(string reason) =>
+        bool ISoftReconnectIoHost.PairingRestartPending => _pairingRestartPending;
+
+        bool ISoftReconnectIoHost.IsAuthPresent => _authState != null;
+
+        bool ISoftReconnectIoHost.IsAuthRegistered =>
+            _authState != null && _authState.Registered;
+
+        bool ISoftReconnectIoHost.IsConnected => IsConnected;
+
+        void ISoftReconnectIoHost.LogAutoReconnectScheduled(string reason) =>
             Debug.WriteLine("[WhatsAppService] Scheduling persistent reconnect: " + reason);
 
-        void IScheduleAutoReconnectHost.WriteAutoReconnectScheduled(string reason) =>
+        void ISoftReconnectIoHost.WriteAutoReconnectScheduled(string reason) =>
             RuntimeDiagnosticsService.Instance.Write("connection", "reconnect-scheduled", reason);
 
-        void IScheduleAutoReconnectHost.TracePairingSkippedForPending(string reason) =>
+        void ISoftReconnectIoHost.TracePairingSkippedForPending(string reason) =>
             PairingTrace(
                 "ScheduleAutoReconnect SKIPPED (pairingRestartPending) reason=" +
                 (reason ?? string.Empty));
 
-        void IScheduleAutoReconnectHost.TraceScheduleAutoReconnectReason(string reason)
+        void ISoftReconnectIoHost.TraceScheduleAutoReconnectReason(string reason)
         {
             try
             {
@@ -907,31 +856,13 @@ namespace Unison.Uwp.Services.WhatsApp
             }
         }
 
-        void IScheduleAutoReconnectHost.FireAndForgetAutoReconnect(Func<Task> work) =>
+        void ISoftReconnectIoHost.FireAndForgetAutoReconnect(Func<Task> work) =>
             _ = Task.Run(work);
 
-        Task IScheduleAutoReconnectHost.RunAutoReconnectLoopAsync(string reason) =>
+        Task ISoftReconnectIoHost.RunAutoReconnectLoopAsync(string reason) =>
             AutoReconnectLoopAsync(reason);
 
-        SoftReconnectPostLoopAction IScheduleAutoReconnectHost.CompleteAutoReconnectLoop()
-        {
-            lock (_reconnectStateLock)
-            {
-                _isReconnecting = false;
-                return ConnectionSoftReconnectGates.DecidePostLoop(
-                    _suppressReconnect,
-                    _fatalSessionEnded,
-                    _pairingRestartPending,
-                    _authState != null,
-                    _authState != null && _authState.Registered,
-                    IsConnected);
-            }
-        }
-
-        void IScheduleAutoReconnectHost.ScheduleAutoReconnect(string reason) =>
-            ScheduleAutoReconnect(reason);
-
-        void IScheduleAutoReconnectHost.TryStartPairingStage2Reconnect(string reason) =>
+        void ISoftReconnectIoHost.TryStartPairingStage2Reconnect(string reason) =>
             TryStartPairingStage2Reconnect(reason);
 
 
@@ -1743,7 +1674,7 @@ namespace Unison.Uwp.Services.WhatsApp
         {
             return ConnectionEnsure.RunAsync(
                 this,
-                _resumeConnectionLock,
+                _connectionGates.ResumeGate,
                 timeoutMs,
                 forceFreshTransport);
         }
@@ -1822,12 +1753,13 @@ namespace Unison.Uwp.Services.WhatsApp
 
         // --- IConnectAsyncHost -----------------------------------------------
 
-        Task IConnectAsyncHost.EnterConnectLockAsync() => _connectLock.WaitAsync();
+        Task IConnectAsyncHost.EnterConnectLockAsync() =>
+            _connectionGates.EnterConnectAsync();
 
         void IConnectAsyncHost.ExitConnectLock()
         {
             _isConnecting = false;
-            _connectLock.Release();
+            _connectionGates.ExitConnect();
         }
 
         void IConnectAsyncHost.WriteConnectSkippedAlreadyHealthy() =>
@@ -1960,13 +1892,8 @@ namespace Unison.Uwp.Services.WhatsApp
         void IConnectionPairingStage2Host.ClearPairingRestartPending() =>
             _pairingRestartPending = false;
 
-        void IConnectionPairingStage2Host.ClearReconnectingFlag()
-        {
-            lock (_reconnectStateLock)
-            {
-                _isReconnecting = false;
-            }
-        }
+        void IConnectionPairingStage2Host.ClearReconnectingFlag() =>
+            _softReconnect.ClearReconnectingFlag();
 
         Task IConnectionPairingStage2Host.ConnectAsync() => ConnectAsync();
 
@@ -2072,7 +1999,7 @@ namespace Unison.Uwp.Services.WhatsApp
             _sessionEstablishedTcs = CreateSessionEstablishedTcs();
             _historyIdentityRefreshTriggeredThisSession = false;
             _qrDeliveredThisConnection = false;
-            Interlocked.Exchange(ref _postMessageEnrichmentStarted, 0);
+            _postSyncMaintenance.ResetEnrichmentStarted();
             Interlocked.Exchange(ref _enrichmentAwaitingHeavyHistory, 0);
         }
 
@@ -2242,9 +2169,8 @@ namespace Unison.Uwp.Services.WhatsApp
         void IConnectionLifecycleHost.CancelBackgroundWorkForShutdown()
         {
             Contacts?.CancelBackgroundResolution();
-            _postReplayMaintenanceCts?.Cancel();
-            _postReplayMaintenanceCts?.Dispose();
-            _postReplayMaintenanceCts = null;
+            _postSyncMaintenance.CancelAll();
+            _hydrationDayRetry.Cancel();
             DeferredAvatars?.Cancel();
             Contacts?.CancelAliasFollowUp();
             _offlineReplayFlush?.ClearTimer();

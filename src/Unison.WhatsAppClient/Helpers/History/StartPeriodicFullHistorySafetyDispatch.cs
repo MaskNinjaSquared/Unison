@@ -1,7 +1,8 @@
 // =============================================================================
 // StartPeriodicFullHistorySafetyDispatch
 //
-// Body of StartPeriodicFullHistorySafety. Loop Task.Run stays on the host.
+// Body of StartPeriodicFullHistorySafety. ConnectionHealthMonitorOwner owns
+// CTS / Task.Run; loop body stays on IConnectionHealthMonitorIoHost.
 // =============================================================================
 using System;
 using Unison.WhatsAppClient.Abstractions;

@@ -2,6 +2,38 @@
 
 Newest first.
 
+## Extraction 4 — ConnectionGateLocks + HydrationDayRetryOwner
+
+Connect and resume/ensure `SemaphoreSlim` gates moved to `ConnectionGateLocks`
+(`ConnectAsync` enter/exit; `ConnectionEnsure` uses `ResumeGate`). Hydration
+day-retry CTS, day attempts and day-anchor moved to `HydrationDayRetryOwner`
+over `IHydrationDayRetryIoHost` (freshness / pipeline / stamp only). Same
+ownership shape as the other Phase 4 owners.
+
+## Extraction 4 — PostSyncMaintenanceOwner owns post-replay / enrichment CTS
+
+Post-replay maintenance and post-message enrichment CTS fields, the once-per-
+session enrichment CAS, and `Task.Run` arms moved out of `WhatsAppService` into
+`PostSyncMaintenanceOwner`. Schedule dispatches run against the owner; the client
+only implements `IPostSyncMaintenanceIoHost` (quiet/memory/façade bodies).
+Shutdown cancels both CTS via `CancelAll`. Same ownership shape as
+`SoftReconnectCoordinator` / `ConnectionHealthMonitorOwner`.
+
+## Extraction 4 — ConnectionHealthMonitorOwner owns health / safety CTS
+
+Connection-health monitor and periodic FULL_HISTORY safety CTS / `Task.Run`
+moved out of `WhatsAppService` into `ConnectionHealthMonitorOwner`. Start/Stop
+dispatches run against the owner; the client only implements
+`IConnectionHealthMonitorIoHost` loop bodies. Same ownership shape as
+`SoftReconnectCoordinator`.
+
+## Extraction 4 — SoftReconnectCoordinator owns reconnect slot
+
+Soft auto-reconnect lock and `isReconnecting` moved out of `WhatsAppService` into
+`SoftReconnectCoordinator` (WhatsAppClient). Schedule / claim / complete / pairing
+slot entry points live on the owner; the client only implements `ISoftReconnectIoHost`
+(auth flags, loop body, diagnostics). Same ownership shape as `OfflineReplayFlush` /
+`HistoryHydrationBackfill`.
 ## Mobile — finish FULL_HISTORY on first empty-ack quiet lot (frugal)
 
 Freshness catch-up on Low could burn ~3×50s rounds after WA `ack-accepted`

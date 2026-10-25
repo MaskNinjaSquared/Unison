@@ -1,7 +1,8 @@
 // =============================================================================
 // SchedulePostReplayMaintenanceDispatch
 //
-// Body of SchedulePostReplayMaintenance after CTS swap. Task.Run stays on host.
+// Body of SchedulePostReplayMaintenance. PostSyncMaintenanceOwner owns CTS /
+// Task.Run; quiet/memory work stays on IPostSyncMaintenanceIoHost.
 // =============================================================================
 using System;
 using System.Threading;

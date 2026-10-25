@@ -1,8 +1,9 @@
 // =============================================================================
 // PostMessageEnrichmentScheduleDispatch
 //
-// Body of SchedulePostMessageEnrichment after TrySchedule gates. CAS / CTS /
-// Task.Run stay on the host.
+// Body of SchedulePostMessageEnrichment after TrySchedule gates.
+// PostSyncMaintenanceOwner owns CAS / CTS / Task.Run; façade work stays on
+// IPostSyncMaintenanceIoHost.
 // =============================================================================
 using System;
 using System.Threading;

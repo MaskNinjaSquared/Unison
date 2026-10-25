@@ -1,7 +1,8 @@
 // =============================================================================
 // ScheduleAutoReconnectDispatch
 //
-// Body of ScheduleAutoReconnect. Lock / Task.Run / loop stay on the host.
+// Body of ScheduleAutoReconnect. SoftReconnectCoordinator owns the slot;
+// Task.Run / loop I/O stay on ISoftReconnectIoHost.
 // =============================================================================
 using System;
 using System.Threading.Tasks;
