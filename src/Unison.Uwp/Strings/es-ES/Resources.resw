@@ -1354,4 +1354,67 @@ Desactívalo tras el diagnóstico: mantenerlo activo ralentiza la aplicación.</
   <data name="Debug_SocketSliceStop.Content" xml:space="preserve">
     <value>Stop</value>
   </data>
+  <data name="ChatDetail_ForwardMessage" xml:space="preserve">
+    <value>Forward</value>
+  </data>
+  <data name="ChatDetail_ImageBatchInfo" xml:space="preserve">
+    <value>{0} images ({1} KB)</value>
+  </data>
+  <data name="Profile_Title" xml:space="preserve">
+    <value>Profile</value>
+  </data>
+  <data name="Profile_StartChatAppBarLabel.Text" xml:space="preserve">
+    <value>Start&#x0a;chat</value>
+  </data>
+  <data name="Profile_MissingContact" xml:space="preserve">
+    <value>Contact not found.</value>
+  </data>
+  <data name="Profile_LoadFailed" xml:space="preserve">
+    <value>Could not open this profile.</value>
+  </data>
+  <data name="Favorites_EmptyTitle.Text" xml:space="preserve">
+    <value>Add favorites</value>
+  </data>
+  <data name="Favorites_AddPeopleOrGroups.Content" xml:space="preserve">
+    <value>Add people or groups</value>
+  </data>
+  <data name="Share_PickChat.Text" xml:space="preserve">
+    <value>Send to…</value>
+  </data>
+  <data name="Favorites_SortAlphabetical.Text" xml:space="preserve">
+    <value>A-Z</value>
+  </data>
+  <data name="ChatList_AddFavorite.Text" xml:space="preserve">
+    <value>Add to favorites</value>
+  </data>
+  <data name="ChatList_RemoveFavorite.Text" xml:space="preserve">
+    <value>Remove from favorites</value>
+  </data>
+  <data name="Favorites_OpenChat.Text" xml:space="preserve">
+    <value>Open chat</value>
+  </data>
+  <data name="Favorites_Remove.Text" xml:space="preserve">
+    <value>Remove from favorites</value>
+  </data>
+  <data name="ChatList_ViewProfile.Text" xml:space="preserve">
+    <value>View profile</value>
+  </data>
+  <data name="ChatDetailInfo_PinContactAppBarLabel.Text" xml:space="preserve">
+    <value>Pin&#x0a;contact</value>
+  </data>
+  <data name="ChatDetailInfo_UnpinContactAppBarLabel.Text" xml:space="preserve">
+    <value>Unpin&#x0a;contact</value>
+  </data>
+  <data name="Tile_ContactProfileTitle" xml:space="preserve">
+    <value>{0} Profile</value>
+  </data>
+  <data name="Tile_ContactNoNewMessages" xml:space="preserve">
+    <value>No new messages</value>
+  </data>
+  <data name="Tile_ContactHasNewMessages" xml:space="preserve">
+    <value>{0} New Messages</value>
+  </data>
+  <data name="Tile_ContactNoMotto" xml:space="preserve">
+    <value>No status message</value>
+  </data>
 </root>
