@@ -1638,6 +1638,14 @@ namespace Unison.Uwp.Shell.Unison.Views
 
             _activeChat = chat;
             chats?.SetActiveChatJid(chat?.JID);
+            // Hold before SyncActiveChat so group roster/metadata UI applies wait behind
+            // Yield + LoadMessages (500+ members were starving Mobile open by ~40s).
+            if (chat != null)
+            {
+                App.Services?.GetService<ChatTimelineLoadPriorityGate>()
+                    ?.Hold("prepare-active-chat");
+            }
+
             ViewModel?.SyncActiveChat(chat);
 
             // A menu belongs to the conversation it was opened over, so a different one arriving
@@ -1722,20 +1730,23 @@ namespace Unison.Uwp.Shell.Unison.Views
         /// <summary>
         /// Loads the UI message window for the chat <see cref="PrepareActiveChatAsync"/> just showed.
         /// Yields one frame (a short extra wait on Mobile) so the detail pane can paint first.
-        /// Holds <see cref="ChatTimelineLoadPriorityGate"/> so tip-reconcile UI does not starve SQLite.
+        /// Releases <see cref="ChatTimelineLoadPriorityGate"/> held in Prepare so tip/roster UI
+        /// can resume after the timeline paints.
         /// </summary>
         public async Task CompleteActiveChatLoadAsync()
         {
             ChatItem chat = _activeChat;
+            ChatTimelineLoadPriorityGate timelinePriority =
+                App.Services?.GetService<ChatTimelineLoadPriorityGate>();
             if (chat == null || ViewModel == null)
             {
                 PreferFastTimelineLoad = false;
+                // Prepare may have Held; always pair a Release on the complete path.
+                timelinePriority?.Release("prepare-active-chat");
                 return;
             }
 
-            ChatTimelineLoadPriorityGate timelinePriority =
-                App.Services?.GetService<ChatTimelineLoadPriorityGate>();
-            timelinePriority?.Hold("complete-active-chat-load");
+            // Prepare already Held; Complete only Releases in finally (refcount).
             try
             {
                 CancellationToken token = _chatLoadCts?.Token ?? CancellationToken.None;
@@ -1863,7 +1874,7 @@ namespace Unison.Uwp.Shell.Unison.Views
             finally
             {
                 PreferFastTimelineLoad = false;
-                timelinePriority?.Release("complete-active-chat-load");
+                timelinePriority?.Release("prepare-active-chat");
             }
         }
 

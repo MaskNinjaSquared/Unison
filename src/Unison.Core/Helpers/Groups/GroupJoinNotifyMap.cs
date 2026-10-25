@@ -19,7 +19,9 @@ namespace Unison.Core.Helpers.Groups
         public static IReadOnlyList<GroupJoinNotifyRequest> FromAddParticipants(
             string groupJid,
             IEnumerable<string> participants,
-            IReadOnlyDictionary<string, string> participantPhones,
+            // IDictionary: Socket GroupParticipantsUpdate.ParticipantPhones is that shape;
+            // IDictionary does not implement IReadOnlyDictionary on this target.
+            IDictionary<string, string> participantPhones,
             string notificationId,
             DateTime timestampUtc)
         {

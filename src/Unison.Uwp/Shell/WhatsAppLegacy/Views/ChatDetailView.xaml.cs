@@ -1842,6 +1842,14 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
 
             _activeChat = chat;
             chats?.SetActiveChatJid(chat?.JID);
+            // Hold before SyncActiveChat so group roster/metadata UI applies wait behind
+            // Yield + LoadMessages (500+ members were starving Mobile open by ~40s).
+            if (chat != null)
+            {
+                App.Services?.GetService<ChatTimelineLoadPriorityGate>()
+                    ?.Hold("prepare-active-chat");
+            }
+
             ViewModel?.SyncActiveChat(chat);
 
             // A menu belongs to the conversation it was opened over, so a different one arriving
@@ -1923,15 +1931,16 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
         public async Task CompleteActiveChatLoadAsync()
         {
             ChatItem chat = _activeChat;
+            ChatTimelineLoadPriorityGate timelinePriority =
+                App.Services?.GetService<ChatTimelineLoadPriorityGate>();
             if (chat == null || ViewModel == null)
             {
                 PreferFastTimelineLoad = false;
+                timelinePriority?.Release("prepare-active-chat");
                 return;
             }
 
-            ChatTimelineLoadPriorityGate timelinePriority =
-                App.Services?.GetService<ChatTimelineLoadPriorityGate>();
-            timelinePriority?.Hold("complete-active-chat-load");
+            // Prepare already Held; Complete only Releases in finally (refcount).
             try
             {
                 CancellationToken token = _chatLoadCts?.Token ?? CancellationToken.None;
@@ -2059,7 +2068,7 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             finally
             {
                 PreferFastTimelineLoad = false;
-                timelinePriority?.Release("complete-active-chat-load");
+                timelinePriority?.Release("prepare-active-chat");
             }
         }
 

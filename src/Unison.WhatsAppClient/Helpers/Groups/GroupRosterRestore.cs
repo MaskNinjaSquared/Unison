@@ -24,19 +24,22 @@ namespace Unison.WhatsAppClient.Helpers
         private readonly IJidResolver _jids;
         private readonly IChatStateStore _chats;
         private readonly IGroupRosterStore _store;
+        private readonly ChatTimelineLoadPriorityGate _timelinePriority;
 
         public GroupRosterRestore(
             IGroupNaming naming,
             IDispatcher ui,
             IJidResolver jids,
             IChatStateStore chats,
-            IGroupRosterStore store)
+            IGroupRosterStore store,
+            ChatTimelineLoadPriorityGate timelinePriority = null)
         {
             _naming = naming ?? throw new ArgumentNullException(nameof(naming));
             _ui = ui ?? throw new ArgumentNullException(nameof(ui));
             _jids = jids ?? throw new ArgumentNullException(nameof(jids));
             _chats = chats ?? throw new ArgumentNullException(nameof(chats));
             _store = store ?? throw new ArgumentNullException(nameof(store));
+            _timelinePriority = timelinePriority;
         }
 
         public async Task EnsureLoadedAsync(string groupJid)
@@ -84,6 +87,12 @@ namespace Unison.WhatsAppClient.Helpers
             if (hydrated.Count == 0)
             {
                 return;
+            }
+
+            // Large rosters (500+) on the UI thread starve chat-open Yield/LoadMessages on Mobile.
+            if (_timelinePriority != null)
+            {
+                await _timelinePriority.WaitWhileHeldAsync().ConfigureAwait(false);
             }
 
             await _ui.RunAsync(() =>

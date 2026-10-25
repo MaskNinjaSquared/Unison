@@ -789,7 +789,9 @@ namespace Unison.Uwp
                 sp.GetRequiredService<IJidResolver>(),
                 sp.GetRequiredService<IChatStateStore>(),
                 sp.GetRequiredService<ChatRowIndex>(),
-                sp.GetRequiredService<ChatStateStore>().GroupSubjects));
+                sp.GetRequiredService<ChatStateStore>().GroupSubjects,
+                utcNow: null,
+                timelinePriority: sp.GetRequiredService<ChatTimelineLoadPriorityGate>()));
             services.AddSingleton<IGroupService>(sp => new GroupFacade(
                 sp.GetRequiredService<IGroupWireActions>(),
                 sp.GetRequiredService<IGroupNaming>(),
@@ -803,7 +805,8 @@ namespace Unison.Uwp
                     sp.GetRequiredService<AttachedUiDispatcher>(),
                     sp.GetRequiredService<IJidResolver>(),
                     sp.GetRequiredService<IChatStateStore>(),
-                    sp.GetRequiredService<IGroupRosterStore>()),
+                    sp.GetRequiredService<IGroupRosterStore>(),
+                    sp.GetRequiredService<ChatTimelineLoadPriorityGate>()),
                 sp.GetRequiredService<IGroupAvatarActions>(),
                 sp.GetRequiredService<IUsyncGate>(),
                 sp.GetRequiredService<SyncStatusChannel>(),

@@ -2,6 +2,23 @@
 
 Newest first.
 
+## Mobile — group chat open no longer waits on 500+ roster apply
+
+Opening a large group (~568 members) held the UI ~40s between Prepare and
+timeline paint: `SyncActiveChat` restored/applied the full roster on the
+dispatcher while `YieldForSurfacePaint` waited, and `ChatOpenMetadataProbe`
+issued a second `QueryGroupMetadata`. Fix: ref-counted
+`ChatTimelineLoadPriorityGate` held from Prepare→Complete; roster restore +
+metadata apply wait while held; probe keeps RAM/SQL only (no wire query).
+
+## Extraction 3.9b — client drops public MessagesByChat
+
+`WhatsAppService` no longer re-exports `ChatStateStore.MessagesByChat`. Hosts and
+diagnostics reach the store (`GetMessageCount` / `GetMessages` for counts and
+on-demand history pages; cache clear/evict still on `_chatState.MessagesByChat`).
+Dead client `TrimInMemoryMessageWindow` removed (trim already on `MessageFacade`).
+`Chats` binding alias stays.
+
 ## Refactor wave — DeferredAvatars seam + pane chrome DRY + GroupJoin map
 
 Two highs + light hygiene (Mobile test window kept clear of Legacy Hold):

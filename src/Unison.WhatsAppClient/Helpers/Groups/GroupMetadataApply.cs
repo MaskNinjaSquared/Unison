@@ -32,6 +32,7 @@ namespace Unison.WhatsAppClient.Helpers
         private readonly ChatRowIndex _rows;
         private readonly DisplayNameTable _subjects;
         private readonly Func<DateTime> _utcNow;
+        private readonly ChatTimelineLoadPriorityGate _timelinePriority;
 
         public GroupMetadataApply(
             IGroupNaming naming,
@@ -42,7 +43,8 @@ namespace Unison.WhatsAppClient.Helpers
             IChatStateStore chats,
             ChatRowIndex rows,
             DisplayNameTable subjects,
-            Func<DateTime> utcNow = null)
+            Func<DateTime> utcNow = null,
+            ChatTimelineLoadPriorityGate timelinePriority = null)
         {
             _naming = naming ?? throw new ArgumentNullException(nameof(naming));
             _ui = ui ?? throw new ArgumentNullException(nameof(ui));
@@ -53,6 +55,7 @@ namespace Unison.WhatsAppClient.Helpers
             _rows = rows ?? throw new ArgumentNullException(nameof(rows));
             _subjects = subjects ?? throw new ArgumentNullException(nameof(subjects));
             _utcNow = utcNow ?? (() => DateTime.UtcNow);
+            _timelinePriority = timelinePriority;
         }
 
         /// <summary>
@@ -128,6 +131,11 @@ namespace Unison.WhatsAppClient.Helpers
             }
 
             string canonical = _jids.GetCanonicalJid(groupJid);
+            if (_timelinePriority != null)
+            {
+                await _timelinePriority.WaitWhileHeldAsync().ConfigureAwait(false);
+            }
+
             await _ui.RunAsync(() =>
             {
                 ChatItem chat = _chats.Chats.FirstOrDefault(c =>
