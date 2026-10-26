@@ -20,7 +20,7 @@
     <PackageCertificateThumbprint>
     </PackageCertificateThumbprint>
     <!-- APPX4001: declare bundle platforms explicitly -->
-    <AppxBundlePlatforms>arm</AppxBundlePlatforms>
+    <AppxBundlePlatforms>x64|arm</AppxBundlePlatforms>
     <!-- PRI257: avoid NuGet satellite assemblies overriding app default language -->
     <AppxGeneratePrisForPortableLibrariesEnabled>false</AppxGeneratePrisForPortableLibrariesEnabled>
     <!-- Prefer 64-bit ILC; can avoid some 1.7.6 Analysis NREs -->
@@ -478,7 +478,6 @@
     <Compile Include="UI\Helpers\MentionComposerInput.cs" />
     <Compile Include="UI\Helpers\ChatDetailClipboardPaste.cs" />
     <Compile Include="UI\Helpers\ViewerEscapeKey.cs" />
-
     <Compile Include="UI\Helpers\MessageBubbleContextActions.cs" />
     <Compile Include="UI\Helpers\DesktopCursor.cs" />
     <Compile Include="UI\Helpers\CommunityChatDetailHeader.cs" />
@@ -652,28 +651,14 @@
     <None Include="Native\WebP\ARM\libwebp.dll" />
     <None Include="Native\WebP\ARM\libsharpyuv.dll" />
   </ItemGroup>
-  <Target Name="CopyWebPDllsToOutputRoot"
-          AfterTargets="Build"
-          Condition="'$(Platform)' == 'ARM'">
-    <Copy SourceFiles="$(MSBuildProjectDirectory)\Native\WebP\ARM\libwebp.dll"
-          DestinationFiles="$(OutDir)libwebp.dll"
-          SkipUnchangedFiles="true" />
-    <Copy SourceFiles="$(MSBuildProjectDirectory)\Native\WebP\ARM\libsharpyuv.dll"
-          DestinationFiles="$(OutDir)libsharpyuv.dll"
-          SkipUnchangedFiles="true" />
+  <Target Name="CopyWebPDllsToOutputRoot" AfterTargets="Build" Condition="'$(Platform)' == 'ARM'">
+    <Copy SourceFiles="$(MSBuildProjectDirectory)\Native\WebP\ARM\libwebp.dll" DestinationFiles="$(OutDir)libwebp.dll" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="$(MSBuildProjectDirectory)\Native\WebP\ARM\libsharpyuv.dll" DestinationFiles="$(OutDir)libsharpyuv.dll" SkipUnchangedFiles="true" />
     <!-- Deploy layout root (same folder AppX reads for local deploy). -->
-    <Copy SourceFiles="$(MSBuildProjectDirectory)\Native\WebP\ARM\libwebp.dll"
-          DestinationFiles="$(OutDir)Core\libwebp.dll"
-          SkipUnchangedFiles="true"
-          Condition="Exists('$(OutDir)Core')" />
-    <Copy SourceFiles="$(MSBuildProjectDirectory)\Native\WebP\ARM\libsharpyuv.dll"
-          DestinationFiles="$(OutDir)Core\libsharpyuv.dll"
-          SkipUnchangedFiles="true"
-          Condition="Exists('$(OutDir)Core')" />
+    <Copy SourceFiles="$(MSBuildProjectDirectory)\Native\WebP\ARM\libwebp.dll" DestinationFiles="$(OutDir)Core\libwebp.dll" SkipUnchangedFiles="true" Condition="Exists('$(OutDir)Core')" />
+    <Copy SourceFiles="$(MSBuildProjectDirectory)\Native\WebP\ARM\libsharpyuv.dll" DestinationFiles="$(OutDir)Core\libsharpyuv.dll" SkipUnchangedFiles="true" Condition="Exists('$(OutDir)Core')" />
   </Target>
-  <Target Name="IncludeWebPDllsInAppx"
-          BeforeTargets="_ComputeAppxPackagePayload"
-          Condition="'$(Platform)' == 'ARM'">
+  <Target Name="IncludeWebPDllsInAppx" BeforeTargets="_ComputeAppxPackagePayload" Condition="'$(Platform)' == 'ARM'">
     <ItemGroup>
       <AppxPackagePayload Include="$(MSBuildProjectDirectory)\Native\WebP\ARM\libwebp.dll">
         <TargetPath>libwebp.dll</TargetPath>
