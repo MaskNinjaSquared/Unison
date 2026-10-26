@@ -2,6 +2,57 @@
 
 Newest first.
 
+## Mobile — minimal group roster for bubble photos; @ loads full from store
+
+Open still skips the 500+ member apply. Visible bubble (and quote) JIDs get
+`GroupMember.IsMinimal` stubs so `HydrateVisible` can fetch photos; full restore
+merges over stubs (`HasFullGroupRoster`) and keeps avatar/name. First `@`
+ensures roster from SQLite (wire only if still empty) and refreshes the mention
+menu — not on every chat open.
+
+## Mobile — live strip tip vs reorder; alias dedupe skip
+
+Live incoming list apply writes the tip/unread on the urgent UI hop and
+schedules `ChatDisplayOrder.Reposition` on a Normal hop that toast does not
+await — so a slow `VisibleChats.Move` no longer holds the announce ~80s.
+`ChatListDeduper` skips `BuildPlan` when `JidAliasTable.ChangeGeneration` is
+unchanged since the last pass, plans with `PeekCanonicalJid` (no LidMapping
+promote storms), and only walks message-cache keys when aliases exist.
+Breadcrumbs: `strip-tip` / `strip-reorder` / `chat-list-dedupe|skip-unchanged`.
+
+## Notifications — community subgroup titles use GroupNaming
+
+Live toast chat title for `@g.us` no longer prefers `ContactDisplayNames`
+(agenda/push). It uses `ChatItem.GetNameResolved` then
+`IGroupNaming.ResolveChatDisplayName` (GroupSubjects first) — same policy as
+the community hub list — so linked subgroups stop toasting the wrong/parent
+name. Avisos still forced via `PreferChatTitle`.
+
+## ChatDetailInfo — name / phone / groups-in-common white on Unison
+
+Pane body text (group title, contact name, phone, groups-in-common titles)
+uses a dedicated `ChatDetailInfoPaneBodyBrush` (always white on the brand-green
+info pane). Stops WinUI HyperlinkButton / `SystemControlHyperlinkTextBrush`
+accent green and Legacy `ChatDetailInfoValueBrush` green from painting those
+fields. Local overrides in `ChatDetailInfoPivotStyles` also pin hyperlink
+accent fills to white inside the pane.
+
+## Notifications — community Avisos toast uses localized label
+
+Live toast title for `IsCommunityAnnounce` chats always uses
+`Chat_CommunityAnnouncements` (Avisos / Announcements) via
+`NotificationDisplayLabel.PreferChatTitle` — never the wire subject.
+
+## Resume — skip Theme.xaml remount; community subject cache; group toast ids
+
+`OnResuming` calls `ApplyFromSettingsIfShellChanged` — remounts shell Theme.xaml
+only when `SelectedShell` differs from the last applied shell or a pending
+“shell applied” toast is owed (stops Legacy white flash after FileOpenPicker).
+`GroupMetadataApply` files wire subjects even when the chat row is missing
+(synthetic community hubs). Toast `NotificationDisplayLabel` rejects group id
+placeholders so Mobile notifications no longer prefer bare numeric JIDs over
+real subjects.
+
 ## Notifications — resolve toast title/author past bare JID/@lid
 
 Live toast announce (`FinishLiveStripAnnounceAsync`) runs chat + group-author
