@@ -780,12 +780,15 @@ namespace Unison.Uwp
                 sp.GetRequiredService<IDialogService>(),
                 sp.GetRequiredService<IRuntimeDiagnostics>()));
             // After IChatService: the projection persists resolved strip rows so cold start keeps names.
+            // AttachedUiDispatcher (not IDispatcher/DispatcherService): same live frame as
+            // GroupMetadataApply / ChatFacade so strip passes share the pump; DispatcherService
+            // also ran inline on HasThreadAccess and stacked BeginSweep inside metadata hops.
             services.AddSingleton<IChatAuthorProjection>(sp => new ChatAuthorProjection(
                 sp.GetRequiredService<IChatStateStore>(),
                 sp.GetRequiredService<IPersonStore>(),
                 sp.GetRequiredService<IJidResolver>(),
                 sp.GetRequiredService<IStringResources>(),
-                sp.GetRequiredService<IDispatcher>(),
+                sp.GetRequiredService<AttachedUiDispatcher>(),
                 sp.GetRequiredService<IContactService>(),
                 sp.GetRequiredService<IChatService>(),
                 onDemand: sp.GetRequiredService<ISystemInfoProvider>().IsMobile(),

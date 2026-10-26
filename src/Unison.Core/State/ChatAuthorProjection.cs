@@ -74,6 +74,12 @@ namespace Unison.Core.State
         private const int SweepChunkSize = 8;
 
         /// <summary>
+        /// Linear roster tip scan above this size is skipped — 500-member groups made each
+        /// SweepOne dominate the hop; Person / 1:1 maps still name the strip.
+        /// </summary>
+        private const int MaxRosterTipScan = 64;
+
+        /// <summary>
         /// Tells <see cref="GroupParticipantResolver"/> not to re-walk GroupMembers after we
         /// already looked up the tip sender once.
         /// </summary>
@@ -319,6 +325,11 @@ namespace Unison.Core.State
                     await _timelinePriority.WaitWhileHeldAsync().ConfigureAwait(false);
                 }
 
+                // IDispatcher runs inline when already on the UI thread. FinishSweep → SchedulePass
+                // during a PersonChanged / avatar storm would nest another BeginSweep inside the
+                // same watchdog hop (seen as RunPassWhenOpenAllowsAsync for 30–86s on ARM). Always
+                // leave the current frame before the next pass.
+                await Task.Yield();
                 await _dispatcher.RunAsync(BeginSweep).ConfigureAwait(false);
             }
             catch (Exception ex)
@@ -554,7 +565,12 @@ namespace Unison.Core.State
 
             // Prefer roster tip / 1:1 map as nameHint so ResolveDisplayName returns before the
             // contacts service hop (that path dominated Mobile time even with indexes).
-            GroupMember tipMember = ChatAuthorStripMaps.FindRosterTip(chat, participant, _jids);
+            // Skip linear scan on huge rosters — EmptyRoster already avoids a second walk.
+            GroupMember tipMember = null;
+            if (chat.GroupMembers == null || chat.GroupMembers.Count <= MaxRosterTipScan)
+            {
+                tipMember = ChatAuthorStripMaps.FindRosterTip(chat, participant, _jids);
+            }
             string directHint;
             ChatAuthorStripMaps.TryGetDirectName(
                 directChatNames,

@@ -146,6 +146,64 @@ namespace Unison.Core.Tests.State
         }
 
         [Fact]
+        public async Task Sweep_skips_huge_roster_tip_scan_and_uses_Person()
+        {
+            var jids = new AliasJids();
+            jids.Pair(Lid, Pn);
+            var people = new MemoryPersonStore();
+            people.SeedDisk(new Person
+            {
+                Jid = Pn,
+                Name = "Ana Souza",
+                Phone = "5511988887777",
+                Source = PersonSource.Observed
+            });
+
+            var members = new List<GroupMember>();
+            for (int i = 0; i < 80; i++)
+            {
+                members.Add(new GroupMember
+                {
+                    Jid = "1000" + i + "@lid",
+                    DisplayName = "Member " + i
+                });
+            }
+
+            // Tip at the end with a roster label that must not be reached by a capped scan.
+            members.Add(new GroupMember
+            {
+                Jid = Lid,
+                DisplayName = "Ana Roster Only"
+            });
+
+            var chatState = new ChatStateStore(new CountingDispatcher());
+            var group = new ChatItem
+            {
+                JID = Group,
+                Name = "Família",
+                IsGroup = true,
+                LastMessageIsFromMe = false,
+                LastMessageParticipantJid = Lid,
+                GroupMembers = members
+            };
+            chatState.Chats.Add(group);
+
+            var dispatcher = new CountingDispatcher();
+            var projection = new ChatAuthorProjection(
+                chatState,
+                people,
+                jids,
+                strings: null,
+                dispatcher);
+
+            projection.Start();
+            await WaitForAsync(() => group.LastMessageSenderName == "Ana Souza");
+
+            Assert.Equal("Ana Souza: ", group.LastMessageAuthor);
+            Assert.True(dispatcher.MaxDepth <= 1, "BeginSweep nested depth=" + dispatcher.MaxDepth);
+        }
+
+        [Fact]
         public async Task OnDemand_PersonChanged_updates_only_groups_with_that_tip()
         {
             var jids = new AliasJids();
