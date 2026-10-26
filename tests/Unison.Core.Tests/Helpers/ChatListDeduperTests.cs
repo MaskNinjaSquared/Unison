@@ -74,7 +74,43 @@ namespace Unison.Core.Tests.Helpers
             await Task.WhenAll(first, second, third);
 
             Assert.Same(second, third);
-            Assert.Equal(2, _ui.Passes);
+            // Follow-up sees the same alias generation and skips BuildPlan (no second UI hop).
+            Assert.Equal(1, _ui.Passes);
+            Assert.True((await second).SkippedUnchangedAliases);
+        }
+
+        [Fact]
+        public async Task Second_pass_skips_when_alias_generation_unchanged()
+        {
+            _chats.Chats.Add(new ChatItem { JID = Pn });
+            _chats.Chats.Add(new ChatItem { JID = Other });
+            var deduper = Build();
+
+            ChatListDeduperResult first = await deduper.RunAsync("first");
+            ChatListDeduperResult second = await deduper.RunAsync("second");
+
+            Assert.False(first.SkippedUnchangedAliases);
+            Assert.True(second.SkippedUnchangedAliases);
+            Assert.Equal(1, _ui.Passes);
+        }
+
+        [Fact]
+        public async Task Alias_change_after_a_pass_forces_a_new_plan()
+        {
+            _chats.Chats.Add(new ChatItem { JID = Pn });
+            var deduper = Build();
+
+            await deduper.RunAsync("cold");
+            int hopsAfterCold = _ui.Passes;
+            PairLidWithPn();
+            _chats.Chats.Add(new ChatItem { JID = Lid });
+
+            ChatListDeduperResult result = await deduper.RunAsync("after-pair");
+
+            Assert.False(result.SkippedUnchangedAliases);
+            Assert.Equal(1, result.Merged);
+            // Snapshot + one apply batch for the fold.
+            Assert.Equal(hopsAfterCold + 2, _ui.Passes);
         }
 
         [Fact]

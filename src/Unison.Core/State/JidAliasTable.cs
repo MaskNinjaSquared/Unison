@@ -42,6 +42,7 @@ namespace Unison.Core.State
         private ILidMappingMemory _lidMemory;
         private int _bulkImportDepth;
         private bool _bulkImportDirty;
+        private long _changeGeneration;
 
         /// <summary>
         /// Raised when the map changed, which is what lets caches keyed by canonical address
@@ -133,21 +134,38 @@ namespace Unison.Core.State
         // ---------------------------------------------------------------------
 
         /// <summary>
+        /// Bumps on every map mutation that raises <see cref="Changed"/>. Deduper skips a pass
+        /// when this matches the generation it already planned against.
+        /// </summary>
+        public long ChangeGeneration
+        {
+            get { lock (_sync) { return _changeGeneration; } }
+        }
+
+        /// <summary>
         /// The address a contact should be filed under, given everything the session has learned.
         /// Returns the input normalized when nothing is known about it.
         /// </summary>
-        public string GetCanonicalJid(string jid)
+        public string GetCanonicalJid(string jid) => ResolveCanonical(jid, promoteMisses: true);
+
+        /// <summary>
+        /// Same rules as <see cref="GetCanonicalJid"/> but never promotes LidMapping misses into
+        /// the table (no <see cref="Changed"/>). Use for bulk planning on a worker thread.
+        /// </summary>
+        public string PeekCanonicalJid(string jid) => ResolveCanonical(jid, promoteMisses: false);
+
+        private string ResolveCanonical(string jid, bool promoteMisses)
         {
             if (string.IsNullOrEmpty(jid)) return jid;
             string normalized = Normalize(jid);
 
-            if (TryGetValue(normalized, out var alias))
+            if (TryResolveAlias(normalized, promoteMisses, out var alias))
             {
                 string normalizedAlias = Normalize(alias);
 
                 bool isBidirectionalSelfAlias =
                     IsSelfLinked(normalizedAlias) &&
-                    TryGetValue(normalizedAlias, out var reverseAlias) &&
+                    TryResolveAlias(normalizedAlias, promoteMisses, out var reverseAlias) &&
                     string.Equals(Normalize(reverseAlias), normalized, StringComparison.OrdinalIgnoreCase);
 
                 // Guard: never canonicalize a non-self contact to our own JID.
@@ -176,7 +194,7 @@ namespace Unison.Core.State
                 return normalizedAlias;
             }
 
-            string lidLikeAlias = GetCanonicalForLidLikeSWhatsappJid(normalized);
+            string lidLikeAlias = GetCanonicalForLidLikeSWhatsappJid(normalized, promoteMisses);
             if (!string.IsNullOrWhiteSpace(lidLikeAlias))
             {
                 return lidLikeAlias;
@@ -314,7 +332,7 @@ namespace Unison.Core.State
             return string.IsNullOrWhiteSpace(meLid) ? null : meLid;
         }
 
-        private string GetCanonicalForLidLikeSWhatsappJid(string normalized)
+        private string GetCanonicalForLidLikeSWhatsappJid(string normalized, bool promoteMisses)
         {
             if (string.IsNullOrWhiteSpace(normalized) ||
                 !normalized.EndsWith("@s.whatsapp.net", StringComparison.OrdinalIgnoreCase))
@@ -330,14 +348,14 @@ namespace Unison.Core.State
             }
 
             string baseLid = $"{user.Substring(0, dotIndex)}@lid";
-            if (TryGetValue(baseLid, out var alias))
+            if (TryResolveAlias(baseLid, promoteMisses, out var alias))
             {
                 string canonical = Normalize(alias);
                 if (!string.IsNullOrWhiteSpace(canonical))
                 {
                     bool isBidirectionalSelfAlias =
                         IsSelfLinked(canonical) &&
-                        TryGetValue(canonical, out var reverseAlias) &&
+                        TryResolveAlias(canonical, promoteMisses, out var reverseAlias) &&
                         string.Equals(Normalize(reverseAlias), baseLid, StringComparison.OrdinalIgnoreCase);
 
                     if (!IsSelfLinked(baseLid) && IsSelfLinked(canonical) && !isBidirectionalSelfAlias)
@@ -346,7 +364,7 @@ namespace Unison.Core.State
                         return null;
                     }
 
-                    return GetCanonicalJid(canonical);
+                    return ResolveCanonical(canonical, promoteMisses);
                 }
             }
 
@@ -466,7 +484,11 @@ namespace Unison.Core.State
             }
         }
 
-        public bool TryGetValue(string key, out string value)
+        public bool TryGetValue(string key, out string value) =>
+            TryResolveAlias(key, promoteMisses: true, out value);
+
+        /// <summary>Table + LidMapping peek without promoting a miss into <see cref="_inner"/>.</summary>
+        private bool TryResolveAlias(string key, bool promoteMisses, out string value)
         {
             lock (_sync)
             {
@@ -491,8 +513,12 @@ namespace Unison.Core.State
                 return false;
             }
 
-            // Promote into the table so the next sync lookup stays local.
-            this[normalized] = paired;
+            if (promoteMisses)
+            {
+                // Promote into the table so the next sync lookup stays local.
+                this[normalized] = paired;
+            }
+
             value = paired;
             return true;
         }
@@ -637,7 +663,15 @@ namespace Unison.Core.State
             memory?.RememberPair(key, value);
         }
 
-        private void RaiseChanged() => Changed?.Invoke(this, EventArgs.Empty);
+        private void RaiseChanged()
+        {
+            lock (_sync)
+            {
+                _changeGeneration++;
+            }
+
+            Changed?.Invoke(this, EventArgs.Empty);
+        }
 
         private sealed class BulkImportScope : IDisposable
         {

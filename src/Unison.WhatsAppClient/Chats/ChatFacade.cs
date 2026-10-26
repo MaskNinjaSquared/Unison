@@ -1636,9 +1636,11 @@ namespace Unison.WhatsAppClient.Chats
             }
 
             LiveIncomingChatListApplyResult result = new LiveIncomingChatListApplyResult();
-            // High priority so Normal reshuffles do not starve the tip Move. Callers on the
-            // live pump must not await this for stage=route — MessageFacade detaches strip+toast.
-            var stripElapsed = Stopwatch.StartNew();
+            // Tip at High priority; Reposition (store Move → VisibleChats.Move) at Normal and
+            // not awaited — toast/Live Tile must not wait on list layout. Callers on the live
+            // pump must not await this for stage=route — MessageFacade detaches strip+toast.
+            ChatItem chatForReorder = null;
+            var tipElapsed = Stopwatch.StartNew();
             await RunLiveStripAsync(() =>
             {
                 ChatItem chat = ApplyStripOnUiThread(
@@ -1656,6 +1658,7 @@ namespace Unison.WhatsAppClient.Chats
                     request.AliasLid,
                     request.AliasPn,
                     createAtFront: true,
+                    reposition: false,
                     out _,
                     request.ParticipantJid,
                     request.SenderName);
@@ -1663,15 +1666,44 @@ namespace Unison.WhatsAppClient.Chats
                 result.Chat = chat;
                 result.DisplayName = chat != null ? chat.Name : null;
                 result.TotalUnread = GetTotalUnreadCount();
+                chatForReorder = chat;
             }).ConfigureAwait(false);
-            stripElapsed.Stop();
-            if (stripElapsed.ElapsedMilliseconds >= 1000)
+            tipElapsed.Stop();
+            if (tipElapsed.ElapsedMilliseconds >= 1000)
             {
                 DiagWrite(
                     "messages",
                     "live-strip-ui-slow",
                     "jid=" + request.ChatJid +
-                    "; elapsedMs=" + stripElapsed.ElapsedMilliseconds);
+                    "; phase=tip; elapsedMs=" + tipElapsed.ElapsedMilliseconds);
+            }
+            else if (tipElapsed.ElapsedMilliseconds >= 300)
+            {
+                DiagWrite(
+                    "messages",
+                    "strip-tip",
+                    "jid=" + request.ChatJid +
+                    "; elapsedMs=" + tipElapsed.ElapsedMilliseconds);
+            }
+
+            if (chatForReorder != null)
+            {
+                ChatItem toReorder = chatForReorder;
+                string reorderJid = request.ChatJid;
+                _ = _ui.RunAsync(() =>
+                {
+                    var reorderElapsed = Stopwatch.StartNew();
+                    ChatDisplayOrder.Reposition(_chatState.Chats, toReorder);
+                    reorderElapsed.Stop();
+                    if (reorderElapsed.ElapsedMilliseconds >= 300)
+                    {
+                        DiagWrite(
+                            "messages",
+                            "strip-reorder",
+                            "jid=" + reorderJid +
+                            "; elapsedMs=" + reorderElapsed.ElapsedMilliseconds);
+                    }
+                });
             }
 
             return result;
@@ -1726,6 +1758,7 @@ namespace Unison.WhatsAppClient.Chats
                         aliasLid: null,
                         aliasPn: null,
                         createAtFront: false,
+                        reposition: false,
                         out createdRow,
                         summary.ParticipantJid,
                         summary.SenderName);
@@ -1767,6 +1800,10 @@ namespace Unison.WhatsAppClient.Chats
         /// <summary>
         /// Shared live / offline strip write. Caller must already be on the UI thread.
         /// </summary>
+        /// <param name="reposition">
+        /// When true, moves the row in the store now. Live incoming passes false and schedules
+        /// <see cref="ChatDisplayOrder.Reposition"/> on a Normal hop so toast does not wait.
+        /// </param>
         private ChatItem ApplyStripOnUiThread(
             string jid,
             string previewText,
@@ -1782,6 +1819,7 @@ namespace Unison.WhatsAppClient.Chats
             string aliasLid,
             string aliasPn,
             bool createAtFront,
+            bool reposition,
             out bool createdRow,
             string participantJid = null,
             string senderName = null)
@@ -1892,7 +1930,7 @@ namespace Unison.WhatsAppClient.Chats
                 }
             }
 
-            if (createAtFront)
+            if (reposition)
             {
                 ChatDisplayOrder.Reposition(_chatState.Chats, chat);
             }

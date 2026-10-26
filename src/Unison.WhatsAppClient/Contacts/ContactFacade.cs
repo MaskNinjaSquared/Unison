@@ -786,7 +786,11 @@ namespace Unison.WhatsAppClient.Contacts
 
                 ChatListDeduperResult result = await _deduper.RunAsync("alias:" + source)
                     .ConfigureAwait(false);
-                if (result.Merged > 0 || result.NormalizedKeys > 0)
+                if (result.SkippedUnchangedAliases)
+                {
+                    // Alias map unchanged since the last fold — no list / author work owed.
+                }
+                else if (result.Merged > 0 || result.NormalizedKeys > 0)
                 {
                     _catalog.Schedule();
                     _chatState.NotifyDisplayNamesChanged();
