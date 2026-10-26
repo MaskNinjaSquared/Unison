@@ -649,7 +649,8 @@ namespace Unison.Uwp
                 sp.GetRequiredService<IChatStore>(),
                 sp.GetService<IStringResources>(),
                 sp.GetRequiredService<ISystemInfoProvider>(),
-                sp.GetRequiredService<IRuntimeDiagnostics>()));
+                sp.GetRequiredService<IRuntimeDiagnostics>(),
+                sp.GetRequiredService<IGroupNaming>()));
             // AttachedUiDispatcher (not IDispatcher/DispatcherService): PropertyChanged from the
             // incoming pump must marshal onto the live frame dispatcher, or IsRevoked/HasReactions
             // bindings throw RPC_E_WRONG_THREAD on Mobile.
@@ -1658,9 +1659,10 @@ namespace Unison.Uwp
             RuntimeDiagnosticsService.Instance.Write("lifecycle", "resuming-start");
             try
             {
-                // Mobile often survives shell-change Exit(); resume never hits OnLaunched, so
-                // re-read SelectedShell + pending applied toast before chrome/reconnect.
-                ApplyShellThemeFromSettings();
+                // Mobile often survives shell-change Exit(); resume never hits OnLaunched.
+                // Do not remount Theme.xaml on every resume (FileOpenPicker white flash on
+                // Legacy) — only when SelectedShell changed or a pending shell toast is owed.
+                ApplyShellThemeFromSettingsIfChanged();
                 ApplyWindowChromeBootstrap();
                 // Suspension intentionally closes the WebSocket. On Windows 10 Mobile
                 // OnLaunched is not called again when the process is resumed, so the
@@ -1700,6 +1702,26 @@ namespace Unison.Uwp
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine("[App] Apply shell theme: " + ex.Message);
+            }
+        }
+
+        /// <summary>
+        /// Resume path: skip Theme.xaml remount when the shell dictionaries are already current.
+        /// </summary>
+        private void ApplyShellThemeFromSettingsIfChanged()
+        {
+            try
+            {
+                if (Services == null)
+                {
+                    return;
+                }
+
+                Services.GetRequiredService<IShellThemeService>().ApplyFromSettingsIfShellChanged();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine("[App] Apply shell theme if changed: " + ex.Message);
             }
         }
 

@@ -65,6 +65,7 @@ namespace Unison.WhatsAppClient.Messages
         private readonly Func<IStatusService> _resolveStatus;
         private readonly Func<IGroupService> _resolveGroups;
         private readonly Func<IConnectionService> _resolveConnection;
+        private readonly IGroupNaming _groupNaming;
         private readonly IOfflineReplayHost _offlineReplay;
         private readonly SelfProfileState _selfProfile;
         private readonly IDispatcher _ui;
@@ -119,7 +120,8 @@ namespace Unison.WhatsAppClient.Messages
             IChatStore chatStore = null,
             IStringResources strings = null,
             ISystemInfoProvider systemInfo = null,
-            IRuntimeDiagnostics diagnostics = null)
+            IRuntimeDiagnostics diagnostics = null,
+            IGroupNaming groupNaming = null)
         {
             _diagnostics = diagnostics;
             _ui = ui ?? throw new ArgumentNullException(nameof(ui));
@@ -172,6 +174,8 @@ namespace Unison.WhatsAppClient.Messages
             _selfProfile = selfProfile
                 ?? throw new ArgumentNullException(nameof(selfProfile));
             _strings = strings;
+            // Optional: older hosts omit it; group toast titles then fall back to chat.Name.
+            _groupNaming = groupNaming;
             _receipts = new ReceiptReader(jids);
 
             _textSend = new OutgoingTextSend(
@@ -3529,11 +3533,19 @@ namespace Unison.WhatsAppClient.Messages
                 Debug.WriteLine("[MessageFacade] Toast name contacts skipped: " + ex.Message);
             }
 
-            // Title + group author: full contact stack (person / agenda / push), not bare @lid.
-            string toastTitle = NotificationDisplayLabel.Prefer(
-                contacts != null ? contacts.ResolveDisplayName(jid, "toast-chat") : null,
+            // Title: 1:1 uses the contact stack; groups use subjects-first (same as the community
+            // list / GroupNaming) so agenda/push under @g.us cannot rename a subgroup toast.
+            // Community Avisos: always the localized string — never the wire subject name.
+            bool isCommunityAnnounce = notificationChat != null && notificationChat.IsCommunityAnnounce;
+            string announcementsLabel = isCommunityAnnounce && notificationChat != null
+                ? notificationChat.GetNameResolved(_strings)
+                : null;
+            string toastTitle = NotificationDisplayLabel.PreferChatTitle(
+                ResolveToastChatTitle(isGroup, jid, notificationChat, notificationName, contacts),
                 notificationName,
-                jid);
+                jid,
+                isCommunityAnnounce,
+                announcementsLabel);
             string toastSender = senderName;
             if (isGroup && !isFromMe)
             {
@@ -3556,6 +3568,49 @@ namespace Unison.WhatsAppClient.Messages
                 suppressToast,
                 totalUnreadForNotify,
                 notificationChat);
+        }
+
+        /// <summary>
+        /// Toast chat title. Groups: row <see cref="ChatItem.GetNameResolved"/> (Avisos / subject),
+        /// then <see cref="IGroupNaming.ResolveChatDisplayName"/> (GroupSubjects), then strip name.
+        /// Never ContactDisplayNames for @g.us — that path lets agenda/push beat a live subject
+        /// (community subgroups looked right in the hub list, wrong on the toast).
+        /// </summary>
+        private string ResolveToastChatTitle(
+            bool isGroup,
+            string jid,
+            ChatItem notificationChat,
+            string notificationName,
+            IContactService contacts)
+        {
+            if (!isGroup)
+            {
+                return contacts != null
+                    ? contacts.ResolveDisplayName(jid, "toast-chat")
+                    : null;
+            }
+
+            if (notificationChat != null)
+            {
+                string fromRow = notificationChat.GetNameResolved(_strings);
+                if (!string.IsNullOrWhiteSpace(fromRow) &&
+                    !GroupIdPlaceholder.IsIdPlaceholder(fromRow, jid))
+                {
+                    return fromRow.Trim();
+                }
+            }
+
+            if (_groupNaming != null)
+            {
+                string fromSubjects = _groupNaming.ResolveChatDisplayName(jid);
+                if (!string.IsNullOrWhiteSpace(fromSubjects) &&
+                    _groupNaming.IsMeaningfulGroupLabel(fromSubjects, jid))
+                {
+                    return fromSubjects.Trim();
+                }
+            }
+
+            return notificationName;
         }
 
         /// <summary>

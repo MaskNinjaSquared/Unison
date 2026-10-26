@@ -228,7 +228,31 @@ namespace Unison.Core.Helpers
                 return false;
             }
 
+            // Never treat the localized list placeholder as a real subject — otherwise a
+            // stamped "Community" / "Comunidade" blocks EnrichCommunityHubLabel probes.
+            if (IsCommunityFallbackLabel(trimmed))
+            {
+                return false;
+            }
+
             return !string.Equals(trimmed, hubJid, StringComparison.OrdinalIgnoreCase);
+        }
+
+        /// <summary>
+        /// Known en/pt (and common) fallbacks used when the parent subject is still unknown.
+        /// </summary>
+        private static bool IsCommunityFallbackLabel(string trimmed)
+        {
+            return string.Equals(trimmed, "Community", StringComparison.OrdinalIgnoreCase) ||
+                   string.Equals(trimmed, "Comunidade", StringComparison.OrdinalIgnoreCase) ||
+                   string.Equals(trimmed, "Comunidad", StringComparison.OrdinalIgnoreCase) ||
+                   string.Equals(trimmed, "Gemeinschaft", StringComparison.OrdinalIgnoreCase) ||
+                   string.Equals(trimmed, "Communauté", StringComparison.OrdinalIgnoreCase) ||
+                   string.Equals(trimmed, "Communiteit", StringComparison.OrdinalIgnoreCase) ||
+                   string.Equals(trimmed, "Społeczność", StringComparison.OrdinalIgnoreCase) ||
+                   string.Equals(trimmed, "Сообщество", StringComparison.OrdinalIgnoreCase) ||
+                   string.Equals(trimmed, "Спільнота", StringComparison.OrdinalIgnoreCase) ||
+                   string.Equals(trimmed, "Komunitas", StringComparison.OrdinalIgnoreCase);
         }
 
         private static string PickCommunityTitle(
