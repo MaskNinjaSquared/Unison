@@ -85,6 +85,8 @@
             <SolidColorBrush x:Key="ChatDetailAccentBrush" Color="#FF04564A"/>
             <SolidColorBrush x:Key="ChatDetailInfoLabelBrush" Color="#FFFFFFFF"/>
             <SolidColorBrush x:Key="ChatDetailInfoValueBrush" Color="#FF1DAA61"/>
+            <!-- Body on brand-green info pane — white (not accent); ValueBrush stays Legacy green for other surfaces. -->
+            <SolidColorBrush x:Key="ChatDetailInfoPaneBodyBrush" Color="#FFFFFFFF"/>
             <SolidColorBrush x:Key="ChatDetailInfoMutedBrush" Color="#FFCCCCCC"/>
             <SolidColorBrush x:Key="WhatsAppGreenFocusBrush" Color="#FF04564A"/>
             <SolidColorBrush x:Key="ChatDetailInputBarBackgroundBrush" Color="#FF000000"/>
@@ -142,6 +144,8 @@
             <SolidColorBrush x:Key="ChatDetailAccentBrush" Color="#FF04564A"/>
             <SolidColorBrush x:Key="ChatDetailInfoLabelBrush" Color="#FFFFFFFF"/>
             <SolidColorBrush x:Key="ChatDetailInfoValueBrush" Color="#FF1DAA61"/>
+            <!-- Body on brand-green info pane — white (not accent); ValueBrush stays Legacy green for other surfaces. -->
+            <SolidColorBrush x:Key="ChatDetailInfoPaneBodyBrush" Color="#FFFFFFFF"/>
             <SolidColorBrush x:Key="ChatDetailInfoMutedBrush" Color="#FFCCCCCC"/>
             <SolidColorBrush x:Key="WhatsAppGreenFocusBrush" Color="#FF04564A"/>
             <SolidColorBrush x:Key="ChatDetailInputBarBackgroundBrush" Color="#FF000000"/>
@@ -200,6 +204,8 @@
             <SolidColorBrush x:Key="ChatDetailAccentBrush" Color="#FF04564A"/>
             <SolidColorBrush x:Key="ChatDetailInfoLabelBrush" Color="#FF000000"/>
             <SolidColorBrush x:Key="ChatDetailInfoValueBrush" Color="#FF1DAA61"/>
+            <!-- Body on brand-green info pane — white (not accent). -->
+            <SolidColorBrush x:Key="ChatDetailInfoPaneBodyBrush" Color="#FFFFFFFF"/>
             <SolidColorBrush x:Key="ChatDetailInfoMutedBrush" Color="#FF333333"/>
             <SolidColorBrush x:Key="WhatsAppGreenFocusBrush" Color="#FF04564A"/>
             <SolidColorBrush x:Key="ChatDetailInputBarBackgroundBrush" Color="#FFFFFFFF"/>

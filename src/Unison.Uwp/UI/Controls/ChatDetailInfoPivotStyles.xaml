@@ -3,7 +3,13 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:helpers="using:Unison.Uwp.UI.Helpers">
 
-    <!-- Label/Value/Muted colors live in Themes/*/ ThemeDictionaries as ChatDetailInfo*Brush. -->
+    <!-- Label/Muted: Themes/*/ ChatDetailInfo*Brush. Body (name/phone/group titles): PaneBodyBrush
+         (always white on the brand-green pane — not SystemAccent / Legacy ValueBrush green). -->
+
+    <!-- WinUI HyperlinkButton defaults to AccentTextFill / SystemControlHyperlinkText; keep pane body white. -->
+    <SolidColorBrush x:Key="SystemControlHyperlinkTextBrush" Color="#FFFFFFFF"/>
+    <SolidColorBrush x:Key="AccentTextFillColorPrimaryBrush" Color="#FFFFFFFF"/>
+    <SolidColorBrush x:Key="AccentTextFillColorSecondaryBrush" Color="#E6FFFFFF"/>
 
     <SolidColorBrush x:Key="ToggleSwitchKnobFillOn" Color="White"/>
     <SolidColorBrush x:Key="ToggleSwitchKnobFillOnPointerOver" Color="White"/>
@@ -26,11 +32,11 @@
         <Setter Property="FontFamily" Value="{StaticResource MainFont}"/>
         <Setter Property="FontWeight" Value="Normal"/>
         <Setter Property="FontSize" Value="16"/>
-        <Setter Property="Foreground" Value="{ThemeResource ChatDetailInfoValueBrush}"/>
+        <Setter Property="Foreground" Value="{ThemeResource ChatDetailInfoPaneBodyBrush}"/>
         <Setter Property="TextWrapping" Value="Wrap"/>
     </Style>
     <Style x:Key="ChatDetailInfoHyperlinkButtonStyle" TargetType="HyperlinkButton">
-        <Setter Property="Foreground" Value="{ThemeResource ChatDetailInfoValueBrush}"/>
+        <Setter Property="Foreground" Value="{ThemeResource ChatDetailInfoPaneBodyBrush}"/>
         <Setter Property="Padding" Value="0"/>
         <Setter Property="HorizontalAlignment" Value="Left"/>
         <Setter Property="HorizontalContentAlignment" Value="Left"/>

@@ -56,7 +56,9 @@
                                                 HorizontalAlignment="Center"
                                                 Margin="0,16,0,24"/>
                     <TextBlock x:Name="NameLabel" x:Uid="ChatDetailInfo_GroupNameLabel" Style="{StaticResource ChatDetailInfoSectionLabelStyle}" Text="GROUP NAME"/>
-                    <TextBlock x:Name="NameValue" Style="{StaticResource ChatDetailInfoSectionValueStyle}"/>
+                    <TextBlock x:Name="NameValue"
+                               Style="{StaticResource ChatDetailInfoSectionValueStyle}"
+                               Foreground="{ThemeResource ChatDetailInfoPaneBodyBrush}"/>
                     <TextBlock x:Name="StatusLabel" x:Uid="ChatDetailInfo_DescriptionLabel" Margin="0,20,0,0" Style="{StaticResource ChatDetailInfoSectionLabelStyle}" Text="DESCRIPTION"/>
                     <TextBlock x:Name="StatusValue" Style="{StaticResource ChatDetailInfoSectionValueStyle}"/>
                     <TextBlock x:Name="NotificationsLabel" x:Uid="ChatDetailInfo_NotificationsLabel" Margin="0,20,0,0" Style="{StaticResource ChatDetailInfoSectionLabelStyle}" Text="NOTIFICATIONS"/>
@@ -87,7 +89,7 @@
                              BorderThickness="0"
                              IsIndeterminate="True"
                              IsHitTestVisible="False"
-                             Foreground="{ThemeResource ChatDetailInfoValueBrush}"
+                             Foreground="{ThemeResource ChatDetailInfoPaneBodyBrush}"
                              Background="Transparent"
                              Visibility="Collapsed"/>
                 <TextBlock x:Name="MembersEmptyText"
@@ -128,7 +130,7 @@
                                            Text="{Binding DisplayName}"
                                            FontFamily="{StaticResource MainFont}"
                                            FontSize="16"
-                                           Foreground="{ThemeResource ChatDetailInfoValueBrush}"
+                                           Foreground="{ThemeResource ChatDetailInfoPaneBodyBrush}"
                                            VerticalAlignment="Center"
                                            Margin="12,0,8,0"
                                            TextTrimming="CharacterEllipsis"/>
@@ -150,7 +152,7 @@
                              Height="48"
                              HorizontalAlignment="Center"
                              VerticalAlignment="Center"
-                             Foreground="{ThemeResource ChatDetailInfoValueBrush}"
+                             Foreground="{ThemeResource ChatDetailInfoPaneBodyBrush}"
                              IsActive="False"
                              Visibility="Collapsed"
                              IsHitTestVisible="False"/>

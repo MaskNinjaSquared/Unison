@@ -60,6 +60,8 @@
             <!-- Chat detail info pane: name/phone (not SystemAccent). -->
             <SolidColorBrush x:Key="ChatDetailInfoLabelBrush" Color="#FFFFFFFF"/>
             <SolidColorBrush x:Key="ChatDetailInfoValueBrush" Color="#FFFFFFFF"/>
+            <!-- Body on brand-green pane (name / phone / groups-in-common titles). Never SystemAccent. -->
+            <SolidColorBrush x:Key="ChatDetailInfoPaneBodyBrush" Color="#FFFFFFFF"/>
             <SolidColorBrush x:Key="ChatDetailInfoMutedBrush" Color="#E8FFFFFF"/>
             <SolidColorBrush x:Key="ChatDetailPaneSeparatorBrush" Color="#FF3B3B3B"/>
             <SolidColorBrush x:Key="ChatDetailPinnedBarBackgroundBrush" Color="#FF32373B"/>
@@ -186,6 +188,8 @@
             <!-- Chat detail info pane: name/phone (not SystemAccent). -->
             <SolidColorBrush x:Key="ChatDetailInfoLabelBrush" Color="#FFFFFFFF"/>
             <SolidColorBrush x:Key="ChatDetailInfoValueBrush" Color="#FFFFFFFF"/>
+            <!-- Body on brand-green pane (name / phone / groups-in-common titles). Never SystemAccent. -->
+            <SolidColorBrush x:Key="ChatDetailInfoPaneBodyBrush" Color="#FFFFFFFF"/>
             <SolidColorBrush x:Key="ChatDetailInfoMutedBrush" Color="#E8FFFFFF"/>
             <SolidColorBrush x:Key="ChatDetailPaneSeparatorBrush" Color="#FF3B3B3B"/>
             <SolidColorBrush x:Key="ChatDetailPinnedBarBackgroundBrush" Color="#FF32373B"/>
@@ -310,6 +314,8 @@
             <!-- Chat detail info pane: name/phone (not SystemAccent). -->
             <SolidColorBrush x:Key="ChatDetailInfoLabelBrush" Color="#FFFFFFFF"/>
             <SolidColorBrush x:Key="ChatDetailInfoValueBrush" Color="#FFFFFFFF"/>
+            <!-- Body on brand-green pane (name / phone / groups-in-common titles). Never SystemAccent. -->
+            <SolidColorBrush x:Key="ChatDetailInfoPaneBodyBrush" Color="#FFFFFFFF"/>
             <SolidColorBrush x:Key="ChatDetailInfoMutedBrush" Color="#E8FFFFFF"/>
             <SolidColorBrush x:Key="ChatDetailPaneSeparatorBrush" Color="#FFE9EDEF"/>
             <SolidColorBrush x:Key="ChatDetailPinnedBarBackgroundBrush" Color="#FFFFFFFF"/>
