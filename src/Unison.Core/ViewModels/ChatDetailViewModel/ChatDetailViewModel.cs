@@ -113,6 +113,9 @@ namespace Unison.Core.ViewModels
 
         /// <summary>JID already given one open-path subject IQ (see TryRefreshGroupSubjectOnce).</summary>
         private string _groupSubjectRefreshJid;
+
+        /// <summary>Group JID for which @ already kicked a store/wire roster ensure this open.</summary>
+        private string _mentionRosterEnsureJid;
         private string _recordingChatJid;
         private bool _isChatDetailInfoOpen;
         private ChatDetailInfoViewModel _chatDetailInfo;
@@ -565,6 +568,17 @@ namespace Unison.Core.ViewModels
             _mentionTokenStart = at;
             _mentionTokenLength = length;
             _mentionTokenCaret = caret;
+
+            // Mobile open skips full roster; load from SQLite (then wire if empty) on first @.
+            string ensureKey = _jids.GetCanonicalJid(ActiveChat.JID) ?? ActiveChat.JID;
+            if (!ActiveChat.HasFullGroupRoster &&
+                _groupService != null &&
+                !string.Equals(_mentionRosterEnsureJid, ensureKey, StringComparison.OrdinalIgnoreCase))
+            {
+                _mentionRosterEnsureJid = ensureKey;
+                _ = EnsureMentionRosterAsync(ActiveChat.JID);
+            }
+
             string everyone = _strings != null
                 ? _strings.Get("ChatDetail_MentionEveryone", "Everyone")
                 : "Everyone";
@@ -588,6 +602,61 @@ namespace Unison.Core.ViewModels
             MentionSelectedIndex = -1;
             MentionSelectedIndex = 0;
             IsMentionMenuOpen = MentionChoices.Count > 0;
+        }
+
+        private async Task EnsureMentionRosterAsync(string groupJid)
+        {
+            if (string.IsNullOrWhiteSpace(groupJid) || _groupService == null)
+            {
+                return;
+            }
+
+            try
+            {
+                await _groupService.EnsureGroupRosterLoadedFromStoreAsync(groupJid)
+                    .ConfigureAwait(false);
+
+                ChatItem chat = ActiveChat;
+                if (chat == null || !chat.IsGroup)
+                {
+                    return;
+                }
+
+                string activeKey = _jids.GetCanonicalJid(chat.JID) ?? chat.JID;
+                string wantKey = _jids.GetCanonicalJid(groupJid) ?? groupJid;
+                if (!string.Equals(activeKey, wantKey, StringComparison.OrdinalIgnoreCase))
+                {
+                    return;
+                }
+
+                if (!chat.HasFullGroupRoster)
+                {
+                    await _groupService.RefreshGroupSendPermissionsAsync(
+                            groupJid,
+                            includeRoster: true)
+                        .ConfigureAwait(false);
+                }
+
+                if (_dispatcher == null || !IsMentionMenuOpen)
+                {
+                    return;
+                }
+
+                await _dispatcher.RunAsync(() =>
+                {
+                    if (!IsMentionMenuOpen || ActiveChat == null)
+                    {
+                        return;
+                    }
+
+                    UpdateMentionQuery(_messageText, _mentionTokenCaret);
+                }).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine(
+                    "[ChatDetailViewModel] Mention roster ensure failed: " + ex.Message);
+            }
         }
 
         private bool IsCurrentMember(GroupMember member)

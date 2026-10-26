@@ -54,6 +54,7 @@ namespace Unison.Core.ViewModels
                 CloseChatDetailInfo();
                 ResetTimelinePaging();
                 _groupSubjectRefreshJid = null;
+                _mentionRosterEnsureJid = null;
             }
 
             // EnsureFresh: 2nd open of the same group reuses the warm 1:1 index / roster maps.

@@ -161,17 +161,21 @@ namespace Unison.WhatsAppClient.Helpers
                 // thread while LoadMessages is also waiting for a dispatcher turn.
                 List<ChatItem> rows = _rows.FindConversation(canonical);
                 chat = rows != null && rows.Count > 0 ? rows[0] : null;
-                if (chat == null)
-                {
-                    return;
-                }
 
+                // Community synthetic hubs are not in the catalogue. Still file the wire
+                // subject so GroupNaming / hub EnrichCommunityHubLabel can leave the
+                // localized “Community” fallback after RefreshGroupSendPermissionsAsync.
                 if (!string.IsNullOrWhiteSpace(wireSubject))
                 {
                     TryCacheSyncedSubject(
                         canonical,
                         wireSubject,
                         DuplicateChatRowPick.FirstNonBlankName(rows));
+                }
+
+                if (chat == null)
+                {
+                    return;
                 }
 
                 ApplyToRow(chat, metadata, includeRoster: false);
@@ -290,6 +294,16 @@ namespace Unison.WhatsAppClient.Helpers
                 applied = next;
             }
 
+            for (int i = 0; i < applied.Count; i++)
+            {
+                if (applied[i] != null)
+                {
+                    applied[i].IsMinimal = false;
+                }
+            }
+
+            chat.HasFullGroupRoster = true;
+
             if (chat.GroupMemberCount < applied.Count)
             {
                 chat.GroupMemberCount = applied.Count;
@@ -382,6 +396,7 @@ namespace Unison.WhatsAppClient.Helpers
                 PhoneNumber = string.IsNullOrWhiteSpace(draft.PhoneNumber) ? null : draft.PhoneNumber,
                 Lid = string.IsNullOrWhiteSpace(draft.Lid) ? null : draft.Lid,
                 Role = draft.Role,
+                IsMinimal = false,
                 DisplayName = _naming.ResolveMemberDisplayName(draft.Jid),
                 AvatarUrl = avatarUrl,
                 AvatarFetchedAtUtc = fetchedAt,

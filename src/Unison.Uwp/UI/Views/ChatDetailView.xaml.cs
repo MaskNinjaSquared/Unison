@@ -996,6 +996,17 @@ namespace Unison.Uwp.UI.Views
                 {
                     jids.Add(participant);
                 }
+
+                string quoted = vm?.QuotedParticipantJid;
+                if (string.IsNullOrWhiteSpace(quoted))
+                {
+                    quoted = vm?.Model?.QuotedParticipantJid;
+                }
+
+                if (!string.IsNullOrWhiteSpace(quoted))
+                {
+                    jids.Add(quoted);
+                }
             }
 
             if (jids.Count > 0)

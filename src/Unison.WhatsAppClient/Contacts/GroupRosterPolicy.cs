@@ -21,6 +21,7 @@ using Unison.Core.Helpers;
 using Unison.Core.Models;
 using Unison.Core.State;
 using Unison.WhatsAppClient.Abstractions;
+using Unison.WhatsAppClient.Helpers;
 
 namespace Unison.WhatsAppClient.Contacts
 {
@@ -432,7 +433,24 @@ namespace Unison.WhatsAppClient.Contacts
             await _ui.RunAsync(() =>
             {
                 ChatItem chat = FindGroup(groupJid);
-                if (chat?.GroupMembers == null)
+                if (chat == null)
+                {
+                    return;
+                }
+
+                // Mobile open skips full roster — seed IsMinimal stubs so hydrate can fetch.
+                GroupRosterRules.EnsureMinimalMembers(
+                    chat,
+                    memberJids,
+                    _jids,
+                    jid => _contacts.ResolveDisplayName(jid, "group-member"),
+                    jid =>
+                    {
+                        ChatItem direct = _chatState.FindChat(jid);
+                        return direct != null ? direct.GetAvatarUrl(preferHigh: false) : null;
+                    });
+
+                if (chat.GroupMembers == null)
                 {
                     return;
                 }

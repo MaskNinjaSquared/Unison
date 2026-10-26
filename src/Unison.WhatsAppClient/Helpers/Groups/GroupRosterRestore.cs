@@ -63,7 +63,8 @@ namespace Unison.WhatsAppClient.Helpers
                 target = _chats.Chats.FirstOrDefault(c =>
                     c != null &&
                     string.Equals(_jids.GetCanonicalJid(c.JID), canonical, StringComparison.OrdinalIgnoreCase));
-                needsLoad = target != null && !target.HasGroupMembers;
+                // Minimal timeline stubs still need the store full roster (@ mention / Members).
+                needsLoad = target != null && !target.HasFullGroupRoster;
             }).ConfigureAwait(false);
 
             if (!needsLoad || target == null)

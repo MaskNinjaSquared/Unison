@@ -85,17 +85,32 @@ namespace Unison.WhatsAppClient.Helpers
         /// Puts a restored roster on the row. UI thread only.
         /// </summary>
         /// <returns>
-        /// False when the row already holds members: the store read runs off the UI thread, and a
-        /// live metadata reply that landed meanwhile is fresher than anything on disk.
+        /// False when the row already holds a <see cref="ChatItem.HasFullGroupRoster"/>: the store
+        /// read runs off the UI thread, and a live metadata reply that landed meanwhile is fresher
+        /// than anything on disk. Minimal timeline stubs are merged into (avatar/name kept).
         /// </returns>
         public static bool ApplyRestored(ChatItem chat, List<GroupMember> hydrated)
         {
-            if (chat == null || hydrated == null || hydrated.Count == 0 || chat.HasGroupMembers)
+            if (chat == null || hydrated == null || hydrated.Count == 0 || chat.HasFullGroupRoster)
             {
                 return false;
             }
 
+            if (chat.HasGroupMembers)
+            {
+                PreserveMinimalFieldsOnto(hydrated, chat.GroupMembers);
+            }
+
+            for (int i = 0; i < hydrated.Count; i++)
+            {
+                if (hydrated[i] != null)
+                {
+                    hydrated[i].IsMinimal = false;
+                }
+            }
+
             chat.GroupMembers = hydrated;
+            chat.HasFullGroupRoster = true;
             if (chat.GroupMemberCount < hydrated.Count)
             {
                 chat.GroupMemberCount = hydrated.Count;
@@ -107,6 +122,170 @@ namespace Unison.WhatsAppClient.Helpers
             }
 
             return true;
+        }
+
+        /// <summary>
+        /// Ensures a minimal stub exists for each participant JID (timeline / quote authors).
+        /// UI thread. Does not set <see cref="ChatItem.HasFullGroupRoster"/>.
+        /// </summary>
+        public static void EnsureMinimalMembers(
+            ChatItem chat,
+            IEnumerable<string> participantJids,
+            IJidResolver jids,
+            Func<string, string> resolveDisplayName,
+            Func<string, string> resolveAvatarUrl)
+        {
+            if (chat == null || participantJids == null)
+            {
+                return;
+            }
+
+            List<GroupMember> roster = chat.GroupMembers;
+            bool created = false;
+            if (roster == null)
+            {
+                roster = new List<GroupMember>();
+                created = true;
+            }
+
+            int added = 0;
+            foreach (string raw in participantJids)
+            {
+                if (string.IsNullOrWhiteSpace(raw))
+                {
+                    continue;
+                }
+
+                string canonical = jids != null
+                    ? jids.GetCanonicalJid(raw)
+                    : JidHelper.Normalize(raw);
+                if (string.IsNullOrWhiteSpace(canonical))
+                {
+                    canonical = JidHelper.Normalize(raw);
+                }
+
+                if (string.IsNullOrWhiteSpace(canonical) || FindMember(roster, canonical, jids) != null)
+                {
+                    continue;
+                }
+
+                string name = resolveDisplayName != null ? resolveDisplayName(canonical) : null;
+                if (string.IsNullOrWhiteSpace(name) &&
+                    !string.Equals(canonical, raw, StringComparison.OrdinalIgnoreCase) &&
+                    resolveDisplayName != null)
+                {
+                    name = resolveDisplayName(raw);
+                }
+
+                string avatar = resolveAvatarUrl != null ? resolveAvatarUrl(canonical) : null;
+                if (string.IsNullOrWhiteSpace(avatar) &&
+                    !string.Equals(canonical, raw, StringComparison.OrdinalIgnoreCase) &&
+                    resolveAvatarUrl != null)
+                {
+                    avatar = resolveAvatarUrl(raw);
+                }
+
+                roster.Add(new GroupMember
+                {
+                    Jid = canonical,
+                    DisplayName = string.IsNullOrWhiteSpace(name) ? null : name.Trim(),
+                    AvatarUrl = string.IsNullOrWhiteSpace(avatar) ? null : avatar.Trim(),
+                    IsMinimal = true
+                });
+                added++;
+            }
+
+            if (added == 0 && !created)
+            {
+                return;
+            }
+
+            // Empty list becomes null on the ChatItem setter — only assign once we have rows.
+            if (created)
+            {
+                if (roster.Count > 0)
+                {
+                    chat.GroupMembers = roster;
+                }
+
+                return;
+            }
+
+            chat.RefreshMentionLookupFromRoster();
+        }
+
+        private static void PreserveMinimalFieldsOnto(
+            List<GroupMember> hydrated,
+            List<GroupMember> existing)
+        {
+            if (hydrated == null || existing == null || existing.Count == 0)
+            {
+                return;
+            }
+
+            for (int i = 0; i < hydrated.Count; i++)
+            {
+                GroupMember next = hydrated[i];
+                if (next == null || string.IsNullOrWhiteSpace(next.Jid))
+                {
+                    continue;
+                }
+
+                GroupMember prior = FindMember(existing, next.Jid, jids: null);
+                if (prior == null)
+                {
+                    for (int e = 0; e < existing.Count; e++)
+                    {
+                        if (MemberMatches(existing[e], JidHelper.Normalize(next.Jid), jids: null))
+                        {
+                            prior = existing[e];
+                            break;
+                        }
+                    }
+                }
+
+                if (prior == null)
+                {
+                    continue;
+                }
+
+                if (string.IsNullOrWhiteSpace(next.DisplayName) &&
+                    !string.IsNullOrWhiteSpace(prior.DisplayName))
+                {
+                    next.DisplayName = prior.DisplayName;
+                }
+
+                if (string.IsNullOrWhiteSpace(next.AvatarUrl) &&
+                    !string.IsNullOrWhiteSpace(prior.AvatarUrl))
+                {
+                    next.AvatarUrl = prior.AvatarUrl;
+                    if (!next.AvatarFetchedAtUtc.HasValue && prior.AvatarFetchedAtUtc.HasValue)
+                    {
+                        next.AvatarFetchedAtUtc = prior.AvatarFetchedAtUtc;
+                    }
+                }
+            }
+        }
+
+        private static GroupMember FindMember(
+            IList<GroupMember> roster,
+            string canonical,
+            IJidResolver jids)
+        {
+            if (roster == null || string.IsNullOrWhiteSpace(canonical))
+            {
+                return null;
+            }
+
+            for (int i = 0; i < roster.Count; i++)
+            {
+                if (MemberMatches(roster[i], canonical, jids))
+                {
+                    return roster[i];
+                }
+            }
+
+            return null;
         }
 
         /// <summary>
@@ -363,6 +542,7 @@ namespace Unison.WhatsAppClient.Helpers
                 }
 
                 dest.Role = src.Role;
+                dest.IsMinimal = false;
 
                 if (!string.IsNullOrWhiteSpace(src.DisplayName))
                 {
@@ -420,6 +600,7 @@ namespace Unison.WhatsAppClient.Helpers
                 Lid = source.Lid,
                 DisplayName = displayName,
                 Role = source.Role,
+                IsMinimal = source.IsMinimal,
                 AvatarUrl = source.AvatarUrl,
                 AvatarFetchedAtUtc = source.AvatarFetchedAtUtc,
                 AvatarFetchFailedAtUtc = source.AvatarFetchFailedAtUtc,

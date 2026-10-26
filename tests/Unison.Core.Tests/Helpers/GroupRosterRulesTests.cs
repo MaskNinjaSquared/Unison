@@ -100,6 +100,8 @@ namespace Unison.Core.Tests.Helpers
             Assert.Same(hydrated, chat.GroupMembers);
             Assert.Equal(2, chat.GroupMemberCount);
             Assert.True(chat.IsGroup);
+            Assert.True(chat.HasFullGroupRoster);
+            Assert.False(chat.GroupMembers[0].IsMinimal);
         }
 
         [Fact]
@@ -113,12 +115,17 @@ namespace Unison.Core.Tests.Helpers
         }
 
         [Fact]
-        public void ApplyRestored_leaves_a_roster_that_arrived_first()
+        public void ApplyRestored_leaves_a_full_roster_that_arrived_first()
         {
             // The store read is off the UI thread; a live metadata reply can land in between,
             // and it is fresher than anything on disk.
             var live = new List<GroupMember> { new GroupMember { Jid = "333@s.whatsapp.net" } };
-            var chat = new ChatItem { JID = "1203@g.us", GroupMembers = live };
+            var chat = new ChatItem
+            {
+                JID = "1203@g.us",
+                GroupMembers = live,
+                HasFullGroupRoster = true
+            };
 
             bool applied = GroupRosterRules.ApplyRestored(
                 chat,
@@ -126,6 +133,66 @@ namespace Unison.Core.Tests.Helpers
 
             Assert.False(applied);
             Assert.Same(live, chat.GroupMembers);
+        }
+
+        [Fact]
+        public void ApplyRestored_merges_over_minimal_stubs_and_keeps_avatar()
+        {
+            var chat = new ChatItem
+            {
+                JID = "1203@g.us",
+                GroupMembers = new List<GroupMember>
+                {
+                    new GroupMember
+                    {
+                        Jid = "111@s.whatsapp.net",
+                        AvatarUrl = "ms-appdata:///local/a.jpg",
+                        IsMinimal = true
+                    }
+                }
+            };
+
+            bool applied = GroupRosterRules.ApplyRestored(
+                chat,
+                new List<GroupMember>
+                {
+                    new GroupMember
+                    {
+                        Jid = "111@s.whatsapp.net",
+                        DisplayName = "Alice",
+                        Role = GroupParticipantRole.Admin
+                    },
+                    new GroupMember { Jid = "222@s.whatsapp.net", DisplayName = "Bob" }
+                });
+
+            Assert.True(applied);
+            Assert.True(chat.HasFullGroupRoster);
+            Assert.Equal(2, chat.GroupMembers.Count);
+            GroupMember alice = chat.GroupMembers[0];
+            Assert.Equal("Alice", alice.DisplayName);
+            Assert.Equal("ms-appdata:///local/a.jpg", alice.AvatarUrl);
+            Assert.False(alice.IsMinimal);
+            Assert.Equal(GroupParticipantRole.Admin, alice.Role);
+        }
+
+        [Fact]
+        public void EnsureMinimalMembers_adds_stubs_without_marking_full_roster()
+        {
+            var chat = new ChatItem { JID = "1203@g.us" };
+
+            GroupRosterRules.EnsureMinimalMembers(
+                chat,
+                new[] { "111@s.whatsapp.net", "111@s.whatsapp.net", "222@s.whatsapp.net" },
+                jids: null,
+                resolveDisplayName: jid => jid == "111@s.whatsapp.net" ? "Alice" : null,
+                resolveAvatarUrl: jid => jid == "111@s.whatsapp.net" ? "ms-appdata:///local/a.jpg" : null);
+
+            Assert.True(chat.HasGroupMembers);
+            Assert.False(chat.HasFullGroupRoster);
+            Assert.Equal(2, chat.GroupMembers.Count);
+            Assert.True(chat.GroupMembers[0].IsMinimal);
+            Assert.Equal("Alice", chat.GroupMembers[0].DisplayName);
+            Assert.Equal("ms-appdata:///local/a.jpg", chat.GroupMembers[0].AvatarUrl);
         }
 
         [Fact]

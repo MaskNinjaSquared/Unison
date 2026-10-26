@@ -322,15 +322,38 @@ namespace Unison.Core.Models
                 var next = (value != null && value.Count > 0) ? value : null;
                 if (ReferenceEquals(_groupMembers, next)) return;
                 _groupMembers = next;
+                if (next == null)
+                {
+                    _hasFullGroupRoster = false;
+                }
+
                 _mentionLookup = MentionLookupBuilder.FromRoster(_groupMembers);
                 OnPropertyChanged();
                 OnPropertyChanged(nameof(HasGroupMembers));
+                OnPropertyChanged(nameof(HasFullGroupRoster));
                 OnPropertyChanged(nameof(MentionLookup));
             }
         }
 
         [Newtonsoft.Json.JsonIgnore]
         public bool HasGroupMembers => _groupMembers != null && _groupMembers.Count > 0;
+
+        private bool _hasFullGroupRoster;
+        /// <summary>
+        /// True after store/IQ applied the complete participant list. False while empty or only
+        /// <see cref="GroupMember.IsMinimal"/> stubs from the open timeline (Mobile).
+        /// </summary>
+        [Newtonsoft.Json.JsonIgnore]
+        public bool HasFullGroupRoster
+        {
+            get => _hasFullGroupRoster;
+            set
+            {
+                if (_hasFullGroupRoster == value) return;
+                _hasFullGroupRoster = value;
+                OnPropertyChanged();
+            }
+        }
 
         /// <summary>
         /// Digit → name map from <see cref="GroupMembers"/>, rebuilt when the roster is replaced.

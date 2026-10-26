@@ -33,6 +33,7 @@ namespace Unison.Core.Tests.Helpers
             Assert.Equal(2, chat.GroupMembers.Count);
             Assert.Equal("Bia", chat.GroupMembers[1].DisplayName);
             Assert.Equal(2, chat.GroupMemberCount);
+            Assert.True(chat.HasFullGroupRoster);
             Assert.Equal(new[] { Group }, fixture.Announced);
             Assert.Equal(new[] { Group }, fixture.Store.Asked);
             Assert.True(fixture.Store.Initialized);
@@ -54,16 +55,41 @@ namespace Unison.Core.Tests.Helpers
         }
 
         [Fact]
-        public async Task Skips_the_store_when_the_row_is_missing_or_already_has_members()
+        public async Task Skips_the_store_when_the_row_is_missing_or_already_full()
         {
             var fixture = new Fixture();
             await fixture.Restore.EnsureLoadedAsync(Group);
 
-            fixture.AddChat(Group).GroupMembers = new List<GroupMember> { new GroupMember { Jid = "333@s.whatsapp.net" } };
+            var full = fixture.AddChat(Group);
+            full.GroupMembers = new List<GroupMember> { new GroupMember { Jid = "333@s.whatsapp.net" } };
+            full.HasFullGroupRoster = true;
             await fixture.Restore.EnsureLoadedAsync(Group);
 
             Assert.Empty(fixture.Store.Asked);
             Assert.Empty(fixture.Announced);
+        }
+
+        [Fact]
+        public async Task Still_reads_the_store_when_only_minimal_stubs_exist()
+        {
+            var fixture = new Fixture();
+            var chat = fixture.AddChat(Group);
+            chat.GroupMembers = new List<GroupMember>
+            {
+                new GroupMember { Jid = "333@s.whatsapp.net", IsMinimal = true }
+            };
+            fixture.Store.Rows[Group] = new List<GroupMember>
+            {
+                new GroupMember { Jid = "111@s.whatsapp.net", DisplayName = "Ana" },
+                new GroupMember { Jid = "333@s.whatsapp.net", DisplayName = "Bob" }
+            };
+
+            await fixture.Restore.EnsureLoadedAsync(Group);
+
+            Assert.Equal(new[] { Group }, fixture.Store.Asked);
+            Assert.True(chat.HasFullGroupRoster);
+            Assert.Equal(2, chat.GroupMembers.Count);
+            Assert.Equal("Bob", chat.GroupMembers[1].DisplayName);
         }
 
         [Fact]
@@ -82,13 +108,17 @@ namespace Unison.Core.Tests.Helpers
         }
 
         [Fact]
-        public async Task Does_not_overwrite_a_roster_that_landed_during_the_read()
+        public async Task Does_not_overwrite_a_full_roster_that_landed_during_the_read()
         {
             var fixture = new Fixture();
             var chat = fixture.AddChat(Group);
             var live = new List<GroupMember> { new GroupMember { Jid = "333@s.whatsapp.net" } };
             fixture.Store.Rows[Group] = new List<GroupMember> { new GroupMember { Jid = "111@s.whatsapp.net" } };
-            fixture.Store.OnRead = () => chat.GroupMembers = live;
+            fixture.Store.OnRead = () =>
+            {
+                chat.GroupMembers = live;
+                chat.HasFullGroupRoster = true;
+            };
 
             await fixture.Restore.EnsureLoadedAsync(Group);
 
