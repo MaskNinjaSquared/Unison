@@ -25,7 +25,7 @@ namespace Unison.WhatsAppClient.Helpers
     public sealed class ChatNameRefresh
     {
         /// <summary>Chat rows processed per UI turn when frugal.</summary>
-        public const int FrugalUiSliceSize = 32;
+        public const int FrugalUiSliceSize = 16;
 
         private static readonly TimeSpan FrugalSliceGap = TimeSpan.FromMilliseconds(24);
 
