@@ -88,6 +88,12 @@ namespace Unison.WhatsAppClient.Chats
         /// <summary>Short enough that the first recovered chat shows while a long replay continues.</summary>
         private static readonly TimeSpan OfflineReplayTipThrottle = TimeSpan.FromMilliseconds(180);
 
+        /// <summary>
+        /// Offline tip rows per UI hop. A single foreach over the full replay used to hold the
+        /// dispatcher for seconds on Mobile (each row also did an O(n) chat scan before the index).
+        /// </summary>
+        private const int OfflineReplayUiSliceSize = 12;
+
         private readonly object _fullPreviewReconcileGate = new object();
         private Task _inflightFullPreviewReconcile;
         private DateTime _lastFullPreviewReconcileUtc = DateTime.MinValue;
@@ -1729,56 +1735,78 @@ namespace Unison.WhatsAppClient.Chats
                 return;
             }
 
+            int created = 0;
+            int updated = 0;
+            int unreadAdded = 0;
+
+            for (int start = 0; start < summaries.Count; start += OfflineReplayUiSliceSize)
+            {
+                int sliceStart = start;
+                int sliceEnd = Math.Min(summaries.Count, start + OfflineReplayUiSliceSize);
+                int sliceCreated = 0;
+                int sliceUpdated = 0;
+                int sliceUnread = 0;
+
+                await _ui.RunAsync(() =>
+                {
+                    for (int i = sliceStart; i < sliceEnd; i++)
+                    {
+                        OfflineReplayChatSummary summary = summaries[i];
+                        if (summary == null || string.IsNullOrWhiteSpace(summary.Jid))
+                        {
+                            continue;
+                        }
+
+                        bool createdRow;
+                        ChatItem preferred = ApplyStripOnUiThread(
+                            summary.Jid,
+                            summary.Preview ?? string.Empty,
+                            summary.Timestamp,
+                            summary.Kind,
+                            summary.AuthorPrefix,
+                            mentionedJids: null,
+                            summary.IsFromMe,
+                            HistoryLiveMessageMapper.FromStatus(summary.Status, summary.IsFromMe),
+                            messageId: null,
+                            summary.UnreadDelta,
+                            summary.IsGroup,
+                            aliasLid: null,
+                            aliasPn: null,
+                            createAtFront: false,
+                            reposition: false,
+                            out createdRow,
+                            summary.ParticipantJid,
+                            summary.SenderName);
+
+                        if (createdRow)
+                        {
+                            sliceCreated++;
+                        }
+
+                        if (preferred != null && summary.Timestamp != DateTime.MinValue)
+                        {
+                            sliceUpdated++;
+                        }
+
+                        if (summary.UnreadDelta > 0)
+                        {
+                            sliceUnread += summary.UnreadDelta;
+                        }
+                    }
+                }).ConfigureAwait(false);
+
+                created += sliceCreated;
+                updated += sliceUpdated;
+                unreadAdded += sliceUnread;
+
+                if (sliceEnd < summaries.Count)
+                {
+                    await Task.Yield();
+                }
+            }
+
             await _ui.RunAsync(() =>
             {
-                int created = 0;
-                int updated = 0;
-                int unreadAdded = 0;
-
-                foreach (OfflineReplayChatSummary summary in summaries)
-                {
-                    if (summary == null || string.IsNullOrWhiteSpace(summary.Jid))
-                    {
-                        continue;
-                    }
-
-                    bool createdRow;
-                    ChatItem preferred = ApplyStripOnUiThread(
-                        summary.Jid,
-                        summary.Preview ?? string.Empty,
-                        summary.Timestamp,
-                        summary.Kind,
-                        summary.AuthorPrefix,
-                        mentionedJids: null,
-                        summary.IsFromMe,
-                        HistoryLiveMessageMapper.FromStatus(summary.Status, summary.IsFromMe),
-                        messageId: null,
-                        summary.UnreadDelta,
-                        summary.IsGroup,
-                        aliasLid: null,
-                        aliasPn: null,
-                        createAtFront: false,
-                        reposition: false,
-                        out createdRow,
-                        summary.ParticipantJid,
-                        summary.SenderName);
-
-                    if (createdRow)
-                    {
-                        created++;
-                    }
-
-                    if (preferred != null && summary.Timestamp != DateTime.MinValue)
-                    {
-                        updated++;
-                    }
-
-                    if (summary.UnreadDelta > 0)
-                    {
-                        unreadAdded += summary.UnreadDelta;
-                    }
-                }
-
                 ChatDisplayOrder.SortInPlace(_chatState.Chats);
                 int totalUnread = GetTotalUnreadCount();
                 if (_notifications != null)
@@ -1825,13 +1853,21 @@ namespace Unison.WhatsAppClient.Chats
             string senderName = null)
         {
             createdRow = false;
-            string canonicalLookup = _jids.GetCanonicalJid(jid) ?? jid;
-            ChatItem chat = _chatState.Chats.FirstOrDefault(c =>
-                c != null &&
-                string.Equals(
-                    _jids.GetCanonicalJid(c.JID),
-                    canonicalLookup,
-                    StringComparison.OrdinalIgnoreCase));
+            // Index lookup — never walk Chats with GetCanonicalJid per row on the live tip hop
+            // (Mobile: that O(n) scan stacked into multi-second urgent:RunLiveStripAsync stalls).
+            List<ChatItem> indexed = _chatRows.FindConversation(jid);
+            ChatItem chat = null;
+            if (indexed != null)
+            {
+                for (int i = 0; i < indexed.Count; i++)
+                {
+                    if (indexed[i] != null)
+                    {
+                        chat = indexed[i];
+                        break;
+                    }
+                }
+            }
 
             if (chat == null)
             {
