@@ -198,6 +198,11 @@ namespace Unison.Core.Tests.ViewModels
             public bool IsHistoryOnDemandPending(string jid) => false;
             public Task<ChatMessage> SendTextMessageAsync(string jid, string text) => throw new NotImplementedException();
             public Task<ChatMessage> SendTextMessageAsync(string jid, OutgoingTextMentions message) => throw new NotImplementedException();
+            public Task<ChatMessage> ForwardMessageAsync(
+                string sourceChatJid,
+                string messageId,
+                string targetChatJid) =>
+                throw new NotImplementedException();
             public Task SendImageAsync(string jid, byte[] imageBytes, string caption) => throw new NotImplementedException();
             public Task<IReadOnlyList<ChatMessage>> SendImagesAsync(
                 string jid,

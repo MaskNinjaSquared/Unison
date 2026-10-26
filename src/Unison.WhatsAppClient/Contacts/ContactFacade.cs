@@ -23,6 +23,7 @@ using System.Threading.Tasks;
 using Unison.Core.Contracts;
 using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Helpers;
+using Unison.Core.Helpers.Groups;
 using Unison.Core.Models;
 using Unison.Core.State;
 using Unison.Core.Constants;
@@ -877,6 +878,58 @@ namespace Unison.WhatsAppClient.Contacts
         public bool IsContactRefreshRunning => _names.IsRunning;
 
         public bool IsContactRefreshOnCooldown => _names.IsOnCooldown;
+
+        /// <inheritdoc />
+        public async Task ResolveGroupJoinParticipantsAsync(
+            IEnumerable<KeyValuePair<string, string>> participantJidToPhone)
+        {
+            GroupJoinParticipantPrepResult prep =
+                GroupJoinParticipantPrep.FromParticipantPhones(participantJidToPhone);
+            if (prep.LidToPn.Count == 0 && prep.UsyncLookupJids.Count == 0)
+            {
+                return;
+            }
+
+            if (prep.LidToPn.Count > 0)
+            {
+                _aliasPersist.RegisterAliasMappings(prep.LidToPn, "group-join");
+            }
+
+            foreach (KeyValuePair<string, string> pair in prep.LidToPn)
+            {
+                await WarmPersonQuietAsync(pair.Key).ConfigureAwait(false);
+                await WarmPersonQuietAsync(pair.Value).ConfigureAwait(false);
+            }
+
+            foreach (string lookup in prep.UsyncLookupJids)
+            {
+                await WarmPersonQuietAsync(lookup).ConfigureAwait(false);
+            }
+
+            if (prep.UsyncLookupJids.Count > 0)
+            {
+                await _usync.ResolveAsync(prep.UsyncLookupJids).ConfigureAwait(false);
+            }
+        }
+
+        private async Task WarmPersonQuietAsync(string jid)
+        {
+            if (string.IsNullOrWhiteSpace(jid) || _personStore == null)
+            {
+                return;
+            }
+
+            try
+            {
+                await _personStore.InitializeAsync().ConfigureAwait(false);
+                await _personStore.GetAsync(jid).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine(
+                    "[ContactFacade] Group-join person warm failed for " + jid + ": " + ex.Message);
+            }
+        }
 
         /// <summary>
         /// Asks the server whether the number has an account. Falls back to the older search only

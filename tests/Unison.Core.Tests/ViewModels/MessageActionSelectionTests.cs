@@ -1,3 +1,4 @@
+using System.Threading.Tasks;
 using Unison.Core.Contracts;
 using Unison.Core.Models;
 using Unison.Core.ViewModels;
@@ -88,6 +89,11 @@ namespace Unison.Core.Tests.ViewModels
             public void CopyText(string text)
             {
             }
+
+            public bool HasPasteableMedia() => false;
+
+            public Task<ClipboardPasteResult> ReadPasteAsync() =>
+                Task.FromResult(ClipboardPasteResult.Empty);
         }
     }
 }

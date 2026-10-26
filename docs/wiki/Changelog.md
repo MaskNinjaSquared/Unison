@@ -2,6 +2,23 @@
 
 Newest first.
 
+## Notifications — resolve toast title/author past bare JID/@lid
+
+Live toast announce (`FinishLiveStripAnnounceAsync`) runs chat + group-author
+labels through `IContactService.ResolveDisplayName` +
+`NotificationDisplayLabel` (strips `~`, prefers phone over `@lid`). Incoming
+envelope sender/chat names use the same contact stack before the bubble and
+strip are built.
+
+## GroupJoin — resolve member names before “joined” line
+
+On `w:gp2` add, `IContactService.ResolveGroupJoinParticipantsAsync` files LID↔PN
+from wire `phone_number` and usyncs those few PNs only (not a full roster).
+`NotifyGroupJoinsAsync` labels via `ResolveDisplayName` +
+`GroupJoinDisplayLabel` (phone over bare `@lid`). A fire-and-forget relabel
+rewrites Content/SenderName if a better name arrives after insert. Mobile-safe:
+one join event, gated usync.
+
 ## Legacy Mobile — accent StatusBar; delete chat always confirms
 
 WhatsApp Legacy Mobile StatusBar uses the shell accent (`#04564A`) in portrait

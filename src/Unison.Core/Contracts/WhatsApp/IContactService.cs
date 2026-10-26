@@ -258,6 +258,14 @@ namespace Unison.Core.Contracts.WhatsApp
         Task ApplyResolvedNamesToChatListAsync();
 
         /// <summary>
+        /// Group-add path only: file LID↔PN from wire <c>phone_number</c>, then usync those
+        /// few PNs so <see cref="ResolveDisplayName"/> can label a GroupJoin line (avoids bare
+        /// <c>@lid</c>). Never a full roster or list refresh — Mobile-safe for one join event.
+        /// </summary>
+        Task ResolveGroupJoinParticipantsAsync(
+            IEnumerable<KeyValuePair<string, string>> participantJidToPhone);
+
+        /// <summary>
         /// User action: resolve a phone number to a WhatsApp JID (new-chat search).
         /// Prefer this over calling WhatsAppService from ViewModels.
         /// </summary>

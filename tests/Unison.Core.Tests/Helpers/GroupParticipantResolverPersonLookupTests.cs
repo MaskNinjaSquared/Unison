@@ -220,6 +220,10 @@ namespace Unison.Core.Tests.Helpers
 
             public Task ApplyResolvedNamesToChatListAsync() => Task.CompletedTask;
 
+            public Task ResolveGroupJoinParticipantsAsync(
+                IEnumerable<KeyValuePair<string, string>> participantJidToPhone) =>
+                Task.CompletedTask;
+
             public Task<string> SearchContactAsync(string phoneNumber) => Task.FromResult<string>(null);
 
             public string TryResolvePhone(string jid, string phoneDigits = null) => null;

@@ -8,6 +8,8 @@ using Proto;
 using Unison.Core.Contracts;
 using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Helpers;
+using Unison.Core.Helpers.Groups;
+using Unison.Core.Helpers.Notifications;
 using Unison.Core.Models;
 using Unison.Core.State;
 using Unison.WhatsAppClient.Abstractions;
@@ -2986,20 +2988,33 @@ namespace Unison.WhatsAppClient.Messages
             string stripParticipantJid = ParticipantStripIdentity.PreferForDisplay(
                 participantJid,
                 participantAltJid);
-            string resolvedParticipantName =
-                (!string.IsNullOrEmpty(stripParticipantJid)
-                    ? _chatState.ResolveDisplayName(stripParticipantJid)
-                    : null)
-                ?? (!string.IsNullOrEmpty(participantJid)
-                    ? _chatState.ResolveDisplayName(participantJid)
-                    : null);
+            IContactService nameContacts = null;
+            try
+            {
+                nameContacts = _resolveContacts();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[MessageFacade] Incoming name contacts skipped: " + ex.Message);
+            }
+
+            string resolvedParticipantName = ResolveIncomingPersonLabel(
+                nameContacts,
+                stripParticipantJid,
+                participantJid,
+                "incoming-sender");
+            string resolvedChatLabel = ResolveIncomingPersonLabel(
+                nameContacts,
+                jid,
+                null,
+                "incoming-chat");
             IncomingSenderResolution sender = IncomingSenderResolver.Resolve(
                 isGroup,
                 request.EnvelopeIsFromMe,
                 request.SelfDisplayName,
                 selfFallback,
                 resolvedParticipantName,
-                _chatState.ResolveDisplayName(jid),
+                resolvedChatLabel,
                 !string.IsNullOrEmpty(participantJid) || !string.IsNullOrEmpty(stripParticipantJid));
             string senderName = sender.SenderName;
             bool isActuallyFromMe = sender.IsFromMe;
@@ -3438,6 +3453,7 @@ namespace Unison.WhatsAppClient.Messages
                 stripTask,
                 jid,
                 request.SenderName,
+                request.IsGroup ? request.StripParticipantJid : null,
                 request.NotifyContent ?? request.DisplayContent,
                 request.IsGroup,
                 request.IsFromMe,
@@ -3455,6 +3471,7 @@ namespace Unison.WhatsAppClient.Messages
             Task<LiveIncomingChatListApplyResult> stripTask,
             string jid,
             string senderName,
+            string senderJid,
             string preview,
             bool isGroup,
             bool isFromMe,
@@ -3502,16 +3519,91 @@ namespace Unison.WhatsAppClient.Messages
                     : _chatState.ResolveDisplayName(jid);
             }
 
+            IContactService contacts = null;
+            try
+            {
+                contacts = _resolveContacts();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[MessageFacade] Toast name contacts skipped: " + ex.Message);
+            }
+
+            // Title + group author: full contact stack (person / agenda / push), not bare @lid.
+            string toastTitle = NotificationDisplayLabel.Prefer(
+                contacts != null ? contacts.ResolveDisplayName(jid, "toast-chat") : null,
+                notificationName,
+                jid);
+            string toastSender = senderName;
+            if (isGroup && !isFromMe)
+            {
+                string lookup = !string.IsNullOrWhiteSpace(senderJid) ? senderJid : senderName;
+                toastSender = NotificationDisplayLabel.Prefer(
+                    contacts != null && !string.IsNullOrWhiteSpace(lookup)
+                        ? contacts.ResolveDisplayName(lookup, "toast-sender")
+                        : null,
+                    senderName,
+                    lookup);
+            }
+
             NotifyLiveIncoming(
                 jid,
-                notificationName,
-                senderName,
+                toastTitle,
+                toastSender,
                 preview,
                 isGroup,
                 isFromMe,
                 suppressToast,
                 totalUnreadForNotify,
                 notificationChat);
+        }
+
+        /// <summary>
+        /// Person label for an incoming envelope: ContactFacade first (aliases + person store),
+        /// then the chat-state push/agenda maps.
+        /// </summary>
+        private string ResolveIncomingPersonLabel(
+            IContactService contacts,
+            string primaryJid,
+            string secondaryJid,
+            string context)
+        {
+            if (contacts != null)
+            {
+                if (!string.IsNullOrEmpty(primaryJid))
+                {
+                    string fromContacts = contacts.ResolveDisplayName(primaryJid, context);
+                    if (!GroupJoinDisplayLabel.NeedsBetterName(fromContacts))
+                    {
+                        return DisplayNameResolution.StripContactIndicator(fromContacts);
+                    }
+                }
+
+                if (!string.IsNullOrEmpty(secondaryJid))
+                {
+                    string fromContacts = contacts.ResolveDisplayName(secondaryJid, context);
+                    if (!GroupJoinDisplayLabel.NeedsBetterName(fromContacts))
+                    {
+                        return DisplayNameResolution.StripContactIndicator(fromContacts);
+                    }
+                }
+            }
+
+            if (!string.IsNullOrEmpty(primaryJid))
+            {
+                string fromState = _chatState.ResolveDisplayName(primaryJid);
+                if (!string.IsNullOrWhiteSpace(fromState))
+                {
+                    return fromState;
+                }
+            }
+
+            if (!string.IsNullOrEmpty(secondaryJid))
+            {
+                return _chatState.ResolveDisplayName(secondaryJid);
+            }
+
+            return null;
         }
 
         /// <inheritdoc />
@@ -3525,6 +3617,41 @@ namespace Unison.WhatsAppClient.Messages
             string template = _strings != null
                 ? _strings.Get("Message_GroupJoin", "{0} joined the group")
                 : "{0} joined the group";
+
+            IContactService contacts = null;
+            try
+            {
+                contacts = _resolveContacts();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[MessageFacade] Group-join contacts resolve skipped: " + ex.Message);
+            }
+
+            var phoneRows = new List<KeyValuePair<string, string>>(joins.Count);
+            foreach (GroupJoinNotifyRequest join in joins)
+            {
+                if (join == null || string.IsNullOrWhiteSpace(join.ParticipantJid))
+                {
+                    continue;
+                }
+
+                phoneRows.Add(new KeyValuePair<string, string>(
+                    join.ParticipantJid.Trim(),
+                    join.PhoneDigits));
+            }
+
+            if (contacts != null && phoneRows.Count > 0)
+            {
+                try
+                {
+                    await contacts.ResolveGroupJoinParticipantsAsync(phoneRows).ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine("[MessageFacade] Group-join name prep failed: " + ex.Message);
+                }
+            }
 
             foreach (GroupJoinNotifyRequest join in joins)
             {
@@ -3544,17 +3671,13 @@ namespace Unison.WhatsAppClient.Messages
                 string participant = _jids.GetCanonicalJid(join.ParticipantJid) ?? join.ParticipantJid.Trim();
                 string phoneDigits = PhoneNumberHelper.NormalizePhoneDigits(join.PhoneDigits)
                     ?? PhoneNumberHelper.NormalizePhoneDigits(JidHelper.TryPhoneFromJid(join.PhoneDigits))
-                    ?? JidHelper.TryPhoneFromJid(participant);
+                    ?? JidHelper.TryPhoneFromJid(participant)
+                    ?? (contacts != null ? contacts.TryResolvePhone(participant, join.PhoneDigits) : null);
 
-                string who = (_chatState.ResolveDisplayName(participant) ?? string.Empty).Trim();
-                if (string.IsNullOrEmpty(who) ||
-                    who.IndexOf('@') >= 0 ||
-                    SelfChatNaming.IsKnownFallback(who))
-                {
-                    who = !string.IsNullOrWhiteSpace(phoneDigits)
-                        ? phoneDigits
-                        : (JidHelper.TryPhoneFromJid(participant) ?? participant);
-                }
+                string resolved = contacts != null
+                    ? contacts.ResolveDisplayName(participant, "group-join")
+                    : _chatState.ResolveDisplayName(participant);
+                string who = GroupJoinDisplayLabel.Pick(resolved, phoneDigits, participant);
 
                 string content = string.Format(
                     System.Globalization.CultureInfo.CurrentCulture,
@@ -3606,6 +3729,102 @@ namespace Unison.WhatsAppClient.Messages
                     CountsAsUnread = false,
                     SuppressToast = true
                 }).ConfigureAwait(false);
+
+                if (contacts != null && GroupJoinDisplayLabel.NeedsBetterName(who))
+                {
+                    ScheduleGroupJoinRelabel(contacts, groupJid, chatMessage, participant, phoneDigits, template);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Second pass when the join line still shows a number/@lid: one more targeted usync
+        /// (same join phones only), then rewrite Content/SenderName on the UI thread.
+        /// </summary>
+        private void ScheduleGroupJoinRelabel(
+            IContactService contacts,
+            string groupJid,
+            ChatMessage chatMessage,
+            string participant,
+            string phoneDigits,
+            string template)
+        {
+            _ = RelabelGroupJoinWhenNamedAsync(
+                contacts,
+                groupJid,
+                chatMessage,
+                participant,
+                phoneDigits,
+                template);
+        }
+
+        private async Task RelabelGroupJoinWhenNamedAsync(
+            IContactService contacts,
+            string groupJid,
+            ChatMessage chatMessage,
+            string participant,
+            string phoneDigits,
+            string template)
+        {
+            if (contacts == null || chatMessage == null || string.IsNullOrWhiteSpace(participant))
+            {
+                return;
+            }
+
+            try
+            {
+                await contacts.ResolveGroupJoinParticipantsAsync(
+                    new[]
+                    {
+                        new KeyValuePair<string, string>(participant, phoneDigits)
+                    }).ConfigureAwait(false);
+
+                string resolved = contacts.ResolveDisplayName(participant, "group-join-relabel");
+                string who = GroupJoinDisplayLabel.Pick(resolved, phoneDigits, participant);
+                if (GroupJoinDisplayLabel.NeedsBetterName(who) ||
+                    string.Equals(who, chatMessage.SenderName, StringComparison.Ordinal))
+                {
+                    return;
+                }
+
+                string content = string.Format(
+                    System.Globalization.CultureInfo.CurrentCulture,
+                    template,
+                    who);
+
+                await _ui.RunAsync(() =>
+                {
+                    chatMessage.SenderName = who;
+                    chatMessage.Content = content;
+                    if (!string.IsNullOrWhiteSpace(phoneDigits) &&
+                        string.IsNullOrWhiteSpace(chatMessage.GroupJoinPhone))
+                    {
+                        chatMessage.GroupJoinPhone = phoneDigits;
+                    }
+
+                    foreach (ChatItem chat in _chatRows.FindConversation(groupJid))
+                    {
+                        if (chat != null &&
+                            string.Equals(
+                                chat.LastMessageId,
+                                chatMessage.Id,
+                                StringComparison.OrdinalIgnoreCase))
+                        {
+                            chat.LastMessage = content;
+                            chat.LastMessageSenderName = who;
+                        }
+                    }
+
+                    if (_activeChat.IsOpen(groupJid))
+                    {
+                        NotifyChatMessagesChanged(groupJid);
+                    }
+                }).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine(
+                    "[MessageFacade] Group-join relabel failed for " + participant + ": " + ex.Message);
             }
         }
 
