@@ -695,16 +695,27 @@ namespace Unison.WhatsAppClient.Groups
                 return false;
             }
 
-            var unresolved = new List<ChatItem>();
+            // Snapshot on UI, classify off it — walking every row with GetCanonicalJid inside
+            // RunAsync was a multi-second hop on Mobile before any IQ fired.
+            List<ChatItem> snapshot = null;
             await _ui.RunAsync(() =>
             {
+                snapshot = new List<ChatItem>(_chats.Chats.Count);
                 foreach (var chat in _chats.Chats)
                 {
-                    if (chat == null)
+                    if (chat != null)
                     {
-                        continue;
+                        snapshot.Add(chat);
                     }
+                }
+            }).ConfigureAwait(false);
 
+            var unresolved = new List<ChatItem>();
+            if (snapshot != null)
+            {
+                for (int i = 0; i < snapshot.Count; i++)
+                {
+                    ChatItem chat = snapshot[i];
                     string canonical = _jids.GetCanonicalJid(chat.JID);
                     bool missingCommunityLink =
                         string.IsNullOrWhiteSpace(chat.LinkedParentJid) &&
@@ -721,7 +732,7 @@ namespace Unison.WhatsAppClient.Groups
                         unresolved.Add(chat);
                     }
                 }
-            });
+            }
 
             if (unresolved.Count == 0)
             {
