@@ -206,7 +206,8 @@ namespace Unison.WhatsAppClient.Helpers
 
             CapturePrevious(chat, out Dictionary<string, GroupMember> previous, out List<GroupMember> previousList);
             List<GroupMember> next = BuildMembers(drafts, previous, previousList);
-            CommitBuiltRoster(chat, previous, previousList, next);
+            List<GroupMember> applied = CommitBuiltRoster(chat, previous, previousList, next);
+            PersistRosterSnapshot(chat.JID, applied);
         }
 
         /// <summary>
@@ -238,8 +239,22 @@ namespace Unison.WhatsAppClient.Helpers
 
             cancellationToken.ThrowIfCancellationRequested();
 
-            await _ui.RunAsync(() => CommitBuiltRoster(chat, previous, previousList, next))
-                .ConfigureAwait(false);
+            List<GroupMember> applied = null;
+            string groupJid = null;
+            await _ui.RunAsync(() =>
+            {
+                applied = CommitBuiltRoster(chat, previous, previousList, next);
+                groupJid = chat.JID;
+            }).ConfigureAwait(false);
+
+            // Memberships / CopyForStore stay off the UI hop that assigned the roster.
+            if (applied != null && applied.Count > 0)
+            {
+                string jid = groupJid;
+                List<GroupMember> forStore = applied;
+                await Task.Run(() => PersistRosterSnapshot(jid, forStore), cancellationToken)
+                    .ConfigureAwait(false);
+            }
         }
 
         private static void CapturePrevious(
@@ -268,7 +283,11 @@ namespace Unison.WhatsAppClient.Helpers
             }
         }
 
-        private void CommitBuiltRoster(
+        /// <summary>
+        /// In-memory roster commit + notify. Caller persists via <see cref="PersistRosterSnapshot"/>
+        /// (sync for tests, off-UI for <see cref="ApplyMembersAsync"/>).
+        /// </summary>
+        private List<GroupMember> CommitBuiltRoster(
             ChatItem chat,
             Dictionary<string, GroupMember> previous,
             List<GroupMember> previousList,
@@ -276,7 +295,7 @@ namespace Unison.WhatsAppClient.Helpers
         {
             if (next == null || next.Count == 0)
             {
-                return;
+                return null;
             }
 
             List<GroupMember> applied;
@@ -309,19 +328,36 @@ namespace Unison.WhatsAppClient.Helpers
                 chat.GroupMemberCount = applied.Count;
             }
 
-            List<PersonGroupMembership> memberships = GroupRosterRules.Memberships(chat.JID, applied, _jids);
-            if (memberships.Count > 0)
-            {
-                _rosterWriter.SaveMemberships(chat.JID, memberships);
-            }
-
-            List<GroupMember> snapshot = GroupRosterRules.CopyForStore(applied);
-            if (snapshot != null && !string.IsNullOrWhiteSpace(chat.JID))
-            {
-                _rosterWriter.SaveRoster(chat.JID, snapshot);
-            }
-
             _chats.NotifyGroupRosterChanged(chat.JID);
+            return applied;
+        }
+
+        private void PersistRosterSnapshot(string groupJid, List<GroupMember> applied)
+        {
+            if (applied == null || applied.Count == 0 || string.IsNullOrWhiteSpace(groupJid))
+            {
+                return;
+            }
+
+            try
+            {
+                List<PersonGroupMembership> memberships =
+                    GroupRosterRules.Memberships(groupJid, applied, _jids);
+                if (memberships.Count > 0)
+                {
+                    _rosterWriter.SaveMemberships(groupJid, memberships);
+                }
+
+                List<GroupMember> snapshot = GroupRosterRules.CopyForStore(applied);
+                if (snapshot != null)
+                {
+                    _rosterWriter.SaveRoster(groupJid, snapshot);
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[GroupMetadataApply] Roster persist failed: " + ex.Message);
+            }
         }
 
         private List<GroupMember> BuildMembers(
