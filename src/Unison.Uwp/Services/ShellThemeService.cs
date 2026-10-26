@@ -26,6 +26,8 @@ namespace Unison.Uwp.Services
         private readonly IStringResources _strings;
         private readonly ISystemInfoProvider _systemInfo;
         private ShellThemeStrategy _strategy;
+        /// <summary>Last shell whose Theme.xaml was mounted into Application.Resources.</summary>
+        private AppShell? _appliedThemeShell;
 
         public ShellThemeService(
             ILocalSettings localSettings,
@@ -77,9 +79,43 @@ namespace Unison.Uwp.Services
             AppShell shell = ReadSelectedShell();
             _strategy = CreateStrategy(shell);
             ApplyTheme(shell);
+            _appliedThemeShell = shell;
             // Title bar chrome is applied from App window bootstrap (after Activate).
             // Calling SetTitleBar here is often a no-op or gets overwritten on desktop.
             MaybeShowPendingRestartToast();
+        }
+
+        /// <inheritdoc />
+        public void ApplyFromSettingsIfShellChanged()
+        {
+            AppShell shell = ReadSelectedShell();
+            bool pendingToast = false;
+            try
+            {
+                pendingToast = _localSettings.Get<bool>(LocalSettingsConstants.PendingShellAppliedToast);
+            }
+            catch
+            {
+                pendingToast = false;
+            }
+
+            bool themeAlreadyMounted = _appliedThemeShell.HasValue &&
+                                       _appliedThemeShell.Value == shell;
+            if (themeAlreadyMounted && !pendingToast)
+            {
+                Debug.WriteLine("[ShellTheme] resume skip ApplyTheme (shell unchanged)");
+                return;
+            }
+
+            if (themeAlreadyMounted && pendingToast)
+            {
+                // Theme dictionaries already match SelectedShell — only the toast is owed.
+                Debug.WriteLine("[ShellTheme] resume skip ApplyTheme (pending toast only)");
+                MaybeShowPendingRestartToast();
+                return;
+            }
+
+            ApplyFromSettings();
         }
 
         public void ApplyChrome()
