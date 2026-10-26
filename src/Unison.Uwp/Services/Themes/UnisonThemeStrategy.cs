@@ -35,6 +35,14 @@ namespace Unison.Uwp.Services.Themes
         public override bool UsesMobileStatusBarProgress =>
             _systemInfo != null && _systemInfo.IsMobile();
 
+        // Mobile overlay open was janky with full chat-row templates; strategy owns the rule.
+        public override bool ContactsPickerUsesCompactRows => true;
+
+        public override bool ContactsPickerAnimatesOpen => true;
+
+        public override bool ContactsPickerDefersItemsUntilOpen =>
+            _systemInfo == null || _systemInfo.IsMobile();
+
         public override string ShellBrandName => "Unison";
 
         // Same unplated glyph as MainView / EmptyStateBrandLogo. BadgeLogo.scale-125 was

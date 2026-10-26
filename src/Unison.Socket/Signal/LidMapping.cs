@@ -9,6 +9,8 @@
 //
 // Ports: rc14 LIDMapping in src/Types/Auth.ts
 // =============================================================================
+using Unison.Socket.WABinary;
+
 namespace Unison.Socket.Signal
 {
     public sealed class LidMapping
@@ -28,6 +30,22 @@ namespace Unison.Socket.Signal
 
         /// <summary>The identity in phone-number space, e.g. "5511999999999@s.whatsapp.net".</summary>
         public string Pn { get; set; }
+
+        /// <summary>
+        /// Builds a mapping from an unordered alias pair. Returns null when the two
+        /// strings are not one LID (any) and one phone number (any).
+        /// </summary>
+        public static LidMapping TryFromAliasPair(string jidA, string jidB)
+        {
+            if (string.IsNullOrEmpty(jidA) || string.IsNullOrEmpty(jidB))
+            {
+                return null;
+            }
+
+            string lid = JidUtils.IsAnyLid(jidA) ? jidA : (JidUtils.IsAnyLid(jidB) ? jidB : null);
+            string pn = JidUtils.IsAnyPn(jidA) ? jidA : (JidUtils.IsAnyPn(jidB) ? jidB : null);
+            return lid != null && pn != null ? new LidMapping(lid, pn) : null;
+        }
 
         public override string ToString()
         {

@@ -94,6 +94,12 @@ namespace Unison.Core.ViewModels
         /// <summary>Keeps the chat-list author strip in step with the names resolved here.</summary>
         private readonly IChatAuthorProjection _authorProjection;
 
+        /// <summary>Shell people picker for Forward (title Encaminhar / Forward + message id).</summary>
+        private readonly IForwardMessagePicker _forwardPicker;
+
+        /// <summary>Clipboard paste (Ctrl+V media) — Image / Audio / Document only.</summary>
+        private readonly ICopyService _copy;
+
         // ── State ─────────────────────────────────────────────────────────────
 
         private ChatItem _activeChat;
@@ -104,6 +110,9 @@ namespace Unison.Core.ViewModels
         private bool _hasActiveChat;
         private bool _isLoadingMessages;
         private bool _isLoadingMore;
+
+        /// <summary>JID already given one open-path subject IQ (see TryRefreshGroupSubjectOnce).</summary>
+        private string _groupSubjectRefreshJid;
         private string _recordingChatJid;
         private bool _isChatDetailInfoOpen;
         private ChatDetailInfoViewModel _chatDetailInfo;
@@ -123,10 +132,7 @@ namespace Unison.Core.ViewModels
         /// Per open-chat lookup of group participant labels/avatars (plus 1:1 indexes).
         /// Owned for the VM lifetime; roster hooks detach on uninitialize without Dispose.
         /// </summary>
-        private readonly GroupParticipantLookup _participants;
-
-        /// <summary>What participant resolution is allowed to reach. Shared with the lookup above.</summary>
-        private readonly ParticipantResolutionContext _participantContext;
+        private readonly IGroupParticipantLookup _participants;
 
         /// <summary>Which JIDs are the same person (PN vs LID).</summary>
         private readonly IJidResolver _jids;
@@ -160,7 +166,9 @@ namespace Unison.Core.ViewModels
             IConnectionService connectionService = null,
             IGroupService groupService = null,
             IChatAuthorProjection authorProjection = null,
-            IUiSoundService uiSounds = null)
+            IUiSoundService uiSounds = null,
+            IForwardMessagePicker forwardPicker = null,
+            ICopyService copy = null)
         {
             _chatService = chatService;
             _connectionService = connectionService;
@@ -185,8 +193,11 @@ namespace Unison.Core.ViewModels
             _sessionLogger = sessionLogger;
             _diagnostics = diagnostics;
             _authorProjection = authorProjection;
-
-            _participantContext = new ParticipantResolutionContext(jids, contactService, chatState, personStore);
+            _forwardPicker = forwardPicker;
+            _copy = copy;
+            System.Diagnostics.Debug.WriteLine(
+                "[Forward] ChatDetailViewModel ctor; IForwardMessagePicker=" +
+                (_forwardPicker != null ? "injected" : "NULL"));
 
             // Open-chat bubble budget follows memory tier (not DeviceFamily): Unsupported/Low keep
             // the old Mobile 30/80 window; High keeps the desktop 50/150.
@@ -219,6 +230,9 @@ namespace Unison.Core.ViewModels
                 () => CanCompose);
             AttachContactCommand = new RelayCommand(() => { }, () => false);
             AttachLocationCommand = new RelayCommand(() => { }, () => false);
+            PasteClipboardCommand = new RelayCommand(
+                () => _ = RunSafeAsync(PasteClipboardAsync, "paste-clipboard"),
+                () => CanCompose && _copy != null);
 
             StartRecordingCommand = new RelayCommand(
                 () => _ = RunSafeAsync(StartRecordingAsync, "record-start"),
@@ -260,6 +274,17 @@ namespace Unison.Core.ViewModels
             ReplySelectedMessageCommand = new RelayCommand(
                 () => BeginReply(SelectedMessage),
                 () => _messageActions.CanReply);
+            ForwardSelectedMessageCommand = new RelayCommand(
+                () =>
+                {
+                    System.Diagnostics.Debug.WriteLine(
+                        "[Forward] ForwardSelectedMessageCommand execute; selected=" +
+                        (SelectedMessage?.Model?.Id ?? "(null)") +
+                        "; canForward=" + _messageActions.CanForward +
+                        "; picker=" + (_forwardPicker != null ? "ok" : "NULL"));
+                    BeginForward(SelectedMessage);
+                },
+                () => _messageActions.CanForward);
             DismissReplyCommand = new RelayCommand(DismissReply);
             PinSelectedFor24HoursCommand = new RelayCommand(
                 () => _ = PinSelectedAsync(true, MessageActionSelection.PinFor24HoursSeconds),
@@ -274,13 +299,13 @@ namespace Unison.Core.ViewModels
                 () => _ = PinSelectedAsync(false, 0),
                 () => _messageActions.CanUnpin);
             MuteFor8HoursCommand = new RelayCommand(
-                () => _ = SetLocalMuteAsync(ChatMuteHelper.FromNow(ChatMuteHelper.EightHours)),
+                () => _ = SetLocalMuteAsync(_chatService.MuteUntilEightHoursFromNow()),
                 () => CanMuteActiveChat());
             MuteFor1WeekCommand = new RelayCommand(
-                () => _ = SetLocalMuteAsync(ChatMuteHelper.FromNow(ChatMuteHelper.OneWeek)),
+                () => _ = SetLocalMuteAsync(_chatService.MuteUntilOneWeekFromNow()),
                 () => CanMuteActiveChat());
             MuteForeverCommand = new RelayCommand(
-                () => _ = SetLocalMuteAsync(ChatMuteHelper.ForeverUnixSeconds),
+                () => _ = SetLocalMuteAsync(_chatService.MuteForeverUnixSeconds),
                 () => CanMuteActiveChat());
             UnmuteLocalCommand = new RelayCommand(
                 () => _ = SetLocalMuteAsync(null),
@@ -300,7 +325,11 @@ namespace Unison.Core.ViewModels
                 () => _ = CallPhoneAsync(),
                 () => CanCallPhone);
 
-            _participants = new GroupParticipantLookup(_participantContext, SelfListDisplayName);
+            _participants = _groupService != null
+                ? _groupService.CreateOpenChatParticipantLookup(SelfListDisplayName)
+                : new GroupParticipantLookup(
+                    new ParticipantResolutionContext(jids, contactService, chatState, personStore),
+                    SelfListDisplayName);
             _participants.ParticipantAvatarChanged += OnParticipantAvatarChanged;
         }
 
@@ -443,6 +472,8 @@ namespace Unison.Core.ViewModels
 
         public ICommand ReplySelectedMessageCommand { get; }
 
+        public ICommand ForwardSelectedMessageCommand { get; }
+
         public ICommand PinSelectedFor24HoursCommand { get; }
 
         public ICommand PinSelectedFor7DaysCommand { get; }
@@ -472,6 +503,7 @@ namespace Unison.Core.ViewModels
             OnPropertyChanged(nameof(CanUnpinSelectedMessage));
             (CopySelectedMessageCommand as RelayCommand)?.RaiseCanExecuteChanged();
             (ReplySelectedMessageCommand as RelayCommand)?.RaiseCanExecuteChanged();
+            (ForwardSelectedMessageCommand as RelayCommand)?.RaiseCanExecuteChanged();
             (PinSelectedFor24HoursCommand as RelayCommand)?.RaiseCanExecuteChanged();
             (PinSelectedFor7DaysCommand as RelayCommand)?.RaiseCanExecuteChanged();
             (PinSelectedFor30DaysCommand as RelayCommand)?.RaiseCanExecuteChanged();
@@ -523,7 +555,8 @@ namespace Unison.Core.ViewModels
             int at;
             string query;
             int length;
-            if (!MentionSearch.TryReadToken(text, caret, out at, out query, out length))
+            if (_messageService == null ||
+                !_messageService.TryReadMentionToken(text, caret, out at, out query, out length))
             {
                 CloseMentionMenu();
                 return;
@@ -538,7 +571,7 @@ namespace Unison.Core.ViewModels
             string detail = _strings != null
                 ? _strings.Get("ChatDetail_MentionEveryoneDetail", "Mention all group members")
                 : "Mention all group members";
-            IReadOnlyList<MentionChoice> rows = MentionSearch.Search(
+            IReadOnlyList<MentionChoice> rows = _messageService.SearchMentionChoices(
                 ActiveChat.GroupMembers,
                 query,
                 everyone,
@@ -559,12 +592,12 @@ namespace Unison.Core.ViewModels
 
         private bool IsCurrentMember(GroupMember member)
         {
-            if (member == null || _jids == null)
+            if (member == null || _contactService == null)
             {
                 return false;
             }
 
-            if (SelfIdentity.IsSelf(member.Jid, _jids) || SelfIdentity.IsSelf(member.Lid, _jids))
+            if (_contactService.IsSelf(member.Jid) || _contactService.IsSelf(member.Lid))
             {
                 return true;
             }
@@ -580,7 +613,7 @@ namespace Unison.Core.ViewModels
                 phone = phone + "@s.whatsapp.net";
             }
 
-            return SelfIdentity.IsSelf(phone, _jids);
+            return _contactService.IsSelf(phone);
         }
 
         public void MoveMentionSelection(int delta)
@@ -739,6 +772,9 @@ namespace Unison.Core.ViewModels
         public void BeginLoadingMessages()
         {
             IsLoadingMessages = true;
+            // New groups often have only a JID placeholder until w:g2 — fetch subject once here
+            // (not on Prepare) so Mobile open still gets a name while messages load.
+            TryRefreshGroupSubjectOnce();
         }
 
         /// <summary>Clears the initial timeline fetch flag.</summary>
@@ -780,6 +816,12 @@ namespace Unison.Core.ViewModels
 
         /// <summary>Share a location. Unavailable: no location send route.</summary>
         public ICommand AttachLocationCommand { get; }
+
+        /// <summary>
+        /// Ctrl+V media paste: reads clipboard via <see cref="ICopyService"/> and sends
+        /// Image / Audio / Document (text paste stays on the TextBox).
+        /// </summary>
+        public ICommand PasteClipboardCommand { get; }
 
         /// <summary>Starts audio capture for a voice note.</summary>
         public ICommand StartRecordingCommand { get; }
@@ -931,7 +973,7 @@ namespace Unison.Core.ViewModels
 
         private void Contacts_DisplayNamesUpdated(object sender, EventArgs e)
         {
-            GroupParticipantLookup.InvalidateDirectChatIndex();
+            _groupService?.InvalidateParticipantDirectChatIndex();
 
             if (_dispatcher != null)
             {

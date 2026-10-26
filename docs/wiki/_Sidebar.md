@@ -10,4 +10,5 @@
 * [Adding languages](Adding-Languages)
 * [Migration](Migration)
 * [WhatsAppService extraction](WhatsAppService-Extraction)
+* [Netstandard WhatsApp client](Netstandard-WhatsApp-Client)
 * [Changelog](Changelog)

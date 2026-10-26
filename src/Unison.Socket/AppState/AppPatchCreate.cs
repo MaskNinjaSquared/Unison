@@ -103,6 +103,37 @@ namespace Unison.Socket.AppState
             return Build(WaPatchName.RegularLow, 5, action, "pin_v1", jid);
         }
 
+        /// <summary>
+        /// Replaces the account Favourites list. WhatsApp stores one record — always pass the
+        /// complete desired JID set. <paramref name="add"/> selects SET vs REMOVE.
+        /// </summary>
+        public static AppPatchCreate Favorites(IEnumerable<string> jids, bool add)
+        {
+            var action = NewAction();
+            var favorites = new global::Proto.SyncActionValue.Types.FavoritesAction();
+            if (jids != null)
+            {
+                foreach (string jid in jids)
+                {
+                    if (string.IsNullOrWhiteSpace(jid))
+                    {
+                        continue;
+                    }
+
+                    favorites.Favorites.Add(
+                        new global::Proto.SyncActionValue.Types.FavoritesAction.Types.Favorite
+                        {
+                            Id = jid
+                        });
+                }
+            }
+
+            action.FavoritesAction = favorites;
+            var patch = Build(WaPatchName.RegularLow, 5, action, "favorites");
+            patch.IsRemove = !add;
+            return patch;
+        }
+
         public static AppPatchCreate Star(string jid, string messageId, bool fromMe, bool starred)
         {
             var action = NewAction();

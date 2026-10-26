@@ -57,6 +57,7 @@ namespace Unison.Core.ViewModels
         private bool _isMembersAvatarsLoading;
         private bool _isMembersRosterLoading;
         private Task _membersRosterEnsureTask;
+        private CancellationTokenSource _membersRosterCts;
 
         /// <summary>Tiles materialized per page. Groups hold hundreds of media rows.</summary>
         private const int MediaPageSize = 30;
@@ -176,6 +177,7 @@ namespace Unison.Core.ViewModels
                 enabled => _ = SetNotificationsEnabledAsync(enabled),
                 _ => !_isGroupMember &&
                      _chatStore != null &&
+                     _chatService != null &&
                      !string.IsNullOrWhiteSpace(_source?.JID));
 
             AddContactCommand = new RelayCommand(
@@ -250,7 +252,7 @@ namespace Unison.Core.ViewModels
 
         public string AvatarUrl =>
             _isGroupMember
-                ? (GroupParticipantResolver.ResolveAvatar(
+                ? (_groups?.ResolveMemberAvatar(
                     _member?.Jid ?? _member?.Lid ?? _member?.PhoneNumber,
                     _source,
                     _participants,
@@ -264,7 +266,7 @@ namespace Unison.Core.ViewModels
                 if (_isGroupMember)
                 {
                     string jid = _member?.Jid ?? _member?.Lid ?? _member?.PhoneNumber;
-                    return GroupParticipantResolver.ResolveDisplayName(
+                    return _groups?.ResolveMemberDisplayName(
                         jid,
                         _source,
                         _participants,
@@ -449,10 +451,16 @@ namespace Unison.Core.ViewModels
             _isMembersAvatarsLoading = false;
             _isMembersRosterLoading = false;
             _membersRosterEnsureTask = null;
-        }
+            try
+            {
+                _membersRosterCts?.Cancel();
+            }
+            catch
+            {
+            }
 
-        /// <summary>
-        /// Starts the media/files SQLite index on first Media or Files pivot open.
-        /// Live message events only rebuild after this has run once.
+            _membersRosterCts?.Dispose();
+            _membersRosterCts = null;
+        }
     }
 }

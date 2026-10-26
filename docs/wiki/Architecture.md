@@ -14,8 +14,9 @@ Unison is split so that **WhatsApp protocol and session** live in a portable lib
 
 ```mermaid
 flowchart TB
-    Uwp["Unison.Uwp<br/>UWP app, facades, SocketBridge"]
+    Uwp["Unison.Uwp<br/>UWP app, facades today, SocketBridge"]
     Core["Unison.Core<br/>contracts, models, ViewModels"]
+    App["Unison.WhatsAppClient<br/>facades + domain helpers scaffold"]
     Socket["Unison.Socket<br/>session, use cases, events"]
     Baileys["Unison.Baileys<br/>Noise, Signal, binary XML, proto"]
     Bg["Unison.Background<br/>SocketActivity task"]
@@ -24,6 +25,8 @@ flowchart TB
     Uwp --> Socket
     Uwp --> Baileys
     Uwp --> Bg
+    App --> Core
+    App --> Socket
     Core --> Baileys
     Socket --> Baileys
     Bg --> Baileys
@@ -31,11 +34,12 @@ flowchart TB
 
 | Project | Target | Role |
 |---|---|---|
-| `Unison.Uwp` | UAP 10.0.16299+ | App, views, DI, stores, `SocketBridge` |
-| `Unison.Core` | netstandard2.0 | Contracts, models, ViewModels, helpers |
+| `Unison.Uwp` | UAP 10.0.16299+ | App, views, DI, stores, `SocketBridge` (façades still here until phase C move) |
+| `Unison.Core` | netstandard2.0 | Contracts, models, ViewModels, presentation helpers |
+| `Unison.WhatsAppClient` | netstandard2.0 | Facades + domain helpers (scaffold; see [Netstandard WhatsApp client](Netstandard-WhatsApp-Client)) |
 | `Unison.Socket` | netstandard2.0 | Baileys 7.0.0-rc14 session and protocol |
 | `Unison.Baileys` | netstandard2.0 | Crypto, Noise, Signal, protobuf, `AuthState` |
-| `Unison.Background` | UAP winmdobj | Out-of-process broker; **no** Core / Socket reference |
+| `Unison.Background` | UAP winmdobj | Out-of-process broker; **no** Core / Socket / Application reference |
 
 Solution file: `Unison.slnx`. Ignore the nested stub `src/Unison.Socket/Unison.Socket/` (empty WinUI project). The real library is `src/Unison.Socket/Unison.Socket.csproj`.
 
@@ -125,7 +129,8 @@ Broker transfer and reclaim go through `ConnectionHandler` and answer `true` onl
 
 ## WhatsAppService today
 
-Still the singleton `IWhatsAppService` registered in `App.ConfigureServices`. It still owns:
+Still the concrete singleton registered in `App.ConfigureServices` (host ports + lifecycle).
+`IWhatsAppService` is gone — UI uses façades (`IConnectionService`, …). It still owns:
 
 - Connect / resume / persist
 - In-memory `Chats` collection and message caches
@@ -134,9 +139,9 @@ Still the singleton `IWhatsAppService` registered in `App.ConfigureServices`. It
 - Presence subscribe
 - Memory-pressure and suspend hooks
 
-The type is `partial` (`WhatsAppService.Connection.cs`, `.Media.cs`, `.Groups.cs`, …) so cluster extractions stay reviewable. **Partials are the same class** — façades still inject `IWhatsAppService`. Moving a cluster means cutting methods onto a façade, not calling the partial file. Plan and leftover UI leaks: [WhatsAppService extraction](WhatsAppService-Extraction).
+The type is `partial` (`WhatsAppService.Connection.cs`, `.Media.cs`, `.Groups.cs`, …) so cluster extractions stay reviewable. **Partials are the same class** — façades talk to host ports / domain contracts, not an aggregating client interface. Moving a cluster means cutting methods onto a façade, not calling the partial file. Plan and leftover UI leaks: [WhatsAppService extraction](WhatsAppService-Extraction).
 
-Facades extracted **policy** around it (pairing/logout, pin/mark-read, contact overlay, profile picture IQ, history resync that waits for the phone). Screens should not subscribe to its raw events; those are for facades only (stated on `IWhatsAppService`).
+Facades extracted **policy** around it (pairing/logout, pin/mark-read, contact overlay, profile picture IQ, history resync that waits for the phone). Screens should not subscribe to raw client events; those are for façades only (`IConnectionEventSource` and peers).
 
 ## Data that persists
 
@@ -144,7 +149,7 @@ Facades extracted **policy** around it (pairing/logout, pin/mark-read, contact o
 |---|---|---|
 | `AuthStore` | `LocalSettings` container `WhatsAppAuth` | Credentials (`AuthState` JSON) |
 | `FileKeyStore` | `SignalKeys\` | Sessions, prekeys, sender keys, app-state keys |
-| `SqliteLidMappingStorage` | SQLite | PN ↔ LID map for the rc14 addressing model |
+| `SqliteLidMappingStorage` | SQLite | PN ↔ LID map (durable). RAM LRU is tier-capped; Mobile never full-warms — see [Socket stack](Socket-Stack#addressing-lid-not-jidalias) |
 | `ChatStore` / `PersonStore` | SQLite | Local chat flags (mute/pin) and people |
 | `MessageStore` | App data JSON | Leftover identity sidecars (contact names / aliases); chat/message JSON no longer the live path |
 | `HistoryChatPreviewStore` | SQLite `history_chat_preview` | List catalog, schema 6: `ChatStatus` Active/Deleted/Archived plus `DeletedAtUtc` tombstone; history chunks apply as **delta** (insert new / update lifecycle + tip when newer); UI hydrates via `ChatPreviewChunkPersisted` |

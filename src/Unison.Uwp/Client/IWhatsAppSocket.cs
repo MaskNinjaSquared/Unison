@@ -134,9 +134,12 @@ namespace Unison.Uwp.Client
 
         string GenerateMessageId();
 
-        Task<BinaryNode> QueryGroupMetadataAsync(string groupJid);
+        Task<BinaryNode> QueryGroupMetadataAsync(
+            string groupJid,
+            System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken));
 
-        Task<BinaryNode> QueryParticipatingGroupsAsync();
+        Task<BinaryNode> QueryParticipatingGroupsAsync(
+            System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken));
 
         Task<ProfilePictureResult> GetProfilePictureUrlResultAsync(string jid, string type = "preview");
 
@@ -151,6 +154,9 @@ namespace Unison.Uwp.Client
 
         /// <summary>Pins or unpins a conversation for the whole account.</summary>
         Task SetChatPinnedAsync(string jid, bool pinned);
+
+        /// <summary>Replaces the account Favourites list (complete JID set).</summary>
+        Task SetFavoritesListAsync(IEnumerable<string> jids, bool add);
 
         /// <summary>
         /// Deletes a conversation for the whole account. The range names the tail it covers.
@@ -169,7 +175,9 @@ namespace Unison.Uwp.Client
             string explicitMessageId = null,
             IList<string> mentions = null,
             bool mentionAll = false,
-            OutgoingQuote quote = null);
+            OutgoingQuote quote = null,
+            bool markAsForwarded = false,
+            uint forwardingScore = 0);
 
         Task<string> SendImageMessageAsync(
             string jid,

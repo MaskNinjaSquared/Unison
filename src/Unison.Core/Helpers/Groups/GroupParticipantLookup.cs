@@ -12,7 +12,7 @@ namespace Unison.Core.Helpers
     /// Built from the roster (plus service/Person caches) and reused by run layout so every
     /// bubble does not walk the member list and ResolveDisplayName again.
     /// </summary>
-    public sealed class GroupParticipantLookup : IDisposable
+    public sealed class GroupParticipantLookup : IGroupParticipantLookup
     {
         private readonly ParticipantResolutionContext _context;
         private readonly IJidResolver _jids;

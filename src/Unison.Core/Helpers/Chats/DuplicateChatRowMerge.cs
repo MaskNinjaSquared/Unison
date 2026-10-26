@@ -125,6 +125,8 @@ namespace Unison.Core.Helpers
             }
 
             primary.AvatarUrl = secondary.AvatarUrl;
+            primary.AvatarPictureId = secondary.AvatarPictureId;
+            primary.AvatarRemoteUrl = secondary.AvatarRemoteUrl;
             primary.AvatarFetchedAtUtc = secondary.AvatarFetchedAtUtc;
             primary.AvatarFetchFailedAtUtc = secondary.AvatarFetchFailedAtUtc;
             primary.AvatarFetchFailureReason = secondary.AvatarFetchFailureReason;

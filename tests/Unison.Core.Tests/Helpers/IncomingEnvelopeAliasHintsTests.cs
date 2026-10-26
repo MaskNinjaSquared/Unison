@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using Unison.Core.Helpers;
 using Xunit;
+using Unison.WhatsAppClient.Helpers;
 
 namespace Unison.Core.Tests.Helpers
 {

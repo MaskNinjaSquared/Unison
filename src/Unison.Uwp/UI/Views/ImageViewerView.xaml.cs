@@ -1,6 +1,7 @@
 using System;
 using System.ComponentModel;
 using Unison.Core.ViewModels;
+using Unison.Uwp.UI.Helpers;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
 using Windows.UI.Xaml.Input;
@@ -23,6 +24,7 @@ namespace Unison.Uwp.UI.Views
         private static readonly object ClosedDataContext = new object();
 
         private ImageViewerViewModel _viewModel;
+        private readonly ViewerEscapeKey _escapeKey;
         private int _naturalWidth;
         private int _naturalHeight;
         private double _displayWidth;
@@ -33,6 +35,9 @@ namespace Unison.Uwp.UI.Views
         {
             InitializeComponent();
             DataContext = ClosedDataContext;
+            _escapeKey = new ViewerEscapeKey(
+                () => Visibility == Visibility.Visible && _viewModel != null,
+                () => _viewModel?.CloseCommand);
             Unloaded += ImageViewerView_Unloaded;
             SizeChanged += ImageViewerView_SizeChanged;
             ImageArea.SizeChanged += ImageArea_SizeChanged;
@@ -54,6 +59,7 @@ namespace Unison.Uwp.UI.Views
                 {
                     _viewModel.PropertyChanged -= ViewModel_PropertyChanged;
                     _viewModel.CloseRequested -= ViewModel_CloseRequested;
+                    _escapeKey.Unhook();
                 }
 
                 _viewModel = value;
@@ -72,6 +78,7 @@ namespace Unison.Uwp.UI.Views
                     ApplyChromeVisibility(_viewModel.IsChromeVisible, animate: false);
                     LoadImageSource(_viewModel.ImageUri);
                     ResetZoom();
+                    _escapeKey.Hook();
                 }
                 else
                 {
@@ -87,6 +94,7 @@ namespace Unison.Uwp.UI.Views
             // Unsubscribing alone left the view model, and the full-screen bitmap it holds, alive
             // behind a closed overlay — the app's memory peak, on the device with the least of it.
             // The setter already unsubscribes and clears the image source, so hand it null.
+            _escapeKey.Unhook();
             ViewModel = null;
         }
 

@@ -41,6 +41,16 @@ namespace Unison.Core.ViewModels
             get { return _message != null; }
         }
 
+        public bool CanForward
+        {
+            get
+            {
+                return _message != null &&
+                       _message.ForwardCommand != null &&
+                       _message.ForwardCommand.CanExecute(null);
+            }
+        }
+
         public bool CanPin
         {
             get { return _message != null && !_message.IsPinned; }
@@ -119,6 +129,7 @@ namespace Unison.Core.ViewModels
         {
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(CanCopy)));
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(CanReply)));
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(CanForward)));
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(CanPin)));
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(CanUnpin)));
         }

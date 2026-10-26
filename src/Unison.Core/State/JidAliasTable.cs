@@ -8,15 +8,16 @@
 // rules are the only reason the map exists, and every caller that reached for
 // the dictionary directly was one reimplementing a rule badly.
 //
-// The long-term home for LID/PN pairs is LidMappingStore, which is SQLite-backed
-// and async. This table stays synchronous on purpose, because canonicalization
-// sits on the incoming-message path and behind XAML bindings, where there is no
-// thread to await on. Converging the two is a storage swap behind this seam.
+// The durable home for LID/PN pairs is LidMappingStore (SQLite + memory cache).
+// This table stays the synchronous seam for canonicalization (incoming path /
+// XAML), reading the store via ILidMappingMemory and dual-writing LID↔PN pairs
+// back (phase 3.7b). Self-poisoning and LID-like rules stay here.
 // =============================================================================
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
+using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Helpers;
 using Unison.Core.Models;
 
@@ -38,6 +39,9 @@ namespace Unison.Core.State
         private Func<string> _selfId;
         private Func<string> _selfLid;
         private Func<string> _selfPhone;
+        private ILidMappingMemory _lidMemory;
+        private int _bulkImportDepth;
+        private bool _bulkImportDirty;
 
         /// <summary>
         /// Raised when the map changed, which is what lets caches keyed by canonical address
@@ -62,6 +66,44 @@ namespace Unison.Core.State
             _selfId = selfId;
             _selfLid = selfLid;
             _selfPhone = selfPhone;
+        }
+
+        /// <summary>
+        /// Optional sync peek / dual-write seam into <c>LidMappingStore</c> (phase 3.7b).
+        /// Misses promote into this table; indexer/`Add` remember LID↔PN pairs back into the store.
+        /// </summary>
+        public void AttachLidMappingMemory(ILidMappingMemory memory)
+        {
+            _lidMemory = memory;
+        }
+
+        /// <summary>
+        /// True while a <see cref="BeginBulkImport"/> scope is open (including nested).
+        /// Hosts use this to defer per-pair socket dual-writes until the outer flush.
+        /// </summary>
+        public bool IsBulkImporting
+        {
+            get
+            {
+                lock (_sync)
+                {
+                    return _bulkImportDepth > 0;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Coalesces dual-write + <see cref="Changed"/> across many sets (persistence restore).
+        /// Dispose flushes one <c>RememberPairs</c> of the snapshot and one change notify.
+        /// </summary>
+        public IDisposable BeginBulkImport()
+        {
+            lock (_sync)
+            {
+                _bulkImportDepth++;
+            }
+
+            return new BulkImportScope(this);
         }
 
         /// <summary>
@@ -391,7 +433,7 @@ namespace Unison.Core.State
 
                 if (notify)
                 {
-                    RaiseChanged();
+                    AfterMutation(key, value);
                 }
             }
         }
@@ -428,8 +470,31 @@ namespace Unison.Core.State
         {
             lock (_sync)
             {
-                return _inner.TryGetValue(key, out value);
+                if (_inner.TryGetValue(key, out value))
+                {
+                    return true;
+                }
             }
+
+            ILidMappingMemory memory = _lidMemory;
+            if (memory == null)
+            {
+                value = null;
+                return false;
+            }
+
+            string normalized = Normalize(key);
+            string paired;
+            if (!memory.TryGetPairedJid(normalized, out paired) || string.IsNullOrEmpty(paired))
+            {
+                value = null;
+                return false;
+            }
+
+            // Promote into the table so the next sync lookup stays local.
+            this[normalized] = paired;
+            value = paired;
+            return true;
         }
 
         public bool Contains(KeyValuePair<string, string> item)
@@ -465,7 +530,7 @@ namespace Unison.Core.State
                 _inner.Add(key, value);
             }
 
-            RaiseChanged();
+            AfterMutation(key, value);
         }
 
         public void Add(KeyValuePair<string, string> item) => Add(item.Key, item.Value);
@@ -522,6 +587,78 @@ namespace Unison.Core.State
             }
         }
 
+        private void AfterMutation(string key, string value)
+        {
+            lock (_sync)
+            {
+                if (_bulkImportDepth > 0)
+                {
+                    _bulkImportDirty = true;
+                    return;
+                }
+            }
+
+            RememberLidPnPair(key, value);
+            RaiseChanged();
+        }
+
+        private void EndBulkImport()
+        {
+            bool flush;
+            Dictionary<string, string> snapshot = null;
+            lock (_sync)
+            {
+                if (_bulkImportDepth > 0)
+                {
+                    _bulkImportDepth--;
+                }
+
+                flush = _bulkImportDepth == 0 && _bulkImportDirty;
+                if (flush)
+                {
+                    _bulkImportDirty = false;
+                    snapshot = new Dictionary<string, string>(_inner, StringComparer.OrdinalIgnoreCase);
+                }
+            }
+
+            if (!flush)
+            {
+                return;
+            }
+
+            ILidMappingMemory memory = _lidMemory;
+            memory?.RememberPairs(snapshot);
+            RaiseChanged();
+        }
+
+        private void RememberLidPnPair(string key, string value)
+        {
+            ILidMappingMemory memory = _lidMemory;
+            memory?.RememberPair(key, value);
+        }
+
         private void RaiseChanged() => Changed?.Invoke(this, EventArgs.Empty);
+
+        private sealed class BulkImportScope : IDisposable
+        {
+            private JidAliasTable _table;
+
+            public BulkImportScope(JidAliasTable table)
+            {
+                _table = table;
+            }
+
+            public void Dispose()
+            {
+                JidAliasTable table = _table;
+                if (table == null)
+                {
+                    return;
+                }
+
+                _table = null;
+                table.EndBulkImport();
+            }
+        }
     }
 }

@@ -8,6 +8,7 @@
 using System;
 using System.Collections.Generic;
 using Unison.Core.Helpers;
+using Unison.WhatsAppClient.Helpers;
 using Unison.Core.Models;
 using Xunit;
 

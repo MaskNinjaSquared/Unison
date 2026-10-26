@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Unison.Core.Contracts;
 using Unison.Core.Helpers;
+using Unison.WhatsAppClient.Helpers;
 using Unison.Core.Models;
 using Xunit;
 

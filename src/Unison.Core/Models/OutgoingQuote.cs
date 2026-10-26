@@ -70,6 +70,8 @@ namespace Unison.Core.Models
                     return ChatPreviewKind.Voice;
                 case ChatMessageKind.Document:
                     return ChatPreviewKind.Document;
+                case ChatMessageKind.Contact:
+                    return ChatPreviewKind.Contact;
                 default:
                     return ChatPreviewKind.Text;
             }
@@ -91,6 +93,12 @@ namespace Unison.Core.Models
                 !string.IsNullOrWhiteSpace(message.DocumentFileName))
             {
                 return message.DocumentFileName;
+            }
+
+            if (message.Kind == ChatMessageKind.Contact &&
+                !string.IsNullOrWhiteSpace(message.ContactCardDisplayName))
+            {
+                return message.ContactCardDisplayName;
             }
 
             return message.Content ?? string.Empty;

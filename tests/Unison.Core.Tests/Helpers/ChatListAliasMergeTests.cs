@@ -4,6 +4,7 @@ using Unison.Core.Helpers;
 using Unison.Core.Models;
 using Unison.Core.State;
 using Xunit;
+using Unison.WhatsAppClient.Helpers;
 
 namespace Unison.Core.Tests.Helpers
 {
@@ -16,16 +17,24 @@ namespace Unison.Core.Tests.Helpers
         private readonly DisplayNameTable _pushNames = new DisplayNameTable();
         private readonly ChatStateStore _chats = new ChatStateStore(new CountingDispatcher());
         private readonly CountingDispatcher _ui = new CountingDispatcher();
+        private readonly ChatRowIndex _rows;
         private readonly ChatListDeduper _deduper;
 
         public ChatListAliasMergeTests()
         {
-            var rows = new ChatRowIndex(() => _chats.Chats, _aliases.GetCanonicalJid);
-            _deduper = new ChatListDeduper(_ui, _chats, rows, _aliases, _pushNames);
+            _rows = new ChatRowIndex(() => _chats.Chats, _aliases.GetCanonicalJid);
+            _deduper = new ChatListDeduper(_ui, _chats, _rows, _aliases, _pushNames);
         }
 
         private ChatListAliasMerge Build() =>
-            new ChatListAliasMerge(_ui, _chats, _aliases, _deduper);
+            new ChatListAliasMerge(_ui, _chats, _rows, _aliases, _deduper, new NoMarkers());
+
+        private sealed class NoMarkers : ISelfMarkerNaming
+        {
+            public bool IsMarkerLabel(string label) => false;
+
+            public string StripMarker(string label) => label;
+        }
 
         [Fact]
         public async Task Already_aliased_addresses_run_the_list_dedupe()
@@ -60,6 +69,36 @@ namespace Unison.Core.Tests.Helpers
             Assert.Contains(pnRow, _chats.Chats);
             Assert.False(_chats.MessagesByChat.Contains(Lid));
             Assert.Equal(2, _chats.MessagesByChat.CountFor(Pn));
+        }
+
+        [Fact]
+        public async Task Usync_merge_keeps_the_newer_lid_preview_on_the_phone_row()
+        {
+            var lidRow = new ChatItem
+            {
+                JID = Lid,
+                LastMessage = "from lid",
+                LastMessageId = "L1",
+                LastMessageTimestampUtc = new DateTime(2024, 6, 2, 12, 0, 0, DateTimeKind.Utc),
+                UnreadCount = 3
+            };
+            var pnRow = new ChatItem
+            {
+                JID = Pn,
+                LastMessage = "older pn",
+                LastMessageId = "P1",
+                LastMessageTimestampUtc = new DateTime(2024, 6, 1, 12, 0, 0, DateTimeKind.Utc),
+                UnreadCount = 1
+            };
+            _chats.Chats.Add(lidRow);
+            _chats.Chats.Add(pnRow);
+
+            ChatListAliasMergeResult result = await Build().MergeAsync(Lid, Pn);
+
+            Assert.Equal(ChatListAliasMergeOutcome.MergedRows, result.Outcome);
+            Assert.Equal("from lid", pnRow.LastMessage);
+            Assert.Equal("L1", pnRow.LastMessageId);
+            Assert.Equal(3, pnRow.UnreadCount);
         }
 
         [Fact]

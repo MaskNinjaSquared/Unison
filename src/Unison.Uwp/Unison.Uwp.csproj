@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="15.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
   <PropertyGroup>
@@ -20,7 +20,7 @@
     <PackageCertificateThumbprint>
     </PackageCertificateThumbprint>
     <!-- APPX4001: declare bundle platforms explicitly -->
-    <AppxBundlePlatforms>arm</AppxBundlePlatforms>
+    <AppxBundlePlatforms>x64|arm</AppxBundlePlatforms>
     <!-- PRI257: avoid NuGet satellite assemblies overriding app default language -->
     <AppxGeneratePrisForPortableLibrariesEnabled>false</AppxGeneratePrisForPortableLibrariesEnabled>
     <!-- Prefer 64-bit ILC; can avoid some 1.7.6 Analysis NREs -->
@@ -134,6 +134,7 @@
       <DependentUpon>App.xaml</DependentUpon>
     </Compile>
     <Compile Include="Helpers\LocalizedStrings.cs" />
+    <Compile Include="Helpers\LocalizedChatStripLabels.cs" />
     <Compile Include="Helpers\SelfChatDisplayHelper.cs" />
     <Compile Include="Helpers\SelfMarkerNaming.cs" />
     <Compile Include="Helpers\LocalSettingsAccess.cs" />
@@ -142,6 +143,7 @@
     <Compile Include="Services\DispatcherService.cs" />
     <Compile Include="Services\UiThreadDispatcherService.cs" />
     <Compile Include="Services\AttachedUiDispatcher.cs" />
+    <Compile Include="Services\UiStallWatchdog.cs" />
     <Compile Include="Services\DialogService.cs" />
     <Compile Include="Services\MediaDiskUsageService.cs" />
     <Compile Include="Services\StartTileMarkAssets.cs" />
@@ -151,32 +153,30 @@
     <Compile Include="Services\MediaCacheService.cs" />
     <Compile Include="Services\MediaDerivationService.cs" />
     <Compile Include="Services\MediaDownloadGate.cs" />
-    <Compile Include="Services\WhatsApp\Messages\ReceiptReader.cs" />
     <Compile Include="Services\UsyncGate.cs" />
     <Compile Include="Services\WhatsApp\Contacts\AvatarFetcher.cs" />
     <Compile Include="Services\LocalSettingsService.cs" />
     <Compile Include="Services\Socket\WaTransportAdapter.cs" />
+    <Compile Include="Services\Socket\UwpWhatsAppTransportFactory.cs" />
     <Compile Include="Services\Socket\IWhatsAppSessionProvider.cs" />
+    <Compile Include="Services\WhatsApp\SocketBridgeRemoteHooks.cs" />
+    <Compile Include="Services\WhatsApp\SocketEventHandlerWiring.cs" />
+    <Compile Include="Services\WhatsApp\UwpConnectionSocketSessionFactory.cs" />
     <Compile Include="Services\WhatsApp\JidResolver.cs" />
-    <Compile Include="Services\WhatsApp\Connection\ConnectionFacade.cs" />
-    <Compile Include="Services\WhatsApp\Contacts\ContactFacade.cs" />
-    <Compile Include="Services\WhatsApp\Contacts\AddressBookOverlay.cs" />
-    <Compile Include="Services\WhatsApp\Contacts\ChatAvatarPolicy.cs" />
+    <Compile Include="Services\WhatsApp\LidMappingMemoryAdapter.cs" />
+    <Compile Include="Services\LidMappingPersistHost.cs" />
+    <Compile Include="Services\SyncWorkloadLidMappingPersistPolicy.cs" />
     <Compile Include="Services\WhatsApp\Contacts\ChatAvatarFetch.cs" />
-    <Compile Include="Services\WhatsApp\Contacts\GroupRosterPolicy.cs" />
-    <Compile Include="Services\WhatsApp\Contacts\ContactDirectory.cs" />
-    <Compile Include="Services\WhatsApp\Contacts\ContactNameResolver.cs" />
-    <Compile Include="Services\WhatsApp\Contacts\ContactUsyncResolver.cs" />
-    <Compile Include="Services\WhatsApp\Chats\ChatFacade.cs" />
-    <Compile Include="Services\WhatsApp\Chats\ChatPreviewReconciler.cs" />
-    <Compile Include="Services\WhatsApp\Groups\GroupFacade.cs" />
-    <Compile Include="Services\WhatsApp\Groups\GroupMetadataReader.cs" />
-    <Compile Include="Services\WhatsApp\History\HistoryFacade.cs" />
+    <Compile Include="Services\WhatsApp\Chats\BridgeChatAccountActions.cs" />
+    <Compile Include="Services\WhatsApp\Groups\BridgeGroupWireActions.cs" />
+    <Compile Include="Services\WhatsApp\Groups\BridgeGroupAvatarActions.cs" />
     <Compile Include="Services\WhatsApp\History\HistoryThumbnailMaterializer.cs" />
-    <Compile Include="Services\WhatsApp\Status\StatusFacade.cs" />
-    <Compile Include="Services\WhatsApp\Messages\MessageFacade.cs" />
+    <Compile Include="Services\WhatsApp\History\WinRtHistoryMessageThumbnailMaterializer.cs" />
+    <Compile Include="Services\WhatsApp\Status\WinRtStatusThumbnailMaterializer.cs" />
+    <Compile Include="Services\Network\WinRtNetworkAccess.cs" />
+    <Compile Include="Services\WinRtAppMemoryInfo.cs" />
+    <Compile Include="Services\WhatsApp\Messages\BridgeMessageWireActions.cs" />
     <Compile Include="Services\WhatsApp\Messages\MediaAvailability.cs" />
-    <Compile Include="Services\WhatsApp\Profiles\ProfileFacade.cs" />
     <Compile Include="Services\Socket\DelegateSocketLog.cs" />
     <Compile Include="Services\Socket\SocketSliceProbe.cs" />
     <Compile Include="Services\Socket\SignalRepositoryAdapter.cs" />
@@ -265,6 +265,7 @@
     <Compile Include="Services\SocketBrokerCoordinator.cs" />
     <Compile Include="Services\BackgroundAccessService.cs" />
     <Compile Include="Services\AppLifecycleService.cs" />
+    <Compile Include="Services\AppVisibilityService.cs" />
     <Compile Include="Services\AppActivationRouter.cs" />
     <Compile Include="Services\UriLauncherService.cs" />
     <Compile Include="Services\FilePickerService.cs" />
@@ -272,18 +273,15 @@
     <Compile Include="Services\AudioExportService.cs" />
     <Compile Include="UI\Controls\ChatAudioOverflowMenu.cs" />
     <Compile Include="Services\ShareService.cs" />
+    <Compile Include="Services\ShareTargetSession.cs" />
+    <Compile Include="Services\ShareActivationMaterializer.cs" />
     <Compile Include="Services\AudioRecordingService.cs" />
     <Compile Include="Services\UiSoundService.cs" />
     <Compile Include="Services\VoicePlaybackRoutingService.cs" />
     <Compile Include="Services\WhatsApp\WhatsAppService.cs" />
     <Compile Include="Services\WhatsApp\WhatsAppService.Connection.cs" />
-    <Compile Include="Services\WhatsApp\WhatsAppService.Media.cs" />
-    <Compile Include="Services\WhatsApp\WhatsAppService.Groups.cs" />
-    <Compile Include="Services\WhatsApp\WhatsAppService.Avatars.cs" />
     <Compile Include="Services\WhatsApp\WhatsAppService.StartupPhases.cs" />
-    <Compile Include="Services\WhatsApp\StartupPhaseTrace.cs" />
     <Compile Include="Services\WhatsApp\WhatsAppService.Identity.cs" />
-    <Compile Include="Services\WhatsApp\WhatsAppService.AppState.cs" />
     <Compile Include="Services\WhatsApp\WhatsAppService.Persistence.cs" />
     <Compile Include="Services\WhatsApp\WhatsAppService.Receipts.cs" />
     <Compile Include="Services\WhatsApp\WhatsAppService.IncomingPump.cs" />
@@ -445,6 +443,9 @@
     <Compile Include="UI\Controls\CallsEmptyControl.xaml.cs">
       <DependentUpon>CallsEmptyControl.xaml</DependentUpon>
     </Compile>
+    <Compile Include="UI\Controls\ContactsVisualizerControl.xaml.cs">
+      <DependentUpon>ContactsVisualizerControl.xaml</DependentUpon>
+    </Compile>
     <Compile Include="UI\Controls\FavoritesEmptyControl.xaml.cs">
       <DependentUpon>FavoritesEmptyControl.xaml</DependentUpon>
     </Compile>
@@ -468,8 +469,15 @@
     </Compile>
     <Compile Include="UI\Triggers\WindowWidthRangeTrigger.cs" />
     <Compile Include="UI\Helpers\ChatPreviewKindPresentation.cs" />
+    <!-- Open-chat pane/paint helpers (Unison/WhatsApp/UI). Legacy Hold/scrim untouched. -->
+    <Compile Include="UI\Helpers\ChatPaneLayoutApply.cs" />
+    <Compile Include="UI\Helpers\ChatPaneWideBothChrome.cs" />
+    <Compile Include="UI\Helpers\ChatOpenPaintSchedule.cs" />
+    <Compile Include="UI\Helpers\ChatOpenHostSequence.cs" />
     <Compile Include="UI\Helpers\CommentRichService.cs" />
     <Compile Include="UI\Helpers\MentionComposerInput.cs" />
+    <Compile Include="UI\Helpers\ChatDetailClipboardPaste.cs" />
+    <Compile Include="UI\Helpers\ViewerEscapeKey.cs" />
     <Compile Include="UI\Helpers\MessageBubbleContextActions.cs" />
     <Compile Include="UI\Helpers\DesktopCursor.cs" />
     <Compile Include="UI\Helpers\CommunityChatDetailHeader.cs" />
@@ -636,17 +644,30 @@
     <Content Include="Assets\Sounds\voice_note_error.wav" />
     <Content Include="Properties\Default.rd.xml" />
   </ItemGroup>
-  <!-- libwebp for W10M (ARM) only — must land at package root for DllImport("libwebp.dll"). -->
+  <!-- libwebp for W10M (ARM): DllImport("libwebp.dll") needs package root.
+       Do not use Content+Link on in-tree files — VS rejects that
+       ("file is inside the project directory tree"). Stage via AppxPackagePayload. -->
   <ItemGroup Condition="'$(Platform)' == 'ARM'">
-    <Content Include="Native\WebP\ARM\libwebp.dll">
-      <Link>libwebp.dll</Link>
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-    <Content Include="Native\WebP\ARM\libsharpyuv.dll">
-      <Link>libsharpyuv.dll</Link>
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
+    <None Include="Native\WebP\ARM\libwebp.dll" />
+    <None Include="Native\WebP\ARM\libsharpyuv.dll" />
   </ItemGroup>
+  <Target Name="CopyWebPDllsToOutputRoot" AfterTargets="Build" Condition="'$(Platform)' == 'ARM'">
+    <Copy SourceFiles="$(MSBuildProjectDirectory)\Native\WebP\ARM\libwebp.dll" DestinationFiles="$(OutDir)libwebp.dll" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="$(MSBuildProjectDirectory)\Native\WebP\ARM\libsharpyuv.dll" DestinationFiles="$(OutDir)libsharpyuv.dll" SkipUnchangedFiles="true" />
+    <!-- Deploy layout root (same folder AppX reads for local deploy). -->
+    <Copy SourceFiles="$(MSBuildProjectDirectory)\Native\WebP\ARM\libwebp.dll" DestinationFiles="$(OutDir)Core\libwebp.dll" SkipUnchangedFiles="true" Condition="Exists('$(OutDir)Core')" />
+    <Copy SourceFiles="$(MSBuildProjectDirectory)\Native\WebP\ARM\libsharpyuv.dll" DestinationFiles="$(OutDir)Core\libsharpyuv.dll" SkipUnchangedFiles="true" Condition="Exists('$(OutDir)Core')" />
+  </Target>
+  <Target Name="IncludeWebPDllsInAppx" BeforeTargets="_ComputeAppxPackagePayload" Condition="'$(Platform)' == 'ARM'">
+    <ItemGroup>
+      <AppxPackagePayload Include="$(MSBuildProjectDirectory)\Native\WebP\ARM\libwebp.dll">
+        <TargetPath>libwebp.dll</TargetPath>
+      </AppxPackagePayload>
+      <AppxPackagePayload Include="$(MSBuildProjectDirectory)\Native\WebP\ARM\libsharpyuv.dll">
+        <TargetPath>libsharpyuv.dll</TargetPath>
+      </AppxPackagePayload>
+    </ItemGroup>
+  </Target>
   <ItemGroup>
     <Content Include="Assets\BadgeLogo.scale-100.png" />
     <Content Include="Assets\BadgeLogo.scale-125.png" />
@@ -1084,6 +1105,10 @@
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </Page>
+    <Page Include="UI\Controls\ContactsVisualizerControl.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
     <Page Include="UI\Views\ImageViewerView.xaml">
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
@@ -1217,6 +1242,10 @@
     <ProjectReference Include="..\Unison.Socket\Unison.Socket.csproj">
       <Project>{3F5C1A82-9D4E-4B67-8C31-2E7A6B0D9F14}</Project>
       <Name>Unison.Socket</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\Unison.WhatsAppClient\Unison.WhatsAppClient.csproj">
+      <Project>{B7E4C291-5A8F-4D3E-9C16-0F2A8E7D4B51}</Project>
+      <Name>Unison.WhatsAppClient</Name>
     </ProjectReference>
   </ItemGroup>
   <ItemGroup>

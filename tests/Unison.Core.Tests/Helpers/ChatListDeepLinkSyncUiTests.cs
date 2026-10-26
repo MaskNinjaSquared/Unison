@@ -2,7 +2,7 @@
 // Tests for ChatListDeepLinkSyncUi — toast/tile open suppresses sync banner
 // until the conversation finishes loading (cold start only).
 // =============================================================================
-using Unison.Core.Helpers;
+using Unison.WhatsAppClient.Helpers;
 using Xunit;
 
 namespace Unison.Core.Tests.Helpers

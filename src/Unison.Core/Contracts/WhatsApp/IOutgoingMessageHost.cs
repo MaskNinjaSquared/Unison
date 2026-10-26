@@ -22,6 +22,12 @@ namespace Unison.Core.Contracts.WhatsApp
         /// <summary>Reply target. Null when this send quotes nothing.</summary>
         public OutgoingQuote Quote { get; set; }
 
+        /// <summary>Stamp ContextInfo.isForwarded on the wire text.</summary>
+        public bool MarkAsForwarded { get; set; }
+
+        /// <summary>ContextInfo.forwardingScore; 0 with <see cref="MarkAsForwarded"/> means 1.</summary>
+        public uint ForwardingScore { get; set; }
+
         /// <summary>The same on every attempt, so a retry cannot mint a second bubble.</summary>
         public string MessageId { get; set; }
 
@@ -100,14 +106,6 @@ namespace Unison.Core.Contracts.WhatsApp
         /// <summary>Uploads and sends under <paramref name="messageId"/>; throws when the send fails.</summary>
         Task SendDocumentAsync(string jid, OutgoingDocument document, string messageId);
 
-        /// <summary>Files the bubble in memory: pending receipts applied, inserted in order, id indexed.</summary>
-        void AcceptOutgoing(string chatJid, ChatMessage message);
-
-        /// <summary>Moves the chat row to the top with this message as its preview.</summary>
-        Task ShowLocalSendPreviewAsync(string chatJid, ChatMessage message, ChatPreviewKind kind);
-
-        void NotifyChatChanged(string chatJid);
-
         /// <summary>Writes the message to the durable outbox now. Throws when the store does.</summary>
         Task PersistLiveAsync(string chatJid, ChatMessage message);
 
@@ -130,11 +128,5 @@ namespace Unison.Core.Contracts.WhatsApp
 
         /// <summary>Surfaces the failure to whoever listens for client errors.</summary>
         void ReportError(Exception error);
-
-        /// <summary>
-        /// RAM overlay for an open chat: rebuilds the in-memory window, applies held receipts
-        /// and queues dirty rows for persist. SQLite history is merged by the message façade.
-        /// </summary>
-        Task<System.Collections.Generic.List<ChatMessage>> LoadLiveOverlayAsync(string chatJid);
     }
 }

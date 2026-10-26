@@ -34,17 +34,19 @@ The **Unison.Socket** stack (Baileys **7.0.0-rc14**) is now the foundation for W
 | [Adding languages](Adding-Languages) | Tutorial: new `.resw` pack, package registration, `AppLanguage` enum |
 | [Migration](Migration) | What moved, what is still legacy (history SQLite, broker, SocketClient) |
 | [WhatsAppService extraction](WhatsAppService-Extraction) | Phase 0 done; plan to move the client into façades |
+| [Netstandard WhatsApp client](Netstandard-WhatsApp-Client) | Destination: portable Application layer over Socket; UWP host injects ports; Phase E = client-owned I/O (future) |
 | [Changelog](Changelog) | Newest → oldest product and architecture notes |
 
 ## Solution layout
 
 ```
 Unison.slnx
-├── src/Unison.Uwp          UWP app, views, DI adapters, SocketBridge
-├── src/Unison.Core         Contracts, models, ViewModels (no XAML)
-├── src/Unison.Socket       WhatsApp session / protocol (netstandard2.0)
-├── src/Unison.Baileys      Noise, Signal, binary XML, protobuf, crypto
-└── src/Unison.Background   Out-of-process SocketActivity task
+├── src/Unison.Uwp            UWP app, views, DI adapters, SocketBridge
+├── src/Unison.Core           Contracts, models, ViewModels (no XAML)
+├── src/Unison.WhatsAppClient    Facades + domain helpers (scaffold; phase C)
+├── src/Unison.Socket         WhatsApp session / protocol (netstandard2.0)
+├── src/Unison.Baileys        Noise, Signal, binary XML, protobuf, crypto
+└── src/Unison.Background     Out-of-process SocketActivity task
 ```
 
 Build and deploy (ARM Release by default):

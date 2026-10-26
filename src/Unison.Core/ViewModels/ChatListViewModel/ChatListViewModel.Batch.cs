@@ -174,11 +174,13 @@ namespace Unison.Core.ViewModels
                 return;
             }
 
-            var source = ChatListDisplayOrder.SortForDisplay(
-                _chatState.Chats.Where(c =>
-                    c != null &&
-                    !string.IsNullOrWhiteSpace(c.JID) &&
-                    MatchesScope(c)));
+            var scoped = _chatState.Chats.Where(c =>
+                c != null &&
+                !string.IsNullOrWhiteSpace(c.JID) &&
+                MatchesScope(c));
+            var source = _chatService != null
+                ? _chatService.SortChatsForDisplay(scoped)
+                : scoped.ToList();
 
             int desiredCount = _batchCompleted
                 ? source.Count
@@ -317,14 +319,14 @@ namespace Unison.Core.ViewModels
                 try
                 {
                     _chatStore.ApplyTo(chat);
-                    TryApplyCanonicalPinFallback(chat);
+                    _chatService?.ApplyLocalStateAliasFallback(chat);
 
                     // History / app-state can pin the row in memory before ChatStore has a known
                     // pin under this exact JID. Mirror it into the cache so the next ApplyTo
                     // (another batch tick) cannot treat a mute-only stub as "not pinned".
                     if (chat.IsChatPinned)
                     {
-                        RememberPinnedUnderAliases(chat.JID, true);
+                        _chatService?.RememberPinnedUnderAliases(chat.JID, true);
                     }
 
                     if (chat.MutedUntil != null)
@@ -337,180 +339,6 @@ namespace Unison.Core.ViewModels
                     System.Diagnostics.Debug.WriteLine(
                         "[ChatListViewModel] ApplyTo (batch) failed: " + ex.Message);
                 }
-            }
-        }
-
-        /// <summary>
-        /// Pin may be stored under the PN while the list row is still a LID (or the reverse).
-        /// <see cref="IJidResolver.GetCanonicalJid"/> alone is not enough: when the row is already
-        /// the canonical PN, the pin often lives under the LID alias from <c>pin_v1</c>.
-        /// </summary>
-        private void TryApplyCanonicalPinFallback(ChatItem chat)
-        {
-            if (chat == null || _chatStore == null)
-            {
-                return;
-            }
-
-            ChatLocalState exact = _chatStore.TryGetCached(chat.JID);
-            // An explicit unpin under this exact JID wins over any alias.
-            if (exact != null && exact.Knows(ChatLocalStateFields.Pin) && !exact.IsChatPinned)
-            {
-                return;
-            }
-
-            IReadOnlyList<string> keys = ChatPinStoreKeys.For(chat.JID, _jids);
-            for (int i = 0; i < keys.Count; i++)
-            {
-                string key = keys[i];
-                if (string.Equals(
-                        JidHelper.Normalize(key),
-                        JidHelper.Normalize(chat.JID),
-                        StringComparison.OrdinalIgnoreCase))
-                {
-                    continue;
-                }
-
-                ChatLocalState alt = _chatStore.TryGetCached(key);
-                if (alt == null || !alt.Knows(ChatLocalStateFields.Pin) || !alt.IsChatPinned)
-                {
-                    continue;
-                }
-
-                if (!chat.IsChatPinned)
-                {
-                    chat.IsChatPinned = true;
-                    if (chat.PinnedTimestamp == null || chat.PinnedTimestamp == 0)
-                    {
-                        chat.PinnedTimestamp = 1;
-                    }
-
-                    RememberPinnedUnderAliases(chat.JID, true);
-                }
-
-                break;
-            }
-
-            for (int i = 0; i < keys.Count; i++)
-            {
-                string key = keys[i];
-                if (string.Equals(
-                        JidHelper.Normalize(key),
-                        JidHelper.Normalize(chat.JID),
-                        StringComparison.OrdinalIgnoreCase))
-                {
-                    continue;
-                }
-
-                ChatLocalState alt = _chatStore.TryGetCached(key);
-                if (alt == null)
-                {
-                    continue;
-                }
-
-                if (!chat.IsWidgetPinned &&
-                    alt.Knows(ChatLocalStateFields.WidgetPin) &&
-                    alt.IsWidgetPinned)
-                {
-                    chat.IsWidgetPinned = true;
-                }
-
-                if (chat.MutedUntil == null &&
-                    !(exact != null && exact.Knows(ChatLocalStateFields.Mute)) &&
-                    alt.Knows(ChatLocalStateFields.Mute) &&
-                    alt.MutedUntil != null)
-                {
-                    chat.MutedUntil = alt.MutedUntil;
-                    _chatStore.RememberMutedUntil(chat.JID, alt.MutedUntil);
-                }
-            }
-        }
-
-        private void RememberPinnedUnderAliases(string jid, bool pinned)
-        {
-            if (_chatStore == null)
-            {
-                return;
-            }
-
-            IReadOnlyList<string> keys = ChatPinStoreKeys.For(jid, _jids);
-            for (int i = 0; i < keys.Count; i++)
-            {
-                _chatStore.RememberChatPinned(keys[i], pinned);
-            }
-        }
-
-        /// <summary>
-        /// Writes the pin / mute the history Conversation carried into the durable store.
-        /// Without this the icons appear for one session and vanish on the next launch.
-        /// </summary>
-        private void PersistHistoryLocalFlags(ChatItem chat, HistoryChatPreview preview)
-        {
-            if (chat == null || preview == null || _chatStore == null || string.IsNullOrWhiteSpace(chat.JID))
-            {
-                return;
-            }
-
-            if (preview.IsChatPinned.HasValue)
-            {
-                // Cache under PN and LID so ApplyTo on either address cannot miss the pin.
-                RememberPinnedUnderAliases(chat.JID, preview.IsChatPinned.Value);
-                if (!string.IsNullOrWhiteSpace(preview.LidJid))
-                {
-                    _chatStore.RememberChatPinned(preview.LidJid, preview.IsChatPinned.Value);
-                }
-
-                if (!string.IsNullOrWhiteSpace(preview.PnJid))
-                {
-                    _chatStore.RememberChatPinned(preview.PnJid, preview.IsChatPinned.Value);
-                }
-
-                _ = PersistHistoryPinnedAsync(chat.JID, preview.IsChatPinned.Value);
-                if (!string.IsNullOrWhiteSpace(preview.LidJid))
-                {
-                    _ = PersistHistoryPinnedAsync(preview.LidJid, preview.IsChatPinned.Value);
-                }
-
-                if (!string.IsNullOrWhiteSpace(preview.PnJid))
-                {
-                    _ = PersistHistoryPinnedAsync(preview.PnJid, preview.IsChatPinned.Value);
-                }
-            }
-
-            if (preview.AppliesMute)
-            {
-                _chatStore.RememberMutedUntil(chat.JID, preview.MutedUntil);
-                _ = PersistHistoryMuteAsync(chat.JID, preview.MutedUntil);
-            }
-        }
-
-        private async Task PersistHistoryPinnedAsync(string jid, bool pinned)
-        {
-            try
-            {
-                IReadOnlyList<string> keys = ChatPinStoreKeys.For(jid, _jids);
-                for (int i = 0; i < keys.Count; i++)
-                {
-                    await _chatStore.SetChatPinnedAsync(keys[i], pinned).ConfigureAwait(false);
-                }
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine(
-                    "[ChatListViewModel] Persist history pin failed: " + ex.Message);
-            }
-        }
-
-        private async Task PersistHistoryMuteAsync(string jid, long? mutedUntil)
-        {
-            try
-            {
-                await _chatStore.SetMutedUntilAsync(jid, mutedUntil).ConfigureAwait(false);
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine(
-                    "[ChatListViewModel] Persist history mute failed: " + ex.Message);
             }
         }
 
@@ -541,8 +369,10 @@ namespace Unison.Core.ViewModels
 
             ApplyLocalChatFieldsToScopedChats();
 
-            var desired = ChatListDisplayOrder.SortForDisplay(
-                VisibleChats.Where(c => c != null && !string.IsNullOrWhiteSpace(c.JID)));
+            var desired = _chatService != null
+                ? _chatService.SortChatsForDisplay(
+                    VisibleChats.Where(c => c != null && !string.IsNullOrWhiteSpace(c.JID)))
+                : VisibleChats.Where(c => c != null && !string.IsNullOrWhiteSpace(c.JID)).ToList();
 
             IsRefreshing = true;
             try

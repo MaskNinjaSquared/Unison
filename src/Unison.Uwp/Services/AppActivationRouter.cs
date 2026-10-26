@@ -1,24 +1,30 @@
 using System;
 using System.Diagnostics;
 using Unison.Core.Contracts;
-using Unison.Core.Helpers;
+using Unison.Core.Contracts.WhatsApp;
+using Unison.Core.Models;
 using Unison.Core.ViewModels;
 using Windows.Foundation;
 
 namespace Unison.Uwp.Services
 {
     /// <summary>
-    /// UWP adapter for <see cref="IAppActivationRouter"/>: parses People / launch arguments
+    /// UWP adapter for <see cref="IAppActivationRouter"/>: parses People / launch arguments / Share
     /// and queues chat or profile navigation on <see cref="ShellViewModel"/>.
     /// </summary>
     public sealed class AppActivationRouter : IAppActivationRouter
     {
         private readonly ShellViewModel _shell;
+        private readonly IChatService _chats;
         private readonly IRuntimeDiagnostics _diagnostics;
 
-        public AppActivationRouter(ShellViewModel shell, IRuntimeDiagnostics diagnostics)
+        public AppActivationRouter(
+            ShellViewModel shell,
+            IChatService chats,
+            IRuntimeDiagnostics diagnostics)
         {
             _shell = shell ?? throw new ArgumentNullException(nameof(shell));
+            _chats = chats ?? throw new ArgumentNullException(nameof(chats));
             _diagnostics = diagnostics;
         }
 
@@ -38,7 +44,7 @@ namespace Unison.Uwp.Services
 
                 // Running/Suspended: list is (or was) already up — open the chat only.
                 // NotRunning/Terminated/ClosedByUser: cold path may delay list until detail loads.
-                bool delayChatList = ChatListDeepLinkSyncUi.ShouldArmListHold(appWasAlreadyOpen);
+                bool delayChatList = _chats.ShouldArmDeepLinkListHold(appWasAlreadyOpen);
                 _shell.QueueOpenChatFromActivation(arguments, delayChatList);
             }
             catch (Exception ex)
@@ -72,6 +78,19 @@ namespace Unison.Uwp.Services
                 "contact-panel-activated",
                 "hasProfile=" + (arguments.Length > 0));
             RouteLaunchArguments(arguments, appWasAlreadyOpen);
+        }
+
+        public void RouteShare(IncomingSharePayload payload)
+        {
+            if (payload == null || payload.IsEmpty || _shell == null)
+            {
+                return;
+            }
+
+            WriteLifecycle(
+                "share-activated",
+                "hasText=" + payload.HasText + "; media=" + (payload.Media?.Count ?? 0));
+            _shell.QueueIncomingShare(payload);
         }
 
         public string BuildPeopleLaunchArguments(string remoteId, bool openProfile)

@@ -76,6 +76,27 @@ namespace Unison.Core.Tests.State
         }
 
         [Fact]
+        public void Frugal_empty_ack_lot_finishes_on_first_quiet_decide()
+        {
+            var continuation = new HistoryCatchUpContinuation();
+
+            HistoryCatchUpContinueResult decision = continuation.DecideAfterQuietLot(
+                T0,
+                progressSignals: 0,
+                stillStale: true,
+                stagnantStop: 3,
+                maxRounds: 4,
+                out HistoryCatchUpProgress before,
+                ackAccepted: true,
+                finishOnEmptyAckLot: true);
+
+            Assert.Equal(HistoryCatchUpContinueAction.FinishStagnantProgress, decision.Action);
+            Assert.Equal(0, before.Round);
+            Assert.Equal(0, continuation.Snapshot().Round);
+            Assert.False(continuation.IsActive(bannerActive: false));
+        }
+
+        [Fact]
         public void Stagnant_lots_finish_without_resetting_the_round()
         {
             var continuation = new HistoryCatchUpContinuation();

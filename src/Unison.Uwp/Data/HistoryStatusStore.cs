@@ -10,6 +10,7 @@ using Unison.Core.Helpers;
 using Unison.Core.Models;
 using Unison.Uwp.Data.Entities;
 using Windows.Storage;
+using Unison.WhatsAppClient.Helpers;
 
 namespace Unison.Uwp.Data
 {

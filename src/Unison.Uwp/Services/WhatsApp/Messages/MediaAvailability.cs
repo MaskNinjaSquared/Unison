@@ -9,7 +9,8 @@ using Unison.Core.Models;
 using Unison.Socket.Abstractions;
 using Unison.Uwp.Client;
 using Unison.Uwp.Helpers;
-using Windows.Storage;
+using Unison.WhatsAppClient.Abstractions;
+using Unison.WhatsAppClient.Helpers;
 
 namespace Unison.Uwp.Services.WhatsApp.Messages
 {
@@ -18,10 +19,12 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
     /// document share one gate with the live hydrate path, so two taps cannot fetch at once
     /// on a phone.
     /// </summary>
-    internal sealed class MediaAvailability
+    internal sealed class MediaAvailability : IMediaAvailability
     {
-        private readonly IWhatsAppService _client;
+        private readonly IConnectionService _connection;
         private readonly IMediaDownloadHost _host;
+        private readonly IWhatsAppSessionProvider _sessions;
+        private readonly Func<IMessageService> _messages;
         private readonly IEncryptedMediaDownloader _downloader;
         private readonly IJidResolver _jids;
         private readonly IMediaCache _cache;
@@ -30,8 +33,10 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
         private readonly IChatCatalogPersistence _catalog;
 
         public MediaAvailability(
-            IWhatsAppService client,
+            IConnectionService connection,
             IMediaDownloadHost host,
+            IWhatsAppSessionProvider sessions,
+            Func<IMessageService> messages,
             IEncryptedMediaDownloader downloader,
             IJidResolver jids,
             IMediaCache cache,
@@ -39,9 +44,11 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
             MediaDownloadGate gate,
             IChatCatalogPersistence catalog)
         {
-            _client = client ?? throw new ArgumentNullException(nameof(client));
+            _connection = connection ?? throw new ArgumentNullException(nameof(connection));
             _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
             _host = host ?? throw new ArgumentNullException(nameof(host));
+            _sessions = sessions ?? throw new ArgumentNullException(nameof(sessions));
+            _messages = messages ?? throw new ArgumentNullException(nameof(messages));
             _downloader = downloader ?? throw new ArgumentNullException(nameof(downloader));
             _jids = jids ?? throw new ArgumentNullException(nameof(jids));
             _cache = cache ?? throw new ArgumentNullException(nameof(cache));
@@ -66,7 +73,7 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
                 return await EnsurePlayableAudioUriAsync(message, message.AudioUri);
             }
 
-            await _client.EnsureConnectedAsync();
+            await _connection.EnsureConnectedAsync();
 
             MediaDownloadPlan plan = MediaDownloadPlan.For(message, MediaDownloadKind.Audio);
             if (!plan.HasKey) throw new InvalidOperationException("A chave do áudio não está disponível.");
@@ -166,7 +173,7 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
                 return await EnsureWebPDisplayUriAsync(message);
             }
 
-            await _client.EnsureConnectedAsync();
+            await _connection.EnsureConnectedAsync();
 
             MediaDownloadPlan plan = MediaDownloadPlan.For(
                 message,
@@ -257,7 +264,7 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
                 return await EnsureVideoPosterAsync(message);
             }
 
-            await _client.EnsureConnectedAsync();
+            await _connection.EnsureConnectedAsync();
 
             MediaDownloadPlan plan = MediaDownloadPlan.For(message, MediaDownloadKind.Video);
             if (!plan.HasKey)
@@ -331,7 +338,7 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
                 return message.DocumentUri;
             }
 
-            await _client.EnsureConnectedAsync();
+            await _connection.EnsureConnectedAsync();
 
             MediaDownloadPlan plan = MediaDownloadPlan.For(message, MediaDownloadKind.Document);
             if (!plan.HasKey)
@@ -449,7 +456,7 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
             }
 
             await _host.SaveMessageQuietAsync(chatJid, message);
-            _host.NotifyMessagesChanged(chatJid);
+            _messages()?.NotifyChatMessagesChanged(chatJid);
         }
 
         private async Task<string> EnsureWebPDisplayUriAsync(ChatMessage message)
@@ -591,38 +598,18 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
 
             try
             {
-                StorageFile file = null;
-                string uri = message.DocumentUri.Trim();
-                if (uri.StartsWith("ms-appdata:", StringComparison.OrdinalIgnoreCase))
-                {
-                    file = await StorageFile.GetFileFromApplicationUriAsync(new Uri(uri));
-                }
-                else if (uri.StartsWith("file:", StringComparison.OrdinalIgnoreCase))
-                {
-                    file = await StorageFile.GetFileFromPathAsync(new Uri(uri).LocalPath);
-                }
-                else if (System.IO.Path.IsPathRooted(uri))
-                {
-                    file = await StorageFile.GetFileFromPathAsync(uri);
-                }
-
-                if (file == null)
+                long? length = await _cache.TryGetLengthBytesAsync(message.DocumentUri.Trim());
+                if (length == null || length.Value <= 0)
                 {
                     return;
                 }
 
-                var props = await file.GetBasicPropertiesAsync();
-                if (props != null && props.Size > 0)
-                {
-                    message.DocumentFileLengthBytes = props.Size > long.MaxValue
-                        ? long.MaxValue
-                        : (long)props.Size;
+                message.DocumentFileLengthBytes = length.Value;
 
-                    string chatJid = _jids.GetCanonicalJid(message.RemoteJid);
-                    if (!string.IsNullOrWhiteSpace(chatJid))
-                    {
-                        await _host.SaveMessageQuietAsync(chatJid, message);
-                    }
+                string chatJid = _jids.GetCanonicalJid(message.RemoteJid);
+                if (!string.IsNullOrWhiteSpace(chatJid))
+                {
+                    await _host.SaveMessageQuietAsync(chatJid, message);
                 }
             }
             catch (Exception ex)
@@ -637,7 +624,7 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
             string messageId,
             string chatJid)
         {
-            if (chatMessage == null || imageMessage == null || !_host.HasLiveSocket)
+            if (chatMessage == null || imageMessage == null || !_sessions.IsTransportReady)
             {
                 return;
             }
@@ -738,7 +725,7 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
             string messageId,
             string chatJid)
         {
-            if (chatMessage == null || stickerMessage == null || !_host.HasLiveSocket)
+            if (chatMessage == null || stickerMessage == null || !_sessions.IsTransportReady)
             {
                 return;
             }
@@ -835,7 +822,7 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
         {
             await _host.SaveMessageQuietAsync(chatJid, message);
             _catalog.Schedule();
-            _host.NotifyMessagesChanged(chatJid);
+            _messages()?.NotifyChatMessagesChanged(chatJid);
         }
 
         private Task<string> SaveCachedImageAsync(byte[] imageBytes, string fileBase, string mimeType)

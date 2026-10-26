@@ -1,5 +1,5 @@
-using Unison.Core.Helpers;
 using Unison.Core.Models;
+using Unison.WhatsAppClient.Helpers;
 
 namespace Unison.Core.Tests.Helpers;
 
@@ -276,10 +276,18 @@ public class MessageRenderReaderTests
     {
         MessageRenderInfo info = MessageRenderReader.Read(new Proto.Message
         {
-            ContactMessage = new Proto.Message.Types.ContactMessage { DisplayName = "Alice" }
+            ContactMessage = new Proto.Message.Types.ContactMessage
+            {
+                DisplayName = "Alice",
+                Vcard = "BEGIN:VCARD\nVERSION:3.0\nFN:Alice\nTEL;waid=5511999999999:+55 11 99999-9999\nEND:VCARD"
+            }
         });
 
         Assert.Contains("Alice", info.Content);
+        Assert.True(info.IsContact);
+        Assert.Equal(ChatPreviewKind.Contact, info.PreviewKind);
+        Assert.Equal("Alice", info.ContactDisplayName);
+        Assert.Equal("5511999999999@s.whatsapp.net", info.ContactJid);
     }
 
     [Fact]

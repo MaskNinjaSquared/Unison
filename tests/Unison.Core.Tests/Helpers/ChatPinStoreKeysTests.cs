@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using Unison.Core.Contracts;
 using Unison.Core.Helpers;
 using Unison.Core.Models;
+using Unison.WhatsAppClient.Helpers;
 using Xunit;
 
 namespace Unison.Core.Tests.Helpers

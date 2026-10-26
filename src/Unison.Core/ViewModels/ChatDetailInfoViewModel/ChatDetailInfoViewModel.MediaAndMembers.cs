@@ -94,9 +94,15 @@ namespace Unison.Core.ViewModels
                 {
                     if (_groups != null)
                     {
-                        await _groups.RefreshGroupSendPermissionsAsync(_source.JID)
+                        await _groups.RefreshGroupSendPermissionsAsync(
+                                _source.JID,
+                                includeRoster: true,
+                                GetMembersRosterToken())
                             .ConfigureAwait(false);
                     }
+                }
+                catch (OperationCanceledException)
+                {
                 }
                 catch (Exception ex)
                 {
@@ -133,13 +139,30 @@ namespace Unison.Core.ViewModels
 
             try
             {
-                await _groups.RefreshGroupSendPermissionsAsync(_source.JID).ConfigureAwait(false);
+                await _groups.RefreshGroupSendPermissionsAsync(
+                        _source.JID,
+                        includeRoster: true,
+                        GetMembersRosterToken())
+                    .ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
             }
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine(
                     "[ChatDetailInfoViewModel] Members roster background sync failed: " + ex.Message);
             }
+        }
+
+        private CancellationToken GetMembersRosterToken()
+        {
+            if (_membersRosterCts == null)
+            {
+                _membersRosterCts = new CancellationTokenSource();
+            }
+
+            return _membersRosterCts.Token;
         }
 
         /// <summary>
@@ -359,11 +382,11 @@ namespace Unison.Core.ViewModels
                             continue;
                         }
 
-                        if (ChatMediaFilter.IsDocument(message))
+                        if (_messages != null && _messages.IsChatInfoDocument(message))
                         {
                             files.Add(message);
                         }
-                        else if (ChatMediaFilter.IsMedia(message))
+                        else if (_messages != null && _messages.IsChatInfoMedia(message))
                         {
                             media.Add(message);
                         }
@@ -568,12 +591,13 @@ namespace Unison.Core.ViewModels
                 canonical = JidHelper.Normalize(participant);
             }
 
-            return GroupRosterRules.MemberMatches(_member, canonical, _jids);
+            return _groups != null && _groups.MemberMatches(_member, canonical);
         }
 
         private async Task LoadSharedGroupsAsync()
         {
-            if (_personStore == null || _member == null || string.IsNullOrWhiteSpace(_member.Jid))
+            if (_personStore == null || _groups == null || _member == null ||
+                string.IsNullOrWhiteSpace(_member.Jid))
             {
                 return;
             }
@@ -583,7 +607,7 @@ namespace Unison.Core.ViewModels
                 await _personStore.InitializeAsync().ConfigureAwait(false);
 
                 var membershipsByGroup = new Dictionary<string, PersonGroupMembership>(StringComparer.OrdinalIgnoreCase);
-                foreach (string personKey in GroupRosterRules.MembershipPersonKeys(_member, _jids))
+                foreach (string personKey in _groups.MembershipPersonKeys(_member))
                 {
                     var found = await _personStore.ListGroupsForPersonAsync(personKey).ConfigureAwait(false);
                     if (found == null)

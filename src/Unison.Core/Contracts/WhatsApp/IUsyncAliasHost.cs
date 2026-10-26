@@ -1,12 +1,12 @@
 namespace Unison.Core.Contracts.WhatsApp
 {
     /// <summary>
-    /// Files an accepted usync LID/phone pair with the live session and heals our own
-    /// identity when the pair touches it.
+    /// Files an accepted usync LID/phone pair and registers it with the live session.
     /// </summary>
     /// <remarks>
-    /// Table policy and the two-way write are <c>UsyncAliasFiling</c> in Core. This port is
-    /// only the socket registration and auth-state heal the client still owns.
+    /// Implemented in WhatsAppClient (<c>UsyncAliasHost</c>) over <c>UsyncAliasFiling</c>
+    /// and <see cref="ISocketAliasRegistrar"/>. The connection client only implements the
+    /// registrar (socket + auth heal).
     /// </remarks>
     public interface IUsyncAliasHost
     {

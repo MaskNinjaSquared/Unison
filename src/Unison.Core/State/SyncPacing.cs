@@ -2,7 +2,8 @@
 // SyncPacing
 //
 // The waits and stop thresholds around startup and history catch-up. Each
-// SyncWorkloadStrategy holds a frugal and a generous set; SyncBudget decides
+// SyncWorkloadStrategy holds a frugal and a generous set (see the "Deferred
+// avatar wake + pacing" region on SyncWorkloadStrategy); SyncBudget decides
 // at run time which one applies (memory pressure, hot sync). The tier owns the
 // numbers, the budget owns the switch.
 // =============================================================================

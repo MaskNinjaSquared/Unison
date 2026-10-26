@@ -1,34 +1,23 @@
-using System;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 
 namespace Unison.Core.Contracts.WhatsApp
 {
     /// <summary>
-    /// Local half of account-driven list/timeline mutations: write the in-memory rows and
-    /// the durable mirror without telling the server.
+    /// ForgetChatStorage port on the compatibility client (name is historical —
+    /// the only member is durable chat-delete I/O, not live app-state apply).
     /// </summary>
     /// <remarks>
-    /// The wire half lives on the façades (<c>IChatService.SetPinnedAsync</c>,
-    /// <c>DeleteChatAsync</c>, <c>IMessageService.SetMessagePinnedAsync</c>). The client still
-    /// owns the row surgery and the SQLite/catalog writes those paths share with app-state
-    /// sync from the phone.
+    /// Wire + RAM halves live on the façades (<c>IChatService.DeleteChatAsync</c> /
+    /// <c>ApplyAppStateDeleteChatAsync</c>, <c>IMessageService</c> pin/delete). This port
+    /// only tombstones previews, drops SQLite history, and persists the catalog.
     /// </remarks>
     public interface IAppStateLocalHost
     {
-        /// <summary>Writes the chat-list pin onto the rows and the local mirror.</summary>
-        Task ApplyChatPinAsync(string jid, bool pinned);
-
         /// <summary>
-        /// Removes the conversation from the list, the in-memory timeline and local storage.
+        /// Durable half of a chat deletion: preview tombstone, history delete, catalog persist.
+        /// RAM rows are removed by <c>IChatService.ApplyAppStateDeleteChatAsync</c> first.
         /// </summary>
-        Task ApplyChatDeletionAsync(string jid);
-
-        /// <summary>Writes a message pin onto the timeline and local storage.</summary>
-        Task ApplyMessagePinAsync(
-            string chatJid,
-            string messageId,
-            bool isPinned,
-            DateTime? pinnedAtUtc,
-            DateTime? expiresAtUtc);
+        Task ForgetChatStorageAsync(string canonicalJid, IReadOnlyList<string> storeKeys);
     }
 }

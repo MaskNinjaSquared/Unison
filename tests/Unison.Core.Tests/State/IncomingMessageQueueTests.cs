@@ -160,6 +160,22 @@ namespace Unison.Core.Tests.State
             Assert.True(queue.ShouldRetryTimedOut(item));
             Assert.True(queue.ShouldRetryTimedOut(new Item(" ", false)));
             Assert.True(queue.ShouldRetryTimedOut(new Item(" ", false)));
+            Assert.False(queue.ShouldRetryTimedOut(null));
+        }
+
+        [Fact]
+        public void Reset_retires_generation_so_stale_drain_is_detected()
+        {
+            var queue = NewQueue();
+            queue.Enqueue(new Item("a", false));
+            int generation;
+            queue.TryStart(_ => Task.CompletedTask, Now, out generation);
+            Assert.True(queue.IsCurrentGeneration(generation));
+
+            queue.Reset("health-stall", requeueCurrent: true, Now);
+
+            Assert.False(queue.IsCurrentGeneration(generation));
+            Assert.True(queue.IsCurrentGeneration(generation + 1));
         }
 
         [Fact]

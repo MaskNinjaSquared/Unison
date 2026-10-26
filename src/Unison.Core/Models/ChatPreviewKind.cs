@@ -14,6 +14,10 @@ namespace Unison.Core.Models
         Reaction = 6,
         Revoked = 7,
         /// <summary>WhatsApp GIF playback (video envelope with <c>GifPlayback</c>).</summary>
-        Gif = 8
+        Gif = 8,
+        /// <summary>Shared contact card (vCard / <c>ContactMessage</c>).</summary>
+        Contact = 9,
+        /// <summary>Group join system line — strip shows plain text, no chip icon.</summary>
+        GroupJoin = 10
     }
 }

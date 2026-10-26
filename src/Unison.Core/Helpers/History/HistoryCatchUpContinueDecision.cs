@@ -53,6 +53,11 @@ namespace Unison.Core.Helpers
         /// <param name="stagnantStop">Lots without progress before finish.</param>
         /// <param name="continueRound">Adjacent pages already requested.</param>
         /// <param name="maxRounds">Hard ceiling on adjacent pages.</param>
+        /// <param name="ackAccepted">Server accepted the FULL_HISTORY request.</param>
+        /// <param name="finishOnEmptyAckLot">
+        /// Frugal Mobile: one quiet lot with ack and zero chunk signals finishes
+        /// catch-up (no N×idleAbort ghost rounds when WA has nothing to send).
+        /// </param>
         public static HistoryCatchUpContinueResult Decide(
             DateTime newestUtc,
             DateTime watermarkUtc,
@@ -61,16 +66,43 @@ namespace Unison.Core.Helpers
             int stagnantCycles,
             int stagnantStop,
             int continueRound,
-            int maxRounds)
+            int maxRounds,
+            bool ackAccepted = false,
+            bool finishOnEmptyAckLot = false)
         {
-            bool tipAdvanced = newestUtc != DateTime.MinValue && newestUtc > watermarkUtc;
+            // Seeding the watermark from MinValue is not lot progress — otherwise the
+            // first quiet ack with signals=0 always looks like tipAdvanced and resets
+            // stagnant, burning an extra Continue round on Mobile before Finish.
+            bool tipAdvanced = watermarkUtc != DateTime.MinValue
+                && newestUtc != DateTime.MinValue
+                && newestUtc > watermarkUtc;
             bool madeProgress = tipAdvanced || progressSignals > 0;
 
             int nextStagnant = madeProgress ? 0 : stagnantCycles + 1;
             DateTime nextWatermark = watermarkUtc;
-            if (madeProgress && tipAdvanced)
+            if (tipAdvanced)
             {
                 nextWatermark = newestUtc;
+            }
+            else if (nextWatermark == DateTime.MinValue && newestUtc != DateTime.MinValue)
+            {
+                nextWatermark = newestUtc;
+            }
+
+            // Ghost catch-up: WA acked FULL_HISTORY but delivered no chunks/offline
+            // signals and the tip did not move. Frugal budgets finish on that lot.
+            if (finishOnEmptyAckLot &&
+                ackAccepted &&
+                !madeProgress &&
+                progressSignals == 0)
+            {
+                return Finish(
+                    HistoryCatchUpContinueAction.FinishStagnantProgress,
+                    nextStagnant,
+                    continueRound,
+                    nextWatermark,
+                    madeProgress,
+                    tipAdvanced);
             }
 
             if (!stillStale && nextStagnant >= stagnantStop)

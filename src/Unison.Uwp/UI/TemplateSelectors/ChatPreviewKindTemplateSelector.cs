@@ -18,6 +18,7 @@ namespace Unison.Uwp.UI.TemplateSelectors
         public DataTemplate StickerTemplate { get; set; }
         public DataTemplate VoiceTemplate { get; set; }
         public DataTemplate DocumentTemplate { get; set; }
+        public DataTemplate ContactTemplate { get; set; }
         public DataTemplate ReactionTemplate { get; set; }
         public DataTemplate RevokedTemplate { get; set; }
 
@@ -51,6 +52,11 @@ namespace Unison.Uwp.UI.TemplateSelectors
                     return VoiceTemplate ?? TextTemplate;
                 case ChatPreviewKind.Document:
                     return DocumentTemplate ?? TextTemplate;
+                case ChatPreviewKind.Contact:
+                    return ContactTemplate ?? TextTemplate;
+                case ChatPreviewKind.GroupJoin:
+                    // Plain strip text — empty chip like Text.
+                    return TextTemplate;
                 case ChatPreviewKind.Reaction:
                     return ReactionTemplate ?? TextTemplate;
                 case ChatPreviewKind.Revoked:

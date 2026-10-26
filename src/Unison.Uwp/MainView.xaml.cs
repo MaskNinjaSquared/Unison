@@ -292,6 +292,7 @@ namespace Unison.Uwp
             if (_wiredFavoritesMenu != null)
             {
                 _wiredFavoritesMenu.MenuClicked -= ChatsView_MenuClicked;
+                _wiredFavoritesMenu.ChatSelected -= FavoritesView_ChatSelected;
                 _wiredFavoritesMenu = null;
             }
 
@@ -301,8 +302,22 @@ namespace Unison.Uwp
             }
 
             favorites.MenuClicked += ChatsView_MenuClicked;
+            favorites.ChatSelected += FavoritesView_ChatSelected;
             _wiredFavoritesMenu = favorites;
             Debug.WriteLine("[MainView] WireFavoritesViewMenu attached");
+        }
+
+        private void FavoritesView_ChatSelected(object sender, ChatSelectedEventArgs e)
+        {
+            if (e?.SelectedChat == null || string.IsNullOrWhiteSpace(e.SelectedChat.JID))
+            {
+                return;
+            }
+
+            // Same toast/deep-link queue ChatsView already drains (app already open → no list hold).
+            ViewModel?.QueueOpenChatFromActivation(
+                "chat=" + e.SelectedChat.JID,
+                delayChatListUntilConversationReady: false);
         }
 
         private void ShellViewModel_PropertyChanged(object sender, PropertyChangedEventArgs e)

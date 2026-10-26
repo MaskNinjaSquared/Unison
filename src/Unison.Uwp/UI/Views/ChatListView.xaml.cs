@@ -11,6 +11,7 @@ using Windows.UI.Xaml.Controls;
 using Windows.UI.Xaml.Input;
 using Windows.UI.Xaml.Media;
 using Unison.Uwp.Services;
+using Unison.Uwp.UI.Helpers;
 using Unison.Uwp.UI.Templates;
 
 namespace Unison.Uwp.UI.Views
@@ -388,20 +389,41 @@ namespace Unison.Uwp.UI.Views
 
         private void ChatList_ContainerContentChanging(ListViewBase sender, ContainerContentChangingEventArgs args)
         {
+            HandleRowContainerChanging(args, trace: true);
+        }
+
+        private void CommunityHubList_ContainerContentChanging(ListViewBase sender, ContainerContentChangingEventArgs args)
+        {
+            HandleRowContainerChanging(args, trace: false);
+        }
+
+        private void HandleRowContainerChanging(ContainerContentChangingEventArgs args, bool trace)
+        {
             if (args == null || args.InRecycleQueue || args.Item == null)
             {
                 return;
             }
 
-            _containerChangingCount++;
-            if (_containerChangingCount <= 5 || (_containerChangingCount % 25) == 0)
+            // ListViewItem must not own a flyout; the row Grid keeps ContextFlyout (feature/2.1).
+            // Do not also ShowAt from ListView Holding/RightTapped — that drew the menu twice.
+            var container = args.ItemContainer as ListViewItem;
+            if (container != null)
             {
-                TraceListUi(
-                    "container-changing",
-                    "n=" + _containerChangingCount +
-                    "; phase=" + args.Phase +
-                    "; visibleVm=" + (ViewModel?.VisibleChats?.Count ?? 0),
-                    flush: _containerChangingCount <= 3);
+                container.ContextFlyout = null;
+            }
+
+            if (trace)
+            {
+                _containerChangingCount++;
+                if (_containerChangingCount <= 5 || (_containerChangingCount % 25) == 0)
+                {
+                    TraceListUi(
+                        "container-changing",
+                        "n=" + _containerChangingCount +
+                        "; phase=" + args.Phase +
+                        "; visibleVm=" + (ViewModel?.VisibleChats?.Count ?? 0),
+                        flush: _containerChangingCount <= 3);
+                }
             }
 
             // On demand, and only for rows that actually reached the screen. Fetching every

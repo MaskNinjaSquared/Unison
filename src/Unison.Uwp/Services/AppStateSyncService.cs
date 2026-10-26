@@ -14,6 +14,7 @@ using Unison.Baileys.Protocol;
 using Unison.Baileys.Client;
 using Unison.Core.Helpers;
 using Unison.Uwp.Services.WhatsApp;
+using Unison.WhatsAppClient.Helpers;
 
 namespace Unison.Uwp.Services
 {
@@ -1384,19 +1385,28 @@ namespace Unison.Uwp.Services
                 return;
             }
 
+            // ContactAction dual-writes used to call RegisterJidAlias(1) per mutation → Bridge
+            // Store(1) flood on regular_low. Bulk-import coalesces memory dual-write; pending
+            // socket pairs flush once after the scope ends.
             int applied = 0;
-            foreach (var mutation in mutations.Values)
+            using (_owner.JidAlias.BeginBulkImport())
             {
-                WhatsAppService.Log($"[AppStateSync] {collectionName}: mutation candidate index={mutation?.Index} operation={mutation?.Operation} summary={DescribeAction(mutation?.SyncAction?.Value)}");
-                if (await ApplyMutationAsync(collectionName, mutation, isInitialSync))
+                foreach (var mutation in mutations.Values)
                 {
-                    applied++;
+                    WhatsAppService.Log($"[AppStateSync] {collectionName}: mutation candidate index={mutation?.Index} operation={mutation?.Operation} summary={DescribeAction(mutation?.SyncAction?.Value)}");
+                    if (await ApplyMutationAsync(collectionName, mutation, isInitialSync))
+                    {
+                        applied++;
+                    }
                 }
             }
 
+            _owner.FlushPendingSocketAliasesAfterAppState(collectionName);
+
             if (applied > 0)
             {
-                _owner.SchedulePersistForAppState($"app-state:{collectionName}:{applied}");
+                _owner.EnableScheduledPersist($"app-state:{collectionName}:{applied}");
+                _owner.SchedulePersist();
             }
 
             WhatsAppService.Log($"[AppStateSync] {collectionName}: applied {applied}/{mutations.Count} mutation(s)");
@@ -1417,7 +1427,9 @@ namespace Unison.Uwp.Services
             {
                 if (!string.IsNullOrEmpty(chatJid) && !string.IsNullOrEmpty(messageId))
                 {
-                    return await _owner.ApplyAppStateDeleteMessageAsync(chatJid, messageId);
+                    return _owner.MessagesFacade != null
+                        && await _owner.MessagesFacade.ApplyAppStateDeleteMessageAsync(chatJid, messageId)
+                            .ConfigureAwait(false);
                 }
 
                 return false;
@@ -1435,7 +1447,7 @@ namespace Unison.Uwp.Services
                 string name = FirstNonEmpty(value.ContactAction.FullName, value.ContactAction.FirstName, value.ContactAction.Username);
                 if (!string.IsNullOrWhiteSpace(value.ContactAction.LidJid) && !string.IsNullOrWhiteSpace(value.ContactAction.PnJid))
                 {
-                    _owner.RegisterAliasFromAppState(value.ContactAction.LidJid, value.ContactAction.PnJid, "app-state-contact");
+                    _owner.RegisterAliasMapping(value.ContactAction.LidJid, value.ContactAction.PnJid, "app-state-contact");
                 }
 
                 if (!string.IsNullOrWhiteSpace(preferredJid) && !string.IsNullOrWhiteSpace(name))
@@ -1458,7 +1470,12 @@ namespace Unison.Uwp.Services
 
             if (value.PushNameSetting != null && !string.IsNullOrWhiteSpace(value.PushNameSetting.Name))
             {
-                await _owner.ApplyAppStateSelfPushNameAsync(value.PushNameSetting.Name);
+                if (_owner.ContactsFacade != null)
+                {
+                    await _owner.ContactsFacade.ApplyRemoteSelfPushNameAsync(value.PushNameSetting.Name)
+                        .ConfigureAwait(false);
+                }
+
                 return true;
             }
 
@@ -1470,13 +1487,19 @@ namespace Unison.Uwp.Services
 
             if (value.DeleteChatAction != null && !string.IsNullOrWhiteSpace(chatJid))
             {
-                await _owner.ApplyAppStateDeleteChatAsync(chatJid);
+                if (_owner.ChatsFacade != null)
+                {
+                    await _owner.ChatsFacade.ApplyAppStateDeleteChatAsync(chatJid).ConfigureAwait(false);
+                }
+
                 return true;
             }
 
             if (value.DeleteMessageForMeAction != null && !string.IsNullOrWhiteSpace(chatJid) && !string.IsNullOrWhiteSpace(messageId))
             {
-                return await _owner.ApplyAppStateDeleteMessageAsync(chatJid, messageId);
+                return _owner.MessagesFacade != null
+                    && await _owner.MessagesFacade.ApplyAppStateDeleteMessageAsync(chatJid, messageId)
+                        .ConfigureAwait(false);
             }
 
             if (value.ArchiveChatAction != null && !string.IsNullOrWhiteSpace(chatJid))
@@ -1512,7 +1535,7 @@ namespace Unison.Uwp.Services
 
             if (value.PnForLidChatAction != null && !string.IsNullOrWhiteSpace(chatJid) && !string.IsNullOrWhiteSpace(value.PnForLidChatAction.PnJid))
             {
-                _owner.RegisterAliasFromAppState(chatJid, value.PnForLidChatAction.PnJid, "app-state-pnforlid");
+                _owner.RegisterAliasMapping(chatJid, value.PnForLidChatAction.PnJid, "app-state-pnforlid");
                 return true;
             }
 

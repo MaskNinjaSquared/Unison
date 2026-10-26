@@ -326,8 +326,8 @@ namespace Unison.Core.ViewModels
         }
 
         /// <summary>
-        /// A row scrolled into view. Avatars are fetched here rather than up front because a
-        /// full-list fetch on load costs hundreds of requests for rows nobody will look at.
+        /// A row scrolled into view. Desktop may refresh here; Mobile keeps the list offline
+        /// (batch after history sync + disk hydrate) and revalidates only when the chat opens.
         /// </summary>
         public void OnRowRealized(ChatItem chat)
         {
@@ -337,7 +337,7 @@ namespace Unison.Core.ViewModels
             }
 
             // Frugal: skip avatar I/O while list enrich / reshuffle is already saturating the UI.
-            if (PreferFrugalUi && ListEnrichmentPhase.Matches(_lastSyncPhaseToken))
+            if (PreferFrugalUi && _chatService.MatchesListEnrichmentPhase(_lastSyncPhaseToken))
             {
                 return;
             }
@@ -349,6 +349,12 @@ namespace Unison.Core.ViewModels
                     "row-realized",
                     BuildListSnapshot("n=" + _postSyncRowRealized),
                     flush: _postSyncRowRealized <= 3 || (_postSyncRowRealized % 50) == 0);
+            }
+
+            bool isMobile = _systemInfo != null && _systemInfo.IsMobile();
+            if (!MobileChatListAvatarGate.AllowRefreshOnRowRealized(isMobile))
+            {
+                return;
             }
 
             _contactService.RequestAvatarRefresh(chat);
@@ -483,11 +489,8 @@ namespace Unison.Core.ViewModels
         /// </summary>
         private async Task DeleteChatAsync(ChatItem chat)
         {
-            bool deleted = await ChatDeletionPrompt.ConfirmAndDeleteAsync(
-                chat,
-                _chatService,
-                _dialogService,
-                _strings);
+            bool deleted = _chatService != null &&
+                await _chatService.ConfirmAndDeleteAsync(chat);
 
             if (deleted)
             {

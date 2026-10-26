@@ -51,7 +51,8 @@ namespace Unison.Core.Mappers
                     snapshot.IsSticker,
                     snapshot.IsAudio,
                     snapshot.IsVoice,
-                    snapshot.IsDocument);
+                    snapshot.IsDocument,
+                    snapshot.IsContact);
 
             return new ChatMessage
             {
@@ -96,7 +97,7 @@ namespace Unison.Core.Mappers
 
         private static Message UnwrapMessage(Message msg)
         {
-            return HistorySyncContentFilter.Unwrap(msg);
+            return ProtoMessageUnwrap.Run(msg);
         }
     }
 }

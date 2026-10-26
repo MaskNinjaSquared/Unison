@@ -22,7 +22,12 @@ namespace Unison.Core.Contracts.WhatsApp
             int count,
             string stanzaId);
 
-        /// <summary>Asks for the account-wide catch-up under <paramref name="stanzaId"/>; returns the id it went out with.</summary>
-        Task<string> RequestFullHistoryAsync(string stanzaId);
+        /// <summary>
+        /// Asks for the account-wide catch-up under <paramref name="stanzaId"/>; returns the id
+        /// it went out with. <paramref name="requestId"/> correlates chunks on the session bus
+        /// when the caller waits for an answer (resync), rather than for a timer.
+        /// </summary>
+        Task<string> RequestFullHistoryAsync(string stanzaId, string requestId = null);
     }
 }
+

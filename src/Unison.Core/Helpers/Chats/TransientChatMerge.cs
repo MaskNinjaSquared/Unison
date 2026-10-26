@@ -129,6 +129,8 @@ namespace Unison.Core.Helpers
 
             canonical.AvatarUrl = transient.AvatarUrl;
             canonical.AvatarHighUrl = transient.AvatarHighUrl;
+            canonical.AvatarPictureId = transient.AvatarPictureId;
+            canonical.AvatarRemoteUrl = transient.AvatarRemoteUrl;
             canonical.AvatarFetchedAtUtc = transient.AvatarFetchedAtUtc;
             canonical.AvatarFetchFailedAtUtc = transient.AvatarFetchFailedAtUtc;
             canonical.AvatarFetchFailureReason = transient.AvatarFetchFailureReason;

@@ -5,7 +5,7 @@
 // existed as two copies inside WhatsAppService that had drifted apart; these
 // pin the single version.
 // =============================================================================
-using Unison.Core.Helpers;
+using Unison.WhatsAppClient.Helpers;
 using Xunit;
 
 namespace Unison.Core.Tests.Helpers

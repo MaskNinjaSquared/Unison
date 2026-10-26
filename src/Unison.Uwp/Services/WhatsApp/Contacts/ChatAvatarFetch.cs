@@ -9,8 +9,10 @@ using Unison.Core.Helpers;
 using Unison.Core.Models;
 using Unison.Core.State;
 using Unison.Uwp.Client;
-using Unison.Uwp.Services.Socket;
-using Unison.Uwp.Services.WhatsApp.Groups;
+using Unison.WhatsAppClient.Abstractions;
+using Unison.WhatsAppClient.Groups;
+using Unison.WhatsAppClient.Helpers;
+using UwpSessionProvider = Unison.Uwp.Services.Socket.IWhatsAppSessionProvider;
 
 namespace Unison.Uwp.Services.WhatsApp.Contacts
 {
@@ -18,27 +20,27 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
     /// Fetches a chat picture and writes it on the row, including a group's parent or sibling
     /// when the group itself has none.
     /// </summary>
-    internal sealed class ChatAvatarFetch
+    internal sealed class ChatAvatarFetch : IChatAvatarFetch
     {
         private const string GroupAvatarFallbackMissReason = "group-avatar-fallback-miss";
 
         private readonly IDispatcher _ui;
         private readonly IChatCatalogPersistence _catalog;
-        private readonly IWhatsAppSessionProvider _sessions;
+        private readonly UwpSessionProvider _sessions;
         private readonly IGroupService _groups;
         private readonly IJidResolver _jids;
         private readonly IChatStateStore _chats;
-        private readonly IAvatarReport _report;
+        private readonly Func<IContactService> _contacts;
         private readonly AvatarFetcher _avatars;
         private readonly IAvatarCache _cache;
         private readonly GroupMetadataReader _reader;
 
         public ChatAvatarFetch(
-            IWhatsAppSessionProvider sessions,
+            UwpSessionProvider sessions,
             IGroupService groups,
             IJidResolver jids,
             IChatStateStore chats,
-            IAvatarReport report,
+            Func<IContactService> contacts,
             AvatarFetcher avatars,
             IAvatarCache cache,
             IDispatcher ui,
@@ -50,7 +52,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             _groups = groups ?? throw new ArgumentNullException(nameof(groups));
             _jids = jids ?? throw new ArgumentNullException(nameof(jids));
             _chats = chats ?? throw new ArgumentNullException(nameof(chats));
-            _report = report ?? throw new ArgumentNullException(nameof(report));
+            _contacts = contacts ?? throw new ArgumentNullException(nameof(contacts));
             _avatars = avatars ?? throw new ArgumentNullException(nameof(avatars));
             _cache = cache ?? throw new ArgumentNullException(nameof(cache));
             _reader = new GroupMetadataReader(jids);
@@ -191,6 +193,24 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             DateTime nowUtc = DateTime.UtcNow;
             if (!string.IsNullOrWhiteSpace(result.Url))
             {
+                bool hasLocal = !string.IsNullOrWhiteSpace(chat.GetAvatarUrl(preferHigh: false));
+                if (hasLocal &&
+                    AvatarPictureIdentity.IsUnchanged(
+                        chat.AvatarPictureId,
+                        chat.AvatarRemoteUrl,
+                        result.Id,
+                        result.Url))
+                {
+                    await _ui.RunAsync(() =>
+                    {
+                        ChatAvatarOutcome.RecordUnchanged(chat, nowUtc);
+                        RememberPictureIdentity(chat, result.Id, result.Url);
+                    });
+                    Debug.WriteLine(
+                        $"[WhatsAppService] Avatar unchanged for {chat.JID}: id={result.Id}, skipped CDN");
+                    return;
+                }
+
                 string localUri = null;
                 try
                 {
@@ -214,11 +234,12 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
                 await _ui.RunAsync(() =>
                 {
                     ChatAvatarOutcome.RecordCached(chat, localUri, nowUtc);
+                    RememberPictureIdentity(chat, result.Id, result.Url);
                     _groups.ApplyGroupMemberAvatarOutcome(
                         chat.JID,
                         new GroupMemberAvatarFetchResult { LocalUri = localUri });
                 });
-                _report.ReportCached(chat.JID, localUri);
+                ReportAvatarCached(chat.JID, localUri);
                 return;
             }
 
@@ -236,7 +257,10 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
                 }
 
                 await _ui.RunAsync(() =>
-                    ChatAvatarOutcome.RecordAbsent(chat, failureReason, nowUtc));
+                {
+                    ChatAvatarOutcome.RecordAbsent(chat, failureReason, nowUtc);
+                    RememberPictureIdentity(chat, null, null);
+                });
                 Debug.WriteLine($"[WhatsAppService] Avatar confirmed absent for {chat.JID}: target={result.TargetJid}, reason={failureReason}");
                 return;
             }
@@ -308,7 +332,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
                         chat.AvatarFetchFailedAtUtc = null;
                         chat.AvatarFetchFailureReason = null;
                     });
-                    _report.ReportCached(chat.JID, localUri);
+                    ReportAvatarCached(chat.JID, localUri);
                     Debug.WriteLine($"[WhatsAppService] Group avatar fallback cached {chat.JID} from {fallbackJid}");
                     return true;
                 }
@@ -333,6 +357,8 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             string sourceJid = source.JID;
             string sourceAvatar = source.AvatarUrl;
             string sourceAvatarHigh = source.AvatarHighUrl;
+            string sourcePictureId = source.AvatarPictureId;
+            string sourceRemoteUrl = source.AvatarRemoteUrl;
             DateTime nowUtc = DateTime.UtcNow;
 
             await _ui.RunAsync(() =>
@@ -343,13 +369,43 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
                     chat.AvatarHighUrl = sourceAvatarHigh;
                 }
 
+                RememberPictureIdentity(chat, sourcePictureId, sourceRemoteUrl);
                 chat.AvatarFetchedAtUtc = nowUtc;
                 chat.AvatarFetchFailedAtUtc = null;
                 chat.AvatarFetchFailureReason = null;
             });
-            _report.ReportCached(chat.JID, sourceAvatar);
+            ReportAvatarCached(chat.JID, sourceAvatar);
             Debug.WriteLine($"[WhatsAppService] Group avatar sibling fallback copied {chat.JID} from same-subject group {sourceJid}");
             return true;
+        }
+
+        private void ReportAvatarCached(string jid, string localAvatarUrl)
+        {
+            if (string.IsNullOrWhiteSpace(jid) || string.IsNullOrWhiteSpace(localAvatarUrl))
+            {
+                return;
+            }
+
+            try
+            {
+                _contacts()?.NotifyAvatarCached(jid, localAvatarUrl);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine(
+                    "[ChatAvatarFetch] NotifyAvatarCached failed: " + ex.Message);
+            }
+        }
+
+        private static void RememberPictureIdentity(ChatItem chat, string pictureId, string remoteUrl)
+        {
+            if (chat == null)
+            {
+                return;
+            }
+
+            chat.AvatarPictureId = string.IsNullOrWhiteSpace(pictureId) ? null : pictureId.Trim();
+            chat.AvatarRemoteUrl = string.IsNullOrWhiteSpace(remoteUrl) ? null : remoteUrl.Trim();
         }
 
         private static bool ShouldTry(ProfilePictureResult result)

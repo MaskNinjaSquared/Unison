@@ -182,6 +182,11 @@ namespace Unison.Core.State
                 merged.Status = fromDisk.Status;
             }
 
+            if (!merged.Knows(ChatLocalStateFields.Favorite))
+            {
+                merged.IsFavorite = fromDisk.IsFavorite;
+            }
+
             return merged;
         }
 
@@ -217,6 +222,11 @@ namespace Unison.Core.State
             if (source.Knows(ChatLocalStateFields.Mute))
             {
                 copy.MutedUntil = source.MutedUntil;
+            }
+
+            if (source.Knows(ChatLocalStateFields.Favorite))
+            {
+                copy.IsFavorite = source.IsFavorite;
             }
 
             return copy;

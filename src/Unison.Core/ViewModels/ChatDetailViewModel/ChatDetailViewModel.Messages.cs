@@ -165,9 +165,9 @@ namespace Unison.Core.ViewModels
 
                     // Self-chat / dual-key overlap: SQLite can return a page already on screen.
                     // Advance past that tip once so scroll-up is not stuck with prepended=0.
-                    if (TimelineLoadMorePage.IsDuplicateOnlyPage(older.Count, prepended))
+                    if (_messageService.IsTimelineDuplicateOnlyPage(older.Count, prepended))
                     {
-                        ChatMessage tip = TimelineLoadMorePage.OldestTip(older);
+                        ChatMessage tip = _messageService.OldestTimelinePageTip(older);
                         if (tip != null)
                         {
                             older = await _messageService.LoadMoreMessagesAsync(
@@ -289,7 +289,8 @@ namespace Unison.Core.ViewModels
                     continue;
                 }
 
-                if (model.IsPreviewFallback || ChatPreviewMessageFactory.IsPreviewFallbackId(model.Id))
+                if (model.IsPreviewFallback ||
+                    (_messageService != null && _messageService.IsPreviewFallbackMessageId(model.Id)))
                 {
                     RemoveTimelineAt(i);
                 }
@@ -298,78 +299,14 @@ namespace Unison.Core.ViewModels
 
         /// <summary>
         /// Corrects the chat's list row from the timeline just opened, then asks the store for a
-        /// reconcile in case SQLite holds something newer. See <see cref="TimelineListStrip"/>.
+        /// reconcile in case SQLite holds something newer.
         /// </summary>
         public void SyncListStripFromTimeline(
             ChatItem chat,
             string requestedJid,
             IReadOnlyList<ChatMessage> visibleMessages)
         {
-            if (chat == null)
-            {
-                return;
-            }
-
-            ChatMessage tip = TimelineListStrip.PickTip(visibleMessages);
-            if (tip == null)
-            {
-                _ = _chatService?.ReconcileChatPreviewsFromSqliteAsync(new[] { requestedJid }, "chat-open-empty");
-                return;
-            }
-
-            bool isGroup = chat.IsGroup ||
-                (chat.JID ?? string.Empty).EndsWith("@g.us", StringComparison.OrdinalIgnoreCase);
-            string rawPreview = ChatPreviewNormalizer.FormatListPreview(tip, isGroup);
-            string stripParticipant = isGroup
-                ? ParticipantStripIdentity.PreferForDisplay(
-                    tip.ParticipantJid,
-                    _jids.GetCanonicalJid(tip.ParticipantJid))
-                : null;
-            string authorPrefix = ChatPreviewNormalizer.FormatListAuthorPrefix(
-                tip,
-                isGroup,
-                _strings?.Get("Chat_SelfFallbackName", "You") ?? "You",
-                stripParticipant);
-            ChatPreviewNormalizer.Normalize(
-                rawPreview,
-                ChatPreviewNormalizer.InferKindFromMessage(tip),
-                out var previewKind,
-                out var preview);
-            MessageSendState sendState = HistoryLiveMessageMapper.FromStatus(tip.Status, tip.IsFromMe);
-            string senderName = tip.IsFromMe ? null : tip.SenderName;
-
-            if (TimelineListStrip.ShouldReplace(chat, tip, preview, previewKind, authorPrefix, sendState))
-            {
-                DateTime tipUtc = WhatsAppMapper.ToUtc(tip.Timestamp);
-                chat.LastMessage = preview;
-                chat.LastMessageAuthor = authorPrefix;
-                chat.LastMessageKind = previewKind;
-                chat.LastMessageMentionedJids = tip.MentionedJids != null && tip.MentionedJids.Count > 0
-                    ? new List<string>(tip.MentionedJids)
-                    : null;
-                chat.LastMessageIsFromMe = tip.IsFromMe;
-                chat.LastMessageSendState = sendState;
-                chat.LastMessageId = tip.Id;
-                chat.LastMessageTimestampUtc = tipUtc;
-                chat.Timestamp = WhatsAppMapper.FormatTimestamp(
-                    tip.Timestamp,
-                    _strings?.Get("Common_Yesterday", "Yesterday") ?? "Yesterday");
-                LiveChatPreviewApplier.ApplyAuthorParts(chat, stripParticipant, senderName, authorPrefix);
-                _chatService?.PersistChatListRows(new[] { chat });
-                System.Diagnostics.Debug.WriteLine(
-                    "[ChatDetailViewModel] List preview from newest tip id=" + (tip.Id ?? "?") +
-                    " fromMe=" + tip.IsFromMe + " ts=" + tipUtc.ToString("O"));
-            }
-            else if (isGroup &&
-                     !string.IsNullOrWhiteSpace(tip.Id) &&
-                     string.Equals(chat.LastMessageId, tip.Id, StringComparison.Ordinal))
-            {
-                // Same tip the bubble just named — promote author without moving the strip time.
-                LiveChatPreviewApplier.ApplyAuthorParts(chat, stripParticipant, senderName, authorPrefix);
-                _chatService?.PersistChatListRows(new[] { chat });
-            }
-
-            _ = _chatService?.ReconcileChatPreviewsFromSqliteAsync(new[] { requestedJid }, "chat-open");
+            _chatService?.SyncListStripFromTimeline(chat, requestedJid, visibleMessages);
         }
 
         /// <summary>
@@ -386,7 +323,7 @@ namespace Unison.Core.ViewModels
 
             string targetJid = string.IsNullOrWhiteSpace(requestedJid) ? chat.JID : requestedJid;
             string selfName = _strings?.Get("Chat_SelfFallbackName", "You") ?? "You";
-            ChatMessage fallback = ChatPreviewMessageFactory.TryCreate(chat, selfName);
+            ChatMessage fallback = _messageService?.TryCreatePreviewFallback(chat, selfName);
             if (fallback != null)
             {
                 if (isGroup &&
@@ -421,7 +358,9 @@ namespace Unison.Core.ViewModels
                 return false;
             }
 
-            ChatTimelineMergeMode mode = ChatTimelineLiveMerge.Choose(followingEnd, IsDetachedFromEnd);
+            ChatTimelineMergeMode mode = _messageService.ChooseTimelineMergeMode(
+                followingEnd,
+                IsDetachedFromEnd);
             if (mode == ChatTimelineMergeMode.RejoinEnd)
             {
                 RejoinTimelineEnd(serviceMessages, requestedJid);
@@ -462,7 +401,10 @@ namespace Unison.Core.ViewModels
                     continue;
                 }
 
-                if (!ChatTimelineLiveMerge.ShouldInsert(msg.Timestamp, newestShown, IsDetachedFromEnd))
+                if (!_messageService.ShouldInsertLiveTimelineRow(
+                        msg.Timestamp,
+                        newestShown,
+                        IsDetachedFromEnd))
                 {
                     continue;
                 }
@@ -492,7 +434,7 @@ namespace Unison.Core.ViewModels
         private void RejoinTimelineEnd(IList<ChatMessage> serviceMessages, string requestedJid)
         {
             var latest = serviceMessages.Where(m => m != null).ToList();
-            ChatMessageOrder.SortInPlace(latest);
+            _messageService.SortTimelineInPlace(latest);
             if (latest.Count > InitialUiMessageWindow)
             {
                 latest.RemoveRange(0, latest.Count - InitialUiMessageWindow);
@@ -539,7 +481,7 @@ namespace Unison.Core.ViewModels
         }
 
         /// <summary>Copies the fields a reload can carry forward onto a row already on screen.</summary>
-        private static void ApplyLiveFieldsTo(ChatMessage target, ChatMessage source)
+        private void ApplyLiveFieldsTo(ChatMessage target, ChatMessage source)
         {
             if (target == null || source == null)
             {
@@ -553,7 +495,7 @@ namespace Unison.Core.ViewModels
             target.PinExpiresAtUtc = source.PinExpiresAtUtc;
             target.RemoteJid = source.RemoteJid;
             target.ParticipantJid = source.ParticipantJid;
-            HistoryMessageMapper.CopyReactionState(target, source);
+            _messageService?.CopyReactionState(target, source);
             if (source.IsRevoked)
             {
                 target.Content = source.Content;
@@ -743,7 +685,7 @@ namespace Unison.Core.ViewModels
 
         /// <summary>
         /// Timeline scan: true when the quoted message id matches an outgoing bubble on screen.
-        /// Self-JID checks live in <see cref="GroupParticipantLookup"/>.
+        /// Self-JID checks live in <see cref="IGroupParticipantLookup"/>.
         /// </summary>
         private bool QuotedMessageIdIsFromMe(string quotedId)
         {

@@ -1,39 +1,25 @@
 // =============================================================================
-// IWhatsAppSessionProvider
+// IWhatsAppSessionProvider (UWP bridge extension)
 //
-// Hands out the live Unison.Socket session, or null when there is no connection.
-//
-// Facades depend on this rather than on a session instance because the socket is
-// replaced on every reconnect: one holding the session it was constructed with
-// would be sending into a closed one by the second disconnect. Asking each time
-// also gives them somewhere to report "not connected" instead of failing in an
-// obscure way.
+// Extends the portable Application provider with the app-side IWhatsAppSocket
+// surface (legacy events / modules). Facades still in UWP take this type;
+// portable façades take Unison.WhatsAppClient.Abstractions.IWhatsAppSessionProvider.
 // =============================================================================
 using System;
 using Unison.Socket.Session;
 using Unison.Uwp.Client;
+using AppSessionProvider = Unison.WhatsAppClient.Abstractions.IWhatsAppSessionProvider;
 
 namespace Unison.Uwp.Services.Socket
 {
-    internal interface IWhatsAppSessionProvider
+    internal interface IWhatsAppSessionProvider : AppSessionProvider
     {
-        /// <summary>The connected session, or null when the legacy stack owns the connection.</summary>
-        WhatsAppSession Current { get; }
-
         /// <summary>
         /// The bridge itself, for the few facades that need the app-side surface rather than the
         /// raw session: the legacy events it republishes, and the modules the session keeps
-        /// internal. Null under the same conditions as <see cref="Current"/>.
+        /// internal. Null under the same conditions as <see cref="AppSessionProvider.Current"/>.
         /// </summary>
         IWhatsAppSocket Socket { get; }
-
-        bool IsReady { get; }
-
-        /// <summary>
-        /// The current connection finished the noise handshake, so IQ calls are safe. Asked of
-        /// whatever socket is current, bridge or not.
-        /// </summary>
-        bool IsTransportReady { get; }
     }
 
     /// <summary>

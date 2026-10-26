@@ -9,7 +9,7 @@ namespace Unison.Core.Tests.Helpers
     {
         public int Passes { get; private set; }
 
-        public Task RunAsync(Action action)
+        public Task RunAsync(Action action, string caller = null, string callerFile = null)
         {
             Passes++;
             action();

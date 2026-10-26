@@ -53,8 +53,11 @@ namespace Unison.Core.ViewModels
             {
                 CloseChatDetailInfo();
                 ResetTimelinePaging();
+                _groupSubjectRefreshJid = null;
             }
 
+            // EnsureFresh: 2nd open of the same group reuses the warm 1:1 index / roster maps.
+            // Full Rebuild on every SyncActiveChat was re-paying the cold DirectChatIndex walk.
             RebuildParticipantLookup();
 
             RaisePinToStartCanExecuteChanged();
@@ -68,12 +71,19 @@ namespace Unison.Core.ViewModels
             RaiseCanAddToAddressBook();
             if (LooksLikeGroupChat(chat))
             {
-                _ = RefreshGroupSendPermissionsSafeAsync(chat.JID);
+                // Strip after Yield only. Subject/meta IQ runs once from BeginLoadingMessages so
+                // a brand-new group still gets a name while the timeline loads (socket often
+                // not ready yet on the Prepare turn).
+                _ = DeferGroupOpenEnrichmentAsync(chat.JID);
+            }
 
-                // Opening a group resolves its senders here (roster + contacts) while the list row
-                // may still be sitting on the number a history chunk left behind. Ask the strip to
-                // catch up so the two do not disagree on the same person.
-                _authorProjection?.Refresh();
+            bool isMobile = _systemInfo != null && _systemInfo.IsMobile();
+            if (_contactService != null &&
+                MobileChatListAvatarGate.AllowRefreshOnChatOpen(isMobile, chatChanged, chat != null))
+            {
+                // Force past the 7-day interval: Mobile revalidates on every open; Apply skips
+                // the CDN download when picture id/url matches what we already cached.
+                _contactService.RequestAvatarRefresh(chat, force: true);
             }
 
             if (chat == null)
@@ -128,6 +138,71 @@ namespace Unison.Core.ViewModels
             }
         }
 
+        /// <summary>
+        /// Leaves the Prepare/SyncActiveChat frame, then author strip only.
+        /// Subject IQ is <see cref="TryRefreshGroupSubjectOnce"/> during timeline load.
+        /// </summary>
+        private async Task DeferGroupOpenEnrichmentAsync(string groupJid)
+        {
+            if (string.IsNullOrWhiteSpace(groupJid))
+            {
+                return;
+            }
+
+            try
+            {
+                await Task.Yield();
+                _authorProjection?.RefreshChat(groupJid);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine(
+                    "[ChatDetailViewModel] DeferGroupOpenEnrichment failed: " + ex.Message);
+            }
+        }
+
+        /// <summary>
+        /// One w:g2 refresh per open (flags + subject). Apply still waits on the timeline Hold.
+        /// Skips when the row already has a real subject so warm opens stay quiet.
+        /// </summary>
+        private void TryRefreshGroupSubjectOnce()
+        {
+            ChatItem chat = ActiveChat;
+            if (!LooksLikeGroupChat(chat) || string.IsNullOrWhiteSpace(chat.JID))
+            {
+                return;
+            }
+
+            if (!NeedsGroupSubjectRefresh(chat))
+            {
+                System.Diagnostics.Debug.WriteLine(
+                    "[ChatDetailViewModel] Group subject refresh skipped (already named); jid=" +
+                    chat.JID);
+                return;
+            }
+
+            string jid = chat.JID.Trim();
+            if (string.Equals(_groupSubjectRefreshJid, jid, StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
+            _groupSubjectRefreshJid = jid;
+            System.Diagnostics.Debug.WriteLine(
+                "[ChatDetailViewModel] Group subject refresh once during timeline load; jid=" + jid);
+            _ = RefreshGroupSendPermissionsSafeAsync(jid);
+        }
+
+        private static bool NeedsGroupSubjectRefresh(ChatItem chat)
+        {
+            if (chat == null)
+            {
+                return false;
+            }
+
+            return GroupIdPlaceholder.IsIdPlaceholder(chat.Name, chat.JID);
+        }
+
         private async Task RefreshGroupSendPermissionsSafeAsync(string groupJid)
         {
             if (string.IsNullOrWhiteSpace(groupJid) || _groupService == null)
@@ -137,8 +212,8 @@ namespace Unison.Core.ViewModels
 
             try
             {
-                await _groupService.EnsureGroupRosterLoadedFromStoreAsync(groupJid)
-                    .ConfigureAwait(false);
+                // Do not EnsureGroupRosterLoadedFromStore here: restoring hundreds of members
+                // on open freezes Mobile after paint. Members pivot loads the roster on demand.
                 await _groupService.RefreshGroupSendPermissionsAsync(groupJid)
                     .ConfigureAwait(false);
             }
@@ -189,7 +264,8 @@ namespace Unison.Core.ViewModels
         {
             return ActiveChat != null &&
                    !string.IsNullOrWhiteSpace(ActiveChat.JID) &&
-                   _chatStore != null;
+                   _chatStore != null &&
+                   _chatService != null;
         }
 
         private bool CanDeleteActiveChat()
@@ -205,11 +281,8 @@ namespace Unison.Core.ViewModels
         /// </summary>
         private async Task DeleteActiveChatAsync()
         {
-            bool deleted = await ChatDeletionPrompt.ConfirmAndDeleteAsync(
-                ActiveChat,
-                _chatService,
-                _dialogs,
-                _strings);
+            bool deleted = _chatService != null &&
+                await _chatService.ConfirmAndDeleteAsync(ActiveChat);
 
             if (deleted)
             {

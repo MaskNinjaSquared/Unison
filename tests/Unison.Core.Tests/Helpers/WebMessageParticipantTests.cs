@@ -10,6 +10,7 @@ using System.Text;
 using Google.Protobuf;
 using Proto;
 using Unison.Core.Helpers;
+using Unison.WhatsAppClient.Helpers;
 using Xunit;
 
 namespace Unison.Core.Tests.Helpers

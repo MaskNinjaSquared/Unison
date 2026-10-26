@@ -101,11 +101,10 @@ namespace Unison.Core.ViewModels
                 return;
             }
 
-            GroupParticipantResolver.EnrichMember(
+            _groupService?.EnrichMember(
                 member,
                 participantJid ?? member.Jid ?? member.Lid ?? member.PhoneNumber,
                 ActiveChat,
-                _participantContext,
                 nameHint);
 
             ShowInfoPane(_infoFactory.CreateGroupMember(ActiveChat, member));
@@ -173,11 +172,13 @@ namespace Unison.Core.ViewModels
         }
 
         /// <summary>
-        /// Rebuilds participant name/avatar/roster indexes for the active chat.
+        /// Ensures participant name/avatar/roster indexes for the active chat.
+        /// Uses <see cref="IGroupParticipantLookup.EnsureFresh"/> so a 2nd open of the same group
+        /// reuses the warm maps (full Rebuild was re-paying the cold 1:1 index walk).
         /// </summary>
         public void RebuildParticipantLookup()
         {
-            _participants.Rebuild(ActiveChat);
+            _participants.EnsureFresh(ActiveChat);
         }
 
         /// <summary>

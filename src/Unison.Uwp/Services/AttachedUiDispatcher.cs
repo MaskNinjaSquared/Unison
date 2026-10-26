@@ -1,4 +1,5 @@
 using System;
+using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
 using Unison.Core.Contracts;
 using Windows.ApplicationModel.Core;
@@ -15,14 +16,16 @@ namespace Unison.Uwp.Services
     /// unlike <see cref="DispatcherService"/> and <see cref="UiThreadDispatcherService"/>, which
     /// run inline when they find no dispatcher.
     /// </remarks>
-    public sealed class AttachedUiDispatcher : IDispatcher
+    public sealed class AttachedUiDispatcher : IDispatcher, IUrgentDispatcher
     {
         private readonly IRuntimeDiagnostics _diagnostics;
+        private readonly UiStallWatchdog _watchdog;
         private CoreDispatcher _attached;
 
-        public AttachedUiDispatcher(IRuntimeDiagnostics diagnostics)
+        public AttachedUiDispatcher(IRuntimeDiagnostics diagnostics, UiStallWatchdog watchdog)
         {
             _diagnostics = diagnostics ?? throw new ArgumentNullException(nameof(diagnostics));
+            _watchdog = watchdog ?? throw new ArgumentNullException(nameof(watchdog));
         }
 
         public void Attach(CoreDispatcher dispatcher)
@@ -54,7 +57,25 @@ namespace Unison.Uwp.Services
             }
         }
 
-        public async Task RunAsync(Action action)
+        public Task RunAsync(
+            Action action,
+            [CallerMemberName] string caller = null,
+            [CallerFilePath] string callerFile = null) =>
+            RunCoreAsync(action, CoreDispatcherPriority.Normal, "sync", caller, callerFile);
+
+        /// <inheritdoc />
+        public Task RunUrgentAsync(
+            Action action,
+            [CallerMemberName] string caller = null,
+            [CallerFilePath] string callerFile = null) =>
+            RunCoreAsync(action, CoreDispatcherPriority.High, "urgent", caller, callerFile);
+
+        private async Task RunCoreAsync(
+            Action action,
+            CoreDispatcherPriority priority,
+            string kind,
+            string caller,
+            string callerFile)
         {
             if (action == null)
             {
@@ -64,21 +85,27 @@ namespace Unison.Uwp.Services
             CoreDispatcher dispatcher = Current;
             if (dispatcher == null)
             {
-                _diagnostics.Write("runtime", "ui-dispatch-skipped", "kind=sync; reason=no-dispatcher");
+                _diagnostics.Write(
+                    "runtime",
+                    "ui-dispatch-skipped",
+                    "kind=" + kind + "; reason=no-dispatcher");
                 return;
             }
 
             if (dispatcher.HasThreadAccess)
             {
-                action();
+                _watchdog.Run(action, kind, caller, callerFile);
                 return;
             }
 
-            await dispatcher.RunAsync(CoreDispatcherPriority.Normal, () => action());
+            await dispatcher.RunAsync(priority, () => _watchdog.Run(action, kind, caller, callerFile));
         }
 
         /// <summary>Runs async UI work at low priority and waits for it to finish.</summary>
-        public async Task RunTaskAsync(Func<Task> action)
+        public async Task RunTaskAsync(
+            Func<Task> action,
+            [CallerMemberName] string caller = null,
+            [CallerFilePath] string callerFile = null)
         {
             if (action == null)
             {
@@ -94,7 +121,7 @@ namespace Unison.Uwp.Services
 
             if (dispatcher.HasThreadAccess)
             {
-                await action();
+                await StartTracked(action, caller, callerFile);
                 return;
             }
 
@@ -103,7 +130,7 @@ namespace Unison.Uwp.Services
             {
                 try
                 {
-                    await action();
+                    await StartTracked(action, caller, callerFile);
                     completion.TrySetResult(true);
                 }
                 catch (Exception ex)
@@ -115,7 +142,10 @@ namespace Unison.Uwp.Services
         }
 
         /// <summary>Queues work without waiting; dropped silently when no dispatcher is known.</summary>
-        public void Post(Action action)
+        public void Post(
+            Action action,
+            [CallerMemberName] string caller = null,
+            [CallerFilePath] string callerFile = null)
         {
             if (action == null)
             {
@@ -130,11 +160,27 @@ namespace Unison.Uwp.Services
 
             if (dispatcher.HasThreadAccess)
             {
-                action();
+                _watchdog.Run(action, "post", caller, callerFile);
                 return;
             }
 
-            _ = dispatcher.RunAsync(CoreDispatcherPriority.Normal, () => action());
+            _ = dispatcher.RunAsync(
+                CoreDispatcherPriority.Normal,
+                () => _watchdog.Run(action, "post", caller, callerFile));
+        }
+
+        /// <summary>Tracks only the synchronous slice; awaits inside resume untracked.</summary>
+        private Task StartTracked(Func<Task> action, string caller, string callerFile)
+        {
+            object token = _watchdog.Enter("async", caller, callerFile);
+            try
+            {
+                return action() ?? Task.CompletedTask;
+            }
+            finally
+            {
+                _watchdog.Exit(token);
+            }
         }
     }
 }

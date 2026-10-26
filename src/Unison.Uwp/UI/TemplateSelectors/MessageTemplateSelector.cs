@@ -9,15 +9,18 @@ namespace Unison.Uwp.UI.TemplateSelectors
     {
         public DataTemplate SentTemplate { get; set; }
         public DataTemplate ReceivedTemplate { get; set; }
+        public DataTemplate GroupJoinTemplate { get; set; }
 
         protected override DataTemplate SelectTemplateCore(object item, DependencyObject container)
         {
             bool? fromMe = null;
+            bool isGroupJoin = false;
 
             var vm = item as ChatMessageViewModel;
             if (vm != null)
             {
                 fromMe = vm.IsFromMe;
+                isGroupJoin = vm.IsGroupJoin;
             }
             else
             {
@@ -25,7 +28,13 @@ namespace Unison.Uwp.UI.TemplateSelectors
                 if (message != null)
                 {
                     fromMe = message.IsFromMe;
+                    isGroupJoin = message.IsGroupJoin;
                 }
+            }
+
+            if (isGroupJoin && GroupJoinTemplate != null)
+            {
+                return GroupJoinTemplate;
             }
 
             if (fromMe == null)

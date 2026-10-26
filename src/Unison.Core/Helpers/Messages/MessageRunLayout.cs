@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Mappers;
 using Unison.Core.Models;
 
@@ -16,7 +17,7 @@ namespace Unison.Core.Helpers
             IList<ChatMessage> messages,
             bool isGroup,
             ChatItem groupChat,
-            GroupParticipantLookup lookup,
+            IGroupParticipantLookup lookup,
             string todayLabel,
             string yesterdayLabel,
             Func<string, bool> quotedIdIsFromMe)
@@ -160,6 +161,12 @@ namespace Unison.Core.Helpers
         public static bool IsSameMessageRun(ChatMessage left, ChatMessage right, bool isGroup)
         {
             if (left == null || right == null)
+            {
+                return false;
+            }
+
+            // GroupJoin uses date-separator chrome — never share a bubble run.
+            if (left.IsGroupJoin || right.IsGroupJoin)
             {
                 return false;
             }

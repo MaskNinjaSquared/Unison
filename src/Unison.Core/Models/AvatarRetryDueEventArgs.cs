@@ -4,9 +4,8 @@ using System.Collections.Generic;
 namespace Unison.Core.Models
 {
     /// <summary>
-    /// Args for <see cref="Contracts.WhatsApp.IWhatsAppService.OnAvatarRetryDue"/>: rows with no
-    /// avatar whose identity just became fully known. Raised on the UI thread, and the rows are
-    /// the live list's, so a subscriber may read them there and nowhere else.
+    /// Legacy args for forced avatar retries after an alias pair lands. ContactFacade now
+    /// refreshes those rows inside its alias follow-up; this type is unused on the live path.
     /// </summary>
     public sealed class AvatarRetryDueEventArgs : EventArgs
     {

@@ -160,6 +160,17 @@
             </DataTemplate>
         </selectors:ChatPreviewKindTemplateSelector.DocumentTemplate>
 
+        <!-- Icon only — person name is the strip body (PreviewText), not "Contact". -->
+        <selectors:ChatPreviewKindTemplateSelector.ContactTemplate>
+            <DataTemplate>
+                <FontIcon Glyph="&#xE77B;"
+                          FontFamily="{StaticResource IconFont}"
+                          FontSize="14"
+                          VerticalAlignment="Center"
+                          Margin="0,0,0,0"/>
+            </DataTemplate>
+        </selectors:ChatPreviewKindTemplateSelector.ContactTemplate>
+
         <selectors:ChatPreviewKindTemplateSelector.ReactionTemplate>
             <DataTemplate>
                 <Grid VerticalAlignment="Center">

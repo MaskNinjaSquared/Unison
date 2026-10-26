@@ -19,6 +19,9 @@ namespace Unison.Uwp.Data.Entities
 
         public bool IsWidgetPinned { get; set; }
 
+        /// <summary>WhatsApp Favourites list (favoritesAction).</summary>
+        public bool IsFavorite { get; set; }
+
         /// <summary>Unix seconds; null = not muted.</summary>
         public long? MutedUntil { get; set; }
 

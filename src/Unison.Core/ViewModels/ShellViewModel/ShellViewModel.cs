@@ -15,7 +15,7 @@ namespace Unison.Core.ViewModels
     /// App shell surface (start / login / connected) and chat list/detail pane intent.
     /// Root navigation via <see cref="INavigator"/>; shell sections via NavigateInShell.
     /// </summary>
-    public partial class ShellViewModel : Observable
+    public partial class ShellViewModel : Observable, IForwardMessagePicker
     {
         public const string SurfaceStartup = "Startup";
         public const string SurfaceStart = "Start";
@@ -34,6 +34,9 @@ namespace Unison.Core.ViewModels
 
         /// <summary>Only for the unread total behind the tile badge.</summary>
         private readonly IChatService _chatService;
+
+        /// <summary>Forward send from the people picker (text/caption MVP).</summary>
+        private readonly IMessageService _messageService;
         private readonly IProfileService _profileService;
         private readonly IDispatcher _dispatcher;
         private readonly INotificationService _notificationService;
@@ -48,6 +51,7 @@ namespace Unison.Core.ViewModels
 
         /// <summary>Only for the startup address-book pass over the restored chat list.</summary>
         private readonly IContactService _contactService;
+        private readonly IShareTargetSession _shareTarget;
 
         private bool _isPaneOpen;
         private string _currentUserName;
@@ -68,6 +72,14 @@ namespace Unison.Core.ViewModels
         private bool _initialized;
         private bool _eventsHooked;
         private bool _startInProgress;
+
+        /// <summary>
+        /// In-flight cold start. Concurrent Boot remounts (Mobile double/triple OnLaunched)
+        /// must await this instead of returning while still on Startup — that used to dump a
+        /// registered account onto the language Start screen.
+        /// </summary>
+        private Task _coldStartTask;
+        private readonly object _coldStartGate = new object();
         private bool _startPairingOnLoginSurface = true;
         private double _chatListPaneWidth;
         private readonly NotificationCounterWatch _notificationCounter;
@@ -94,11 +106,14 @@ namespace Unison.Core.ViewModels
             ISessionLogger sessionLogger = null,
             IBackgroundAccessPrompt backgroundAccessPrompt = null,
             IContactService contactService = null,
-            ChatListDeepLinkHoldGate deepLinkHold = null)
+            ChatListDeepLinkHoldGate deepLinkHold = null,
+            IShareTargetSession shareTarget = null,
+            IMessageService messageService = null)
         {
             _chatState = chatState ?? throw new ArgumentNullException(nameof(chatState));
             _connectionService = connectionService ?? throw new ArgumentNullException(nameof(connectionService));
             _chatService = chatService;
+            _messageService = messageService;
             _profileService = profileService;
             _dispatcher = dispatcher;
             _notificationService = notificationService;
@@ -112,12 +127,14 @@ namespace Unison.Core.ViewModels
             _backgroundAccessPrompt = backgroundAccessPrompt;
             _contactService = contactService;
             _deepLinkHold = deepLinkHold;
+            _shareTarget = shareTarget;
 
             _chatListPaneWidth = ReadStoredChatListPaneWidth();
 
             TogglePaneCommand = new RelayCommand(() => IsPaneOpen = !IsPaneOpen);
             NavigateToSectionCommand = new RelayCommand<string>(NavigateToSection);
             OpenProfileSettingsCommand = new RelayCommand(OpenProfileSettings);
+            InitShareCommands();
 
             _navigator.ShellNavigated += Navigator_ShellNavigated;
             _notificationCounter = new NotificationCounterWatch(_chatState.Chats);

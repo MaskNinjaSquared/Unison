@@ -51,6 +51,7 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
         private ChatsView _hookedChats;
         private ArchivedChatsView _hookedArchived;
         private LegacyPivotPlaceholderView _hookedPlaceholder;
+        private FavoritesView _hookedFavorites;
         private StatusView _hookedStatusBar;
         private bool _detailOpen;
         private bool _detailHooked;
@@ -61,11 +62,11 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
         /// <summary>Last People / profile= JID — survives ClearPending before the overlay mounts.</summary>
         private string _profileOverlayJid;
 
+        /// <summary>x:Bind surface for share overlay (same instance as <see cref="_shell"/>).</summary>
+        public ShellViewModel ViewModel => _shell;
+
         public ShellView()
         {
-            InitializeComponent();
-            NavigationCacheMode = NavigationCacheMode.Disabled;
-
             if (App.Services != null)
             {
                 _shell = App.Services.GetRequiredService<ShellViewModel>();
@@ -77,8 +78,11 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                 _strings = App.Services.GetService<IStringResources>();
                 _jids = App.Services.GetService<IJidResolver>();
                 _isWindowsMobile = App.Services.GetService<ISystemInfoProvider>()?.IsMobile() == true;
-                DataContext = _shell;
             }
+
+            InitializeComponent();
+            NavigationCacheMode = NavigationCacheMode.Disabled;
+            DataContext = _shell;
 
             Loaded += OnLoaded;
             Unloaded += OnUnloaded;
@@ -278,6 +282,12 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                 return;
             }
 
+            if (e.PropertyName == nameof(ShellViewModel.PendingOpenChatJid))
+            {
+                _ = EnsureOpenPendingChatFromActivationAsync();
+                return;
+            }
+
             if (e.PropertyName == nameof(ShellViewModel.HidesLegacyShellChrome) ||
                 e.PropertyName == nameof(ShellViewModel.HasOpenStatusDetail) ||
                 e.PropertyName == nameof(ShellViewModel.ChatPane) ||
@@ -306,6 +316,80 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             if (!string.IsNullOrWhiteSpace(jid))
             {
                 _profileOverlayJid = jid.Trim();
+            }
+        }
+
+        private async Task EnsureOpenPendingChatFromActivationAsync()
+        {
+            if (_shell == null || string.IsNullOrWhiteSpace(_shell.PendingOpenChatJid))
+            {
+                return;
+            }
+
+            string jid = _shell.PendingOpenChatJid;
+            ChatItem chat = null;
+            for (int i = 0; i < 50; i++)
+            {
+                jid = _shell.PendingOpenChatJid;
+                if (string.IsNullOrWhiteSpace(jid))
+                {
+                    return;
+                }
+
+                chat = FindChatByJid(jid);
+                if (chat != null)
+                {
+                    break;
+                }
+
+                await Task.Delay(100);
+            }
+
+            if (chat == null)
+            {
+                Debug.WriteLine("[WhatsAppLegacy] Deep-link chat not found yet: " + jid);
+                return;
+            }
+
+            _shell.ClearPendingOpenChatJid();
+            LoadSection(NavigationRoutes.Chats, force: false);
+            await OpenDetailAsync(chat);
+        }
+
+        private ChatItem FindChatByJid(string jid)
+        {
+            if (string.IsNullOrWhiteSpace(jid) || _chatState?.Chats == null)
+            {
+                return null;
+            }
+
+            foreach (ChatItem chat in _chatState.Chats)
+            {
+                if (chat != null && string.Equals(chat.JID, jid, StringComparison.OrdinalIgnoreCase))
+                {
+                    return chat;
+                }
+            }
+
+            return null;
+        }
+
+        private async Task TryApplyPendingShareAsync()
+        {
+            IncomingSharePayload share = _shell?.TakeShareAwaitingChatApply();
+            if (share == null || share.IsEmpty || ShellChatDetail?.ViewModel == null)
+            {
+                return;
+            }
+
+            try
+            {
+                await ShellChatDetail.ViewModel.ApplyIncomingShareAsync(share);
+                _shell?.NotifyShareContentApplied(share);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[WhatsAppLegacy] ApplyIncomingShare failed: " + ex.Message);
             }
         }
 
@@ -769,7 +853,9 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                 _detailOpen = true;
                 ApplyDetailLayout();
                 ApplyShellChrome();
+                ShellChatDetail.PreferFastTimelineLoad = true;
                 await ShellChatDetail.CompleteActiveChatLoadAsync();
+                await TryApplyPendingShareAsync();
             }
             catch (Exception ex)
             {
@@ -885,6 +971,11 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                 placeholder.DebugRequested += List_DebugRequested;
                 placeholder.SettingsRequested += List_SettingsRequested;
             }
+            else if (content is FavoritesView favorites)
+            {
+                _hookedFavorites = favorites;
+                favorites.ChatSelected += LegacyFavorites_ChatSelected;
+            }
             else if (content is StatusView status)
             {
                 _hookedStatusBar = status;
@@ -927,6 +1018,12 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                 _hookedPlaceholder = null;
             }
 
+            if (_hookedFavorites != null)
+            {
+                _hookedFavorites.ChatSelected -= LegacyFavorites_ChatSelected;
+                _hookedFavorites = null;
+            }
+
             if (_hookedStatusBar != null)
             {
                 _hookedStatusBar.SearchRequested -= List_SearchRequested;
@@ -961,6 +1058,18 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
         private void Archived_ChatOpenRequested(object sender, ChatSelectedEventArgs e)
         {
             Chats_ChatOpenRequested(sender, e);
+        }
+
+        private void LegacyFavorites_ChatSelected(
+            object sender,
+            global::Unison.Uwp.UI.Views.ChatSelectedEventArgs e)
+        {
+            if (e?.SelectedChat == null)
+            {
+                return;
+            }
+
+            _ = OpenDetailAsync(e.SelectedChat);
         }
 
         private void List_SearchRequested(object sender, EventArgs e) => EnterSearchState();
@@ -1230,10 +1339,14 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                 return new ArchivedChatsView();
             }
 
-            if (string.Equals(tag, "calls", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(tag, "favorites", StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(tag, "calls", StringComparison.OrdinalIgnoreCase))
             {
                 return new LegacyPivotPlaceholderView();
+            }
+
+            if (string.Equals(tag, "favorites", StringComparison.OrdinalIgnoreCase))
+            {
+                return new FavoritesView();
             }
 
             return new ChatsView();

@@ -257,6 +257,9 @@ Desative depois de diagnosticar: manter ligado deixa o app lento.</value>
   <data name="ChatList_PreviewDocument" xml:space="preserve">
     <value>Documento</value>
   </data>
+  <data name="ChatList_PreviewContact" xml:space="preserve">
+    <value>Contato</value>
+  </data>
   <data name="ChatList_PreviewReaction" xml:space="preserve">
     <value>Reação</value>
   </data>
@@ -679,8 +682,32 @@ Desative depois de diagnosticar: manter ligado deixa o app lento.</value>
   <data name="Favorites_Header.Text" xml:space="preserve">
     <value>Favoritos</value>
   </data>
+  <data name="Favorites_EmptyTitle.Text" xml:space="preserve">
+    <value>Adicionar favoritos</value>
+  </data>
+  <data name="Favorites_AddPeopleOrGroups.Content" xml:space="preserve">
+    <value>Adicionar pessoas ou grupos</value>
+  </data>
+  <data name="Share_PickChat.Text" xml:space="preserve">
+    <value>Enviar para…</value>
+  </data>
+  <data name="Favorites_SortAlphabetical.Text" xml:space="preserve">
+    <value>A-Z</value>
+  </data>
+  <data name="ChatList_AddFavorite.Text" xml:space="preserve">
+    <value>Adicionar aos favoritos</value>
+  </data>
+  <data name="ChatList_RemoveFavorite.Text" xml:space="preserve">
+    <value>Remover dos favoritos</value>
+  </data>
+  <data name="Favorites_OpenChat.Text" xml:space="preserve">
+    <value>Abrir conversa</value>
+  </data>
+  <data name="Favorites_Remove.Text" xml:space="preserve">
+    <value>Remover dos favoritos</value>
+  </data>
   <data name="Favorites_Empty.Text" xml:space="preserve">
-    <value>Os Favoritos São Exibidos nas seções de Conversas e Ligações. Adicione quantas pessoas e quantos grupos você quiser.</value>
+    <value>Os favoritos são exibidos nas abas Conversas e Ligações. Adicione quantas pessoas e quantos grupos você quiser.</value>
   </data>
   <data name="Calls_Header.Text" xml:space="preserve">
     <value>Chamadas</value>
@@ -1044,6 +1071,15 @@ Desative depois de diagnosticar: manter ligado deixa o app lento.</value>
   <data name="ChatDetail_AddContact.Text" xml:space="preserve">
     <value>Adicionar contato</value>
   </data>
+  <data name="MessageContact_Chat.Text" xml:space="preserve">
+    <value>Conversar</value>
+  </data>
+  <data name="MessageContact_Add.Text" xml:space="preserve">
+    <value>Adicionar contato</value>
+  </data>
+  <data name="Message_GroupJoin" xml:space="preserve">
+    <value>{0} entrou no grupo</value>
+  </data>
   <data name="ChatDetail_AddContactLink.Content" xml:space="preserve">
     <value>Adicionar contato</value>
   </data>
@@ -1352,5 +1388,92 @@ Desative depois de diagnosticar: manter ligado deixa o app lento.</value>
   </data>
   <data name="ChatDetail_Back.ToolTip" xml:space="preserve">
     <value>Voltar</value>
+  </data>
+  <data name="ChatDetail_ForwardMessage" xml:space="preserve">
+    <value>Encaminhar</value>
+  </data>
+  <data name="Shell_LegacyPivot_Chats.Header" xml:space="preserve">
+    <value>conversas</value>
+  </data>
+  <data name="Shell_LegacyPivot_Status.Header" xml:space="preserve">
+    <value>status</value>
+  </data>
+  <data name="Shell_LegacyPivot_Archived.Header" xml:space="preserve">
+    <value>arquivadas</value>
+  </data>
+  <data name="Shell_LegacyChatActions_Pin.Label" xml:space="preserve">
+    <value>Fixar</value>
+  </data>
+  <data name="Shell_LegacyChatActions_Unpin.Label" xml:space="preserve">
+    <value>Desafixar</value>
+  </data>
+  <data name="Shell_LegacyChatActions_Mute.Label" xml:space="preserve">
+    <value>Silenciar</value>
+  </data>
+  <data name="Shell_LegacyChatActions_Unmute.Label" xml:space="preserve">
+    <value>Ativar som</value>
+  </data>
+  <data name="Shell_LegacyChatActions_Archive.Label" xml:space="preserve">
+    <value>Arquivar</value>
+  </data>
+  <data name="Shell_LegacyChatActions_Unarchive.Label" xml:space="preserve">
+    <value>Desarquivar</value>
+  </data>
+  <data name="Shell_LegacyChatActions_Delete.Label" xml:space="preserve">
+    <value>Excluir</value>
+  </data>
+  <data name="Shell_LegacyChatActions_ViewProfile.Label" xml:space="preserve">
+    <value>Ver perfil</value>
+  </data>
+  <data name="Shell_LegacyChatActions_PinToStart.Label" xml:space="preserve">
+    <value>Fixar no Iniciar</value>
+  </data>
+  <data name="Shell_LegacyChatActions_UnpinFromStart.Label" xml:space="preserve">
+    <value>Desafixar do Iniciar</value>
+  </data>
+  <data name="Shell_LegacyChatActions_AddContact.Label" xml:space="preserve">
+    <value>Adicionar contato</value>
+  </data>
+  <data name="Shell_LegacyChatActions_AddFavorite.Label" xml:space="preserve">
+    <value>Adicionar aos favoritos</value>
+  </data>
+  <data name="Shell_LegacyChatActions_RemoveFavorite.Label" xml:space="preserve">
+    <value>Remover dos favoritos</value>
+  </data>
+  <data name="Shell_LegacyChatActions_Mute8Hours.Label" xml:space="preserve">
+    <value>8 horas</value>
+  </data>
+  <data name="Shell_LegacyChatActions_Mute1Week.Label" xml:space="preserve">
+    <value>1 semana</value>
+  </data>
+  <data name="Shell_LegacyChatActions_MuteAlways.Label" xml:space="preserve">
+    <value>Sempre</value>
+  </data>
+  <data name="Settings_ProfileHint.Text" xml:space="preserve">
+    <value>Seu nome e foto</value>
+  </data>
+  <data name="Settings_GeneralHint.Text" xml:space="preserve">
+    <value>Live tiles, sessão e contatos</value>
+  </data>
+  <data name="Settings_NotificationsHint.Text" xml:space="preserve">
+    <value>Toasts e badge de mensagens</value>
+  </data>
+  <data name="Settings_CustomizationHint.Text" xml:space="preserve">
+    <value>Tema e idioma</value>
+  </data>
+  <data name="Settings_AccountHint.Text" xml:space="preserve">
+    <value>Desvincular este dispositivo</value>
+  </data>
+  <data name="Debug_SocketSlice.Text" xml:space="preserve">
+    <value>Reescrita do Socket (experimental)</value>
+  </data>
+  <data name="Debug_SocketSliceDesc.Text" xml:space="preserve">
+    <value>Conecta com a nova pilha Unison.Socket usando credenciais temporárias, sem alterar a sessão em que você está conectado. Escaneie o QR para validar o pareamento.</value>
+  </data>
+  <data name="Debug_SocketSliceRun.Content" xml:space="preserve">
+    <value>Executar slice</value>
+  </data>
+  <data name="Debug_SocketSliceStop.Content" xml:space="preserve">
+    <value>Parar</value>
   </data>
 </root>

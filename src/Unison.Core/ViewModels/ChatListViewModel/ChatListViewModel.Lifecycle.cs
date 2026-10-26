@@ -56,6 +56,16 @@ namespace Unison.Core.ViewModels
                 _deepLinkHold.Changed += DeepLinkHold_Changed;
             }
 
+            if (_timelinePriority != null)
+            {
+                _timelinePriority.Changed += TimelinePriority_Changed;
+            }
+
+            if (_appVisibility != null)
+            {
+                _appVisibility.Changed += AppVisibility_Changed;
+            }
+
             _notificationCounter = new NotificationCounterWatch(_chatState.Chats);
             _notificationCounter.Changed += NotificationCounter_Changed;
             RaiseProperties(nameof(NotificationCounterBadge), nameof(NotificationCounterBadgeText));
@@ -180,6 +190,16 @@ namespace Unison.Core.ViewModels
                 _deepLinkHold.Changed -= DeepLinkHold_Changed;
             }
 
+            if (_timelinePriority != null)
+            {
+                _timelinePriority.Changed -= TimelinePriority_Changed;
+            }
+
+            if (_appVisibility != null)
+            {
+                _appVisibility.Changed -= AppVisibility_Changed;
+            }
+
             foreach (var chat in _chatState.Chats)
             {
                 if (chat != null) chat.PropertyChanged -= ChatItem_PropertyChanged;
@@ -195,6 +215,12 @@ namespace Unison.Core.ViewModels
             _refreshCts?.Cancel();
             _refreshContinueCts?.Cancel();
             _pendingVisibleRefreshSource = null;
+            if (_visibleColdPopulate)
+            {
+                _visibleColdPopulate = false;
+                _coldPopulateGate?.Release();
+            }
+
             _batchRendering = false;
             lock (_previewHydrateGate)
             {

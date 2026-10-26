@@ -1078,6 +1078,18 @@
                                    HorizontalAlignment="Center"
                                    VerticalAlignment="Center"/>
                     </AppBarButton>
+                    <AppBarButton x:Name="ForwardMessageButton"
+                                  Style="{StaticResource LegacyAppBarButtonStyle}"
+                                  Label="Forward"
+                                  Command="{Binding ForwardSelectedMessageCommand}">
+                        <!-- Same forward glyph as bubble Forwarded label; Segoe MDL2 (not Fluent). -->
+                        <TextBlock Text="&#xEA54;"
+                                   FontFamily="Segoe MDL2 Assets"
+                                   FontSize="{StaticResource LegacyAppBarGlyphSize}"
+                                   TextLineBounds="Tight"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center"/>
+                    </AppBarButton>
                     <CommandBar.SecondaryCommands>
                         <AppBarButton x:Name="PinFor24HoursButton"
                                       Label="Pin for 24 hours"

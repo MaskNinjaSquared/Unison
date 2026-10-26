@@ -15,11 +15,11 @@ namespace Unison.Uwp.UI.Views
         private DebugViewModel _viewModel;
         private readonly DispatcherTimer _logFlushTimer = new DispatcherTimer
         {
-            Interval = TimeSpan.FromMilliseconds(250)
+            Interval = DebugViewModel.GenerousLogFlushInterval
         };
         private readonly DispatcherTimer _runtimeRefreshTimer = new DispatcherTimer
         {
-            Interval = TimeSpan.FromSeconds(2)
+            Interval = DebugViewModel.GenerousRuntimeRefreshInterval
         };
 
         private DebugViewModel ViewModel
@@ -106,6 +106,8 @@ namespace Unison.Uwp.UI.Views
                 vm.LogTextChanged -= ViewModel_LogTextChanged;
                 vm.LogTextChanged += ViewModel_LogTextChanged;
                 vm.Activate(buildInfo);
+                _logFlushTimer.Interval = vm.LogFlushInterval;
+                _runtimeRefreshTimer.Interval = vm.RuntimeRefreshInterval;
             }
 
             StripToggleLabels(VerboseLoggingToggle);
@@ -140,6 +142,11 @@ namespace Unison.Uwp.UI.Views
 
         private void ViewModel_LogTextChanged(object sender, EventArgs e)
         {
+            if (_viewModel != null && !_viewModel.ShouldAutoScrollLog())
+            {
+                return;
+            }
+
             try
             {
                 SessionLogScroller?.ChangeView(null, SessionLogScroller.ScrollableHeight, null, true);

@@ -22,6 +22,7 @@ using Unison.Core.Helpers;
 using Unison.Uwp.Client;
 using Unison.Uwp.Helpers;
 using Windows.Storage;
+using Unison.WhatsAppClient.Helpers;
 
 namespace Unison.Uwp.Services
 {

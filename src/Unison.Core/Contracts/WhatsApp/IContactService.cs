@@ -22,12 +22,29 @@ namespace Unison.Core.Contracts.WhatsApp
         /// </summary>
         void NotifyDisplayNamesUpdated();
 
+        /// <summary>Host path: an avatar file was written to the local cache for a JID.</summary>
+        void NotifyAvatarCached(string jid, string localAvatarUrl);
+
+        /// <summary>Host path: a phone JID and a LID were newly paired.</summary>
+        void NotifyJidAliasResolved(string phoneJid, string lidJid, string source);
+
         /// <summary>
         /// Best known label for a JID: device address book first, then the push name the account
         /// broadcasts, then the bare number. <paramref name="context"/> only labels the call site
         /// in diagnostics.
         /// </summary>
         string ResolveDisplayName(string jid, string context);
+
+        /// <summary>
+        /// True when <paramref name="jid"/> is the logged-in account (PN, LID, or matching phone digits).
+        /// </summary>
+        bool IsSelf(string jid);
+
+        /// <summary>
+        /// Label for a placeholder 1:1 row: a meaningful display name, or the phone digits when
+        /// the resolver only had a JID / masked stand-in.
+        /// </summary>
+        string ResolvePlaceholderChatName(string jid);
 
         /// <summary>
         /// JID → the name this device's address book has for that person. Empty until the overlay
@@ -54,7 +71,7 @@ namespace Unison.Core.Contracts.WhatsApp
 
         /// <summary>
         /// Owns the avatar batch/backoff policy (which chats need a picture, how often to retry).
-        /// Uses <see cref="IWhatsAppService"/> only for the raw fetch/apply primitives.
+        /// Uses host/wire ports only for the raw fetch/apply primitives.
         /// </summary>
         Task RetrieveContactPicturesAsync(CancellationToken cancellationToken = default(CancellationToken));
 
@@ -113,12 +130,140 @@ namespace Unison.Core.Contracts.WhatsApp
         /// <param name="force">
         /// When true, run even while sync traffic would normally defer usync (first-sync list unlock).
         /// </param>
-        Task ResolveMissingNamesAsync(bool force = false);
+        /// <param name="includeGroupListing">
+        /// When true, unnamed groups may trigger <c>QueryAllGroups</c>. Pass false when a dedicated
+        /// groups phase / <see cref="NotifyBackgroundResolutionDueAsync"/> follows — embedding a
+        /// forced listing inside names held Mobile ~200s and starved the list dispatcher.
+        /// </param>
+        Task ResolveMissingNamesAsync(bool force = false, bool includeGroupListing = true);
+
+        /// <summary>
+        /// Background names then pictures (or schedules a deferred retry). Quiet-wait /
+        /// handshake / catch-up gates run in <see cref="TriggerBackgroundResolution"/> before
+        /// this body; group listing is raised after this.
+        /// </summary>
+        Task RunBackgroundResolutionAsync(CancellationToken cancellationToken = default(CancellationToken));
+
+        /// <summary>
+        /// Host path after quiet/handshake/catch-up/avatar gates: run background names/pictures
+        /// then <see cref="IGroupService.NotifyGroupListingDue"/>.
+        /// </summary>
+        Task NotifyBackgroundResolutionDueAsync(CancellationToken cancellationToken = default(CancellationToken));
+
+        /// <summary>
+        /// Starts the gated background enrichment pass (quiet → handshake → replay/catch-up →
+        /// names/pictures). Replaces any in-flight pass.
+        /// </summary>
+        void TriggerBackgroundResolution();
+
+        /// <summary>
+        /// Avatar-only retry after <see cref="IDeferredAvatarResolution"/> fired. Must not
+        /// re-run name resolution — that loop kept Mobile CPU busy every ~20s after sync.
+        /// </summary>
+        void TriggerDeferredAvatarRetry();
+
+        /// <summary>Cancels an in-flight <see cref="TriggerBackgroundResolution"/> pass.</summary>
+        void CancelBackgroundResolution();
+
+        /// <summary>
+        /// Deferred-startup contact pass after the catalog is normalized: disk avatar hydrate,
+        /// address-book overlay, list relabel, catalog schedule. Optionally starts
+        /// <see cref="ResolveMissingNamesAsync"/> (fire-and-forget) when the list is warm.
+        /// </summary>
+        Task RunDeferredStartupContactPassAsync(bool resolveMissingNames = false);
 
         /// <summary>
         /// Single-chat avatar refresh with in-session dedup (used by UI on load-failure/visibility/JID-alias discovery).
         /// </summary>
         void RequestAvatarRefresh(ChatItem chat, bool force = false);
+
+        /// <summary>
+        /// Drops a pending alias follow-up (persist + dedupe + avatar retry). Called on shutdown.
+        /// </summary>
+        void CancelAliasFollowUp();
+
+        /// <summary>Group subjects from account app-state / listing into the shared name cache.</summary>
+        Task ApplyRemoteGroupSubjectsAsync(IEnumerable<KeyValuePair<string, string>> subjectsByJid);
+
+        /// <summary>One contact name from account app-state.</summary>
+        Task ApplyRemoteContactNameAsync(string jid, string name);
+
+        /// <summary>Self push-name from account app-state.</summary>
+        Task ApplyRemoteSelfPushNameAsync(string name);
+
+        /// <summary>
+        /// Echo / stanza / app-state path that may rename the logged-in account (auth + sidebar).
+        /// </summary>
+        void CaptureSelfPushName(string pushName, string source = null);
+
+        /// <summary>
+        /// Files a push name in the in-memory map and, when the person store needs it, SQLite.
+        /// </summary>
+        void RememberPersonName(string jid, string displayName);
+
+        /// <summary>
+        /// Live/offline envelope push name: self echo goes through
+        /// <see cref="CaptureSelfPushName"/>; peer names through the push-name
+        /// accept decision then <see cref="RememberPersonName"/>.
+        /// </summary>
+        void AcceptIncomingPushName(
+            string rawName,
+            bool isFromMe,
+            string participantJid,
+            string fromJid,
+            bool isOffline);
+
+        /// <summary>
+        /// Stanza <c>notify</c> attribute: file the push name, capture self when linked,
+        /// and relabel placeholder chat rows on the UI thread.
+        /// </summary>
+        void ApplyStanzaNotifyPushName(string fromJid, string notify, string participantJid);
+
+        /// <summary>
+        /// Host socket path: inbound binary-node attrs that may carry a push-name
+        /// <c>notify</c>. No-ops when <paramref name="fromJid"/> / <paramref name="notify"/>
+        /// are blank (host only extracts attrs).
+        /// </summary>
+        void NotifyInboundMessageNode(string fromJid, string notify, string participantJid);
+
+        /// <summary>
+        /// Files PN/LID pairs carried on an inbound envelope (before usync). Source labels
+        /// stay on each pair for diagnostics.
+        /// </summary>
+        void RegisterIncomingEnvelopeAliasHints(
+            string senderLid,
+            string fromJid,
+            string peerRecipientPn,
+            string peerRecipientLid,
+            string recipientJid,
+            string participant,
+            string participantAlt);
+
+        /// <summary>
+        /// Account contact table slice: alias pairs first, then names under every address.
+        /// Pairing before naming so LID rows can borrow the PN label.
+        /// </summary>
+        Task ApplyRemoteContactUpdatesAsync(IReadOnlyList<AccountContactUpdate> contacts);
+
+        /// <summary>
+        /// Startup pass: rewrite list titles from the resolved-name tables when the persisted
+        /// catalogue still shows a number or stale label.
+        /// </summary>
+        Task NormalizePersistedChatNamesAsync();
+
+        /// <summary>
+        /// Relabel chat rows (and members) from the name tables already in memory.
+        /// Call after catch-up or self-name capture learns labels without a full directory refresh.
+        /// </summary>
+        Task ApplyResolvedNamesToChatListAsync();
+
+        /// <summary>
+        /// Group-add path only: file LID↔PN from wire <c>phone_number</c>, then usync those
+        /// few PNs so <see cref="ResolveDisplayName"/> can label a GroupJoin line (avoids bare
+        /// <c>@lid</c>). Never a full roster or list refresh — Mobile-safe for one join event.
+        /// </summary>
+        Task ResolveGroupJoinParticipantsAsync(
+            IEnumerable<KeyValuePair<string, string>> participantJidToPhone);
 
         /// <summary>
         /// User action: resolve a phone number to a WhatsApp JID (new-chat search).

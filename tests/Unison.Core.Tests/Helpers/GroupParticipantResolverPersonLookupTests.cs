@@ -85,7 +85,19 @@ namespace Unison.Core.Tests.Helpers
             {
             }
 
+            public void NotifyAvatarCached(string jid, string localAvatarUrl)
+            {
+            }
+
+            public void NotifyJidAliasResolved(string phoneJid, string lidJid, string source)
+            {
+            }
+
             public string ResolveDisplayName(string jid, string context) => _name;
+
+            public bool IsSelf(string jid) => false;
+
+            public string ResolvePlaceholderChatName(string jid) => _name;
 
             public IReadOnlyDictionary<string, string> PhoneContactNamesByJid { get; } =
                 new Dictionary<string, string>();
@@ -126,11 +138,91 @@ namespace Unison.Core.Tests.Helpers
 
             public bool IsContactRefreshOnCooldown => false;
 
-            public Task ResolveMissingNamesAsync(bool force = false) => Task.CompletedTask;
+            public Task ResolveMissingNamesAsync(bool force = false, bool includeGroupListing = true) =>
+                Task.CompletedTask;
+
+            public Task RunBackgroundResolutionAsync(CancellationToken cancellationToken = default) =>
+                Task.CompletedTask;
+
+            public Task NotifyBackgroundResolutionDueAsync(CancellationToken cancellationToken = default) =>
+                Task.CompletedTask;
+
+            public void TriggerBackgroundResolution()
+            {
+            }
+
+            public void TriggerDeferredAvatarRetry()
+            {
+            }
+
+            public void CancelBackgroundResolution()
+            {
+            }
+
+            public Task RunDeferredStartupContactPassAsync(bool resolveMissingNames = false) =>
+                Task.CompletedTask;
 
             public void RequestAvatarRefresh(ChatItem chat, bool force = false)
             {
             }
+
+            public void CancelAliasFollowUp()
+            {
+            }
+
+            public Task ApplyRemoteGroupSubjectsAsync(
+                IEnumerable<KeyValuePair<string, string>> subjectsByJid) =>
+                Task.CompletedTask;
+
+            public Task ApplyRemoteContactNameAsync(string jid, string name) => Task.CompletedTask;
+
+            public Task ApplyRemoteSelfPushNameAsync(string name) => Task.CompletedTask;
+
+            public void CaptureSelfPushName(string pushName, string source = null)
+            {
+            }
+
+            public void AcceptIncomingPushName(
+                string pushName,
+                bool isGroup,
+                string participantJid,
+                string fromJid,
+                bool isOffline)
+            {
+            }
+
+            public void NotifyInboundMessageNode(string fromJid, string notify, string participantJid) { }
+
+            public void ApplyStanzaNotifyPushName(string fromJid, string notify, string participantJid)
+            {
+            }
+
+            public void RegisterIncomingEnvelopeAliasHints(
+                string senderLid,
+                string fromJid,
+                string peerRecipientPn,
+                string peerRecipientLid,
+                string recipientJid,
+                string participant,
+                string participantAlt)
+            {
+            }
+
+            public void RememberPersonName(string jid, string displayName)
+            {
+            }
+
+            public Task ApplyRemoteContactUpdatesAsync(
+                IReadOnlyList<AccountContactUpdate> contacts) =>
+                Task.CompletedTask;
+
+            public Task NormalizePersistedChatNamesAsync() => Task.CompletedTask;
+
+            public Task ApplyResolvedNamesToChatListAsync() => Task.CompletedTask;
+
+            public Task ResolveGroupJoinParticipantsAsync(
+                IEnumerable<KeyValuePair<string, string>> participantJidToPhone) =>
+                Task.CompletedTask;
 
             public Task<string> SearchContactAsync(string phoneNumber) => Task.FromResult<string>(null);
 

@@ -244,7 +244,7 @@
                    Margin="16,8,16,24"
                    Foreground="{ThemeResource LoginMutedTextBrush}"/>
 
-        <!-- Exit wipe overlay: wave slides down; solid #20C064 fills behind. -->
+        <!-- Exit wipe overlay: wave slides down; solid #20C064 fills behind (logout resets to Unison). -->
         <Grid x:Name="LoginExitOverlay"
               Grid.RowSpan="3"
               Visibility="Collapsed"

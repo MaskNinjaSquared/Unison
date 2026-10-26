@@ -4,13 +4,21 @@ using System.Diagnostics;
 using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
 using Unison.Core.Contracts;
+using Unison.Core.Contracts.WhatsApp;
+using Unison.Core.Helpers;
 using Unison.Core.Models;
 using Unison.Core.ViewModels;
+using Windows.Devices.Input;
 using Windows.Foundation;
+using Windows.System;
+using Windows.UI.Core;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
+using Windows.UI.Xaml.Input;
 using Windows.UI.Xaml.Media;
+using Unison.Uwp.Helpers;
 using Unison.Uwp.Services;
+using Unison.Uwp.UI.Helpers;
 using Unison.Uwp.UI.Templates;
 
 namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
@@ -78,7 +86,18 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
         /// reported to the shell as if the user had clicked.
         /// </summary>
         private bool _suppressSelectionChanged;
+
+        /// <summary>
+        /// Mouse right-click must not open the chat via <see cref="ChatList_SelectionChanged"/>.
+        /// </summary>
+        private bool _ignoreNextSelectionFromContext;
         private int _containerChangingCount;
+
+        /// <summary>Same gate as message bubbles: Hold must not also open the desktop MenuFlyout.</summary>
+        private readonly MessageBubbleContextGestureGate _rowContextGate =
+            new MessageBubbleContextGestureGate();
+
+        private ChatItem _actionsChat;
 
         public ChatListView()
             : this(null, null)
@@ -325,6 +344,21 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
 
         private void ChatList_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
+            // Right-button press selects the row before RightTapped; do not open the chat.
+            if (_ignoreNextSelectionFromContext || IsRightMouseButtonDown())
+            {
+                Debug.WriteLine(
+                    "[ChatListContext] SelectionChanged ignored (right-click); flag=" +
+                    _ignoreNextSelectionFromContext +
+                    "; rightDown=" + IsRightMouseButtonDown());
+                _ignoreNextSelectionFromContext = false;
+                ChatItem keep = e.RemovedItems != null && e.RemovedItems.Count > 0
+                    ? e.RemovedItems[0] as ChatItem
+                    : ViewModel?.ResolveLastSelection();
+                SetSelectionQuiet(keep);
+                return;
+            }
+
             if (_suppressSelectionChanged || ViewModel == null || ViewModel.IsRefreshing)
             {
                 return;
@@ -345,6 +379,8 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                 return;
             }
 
+            DismissChatActions();
+
             if (ViewModel.TryOpenCommunityHub(chat))
             {
                 SetSelectionQuiet(null);
@@ -364,6 +400,23 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
 
         private void CommunityHubList_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
+            if (_ignoreNextSelectionFromContext || IsRightMouseButtonDown())
+            {
+                _ignoreNextSelectionFromContext = false;
+                ChatItem keep = e.RemovedItems != null && e.RemovedItems.Count > 0
+                    ? e.RemovedItems[0] as ChatItem
+                    : null;
+                if (sender is ListView hub)
+                {
+                    bool previous = _suppressSelectionChanged;
+                    _suppressSelectionChanged = true;
+                    hub.SelectedItem = keep;
+                    _suppressSelectionChanged = previous;
+                }
+
+                return;
+            }
+
             if (_suppressSelectionChanged || ViewModel == null)
             {
                 return;
@@ -553,20 +606,76 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
 
         private void ChatList_ContainerContentChanging(ListViewBase sender, ContainerContentChangingEventArgs args)
         {
-            if (args == null || args.InRecycleQueue || args.Item == null)
+            HandleLegacyRowContainerChanging(args, trace: true);
+        }
+
+        private void CommunityHubList_ContainerContentChanging(ListViewBase sender, ContainerContentChangingEventArgs args)
+        {
+            HandleLegacyRowContainerChanging(args, trace: false);
+        }
+
+        private void HandleLegacyRowContainerChanging(ContainerContentChangingEventArgs args, bool trace)
+        {
+            if (args == null)
             {
                 return;
             }
 
-            _containerChangingCount++;
-            if (_containerChangingCount <= 5 || (_containerChangingCount % 25) == 0)
+            var container = args.ItemContainer as ListViewItem;
+            if (container == null)
             {
-                TraceListUi(
-                    "container-changing",
-                    "n=" + _containerChangingCount +
-                    "; phase=" + args.Phase +
-                    "; visibleVm=" + (ViewModel?.VisibleChats?.Count ?? 0),
-                    flush: _containerChangingCount <= 3);
+                return;
+            }
+
+            // Hold → CommandBar. Detach template Grid.ContextFlyout so the platform cannot
+            // auto-open MenuFlyout on Mobile Hold (Hide() races and loses). Mouse ShowAt
+            // uses the stashed flyout (ChatItemTemplates.DetachRowContextFlyoutForLegacyHold).
+            container.ContextFlyout = null;
+            ChatItemTemplates.DetachRowContextFlyoutForLegacyHold(container);
+            container.IsHoldingEnabled = true;
+            container.IsRightTapEnabled = true;
+            container.Holding -= ChatRow_Holding;
+            container.PointerPressed -= ChatRow_PointerPressed;
+            container.RightTapped -= ChatRow_RightTapped;
+            container.ContextRequested -= ChatRow_ContextRequested;
+
+            if (args.InRecycleQueue || args.Item == null)
+            {
+                return;
+            }
+
+            // Recycled roots may get a fresh template with ContextFlyout again.
+            ChatItemTemplates.DetachRowContextFlyoutForLegacyHold(container);
+            // Phase 0 often runs before ContentTemplateRoot exists — detach again once realized.
+            if (container.ContentTemplateRoot == null && args.Phase == 0)
+            {
+                args.RegisterUpdateCallback((s, e) =>
+                {
+                    var late = e.ItemContainer as ListViewItem;
+                    if (late != null && e.Item != null)
+                    {
+                        ChatItemTemplates.DetachRowContextFlyoutForLegacyHold(late);
+                    }
+                });
+            }
+
+            container.Holding += ChatRow_Holding;
+            container.PointerPressed += ChatRow_PointerPressed;
+            container.RightTapped += ChatRow_RightTapped;
+            container.ContextRequested += ChatRow_ContextRequested;
+
+            if (trace)
+            {
+                _containerChangingCount++;
+                if (_containerChangingCount <= 5 || (_containerChangingCount % 25) == 0)
+                {
+                    TraceListUi(
+                        "container-changing",
+                        "n=" + _containerChangingCount +
+                        "; phase=" + args.Phase +
+                        "; visibleVm=" + (ViewModel?.VisibleChats?.Count ?? 0),
+                        flush: _containerChangingCount <= 3);
+                }
             }
 
             // On demand, and only for rows that actually reached the screen. Fetching every
@@ -584,6 +693,707 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                     "n=" + _containerChangingCount);
                 _ = RuntimeDiagnosticsService.Instance.FlushAsync("chat-list-ui:row-realized-failed");
             }
+        }
+
+        private void ChatRow_Holding(object sender, HoldingRoutedEventArgs e)
+        {
+            if (e.HoldingState != Windows.UI.Input.HoldingState.Started)
+            {
+                return;
+            }
+
+            // Mouse right-click must open MenuFlyout, not the Legacy CommandBar.
+            if (e.PointerDeviceType == PointerDeviceType.Mouse)
+            {
+                Debug.WriteLine("[ChatListContext] Holding ignored (mouse)");
+                return;
+            }
+
+            e.Handled = true;
+            if (!_rowContextGate.TryBeginFromHold())
+            {
+                Debug.WriteLine("[ChatListContext] Holding suppressed by gate");
+                return;
+            }
+
+            var container = sender as ListViewItem;
+            ChatItemTemplates.HideRowContextMenu(container);
+            Debug.WriteLine(
+                "[ChatListContext] Holding → CommandBar chat=" +
+                (ResolveContainerChat(container)?.JID ?? "(null)"));
+            OpenChatActions(ResolveContainerChat(container));
+        }
+
+        /// <summary>
+        /// ListView selects on PointerPressed (including right button) before RightTapped /
+        /// ContextRequested. Arm the selection ignore here without marking Handled — Handled
+        /// would kill RightTapped and the menu would never open.
+        /// </summary>
+        private void ChatList_PointerPressed(object sender, PointerRoutedEventArgs e)
+        {
+            ArmIgnoreSelectionIfRightButton(e, "list");
+        }
+
+        private void ChatRow_PointerPressed(object sender, PointerRoutedEventArgs e)
+        {
+            ArmIgnoreSelectionIfRightButton(e, "row");
+        }
+
+        private void ArmIgnoreSelectionIfRightButton(PointerRoutedEventArgs e, string source)
+        {
+            if (e == null)
+            {
+                return;
+            }
+
+            try
+            {
+                if (e.GetCurrentPoint(null).Properties.IsRightButtonPressed)
+                {
+                    _ignoreNextSelectionFromContext = true;
+                    Debug.WriteLine(
+                        "[ChatListContext] PointerPressed right → ignoreSelection=true (" +
+                        source + ")");
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[ChatListContext] PointerPressed arm failed: " + ex.Message);
+            }
+        }
+
+        /// <summary>
+        /// True while the mouse right button is held — SelectionChanged often runs during
+        /// PointerPressed before our handler can arm <see cref="_ignoreNextSelectionFromContext"/>.
+        /// </summary>
+        private static bool IsRightMouseButtonDown()
+        {
+            try
+            {
+                CoreWindow window = Window.Current?.CoreWindow;
+                if (window == null)
+                {
+                    return false;
+                }
+
+                CoreVirtualKeyStates state = window.GetKeyState(VirtualKey.RightButton);
+                return (state & CoreVirtualKeyStates.Down) == CoreVirtualKeyStates.Down;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Desktop mouse only. Touch long-press uses Holding → CommandBar (RightTapped echo is ignored).
+        /// </summary>
+        private void ChatList_RightTapped(object sender, RightTappedRoutedEventArgs e)
+        {
+            Debug.WriteLine(
+                "[ChatListContext] List RightTapped; device=" +
+                (e == null ? "(null)" : e.PointerDeviceType.ToString()) +
+                "; handled=" + (e != null && e.Handled));
+            HandleMouseRightTap(
+                e,
+                e == null ? null : FindListViewItem(e.OriginalSource as DependencyObject),
+                container => e.GetPosition(container));
+        }
+
+        private void ChatRow_RightTapped(object sender, RightTappedRoutedEventArgs e)
+        {
+            Debug.WriteLine(
+                "[ChatListContext] Row RightTapped; device=" +
+                (e == null ? "(null)" : e.PointerDeviceType.ToString()) +
+                "; handled=" + (e != null && e.Handled) +
+                "; sender=" + (sender?.GetType().Name ?? "(null)"));
+            HandleMouseRightTap(e, sender as ListViewItem, container => e.GetPosition(container));
+        }
+
+        private void ChatList_ContextRequested(object sender, ContextRequestedEventArgs e)
+        {
+            Debug.WriteLine(
+                "[ChatListContext] List ContextRequested; handled=" + (e != null && e.Handled));
+            HandleMouseContextRequested(
+                e,
+                FindListViewItem(e.OriginalSource as DependencyObject));
+        }
+
+        private void ChatRow_ContextRequested(object sender, ContextRequestedEventArgs e)
+        {
+            Debug.WriteLine(
+                "[ChatListContext] Row ContextRequested; handled=" + (e != null && e.Handled) +
+                "; sender=" + (sender?.GetType().Name ?? "(null)"));
+            HandleMouseContextRequested(e, sender as ListViewItem);
+        }
+
+        private void HandleMouseRightTap(
+            RightTappedRoutedEventArgs e,
+            ListViewItem container,
+            Func<ListViewItem, Point> position)
+        {
+            if (e == null)
+            {
+                Debug.WriteLine("[ChatListContext] RightTap skip: e null");
+                return;
+            }
+
+            if (e.Handled)
+            {
+                Debug.WriteLine("[ChatListContext] RightTap skip: already Handled");
+                return;
+            }
+
+            if (e.PointerDeviceType != PointerDeviceType.Mouse)
+            {
+                Debug.WriteLine(
+                    "[ChatListContext] RightTap skip: device=" + e.PointerDeviceType);
+                return;
+            }
+
+            if (container == null)
+            {
+                Debug.WriteLine("[ChatListContext] RightTap skip: no ListViewItem");
+                return;
+            }
+
+            if (!TryShowRowContextMenu(container, position(container)))
+            {
+                Debug.WriteLine("[ChatListContext] RightTap TryShow failed");
+                return;
+            }
+
+            e.Handled = true;
+            Debug.WriteLine("[ChatListContext] RightTap menu shown");
+        }
+
+        private void HandleMouseContextRequested(ContextRequestedEventArgs e, ListViewItem container)
+        {
+            if (e == null || e.Handled)
+            {
+                Debug.WriteLine("[ChatListContext] ContextRequested skip: null/handled");
+                return;
+            }
+
+            if (container == null)
+            {
+                Debug.WriteLine("[ChatListContext] ContextRequested skip: no ListViewItem");
+                return;
+            }
+
+            Point at = new Point(double.NaN, double.NaN);
+            e.TryGetPosition(container, out at);
+            if (!TryShowRowContextMenu(container, at))
+            {
+                Debug.WriteLine("[ChatListContext] ContextRequested TryShow failed");
+                return;
+            }
+
+            e.Handled = true;
+            Debug.WriteLine("[ChatListContext] ContextRequested menu shown");
+        }
+
+        private bool TryShowRowContextMenu(ListViewItem container, Point position)
+        {
+            ChatItem chat = ResolveContainerChat(container);
+            if (container == null || chat == null)
+            {
+                Debug.WriteLine(
+                    "[ChatListContext] TryShow abort: container=" +
+                    (container != null) + "; chat=" + (chat != null));
+                return false;
+            }
+
+            if (ChatItemTemplates.ResolveRowContextMenu(container) == null)
+            {
+                Debug.WriteLine(
+                    "[ChatListContext] TryShow abort: ResolveRowContextMenu null; jid=" +
+                    (chat.JID ?? "?"));
+                return false;
+            }
+
+            if (!_rowContextGate.TryBeginFromRightTap())
+            {
+                Debug.WriteLine(
+                    "[ChatListContext] TryShow abort: gesture gate blocked; jid=" +
+                    (chat.JID ?? "?"));
+                return false;
+            }
+
+            // Belt-and-suspenders: PointerPressed usually armed this already; SelectionChanged
+            // may have consumed it when the pressed row was already selected.
+            _ignoreNextSelectionFromContext = true;
+            if (!ChatItemTemplates.TryShowRowContextMenu(container, position))
+            {
+                _ignoreNextSelectionFromContext = false;
+                Debug.WriteLine(
+                    "[ChatListContext] TryShow abort: ShowAt failed; jid=" + (chat.JID ?? "?"));
+                return false;
+            }
+
+            // Same-row right-click never hits SelectionChanged — do not leave ignore sticky
+            // or the next left-click would be swallowed.
+            _ignoreNextSelectionFromContext = false;
+            Debug.WriteLine(
+                "[ChatListContext] TryShow OK; jid=" + (chat.JID ?? "?") +
+                "; pos=" + position.X.ToString("0") + "," + position.Y.ToString("0"));
+            return true;
+        }
+
+        private static ListViewItem FindListViewItem(DependencyObject start)
+        {
+            DependencyObject current = start;
+            while (current != null)
+            {
+                if (current is ListViewItem item)
+                {
+                    return item;
+                }
+
+                current = VisualTreeHelper.GetParent(current);
+            }
+
+            return null;
+        }
+
+        private static ChatItem ResolveContainerChat(ListViewItem container)
+        {
+            if (container == null)
+            {
+                return null;
+            }
+
+            if (container.Content is ChatItem asContent)
+            {
+                return asContent;
+            }
+
+            if (container.DataContext is ChatItem fromDc)
+            {
+                return fromDc;
+            }
+
+            if (container.Content is FrameworkElement root && root.DataContext is ChatItem fromRoot)
+            {
+                return fromRoot;
+            }
+
+            return null;
+        }
+
+        private void OpenChatActions(ChatItem chat)
+        {
+            if (chat == null || ChatActionsScrim == null || ChatActionsBarHost == null)
+            {
+                return;
+            }
+
+            try
+            {
+                App.Services?.GetService<IChatStore>()?.ApplyTo(chat);
+            }
+            catch
+            {
+            }
+
+            _actionsChat = chat;
+            ApplyChatActionsChrome(chat);
+            // Same as ChatDetail MessageActions: scrim over list, bar on row 3 above ListCommandBar.
+            if (ListCommandBarHost != null)
+            {
+                ListCommandBarHost.IsHitTestVisible = false;
+            }
+
+            if (ChatList != null)
+            {
+                ChatList.IsHitTestVisible = false;
+            }
+
+            if (CommunityHubList != null)
+            {
+                CommunityHubList.IsHitTestVisible = false;
+            }
+
+            ChatActionsScrim.Visibility = Visibility.Visible;
+            ChatActionsBarHost.Visibility = Visibility.Visible;
+            LegacyCommandBarLayout.CenterPrimaryCommands(ChatActionsBar);
+        }
+
+        private void DismissChatActions()
+        {
+            _actionsChat = null;
+            if (ChatActionsScrim != null)
+            {
+                ChatActionsScrim.Visibility = Visibility.Collapsed;
+            }
+
+            if (ChatActionsBarHost != null)
+            {
+                ChatActionsBarHost.Visibility = Visibility.Collapsed;
+            }
+
+            if (ListCommandBarHost != null)
+            {
+                ListCommandBarHost.IsHitTestVisible = true;
+            }
+
+            if (ChatList != null)
+            {
+                ChatList.IsHitTestVisible = true;
+            }
+
+            if (CommunityHubList != null)
+            {
+                CommunityHubList.IsHitTestVisible = true;
+            }
+        }
+
+        private void ApplyChatActionsChrome(ChatItem chat)
+        {
+            if (chat == null)
+            {
+                return;
+            }
+
+            bool pinned = chat.IsChatPinned;
+            bool muted = chat.IsMutedLocally;
+            bool archived = chat.Status == ChatStatus.Archived;
+            bool liveTiles;
+            try
+            {
+                var provider = App.Services?.GetService<ISystemInfoProvider>();
+                liveTiles = provider != null
+                    ? provider.LiveTilesCompatible()
+                    : SystemInfoProvider.DetectLiveTilesCompatible();
+            }
+            catch
+            {
+                liveTiles = SystemInfoProvider.DetectLiveTilesCompatible();
+            }
+
+            if (ChatActionsPinButton != null)
+            {
+                ChatActionsPinButton.Label = pinned
+                    ? LocalizedStrings.Get("Shell_LegacyChatActions_Unpin.Label", "Unpin")
+                    : LocalizedStrings.Get("Shell_LegacyChatActions_Pin.Label", "Pin");
+            }
+
+            if (ChatActionsMuteButton != null)
+            {
+                ChatActionsMuteButton.Label = muted
+                    ? LocalizedStrings.Get("Shell_LegacyChatActions_Unmute.Label", "Unmute")
+                    : LocalizedStrings.Get("Shell_LegacyChatActions_Mute.Label", "Mute");
+            }
+
+            if (ChatActionsArchiveButton != null)
+            {
+                ChatActionsArchiveButton.Label = archived
+                    ? LocalizedStrings.Get("Shell_LegacyChatActions_Unarchive.Label", "Unarchive")
+                    : LocalizedStrings.Get("Shell_LegacyChatActions_Archive.Label", "Archive");
+            }
+
+            bool canViewProfile = !chat.IsGroup &&
+                                  !chat.IsCommunityAnnounce &&
+                                  chat.Kind != ChatKind.Community &&
+                                  !string.IsNullOrWhiteSpace(chat.JID);
+            SetAppBarVisibility(ChatActionsViewProfileButton, canViewProfile);
+
+            bool canAdd = false;
+            try
+            {
+                canAdd = App.Services?.GetService<IContactService>()?.CanAddToAddressBook(chat.JID) == true;
+            }
+            catch
+            {
+            }
+
+            SetAppBarVisibility(ChatActionsAddContactButton, canAdd);
+
+            if (ChatActionsFavoriteButton != null)
+            {
+                ChatActionsFavoriteButton.Label = chat.IsFavorite
+                    ? LocalizedStrings.Get("Shell_LegacyChatActions_RemoveFavorite.Label", "Remove from favorites")
+                    : LocalizedStrings.Get("Shell_LegacyChatActions_AddFavorite.Label", "Add to favorites");
+                SetAppBarVisibility(ChatActionsFavoriteButton, true);
+            }
+
+            if (ChatActionsPinToStartButton != null)
+            {
+                ChatActionsPinToStartButton.Label = chat.IsWidgetPinned
+                    ? LocalizedStrings.Get("Shell_LegacyChatActions_UnpinFromStart.Label", "Unpin from Start")
+                    : LocalizedStrings.Get("Shell_LegacyChatActions_PinToStart.Label", "Pin to Start");
+                SetAppBarVisibility(ChatActionsPinToStartButton, liveTiles);
+            }
+
+            SetAppBarVisibility(ChatActionsMute8hButton, !muted);
+            SetAppBarVisibility(ChatActionsMute1wButton, !muted);
+            SetAppBarVisibility(ChatActionsMuteForeverButton, !muted);
+        }
+
+        private static void SetAppBarVisibility(AppBarButton button, bool visible)
+        {
+            if (button != null)
+            {
+                button.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
+            }
+        }
+
+        private void ChatActionsBar_Loaded(object sender, RoutedEventArgs e)
+        {
+            if (ChatActionsDeleteButton != null)
+            {
+                ChatActionsDeleteButton.Label = LocalizedStrings.Get(
+                    "Shell_LegacyChatActions_Delete.Label", "Delete");
+            }
+
+            if (ChatActionsViewProfileButton != null)
+            {
+                ChatActionsViewProfileButton.Label = LocalizedStrings.Get(
+                    "Shell_LegacyChatActions_ViewProfile.Label", "View profile");
+            }
+
+            if (ChatActionsAddContactButton != null)
+            {
+                ChatActionsAddContactButton.Label = LocalizedStrings.Get(
+                    "Shell_LegacyChatActions_AddContact.Label", "Add contact");
+            }
+
+            if (ChatActionsMute8hButton != null)
+            {
+                ChatActionsMute8hButton.Label = LocalizedStrings.Get(
+                    "Shell_LegacyChatActions_Mute8Hours.Label", "8 hours");
+            }
+
+            if (ChatActionsMute1wButton != null)
+            {
+                ChatActionsMute1wButton.Label = LocalizedStrings.Get(
+                    "Shell_LegacyChatActions_Mute1Week.Label", "1 week");
+            }
+
+            if (ChatActionsMuteForeverButton != null)
+            {
+                ChatActionsMuteForeverButton.Label = LocalizedStrings.Get(
+                    "Shell_LegacyChatActions_MuteAlways.Label", "Always");
+            }
+
+            LegacyCommandBarLayout.CenterPrimaryCommands(sender as CommandBar);
+        }
+
+        private void ChatActionsScrim_PointerPressed(object sender, PointerRoutedEventArgs e)
+        {
+            if (e == null)
+            {
+                return;
+            }
+
+            e.Handled = true;
+            TryDismissChatActionsFromScrim();
+        }
+
+        private void ChatActionsScrim_Tapped(object sender, TappedRoutedEventArgs e)
+        {
+            e.Handled = true;
+            TryDismissChatActionsFromScrim();
+        }
+
+        private void TryDismissChatActionsFromScrim()
+        {
+            // Swallow only the opening finger-up that landed on the new scrim.
+            // Do not keep a 500ms grace — that made "click outside" look dead on PC.
+            if (!_rowContextGate.ShouldDismissFromScrim(DateTime.UtcNow, ignoreGraceWindow: true))
+            {
+                return;
+            }
+
+            DismissChatActions();
+        }
+
+        private void ChatActionsPin_Click(object sender, RoutedEventArgs e)
+        {
+            var chat = _actionsChat;
+            if (chat == null)
+            {
+                return;
+            }
+
+            SetChatPinned(chat, !chat.IsChatPinned);
+            DismissChatActions();
+        }
+
+        private void ChatActionsMute_Click(object sender, RoutedEventArgs e)
+        {
+            var chat = _actionsChat;
+            if (chat == null)
+            {
+                return;
+            }
+
+            if (chat.IsMutedLocally)
+            {
+                SetLocalMute(chat, null);
+                DismissChatActions();
+                return;
+            }
+
+            // Not muted: open the overflow so the user picks a duration (same place as More).
+            if (ChatActionsBar != null)
+            {
+                ChatActionsBar.IsOpen = true;
+            }
+        }
+
+        private void ChatActionsArchive_Click(object sender, RoutedEventArgs e)
+        {
+            var chat = _actionsChat;
+            if (chat == null)
+            {
+                return;
+            }
+
+            if (chat.Status == ChatStatus.Archived)
+            {
+                UnarchiveChat(chat);
+            }
+            else
+            {
+                ArchiveChat(chat);
+            }
+
+            DismissChatActions();
+        }
+
+        private void ChatActionsDelete_Click(object sender, RoutedEventArgs e)
+        {
+            var chat = _actionsChat;
+            if (chat == null)
+            {
+                return;
+            }
+
+            DeleteChat(chat);
+            DismissChatActions();
+        }
+
+        private void ChatActionsViewProfile_Click(object sender, RoutedEventArgs e)
+        {
+            ViewProfile(_actionsChat);
+            DismissChatActions();
+        }
+
+        private void ChatActionsPinToStart_Click(object sender, RoutedEventArgs e)
+        {
+            PinChatToStart(_actionsChat);
+            DismissChatActions();
+        }
+
+        private async void ChatActionsFavorite_Click(object sender, RoutedEventArgs e)
+        {
+            var chat = _actionsChat;
+            DismissChatActions();
+            if (chat == null)
+            {
+                return;
+            }
+
+            IChatService chats = null;
+            try
+            {
+                chats = App.Services?.GetService<IChatService>();
+            }
+            catch
+            {
+            }
+
+            if (chats == null)
+            {
+                return;
+            }
+
+            try
+            {
+                await chats.SetFavoriteAsync(chat, !chat.IsFavorite);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[ChatListView] Favorite failed: " + ex.Message);
+            }
+        }
+
+        private async void ChatActionsAddContact_Click(object sender, RoutedEventArgs e)
+        {
+            var chat = _actionsChat;
+            DismissChatActions();
+            if (chat == null)
+            {
+                return;
+            }
+
+            IContactService contacts = null;
+            try
+            {
+                contacts = App.Services?.GetService<IContactService>();
+            }
+            catch
+            {
+            }
+
+            if (contacts == null)
+            {
+                return;
+            }
+
+            IStringResources strings = null;
+            try
+            {
+                strings = App.Services?.GetService<IStringResources>();
+            }
+            catch
+            {
+            }
+
+            try
+            {
+                await contacts.ShowAddToAddressBookAsync(
+                    chat.GetNameResolved(strings),
+                    contacts.TryResolvePhone(chat.JID),
+                    chat.GetAvatarUrl(preferHigh: true),
+                    chat.JID);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[ChatListView] Add contact failed: " + ex.Message);
+            }
+        }
+
+        private void ChatActionsMute8h_Click(object sender, RoutedEventArgs e) =>
+            MuteActionsChatWith(c => c.MuteUntilEightHoursFromNow());
+
+        private void ChatActionsMute1w_Click(object sender, RoutedEventArgs e) =>
+            MuteActionsChatWith(c => c.MuteUntilOneWeekFromNow());
+
+        private void ChatActionsMuteForever_Click(object sender, RoutedEventArgs e) =>
+            MuteActionsChatWith(c => c.MuteForeverUnixSeconds);
+
+        private void MuteActionsChatWith(Func<IChatService, long> untilFactory)
+        {
+            var chat = _actionsChat;
+            IChatService chats = null;
+            try
+            {
+                chats = App.Services?.GetService<IChatService>();
+            }
+            catch
+            {
+            }
+
+            if (chat == null || chats == null || untilFactory == null)
+            {
+                DismissChatActions();
+                return;
+            }
+
+            SetLocalMute(chat, untilFactory(chats));
+            DismissChatActions();
         }
 
         private static void TraceListUi(string eventName, string details, bool flush)

@@ -609,7 +609,8 @@
             </Button>
 
             <!-- Messages List: transparent containers so recycle does not flash opaque ListViewItem chrome over the wallpaper. -->
-            <ListView Grid.Row="2" x:Name="MessageListView" 
+            <Grid Grid.Row="2">
+            <ListView x:Name="MessageListView" 
                       ItemTemplateSelector="{StaticResource MessageTemplateSelector}"
                       SelectionMode="None"
                       IsItemClickEnabled="False"
@@ -648,6 +649,14 @@
                     </ItemsPanelTemplate>
                 </ListView.ItemsPanel>
             </ListView>
+            <!-- Unison: thin header bar alone is easy to miss — centre ring while timeline loads. -->
+            <controls:ModernProgressRing Width="36" Height="36"
+                                         HorizontalAlignment="Center"
+                                         VerticalAlignment="Center"
+                                         IsHitTestVisible="False"
+                                         IsActive="{Binding IsTimelineBusy}"
+                                         Visibility="{Binding IsTimelineBusy, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+            </Grid>
 
             <Button x:Name="ScrollToBottomButton"
                     Grid.Row="2"

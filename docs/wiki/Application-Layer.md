@@ -23,23 +23,23 @@ Unison.Core/
 
 ### WhatsApp contracts
 
-| Interface | Facade (UWP) | Responsibility |
+| Interface | Implementation | Responsibility |
 |---|---|---|
-| `IJidResolver` | `JidResolver` | Canonical JID + PN/LID alias lookup (wraps the client table until it moves) |
-| `IConnectionService` | `ConnectionFacade` | Pairing (QR / code), disconnect policy, server logout, session wipe, startup order (`InitializeConnectionStateAsync`, `IsRegisteredAsync`, `EnsureConnectedAsync`, `LoadPersistedUiStateAsync`, `StartDeferredStartupMaintenance`, `IsConnected`) |
-| `IMessageService` | `MessageFacade` | Send, on-demand media, message pin, reactions, `GetChatMessage`, new chat |
-| `IChatService` | `ChatFacade` | Account pin/unpin (app-state) + mark-read, active chat, unread total, list-row persist + SQLite preview reconcile |
-| `IGroupService` | `GroupFacade` | Group listing, send-permission refresh, roster hydrate, the full-size group picture and member pictures |
-| `IContactService` | `ContactFacade` | Address-book overlay, name refresh, avatar policy, phone search, People add-contact card, optional Unison `UserDataAccount` in People |
-| `IProfileService` | `ProfileFacade` | “Me” hydrate + profile picture IQ |
-| `IHistoryService` | `HistoryFacade` | Sync status, chunks, on-demand full resync, initial-sync counters + frugal budget |
-| `IStatusService` | `StatusFacade` | Active Status authors/items, live status@broadcast ingest, on-demand media |
-| `IDebugSendService` | `DebugSendService` | File-watch test send (`#if DEBUG`) |
-| `IWhatsAppService` | `WhatsAppService` | Compatibility client (socket, in-memory chats, persist) |
+| `IJidResolver` | `JidResolver` (UWP) | Canonical JID + PN/LID alias lookup (wraps the client table until it moves) |
+| `IConnectionService` | `ConnectionFacade` (WhatsAppClient) | Pairing (QR / code), disconnect policy, server logout, session wipe, startup order (`InitializeConnectionStateAsync`, `IsRegisteredAsync`, `EnsureConnectedAsync`, `LoadPersistedUiStateAsync`, `StartDeferredStartupMaintenance`, `IsConnected`) |
+| `IMessageService` | `MessageFacade` (WhatsAppClient) | Send, on-demand media, message pin, reactions, `GetChatMessage`, new chat |
+| `IChatService` | `ChatFacade` (WhatsAppClient) | Account pin/unpin (app-state) + mark-read, active chat, unread total, list-row persist + SQLite preview reconcile |
+| `IGroupService` | `GroupFacade` (WhatsAppClient) | Group listing, send-permission refresh, roster hydrate, the full-size group picture and member pictures |
+| `IContactService` | `ContactFacade` (WhatsAppClient) | Address-book overlay, name refresh, avatar policy, phone search, People add-contact card, optional Unison `UserDataAccount` in People |
+| `IProfileService` | `ProfileFacade` (WhatsAppClient) | “Me” hydrate + profile picture IQ |
+| `IHistoryService` | `HistoryFacade` (WhatsAppClient) | Sync status, chunks, on-demand full resync, initial-sync counters + frugal budget |
+| `IStatusService` | `StatusFacade` (WhatsAppClient) | Active Status authors/items, live status@broadcast ingest, on-demand media |
+| `IDebugSendService` | `DebugSendService` (UWP) | File-watch test send (`#if DEBUG`) |
+| *(concrete)* | `WhatsAppService` (UWP) | Compatibility client + host ports (socket, persist); not registered as an aggregating façade contract |
 
 `IPairingService` stays in `Contracts/` (not under `WhatsApp/`). Login talks to `IConnectionService`, which owns pairing.
 
-Raw events on `IWhatsAppService` are **for facades only**. Each facade re-publishes the subject it owns. A ViewModel that subscribes to the client directly is coupling itself to the class that happens to produce the event today.
+Raw connection events live on `IConnectionEventSource` / other host ports and are **for façades only**. Each façade re-publishes the subject it owns. A ViewModel that subscribes to the client directly is coupling itself to the class that happens to produce the event today.
 
 ### Platform contracts (implemented in UWP)
 
@@ -60,20 +60,38 @@ Raw events on `IWhatsAppService` are **for facades only**. Each facade re-publis
 Registered in `App.ConfigureServices`. Do not recreate leftover `MessageService` / `ContactService` / `ConnectionService` / `ProfileService` next to the façades.
 
 ```
-Unison.Uwp/Services/WhatsApp/
-  Connection/ConnectionFacade.cs
-  Messages/MessageFacade.cs
-  Chats/ChatFacade.cs
-  Contacts/ContactFacade.cs
-    ContactDirectory.cs      Socket use cases + LidMappingStore
-    AddressBookOverlay.cs    device contacts → Person
-    ContactNameResolver.cs   throttle / cooldown
-    ChatAvatarPolicy.cs      dedup / backoff (fetch still on the client)
+Unison.WhatsAppClient/          (netstandard — portable façades)
   Profiles/ProfileFacade.cs
-  History/HistoryFacade.cs
   Status/StatusFacade.cs
+  Chats/ChatFacade.cs
+  Chats/ChatPreviewReconciler.cs
   Groups/GroupFacade.cs
   Groups/GroupMetadataReader.cs
+  Connection/ConnectionFacade.cs
+  History/HistoryFacade.cs
+  Messages/MessageFacade.cs
+  Contacts/ContactFacade.cs
+    ContactDirectory.cs / AddressBookOverlay / ContactNameResolver /
+    ContactUsyncResolver / ChatAvatarPolicy / GroupRosterPolicy
+  Abstractions/IChatAccountActions.cs
+  Abstractions/IGroupWireActions.cs
+  Abstractions/IGroupAvatarActions.cs
+  Abstractions/IMessageWireActions.cs
+  Abstractions/IAvatarFetchActions.cs
+  Abstractions/IChatAvatarFetch.cs
+  Helpers/…                   domain policy helpers (closed batches from Core)
+
+Unison.Uwp/Services/WhatsApp/
+  Messages/BridgeMessageWireActions.cs
+  Messages/MediaAvailability.cs
+  Chats/BridgeChatAccountActions.cs
+  Groups/BridgeGroupWireActions.cs
+  Groups/BridgeGroupAvatarActions.cs
+  Contacts/AvatarFetcher.cs
+  Contacts/ChatAvatarFetch.cs
+  History/HistoryThumbnailMaterializer.cs
+  History/WinRtHistoryMessageThumbnailMaterializer.cs
+  Status/WinRtStatusThumbnailMaterializer.cs
   Diagnostics/DebugSendService.cs
   WhatsAppService.cs         compatibility client (partial)
   WhatsAppService.*.cs       Connection / Media / Groups / Avatars / Identity /
@@ -92,7 +110,7 @@ Owns **when** names and avatars refresh (cooldown, batches, per-session dedup). 
 
 ### StatusFacade
 
-Reads `history_status` (written by `HistoryFacade` from history chunks). Groups unexpired items by author for the Status list; serves oldest→newest items to the viewer; downloads media via `IMessageService.EnsureImage/VideoAvailableAsync`. Live `status@broadcast` messages are ingested here and **must not** become `ChatItem`s.
+Lives in `Unison.WhatsAppClient`. Reads `history_status` (written by `HistoryFacade` from history chunks). Groups unexpired items by author for the Status list; serves oldest→newest items to the viewer; downloads media via `IMessageService.EnsureImage/VideoAvailableAsync`. Live `status@broadcast` messages are ingested here and **must not** become `ChatItem`s. Poster/thumb bytes go through `IStatusThumbnailMaterializer` (UWP adapter).
 
 `IStatusService.StatusUpdated` fires when the store changes. ViewModels talk to `IStatusService` (names/avatars are resolved on the façade via `IPersonStore`), not to `IWhatsAppService` for Status.
 
@@ -111,7 +129,7 @@ Order that matters:
 7. ViewModel factories and platform adapters
 8. ViewModels: `ShellViewModel` **singleton**; others transient
 
-After `BuildServiceProvider`, `WhatsAppService.Attach*` wires the satellites that still call into the client (`AttachMessageService`, `AttachContactService`, the three stores). `IConnectionService.AttachWhatsAppService` breaks the cycle. Profile, History, and Status are resolved immediately because they subscribe to client events in their constructors and would otherwise miss the early ones.
+After `BuildServiceProvider`, Message/Chat/Contact façades resolve lazily via `Func<>` on `WhatsAppService.Create` (no `Attach*`). `IConnectionService` is resolved once so `ConnectionFacade` can subscribe to `IConnectionEventSource` in its ctor. Profile, History, and Status are resolved immediately because they subscribe to client events in their constructors and would otherwise miss the early ones.
 
 `App.GetWhatsAppService()` is the only remaining central resolve for the concrete client.
 

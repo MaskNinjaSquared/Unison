@@ -1,16 +1,16 @@
-using System.Collections.Generic;
 using System.Threading.Tasks;
+using Unison.Core.State;
 
 namespace Unison.Core.Contracts.WhatsApp
 {
     /// <summary>
-    /// What the history façade still needs from the client that owns catch-up progress,
-    /// alias registration and the FULL_HISTORY request path.
+    /// What the history façade still needs from the client that owns catch-up progress
+    /// and the FULL_HISTORY request path.
     /// </summary>
     /// <remarks>
-    /// UI asks through <see cref="IHistoryService"/>. Chunk notify and LID filing are
-    /// façade-only; the full on-demand request is also reached from Debug tools via the
-    /// history façade.
+    /// UI asks through <see cref="IHistoryService"/>. Chunk notify is façade-only; LID
+    /// filing goes through <see cref="IJidAliasPersistence"/>. The full on-demand request
+    /// is also reached from Debug tools via the history façade.
     /// </remarks>
     public interface IHistorySyncHost
     {
@@ -32,7 +32,23 @@ namespace Unison.Core.Contracts.WhatsApp
         /// </summary>
         void NotifyHistorySqliteChunkStarted(string syncType, int conversationCount);
 
-        /// <summary>Records LID↔PN pairs from a history chunk.</summary>
-        void ApplyHistoryLidMappings(IEnumerable<KeyValuePair<string, string>> lidToPn, string source);
+        /// <summary>Progress tick while waiting for a FULL_HISTORY on-demand answer.</summary>
+        void NoteFullHistoryCatchUpProgress(string reason);
+
+        /// <summary>
+        /// When a FULL_HISTORY ack is rejected while a user resync is waiting: end banner,
+        /// status line, and complete the wait as failed.
+        /// </summary>
+        void CompleteUserResyncOnFullHistoryAckRejected();
+
+        /// <summary>Arm the accepted-request timeout / catch-up watchdog for this request.</summary>
+        void ScheduleAcceptedHistoryOnDemandTimeout(HistoryOnDemandRequest state);
+
+        /// <summary>
+        /// After a history chunk was applied on the façade: enable catalogue persist and,
+        /// once per session when the chunk had content and replay is not deferred, kick
+        /// post-message enrichment.
+        /// </summary>
+        void NoteHistorySyncLanded(string syncType, bool hasContent);
     }
 }

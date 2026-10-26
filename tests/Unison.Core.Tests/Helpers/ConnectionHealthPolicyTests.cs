@@ -13,6 +13,7 @@
 using System;
 using Unison.Core.Helpers;
 using Xunit;
+using Unison.WhatsAppClient.Helpers;
 
 namespace Unison.Core.Tests.Helpers
 {
@@ -58,6 +59,40 @@ namespace Unison.Core.Tests.Helpers
             Assert.Equal(
                 ConnectionHealthAction.Reconnect,
                 ConnectionHealthPolicy.Evaluate(nodeProcessingStalled: true, connectionIsFresh: true));
+        }
+
+        [Fact]
+        public void OnDemand_not_ready_without_transport()
+        {
+            Assert.Equal(
+                OnDemandSocketHealthStep.NotReady,
+                ConnectionHealthPolicy.DecideOnDemand(
+                    false, true, true, false, true));
+            Assert.Equal(
+                OnDemandSocketHealthStep.NotReady,
+                ConnectionHealthPolicy.DecideOnDemand(
+                    true, false, true, false, true));
+            Assert.Equal(
+                OnDemandSocketHealthStep.NotReady,
+                ConnectionHealthPolicy.DecideOnDemand(
+                    true, true, false, false, true));
+        }
+
+        [Fact]
+        public void OnDemand_maps_evaluate_to_host_steps()
+        {
+            Assert.Equal(
+                OnDemandSocketHealthStep.Healthy,
+                ConnectionHealthPolicy.DecideOnDemand(
+                    true, true, true, false, true));
+            Assert.Equal(
+                OnDemandSocketHealthStep.Probe,
+                ConnectionHealthPolicy.DecideOnDemand(
+                    true, true, true, false, false));
+            Assert.Equal(
+                OnDemandSocketHealthStep.TearDown,
+                ConnectionHealthPolicy.DecideOnDemand(
+                    true, true, true, true, true));
         }
 
         // --- Backoff -------------------------------------------------------------

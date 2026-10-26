@@ -1,5 +1,8 @@
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using Unison.Baileys.Protocol;
+using Unison.Core.Helpers;
 using Unison.Core.Models;
 
 namespace Unison.Core.Contracts.WhatsApp
@@ -19,7 +22,15 @@ namespace Unison.Core.Contracts.WhatsApp
         /// Refreshes announce-only and the signed-in user's admin rank from w:g2 metadata, and
         /// writes both onto the matching <see cref="ChatItem"/> so the composer can lock itself.
         /// </summary>
-        Task RefreshGroupSendPermissionsAsync(string groupJid);
+        /// <param name="includeRoster">
+        /// When true, also replaces <see cref="ChatItem.GroupMembers"/> from the IQ (Members pivot).
+        /// Default false: chat open only needs flags so a 500+ roster cannot freeze Mobile after paint.
+        /// </param>
+        /// <param name="cancellationToken">Cancel when leaving Info so a large roster build stops.</param>
+        Task RefreshGroupSendPermissionsAsync(
+            string groupJid,
+            bool includeRoster = false,
+            CancellationToken cancellationToken = default);
 
         /// <summary>
         /// Fills <see cref="ChatItem.GroupMembers"/> from the local roster when it is empty.
@@ -54,5 +65,78 @@ namespace Unison.Core.Contracts.WhatsApp
         /// UI thread.
         /// </summary>
         void ApplyGroupMemberAvatarOutcome(string memberJid, GroupMemberAvatarFetchResult result);
+
+        /// <summary>
+        /// Whether <paramref name="member"/> is the same person as <paramref name="candidateJid"/>
+        /// under PN/LID aliasing.
+        /// </summary>
+        bool MemberMatches(GroupMember member, string candidateJid);
+
+        /// <summary>
+        /// Person-store keys under which groups-in-common memberships were written for this member.
+        /// </summary>
+        IReadOnlyList<string> MembershipPersonKeys(GroupMember member);
+
+        /// <summary>
+        /// Fills empty avatar / display name on a roster (or ephemeral) member from local caches.
+        /// </summary>
+        void EnrichMember(
+            GroupMember member,
+            string participantJid,
+            ChatItem groupChat,
+            ParticipantResolutionContext context,
+            string nameHint = null);
+
+        /// <summary>Local avatar URI for a group participant (roster → 1:1 → Person).</summary>
+        string ResolveMemberAvatar(
+            string participantJid,
+            ChatItem groupChat,
+            ParticipantResolutionContext context,
+            GroupMember rosterMember = null);
+
+        /// <summary>Display label for a group participant (roster → hint → names → Person → 1:1).</summary>
+        string ResolveMemberDisplayName(
+            string participantJid,
+            ChatItem groupChat,
+            ParticipantResolutionContext context,
+            string nameHint = null,
+            GroupMember rosterMember = null);
+
+        /// <summary>
+        /// Drops the shared 1:1 name/avatar index used by open-chat participant lookups
+        /// (call after a mass display-name update).
+        /// </summary>
+        void InvalidateParticipantDirectChatIndex();
+
+        /// <summary>
+        /// Open-chat participant name/avatar cache for the conversation pane (one per detail VM).
+        /// </summary>
+        IGroupParticipantLookup CreateOpenChatParticipantLookup(System.Func<string> selfDisplayLabel);
+
+        /// <summary>
+        /// Fills empty avatar / display name using the façade's resolution context (no caller-built context).
+        /// </summary>
+        void EnrichMember(
+            GroupMember member,
+            string participantJid,
+            ChatItem groupChat,
+            string nameHint = null);
+
+        /// <summary>
+        /// Applies an already-fetched metadata snapshot (receipt path / host-owned IQ).
+        /// Does not query the network.
+        /// </summary>
+        Task ApplyGroupMetadataAsync(string groupJid, GroupMetadataSnapshot metadata);
+
+        /// <summary>
+        /// Receipt path: parse a w:g2 metadata IQ the host already fetched and apply it.
+        /// Does not query the network.
+        /// </summary>
+        Task ApplyGroupMetadataFromResponseAsync(string groupJid, BinaryNode response);
+
+        /// <summary>
+        /// Host path: background resolution reached the group listing step.
+        /// </summary>
+        void NotifyGroupListingDue();
     }
 }

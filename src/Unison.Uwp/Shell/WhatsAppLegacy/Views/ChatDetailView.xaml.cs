@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.ObjectModel;
 using System.Collections.Generic;
 using System.ComponentModel;
@@ -9,6 +9,7 @@ using Unison.Core.Contracts;
 using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Factories;
 using Unison.Core.Helpers;
+using Unison.Core.Helpers.Chats;
 using Unison.Core.Mappers;
 using Unison.Core.Models;
 using Unison.Core.State;
@@ -36,6 +37,7 @@ using System.Diagnostics;
 using System.Threading.Tasks;
 using System.Linq;
 using Windows.UI.Xaml.Media;
+using Unison.WhatsAppClient.Helpers;
 
 namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
 {
@@ -87,6 +89,9 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             App.Services?.GetService(typeof(IMessageService)) as IMessageService;
 
         public bool HasActiveChat => ActiveChatGrid.Visibility == Visibility.Visible;
+
+        /// <inheritdoc />
+        public bool PreferFastTimelineLoad { get; set; }
 
         private ScrollViewer _scrollViewer;
         private bool _isSyncingFromService = false;
@@ -1837,6 +1842,14 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
 
             _activeChat = chat;
             chats?.SetActiveChatJid(chat?.JID);
+            // Hold before SyncActiveChat so group roster/metadata UI applies wait behind
+            // Yield + LoadMessages (500+ members were starving Mobile open by ~40s).
+            if (chat != null)
+            {
+                App.Services?.GetService<ChatTimelineLoadPriorityGate>()
+                    ?.Hold("prepare-active-chat");
+            }
+
             ViewModel?.SyncActiveChat(chat);
 
             // A menu belongs to the conversation it was opened over, so a different one arriving
@@ -1913,135 +1926,153 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
         /// <summary>
         /// Loads the UI message window for the chat <see cref="PrepareActiveChatAsync"/> just showed.
         /// Yields one frame (a short extra wait on Mobile) so the detail pane can paint first.
+        /// Holds <see cref="ChatTimelineLoadPriorityGate"/> so tip-reconcile UI does not starve SQLite.
         /// </summary>
         public async Task CompleteActiveChatLoadAsync()
         {
             ChatItem chat = _activeChat;
+            ChatTimelineLoadPriorityGate timelinePriority =
+                App.Services?.GetService<ChatTimelineLoadPriorityGate>();
             if (chat == null || ViewModel == null)
             {
+                PreferFastTimelineLoad = false;
+                await ChatOpenPaintSchedule.ReleaseTimelinePriorityAfterSettleAsync(
+                    timelinePriority,
+                    _isWindowsMobile).ConfigureAwait(false);
                 return;
             }
 
-            CancellationToken token = _chatLoadCts?.Token ?? CancellationToken.None;
-            if (token.IsCancellationRequested)
-            {
-                WriteChatOpenDiagnostics("aborted", chat.JID, "stage=before-yield; reason=cancelled");
-                return;
-            }
-
-            ViewModel.BeginLoadingMessages();
-            await YieldForChatSurfacePaintAsync();
-            if (token.IsCancellationRequested || _activeChat == null ||
-                !ReferenceEquals(_activeChat, chat))
-            {
-                WriteChatOpenDiagnostics(
-                    "aborted",
-                    chat.JID,
-                    "stage=after-yield; reason=" + DescribeChatLoadAbort(token, chat));
-                ViewModel.EndLoadingMessages();
-                return;
-            }
-
-            // Mobile experiment: let NarrowDetail navigation + ProgressBar paint before
-            // SQLite / bubble materialization fights the compositor.
-            if (!await AwaitTimelineMaterializeDelayAsync(token).ConfigureAwait(true) ||
-                _activeChat == null ||
-                !ReferenceEquals(_activeChat, chat))
-            {
-                WriteChatOpenDiagnostics(
-                    "aborted",
-                    chat.JID,
-                    "stage=after-materialize-delay; reason=" + DescribeChatLoadAbort(token, chat));
-                ViewModel.EndLoadingMessages();
-                return;
-            }
-
-            string requestedJid = Jids.GetCanonicalJid(chat.JID);
-            Debug.WriteLine($"[ChatDetailView] Loading messages for {requestedJid}");
-
-            List<ChatMessage> messages;
+            // Prepare already Held; Complete only Releases in finally (refcount).
             try
             {
-                messages = await MessagesFacade.LoadMessagesForChatAsync(requestedJid);
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"[ChatDetailView] LoadMessagesForChatAsync failed: {ex.Message}");
-                App.Services?.GetService<IRuntimeDiagnostics>()?.RecordException("chat-open", "load-failed", ex);
-                ViewModel.EndLoadingMessages();
-                return;
-            }
-
-            if (token.IsCancellationRequested || _activeChat == null ||
-                !string.Equals(Jids.GetCanonicalJid(_activeChat.JID), requestedJid, StringComparison.OrdinalIgnoreCase))
-            {
-                WriteChatOpenDiagnostics(
-                    "aborted",
-                    requestedJid,
-                    "stage=after-load; loaded=" + (messages?.Count ?? 0) +
-                    "; reason=" + (token.IsCancellationRequested ? "cancelled" : "chat-switched"));
-                ViewModel.EndLoadingMessages();
-                return;
-            }
-
-            try
-            {
-            var visibleMessages = ChatDetailViewModel.TakeLastWindow(
-                messages,
-                ViewModel.InitialUiMessageWindow);
-            WriteChatOpenDiagnostics(
-                "rendered",
-                requestedJid,
-                "loaded=" + (messages?.Count ?? 0) +
-                "; visible=" + visibleMessages.Count +
-                "; previewFallback=" + (visibleMessages.Count == 0));
-
-            bool activeIsGroup = chat.IsGroup ||
-                requestedJid.EndsWith("@g.us", StringComparison.OrdinalIgnoreCase);
-            ViewModel.StampGroupRemoteJid(visibleMessages, requestedJid);
-
-            RecomputeMessageRuns(visibleMessages, activeIsGroup);
-            ViewModel.ReplaceTimelineWindow(visibleMessages);
-            UpdatePinnedBanner();
-
-            if (visibleMessages.Count == 0)
-            {
-                ChatMessage fallback = ViewModel.ApplyPreviewFallback(chat, requestedJid, activeIsGroup);
-                if (fallback != null)
+                CancellationToken token = _chatLoadCts?.Token ?? CancellationToken.None;
+                if (token.IsCancellationRequested)
                 {
-                    RecomputeMessageRuns(new List<ChatMessage> { fallback }, activeIsGroup);
-                    UpdatePinnedBanner();
-                    Debug.WriteLine($"[ChatDetailView] Applied preview fallback for {requestedJid}");
+                    WriteChatOpenDiagnostics("aborted", chat.JID, "stage=before-yield; reason=cancelled");
+                    return;
                 }
-            }
-            else
-            {
-                ViewModel.SyncListStripFromTimeline(chat, requestedJid, visibleMessages);
-            }
 
-            if (chat.IsPersonal)
-            {
-                ViewModel.StopPresenceWatch();
-            }
-            else
-            {
-                ViewModel.StartPresenceWatch(chat.JID);
-            }
+                ViewModel.BeginLoadingMessages();
+                await YieldForChatSurfacePaintAsync();
+                if (token.IsCancellationRequested || _activeChat == null ||
+                    !ReferenceEquals(_activeChat, chat))
+                {
+                    WriteChatOpenDiagnostics(
+                        "aborted",
+                        chat.JID,
+                        "stage=after-yield; reason=" + DescribeChatLoadAbort(token, chat));
+                    ViewModel.EndLoadingMessages();
+                    return;
+                }
+
+                // Mobile: list→detail waits 2s for NarrowDetail paint. Toast/deep-link skips
+                // that pause so tip-swapped cannot starve LoadMessages on the dispatcher.
+                if (!await AwaitTimelineMaterializeDelayAsync(token).ConfigureAwait(false) ||
+                    _activeChat == null ||
+                    !ReferenceEquals(_activeChat, chat))
+                {
+                    WriteChatOpenDiagnostics(
+                        "aborted",
+                        chat.JID,
+                        "stage=after-materialize-delay; reason=" + DescribeChatLoadAbort(token, chat));
+                    ViewModel.EndLoadingMessages();
+                    return;
+                }
+
+                string requestedJid = Jids.GetCanonicalJid(chat.JID);
+                Debug.WriteLine($"[ChatDetailView] Loading messages for {requestedJid}");
+
+                List<ChatMessage> messages;
+                try
+                {
+                    messages = await MessagesFacade.LoadMessagesForChatAsync(requestedJid);
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"[ChatDetailView] LoadMessagesForChatAsync failed: {ex.Message}");
+                    App.Services?.GetService<IRuntimeDiagnostics>()?.RecordException("chat-open", "load-failed", ex);
+                    ViewModel.EndLoadingMessages();
+                    return;
+                }
+
+                if (token.IsCancellationRequested || _activeChat == null ||
+                    !string.Equals(Jids.GetCanonicalJid(_activeChat.JID), requestedJid, StringComparison.OrdinalIgnoreCase))
+                {
+                    WriteChatOpenDiagnostics(
+                        "aborted",
+                        requestedJid,
+                        "stage=after-load; loaded=" + (messages?.Count ?? 0) +
+                        "; reason=" + (token.IsCancellationRequested ? "cancelled" : "chat-switched"));
+                    ViewModel.EndLoadingMessages();
+                    return;
+                }
+
+                try
+                {
+                var visibleMessages = ChatDetailViewModel.TakeLastWindow(
+                    messages,
+                    ViewModel.InitialUiMessageWindow);
+                WriteChatOpenDiagnostics(
+                    "rendered",
+                    requestedJid,
+                    "loaded=" + (messages?.Count ?? 0) +
+                    "; visible=" + visibleMessages.Count +
+                    "; previewFallback=" + (visibleMessages.Count == 0));
+
+                bool activeIsGroup = chat.IsGroup ||
+                    requestedJid.EndsWith("@g.us", StringComparison.OrdinalIgnoreCase);
+                ViewModel.StampGroupRemoteJid(visibleMessages, requestedJid);
+
+                RecomputeMessageRuns(visibleMessages, activeIsGroup);
+                ViewModel.ReplaceTimelineWindow(visibleMessages);
+                UpdatePinnedBanner();
+
+                if (visibleMessages.Count == 0)
+                {
+                    ChatMessage fallback = ViewModel.ApplyPreviewFallback(chat, requestedJid, activeIsGroup);
+                    if (fallback != null)
+                    {
+                        RecomputeMessageRuns(new List<ChatMessage> { fallback }, activeIsGroup);
+                        UpdatePinnedBanner();
+                        Debug.WriteLine($"[ChatDetailView] Applied preview fallback for {requestedJid}");
+                    }
+                }
+                else
+                {
+                    ViewModel.SyncListStripFromTimeline(chat, requestedJid, visibleMessages);
+                }
+
+                if (chat.IsPersonal)
+                {
+                    ViewModel.StopPresenceWatch();
+                }
+                else
+                {
+                    ViewModel.StartPresenceWatch(chat.JID);
+                }
+                }
+                finally
+                {
+                    ViewModel.EndLoadingMessages();
+                }
+
+                // ChangeView needs scroll enabled; lock is cleared in finally above.
+                if (!token.IsCancellationRequested &&
+                    _activeChat != null &&
+                    string.Equals(Jids.GetCanonicalJid(_activeChat.JID), requestedJid, StringComparison.OrdinalIgnoreCase))
+                {
+                    ScrollToBottom();
+                    _ = StickScrollToBottomOnOpenAsync(token);
+                    ApplyMessageListCacheLengthIfMobile();
+                    RequestVisibleParticipantAvatarsFromViewport();
+                }
             }
             finally
             {
-                ViewModel.EndLoadingMessages();
-            }
-
-            // ChangeView needs scroll enabled; lock is cleared in finally above.
-            if (!token.IsCancellationRequested &&
-                _activeChat != null &&
-                string.Equals(Jids.GetCanonicalJid(_activeChat.JID), requestedJid, StringComparison.OrdinalIgnoreCase))
-            {
-                ScrollToBottom();
-                _ = StickScrollToBottomOnOpenAsync(token);
-                ApplyMessageListCacheLengthIfMobile();
-                RequestVisibleParticipantAvatarsFromViewport();
+                PreferFastTimelineLoad = false;
+                await ChatOpenPaintSchedule.ReleaseTimelinePriorityAfterSettleAsync(
+                    timelinePriority,
+                    _isWindowsMobile).ConfigureAwait(false);
             }
         }
 
@@ -2049,42 +2080,37 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
         /// Lets the detail VisualState and header layout paint before SQLite / VM materialization.
         /// Mobile needs a real delay: one dispatcher turn is not enough for NarrowDetail to appear.
         /// </summary>
-        private async Task YieldForChatSurfacePaintAsync()
-        {
-            await Dispatcher.RunAsync(CoreDispatcherPriority.Normal, () => { });
-            if (_isWindowsMobile)
-            {
-                await Task.Delay(48);
-            }
-        }
+        private Task YieldForChatSurfacePaintAsync() =>
+            ChatOpenPaintSchedule.YieldForSurfacePaintAsync(Dispatcher, _isWindowsMobile);
 
         /// <summary>
         /// Extra Mobile pause after the top ProgressBar shows and before bubbles load.
-        /// Cancelled when the user switches chat. Returns false when aborted.
+        /// Toast / deep-link / PreferFast skips this so tip-swapped cannot starve LoadMessages.
         /// </summary>
         private async Task<bool> AwaitTimelineMaterializeDelayAsync(CancellationToken token)
         {
-            if (!_isWindowsMobile)
-            {
-                return !token.IsCancellationRequested;
-            }
-
-            try
-            {
-                WriteChatOpenDiagnostics(
+            bool deepLinkHeld = App.Services?.GetService<ChatListDeepLinkHoldGate>()?.IsHeld == true;
+            bool ok = await ChatOpenPaintSchedule.AwaitMaterializeDelayAsync(
+                _isWindowsMobile,
+                PreferFastTimelineLoad,
+                deepLinkHeld,
+                token,
+                onSkipped: () =>
+                {
+                    if (_isWindowsMobile && (PreferFastTimelineLoad || deepLinkHeld))
+                    {
+                        WriteChatOpenDiagnostics(
+                            "materialize-delay-skipped",
+                            _activeChat?.JID,
+                            "preferFast=" + PreferFastTimelineLoad + "; deepLinkHeld=" + deepLinkHeld);
+                    }
+                },
+                onWaiting: () => WriteChatOpenDiagnostics(
                     "materialize-delay",
                     _activeChat?.JID,
-                    "ms=" + (int)TimelineMaterializeDelay.TotalMilliseconds);
-                await Task.Delay(TimelineMaterializeDelay, token).ConfigureAwait(true);
-                return !token.IsCancellationRequested && _activeChat != null;
-            }
-            catch (TaskCanceledException)
-            {
-                return false;
-            }
+                    "ms=" + (int)ChatOpenPaintSchedule.TimelineMaterializeDelay.TotalMilliseconds));
+            return ok && _activeChat != null;
         }
-
-        private static readonly TimeSpan TimelineMaterializeDelay = TimeSpan.FromSeconds(2);
 
         private string DescribeChatLoadAbort(CancellationToken token, ChatItem chat)
         {
@@ -2813,6 +2839,11 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                 return;
             }
 
+            if (ChatDetailClipboardPaste.OnKeyDown(ViewModel, e))
+            {
+                return;
+            }
+
             if (e.Key != Windows.System.VirtualKey.Enter)
             {
                 return;
@@ -3205,11 +3236,23 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
         {
             CopyMessageButton.Label = LocalizedStrings.Get("ChatDetail_CopyMessage", "Copy");
             ReplyMessageButton.Label = LocalizedStrings.Get("ChatDetail_ReplyMessage", "Reply");
+            ForwardMessageButton.Label = LocalizedStrings.Get("ChatDetail_ForwardMessage", "Forward");
             PinFor24HoursButton.Label = LocalizedStrings.Get("ChatDetail_PinFor24Hours", "Pin for 24 hours");
             PinFor7DaysButton.Label = LocalizedStrings.Get("ChatDetail_PinFor7Days", "Pin for 7 days");
             PinFor30DaysButton.Label = LocalizedStrings.Get("ChatDetail_PinFor30Days", "Pin for 30 days");
             UnpinMessageButton.Label = LocalizedStrings.Get("ChatDetail_UnpinMessage", "Unpin message");
+            ForwardMessageButton.Click -= ForwardMessageButton_Click;
+            ForwardMessageButton.Click += ForwardMessageButton_Click;
             LegacyCommandBarLayout.CenterPrimaryCommands(sender as CommandBar);
+        }
+
+        private void ForwardMessageButton_Click(object sender, RoutedEventArgs e)
+        {
+            bool? can = ViewModel?.ForwardSelectedMessageCommand?.CanExecute(null);
+            System.Diagnostics.Debug.WriteLine(
+                "[Forward] Legacy ForwardMessageButton.Click; CanExecute=" + can +
+                "; selected=" + (ViewModel?.SelectedMessage?.Model?.Id ?? "(null)") +
+                "; actionsOpen=" + (ViewModel?.IsMessageActionsOpen ?? false));
         }
 
         /// <summary>Play / resume / pause for a ready local audio bubble + SMTC.</summary>

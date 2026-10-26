@@ -6,6 +6,7 @@ using Unison.Core.Contracts;
 using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Helpers;
 using Unison.Core.Models;
+using Unison.WhatsAppClient.Helpers;
 using Xunit;
 
 namespace Unison.Core.Tests.Helpers
@@ -20,7 +21,23 @@ namespace Unison.Core.Tests.Helpers
         private readonly FakeCache _cache = new FakeCache();
 
         private OutgoingMediaSend Create(string id = "IMG1") =>
-            new OutgoingMediaSend(_host, _jids, _cache, () => At, () => id);
+            new OutgoingMediaSend(
+                _host,
+                _jids,
+                _cache,
+                jid => _host.Log.Add("changed:" + jid),
+                (chatJid, message) =>
+                {
+                    _host.RememberAccepted(message);
+                    _host.Log.Add("accept:" + chatJid + ":" + message.Status);
+                },
+                (chatJid, message, kind) =>
+                {
+                    _host.Log.Add("preview:" + chatJid + ":" + kind);
+                    return Task.CompletedTask;
+                },
+                () => At,
+                () => id);
 
         [Fact]
         public async Task Empty_image_is_rejected_without_reconnecting()
@@ -124,6 +141,17 @@ namespace Unison.Core.Tests.Helpers
                 _host,
                 _jids,
                 _cache,
+                jid => _host.Log.Add("changed:" + jid),
+                (chatJid, message) =>
+                {
+                    _host.RememberAccepted(message);
+                    _host.Log.Add("accept:" + chatJid + ":" + message.Status);
+                },
+                (chatJid, message, kind) =>
+                {
+                    _host.Log.Add("preview:" + chatJid + ":" + kind);
+                    return Task.CompletedTask;
+                },
                 () => At,
                 () => "IMG" + ++sequence);
 
@@ -350,19 +378,7 @@ namespace Unison.Core.Tests.Helpers
                 return Task.CompletedTask;
             }
 
-            public void AcceptOutgoing(string chatJid, ChatMessage message)
-            {
-                _accepted = message;
-                Log.Add("accept:" + chatJid + ":" + message.Status);
-            }
-
-            public Task ShowLocalSendPreviewAsync(string chatJid, ChatMessage message, ChatPreviewKind kind)
-            {
-                Log.Add("preview:" + chatJid + ":" + kind);
-                return Task.CompletedTask;
-            }
-
-            public void NotifyChatChanged(string chatJid) => Log.Add("changed:" + chatJid);
+            public void RememberAccepted(ChatMessage message) => _accepted = message;
 
             public void QueueForPersist(string chatJid, ChatMessage message) => Log.Add("queue-persist:" + chatJid);
 
@@ -383,9 +399,6 @@ namespace Unison.Core.Tests.Helpers
             public void RecordSendFailure(string messageId, Exception error) => throw new NotSupportedException();
 
             public void ReportError(Exception error) => ReportedError = error;
-
-            public Task<List<ChatMessage>> LoadLiveOverlayAsync(string chatJid) =>
-                throw new NotSupportedException();
         }
 
         private sealed class FakeCache : IMediaCache
@@ -408,6 +421,7 @@ namespace Unison.Core.Tests.Helpers
             public Task<string> TryGetUriAsync(MediaCacheKind kind, string fileBase, string extension) => Task.FromResult<string>(null);
 
             public Task<byte[]> TryReadAsync(string cacheUri) => Task.FromResult<byte[]>(null);
+            public Task<long?> TryGetLengthBytesAsync(string uri) => Task.FromResult<long?>(null);
 
             public string SanitizeFileBase(string fileBase) => fileBase;
         }

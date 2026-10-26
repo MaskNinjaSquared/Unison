@@ -42,8 +42,10 @@ namespace Unison.Core.Models
             get => _name;
             set
             {
-                if (_name == value) return;
-                _name = value;
+                // Titles / favourites / SemanticZoom never keep a leading "~" (strip-only mark).
+                string next = DisplayNameResolution.StripContactIndicator(value);
+                if (_name == next) return;
+                _name = next;
                 OnPropertyChanged();
                 OnPropertyChanged(nameof(Initial));
             }
@@ -215,12 +217,22 @@ namespace Unison.Core.Models
         /// <summary>True when there are unread messages (bind with BooleanToVisibilityConverter).</summary>
         public bool HasUnread => _unreadCount > 0;
 
+        private bool _isFavorite;
+
         /// <summary>
-        /// WhatsApp Favourites list (app-state <c>favoritesAction</c> / label list FAVORITES).
-        /// Separate from chat-list pin (<see cref="IsChatPinned"/>). Stub until that store exists —
-        /// the Favorites filter stays empty on purpose.
+        /// WhatsApp Favourites list (app-state <c>favoritesAction</c>).
+        /// Separate from chat-list pin (<see cref="IsChatPinned"/>).
         /// </summary>
-        public bool IsFavorite => false;
+        public bool IsFavorite
+        {
+            get => _isFavorite;
+            set
+            {
+                if (_isFavorite == value) return;
+                _isFavorite = value;
+                OnPropertyChanged();
+            }
+        }
 
         /// <summary>
         /// Local unsent draft. Always false until drafts are stored on the chat row.
@@ -334,6 +346,38 @@ namespace Unison.Core.Models
         {
             _mentionLookup = MentionLookupBuilder.FromRoster(_groupMembers);
             OnPropertyChanged(nameof(MentionLookup));
+        }
+
+        private string _avatarPictureId;
+        /// <summary>
+        /// Server picture id from the last successful IQ. Used to skip CDN download when
+        /// a later open-chat refresh returns the same id.
+        /// </summary>
+        public string AvatarPictureId
+        {
+            get => _avatarPictureId;
+            set
+            {
+                if (_avatarPictureId == value) return;
+                _avatarPictureId = value;
+                OnPropertyChanged();
+            }
+        }
+
+        private string _avatarRemoteUrl;
+        /// <summary>
+        /// Last remote preview URL when <see cref="AvatarPictureId"/> was missing. Fallback
+        /// equality key before downloading again.
+        /// </summary>
+        public string AvatarRemoteUrl
+        {
+            get => _avatarRemoteUrl;
+            set
+            {
+                if (_avatarRemoteUrl == value) return;
+                _avatarRemoteUrl = value;
+                OnPropertyChanged();
+            }
         }
 
         private DateTime? _avatarFetchedAtUtc;
@@ -455,7 +499,8 @@ namespace Unison.Core.Models
 
                 case ChatKind.Direct:
                 default:
-                    return Name ?? string.Empty;
+                    // Never surface a leading "~" in titles / favourites / SemanticZoom keys.
+                    return DisplayNameResolution.StripContactIndicator(Name) ?? string.Empty;
             }
         }
 

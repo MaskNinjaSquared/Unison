@@ -401,6 +401,62 @@
                                           VerticalAlignment="Center"
                                           x:Load="{x:Bind IsDocumentDownloading, Mode=OneWay}"/>
                         </Grid>
+                        <!-- Shared contact card: photo + name, then transparent Message / Add actions. -->
+                        <StackPanel x:Name="SentContactHost"
+                                    x:Load="{x:Bind IsContact, Mode=OneWay}"
+                                    HorizontalAlignment="Stretch"
+                                    MinWidth="200"
+                                    MaxWidth="280"
+                                    Margin="0,0,0,2">
+                            <Grid Margin="0,0,0,8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="1"
+                                           Text="{x:Bind ContactCardDisplayName, Mode=OneWay}"
+                                           Foreground="{ThemeResource ChatDetailSentTextBrush}"
+                                           FontSize="15"
+                                           FontFamily="{StaticResource MainFont}"
+                                           FontWeight="SemiBold"
+                                           TextWrapping="NoWrap"
+                                           TextTrimming="CharacterEllipsis"
+                                           MaxLines="2"
+                                           VerticalAlignment="Center"
+                                           Margin="20,0,0,0"/>
+                                <controls:ChatAvatarControl Grid.Column="0"
+                                                            Size="40"
+                                                            Width="40"
+                                                            Height="40"
+                                                            IsGroup="False"
+                                                            AvatarUrl="{x:Bind ContactCardPhotoUri, Mode=OneWay}"
+                                                            VerticalAlignment="Center"/>
+                            </Grid>
+                            <Button Style="{StaticResource TransparentMediaButtonStyle}"
+                                    HorizontalAlignment="Stretch"
+                                    HorizontalContentAlignment="Center"
+                                    Padding="0,6"
+                                    Command="{x:Bind MessageContactChatCommand, Mode=OneWay}"
+                                    Visibility="{x:Bind CanMessageContact, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                <TextBlock x:Uid="MessageContact_Chat"
+                                           Text="Message"
+                                           Foreground="{ThemeResource ChatDetailSentLinkBrush}"
+                                           FontSize="14"
+                                           FontFamily="{StaticResource MainFont}"/>
+                            </Button>
+                            <Button Style="{StaticResource TransparentMediaButtonStyle}"
+                                    HorizontalAlignment="Stretch"
+                                    HorizontalContentAlignment="Center"
+                                    Padding="0,6"
+                                    Command="{x:Bind MessageContactAddCommand, Mode=OneWay}"
+                                    Visibility="{x:Bind ShowMessageContactAddButton, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                <TextBlock x:Uid="MessageContact_Add"
+                                           Text="Add contact"
+                                           Foreground="{ThemeResource ChatDetailSentLinkBrush}"
+                                           FontSize="14"
+                                           FontFamily="{StaticResource MainFont}"/>
+                            </Button>
+                        </StackPanel>
                         <RichTextBlock x:Name="SentBodyText"
                                        helpers:CommentRichService.Text="{x:Bind Content, Mode=OneWay}"
                                        helpers:CommentRichService.MentionedJids="{x:Bind MentionedJids, Mode=OneWay}"
@@ -973,6 +1029,61 @@
                                           VerticalAlignment="Center"
                                           x:Load="{x:Bind IsDocumentDownloading, Mode=OneWay}"/>
                         </Grid>
+                        <StackPanel x:Name="ReceivedContactHost"
+                                    x:Load="{x:Bind IsContact, Mode=OneWay}"
+                                    HorizontalAlignment="Stretch"
+                                    MinWidth="200"
+                                    MaxWidth="280"
+                                    Margin="0,0,0,2">
+                            <Grid Margin="0,0,0,8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0"
+                                           Text="{x:Bind ContactCardDisplayName, Mode=OneWay}"
+                                           Foreground="{ThemeResource ChatDetailReceivedTextBrush}"
+                                           FontSize="15"
+                                           FontFamily="{StaticResource MainFont}"
+                                           FontWeight="SemiBold"
+                                           TextWrapping="NoWrap"
+                                           TextTrimming="CharacterEllipsis"
+                                           MaxLines="2"
+                                           VerticalAlignment="Center"
+                                           Margin="0,0,10,0"/>
+                                <controls:ChatAvatarControl Grid.Column="1"
+                                                            Size="40"
+                                                            Width="40"
+                                                            Height="40"
+                                                            IsGroup="False"
+                                                            AvatarUrl="{x:Bind ContactCardPhotoUri, Mode=OneWay}"
+                                                            VerticalAlignment="Center"/>
+                            </Grid>
+                            <Button Style="{StaticResource TransparentMediaButtonStyle}"
+                                    HorizontalAlignment="Stretch"
+                                    HorizontalContentAlignment="Left"
+                                    Padding="0,6"
+                                    Command="{x:Bind MessageContactChatCommand, Mode=OneWay}"
+                                    Visibility="{x:Bind CanMessageContact, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                <TextBlock x:Uid="MessageContact_Chat"
+                                           Text="Message"
+                                           Foreground="{ThemeResource ChatDetailReceivedLinkBrush}"
+                                           FontSize="14"
+                                           FontFamily="{StaticResource MainFont}"/>
+                            </Button>
+                            <Button Style="{StaticResource TransparentMediaButtonStyle}"
+                                    HorizontalAlignment="Stretch"
+                                    HorizontalContentAlignment="Left"
+                                    Padding="0,6"
+                                    Command="{x:Bind MessageContactAddCommand, Mode=OneWay}"
+                                    Visibility="{x:Bind ShowMessageContactAddButton, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                <TextBlock x:Uid="MessageContact_Add"
+                                           Text="Add contact"
+                                           Foreground="{ThemeResource ChatDetailReceivedLinkBrush}"
+                                           FontSize="14"
+                                           FontFamily="{StaticResource MainFont}"/>
+                            </Button>
+                        </StackPanel>
                         <RichTextBlock x:Name="ReceivedBodyText"
                                        helpers:CommentRichService.Text="{x:Bind Content, Mode=OneWay}"
                                        helpers:CommentRichService.MentionedJids="{x:Bind MentionedJids, Mode=OneWay}"
@@ -1118,7 +1229,25 @@
         </Grid>
     </DataTemplate>
 
+    <!-- GroupJoin: date-separator chrome (system line), not a bubble. -->
+    <DataTemplate x:Key="MessageGroupJoinTemplate" x:DataType="vm:ChatMessageViewModel">
+        <Grid HorizontalAlignment="Stretch">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+            <controls:ChatDateSeparator
+                Grid.Row="0"
+                Text="{x:Bind DateSeparatorText, Mode=OneWay}"
+                Visibility="{x:Bind IsFirstOfDay, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+            <controls:ChatDateSeparator
+                Grid.Row="1"
+                Text="{x:Bind Content, Mode=OneWay}"/>
+        </Grid>
+    </DataTemplate>
+
     <selectors:MessageTemplateSelector x:Key="MessageTemplateSelector"
                                        SentTemplate="{StaticResource MessageSentTemplate}"
-                                       ReceivedTemplate="{StaticResource MessageReceivedTemplate}"/>
+                                       ReceivedTemplate="{StaticResource MessageReceivedTemplate}"
+                                       GroupJoinTemplate="{StaticResource MessageGroupJoinTemplate}"/>
 </ResourceDictionary>

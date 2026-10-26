@@ -8,10 +8,14 @@
     xmlns:controls="using:Unison.Uwp.UI.Controls">
 
     <DataTemplate x:Key="ChatItemTemplate" x:DataType="models:ChatItem">
-        <!-- ContextFlyout (Imgur): right-click + long-press on Mobile without FlyoutBase.ShowAt(element) [1809+]. -->
+        <!-- ContextFlyout on the row Grid (feature/2.1): platform opens once; Target.DataContext
+             is the ChatItem. Modern ChatListView must NOT also ShowAt from Holding/RightTapped
+             (that drew the menu twice). Legacy Hold hides this flyout and opens the CommandBar;
+             Legacy mouse still ShowAt(Grid, point). -->
         <Grid Height="76" Padding="12,0" Background="Transparent">
             <Grid.ContextFlyout>
-                <MenuFlyout MenuFlyoutPresenterStyle="{StaticResource ModernMenuFlyoutStyle}"
+                <MenuFlyout x:Name="ChatRowMenu"
+                            MenuFlyoutPresenterStyle="{StaticResource ModernMenuFlyoutStyle}"
                             Opening="ChatContextFlyout_Opening">
                     <MenuFlyoutItem Tag="viewProfile"
                                    x:Uid="ChatList_ViewProfile"
@@ -39,6 +43,25 @@
                                    Click="PinChat_Click">
                         <MenuFlyoutItem.Icon>
                             <FontIcon FontFamily="{StaticResource IconFont}" Glyph="&#xE840;"/>
+                        </MenuFlyoutItem.Icon>
+                    </MenuFlyoutItem>
+                    <MenuFlyoutItem Tag="addFavorite"
+                                   x:Uid="ChatList_AddFavorite"
+                                   Text="Add to favorites"
+                                   Style="{StaticResource ModernMenuFlyoutItemStyle}"
+                                   Click="FavoriteChat_Click">
+                        <MenuFlyoutItem.Icon>
+                            <FontIcon FontFamily="{StaticResource IconFont}" Glyph="&#xE734;"/>
+                        </MenuFlyoutItem.Icon>
+                    </MenuFlyoutItem>
+                    <MenuFlyoutItem Tag="removeFavorite"
+                                   x:Uid="ChatList_RemoveFavorite"
+                                   Text="Remove from favorites"
+                                   Visibility="Collapsed"
+                                   Style="{StaticResource ModernMenuFlyoutItemStyle}"
+                                   Click="FavoriteChat_Click">
+                        <MenuFlyoutItem.Icon>
+                            <FontIcon FontFamily="{StaticResource IconFont}" Glyph="&#xE735;"/>
                         </MenuFlyoutItem.Icon>
                     </MenuFlyoutItem>
                     <MenuFlyoutItem Tag="widgetPin"
@@ -140,21 +163,25 @@
                 <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
 
-            <controls:ChatAvatarControl Width="48" Height="48"
+            <!-- x:Load (not Visibility): Creators Update 15063+; Collapsed still builds both avatars per recycled row.
+                 x:Name required by XamlCompiler when using x:Load. -->
+            <controls:ChatAvatarControl x:Name="RowAvatar"
+                                        Width="48" Height="48"
                                         Size="48"
                                         ShowBorder="True"
                                         HorizontalAlignment="Left"
                                         VerticalAlignment="Center"
+                                        x:Load="{x:Bind templates:ChatItemTemplates.ShowsStandardListAvatar(IsCommunityAnnounce), Mode=OneWay}"
                                         AvatarUrl="{x:Bind GetAvatarUrl(AvatarUrl, AvatarHighUrl), Mode=OneWay}"
-                                        IsGroup="{x:Bind templates:ChatItemTemplates.ShowsGroupAvatar(IsGroup, Kind), Mode=OneWay}"
-                                        Visibility="{x:Bind IsCommunityAnnounce, Mode=OneWay, Converter={StaticResource InvertedBooleanToVisibilityConverter}}"/>
-            <controls:CommunityAnnouncementsAvatarControl Width="48" Height="48"
+                                        IsGroup="{x:Bind templates:ChatItemTemplates.ShowsGroupAvatar(IsGroup, Kind), Mode=OneWay}"/>
+            <controls:CommunityAnnouncementsAvatarControl x:Name="RowAnnounceAvatar"
+                                                          Width="48" Height="48"
                                                           Size="48"
                                                           ShowBorder="True"
                                                           HorizontalAlignment="Left"
                                                           VerticalAlignment="Center"
-                                                          AvatarUrl="{x:Bind GetAvatarUrl(AvatarUrl, AvatarHighUrl), Mode=OneWay}"
-                                                          Visibility="{x:Bind IsCommunityAnnounce, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                                                          x:Load="{x:Bind IsCommunityAnnounce, Mode=OneWay}"
+                                                          AvatarUrl="{x:Bind GetAvatarUrl(AvatarUrl, AvatarHighUrl), Mode=OneWay}"/>
 
             <Grid Grid.Column="1" VerticalAlignment="Center" Margin="12,0,12,0">
                 <Grid.RowDefinitions>

@@ -21,20 +21,21 @@ using System.Threading;
 using System.Threading.Tasks;
 using Unison.Core.Contracts;
 using Unison.Uwp.Client;
-using Unison.Uwp.Services.Socket;
+using Unison.WhatsAppClient.Abstractions;
+using UwpSessionProvider = Unison.Uwp.Services.Socket.IWhatsAppSessionProvider;
 
 namespace Unison.Uwp.Services.WhatsApp.Contacts
 {
-    internal sealed class AvatarFetcher
+    internal sealed class AvatarFetcher : IAvatarFetchActions
     {
         private const string PreviewQueryType = "preview";
         private const string FullSizeQueryType = "image";
 
-        private readonly IWhatsAppSessionProvider _sessions;
+        private readonly UwpSessionProvider _sessions;
         private readonly IUsyncGate _gate;
         private readonly IAvatarCache _cache;
 
-        internal AvatarFetcher(IWhatsAppSessionProvider sessions, IUsyncGate gate, IAvatarCache cache)
+        internal AvatarFetcher(UwpSessionProvider sessions, IUsyncGate gate, IAvatarCache cache)
         {
             _sessions = sessions ?? throw new ArgumentNullException(nameof(sessions));
             _gate = gate ?? throw new ArgumentNullException(nameof(gate));

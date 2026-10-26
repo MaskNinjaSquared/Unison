@@ -2,6 +2,1289 @@
 
 Newest first.
 
+## Notifications — resolve toast title/author past bare JID/@lid
+
+Live toast announce (`FinishLiveStripAnnounceAsync`) runs chat + group-author
+labels through `IContactService.ResolveDisplayName` +
+`NotificationDisplayLabel` (strips `~`, prefers phone over `@lid`). Incoming
+envelope sender/chat names use the same contact stack before the bubble and
+strip are built.
+
+## GroupJoin — resolve member names before “joined” line
+
+On `w:gp2` add, `IContactService.ResolveGroupJoinParticipantsAsync` files LID↔PN
+from wire `phone_number` and usyncs those few PNs only (not a full roster).
+`NotifyGroupJoinsAsync` labels via `ResolveDisplayName` +
+`GroupJoinDisplayLabel` (phone over bare `@lid`). A fire-and-forget relabel
+rewrites Content/SenderName if a better name arrives after insert. Mobile-safe:
+one join event, gated usync.
+
+## Legacy Mobile — accent StatusBar; delete chat always confirms
+
+WhatsApp Legacy Mobile StatusBar uses the shell accent (`#04564A`) in portrait
+(no ProgressIndicator brand text — Unison still shows “Unison”). Landscape hides
+the bar like Unison. `ChatDeletionPrompt` never deletes when `IDialogService` is
+missing; confirmation is mandatory for list / detail / info delete.
+
+## Keyboard — ESC closes media viewer; Ctrl+V pastes attach media
+
+Escape on the image/video overlays runs `CloseCommand` (same as chrome close /
+system Back). Ctrl+V on an open chat: when the clipboard has Bitmap or
+StorageItems, `ICopyService.ReadPasteAsync` materializes Image / Audio /
+Document and `ChatDetailViewModel.PasteClipboardCommand` sends via the existing
+`SendPicked*` paths (no file picker; video ignored). Plain-text Ctrl+V stays on
+the composer TextBox.
+
+## Message Forward — text/caption send end-to-end
+
+Picker choice now calls `IMessageService.ForwardMessageAsync` (source chat +
+message id + target). MVP sends the text body or media caption with
+`ContextInfo.isForwarded` / `forwardingScore` via the existing text path
+(`OutgoingTextMentions.MarkAsForwarded` → Socket `MessageFactory`). Full media
+re-upload (Baileys `generateForwardMessageContent`) still later.
+`IForwardMessagePicker.OpenForwardPicker(sourceChatJid, messageId)`;
+`ShellViewModel` injects `IMessageService` for the send. After a successful
+forward the destination chat opens (same activation path as Share Target).
+
+## Contacts picker — row loading ring before every click command
+
+`ContactsVisualizerControl` (Favourites / Share / Forward): on item click,
+paint `RowClickBusyRing` on the compact row (+ scrim) **this** turn, then run
+`ItemClickCommand` on the next dispatcher turn. Order is mandatory so Share /
+Favourite / Forward never look dead after a tap.
+
+## Mobile — group subject once during timeline load + Unison ring
+
+Open deferred strip still after Yield, but the w:g2 subject/flags IQ now starts
+from `BeginLoadingMessages` (once per open, only when the row still looks like a
+JID placeholder). New groups that arrived without a subject get a name while
+messages load instead of relying on Prepare-time handshake. Unison chat detail
+shows a centre `ModernProgressRing` while `IsTimelineBusy` (keeps the 2px header
+bar).
+
+## Message Forward — people picker (menu + Legacy bar)
+
+Bubble context menu (`MessageBubbleContextActions`) and the Legacy
+`MessageActionsBar` gain **Forward**. The command opens the shell
+`ContactsVisualizer` overlay with title `ChatDetail_ForwardMessage`
+(Forward / Encaminhar) and holds source chat + message id on
+`ShellViewModel`.
+
+## Legacy chat list — mouse context menu + Hold CommandBar dismiss
+
+Right-click on PC did nothing for two reasons: (1) `PointerPressed` with
+`Handled=true` killed `RightTapped`; removing that handler left (2) ListView
+selecting on right-button `PointerPressed` so `SelectionChanged` opened the chat
+before `RightTapped`/`ContextRequested` could `ShowAt`. Fix: arm
+`_ignoreNextSelectionFromContext` on right-button `PointerPressed` **without**
+marking Handled; mouse still opens the row `MenuFlyout`; touch Hold still opens
+the bottom CommandBar (mouse Holding is ignored). Scrim dismisses the bar on
+press/tap outside (opening finger-up still swallowed; the 500ms grace no longer
+blocks the next click).
+
+`ResolveRowContextMenu null` after that: Legacy Detach cleared
+`Grid.ContextFlyout` and stashed the `MenuFlyout` on the template Grid; recycle
+could drop that Grid-keyed entry so right-click found nothing. Stash is now on
+the stable `ListViewItem`, with deferred Detach after template realize and a
+`ChatItemTemplate` rehydrate if the flyout was already lost.
+
+## Contacts picker — click busy ring + SemanticZoom jump scroll
+
+`ContactsVisualizerControl` (Favourites add + Share): centre `ModernProgressRing`
+on row click before the command runs so the tap is never silent. SemanticZoom
+letter jump no longer calls `ScrollIntoView(AlphabetChatGroup)` mid-transition
+(docs require `MakeVisible` on a real list item inside SemanticZoom). Now:
+`ViewChangeStarted` maps the tile → first `ChatItem`, then `MakeVisible` /
+`ScrollIntoView` after `ViewChangeCompleted` + Loaded. Same jump fix on
+`FavoritesView`.
+
+## Contacts — `~` only on the chat-list author strip
+
+The unsaved-contact marker was applied globally on push-name winners
+(`DisplayNameResolution` / `chat` context), so 1:1 titles and Favourites
+landed under a `~` SemanticZoom bucket. Default resolve is now unmarked;
+`WithContactIndicator` is true only for context `strip` (list tip / live
+group author). `ChatItem.Name` strips a leading `~` on set;
+`AlphabetChatGroups.LetterKey` and `GetNameResolved` also strip for safety.
+`ContactsVisualizerControl` (Favourites picker + Share overlay) always uses
+A–Z SemanticZoom like Favourites — no category headers.
+
+## Mobile — first group open: defer on-demand cold work
+
+First open of a large group froze ARM; 2nd open was fine (unread already 0,
+DirectChatIndex / strip warm). Open path was stacking ClearUnread tile+slice
+persist, ChatAuthorProjection BeginSweep, and group-meta apply on the same
+turns as Prepare/Hold.
+
+- `ClearUnreadForChatAsync`: badge stays sync; `SecondaryTile` + `PersistRows`
+  run on the thread pool (`chat-open|clear-unread` /
+  `clear-unread-side-effects` / `persist-rows` / `mark-read`).
+- `ChatAuthorProjection` waits `ChatTimelineLoadPriorityGate` before BeginSweep;
+  strip PersistRows is off the UI hop. DI passes the gate.
+- Group open: `RefreshChat` + send-permissions after `Task.Yield` (not inside
+  `SyncActiveChat`); participant maps use `EnsureFresh`.
+- Background unresolved groups: `ApplyMetadata` flags-only (`includeRoster:false`).
+- Resume: hiding the window no longer forces `_visibleOrderDirty` (resume used
+  to rebuild ~24s for mutations=1). `refresh-visible-exit` logs buildMs /
+  reconcileMs / totalMs.
+
+## Mobile — ChatListDeduper plans off the UI thread
+
+Every alias follow-up ran the whole dedupe (canonical lookup per row and per
+message-cache key, fold, re-key) in one UI hop; ARM froze 6–24s
+(`sync:ChatListDeduper.RunAsync`, runs `06f9cb95` / `d1289eeb`, 259 chats).
+Now: one snapshot hop → plan on the thread pool → apply only the found
+groups/keys in UI batches of 8. A clean list costs a single cheap hop.
+Concurrent requests coalesce into one follow-up pass, and rows re-addressed
+mid-pass are left for the next one. New journal line
+`chat-list-dedupe|pass` (reason, requests, rows, dupGroups, aliasKeys,
+merged, normalized, snapshotMs/planMs/applyMs, applyHops) when a pass
+changes something or takes ≥300ms.
+
+## Mobile — defer background-groups on resume settle
+
+Returning from keepalive armed `background-groups:begin` on the same turn as
+`visible=True`, competing with list refresh / fast-resume (hitch in run
+`06f9cb95`). Visibility restore now waits
+`SyncWorkloadStrategy.GroupListingResumeSettleMs` (3s / 2.5s / 1.2s by tier)
+and only fires if the window stayed visible (`GroupListingVisibilityGate.ShouldFireResumeRetry`).
+
+## Mobile — Windows People publish: heavy collect off the UI thread
+
+`PublishWindowsContactsCoreAsync` stalled ARM ~13s because
+`CollectWindowsContactExports` (name/avatar/phone per DM) ran inside
+`_ui.RunAsync`. The dispatcher hop now only snapshots `ChatItem` refs;
+`WindowsContactExportBuilder.Build` + `PublishAppContactsAsync` run after
+`ConfigureAwait(false)`.
+
+## Mobile — ChatAuthorProjection strip is on-demand (per chat / tip)
+
+Mass `ScheduleSweep` on every `DisplayNamesChanged` / Start / open-chat still froze
+ARM after the index fix. Mobile now sets `onDemand: true`:
+
+- Start / `Refresh` / broad `DisplayNamesChanged` do **not** walk the catalogue.
+- `PersonChanged` → only groups whose tip matches that JID (and aliases).
+- `GroupRosterChanged` / `RefreshChat` → only that group.
+- Opening a group calls `RefreshChat(jid)`, not full `Refresh`.
+
+Desktop keeps the full pass for Start / display-name bursts.
+
+## Mobile — ChatAuthorProjection strip sweep uses bubble-style indexes
+
+`ui-watchdog` on ARM showed `vm:ChatAuthorProjection.ScheduleSweep` holding the
+UI for 18–112s after group-metadata bursts: each group tip re-walked the whole
+chat list (and roster) inside one dispatcher hop. The open-chat path already
+builds `_directChatNames` / `_rosterByCanonical` once for bubbles.
+
+- `ChatAuthorStripMaps`: one-shot 1:1 name map + roster tip / direct-name helpers
+  for the list strip (same contract `GroupParticipantResolver` already accepts).
+- `ChatAuthorProjection` builds the 1:1 map once per coalesced pass, prefers
+  roster tip / DM name as `nameHint` (skips the contacts hop when possible), and
+  chunks 8 groups per hop. `IDispatcher.RunAsync` runs **inline** on the UI
+  thread, so the next chunk is queued with `Task.Yield` — without that, 2.2.35
+  still logged `ScheduleSweep` for ~38s with nested `ContinueSweep`. In-flight
+  passes set `_sweepAgain` instead of stacking.
+
+## Mobile — diagnostics: UI stall watchdog + route steps
+
+The frozen-list logs showed the pump as the victim, not the cause: the list froze
+with `decrypted` flat (no message), the retry of a timed-out live message goes
+through `ApplyIncomingDuplicateAsync` (awaits a UI hop), and the toast only
+fires after the strip ran on the UI — so "a notification unblocks the list" is
+the UI freeing up and releasing the toast. Nothing logged what the UI was doing.
+
+- `UiStallWatchdog` (UWP, DI): a worker timer posts a Normal probe every 1s;
+  `ui-watchdog|ui-stall` after 2s with the active dispatcher hop, then
+  `ui-stall-ongoing` every 10s and `ui-stall-end` with the total. Hops ≥300ms
+  log `ui-slow-work`. Hidden windows drop the probe (no false stalls on resume).
+- `IDispatcher.RunAsync` / `IUrgentDispatcher.RunUrgentAsync` take
+  `[CallerMemberName]` + `[CallerFilePath]` so hops are named
+  (`urgent:ChatFacade.RunLiveStripAsync`). .NET Native strips lambda metadata, so
+  no reflection. `AttachedUiDispatcher`, `DispatcherService`,
+  `UiThreadDispatcherService` track the hop; `active=none` means XAML layout,
+  input, or an `await` continuation outside these dispatchers.
+- `IncomingRouteTrace`: fresh per handle attempt; `MessageFacade` marks steps
+  (`alias-hints`, `timeline`, `duplicate-preview`, `inserted`, …). Timeout and
+  health log `stage=route:<step>`. The queue stage is untouched, so a zombie
+  route cannot overwrite the retry.
+
+## Extraction 4 — four startup/sync/socket owners leave WhatsAppService
+
+`DeferredStartupMaintenanceOwner`, `PublishInitialSyncProgressOwner`,
+`HistoryCatchUpBannerOwner` (begin+end), `ResetFirstSyncListHoldFlagsOwner`, and
+`InvalidateCurrentSocketOwner` own their dispatches. Quiet/memory/name/façade
+ports, first-sync flags/channel, banner latch/journal, and socket
+stop/clear/dispose stay as ctor ports on the client.
+
+## Extraction 4 — ReleaseMemoryOwner leaves WhatsAppService
+
+`IReleaseMemoryHost` left the client. `ReleaseMemoryOwner` (WhatsAppClient) owns
+the dispatch; message-store clear / UI hop / inactive-cache remove stay as ctor
+ports. `ReleaseMemoryAsync` forwards to the owner.
+
+## Mobile — incoming pump: ignore stale drain timeouts
+
+After `Reset` (health-stall / timeout), the old drain's 12s `Delay` could still
+fire and `Reset` again with `_current==null` → `message-timeout-retry` /
+`qLive=0` and no `incoming-pump-start` (pump stuck until the next enqueue;
+toast arrived ~85s later from the orphan handle). Timeout now no-ops when the
+drain generation is retired (`stale-drain:…`); null current never retries.
+
+## Mobile — live route: strip+toast detached from pump
+
+`ApplyIncomingInsertedAsync` no longer awaits `ApplyLiveIncomingChatListAsync`
+on `stage=route`. A busy UI dispatcher (scroll/reshuffle) used to hold the pump
+past 12s (`health-stall` → `message-timeout-skip`) and freeze list scroll until
+the next notification. Strip still runs urgent; toast follows when it finishes
+(`live-strip-slow` / `live-strip-ui-slow` when ≥1s).
+
+## Extraction 4 — LoadPersistedUiStateOwner leaves WhatsAppService
+
+`ILoadPersistedUiStateHost` left the client. `LoadPersistedUiStateOwner`
+(WhatsAppClient) owns the dispatch; init / catalogue load / avatar hydrate /
+preview reconcile stay as ctor ports. `LoadPersistedUiStateAsync` forwards to
+the owner.
+
+## Mobile — live list Move: community gate + alias tip probe
+
+`MoveToMatchSource` no longer aborts when *any* community exists in the
+catalogue (that forced every tip into full refresh / `order-clean`). Only the
+moved row's community shape falls back. PN/LID: order by the fresher catalogue
+tip while moving the on-screen instance. Failed incremental still sets
+`_visibleOrderDirty` and logs `incremental-move-miss`.
+
+## Mobile — live list Move: Visible NextIndexOf (fix tip not rising)
+
+Mirroring raw `Chats` index broke when Visible was deduped/sorted differently
+(or PN/LID instance ≠ visible row): Move no-oped and fallback refresh skipped
+(`order-clean`). `MoveToMatchSource` now finds the on-screen row (ref/canonical)
+and uses `ChatListRowOrder.TargetIndex` over VisibleChats only. Failed
+incremental apply sets `_visibleOrderDirty` before ScheduleRefresh.
+
+## Mobile — live inbound: toast off pump + urgent strip hop
+
+`NotifyLiveIncoming` snapshots mute/avatar/unread into `IncomingLiveAnnouncePayload`
+and runs toast / Live Tile / Start-tile on `Task.Run`, so WinRT notify no longer
+holds incoming-pump `stage=route`. Live list strip apply uses
+`IUrgentDispatcher` (`AttachedUiDispatcher.RunUrgentAsync` = High) so Normal
+list reshuffles cannot starve the 12s route timeout.
+
+## Extraction 4 — remaining socket wire owners leave WhatsAppService
+
+`ISocketFacadeWireHost` / `IInboundWireNodeHost` / `IDecryptedMessageWireHost` /
+`IHistorySyncWireHost` / `IOfflineReplayReleaseHost` left `WhatsAppService`.
+`SocketFacadeWireOwner`, `InboundWireNodeOwner`, `DecryptedMessageWireOwner`,
+`HistorySyncWireOwner`, and `OfflineReplayReleaseOwner` own the dispatches;
+façade notify / pump enqueue / history apply / flush stay as ctor ports.
+`SocketEventHandlerWiring` calls the owners, not the client as host.
+
+## Mobile — chat-list avatars: batch + open, not scroll
+
+Mobile no longer calls `RequestAvatarRefresh` from `OnRowRealized` (ListView
+realize storms). First pictures still come from the post-history avatar batch +
+disk hydrate. Opening a chat on Mobile force-revalidates; `ChatAvatarFetch`
+skips the CDN download when picture id (else remote URL) matches what was
+cached (`AvatarPictureId` / `AvatarRemoteUrl`). Desktop keeps row-realize refresh.
+
+## Extraction 4 — SessionInitialized / SocketError / ConnectionUpdate wire owners
+
+`ISessionInitializedHost` / `ISocketErrorHost` / `IConnectionUpdateHost` left
+`WhatsAppService`. `SessionInitializedOwner`, `SocketErrorOwner`, and
+`ConnectionUpdateOwner` (WhatsAppClient) own the dispatches; pairing flags /
+persist / reconnect / diagnostics stay as ctor ports. `SocketEventHandlerWiring`
+calls the owners, not the client as host.
+## Extraction 4 — ClearSession + Qr/Auth wire owners
+
+`IClearSessionHost` / `IRaiseSessionClearedHost` left `WhatsAppService`.
+`ClearSessionOwner` + `RaiseSessionClearedOwner` (WhatsAppClient) own the wipe /
+UI-cleared sequence; store / socket / toast I/O stay as ctor ports.
+`IQrCodeWireHost` / `IAuthStateWireHost` left too — `QrCodeWireOwner` /
+`AuthStateWireOwner`; `SocketEventHandlerWiring` calls the owners, not the
+client as host.
+## Extraction 4 — NotifyServerLogoutOwner
+
+`INotifyServerLogoutHost` left `WhatsAppService`. New `NotifyServerLogoutOwner`
+(WhatsAppClient) runs the dispatch; socket logout / reconnect flags stay as
+ctor ports.
+## Mobile — group listing cancels IQ waiters on hide
+
+`GroupListingCancellation` CTS cancels in-flight participating-groups /
+unresolved-metadata waits. `IGroupWireActions` + `ConnectionHandler.Query*`
+take `CancellationToken` and drop the IQ waiter (stanza may still arrive,
+ignored). Replaces the abort flag that only stopped *after* the IQ returned.
+## Mobile — large-group open: no UI steal before timeline gate + no false list rebuild
+
+`RefreshGroupSendPermissions` queued a Chats walk on the dispatcher before
+`WaitWhileHeld`, racing `LoadMessages` (journal gap ~95s on FullStack 568).
+Subject cache now runs inside `ApplyMetadataAsync` after the gate, via
+`ChatRowIndex`. Timeline Hold no longer marks `visibleOrderDirty` by itself, so
+Release after settle does not force `refresh-visible` on every back-to-list.
+`chat-open` gains `load-begin` / `load-live` / `load-sql` / `load-seed` timings.
+## Extraction 4 — BackgroundDisplayNamesPersistence owns broker name snapshot
+
+`IPersistBackgroundDisplayNamesHost` left `WhatsAppService`. New
+`BackgroundDisplayNamesPersistence` (WhatsAppClient) builds the table and
+journals; `BackgroundDisplayNameStore.SaveAsync` stays a UWP ctor port
+(InternalsVisibleTo Background). Same ownership shape as catalog disk.
+## Extraction 4 — enrichment / self-profile / catalog disk owners
+
+`ReleaseEnrichmentAfterHeavyHistoryCoordinator` owns the awaiting-heavy-history
+flag + release dispatch. `SelfProfileAuthSync` owns sync-from-auth / self-phone /
+avatar persist hosts. `ChatCatalogDiskPersistence` owns full / slice / suspend-tail
+persist and startup catalogue hydrate (`IChatCatalogFullPersistHost` /
+`ILoadPersistedChatCatalogHost`). Debounce timer stays on the client
+(`IChatCatalogPersistHost`). Background display-names host deferred.
+## Extraction 4 — four message/freshness owners leave WhatsAppService
+
+`HistoryFreshnessRepairPersistence` (repair/reconnect UTC stamps),
+`LiveMessagePersist`, `PersistedMessageLookup` (find + retry rebuild),
+and `ActiveChatCacheSideEffects` (cache unload + sync clear) now own the
+matching dispatch hosts. Eight `I*Host` interfaces left the client implements
+list.
+## Extraction 4 — ForgetChatStorageHost owns durable chat-delete I/O
+
+`IForgetChatStorageHost` and `IAppStateLocalHost` left `WhatsAppService`.
+New `ForgetChatStorageHost` + `AppStateLocalHost` (WhatsAppClient) run
+`ForgetChatStorageDispatch`; catalogue upsert via `ChatCatalogPreviewPersist`.
+## Mobile — journal ExtendedExecution keepalive revoke
+
+`LocationKeepAliveService` writes `keepalive|allowed|denied|revoked|retry-*`
+to `IRuntimeDiagnostics` and flushes on revoke so the next lockscreen death
+can show OS `SystemPolicy` reclaim vs unlock UI storm. No behavior change.
+## Extraction 4 — ChatIdentityPersistence owns immediate identity flush
+
+`IChatIdentityPersistence` plus `IPersistChatIdentityStateHost` left
+`WhatsAppService`. New `ChatIdentityPersistence` (WhatsAppClient) runs
+`PersistChatIdentityStateDispatch`; catalogue preview upsert shared via
+`ChatCatalogPreviewPersist`. Same ownership shape as `JidAliasPersistence`.
+## Extraction 4 — JidAliasPersistence owns alias table I/O
+
+`IJidAliasPersistence` plus `ITryRecordAliasMappingHost` /
+`IRegisterAliasMappingsHost` / `IPersistJidAliasesHost` /
+`IFlushPendingSocketAliasesHost` left `WhatsAppService`. New
+`JidAliasPersistence` (WhatsAppClient) runs the existing dispatches;
+`ISocketAliasRegistrar` gained `RegisterPairs` for bulk flush. Same ownership
+shape as `UsyncAliasHost`.
+## Extraction 4 — retire IWhatsAppService
+
+Last DI alias and `implements` removed. No ViewModel/façade resolved it;
+`ConnectionFacade` already uses connection host ports. Concrete
+`WhatsAppService` stays for wire hosts. Doc target surface no longer names
+`IWhatsAppConnection` as a rename of that aggregating contract.
+## Mobile — abort group listing when window hides (keepalive)
+
+1.8 aborted enrichment phases when CoreWindow hid; `QueryAllGroups` already in
+flight still burned IQs for minutes under `location-keepalive` (journal
+`background-groups` 182–256s) and the process died on unlock (black screen).
+`GroupListingVisibilityGate` defers `NotifyGroupListingDue` / listing start
+while hidden, aborts unresolved-metadata mid-pass, arms retry, and flushes on
+`IAppVisibility.Changed` when visible again. Package 2.2.23.
+## Extraction 4 — DeferredStartupOnce owns deferred-startup CAS
+
+`_deferredStartupMaintenanceStarted` moved out of `WhatsAppService` into
+`DeferredStartupOnce`. `StartDeferredStartupMaintenance` claims via
+`TryStart`; a second call is a no-op.
+## Extraction 4 — PersistedUiLoadGate owns persisted-UI load lock
+
+`LoadPersistedUiState` `SemaphoreSlim` moved out of `WhatsAppService` into
+`PersistedUiLoadGate`. Host enter/exit forwards to the gate.
+## Extraction 4 — InitGateOwner owns connection-state init lock
+
+`InitializeConnectionStateAsync` `SemaphoreSlim` moved out of `WhatsAppService`
+into `InitGateOwner` (WhatsAppClient). Same gate shape as `ConnectionGateLocks`.
+## Extraction 4 — ConnectionGateLocks + HydrationDayRetryOwner
+
+Connect and resume/ensure `SemaphoreSlim` gates moved to `ConnectionGateLocks`
+(`ConnectAsync` enter/exit; `ConnectionEnsure` uses `ResumeGate`). Hydration
+day-retry CTS, day attempts and day-anchor moved to `HydrationDayRetryOwner`
+over `IHydrationDayRetryIoHost` (freshness / pipeline / stamp only). Same
+ownership shape as the other Phase 4 owners.
+
+## Extraction 4 — PostSyncMaintenanceOwner owns post-replay / enrichment CTS
+
+Post-replay maintenance and post-message enrichment CTS fields, the once-per-
+session enrichment CAS, and `Task.Run` arms moved out of `WhatsAppService` into
+`PostSyncMaintenanceOwner`. Schedule dispatches run against the owner; the client
+only implements `IPostSyncMaintenanceIoHost` (quiet/memory/façade bodies).
+Shutdown cancels both CTS via `CancelAll`. Same ownership shape as
+`SoftReconnectCoordinator` / `ConnectionHealthMonitorOwner`.
+
+## Extraction 4 — ConnectionHealthMonitorOwner owns health / safety CTS
+
+Connection-health monitor and periodic FULL_HISTORY safety CTS / `Task.Run`
+moved out of `WhatsAppService` into `ConnectionHealthMonitorOwner`. Start/Stop
+dispatches run against the owner; the client only implements
+`IConnectionHealthMonitorIoHost` loop bodies. Same ownership shape as
+`SoftReconnectCoordinator`.
+
+## Extraction 4 — SoftReconnectCoordinator owns reconnect slot
+
+Soft auto-reconnect lock and `isReconnecting` moved out of `WhatsAppService` into
+`SoftReconnectCoordinator` (WhatsAppClient). Schedule / claim / complete / pairing
+slot entry points live on the owner; the client only implements `ISoftReconnectIoHost`
+(auth flags, loop body, diagnostics). Same ownership shape as `OfflineReplayFlush` /
+`HistoryHydrationBackfill`.
+## Mobile — finish FULL_HISTORY on first empty-ack quiet lot (frugal)
+
+Freshness catch-up on Low could burn ~3×50s rounds after WA `ack-accepted`
+with `signals=0` (no history payload). Frugal idle decide now finishes
+`FinishStagnantProgress` on that empty-ack lot instead of Continues. Generous
+path unchanged. Journal: `emptyAckFinish=True`.
+## Mobile — pause tip-swapped during list cold fill + skip clean refresh
+
+Cold reattach still hitching: `tip-swapped` walked all 259 previews while
+`refresh-visible` Continues Inserted the list, and enrichment phase-clear
+scheduled a full rebuild for `mutations=0` (~0.6s). `ChatListColdPopulateGate`
+pauses tip UI slices until cold fill completes; order-clean refreshes skip
+`BuildVisibleRefreshSource`; enrichment release only reshuffles when dirty.
+
+## Extraction 3.10 — SqliteHistoryQuietFinalize owns generation / delay
+
+Quiet-finalize generation counter and the delayed entry that stamps it before
+`SqliteHistoryQuietFinalizeDispatch` moved out of `WhatsAppService` into
+`SqliteHistoryQuietFinalize` (WhatsAppClient). The client only implements
+`ISqliteHistoryQuietFinalizeHost` I/O. Same ownership shape as
+`HistoryHydrationBackfill` / `OfflineReplayFlush`.
+
+## Mobile — list rematerialize + names-phase group listing
+
+Returning to the chat list (and idle refreshes) still closed the process:
+`post-replay-names` embedded `QueryAllGroups(force)` (~200s on Low) while
+enrichment already owns a groups phase; `refresh-visible` rebuilt aligned
+249-row lists for 18–26s and cold reattach Continues every 40ms starved
+`incoming-pump` route. Fix: enrichment/background names skip group listing;
+`IsRefreshing` covers source build + suppress nested pin refreshes; aligned
+lists short-circuit; frugal cold fill uses budget 20 and 120ms Continue gaps.
+
+## Mobile — Debug live paint + name-refresh coalesce
+
+Debug overlay starved Back during FULL_HISTORY catch-up + `list-names-applied`
+storms: 250ms log rebinds (up to 60k) and 2s full snapshot+recent. Frugal budget
+now uses 1s / 8s timers, 12k log cap, timer health without recent dump, throttled
+auto-scroll. `ChatNameRefresh.ApplyAsync` coalesces overlapping callers into one
+catalogue walk (+ one follow-up if tickets arrived mid-pass).
+
+## i18n — Legacy Mobile command bar + missing Settings/Debug keys
+
+Chat-actions AppBar labels now resolve `Shell_LegacyChatActions_*.Label`
+(was bare keys without `.Text`/`.Label`, so non-EN always fell back). Pivot
+chats/status/archived got `x:Uid`. Added English strings for Settings section
+hints and Debug Socket slice. English values shipped in every locale pack
+except `pt-BR` (held for translators).
+
+## Extraction 3.10 — HistoryHydrationBackfill owns lock / start
+
+Background ON_DEMAND hydration lock and active flag moved from
+`WhatsAppService` into `HistoryHydrationBackfill` (WhatsAppClient). The client
+only implements `IHistoryHydrationBackfillHost` (candidates, socket request,
+settle, diagnostics). Same ownership shape as `OfflineReplayFlush`.
+
+## Mobile — large-group open: skip roster parse + no full name refresh + 5s settle
+
+After flags-only apply, open still lagged until the process died: (1)
+`ReadMetadata` always ran `ReadMemberDrafts` (up to 512) then discarded them;
+(2) subject-cache kicked `ChatNameRefresh.ApplyAsync()` → `list-names-applied`
+~190 storms; (3) `MobileScrollSettleHold` released at 1.8s while list Continues
+kept mutating ~250 rows. Fix: `ReadMetadata(..., includeRoster)` / listing
+skips drafts; open path drops full name ApplyAsync (row already labeled);
+settle hold 5s.
+
+## Extraction 3.10 — OfflineReplayFlush owns pending drain
+
+Flush lock, idle timer, and `PendingMessageQueue` claim/drain moved from
+`WhatsAppService` into `OfflineReplayFlush` (WhatsAppClient). The client only
+implements `IOfflineReplayFlushIoHost` (live upsert, remove pending, catalogue
+schedule, diagnostics). `IPendingMessageFlushHost` resolves to the flush owner.
+
+## Mobile — background location-keepalive no longer paints a black list
+
+With `location-keepalive`, the process stays alive while CoreWindow is hidden.
+`refresh-visible` and `tip-swapped` kept mutating the list on that black surface.
+`IAppVisibility.Changed` now defers `ChatListViewModel` visible refresh and pauses
+`ChatPreviewReconciler` UI slices until the window is visible again.
+
+## Extraction 3.10 — IncomingMessagePump owns the decrypted drain
+
+Queue, Task.Run drain, live timeout / stall bookkeeping, and handle→façade
+notify moved from `WhatsAppService.IncomingPump` into
+`IncomingMessagePump` (WhatsAppClient). The client only enqueues from the wire,
+forwards recovered placeholders, and asks for restart/reset/drain on health /
+suspend / resume. Applied-message diagnostics counters live on the pump.
+
+## Mobile — group open skips full roster apply (post-paint lag)
+
+Paint was already gated; after Release, `RefreshGroupSendPermissions` still ran
+`ApplyMembers` for 500+ rows and kicked a name refresh that froze the shell
+(and Debug). Open path now applies announce/role/count flags only
+(`includeRoster: false`); `EnsureGroupRosterLoadedFromStore` left SyncActiveChat.
+Full roster stays on the Members pivot (`includeRoster: true`). Also:
+`ApplyMembers` chunked off-UI (`rosterBuildChunkSize`), Info Detach cancels
+roster CT, frugal name refresh skips roster (`membersToo: false`), Mobile
+scroll-settle hold before releasing timeline priority.
+
+## Mobile — group chat open no longer waits on 500+ roster apply
+
+Opening a large group (~568 members) held the UI ~40s between Prepare and
+timeline paint: `SyncActiveChat` restored/applied the full roster on the
+dispatcher while `YieldForSurfacePaint` waited, and `ChatOpenMetadataProbe`
+issued a second `QueryGroupMetadata`. Fix: ref-counted
+`ChatTimelineLoadPriorityGate` held from Prepare→Complete; roster restore +
+metadata apply wait while held; probe keeps RAM/SQL only (no wire query).
+
+## Extraction 3.9b — client drops public MessagesByChat
+
+`WhatsAppService` no longer re-exports `ChatStateStore.MessagesByChat`. Hosts and
+diagnostics reach the store (`GetMessageCount` / `GetMessages` for counts and
+on-demand history pages; cache clear/evict still on `_chatState.MessagesByChat`).
+Dead client `TrimInMemoryMessageWindow` removed (trim already on `MessageFacade`).
+`Chats` binding alias stays.
+
+## Refactor wave — DeferredAvatars seam + pane chrome DRY + GroupJoin map
+
+Two highs + light hygiene (Mobile test window kept clear of Legacy Hold):
+
+- **H1:** `ScheduleDeferredAvatarsCore` unifies enrichment / catch-up / first-sync
+  unlock deferred-avatar schedules (`FirstSyncUnlockDeferredAvatarDelay`).
+- **H2:** `ChatPaneWideBothChrome` after `ChatPaneLayoutApply` on Unison/WhatsApp/UI
+  Chats + Archived (WideBoth splitter vs narrow reset).
+- Light: `GroupJoinNotifyMap` (+ tests), Share Complete docs, SyncWorkload regions,
+  tipAdvanced asserts on MinValue watermark, ForgetChatStorage / AppState naming
+  comments, ShellThemeStrategy fallback note, csproj helper comment.
+
+## Legacy Mobile — Hold opens CommandBar only; dismiss scrim above list chrome
+
+Touch Hold on a chat row still auto-opened the shared template `Grid.ContextFlyout`
+(MenuFlyout) in parallel with the actions CommandBar — `Hide()` lost the race.
+Legacy now detaches that flyout per row (`DetachRowContextFlyoutForLegacyHold`)
+and keeps it for mouse `ShowAt`. Chat-actions dismiss matches ChatDetail
+MessageActions: scrim on rows 0–2, actions bar on row 3 (`ZIndex` above
+`ListCommandBar`), with the list chrome `IsHitTestVisible=false` while open.
+
+## Open-chat rounds — VSM hitch + shared paint helpers
+
+Two heavy + light cleanup pass while validating PreferFast/Normal yield:
+
+- **H1:** Unison/WhatsApp/UI Chats (+ Archived) apply pane geometry via
+  `ChatPaneLayoutApply` (Visibility/GridLength like Legacy) with skip-if-same-pane
+  — no `VisualStateManager.GoToState` on list→detail.
+- **H2:** `ChatOpenPaintSchedule` + `ChatOpenHostSequence` shared by all
+  `ChatDetailView` / Chats hosts (Normal yield, PreferFast Complete).
+- Light: Identity dead usings; host `IsWindowVisible` → `IAppVisibility`;
+  `SharePickerCatalogRefresh`; csproj Compile for new UI helpers.
+
+## Unison / WhatsApp — list tap opens chat as fast as Legacy
+
+Mobile kept a 2s `TimelineMaterializeDelay` after the ProgressBar on Unison and
+WhatsApp list→detail opens; Legacy already set `PreferFastTimelineLoad` on every
+open and skipped it. Chats + Archived hosts now set PreferFast before
+`CompleteActiveChatLoadAsync` (same path as toast/deep-link). Pre-load hitch:
+Unison/WhatsApp yielded the paint turn at `CoreDispatcherPriority.Low` (queued
+behind VSM/list layout); Legacy used `Normal` — aligned.
+
+## Share Target — picker list refresh + same host window
+
+Cold “Compartilhar com” opened the picker while Boot still had an empty
+`ChatStateStore`, then `EnsurePendingSharePickerVisible` left `IsSharePickerOpen`
+already true without rebuilding — overlay stayed empty after chats loaded.
+Share now queues until Connected, always rebuilds on Ensure, and refreshes
+candidates on `Chats.CollectionChanged` / display-name changes while open
+(`SharePickerCatalog`). `ContactsVisualizerControl` applies `ItemsSource` updates
+even during deferred open. Activation stays on the Share host window (warm reuses
+Frame; cold boots then picker) — no `LaunchUriAsync` handoff — with visibility /
+notification init parity to toast.
+
+## Mobile — toast / deep-link chat open no longer waits 2s + tip flood
+
+Opening a chat from a notification (or other deep-link) kept Mobile’s
+`TimelineMaterializeDelay` (2s) and let `tip-swapped` UI slices run on the
+dispatcher during `LoadMessages`, so the conversation felt frozen for seconds
+after cold start. Toast hosts set `PreferFastTimelineLoad` before
+`CompleteActiveChatLoadAsync`; that path (and deep-link list hold) skips the
+delay (`ChatTimelineOpenPriority`) and holds `ChatTimelineLoadPriorityGate` so
+`ChatPreviewReconciler` pauses tip UI until the timeline paints.
+`Task.Delay` for the remaining list→detail pause uses `ConfigureAwait(false)`.
+
+## Mobile — stop FULL_HISTORY hang after tip reconcile + stagnant catch-up
+
+Long journals showed quiet waits between full tip walks, then catch-up finish
+re-latching force-repair + hydration → periodic FULL_HISTORY forever on Low.
+Three gates: full tip reconcile cool-down 5s→90s (`FullChatPreviewReconcileGate`);
+`AllowStagnantHistoryRepairCascade` false on Low/Unsupported (no MarkForce /
+hydration / periodic re-solicit after stagnant or max-continues; High still
+true); seeding the catch-up tip watermark from `MinValue` is no longer
+`tipAdvanced` progress (`HistoryCatchUpContinueDecision`).
+
+## Share Target — stay on host window (fix Mobile splash→close)
+
+`ReportCompleted` / `LaunchUriAsync(unison://share)` handoff still killed Mobile:
+the share host is the only window, so completing the contract after splash exited
+the process. Share Target now materializes the payload, binds
+`IShareTargetSession` (`ShareTargetSession`), and routes the picker on that same
+window. `ReportCompleted` runs only on picker cancel, after media apply, or on
+suspend (text-only keeps the host alive for the composer). Removed the `unison`
+protocol handoff.
+
+## Mobile — tighter Low / Unsupported sync rules
+
+`SyncWorkloadStrategy` for Low (1 GB Mobile) and Unsupported (512 MB) now backs
+off harder during first sync and enrichment: Low skips history thumbs during
+sync, caps adjacent FULL_HISTORY rounds at 4 (was 12), serial enrichment quiet
+12s, avatar fetch batch 1, leaner name usync, and deferred-avatar retry at most
+twice with a 40s delay. Unsupported disables deferred-avatar wake entirely
+(viewport / open-chat only), lengthens quiet gaps, and keeps catch-up at zero.
+`DeferredAvatarResolution` reads delay + max retries from the tier via DI.
+
+## Mobile — stop background-names CPU loop + share NRE
+
+Deferred avatar retry (`DeferredAvatarResolution` ~20s) was calling full
+`TriggerBackgroundResolution`, so `ResolveMissingNamesAsync` re-ran forever while
+avatars stayed deferred — journal `background-names` every ~20–30s after minute 10.
+Retry is now pictures-only (`TriggerDeferredAvatarRetry`). Share Target cold start
+also NRE’d in `ResumeConnectionWhenVisibleAsync` when connection DI was not ready;
+null-guard skips with `visibility-reconnect-skipped`.
+
+## Share Target — Mobile splash→close (handoff attempt; superseded)
+
+Earlier handoff via `LaunchUriAsync(unison://share)` still closed Mobile because
+the share host is the only window. Superseded by “stay on host window” above.
+Cold boot still re-shows the picker when the connected shell mounts.
+
+## Chat list — coalesce full tip reconcile (Mobile paint storm)
+
+`post-replay` and `deferred-startup` each walked every chat tip within seconds,
+flooding Low/Arm UI with `tip-swapped` PropertyChanged. Full reconciles are now
+single-flight + cool-down (`FullChatPreviewReconcileGate`; later raised to 90s —
+see “stop FULL_HISTORY hang” above); deferred-startup skips the second walk
+unless dedupe merged rows or legacy tip repair rewrote strips. Frugal devices
+also pause ~48ms between UI slices so the list can paint. Stale tips stay
+visible until swap (no per-row “Loading”).
+
+## Phase D — ConnectionConnectAbortedJournal
+
+Prepare-abort journal strings (`connect-aborted` / `reason=…`) moved to
+`ConnectionConnectAbortedJournal` in WhatsAppClient (same pattern as
+`ConnectionKeyStoreOpenJournal`). Host still only calls `RuntimeDiagnosticsService.Write`.
+
+## Share Target + contacts overlay (Mobile open) + Favourites WP8 jump
+
+Share Target (`windows.shareTarget`) materializes text/files into `IncomingSharePayload`,
+routes via `IAppActivationRouter.RouteShare` → shell picker → chat
+`ApplyIncomingShareAsync`. Overlay on `MainView` / Legacy `ShellView`.
+
+Contacts overlay open on Mobile: theme strategy now owns compact rows, deferred
+`ItemsSource`, and fade (`ContactsPicker*` on `ShellThemeStrategy` /
+`IShellThemeService`). Favourites picker is full-bleed (`Grid.RowSpan`);
+hardware Back closes while open.
+
+Favourites SemanticZoom jump list is always A–Z + # (`AlphabetJumpTile`); empty
+letters stay visible but disabled (WP8-style accent tiles).
+
+## Favorites — SemanticZoom jump list no longer crashes open
+
+Zoomed-out `CollectionGroups` items are `ICollectionViewGroup`, not `AlphabetChatGroup`.
+`x:Bind` with the wrong `x:DataType` threw WinRT `0xC000027B` when opening the tab.
+Header / jump templates now use `{Binding Key}` / `{Binding Group.Key}`.
+
+## Chat list — context menu no longer opens twice
+
+Modern `ChatListView` had `Grid.ContextFlyout` (platform open) **and** ListView
+`Holding`/`RightTapped`/`PointerPressed` calling `ShowAt` — two stacked menus.
+Restored feature/2.1 behaviour: ContextFlyout only; clear `ListViewItem.ContextFlyout`.
+Legacy still hides the flyout on Hold → CommandBar and ShowAt for mouse.
+
+## Phase D — connect open ownership closed (pump/reconnect stay UWP)
+
+`IConnectionSocketAssignment` lives in Core next to the open host. Abort/clear of the
+assigned socket and key-store open journal strings are portable helpers
+(`ConnectionAssignedSocketClear`, `ConnectionKeyStoreOpenJournal`). Open sequence
+unchanged; **incoming pump and reconnect timers stay on `WhatsAppService`** until an
+explicit follow-up (Mobile hot path — do not move without confirmation).
+
+## LidMapping — no boot warm; High only gets a larger LRU
+
+Removed critical-path `GetAllAsync` LID cache warm (hung Mobile cold boot; wasted I/O
+even on PC because the LRU already capped entries). **Every** tier:
+`WarmMaxPairs = 0` — fill RAM as PN/LID pairs arrive. LRU caps differ only:
+Unsupported 512 / Low 1024 / High 2048 pairs. `GetRecentForwardPairsAsync` remains
+for tests or a future opt-in seed, not boot. Wiki: [Socket stack](Socket-Stack#addressing-lid-not-jidalias).
+
+Other lifecycle warms audited (left as-is): `ChatStore.WarmAsync` is catalogue-sized
+(~hundreds of mute/pin rows, not a mapping dump); `ChatAuthorProjection` person
+lookups are per-JID on demand; `FileKeyStore` secondary warm is Signal crypto, not
+PN/LID.
+
+## Boot — registered account no longer lands on Start/QR mid-init
+
+Mobile double/triple `OnLaunched` used to hit `InitializeAsync` while cold start
+was in flight and return immediately on `_startInProgress`, leaving `AppSurface`
+at Startup — Boot then navigated to the language Start screen. Concurrent
+callers now await the shared cold-start task; Boot also promotes Connected
+before treating leftover Startup as Start. Persisted JID alias restore is
+budgeted (3s) and deferred like lid-warm so `jid-aliases` cannot stall the
+critical path for 10s+.
+
+## Phase D — ConnectionOpenHost (portable open host)
+
+`ConnectionOpenHost` implements `IConnectionConnectOpenHost` in
+`Unison.WhatsAppClient`. `WhatsAppService` only exposes
+`IConnectionSocketAssignment` (assign session / key store / refuse / health);
+`OpenConnectAsync` routes through the portable host + factory. God client is
+no longer the open-host type.
+
+## Extract — ForgetChatStorageDispatch
+
+`ForgetChatStorageDispatch` + `ForgetChatStorageKeys` + `IForgetChatStorageHost`.
+Durable chat-delete order (tombstone → history → RAM cache → catalogue) left the
+client; store I/O stays on the host. Core tests for key merge and run order.
+
+## Extract — ChatCatalogPersistDispatch
+
+`ChatCatalogPersistDispatch` + `IChatCatalogPersistHost`. Debounced catalogue
+`SchedulePersist` / `EnableScheduledPersist` left the client; `PersistScheduler`,
+timer and `PersistDataAsync` stay on the host. Core tests for defer / arm /
+restore / enable-with-deferred.
+
+## ConnectionFacade — drop IWhatsAppService
+
+`IConnectionEventSource` + `IConnectionSessionHost` (WhatsAppService). Facade
+hooks events in the ctor; `AttachWhatsAppService` left `IConnectionService`.
+Ensure / resume / lifecycle / session wipe no longer null-check a late attach.
+
+## Extract — IncomingPumpDrainDispatch (Netstandard D)
+
+`IncomingPumpDrainDispatch` + `IIncomingPumpDrainHost`. Live-first drain loop,
+live timeout / retry / apply counters left the client; typed queue item and
+`HandleDecryptedMessageAsync` stay on the host. Core tests for empty / offline /
+timeout / success / fault.
+
+## Extract — serialized post-message enrichment into dispatch
+
+`PostMessageEnrichmentDispatch.RunSerializedAsync` owns the low-memory avatars →
+groups quiet gaps. Host ports: defer-avatar gate, deferred schedule, picture
+retrieve, group listing. Core tests for defer vs retrieve paths.
+
+## Extract — OfflineReplayFlushDispatch
+
+`OfflineReplayFlushDispatch` + `OfflineReplayFlushBatch` + `IOfflineReplayFlushHost`.
+Flush body, ApplyFlushAction and idle-timer claim left the client; timer field /
+flush lock / SQLite ports stay on the host. Core tests for id split, apply,
+empty drain, persist and restore-on-failure.
+
+## Extract — PostMessageEnrichmentDispatch
+
+`PostMessageEnrichmentDispatch` + `PostMessageEnrichmentGates` +
+`IPostMessageEnrichmentHost`. TrySchedule gates (heavy / catch-up / FULL_HISTORY /
+list-paint) and the enrichment run body left the client; CAS + CTS schedule stay
+on the host. Core tests for classify / try / run paths.
+
+## Extract — PostReplayMaintenanceDispatch
+
+`PostReplayMaintenanceDispatch` + `PostReplayMaintenanceGates` +
+`IPostReplayMaintenanceHost`. `SchedulePostReplayMaintenance` only swaps the CTS
+and runs the helper (quiet / memory / catch-up / list-paint → ChatFacade notify →
+enrichment arm). Core tests for gates and paths.
+
+## Extract — remaining WireSocketEventHandlers thin-wires
+
+`QrCodeWireDispatch`, `AuthStateWireDispatch`, `InboundWireNodeDispatch`,
+`DecryptedMessageWireDispatch`, `SocketFacadeWireDispatch` (presence / missing /
+outgoing status / receipt / link-code) over host ports. Wire handlers only gate
+current-socket then call the helper. Core tests for each.
+
+## Extract — SocketError / HistorySyncWire / SessionInitialized dispatches
+
+Thin-wire trio after ConnectionUpdate: `SocketErrorDispatch` + `ISocketErrorHost`
+(OnError / OnStreamError), `HistorySyncWireApply` + `IHistorySyncWireHost`
+(OnHistorySyncReceived; still not gated on current socket),
+`SessionInitializedDispatch` + `ISessionInitializedHost`. Core tests for each.
+
+## Extract — ConnectionUpdateDispatch from WireSocketEventHandlers
+
+`ConnectionUpdateDispatch` + `IConnectionUpdateHost`. OnConnectionUpdate only
+checks current-socket then runs the helper; close disposition apply left the
+partial. Core tests cover shutdown / restart / pairing-pending / soft-reconnect /
+QR expired / fatal streak.
+
+## App-state contact LID Store(1) coalesce
+
+`JidAliasTable.IsBulkImporting` + pending socket-alias queue in
+`WhatsAppService.Identity`: app-state ContactAction / PnForLid dual-writes become
+one `RegisterJidAliases` (one Bridge Store log) per collection apply instead of
+N× `Stored 1 LID… from app-state-contact`.
+
+## LID mapping disk persist — paced + after history
+
+`SyncWorkloadStrategy` owns `LidMappingPersistBatchSize` / `LidMappingPersistDelayMs`
+(Unsupported 8/3000, Low 40/1500, High 120/400). `LidMappingStore` write-behind caches
+immediately, queues disk until `ILidMappingDiskPersistGate` opens (HistoryFacade after
+quiet-finalize or warm with no hold). `LidMappingPersistHost` debounce + suspend flush.
+Not in parallel with first history sync.
+
+## Extract — offline-replay release out of WireSocketEventHandlers
+
+`OfflineReplayRelease` + `OfflineReplayReleaseGates` + `IOfflineReplayReleaseHost`.
+Pending-notification handler only checks current-socket then runs the helper.
+Four Core tests.
+
+## Extract — 3.3c quiet media save off the client
+
+`QuietMediaMessagePersist` implements `IMediaDownloadHost` over
+`IOutgoingMessageHost.PersistLiveAsync` (swallow on failure).
+`WhatsAppService` no longer implements the port; `WhatsAppService.Media.cs` gone.
+Three Core tests.
+
+## Extract — connection wire pure rules → WhatsAppClient
+
+`SocketTransportFailure`, `FatalStreamCodeFromException`, `PairingRestartStreamCode`,
+`ConnectionUpdateRoute`, `StaleSocketEventGate` — OnError / OnStreamError /
+OnConnectionUpdate decisions leave the client; hosts only apply side effects.
+
+## Favourites — protocol + SQLite + FavoritesView
+
+Protocol already had `favoritesAction` (bulk list). SQLite gained `Chat.IsFavorite`;
+`ChatItem.IsFavorite` is real. `IChatService.SetFavoriteAsync` updates local + sends the
+full favourites list (`AppStatePatchFactory.Favorites`). Inbound list replace via
+`SyncActionProcessor.FavoritesChanged`. UI: empty CTA, A–Z SemanticZoom, overlay
+`ContactsVisualizerControl` (Title + Items + ICommand — no NavigationService hop),
+context menu + Legacy More. Filter chip already used `IsFavorite`.
+
+## Phase D — IConnectionSocketSessionFactory (connect open leaves the god client)
+
+`ConnectionConnectOpen` takes `IConnectionSocketSessionFactory`: UWP
+`UwpConnectionSocketSessionFactory` owns `SocketBridge` build, remote hooks,
+`SocketEventHandlerWiring`, key-store init, and transport open.
+`WhatsAppService` only assigns the session + key store and starts health.
+App registers concrete `WhatsAppService` so host ports no longer cast
+`IWhatsAppService`.
+
+## Phase D — Init(IWaTransport) shape on connect open
+
+Host builds transports (`WaTransportConnectAttempt` + factory) and calls
+`SocketBridge.ConnectWithTransportsAsync`. Bridge no longer chooses/news WinRT.
+Remote façade hooks left `BuildSocketBridge` (`SocketBridgeRemoteHooks`). Memory
+diagnostics go through `IAppMemoryInfo.LimitBytes`. Self PN/LID filing is
+`SelfIdentityAliasPair`.
+
+## Host owns transport construction — IWhatsAppTransportFactory
+
+`SocketBridge` no longer `new`s StreamSocket/MessageWebSocket or reads DeviceFamily.
+UWP `UwpWhatsAppTransportFactory` + `ISystemInfoProvider.IsMobile` feed connect order
+(`WaTransportConnectOrder`). First step toward Init(IWaTransport) / host-only UWP.
+
+## Phase 3.7b done — LidMappingStore behind JidAliasTable seam
+
+Key shapes reconciled (`TryGetCachedPairedJid` re-attaches device/hosted). Shared
+`LidMapping.TryFromAliasPair`. Durable warm on init (`GetAllAsync` /
+`WarmCacheFromStorageAsync`). Dual-write + bulk restore already in. Table stays
+the sync owner (self-poison / lid-like rules); retiring it is a later phase.
+
+## Extract — SentMessageRetryRebuild (text-only retry bytes)
+
+Rule for rebuilding a peer-requested resend from the persisted row lives in Core;
+`ResolveSentMessageForRetryAsync` only loads and logs.
+
+## Phase 3.7b — bulk import + dual-write coalesce on restore
+
+`JidAliasTable.BeginBulkImport` + `RememberPairs`: persistence restore writes the
+table once, then one store batch (not N fire-and-forgets / N `Changed`).
+
+## Phase 3.7b — dual-write table → LidMappingStore
+
+`ILidMappingMemory.RememberPair` + `LidMappingMemoryAdapter` fire-and-forget
+`StoreMappingsAsync`. `JidAliasTable` indexer/`Add` dual-write LID↔PN pairs so
+the store stays warm with the sync map.
+
+## Phase 3.7b started — LidMappingStore shared + sync peek
+
+Group `@g.us` lowercased in `JidHelper.Normalize`. One DI `LidMappingStore` feeds
+`SocketBridge` and `JidAliasTable` via `ILidMappingMemory` (cache promote on miss).
+Table still owns the sync map.
+
+## Phase 4 — ConnectAsync transport open + handler wiring
+
+`ConnectionConnectOpen` builds/wires/opens the transport after prepare.
+Handlers live in `WireSocketEventHandlers`. Three Core tests.
+
+## Phase 4 — ConnectAsync prepare + close disposition
+
+`ConnectionConnectPrepare` drops the previous socket / loads auth / applies
+registered-session connect state. `ConnectionCloseDisposition` decides restart /
+registered-close / QR-expired reconnect policy. Sixteen Core tests.
+
+## Phase 4 — ConnectionHealthMonitor loop extracted
+
+Background health loop (defer-aware + 1.8.3 A/B) is `ConnectionHealthMonitor` +
+`IConnectionHealthMonitorHost`. Policy thresholds stay in `ConnectionHealthPolicy`.
+Three Core tests.
+
+## Fix — toast activation remounted Boot on WhatsApp Legacy
+
+`IsKnownRootContent` only knew `MainView`. Legacy AppShell is `ShellView`, so a
+toast while the app was open remounted Boot (intro again → black screen). Now
+recognizes Legacy `ShellView` and any strategy `AppShell` page. Unison /
+WhatsApp (non-legacy) already used `MainView` and were fine.
+
+## Phase 4 — soft-reconnect + lifecycle + Connect gates on façade/helpers
+
+`ConnectionFacade` implements `IConnectionSoftReconnect` over
+`IConnectionSoftReconnectHost`. Suspend/shutdown is `ConnectionLifecycle` +
+`IConnectionLifecycleHost`. `ConnectAsync` early gates are
+`ConnectionConnectGates`. Health-monitor *loop* still on the client.
+
+## Phase 4 wave 2 — ConnectionBrokerTransfer policy extracted
+
+Warm broker handoff (ready check, suspend prep, transfer, health restart on
+failure) is `ConnectionBrokerTransfer` + `IConnectionBrokerTransferHost`. Answers
+true only when ownership moved. Five Core tests.
+
+## Phase 4 wave 2 — ConnectionPairingStage2 policy extracted
+
+Close-515 stage-2 reconnect (wait, ConnectAsync, soft-reconnect on registered
+failure) is `ConnectionPairingStage2` + `IConnectionPairingStage2Host`. Four
+Core tests.
+
+## Phase 4 wave 2 — ConnectionResume policy extracted
+
+Foreground resume (fatal block, broker reconnect consume, reclaim, force-fresh
+ensure, soft-reconnect fallback) is `ConnectionResume` + `IConnectionResumeHost`.
+`ConnectionFacade.ResumeAsync` runs it; five Core tests.
+
+## Phase 4 wave 2 — ConnectionEnsure policy extracted
+
+Ensure-connected budget (healthy check, drop, connect timeout, session gate)
+is `ConnectionEnsure` + `IConnectionEnsureHost`. Façade and send host share it;
+four Core tests.
+
+## Phase 4 — catch-up idle decide on HistoryFacade
+
+`NotifyCatchUpIdleBatch` owns quiet-lot / watchdog / timeout decide + adjacent
+FULL_HISTORY. Client keeps `IHistoryCatchUpHost` + shared `HistoryCatchUpContinuation`.
+
+## Phase 4 — IConnectionSoftReconnect port
+
+`RequestSoftReconnect` / `RequestCatchUpContinueReconnect` expose the client's
+auto-reconnect and catch-up-continue seams without naming the whole service.
+
+## Phase 4 — MediaAvailability EnsureConnected via IConnectionService
+
+On-demand media no longer names `IWhatsAppService` for connect; it uses the
+connection façade like App/shell.
+
+## Phase 3 — UsyncAliasHost + ISocketAliasRegistrar
+
+`TryFileUsyncAlias` left the client: `UsyncAliasHost` files via `UsyncAliasFiling` then
+calls `ISocketAliasRegistrar` (socket register + Me heal). Shared with alias persistence.
+
+## Phase 3 — media hydrate uses session transport readiness
+
+`IMediaDownloadHost.HasLiveSocket` removed; image/sticker hydrate asks
+`IWhatsAppSessionProvider.IsTransportReady`. Host is quiet-save only.
+
+## Phase 3 — DeferredAvatarResolution owns the retry timer
+
+`IDeferredAvatarResolution` is a WhatsAppClient singleton; the client no longer
+holds the CTS. Shutdown / socket replace cancel via the port.
+
+## Phase 3 — BackgroundResolutionPass + IBackgroundResolutionGate
+
+Enrichment orchestration (quiet / handshake / replay / catch-up / avatar defer)
+moved to `BackgroundResolutionPass` on `ContactFacade`. Client keeps
+`IBackgroundResolutionGate`. Six Core tests.
+
+## Phase B — post-replay, deferred startup, offline release, receipt metadata, self name
+
+`NotifyPostReplayMaintenanceAsync` / `NotifyDeferredStartupListRepairAsync` on
+`ChatFacade`. `NotifyBackgroundResolutionDueAsync` (names + group listing) on
+`ContactFacade`. `NotifyOfflineReplayReleasedAsync` + `CompleteFirstOfflineRelease`.
+Receipt path: façade applies group metadata then counts; host is IQ + cache.
+`SelfDisplayName` blank filled from `SelfProfileState` on `MessageFacade`.
+
+## Phase B — dead host Func/event, inbound stanza Notify*, history landed
+
+Dropped unused `ExpandNameLookupCandidates`, host `IStatusService` Func, and orphan
+`OnMessage` raise. `ContactFacade.NotifyInboundMessageNode` owns push-name gates.
+`HistoryFacade.ApplyHistorySyncAsync` calls `IHistorySyncHost.NoteHistorySyncLanded`
+(persist enable + first-content enrichment).
+
+## Phase B — outgoing UI notify/accept/preview; media + avatar off host; wire Notify*
+
+`OutgoingTextSend` / `OutgoingMediaSend` call façade callbacks for accept, local
+preview, and `NotifyChatMessagesChanged` (removed from `IOutgoingMessageHost`).
+`LoadLiveOverlay` is self-call on `MessageFacade`. Media download and
+`ChatAvatarFetch` notify via lazy `IMessageService` / `IContactService`
+(`IAvatarReport` gone). Socket acks/status/receipts use
+`NotifyInboundWireAck` / `NotifyOutgoingStatusAsync` / `NotifyReceiptAsync`.
+
+## Phase B — MissingMessageLedger + PlaceholderResendDispatch on MessageFacade
+
+Ledger, schedule, drain, ack apply, and peer-data claim live on `MessageFacade`.
+Host keeps only `IPlaceholderResendSocket` (handshake + generate id + wire send).
+`IMissingMessageChatHost` is forget-only; ChatFacade resolves it to the message façade.
+
+## Phase B — UI marshal, offline settle, sqlite notify, decrypted notify, drain deferral
+
+`NotifyChatMessagesChanged` marshals via `IDispatcher`. `NotifyOfflineReplaySettledAsync`
+owns tips + optional placeholder drain. `NotifySqliteHistoryChunkApplied` raises the null
+history surface notify. `NotifyIncomingDecryptedAsync` fills quiet/window/active context.
+Drain deferral uses `SyncWorkGate` / history-on-demand on the façade (host keeps single resend).
+
+## Phase B — placeholder drain, journal recover, receipt group metadata
+
+`SchedulePlaceholderResendDrain` / drain loop on `MessageFacade` (host keeps
+ledger + deferral + single resend). `RecoverPendingIncomingJournalAsync` on
+`MessageFacade` (flush via `IPendingMessageFlushHost`). Receipt path applies
+group IQ via `IGroupService.ApplyGroupMetadataFromResponseAsync`.
+
+## Phase B — HistoryFacade.ApplyHistorySyncAsync owns chunk apply + notify
+
+Connection calls `ApplyHistorySyncAsync` (persist via `SyncMessageHistoryAsync` +
+`NotifyHistorySyncReceived`). Enrichment gates stay on the host.
+
+## Phase B — legacy preview surface refresh on ChatFacade
+
+After repair, ChatFacade clears `IMessageStore` RAM cache and calls
+`IHistoryService.NotifyHistorySyncReceived(null)`. Dropped
+`IOfflineReplayHost.NotifyHistorySurfaceRefresh`.
+
+## Phase B — Route owns session-control early exits; NotifyChatMessagesChanged nudges store
+
+`RouteIncomingChatEnvelopeAsync` classifies peer-data / placeholder / app-state
+session-only (pump only builds the request). `NotifyChatMessagesChanged` also
+calls `ChatStateStore.NotifyMessagesChanged`; host Raise is marshal-only.
+
+## Phase B — ProfileFacade via IConnectionService
+
+`ProfileFacade` uses `SessionEstablished` + `EnsureConnectedAsync` on
+`IConnectionService` instead of `IWhatsAppService.OnSessionInitialized` /
+client `EnsureConnectedAsync`.
+
+## Phase B — history / contact / group notify owns former client events
+
+`NotifyHistorySyncReceived` / `NotifySessionCleared` / `NotifyBackgroundHistorySyncBounced`
+on `HistoryFacade`; `NotifyAvatarCached` / `NotifyJidAliasResolved` on `ContactFacade`;
+`NotifyGroupListingDue` on `GroupFacade`. Host raises those instead of
+`OnHistorySync*` / `OnAvatar*` / `OnJidAlias*` / `OnGroupListingDue` /
+`OnBackgroundHistorySyncBounced`. Contact and Group façades no longer take
+`IWhatsAppService` only to subscribe.
+
+## Phase B — history ack status + EnsureConnected via IConnectionService
+
+Rejected FULL_HISTORY ack raises sync status on `HistoryFacade`; host only ends
+the catch-up banner / resync wait. Resync connect uses `IConnectionService`.
+
+## Phase B — PresenceUpdated owned by MessageFacade; drop IWhatsAppService
+
+`NotifyPresenceUpdated` replaces client `OnPresenceUpdate`. `MessageFacade` no
+longer takes `IWhatsAppService`. Connection forwards socket presence and both
+ack kinds (placeholder + history-on-demand) in one place.
+
+## Phase B — history-on-demand ack on HistoryFacade
+
+`IHistoryService.HandleOnDemandAck` owns registry Ack + logging; catch-up banner /
+timeout stay on `IHistorySyncHost`. Connection only forwards ack attrs.
+
+## Phase B — require connection/enqueue/history deps; thin Connection socket hooks
+
+`MessageFacade` requires `Func<IConnectionService>`, `IIncomingMessageEnqueueHost`,
+and `HistoryOnDemandRegistry` (pin connect has no WA fallback). Connection
+forwards missing-message / outgoing status / receipts straight to the façade.
+
+## Phase B — ChatMessagesChanged owned by MessageFacade
+
+`IMessageService.NotifyChatMessagesChanged` replaces client
+`OnChatMessagesChanged`. Host still marshals to the UI thread and nudges
+`ChatStateStore`; VMs listen only on the façade.
+
+## Phase B — history LID mappings via IJidAliasPersistence
+
+`HistoryFacade` files chunk LID↔PN pairs through `IJidAliasPersistence`;
+`ApplyHistoryLidMappings` left `IHistorySyncHost`. Placeholder-resend ack
+attrs are forwarded from Connection directly into `MessageFacade`.
+
+## Phase B — alias hints in Route; peer-data + receipts on MessageFacade
+
+`RouteIncomingChatEnvelopeAsync` registers envelope alias hints. Peer-data
+responses are `HandlePeerDataOperationResponseAsync` (history observe logs +
+placeholder recovery). `HandleReceiptAsync` is on `IMessageService`.
+
+## Phase B — drop message-control queue; peer-data awaits on pump
+
+Peer-data responses await on the ingest pump like placeholders. Serial
+`QueueMessageControlWork` and its tail fields are gone.
+
+## Phase B — stanza notify push-name on ContactFacade
+
+`IContactService.ApplyStanzaNotifyPushName` owns notify sanitize, remember,
+self-capture, and placeholder row relabel. Connection only forwards stanza attrs.
+
+## Phase B — placeholder ack + socket missing-message on MessageFacade
+
+`HandlePlaceholderResendAck` and `NoteMissingMessageAndRequestResendAsync` own
+ack logging/ledger apply and the socket missing-message path. Connection only
+forwards attrs / event fields.
+
+## Phase B — peer-data placeholder recovery + pin connect via façade
+
+`ApplyPeerDataPlaceholderResendsAsync` decodes resend payloads and re-enqueues
+through `IIncomingMessageEnqueueHost` (no recursive pump). Message pin
+`EnsureConnected` goes through `IConnectionService`.
+
+## Phase B — placeholder envelopes on MessageFacade
+
+`IMessageService.HandleIncomingPlaceholderAsync` notes the id and requests a
+resend via `IMissingMessageChatHost`. Pump no longer registers or queues that
+path; dead alias-linked helpers removed from `IncomingPump`.
+
+## Phase B — RouteIncomingChatEnvelope owns post-session inbound path
+
+`IMessageService.RouteIncomingChatEnvelopeAsync` covers status, offline fast-path,
+DM routing, self-collapse, envelope controls, and content. Pump keeps session /
+peer-data / alias-hint / drain only.
+
+## Phase B — receipts host, alias hints, envelope control, AppStateSync, journal tips
+
+`IOutgoingReceiptHost` no longer forwards status. Envelope alias hints and
+revoke/pin/reaction dispatch live on Contact/Message façades. AppStateSync
+calls façades directly; journal recovery previews on `ChatFacade`.
+
+## Phase B — ProcessIncomingChatContent on MessageFacade
+
+Render → push-name → sender/attention → bubble → AcceptIncomingTimeline →
+alias/duplicate/insert follow-up lives on `IMessageService.ProcessIncomingChatContentAsync`.
+Pump after revoke/pin/reaction only supplies envelope fields + quiet/active flags.
+
+## Phase B — alias consolidate, status ingest, reaction/offline wrappers
+
+`ApplyIncomingAliasConsolidatedAsync` owns finalize + tip. Live status builds and
+ingests on `IStatusService.IngestLiveFromDecryptedAsync` (pump no longer raises
+`OnLiveStatusReceived` for this path). `TryHandleOfflineDuplicateFast` and
+`ApplyIncomingReactionFromEnvelopeAsync` collapse pump orchestration. Dead
+`IIncomingRevocationHost` removed.
+
+## Phase B — incoming insert + duplicate follow-up on MessageFacade
+
+`IMessageService.ApplyIncomingInsertedAsync` owns offline tip/persist/unload and
+live list-apply + notify + persist + hydrate. `ApplyIncomingDuplicateAsync` owns
+duplicate persist/notify/missing-resolve/tip. `IMissingMessageChatHost.ResolveMissingMessage`
+exposes ledger clear. Alias-consolidate finalize stays pump-queued.
+
+## Phase B — incoming envelope preview on ChatFacade
+
+`IChatService.ApplyIncomingEnvelopePreviewAsync` owns live tip refresh vs offline
+replay tip (+ optional dirty mark). Pump alias/duplicate/insert-offline paths call
+one helper; online still queues control work, offline stays on the pump thread.
+
+## Phase B — self push-name app-state + media hydrate schedule on façades
+
+`IContactService.ApplyRemoteSelfPushNameAsync` owns app-state self push-name
+(`CaptureSelfPushName` + contact-name batch); `IResolvedNameApplyHost` no longer
+has `ApplySelfPushNameFromAppStateAsync`. `IMessageService.ScheduleIncomingMediaHydration`
+owns fire-and-forget sticker/image hydrate beside the pump.
+
+## Phase B — app-state delete + message pin on façades
+
+`IMessageService.ApplyAppStateDeleteMessageAsync` and
+`ApplyPinnedMessageStateAsync` own delete-for-me and local/inbound message pin
+(RAM, pending hold, SQLite pins, notify). `IChatService.ApplyAppStateDeleteChatAsync`
+owns chat delete RAM + badge; durable I/O is `IAppStateLocalHost.ForgetChatStorageAsync`
+only. `IAppStateLocalHost.ApplyChatDeletionAsync` / `ApplyMessagePinAsync` removed.
+SocketBridge and AppStateSync forward to the façades. `PendingMessageState` leaves
+the client ctor (DI singleton stays for `MessageFacade`).
+
+## Phase B — revoke host collapsed; AcceptOutgoing + LoadLiveOverlay on façade
+
+`IIncomingRevocationHost` removed: revoke uses `ChatStateStore` + `IBoundMutationGate`
++ `IChatService.RefreshChatPreviewAsync`. `AcceptOutgoingTimeline`,
+`ApplyHeldMessageState`, and `LoadLiveOverlayAsync` live on `IMessageService`;
+`IOutgoingMessageHost` AcceptOutgoing / LoadLiveOverlay forward to the façade.
+
+## Phase B — outgoing status on MessageFacade + PendingMessageState DI
+
+`IMessageService.ApplyOutgoingStatusAsync` owns receipt/send-ack status on
+`MessagesByChat`, list-tip ticks, hold/forget via shared `PendingMessageState`
+singleton, and persist enqueue. `HandleReceiptAsync` applies through that path;
+`IOutgoingReceiptHost.ApplyOutgoingStatusAsync` forwards. Pin hold still uses the
+same `PendingMessageState` instance on the client.
+
+## Phase B — reaction, push-name, alias finalize, cached-id probe
+
+`IMessageService.ApplyIncomingReactionAsync` owns reaction map/persist/notify.
+`IContactService.AcceptIncomingPushName` owns envelope push-name accept (self + peer).
+`IMessageService.FinalizeAliasConsolidateAsync` owns post-AliasConsolidated store
+delete / survivor persist / list dedupe. `HasCachedMessageId` drives the offline
+fast-path probe. Preview refresh after alias consolidate stays pump-orchestrated.
+
+## Phase B — offline duplicate enrich + shared PendingMessageQueue
+
+`IMessageService.EnrichOfflineDuplicateFast` owns the offline fast-path name/participant
+patch (no render/UI). `PendingMessageQueue` is a DI singleton shared by
+`MessageFacade.QueueIncomingPersist` and Persistence flush; flush-now / idle timer stay
+on `IPendingMessageFlushHost` (client timer + SQLite drain).
+
+## Phase B — AcceptIncomingTimeline + QueueIncomingPersist on MessageFacade
+
+`IMessageService.AcceptIncomingTimeline` runs `IncomingTimeline` over
+`ChatStateStore.MessagesByChat` (alias collect via `AliasLinkedDirectChats` /
+`NameLookupCandidates`). `QueueIncomingPersist` uses `IOutgoingMessageHost.QueueForPersist`
+(pending SQLite batch + catalogue schedule). Pump only calls the façade; private
+wrappers removed. Alias-consolidate SQLite/dedupe side-effects stay pump-orchestrated.
+
+## Phase B — inbound revoke + pin-in-chat on MessageFacade
+
+`IMessageService.ApplyIncomingRevocationAsync` owns revoke apply (envelope cleanup,
+`MessageRevocationContent` tombstone, persist, active-chat notify, tip refresh when
+the revoked row was the list preview). Host port `IIncomingRevocationHost` keeps
+`MessagesByChat` find/remove and LocalizedChatStripLabels tip refresh.
+`IMessageService.ApplyIncomingPinInChatAsync` computes `MessagePinWindow` and writes
+through `IAppStateLocalHost.ApplyMessagePinAsync`. Pump only queues/dispatches.
+
+## Phase B — self push-name capture on ContactFacade
+
+`ContactFacade.CaptureSelfPushName` owns dash/PreferEstablished/RememberPersonName/
+list relabel. `IResolvedNameApplyHost` is auth+sidebar write (`WriteSelfDisplayName`)
+plus identity reads. `StartupPhaseTrace` lives in WhatsAppClient over `IRuntimeDiagnostics`.
+
+## Phase B — usync alias merge uses TransientChatMerge
+
+`ChatListAliasMerge.MergeAsync` applies `TransientChatMerge` before dropping the
+LID row (same preview/unread/avatar/name policy as live collapse). App-state
+self push-name capture goes through `IContactService.CaptureSelfPushName`.
+
+## Phase B — transient direct-chat collapse on ChatFacade
+
+Live self-chat LID collapse is `IChatService.CollapseTransientDirectChatAsync`
+over enriched `ChatListAliasMerge.CollapseTransientAsync` (`TransientChatMerge` +
+name maps). Missing-message ledger forget is `IMissingMessageChatHost`. Socket
+`ContactUpdate` → `AccountContactUpdate` mapping is `AccountContactUpdateMap`.
+
+## Phase B — chat flags / read on ChatFacade
+
+`ChatFacade` owns local archive / pin / mute / read (`ApplyLocalChatFlagsAsync` /
+`ApplyLocalChatReadStateAsync`). `IAppStateLocalHost` keeps only chat delete and
+message pin. SocketBridge fallbacks and dead `ApplyChatUpdateAsync` / contact
+update wrappers removed.
+
+## Phase B — stored preview repair via ChatFacade
+
+Post-replay large-drain in-memory tip repair calls
+`IChatService.ReconcileChatListFromStoredAsync` /
+`RefreshAllChatPreviewsFromStoredAsync`. `WhatsAppService` no longer holds
+`StoredChatPreviewRefresh`.
+
+## Phase B — ChatNameRefresh leaves WhatsAppService
+
+`IContactService.ApplyResolvedNamesToChatListAsync` is the catch-up / self-name list
+relabel. `ContactFacade` owns `ChatNameRefresh.Applied` (diagnostics + `DisplayNamesUpdated`);
+`WhatsAppService` no longer holds the helper.
+
+## Phase B — resolved-name batch + tip reconcile on façades
+
+`ContactFacade` owns `ApplyResolvedNameBatchAsync` and `NormalizePersistedChatNamesAsync`
+(remote subjects / contact names / account contact updates go through it).
+`IResolvedNameApplyHost` is self push-name only. Client startup / catch-up tip reconcile
+calls `IChatService.ReconcileChatPreviewsFromSqliteAsync`; `ChatPreviewReconciler` is no
+longer held by `WhatsAppService`.
+
 ## 2.0.19 — per-JID hydration fallback after empty FULL_HISTORY
 
 When FULL_HISTORY catch-up finishes stagnant/empty (or freshness reconnect is on

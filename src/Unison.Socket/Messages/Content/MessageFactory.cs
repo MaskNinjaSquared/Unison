@@ -468,13 +468,26 @@ namespace Unison.Socket.Messages.Content
         {
             var hasMentions = content.Mentions != null && content.Mentions.Count > 0;
             var hasQuote = content.Quoted != null && content.Quoted.Key != null;
+            bool markForwarded = content.MarkAsForwarded || content.ForwardingScore > 0;
 
-            if (!hasMentions && !content.MentionAll && !hasQuote && content.EphemeralExpiration <= 0)
+            if (!hasMentions &&
+                !content.MentionAll &&
+                !hasQuote &&
+                content.EphemeralExpiration <= 0 &&
+                !markForwarded)
             {
                 return null;
             }
 
             var context = new global::Proto.ContextInfo();
+
+            if (markForwarded)
+            {
+                // Baileys generateForwardMessageContent: score > 0 ⇒ isForwarded + forwardingScore.
+                uint score = content.ForwardingScore > 0 ? content.ForwardingScore : 1u;
+                context.ForwardingScore = score;
+                context.IsForwarded = true;
+            }
 
             if (hasMentions)
             {

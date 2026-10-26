@@ -5,7 +5,7 @@
 // placeholder must not overwrite a name the user can actually read, but it is
 // still better than nothing when the chat has no name at all.
 // =============================================================================
-using Unison.Core.Helpers;
+using Unison.WhatsAppClient.Helpers;
 using Xunit;
 
 namespace Unison.Core.Tests.Helpers

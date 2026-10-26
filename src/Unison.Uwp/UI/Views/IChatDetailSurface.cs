@@ -21,6 +21,13 @@ namespace Unison.Uwp.UI.Views
 
         bool HasActiveChat { get; }
 
+        /// <summary>
+        /// Hosts set this before <see cref="CompleteActiveChatLoadAsync"/> so Mobile skips
+        /// the 2s materialize delay (list tap, archived, toast / deep-link — same as Legacy).
+        /// Cleared when that load finishes.
+        /// </summary>
+        bool PreferFastTimelineLoad { get; set; }
+
         ChatItem ActiveChatItem { get; }
 
         Task SetActiveChatAsync(ChatItem chat);

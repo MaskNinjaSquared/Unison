@@ -1,9 +1,9 @@
 using System;
-using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
 using Unison.Core.Helpers;
-using Windows.System;
+using Unison.Uwp.Services;
+using Unison.WhatsAppClient.Helpers;
 
 namespace Unison.Uwp.Services.WhatsApp
 {
@@ -25,78 +25,37 @@ namespace Unison.Uwp.Services.WhatsApp
         private TimeSpan StartupQuietFloor =>
             TimeSpan.FromMilliseconds(CurrentSyncPacing.StartupQuietFloorMs);
 
-        private static readonly TimeSpan StartupQuietPollInterval = TimeSpan.FromMilliseconds(500);
-
-        /// <summary>Backoff between memory-pressure retries; the pass is dropped after the last one.</summary>
-        private static readonly TimeSpan[] MemoryRetryBackoff =
-        {
-            TimeSpan.FromSeconds(10),
-            TimeSpan.FromSeconds(20),
-            TimeSpan.FromSeconds(40)
-        };
-
         /// <summary>
         /// Holds off enrichment until the list stops moving, up to <paramref name="budget"/>.
         /// Polls rather than sleeping the whole budget: on a device that settles in two seconds
         /// there is nothing left to protect, and the old flat sleep was pure dead time.
         /// </summary>
         /// <returns>False when cancelled.</returns>
-        private async Task<bool> WaitForStartupQuietAsync(
+        private Task<bool> WaitForStartupQuietAsync(
             TimeSpan budget,
             string reason,
             CancellationToken token)
         {
-            var elapsed = Stopwatch.StartNew();
             // Do not paint "Finishing startup…" over an open conversation.
-            if (string.IsNullOrWhiteSpace(_activeChat.Jid))
-            {
-                RaiseSyncStatus(SyncPhaseStatus.Format(SyncPhaseStatus.Settling));
-            }
+            Action begin = string.IsNullOrWhiteSpace(_activeChat.Jid)
+                ? (Action)(() => RaiseSyncStatus(SyncPhaseStatus.Format(SyncPhaseStatus.Settling)))
+                : null;
 
-            try
-            {
-                while (elapsed.Elapsed < budget)
-                {
-                    await Task.Delay(StartupQuietPollInterval, token).ConfigureAwait(false);
-                    if (token.IsCancellationRequested)
-                    {
-                        RaiseSyncStatus(null);
-                        return false;
-                    }
-
-                    if (elapsed.Elapsed < StartupQuietFloor)
-                    {
-                        continue;
-                    }
-
-                    if (!_initialSync.IsActive && !IsReplayDrainActive)
-                    {
-                        break;
-                    }
-                }
-            }
-            catch (TaskCanceledException)
-            {
-                RaiseSyncStatus(null);
-                return false;
-            }
-
-            RuntimeDiagnosticsService.Instance.Write(
-                "startup-phase",
-                "quiet-wait",
-                "reason=" + (reason ?? string.Empty) +
-                "; waitedMs=" + (long)elapsed.Elapsed.TotalMilliseconds +
-                "; budgetMs=" + (long)budget.TotalMilliseconds +
-                "; frugal=" + UseFrugalSyncBudget +
-                "; memory=" + MemoryManager.AppMemoryUsageLevel);
-
-            if (token.IsCancellationRequested)
-            {
-                RaiseSyncStatus(null);
-                return false;
-            }
-
-            return true;
+            return StartupQuietGate.WaitUntilQuietAsync(
+                budget,
+                StartupQuietFloor,
+                token,
+                () => _initialSync.IsActive || ShouldDeferReconnectReplayWork(),
+                begin,
+                () => RaiseSyncStatus(null),
+                (waitedMs, budgetMs) => RuntimeDiagnosticsService.Instance.Write(
+                    "startup-phase",
+                    "quiet-wait",
+                    "reason=" + (reason ?? string.Empty) +
+                    "; waitedMs=" + waitedMs +
+                    "; budgetMs=" + budgetMs +
+                    "; frugal=" + UseFrugalSyncBudget +
+                    "; memory=" + _appMemory.UsageLevel));
         }
 
         /// <summary>
@@ -108,58 +67,35 @@ namespace Unison.Uwp.Services.WhatsApp
         /// on their phone numbers until some other path stumbled over them.
         /// </remarks>
         /// <returns>True when there is headroom; false when every retry was spent or cancelled.</returns>
-        private async Task<bool> WaitForMemoryHeadroomAsync(string reason, CancellationToken token)
+        private Task<bool> WaitForMemoryHeadroomAsync(string reason, CancellationToken token)
         {
-            for (int attempt = 0; attempt <= MemoryRetryBackoff.Length; attempt++)
-            {
-                if (MemoryManager.AppMemoryUsageLevel == AppMemoryUsageLevel.Low)
+            return StartupQuietGate.WaitForMemoryHeadroomAsync(
+                token,
+                () => _appMemory.IsLow,
+                attempt =>
                 {
-                    return !token.IsCancellationRequested;
-                }
-
-                if (attempt == MemoryRetryBackoff.Length)
-                {
-                    break;
-                }
-
-                RaiseSyncStatus(SyncPhaseStatus.Format(SyncPhaseStatus.LowMemory));
-                RuntimeDiagnosticsService.Instance.Write(
+                    RaiseSyncStatus(SyncPhaseStatus.Format(SyncPhaseStatus.LowMemory));
+                    RuntimeDiagnosticsService.Instance.Write(
+                        "startup-phase",
+                        "memory-retry",
+                        "reason=" + (reason ?? string.Empty) +
+                        "; attempt=" + attempt +
+                        "; level=" + _appMemory.UsageLevel);
+                },
+                () => RuntimeDiagnosticsService.Instance.Write(
                     "startup-phase",
-                    "memory-retry",
+                    "memory-abandoned",
                     "reason=" + (reason ?? string.Empty) +
-                    "; attempt=" + (attempt + 1) +
-                    "; level=" + MemoryManager.AppMemoryUsageLevel);
-
-                try
-                {
-                    await Task.Delay(MemoryRetryBackoff[attempt], token).ConfigureAwait(false);
-                }
-                catch (TaskCanceledException)
-                {
-                    return false;
-                }
-
-                if (token.IsCancellationRequested)
-                {
-                    return false;
-                }
-            }
-
-            RuntimeDiagnosticsService.Instance.Write(
-                "startup-phase",
-                "memory-abandoned",
-                "reason=" + (reason ?? string.Empty) +
-                "; level=" + MemoryManager.AppMemoryUsageLevel);
-            return false;
+                    "; level=" + _appMemory.UsageLevel));
         }
 
         /// <summary>
         /// Brackets a startup phase in the runtime journal with its duration and the memory level
         /// at both ends, so an exported report shows where the seconds went.
         /// </summary>
-        private static IDisposable TraceStartupPhase(string phase)
+        private IDisposable TraceStartupPhase(string phase)
         {
-            return new StartupPhaseTrace(phase);
+            return new StartupPhaseTrace(phase, _appMemory, RuntimeDiagnosticsService.Instance);
         }
     }
 }

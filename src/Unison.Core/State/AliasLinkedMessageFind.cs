@@ -49,5 +49,35 @@ namespace Unison.Core.State
 
             return false;
         }
+
+        /// <summary>
+        /// Fast path: whether any alias bucket already indexes <paramref name="messageId"/>.
+        /// Prefer this over <see cref="TryFind"/> when the caller only needs a yes/no.
+        /// </summary>
+        public static bool HasId(
+            ChatMessageCache messages,
+            IEnumerable<string> chatJids,
+            string messageId)
+        {
+            if (messages == null || string.IsNullOrWhiteSpace(messageId))
+            {
+                return false;
+            }
+
+            foreach (string chatJid in chatJids ?? Enumerable.Empty<string>())
+            {
+                if (string.IsNullOrWhiteSpace(chatJid))
+                {
+                    continue;
+                }
+
+                if (messages.KnownIds(chatJid).Contains(messageId))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
     }
 }

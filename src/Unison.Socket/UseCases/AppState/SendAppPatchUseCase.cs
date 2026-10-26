@@ -98,7 +98,19 @@ namespace Unison.Socket.UseCases.AppState
 
                 var incoming = await _resync.ExecuteAsync(new[] { name }).ConfigureAwait(false);
 
-                var current = await _store.GetAsync(name).ConfigureAwait(false) ?? new LtHashState(name);
+                // Resync clears the store on MAC failure and, after MaxAttempts, leaves it null
+                // ("Giving up"). Inventing a fresh v0 here used to still encode + send — the
+                // server can accept that IQ while the phone stays on a high version, then every
+                // later regular_low sync MAC-mismatches. Favourites/pin/mute all share this path.
+                var current = await _store.GetAsync(name).ConfigureAwait(false);
+                if (current == null)
+                {
+                    throw new InvalidOperationException(
+                        "App-state collection '" + name +
+                        "' could not be synced; refusing to write " + Describe(create) +
+                        " on a fabricated v0.");
+                }
+
                 var encoded = await _encoder.EncodeAsync(create, _keyId(), current).ConfigureAwait(false);
 
                 // Logged before the query rather than after it: a rejected write is the case worth

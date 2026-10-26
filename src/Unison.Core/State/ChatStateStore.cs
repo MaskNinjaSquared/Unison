@@ -91,9 +91,10 @@ namespace Unison.Core.State
         //
         // The point of the exercise is already served: the state lives here, so a
         // view model can be pointed at this store without waiting for the class
-        // that used to own it. MessagesByChat disappears with the last direct access
-        // - it is not part of IChatStateStore for that reason, and WhatsAppService is
-        // its only reader. The two name tables lock on their own and are not transitional.
+        // that used to own it. MessagesByChat is not on IChatStateStore; façades and
+        // remaining client hosts reach it on this concrete type (or via GetMessages /
+        // GetMessageCount). WhatsAppService no longer re-exports it. The two name
+        // tables lock on their own and are not transitional.
         //
         // One caveat while MessagesByChat exists. It locks which conversations exist,
         // but the lists inside are edited in place without _gate, so the snapshot the

@@ -27,6 +27,13 @@ namespace Unison.Core.Contracts.WhatsApp
         Task SetPinnedAsync(ChatItem chat, bool pinned);
 
         /// <summary>
+        /// Adds or removes the conversation from WhatsApp Favourites (account-wide
+        /// <c>favoritesAction</c>). Local membership is updated first; the wire patch replaces
+        /// the full favourites list.
+        /// </summary>
+        Task SetFavoriteAsync(ChatItem chat, bool favorite);
+
+        /// <summary>
         /// Marks everything in the conversation as read: the senders are told, and the unread
         /// badge is cleared here and on the phone. Does nothing when there was nothing unread,
         /// so it is safe to call every time a chat is opened.
@@ -40,6 +47,12 @@ namespace Unison.Core.Contracts.WhatsApp
         /// have asked first.
         /// </summary>
         Task DeleteChatAsync(ChatItem chat);
+
+        /// <summary>
+        /// Account-side (or local) chat deletion: drop list rows and the in-memory timeline,
+        /// forget missing-message / on-demand history state, then durable storage via the host.
+        /// </summary>
+        Task ApplyAppStateDeleteChatAsync(string jid);
 
         /// <summary>
         /// Which conversation is on screen. The notification path reads it to stay quiet about the
@@ -91,6 +104,18 @@ namespace Unison.Core.Contracts.WhatsApp
         void RecordOfflineReplayTip(OfflineReplayTipRequest request);
 
         /// <summary>
+        /// After an incoming envelope is accepted on the timeline: refresh the list tip live,
+        /// or record an offline replay tip (optionally marking the chat dirty for persist).
+        /// </summary>
+        Task ApplyIncomingEnvelopePreviewAsync(IncomingEnvelopePreviewRequest request);
+
+        /// <summary>
+        /// After journal recovery flush: re-tip only the chats that got recovered messages.
+        /// </summary>
+        Task ApplyIncomingJournalRecoveryPreviewsAsync(
+            IEnumerable<KeyValuePair<string, ChatMessage>> latestByChat);
+
+        /// <summary>
         /// Applies every waiting offline replay tip to the list. A failure puts them back and rethrows.
         /// </summary>
         Task FlushOfflineReplayTipsAsync(string reason);
@@ -118,5 +143,158 @@ namespace Unison.Core.Contracts.WhatsApp
         /// callers that need the list settled first.
         /// </summary>
         void RequestChatListDedup(string reason);
+
+        /// <summary>
+        /// Same fold as <see cref="RequestChatListDedup"/>, awaited when startup / pump need
+        /// the list settled before the next step.
+        /// </summary>
+        Task DeduplicateChatListAsync(string reason);
+
+        /// <summary>
+        /// Collapses a transient direct chat (often a LID self-address) into its canonical row:
+        /// timeline, list, name maps, then durable identity / message cleanup.
+        /// </summary>
+        Task CollapseTransientDirectChatAsync(
+            string transientJid,
+            string canonicalJid,
+            string reason);
+
+        /// <summary>
+        /// After a local send: tip every alias row (create if missing), then request dedupe.
+        /// </summary>
+        Task ShowLocalSendPreviewAsync(
+            string chatJid,
+            string preview,
+            DateTime timestamp,
+            ChatPreviewKind? kindHint = null,
+            IList<string> mentionedJids = null,
+            string messageId = null,
+            string status = null);
+
+        /// <summary>
+        /// Startup repair for pre-v5.14 revoke envelopes stored as a fresh "[Message Deleted]" tip.
+        /// </summary>
+        Task RepairLegacyDeletedPreviewsAsync();
+
+        /// <summary>
+        /// After offline replay gates: reconcile list tips from SQLite, and for large desktop
+        /// drains also repair/refresh from the in-memory cache. Host owns quiet/memory/catch-up.
+        /// </summary>
+        Task NotifyPostReplayMaintenanceAsync(
+            int offlineCount,
+            bool runDelayedBulkRepair,
+            System.Threading.CancellationToken cancellationToken);
+
+        /// <summary>
+        /// Deferred-startup list pass: dedupe, legacy deleted-preview repair, SQLite tip
+        /// reconcile (coalesced with a recent post-replay full walk unless the list changed).
+        /// Host owns quiet/memory gates and contact-name hydrate before this.
+        /// </summary>
+        Task NotifyDeferredStartupListRepairAsync();
+
+        /// <summary>
+        /// Applies one history-sync preview slice onto the in-memory list: create missing rows,
+        /// update tips when newer, apply pin/mute flags into the row and durable store.
+        /// Must run on the UI thread (list mutations). Presentation batching stays with the caller.
+        /// </summary>
+        HistoryChatPreviewHydrateResult ApplyHistoryChatPreviewHydrate(
+            HistoryChatPreviewHydrateRequest request);
+
+        /// <summary>
+        /// Corrects the chat's list strip from the timeline just opened, then asks the store for a
+        /// reconcile in case SQLite holds something newer. Must run on the UI thread.
+        /// </summary>
+        void SyncListStripFromTimeline(
+            ChatItem chat,
+            string requestedJid,
+            IReadOnlyList<ChatMessage> visibleMessages);
+
+        /// <summary>
+        /// When the row's exact JID cache has no pin/mute, copies those flags from PN/LID alias
+        /// store keys onto the row (and remembers pin under every alias).
+        /// </summary>
+        void ApplyLocalStateAliasFallback(ChatItem chat);
+
+        /// <summary>Caches the account pin under every PN/LID spelling of <paramref name="jid"/>.</summary>
+        void RememberPinnedUnderAliases(string jid, bool pinned);
+
+        /// <summary>Unix-seconds mute deadline eight hours from now (UTC).</summary>
+        long MuteUntilEightHoursFromNow();
+
+        /// <summary>Unix-seconds mute deadline one week from now (UTC).</summary>
+        long MuteUntilOneWeekFromNow();
+
+        /// <summary>Sentinel unix seconds for "mute forever" (year 2999 UTC).</summary>
+        long MuteForeverUnixSeconds { get; }
+
+        /// <summary>
+        /// Confirms with the user, then deletes the conversation for the account everywhere.
+        /// Returns true only when the delete ran (not cancelled / not refused).
+        /// </summary>
+        Task<bool> ConfirmAndDeleteAsync(ChatItem chat);
+
+        /// <summary>Pin / timestamp / name order for the conversation list.</summary>
+        List<ChatItem> SortChatsForDisplay(IEnumerable<ChatItem> source);
+
+        /// <summary>
+        /// One row per person while the same conversation may exist under PN and LID.
+        /// </summary>
+        List<ChatItem> DeduplicateChatsByCanonicalJid(
+            IEnumerable<ChatItem> source,
+            Func<string, string> getCanonical);
+
+        /// <summary>
+        /// Collapses linked subgroups under a community hub row for the chat list.
+        /// </summary>
+        List<ChatItem> ProjectCommunityList(
+            IReadOnlyList<ChatItem> source,
+            Func<string, ChatItem> resolveParent,
+            Func<string, ChatItem> getOrCreateSynthetic,
+            Func<string, string> getCanonical);
+
+        /// <summary>
+        /// Whether a list row matches the search box (title, strip, JID, mention labels).
+        /// </summary>
+        bool MatchesChatListQuery(
+            ChatItem chat,
+            string query,
+            Func<string> resolveChatName,
+            Func<string, string> resolveMentionName);
+
+        /// <summary>
+        /// Cold toast/tile may hold the chat list until the conversation loads; warm activation must not.
+        /// </summary>
+        bool ShouldArmDeepLinkListHold(bool appWasAlreadyOpen);
+
+        /// <summary>Hide SyncStatusPanel / status-bar sync line while a cold deep-link hold is active.</summary>
+        bool ShouldSuppressDeepLinkSyncBanner(bool deepLinkHeld);
+
+        /// <summary>
+        /// Prefer ChatList_Loading over sync-progress copy on the full-list overlay (cold toast only).
+        /// </summary>
+        bool ShouldPreferDeepLinkLoadingOverlay(bool deepLinkHeld, bool listAlreadyMaterialized);
+
+        /// <summary>
+        /// After mass display-name apply, rebuild VisibleChats only when search membership can change.
+        /// </summary>
+        bool RequiresNamesAppliedVisibleRebuild(string searchQuery);
+
+        /// <summary>
+        /// Which <see cref="ChatItem"/> property change can move a row (pin / recency / community link).
+        /// </summary>
+        bool RequiresVisibleReorder(string propertyName);
+
+        /// <summary>
+        /// True when the chat-list control must not be created yet (first history sync or cold deep-link).
+        /// </summary>
+        bool ShouldHoldChatListRows(
+            bool isAwaitingFirstHistorySync,
+            bool deepLinkDetailFirst,
+            bool listAlreadyMaterialized);
+
+        /// <summary>
+        /// True while sync status is still enriching the list (names / avatars / groups / settling / low-memory).
+        /// </summary>
+        bool MatchesListEnrichmentPhase(string syncStatus);
     }
 }

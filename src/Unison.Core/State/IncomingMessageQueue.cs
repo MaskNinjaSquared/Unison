@@ -194,12 +194,30 @@ namespace Unison.Core.State
         }
 
         /// <summary>
+        /// True while <paramref name="generation"/> is still the live drain. A retired
+        /// drain must not Reset again when its timeout Delay fires late.
+        /// </summary>
+        public bool IsCurrentGeneration(int generation)
+        {
+            lock (_gate)
+            {
+                return generation == _generation;
+            }
+        }
+
+        /// <summary>
         /// A live item that timed out is retried once. The second time the same id blocks it is
-        /// skipped. An item without an id is always retried.
+        /// skipped. Null is never retried (orphan timeout after Reset cleared current). Blank
+        /// ids always retry.
         /// </summary>
         public bool ShouldRetryTimedOut(T item)
         {
-            string id = item == null ? null : _idOf(item);
+            if (item == null)
+            {
+                return false;
+            }
+
+            string id = _idOf(item);
             if (string.IsNullOrWhiteSpace(id))
             {
                 return true;

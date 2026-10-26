@@ -257,6 +257,9 @@ Nach der Diagnose deaktivieren: Wenn es aktiviert bleibt, wird die App langsamer
   <data name="ChatList_PreviewDocument" xml:space="preserve">
     <value>Dokument</value>
   </data>
+  <data name="ChatList_PreviewContact" xml:space="preserve">
+    <value>Kontakt</value>
+  </data>
   <data name="ChatList_PreviewReaction" xml:space="preserve">
     <value>Reaktion</value>
   </data>
@@ -1029,6 +1032,15 @@ Nach der Diagnose deaktivieren: Wenn es aktiviert bleibt, wird die App langsamer
   <data name="ChatDetail_AddContact.Text" xml:space="preserve">
     <value>Kontakt hinzufügen</value>
   </data>
+  <data name="MessageContact_Chat.Text" xml:space="preserve">
+    <value>Nachricht</value>
+  </data>
+  <data name="MessageContact_Add.Text" xml:space="preserve">
+    <value>Kontakt hinzuf�gen</value>
+  </data>
+  <data name="Message_GroupJoin" xml:space="preserve">
+    <value>{0} ist der Gruppe beigetreten</value>
+  </data>
   <data name="ChatDetail_AddContactLink.Content" xml:space="preserve">
     <value>Kontakt hinzufügen</value>
   </data>
@@ -1316,5 +1328,152 @@ Nach der Diagnose deaktivieren: Wenn es aktiviert bleibt, wird die App langsamer
   </data>
   <data name="ChatDetail_Back.ToolTip" xml:space="preserve">
     <value>Zurück</value>
+  </data>
+  <data name="Shell_LegacyPivot_Chats.Header" xml:space="preserve">
+    <value>chats</value>
+  </data>
+  <data name="Shell_LegacyPivot_Status.Header" xml:space="preserve">
+    <value>status</value>
+  </data>
+  <data name="Shell_LegacyPivot_Archived.Header" xml:space="preserve">
+    <value>archived</value>
+  </data>
+  <data name="Shell_LegacyChatActions_Pin.Label" xml:space="preserve">
+    <value>Pin</value>
+  </data>
+  <data name="Shell_LegacyChatActions_Unpin.Label" xml:space="preserve">
+    <value>Unpin</value>
+  </data>
+  <data name="Shell_LegacyChatActions_Mute.Label" xml:space="preserve">
+    <value>Mute</value>
+  </data>
+  <data name="Shell_LegacyChatActions_Unmute.Label" xml:space="preserve">
+    <value>Unmute</value>
+  </data>
+  <data name="Shell_LegacyChatActions_Archive.Label" xml:space="preserve">
+    <value>Archive</value>
+  </data>
+  <data name="Shell_LegacyChatActions_Unarchive.Label" xml:space="preserve">
+    <value>Unarchive</value>
+  </data>
+  <data name="Shell_LegacyChatActions_Delete.Label" xml:space="preserve">
+    <value>Delete</value>
+  </data>
+  <data name="Shell_LegacyChatActions_ViewProfile.Label" xml:space="preserve">
+    <value>View profile</value>
+  </data>
+  <data name="Shell_LegacyChatActions_PinToStart.Label" xml:space="preserve">
+    <value>Pin to Start</value>
+  </data>
+  <data name="Shell_LegacyChatActions_UnpinFromStart.Label" xml:space="preserve">
+    <value>Unpin from Start</value>
+  </data>
+  <data name="Shell_LegacyChatActions_AddContact.Label" xml:space="preserve">
+    <value>Add contact</value>
+  </data>
+  <data name="Shell_LegacyChatActions_AddFavorite.Label" xml:space="preserve">
+    <value>Add to favorites</value>
+  </data>
+  <data name="Shell_LegacyChatActions_RemoveFavorite.Label" xml:space="preserve">
+    <value>Remove from favorites</value>
+  </data>
+  <data name="Shell_LegacyChatActions_Mute8Hours.Label" xml:space="preserve">
+    <value>8 hours</value>
+  </data>
+  <data name="Shell_LegacyChatActions_Mute1Week.Label" xml:space="preserve">
+    <value>1 week</value>
+  </data>
+  <data name="Shell_LegacyChatActions_MuteAlways.Label" xml:space="preserve">
+    <value>Always</value>
+  </data>
+  <data name="Settings_ProfileHint.Text" xml:space="preserve">
+    <value>Your name and photo</value>
+  </data>
+  <data name="Settings_GeneralHint.Text" xml:space="preserve">
+    <value>Live tiles, session, and contacts</value>
+  </data>
+  <data name="Settings_NotificationsHint.Text" xml:space="preserve">
+    <value>Toasts and message badge</value>
+  </data>
+  <data name="Settings_CustomizationHint.Text" xml:space="preserve">
+    <value>Theme and language</value>
+  </data>
+  <data name="Settings_AccountHint.Text" xml:space="preserve">
+    <value>Unlink this device</value>
+  </data>
+  <data name="Debug_SocketSlice.Text" xml:space="preserve">
+    <value>Socket Rewrite (experimental)</value>
+  </data>
+  <data name="Debug_SocketSliceDesc.Text" xml:space="preserve">
+    <value>Connects with the new Unison.Socket stack using throwaway credentials, so your signed-in session is never touched. Scan the QR to validate pairing.</value>
+  </data>
+  <data name="Debug_SocketSliceRun.Content" xml:space="preserve">
+    <value>Run Slice</value>
+  </data>
+  <data name="Debug_SocketSliceStop.Content" xml:space="preserve">
+    <value>Stop</value>
+  </data>
+  <data name="ChatDetail_ForwardMessage" xml:space="preserve">
+    <value>Forward</value>
+  </data>
+  <data name="ChatDetail_ImageBatchInfo" xml:space="preserve">
+    <value>{0} images ({1} KB)</value>
+  </data>
+  <data name="Profile_Title" xml:space="preserve">
+    <value>Profile</value>
+  </data>
+  <data name="Profile_StartChatAppBarLabel.Text" xml:space="preserve">
+    <value>Start&#x0a;chat</value>
+  </data>
+  <data name="Profile_MissingContact" xml:space="preserve">
+    <value>Contact not found.</value>
+  </data>
+  <data name="Profile_LoadFailed" xml:space="preserve">
+    <value>Could not open this profile.</value>
+  </data>
+  <data name="Favorites_EmptyTitle.Text" xml:space="preserve">
+    <value>Add favorites</value>
+  </data>
+  <data name="Favorites_AddPeopleOrGroups.Content" xml:space="preserve">
+    <value>Add people or groups</value>
+  </data>
+  <data name="Share_PickChat.Text" xml:space="preserve">
+    <value>Send to…</value>
+  </data>
+  <data name="Favorites_SortAlphabetical.Text" xml:space="preserve">
+    <value>A-Z</value>
+  </data>
+  <data name="ChatList_AddFavorite.Text" xml:space="preserve">
+    <value>Add to favorites</value>
+  </data>
+  <data name="ChatList_RemoveFavorite.Text" xml:space="preserve">
+    <value>Remove from favorites</value>
+  </data>
+  <data name="Favorites_OpenChat.Text" xml:space="preserve">
+    <value>Open chat</value>
+  </data>
+  <data name="Favorites_Remove.Text" xml:space="preserve">
+    <value>Remove from favorites</value>
+  </data>
+  <data name="ChatList_ViewProfile.Text" xml:space="preserve">
+    <value>View profile</value>
+  </data>
+  <data name="ChatDetailInfo_PinContactAppBarLabel.Text" xml:space="preserve">
+    <value>Pin&#x0a;contact</value>
+  </data>
+  <data name="ChatDetailInfo_UnpinContactAppBarLabel.Text" xml:space="preserve">
+    <value>Unpin&#x0a;contact</value>
+  </data>
+  <data name="Tile_ContactProfileTitle" xml:space="preserve">
+    <value>{0} Profile</value>
+  </data>
+  <data name="Tile_ContactNoNewMessages" xml:space="preserve">
+    <value>No new messages</value>
+  </data>
+  <data name="Tile_ContactHasNewMessages" xml:space="preserve">
+    <value>{0} New Messages</value>
+  </data>
+  <data name="Tile_ContactNoMotto" xml:space="preserve">
+    <value>No status message</value>
   </data>
 </root>

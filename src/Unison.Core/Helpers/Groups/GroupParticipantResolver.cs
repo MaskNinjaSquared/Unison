@@ -130,7 +130,7 @@ namespace Unison.Core.Helpers
                 return fromRoster.DisplayName.Trim();
             }
 
-            string fromService = ResolveServiceName(context, participantJid);
+            string fromService = ResolveServiceName(context, participantJid, nameContext: "sender");
             if (UsableLabel(fromService, canonical))
             {
                 return fromService.Trim();
@@ -138,7 +138,7 @@ namespace Unison.Core.Helpers
 
             if (!string.Equals(canonical, participantJid, StringComparison.OrdinalIgnoreCase))
             {
-                fromService = ResolveServiceName(context, canonical);
+                fromService = ResolveServiceName(context, canonical, nameContext: "sender");
                 if (UsableLabel(fromService, canonical))
                 {
                     return fromService.Trim();
@@ -394,9 +394,57 @@ namespace Unison.Core.Helpers
             return null;
         }
 
-        private static string ResolveServiceName(ParticipantResolutionContext context, string jid)
+        private static string ResolveServiceName(
+            ParticipantResolutionContext context,
+            string jid,
+            string nameContext)
         {
-            return context?.Contacts?.ResolveDisplayName(jid, "sender");
+            return context?.Contacts?.ResolveDisplayName(
+                jid,
+                string.IsNullOrWhiteSpace(nameContext) ? "sender" : nameContext);
+        }
+
+        /// <summary>
+        /// Chat-list author strip: contacts ranking with <c>withContactIndicator</c>, else unmarked.
+        /// </summary>
+        public static string ResolveStripDisplayName(
+            string participantJid,
+            ChatItem groupChat,
+            ParticipantResolutionContext context,
+            string nameHint = null,
+            GroupMember rosterMember = null,
+            IReadOnlyDictionary<string, string> directChatNames = null,
+            IReadOnlyDictionary<string, GroupMember> rosterByCanonical = null)
+        {
+            if (context?.Contacts != null && !string.IsNullOrWhiteSpace(participantJid))
+            {
+                string canonical = CanonicalJid(context, participantJid) ?? JidHelper.Normalize(participantJid);
+                string marked = ResolveServiceName(context, participantJid, "strip");
+                if (UsableLabel(marked, canonical))
+                {
+                    return marked.Trim();
+                }
+
+                if (!string.IsNullOrWhiteSpace(canonical) &&
+                    !string.Equals(canonical, participantJid, StringComparison.OrdinalIgnoreCase))
+                {
+                    marked = ResolveServiceName(context, canonical, "strip");
+                    if (UsableLabel(marked, canonical))
+                    {
+                        return marked.Trim();
+                    }
+                }
+            }
+
+            string plain = ResolveDisplayName(
+                participantJid,
+                groupChat,
+                context,
+                nameHint,
+                rosterMember,
+                directChatNames,
+                rosterByCanonical);
+            return DisplayNameResolution.StripContactIndicator(plain);
         }
 
         private static string CanonicalJid(ParticipantResolutionContext context, string jid)

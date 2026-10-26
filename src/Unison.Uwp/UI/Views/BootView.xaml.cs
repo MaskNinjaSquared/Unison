@@ -1,5 +1,6 @@
 using System;
 using System.Threading.Tasks;
+using Windows.UI;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
 using Windows.UI.Xaml.Media;
@@ -9,13 +10,16 @@ using Microsoft.Extensions.DependencyInjection;
 using Unison.Core.Constants;
 using Unison.Core.Contracts;
 using Unison.Core.ViewModels;
+using Unison.Uwp.Services;
+using Unison.Uwp.Services.Themes;
 using Unison.Uwp.Services.WhatsApp;
 
 namespace Unison.Uwp.UI.Views
 {
     /// <summary>
     /// Boot surface: cold start (session resolve) and post-QR green bridge before next root page.
-    /// Green lives on <c>RootGrid</c>; exit floats it up to reveal the page theme background.
+    /// Brand fill on <c>RootGrid</c> comes from the active shell strategy (not ThemeResource —
+    /// App.xaml would shadow Legacy). Exit floats it up to reveal the page theme background.
     /// Icon size tracks the window short side so splash → Boot stays consistent when not maximized.
     /// </summary>
     public sealed partial class BootView : Page
@@ -37,6 +41,7 @@ namespace Unison.Uwp.UI.Views
 
         private bool _introStarted;
         private bool _themeBackgroundApplied;
+        private bool _bootSurfaceFadeStarted;
 
         public BootView()
         {
@@ -48,6 +53,7 @@ namespace Unison.Uwp.UI.Views
 
         private void BootView_Loaded(object sender, RoutedEventArgs e)
         {
+            TryStartBootSurfaceFade();
             UpdateSplashMatchedIconSize();
             TryStartIntroAnimation();
             try
@@ -56,6 +62,63 @@ namespace Unison.Uwp.UI.Views
             }
             catch
             {
+            }
+        }
+
+        /// <summary>
+        /// Splash green stays for Unison. Legacy/WhatsApp: ColorAnimation splash → BootSurfaceColor
+        /// (same pattern as Imgur <c>ShutdownView</c> colorStoryboard, 3s).
+        /// </summary>
+        private void TryStartBootSurfaceFade()
+        {
+            if (_bootSurfaceFadeStarted || BootSurfaceFill == null)
+            {
+                return;
+            }
+
+            Color splash = ShellThemeStrategy.SplashBootSurfaceColor;
+            BootSurfaceFill.Color = splash;
+            Background = new SolidColorBrush(splash);
+
+            ShellThemeService theme = null;
+            try
+            {
+                theme = App.Services?.GetService<ShellThemeService>();
+            }
+            catch
+            {
+            }
+
+            if (theme == null || !theme.FadeBootLogoBackground)
+            {
+                return;
+            }
+
+            _bootSurfaceFadeStarted = true;
+            Color end = theme.BootSurfaceColor;
+
+            // Transparent end: page theme must already show under RootGrid.
+            if (end.A == 0)
+            {
+                ApplyThemePageBackground();
+            }
+
+            if (BootSurfaceFadeAnim == null || BootSurfaceFadeStoryboard == null)
+            {
+                BootSurfaceFill.Color = end;
+                return;
+            }
+
+            try
+            {
+                BootSurfaceFadeAnim.From = splash;
+                BootSurfaceFadeAnim.To = end;
+                BootSurfaceFadeStoryboard.Begin();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine("[BootView] Boot surface fade failed: " + ex.Message);
+                BootSurfaceFill.Color = end;
             }
         }
 
@@ -239,14 +302,103 @@ namespace Unison.Uwp.UI.Views
                 {
                     if (!postPairing)
                     {
-                        await shell.InitializeAsync();
+                        // Mobile has hung forever in InitializeConnectionState (auth / SQLite /
+                        // lid warm) with no connect journal. Cap wait so exit wipe still runs;
+                        // init continues in background if still pending.
+                        const int InitBudgetMs = 45000;
+                        Task initTask = shell.InitializeAsync();
+                        Task finished = await Task.WhenAny(initTask, Task.Delay(InitBudgetMs));
+                        if (finished != initTask)
+                        {
+                            try
+                            {
+                                App.Services?.GetService<IRuntimeDiagnostics>()?.Write(
+                                    "startup",
+                                    "boot-init-timeout",
+                                    "budgetMs=" + InitBudgetMs +
+                                    "; surface=" + (shell.AppSurface ?? string.Empty));
+                            }
+                            catch
+                            {
+                            }
+
+                            // Observe late completion / fault; do not leave an unobserved task.
+                            _ = initTask.ContinueWith(
+                                t =>
+                                {
+                                    if (t.IsFaulted && t.Exception != null)
+                                    {
+                                        System.Diagnostics.Debug.WriteLine(
+                                            "[BootView] InitializeAsync after timeout: " +
+                                            t.Exception.GetBaseException().Message);
+                                    }
+                                },
+                                TaskContinuationOptions.OnlyOnFaulted);
+
+                            // Prefer Connected when auth already loaded (do not bounce to Start).
+                            if (string.Equals(
+                                    shell.AppSurface,
+                                    ShellViewModel.SurfaceStartup,
+                                    StringComparison.Ordinal))
+                            {
+                                try
+                                {
+                                    await shell.PromoteSurfaceAfterBootInitTimeoutAsync();
+                                }
+                                catch (Exception promoteEx)
+                                {
+                                    System.Diagnostics.Debug.WriteLine(
+                                        "[BootView] Promote after timeout: " + promoteEx.Message);
+                                }
+                            }
+                        }
+                        else
+                        {
+                            await initTask;
+                        }
+
                         if (string.Equals(
                                 shell.AppSurface,
                                 ShellViewModel.SurfaceStartup,
                                 StringComparison.Ordinal))
                         {
-                            // Background-apps prompt cancelled — process is exiting.
-                            return;
+                            // Still Startup after init: either not registered, or background-access
+                            // abort. Never dump a registered account here — promote Connected first
+                            // (covers races where auth loaded but surface was not flipped yet).
+                            try
+                            {
+                                await shell.PromoteSurfaceAfterBootInitTimeoutAsync();
+                            }
+                            catch (Exception promoteEx)
+                            {
+                                System.Diagnostics.Debug.WriteLine(
+                                    "[BootView] Promote before Startup leave: " + promoteEx.Message);
+                            }
+
+                            if (string.Equals(
+                                    shell.AppSurface,
+                                    ShellViewModel.SurfaceStartup,
+                                    StringComparison.Ordinal))
+                            {
+                                // Background-apps cancelled: Exit() was requested, but Mobile can
+                                // keep the process alive — never leave SuppressRootNavigation true
+                                // on a green Boot forever.
+                                shell.SuppressRootNavigation = false;
+                                try
+                                {
+                                    shell.EnterStartSurface();
+                                    shell.FinishBootRootNavigation();
+                                }
+                                catch (Exception leaveEx)
+                                {
+                                    System.Diagnostics.Debug.WriteLine(
+                                        "[BootView] Leave Boot after Startup abort: " + leaveEx.Message);
+                                }
+
+                                return;
+                            }
+
+                            // Promoted to Connected — continue Boot exit into shell.
                         }
                     }
                     // postPairing: already Connected after QR wipe.

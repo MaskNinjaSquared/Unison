@@ -27,6 +27,7 @@ namespace Unison.Core.ViewModels
             (AttachAudioCommand as RelayCommand)?.RaiseCanExecuteChanged();
             (AttachCameraCommand as RelayCommand)?.RaiseCanExecuteChanged();
             (AttachFileCommand as RelayCommand)?.RaiseCanExecuteChanged();
+            (PasteClipboardCommand as RelayCommand)?.RaiseCanExecuteChanged();
             (StartRecordingCommand as RelayCommand)?.RaiseCanExecuteChanged();
             (CancelRecordingCommand as RelayCommand)?.RaiseCanExecuteChanged();
             (SendRecordingCommand as RelayCommand)?.RaiseCanExecuteChanged();
@@ -387,6 +388,148 @@ namespace Unison.Core.ViewModels
             finally
             {
                 IsSending = false;
+            }
+        }
+
+        /// <summary>
+        /// Applies a Share Target payload to the open conversation: seeds the composer for text,
+        /// and runs the existing attach previews for media.
+        /// </summary>
+        public async Task ApplyIncomingShareAsync(IncomingSharePayload payload)
+        {
+            if (payload == null || payload.IsEmpty || _activeChat == null)
+            {
+                return;
+            }
+
+            string targetJid = _activeChat.JID;
+            if (string.IsNullOrWhiteSpace(targetJid))
+            {
+                return;
+            }
+
+            if (payload.HasText)
+            {
+                MessageText = payload.Text.Trim();
+            }
+
+            if (!payload.HasMedia)
+            {
+                return;
+            }
+
+            await SendPickedMediaBatchAsync(targetJid, payload.Media);
+        }
+
+        /// <summary>
+        /// Sync peek for Ctrl+V: true when clipboard advertises media and paste can run.
+        /// Starts <see cref="PasteClipboardCommand"/> when true (caller marks KeyDown Handled).
+        /// </summary>
+        public bool TryBeginPasteClipboardMedia()
+        {
+            if (!CanCompose || _copy == null || !_copy.HasPasteableMedia())
+            {
+                return false;
+            }
+
+            if (PasteClipboardCommand == null || !PasteClipboardCommand.CanExecute(null))
+            {
+                return false;
+            }
+
+            PasteClipboardCommand.Execute(null);
+            return true;
+        }
+
+        /// <summary>
+        /// Ctrl+V when the clipboard holds Image / Audio / Document bytes (not plain text).
+        /// </summary>
+        private async Task PasteClipboardAsync()
+        {
+            if (_copy == null || _activeChat == null || _isSending || _isRecording)
+            {
+                return;
+            }
+
+            string targetJid = _activeChat.JID;
+            if (string.IsNullOrWhiteSpace(targetJid))
+            {
+                return;
+            }
+
+            ClipboardPasteResult paste;
+            try
+            {
+                paste = await _copy.ReadPasteAsync();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine("[ChatDetail] PasteClipboard read: " + ex.Message);
+                return;
+            }
+
+            if (paste == null || !paste.HasMedia)
+            {
+                return;
+            }
+
+            try
+            {
+                await SendPickedMediaBatchAsync(targetJid, paste.Media);
+            }
+            catch (UnisonUserException ex)
+            {
+                IsSending = false;
+                await PresentUserExceptionAsync(ex, "paste-fail");
+            }
+            catch (Exception ex)
+            {
+                IsSending = false;
+                await PresentUserExceptionAsync(
+                    new AttachmentSendException("Paste failed: " + ex.Message, ex),
+                    "paste-fail");
+            }
+        }
+
+        /// <summary>
+        /// Routes a mixed media list the same way Share Target does (images batched; audio/doc one-by-one).
+        /// </summary>
+        private async Task SendPickedMediaBatchAsync(string targetJid, IReadOnlyList<PickedChatMedia> media)
+        {
+            if (string.IsNullOrWhiteSpace(targetJid) || media == null || media.Count == 0)
+            {
+                return;
+            }
+
+            var images = new List<PickedChatMedia>();
+            foreach (PickedChatMedia item in media)
+            {
+                if (item == null)
+                {
+                    continue;
+                }
+
+                if (item.IsImage)
+                {
+                    images.Add(item);
+                    continue;
+                }
+
+                if (item.IsAudio)
+                {
+                    await SendPickedAudioAsync(targetJid, item);
+                    continue;
+                }
+
+                if (item.IsDocument)
+                {
+                    await SendPickedDocumentAsync(targetJid, item);
+                }
+            }
+
+            if (images.Count > 0)
+            {
+                await SendPickedImagesAsync(targetJid, images);
             }
         }
 
@@ -764,7 +907,7 @@ namespace Unison.Core.ViewModels
                 return null;
             }
 
-            int index = ChatMessageOrder.FindInsertIndex(
+            int index = _messageService.FindTimelineInsertIndex(
                 Messages.Count,
                 i => Messages[i]?.Timestamp ?? DateTime.MinValue,
                 i => Messages[i]?.Id,

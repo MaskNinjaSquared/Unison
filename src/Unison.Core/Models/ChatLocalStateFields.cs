@@ -18,6 +18,7 @@ namespace Unison.Core.Models
         Mute = 2,
         WidgetPin = 4,
         Status = 8,
-        All = Pin | Mute | WidgetPin | Status
+        Favorite = 16,
+        All = Pin | Mute | WidgetPin | Status | Favorite
     }
 }

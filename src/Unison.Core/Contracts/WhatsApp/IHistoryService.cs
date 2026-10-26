@@ -109,5 +109,50 @@ namespace Unison.Core.Contracts.WhatsApp
         /// in-flight gate so another request can go out.
         /// </summary>
         Task<bool> RequestFullHistoryOnDemandAsync(string reason = null, bool force = false);
+
+        /// <summary>
+        /// Asks the phone for the page of <paramref name="jid"/> older than the oldest message
+        /// in memory. True when a request went out.
+        /// </summary>
+        Task<bool> EnsureChatPageAsync(string jid, int count);
+
+        /// <summary>A page was asked for <paramref name="jid"/> and has not landed yet.</summary>
+        bool IsChatPagePending(string jid);
+
+        /// <summary>
+        /// Wire <c>ack</c> for an outstanding history-on-demand request (chat or full).
+        /// </summary>
+        void HandleOnDemandAck(string ackClass, string ackId, string ackError);
+
+        /// <summary>
+        /// Host path: apply a history chunk (people + SQLite via message façade helpers) then
+        /// raise <see cref="HistorySyncReceived"/>. Null <paramref name="sync"/> is a surface
+        /// reload signal only (no persist).
+        /// </summary>
+        Task ApplyHistorySyncAsync(HistorySync sync);
+
+        /// <summary>
+        /// Host path: raise <see cref="HistorySyncReceived"/> only (null = reload surfaces).
+        /// Prefer <see cref="ApplyHistorySyncAsync"/> when a chunk must be persisted.
+        /// </summary>
+        void NotifyHistorySyncReceived(HistorySync sync);
+
+        /// <summary>Host path: local session wiped — reset history SQLite tables.</summary>
+        void NotifySessionCleared();
+
+        /// <summary>Host path: background FULL_HISTORY solicitation bounced; toast gate counts these.</summary>
+        void NotifyBackgroundHistorySyncBounced();
+
+        /// <summary>
+        /// Host path after a quiet FULL_HISTORY lot / watchdog idle / hard timeout: decide
+        /// whether to finish catch-up or ask the next adjacent page (live socket or soft-reconnect).
+        /// </summary>
+        void NotifyCatchUpIdleBatch(
+            string requestId,
+            bool ackAccepted,
+            int progressSignals,
+            string triggerReason,
+            int idleMs);
     }
 }
+

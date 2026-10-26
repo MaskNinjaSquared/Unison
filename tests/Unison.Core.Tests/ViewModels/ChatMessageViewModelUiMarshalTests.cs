@@ -5,6 +5,7 @@ using Unison.Core.Models;
 using Unison.Core.Tests.Helpers;
 using Unison.Core.ViewModels;
 using Xunit;
+using Unison.WhatsAppClient.Helpers;
 
 namespace Unison.Core.Tests.ViewModels
 {

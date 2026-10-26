@@ -2,6 +2,7 @@ using System;
 using System.Threading.Tasks;
 using Unison.Core.Models;
 using Windows.Foundation.Metadata;
+using Windows.Graphics.Display;
 using Windows.UI;
 using Windows.UI.ViewManagement;
 using Windows.UI.Xaml.Controls;
@@ -14,9 +15,14 @@ namespace Unison.Uwp.Services.Themes
     /// </summary>
     public sealed class WhatsAppLegacyThemeStrategy : ShellThemeStrategy
     {
-        private static readonly Color WpBlack = Color.FromArgb(0xFF, 0x00, 0x00, 0x00);
         private static readonly Color WpWhite = Color.FromArgb(0xFF, 0xFF, 0xFF, 0xFF);
-        private static readonly Color WpAccent = Color.FromArgb(0xFF, 0x00, 0x65, 0x6A);
+        private static readonly Color WpAccent = Color.FromArgb(0xFF, 0x04, 0x56, 0x4A);
+        private static readonly Color WpAccentHover = Color.FromArgb(0xFF, 0x06, 0x6E, 0x5F);
+        private static readonly Color WpAccentPressed = Color.FromArgb(0xFF, 0x02, 0x3C, 0x34);
+
+        public override Color BootSurfaceColor => WpAccent;
+
+        public override bool FadeBootLogoBackground => true;
 
         public override bool DisplaySyncInChatList => true;
 
@@ -95,7 +101,7 @@ namespace Unison.Uwp.Services.Themes
             try
             {
                 var titleBar = ApplicationView.GetForCurrentView().TitleBar;
-                // Desktop: accent strip (#00656A); caption glyphs stay white.
+                // Desktop: accent strip (#04564A); caption glyphs stay white.
                 titleBar.BackgroundColor = WpAccent;
                 titleBar.InactiveBackgroundColor = WpAccent;
                 titleBar.ForegroundColor = WpWhite;
@@ -104,9 +110,9 @@ namespace Unison.Uwp.Services.Themes
                 titleBar.ButtonInactiveBackgroundColor = WpAccent;
                 titleBar.ButtonForegroundColor = WpWhite;
                 titleBar.ButtonInactiveForegroundColor = WpWhite;
-                titleBar.ButtonHoverBackgroundColor = Color.FromArgb(0xFF, 0x00, 0x7A, 0x80);
+                titleBar.ButtonHoverBackgroundColor = WpAccentHover;
                 titleBar.ButtonHoverForegroundColor = WpWhite;
-                titleBar.ButtonPressedBackgroundColor = Color.FromArgb(0xFF, 0x00, 0x52, 0x56);
+                titleBar.ButtonPressedBackgroundColor = WpAccentPressed;
                 titleBar.ButtonPressedForegroundColor = WpWhite;
             }
             catch (Exception ex)
@@ -125,8 +131,20 @@ namespace Unison.Uwp.Services.Themes
                 }
 
                 var statusBar = StatusBar.GetForCurrentView();
-                // No brand strip on Mobile — black status bar only (WP8 chrome lives in-page).
-                statusBar.BackgroundColor = WpBlack;
+                var orientation = DisplayInformation.GetForCurrentView().CurrentOrientation;
+                bool portrait =
+                    orientation == DisplayOrientations.Portrait ||
+                    orientation == DisplayOrientations.PortraitFlipped;
+
+                if (!portrait)
+                {
+                    try { await statusBar.ProgressIndicator.HideAsync(); } catch { }
+                    await statusBar.HideAsync();
+                    return;
+                }
+
+                // Accent strip like desktop title bar; no ProgressIndicator label (Unison shows brand text).
+                statusBar.BackgroundColor = WpAccent;
                 statusBar.ForegroundColor = WpWhite;
                 statusBar.BackgroundOpacity = 1.0;
                 try { await statusBar.ProgressIndicator.HideAsync(); } catch { }

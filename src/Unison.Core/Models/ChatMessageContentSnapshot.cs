@@ -18,6 +18,7 @@ namespace Unison.Core.Models
         public bool IsAudio { get; set; }
         public bool IsVoice { get; set; }
         public bool IsDocument { get; set; }
+        public bool IsContact { get; set; }
         public string Caption { get; set; }
         public string QuotedText { get; set; }
         /// <summary>Media kind for the quoted bubble strip (Text = plain quote body).</summary>

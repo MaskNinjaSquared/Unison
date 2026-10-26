@@ -3,7 +3,7 @@ using System;
 namespace Unison.Core.Models
 {
     /// <summary>
-    /// Args for <see cref="Contracts.WhatsApp.IWhatsAppService.OnSessionCleared"/>.
+    /// Args for <see cref="Contracts.WhatsApp.IConnectionEventSource.OnSessionCleared"/>.
     /// </summary>
     public sealed class SessionClearedEventArgs : EventArgs
     {

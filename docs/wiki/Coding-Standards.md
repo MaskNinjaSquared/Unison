@@ -10,17 +10,20 @@ Agents: read this before adding a view, service, façade, or socket use case.
 
 | Project | May reference | Must not |
 |---|---|---|
-| `Unison.Core` | `Unison.Baileys` | XAML, WinRT, `Unison.Uwp` |
+| `Unison.Core` | `Unison.Baileys` | XAML, WinRT, `Unison.Uwp`, `Unison.WhatsAppClient` |
+| `Unison.WhatsAppClient` | `Unison.Core`, `Unison.Socket` | XAML, WinRT, `Unison.Uwp` |
 | `Unison.Socket` | `Unison.Baileys` | WinRT, SQLite, Core ViewModels |
 | `Unison.Baileys` | NuGet only | Other Unison projects |
-| `Unison.Background` | `Unison.Baileys` | Core, Socket, XAML |
+| `Unison.Background` | `Unison.Baileys` | Core, Socket, Application, XAML |
 | `Unison.Uwp` | All of the above | Protocol logic that belongs in Socket |
 
-- Contracts and ViewModels live in **Core**.
+- Contracts and ViewModels live in **Core** (presentation helpers only under `Helpers/`).
+- WhatsApp façades and **domain** helpers live in **Application** (scaffold today; move is [Netstandard WhatsApp client](Netstandard-WhatsApp-Client) phase C).
 - WinRT implementations live in **UWP** (`Services/`, `Data/`, `Transport/`, `UI/`).
 - WhatsApp wire logic lives in **Socket** (`UseCases/`, `Session/`, modules).
 - `ConnectionHandler` never calls a use case and never holds chats/messages.
 - Reconnect policy stays in the UWP host (`ConnectionUpdate`).
+- Core must not reference Application (ViewModels use façade **contracts**, not Application types).
 
 ---
 
@@ -157,7 +160,7 @@ Composition root: `App.ConfigureServices` in `Unison.Uwp/App.xaml.cs`.
 
 - New `Foo.Instance` / service locator except `App.Services` and `App.GetWhatsAppService()` at the existing composition edges.
 - Registering leftover `MessageService` / `ContactService` / `ConnectionService` / `ProfileService` under `Services/WhatsApp/` (not façades). Those files were deleted; do not recreate them.
-- `WhatsAppService.Instance` in new code. Use `IWhatsAppService` from DI, and prefer the façade that owns the subject.
+- `WhatsAppService.Instance` in new code. Resolve the façade that owns the subject (`IConnectionService`, `IMessageService`, …).
 
 Existing singletons (`SocketBrokerCoordinator.Instance`, `RuntimeDiagnosticsService.Instance`, `LiveTilesService.Instance`) are **legacy**. New code takes the interface (`ISocketBrokerService`, `IRuntimeDiagnostics`, `ILiveTilesService`). Do not add more `.Instance` services.
 
@@ -169,7 +172,7 @@ Screens and ViewModels use:
 
 `IConnectionService`, `IMessageService`, `IChatService`, `IContactService`, `IProfileService`, `IHistoryService`, `IStatusService`.
 
-They do **not** subscribe to raw `IWhatsAppService` events. Those events are for façades only.
+They do **not** subscribe to raw client / host-port events. Those events are for façades only.
 
 The Windows People “add contact” card is WinRT: `ILocalContactsService.ShowSystemContactCardAsync` (full card on desktop; mini-card on Mobile after UI idle). The optional **Unison People export** is `PublishAppContactsAsync` / `ClearPublishedAppContactsAsync`: a `UserDataAccount` plus a contact list and annotations on that account (Unigram Mobile shape) — not a bare app `ContactList`, not the user agenda. ViewModels go through `IContactService` — do not add a second contact service. Do not refresh the address-book overlay in the same turn as showing the card.
 
@@ -177,7 +180,7 @@ Need a live `WhatsAppSession`? `IWhatsAppSessionProvider` — do not cache the s
 
 `LoginViewModel` talks **only** to `IConnectionService`.
 
-Do not grow `IWhatsAppService` for UI features. Add the member on the façade that owns the subject. The step-by-step move off the client is [WhatsAppService extraction](WhatsAppService-Extraction).
+Do not grow the compatibility client for UI features. Add the member on the façade that owns the subject. The step-by-step move off the client is [WhatsAppService extraction](WhatsAppService-Extraction).
 
 `SocketBridge` implements `IWhatsAppSocket` so the client can keep working. New protocol features go on Socket use cases / modules, then a façade — not on `IWhatsAppSocket` unless the client still must see them.
 

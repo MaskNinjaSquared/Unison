@@ -76,23 +76,24 @@
             <SolidColorBrush x:Key="ComboBoxForegroundDisabled" Color="#66FFFFFF"/>
             <SolidColorBrush x:Key="ComboBoxDropDownBackground" Color="#FF000000"/>
             <SolidColorBrush x:Key="ComboBoxDropDownBorderBrush" Color="#FFFFFFFF"/>
-            <!-- Accent #00656A: splitter / unread / composer -->
-            <SolidColorBrush x:Key="ChatPaneSplitterBackgroundBrush" Color="#FF00656A"/>
+            <!-- Accent / boot / title bar #04564A -->
+            <SolidColorBrush x:Key="BootSurfaceBrush" Color="#FF04564A"/>
+            <SolidColorBrush x:Key="ChatPaneSplitterBackgroundBrush" Color="#FF04564A"/>
             <SolidColorBrush x:Key="ChatPaneSplitterGripBrush" Color="#FF000000"/>
-            <SolidColorBrush x:Key="ChatListUnreadBadgeBrush" Color="#FF00656A"/>
-            <SolidColorBrush x:Key="ChatListSyncStatusBrush" Color="#FF00656A"/>
-            <SolidColorBrush x:Key="ChatDetailAccentBrush" Color="#FF00656A"/>
+            <SolidColorBrush x:Key="ChatListUnreadBadgeBrush" Color="#FF04564A"/>
+            <SolidColorBrush x:Key="ChatListSyncStatusBrush" Color="#FF04564A"/>
+            <SolidColorBrush x:Key="ChatDetailAccentBrush" Color="#FF04564A"/>
             <SolidColorBrush x:Key="ChatDetailInfoLabelBrush" Color="#FFFFFFFF"/>
             <SolidColorBrush x:Key="ChatDetailInfoValueBrush" Color="#FF1DAA61"/>
             <SolidColorBrush x:Key="ChatDetailInfoMutedBrush" Color="#FFCCCCCC"/>
-            <SolidColorBrush x:Key="WhatsAppGreenFocusBrush" Color="#FF00656A"/>
+            <SolidColorBrush x:Key="WhatsAppGreenFocusBrush" Color="#FF04564A"/>
             <SolidColorBrush x:Key="ChatDetailInputBarBackgroundBrush" Color="#FF000000"/>
             <SolidColorBrush x:Key="ChatDetailInputBarTopBorderBrush" Color="#FF333333"/>
             <SolidColorBrush x:Key="ChatDetailComposerBackgroundBrush" Color="Transparent"/>
-            <Color x:Key="SystemAccentColor">#00656A</Color>
-            <SolidColorBrush x:Key="SystemControlForegroundAccentBrush" Color="#FF00656A"/>
-            <SolidColorBrush x:Key="SystemControlHighlightAccentBrush" Color="#FF00656A"/>
-            <SolidColorBrush x:Key="SystemControlHighlightAltAccentBrush" Color="#FF00656A"/>
+            <Color x:Key="SystemAccentColor">#04564A</Color>
+            <SolidColorBrush x:Key="SystemControlForegroundAccentBrush" Color="#FF04564A"/>
+            <SolidColorBrush x:Key="SystemControlHighlightAccentBrush" Color="#FF04564A"/>
+            <SolidColorBrush x:Key="SystemControlHighlightAltAccentBrush" Color="#FF04564A"/>
         </ResourceDictionary>
 
         <ResourceDictionary x:Key="Dark">
@@ -133,22 +134,23 @@
             <SolidColorBrush x:Key="ComboBoxForegroundDisabled" Color="#66FFFFFF"/>
             <SolidColorBrush x:Key="ComboBoxDropDownBackground" Color="#FF000000"/>
             <SolidColorBrush x:Key="ComboBoxDropDownBorderBrush" Color="#FFFFFFFF"/>
-            <SolidColorBrush x:Key="ChatPaneSplitterBackgroundBrush" Color="#FF00656A"/>
+            <SolidColorBrush x:Key="BootSurfaceBrush" Color="#FF04564A"/>
+            <SolidColorBrush x:Key="ChatPaneSplitterBackgroundBrush" Color="#FF04564A"/>
             <SolidColorBrush x:Key="ChatPaneSplitterGripBrush" Color="#FF000000"/>
-            <SolidColorBrush x:Key="ChatListUnreadBadgeBrush" Color="#FF00656A"/>
-            <SolidColorBrush x:Key="ChatListSyncStatusBrush" Color="#FF00656A"/>
-            <SolidColorBrush x:Key="ChatDetailAccentBrush" Color="#FF00656A"/>
+            <SolidColorBrush x:Key="ChatListUnreadBadgeBrush" Color="#FF04564A"/>
+            <SolidColorBrush x:Key="ChatListSyncStatusBrush" Color="#FF04564A"/>
+            <SolidColorBrush x:Key="ChatDetailAccentBrush" Color="#FF04564A"/>
             <SolidColorBrush x:Key="ChatDetailInfoLabelBrush" Color="#FFFFFFFF"/>
             <SolidColorBrush x:Key="ChatDetailInfoValueBrush" Color="#FF1DAA61"/>
             <SolidColorBrush x:Key="ChatDetailInfoMutedBrush" Color="#FFCCCCCC"/>
-            <SolidColorBrush x:Key="WhatsAppGreenFocusBrush" Color="#FF00656A"/>
+            <SolidColorBrush x:Key="WhatsAppGreenFocusBrush" Color="#FF04564A"/>
             <SolidColorBrush x:Key="ChatDetailInputBarBackgroundBrush" Color="#FF000000"/>
             <SolidColorBrush x:Key="ChatDetailInputBarTopBorderBrush" Color="#FF333333"/>
             <SolidColorBrush x:Key="ChatDetailComposerBackgroundBrush" Color="Transparent"/>
-            <Color x:Key="SystemAccentColor">#00656A</Color>
-            <SolidColorBrush x:Key="SystemControlForegroundAccentBrush" Color="#FF00656A"/>
-            <SolidColorBrush x:Key="SystemControlHighlightAccentBrush" Color="#FF00656A"/>
-            <SolidColorBrush x:Key="SystemControlHighlightAltAccentBrush" Color="#FF00656A"/>
+            <Color x:Key="SystemAccentColor">#04564A</Color>
+            <SolidColorBrush x:Key="SystemControlForegroundAccentBrush" Color="#FF04564A"/>
+            <SolidColorBrush x:Key="SystemControlHighlightAccentBrush" Color="#FF04564A"/>
+            <SolidColorBrush x:Key="SystemControlHighlightAltAccentBrush" Color="#FF04564A"/>
         </ResourceDictionary>
 
         <ResourceDictionary x:Key="Light">
@@ -190,22 +192,23 @@
             <SolidColorBrush x:Key="ComboBoxForegroundDisabled" Color="#66000000"/>
             <SolidColorBrush x:Key="ComboBoxDropDownBackground" Color="#FFFFFFFF"/>
             <SolidColorBrush x:Key="ComboBoxDropDownBorderBrush" Color="#FF000000"/>
-            <SolidColorBrush x:Key="ChatPaneSplitterBackgroundBrush" Color="#FF00656A"/>
+            <SolidColorBrush x:Key="BootSurfaceBrush" Color="#FF04564A"/>
+            <SolidColorBrush x:Key="ChatPaneSplitterBackgroundBrush" Color="#FF04564A"/>
             <SolidColorBrush x:Key="ChatPaneSplitterGripBrush" Color="#FFFFFFFF"/>
-            <SolidColorBrush x:Key="ChatListUnreadBadgeBrush" Color="#FF00656A"/>
-            <SolidColorBrush x:Key="ChatListSyncStatusBrush" Color="#FF00656A"/>
-            <SolidColorBrush x:Key="ChatDetailAccentBrush" Color="#FF00656A"/>
+            <SolidColorBrush x:Key="ChatListUnreadBadgeBrush" Color="#FF04564A"/>
+            <SolidColorBrush x:Key="ChatListSyncStatusBrush" Color="#FF04564A"/>
+            <SolidColorBrush x:Key="ChatDetailAccentBrush" Color="#FF04564A"/>
             <SolidColorBrush x:Key="ChatDetailInfoLabelBrush" Color="#FF000000"/>
             <SolidColorBrush x:Key="ChatDetailInfoValueBrush" Color="#FF1DAA61"/>
             <SolidColorBrush x:Key="ChatDetailInfoMutedBrush" Color="#FF333333"/>
-            <SolidColorBrush x:Key="WhatsAppGreenFocusBrush" Color="#FF00656A"/>
+            <SolidColorBrush x:Key="WhatsAppGreenFocusBrush" Color="#FF04564A"/>
             <SolidColorBrush x:Key="ChatDetailInputBarBackgroundBrush" Color="#FFFFFFFF"/>
             <SolidColorBrush x:Key="ChatDetailInputBarTopBorderBrush" Color="#FFCCCCCC"/>
             <SolidColorBrush x:Key="ChatDetailComposerBackgroundBrush" Color="Transparent"/>
-            <Color x:Key="SystemAccentColor">#00656A</Color>
-            <SolidColorBrush x:Key="SystemControlForegroundAccentBrush" Color="#FF00656A"/>
-            <SolidColorBrush x:Key="SystemControlHighlightAccentBrush" Color="#FF00656A"/>
-            <SolidColorBrush x:Key="SystemControlHighlightAltAccentBrush" Color="#FF00656A"/>
+            <Color x:Key="SystemAccentColor">#04564A</Color>
+            <SolidColorBrush x:Key="SystemControlForegroundAccentBrush" Color="#FF04564A"/>
+            <SolidColorBrush x:Key="SystemControlHighlightAccentBrush" Color="#FF04564A"/>
+            <SolidColorBrush x:Key="SystemControlHighlightAltAccentBrush" Color="#FF04564A"/>
         </ResourceDictionary>
     </ResourceDictionary.ThemeDictionaries>
 </ResourceDictionary>

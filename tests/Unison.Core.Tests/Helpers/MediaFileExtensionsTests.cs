@@ -4,7 +4,7 @@
 // On Windows 10 Mobile the shell picks the player and the thumbnail provider
 // from the extension, so these mappings are behaviour, not formatting.
 // =============================================================================
-using Unison.Core.Helpers;
+using Unison.WhatsAppClient.Helpers;
 using Xunit;
 
 namespace Unison.Core.Tests.Helpers

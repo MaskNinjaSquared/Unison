@@ -8,37 +8,44 @@
     d:DesignHeight="400"
     d:DesignWidth="400">
 
-    <!-- Desktop (≥720): message at the top-left. Mobile: centered in the pane. -->
     <Grid Background="Transparent">
-        <VisualStateManager.VisualStateGroups>
-            <VisualStateGroup x:Name="LayoutStates">
-                <VisualState x:Name="Narrow"/>
-                <VisualState x:Name="Wide">
-                    <VisualState.StateTriggers>
-                        <AdaptiveTrigger MinWindowWidth="720"/>
-                    </VisualState.StateTriggers>
-                    <VisualState.Setters>
-                        <Setter Target="MessageText.HorizontalAlignment" Value="Left"/>
-                        <Setter Target="MessageText.VerticalAlignment" Value="Top"/>
-                        <Setter Target="MessageText.TextAlignment" Value="Left"/>
-                        <Setter Target="MessageText.Margin" Value="24,24,48,24"/>
-                    </VisualState.Setters>
-                </VisualState>
-            </VisualStateGroup>
-        </VisualStateManager.VisualStateGroups>
+        <StackPanel HorizontalAlignment="Center"
+                    VerticalAlignment="Center"
+                    MaxWidth="420"
+                    Margin="24">
+            <TextBlock x:Uid="Favorites_EmptyTitle"
+                       Text="Add favorites"
+                       HorizontalAlignment="Center"
+                       TextAlignment="Center"
+                       TextWrapping="WrapWholeWords"
+                       FontSize="22"
+                       FontWeight="SemiBold"
+                       Foreground="{ThemeResource WhatsAppTextHighBrush}"
+                       FontFamily="{StaticResource MainFontSemibold}"/>
 
-        <TextBlock x:Name="MessageText"
-                   x:Uid="Favorites_Empty"
-                   Text="Favorites are shown in the Chats and Calls sections. Add as many people and groups as you want."
-                   HorizontalAlignment="Center"
-                   VerticalAlignment="Center"
-                   TextAlignment="Center"
-                   TextWrapping="WrapWholeWords"
-                   Margin="24"
-                   MaxWidth="420"
-                   FontSize="15"
-                   LineHeight="22"
-                   Foreground="{ThemeResource WhatsAppTextMediumBrush}"
-                   FontFamily="{StaticResource MainFont}"/>
+            <TextBlock x:Uid="Favorites_Empty"
+                       Text="Favorites are shown in the Chats and Calls tabs. Add as many people and groups as you want."
+                       HorizontalAlignment="Center"
+                       TextAlignment="Center"
+                       TextWrapping="WrapWholeWords"
+                       Margin="0,12,0,0"
+                       FontSize="15"
+                       LineHeight="22"
+                       Foreground="{ThemeResource WhatsAppTextMediumBrush}"
+                       FontFamily="{StaticResource MainFont}"/>
+
+            <Button x:Name="AddButton"
+                    x:Uid="Favorites_AddPeopleOrGroups"
+                    Content="Add people or groups"
+                    HorizontalAlignment="Center"
+                    Margin="0,20,0,0"
+                    Padding="20,10"
+                    Background="Transparent"
+                    BorderBrush="{ThemeResource LoginAccentBrush}"
+                    BorderThickness="1.5"
+                    Foreground="{ThemeResource LoginAccentBrush}"
+                    FontFamily="{StaticResource MainFontSemibold}"
+                    Click="AddButton_Click"/>
+        </StackPanel>
     </Grid>
 </UserControl>

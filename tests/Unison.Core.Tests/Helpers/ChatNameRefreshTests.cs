@@ -1,10 +1,12 @@
 using System.Collections.Generic;
+using System.Threading;
 using System.Threading.Tasks;
 using Unison.Core.Contracts;
 using Unison.Core.Helpers;
 using Unison.Core.Models;
 using Unison.Core.State;
 using Xunit;
+using Unison.WhatsAppClient.Helpers;
 
 namespace Unison.Core.Tests.Helpers
 {
@@ -126,11 +128,37 @@ namespace Unison.Core.Tests.Helpers
             Assert.Equal("Nome " + (total - 1), _chats.Chats[total - 1].Name);
         }
 
+        [Fact]
+        public async Task Concurrent_applies_coalesce_into_one_ui_walk()
+        {
+            _chats.Chats.Add(new ChatItem { JID = Ana, Name = "5511988887777" });
+            _addressBook.Set(Ana, "Ana Trabalho");
+
+            var entered = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var gate = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var ui = new GatedDispatcher(entered, gate);
+            var refresh = Build(ui);
+
+            Task first = refresh.ApplyAsync();
+            await entered.Task;
+
+            Task second = refresh.ApplyAsync();
+            Task third = refresh.ApplyAsync();
+            gate.TrySetResult(true);
+
+            await Task.WhenAll(first, second, third);
+
+            // In-flight walk + at most one follow-up for tickets that arrived mid-pass —
+            // never one catalogue walk per caller (would be 3 here).
+            Assert.InRange(ui.Passes, 1, 2);
+            Assert.Equal("Ana Trabalho", _chats.Chats[0].Name);
+        }
+
         private sealed class FlagDispatcher : IDispatcher
         {
             public bool InPass { get; private set; }
 
-            public Task RunAsync(System.Action action)
+            public Task RunAsync(System.Action action, string caller = null, string callerFile = null)
             {
                 InPass = true;
                 try
@@ -143,6 +171,39 @@ namespace Unison.Core.Tests.Helpers
                 }
 
                 return Task.CompletedTask;
+            }
+        }
+
+        /// <summary>
+        /// Blocks inside the first RunAsync until <paramref name="release"/> completes so
+        /// overlapping ApplyAsync callers can queue tickets against a held gate.
+        /// </summary>
+        private sealed class GatedDispatcher : IDispatcher
+        {
+            private readonly TaskCompletionSource<bool> _entered;
+            private readonly TaskCompletionSource<bool> _release;
+            private int _passes;
+
+            public GatedDispatcher(
+                TaskCompletionSource<bool> entered,
+                TaskCompletionSource<bool> release)
+            {
+                _entered = entered;
+                _release = release;
+            }
+
+            public int Passes => _passes;
+
+            public async Task RunAsync(System.Action action, string caller = null, string callerFile = null)
+            {
+                int pass = Interlocked.Increment(ref _passes);
+                if (pass == 1)
+                {
+                    _entered.TrySetResult(true);
+                    await _release.Task.ConfigureAwait(false);
+                }
+
+                action();
             }
         }
 

@@ -6,6 +6,7 @@ using Unison.Core.Contracts;
 using Unison.Core.Helpers;
 using Unison.Core.Models;
 using Unison.Core.State;
+using Unison.WhatsAppClient.Helpers;
 using Xunit;
 
 namespace Unison.Core.Tests.Helpers
@@ -396,7 +397,7 @@ namespace Unison.Core.Tests.Helpers
 
         private sealed class InlineDispatcher : IDispatcher
         {
-            public Task RunAsync(Action action)
+            public Task RunAsync(Action action, string caller = null, string callerFile = null)
             {
                 action();
                 return Task.CompletedTask;

@@ -3,8 +3,10 @@ using System.Collections.Generic;
 using System.Threading.Tasks;
 using Proto;
 using Unison.Core.Contracts.WhatsApp;
+using Unison.Core.Helpers;
 using Unison.Core.Models;
 using Unison.Core.ViewModels;
+using Unison.WhatsAppClient.Helpers;
 
 namespace Unison.Core.Tests.ViewModels
 {
@@ -153,10 +155,54 @@ namespace Unison.Core.Tests.ViewModels
             public Task<List<ChatMessage>> LoadRecentMessagesForSyncAsync(string jid) => throw new NotImplementedException();
             public Task<List<ChatMessage>> LoadMoreMessagesAsync(string jid, DateTime? beforeUtc = null, string beforeMessageId = null) => throw new NotImplementedException();
             public Task<List<ChatMessage>> LoadChatMediaIndexAsync(string jid, int limit = 400) => throw new NotImplementedException();
+            public bool IsChatInfoMedia(ChatMessage message) => false;
+            public bool IsChatInfoDocument(ChatMessage message) => false;
+            public void CopyReactionState(ChatMessage target, ChatMessage source) { }
+            public ChatMessage TryCreatePreviewFallback(ChatItem chat, string selfDisplayName = null) => null;
+            public bool IsPreviewFallbackMessageId(string id) => false;
+            public bool TryReadMentionToken(string text, int caret, out int at, out string query, out int length)
+            {
+                at = -1;
+                query = string.Empty;
+                length = 0;
+                return false;
+            }
+
+            public IReadOnlyList<MentionChoice> SearchMentionChoices(
+                IEnumerable<GroupMember> members,
+                string query,
+                string everyoneLabel,
+                string everyoneDetail,
+                string everyoneAvatarUrl,
+                Func<GroupMember, bool> exclude = null) => Array.Empty<MentionChoice>();
+
+            public bool IsTimelineDuplicateOnlyPage(int returnedCount, int prependedCount) => false;
+            public ChatMessage OldestTimelinePageTip(IList<ChatMessage> chronologicalPage) => null;
+            public ChatTimelineMergeMode ChooseTimelineMergeMode(bool followingEnd, bool isDetachedFromEnd) =>
+                ChatTimelineLiveMerge.Choose(followingEnd, isDetachedFromEnd);
+            public bool ShouldInsertLiveTimelineRow(
+                DateTime timestamp,
+                DateTime? newestShown,
+                bool isDetachedFromEnd) =>
+                ChatTimelineLiveMerge.ShouldInsert(timestamp, newestShown, isDetachedFromEnd);
+            public void SortTimelineInPlace(List<ChatMessage> list) =>
+                ChatMessageOrder.SortInPlace(list);
+            public int FindTimelineInsertIndex(
+                int count,
+                Func<int, DateTime> getTimestamp,
+                Func<int, string> getId,
+                DateTime timestamp,
+                string id) =>
+                ChatMessageOrder.FindInsertIndex(count, getTimestamp, getId, timestamp, id);
             public Task<bool> EnsureHistoryOnDemandAsync(string jid, int count) => throw new NotImplementedException();
             public bool IsHistoryOnDemandPending(string jid) => false;
             public Task<ChatMessage> SendTextMessageAsync(string jid, string text) => throw new NotImplementedException();
             public Task<ChatMessage> SendTextMessageAsync(string jid, OutgoingTextMentions message) => throw new NotImplementedException();
+            public Task<ChatMessage> ForwardMessageAsync(
+                string sourceChatJid,
+                string messageId,
+                string targetChatJid) =>
+                throw new NotImplementedException();
             public Task SendImageAsync(string jid, byte[] imageBytes, string caption) => throw new NotImplementedException();
             public Task<IReadOnlyList<ChatMessage>> SendImagesAsync(
                 string jid,
@@ -187,6 +233,137 @@ namespace Unison.Core.Tests.ViewModels
             public IList<ChatMessage> ApplyBufferedReactions(IList<ChatMessage> chatMessages, IEnumerable<PendingReaction> pending) => chatMessages;
             public Task ResyncConversationsAsync(IProgress<ConversationResyncPhase> progress = null) => throw new NotImplementedException();
             public void NotifyLiveIncoming(string chatJid, string chatName, string senderName, string preview, bool isGroup, bool isFromMe, bool suppressToast, int totalUnread, ChatItem chat) { }
+
+            public void NotifyChatMessagesChanged(string chatJid) { }
+            public void NotifyPresenceUpdated(PresenceUpdateEventArgs e) { }
+            public void ScheduleIncomingMediaHydration(
+                ChatMessage message,
+                Message.Types.StickerMessage sticker,
+                Message.Types.ImageMessage image,
+                string messageId,
+                string chatJid)
+            {
+            }
+
+            public Task ApplyIncomingRevocationAsync(string chatJid, string targetMessageId, string envelopeMessageId = null) =>
+                Task.CompletedTask;
+            public Task ApplyIncomingPinInChatAsync(
+                string chatJid,
+                string targetMessageId,
+                bool pin,
+                long senderTimestampMs,
+                uint durationSeconds = 0) => Task.CompletedTask;
+            public Task<bool> ApplyAppStateDeleteMessageAsync(string chatJid, string messageId) =>
+                Task.FromResult(false);
+            public Task<bool> ApplyPinnedMessageStateAsync(
+                string chatJid,
+                string messageId,
+                bool isPinned,
+                DateTime? pinnedAtUtc,
+                DateTime? expiresAtUtc) => Task.FromResult(false);
+            public IncomingTimelineAcceptResult AcceptIncomingTimeline(
+                string chatJid,
+                ChatMessage message,
+                bool isGroup) => default;
+            public void QueueIncomingPersist(string chatJid, ChatMessage message) { }
+            public bool EnrichOfflineDuplicateFast(
+                string chatJid,
+                string messageId,
+                bool isFromMe,
+                string participantJid,
+                string verifiedName,
+                string pushName) => false;
+            public Task<bool> ApplyIncomingReactionAsync(Message message, ChatMessageMapContext context) =>
+                Task.FromResult(false);
+            public Task FinalizeAliasConsolidateAsync(
+                string canonicalChatJid,
+                string aliasSourceChatJid,
+                string messageId,
+                ChatMessage consolidatedMessage) => Task.CompletedTask;
+            public bool HasCachedMessageId(string chatJid, string messageId, bool isGroup) => false;
+            public Task ApplyOutgoingStatusAsync(string messageId, string status, string error = null) =>
+                Task.CompletedTask;
+            public Task HandleReceiptAsync(Unison.Baileys.Protocol.BinaryNode node) => Task.CompletedTask;
+            public void AcceptOutgoingTimeline(string chatJid, ChatMessage message) { }
+            public bool ApplyHeldMessageState(string chatJid, ChatMessage message) => false;
+            public Task<List<ChatMessage>> LoadLiveOverlayAsync(string chatJid) =>
+                Task.FromResult(new List<ChatMessage>());
+            public Task ApplyIncomingDuplicateAsync(IncomingDuplicateApplyRequest request) =>
+                Task.CompletedTask;
+            public Task ApplyIncomingAliasConsolidatedAsync(IncomingAliasConsolidatedApplyRequest request) =>
+                Task.CompletedTask;
+            public Task ApplyIncomingInsertedAsync(IncomingInsertedApplyRequest request) =>
+                Task.CompletedTask;
+            public bool TryHandleOfflineDuplicateFast(
+                string chatJid,
+                string messageId,
+                bool isGroup,
+                bool isFromMe,
+                string participantJid,
+                string verifiedName,
+                string pushName) => false;
+            public Task<bool> ApplyIncomingReactionFromEnvelopeAsync(
+                Message message,
+                string chatJid,
+                string messageId,
+                bool isGroup,
+                bool isFromMe,
+                string participantJid,
+                string selfDisplayName,
+                DateTime timestampUtc) => Task.FromResult(false);
+            public Task ProcessIncomingChatContentAsync(IncomingChatContentProcessRequest request) =>
+                Task.CompletedTask;
+            public Task<bool> TryApplyIncomingEnvelopeControlAsync(
+                Message message,
+                string chatJid,
+                string messageId,
+                bool isGroup,
+                bool isFromMe,
+                string participantJid,
+                string selfDisplayName,
+                DateTime timestampUtc) => Task.FromResult(false);
+            public Task RouteIncomingChatEnvelopeAsync(IncomingRoutedEnvelopeRequest request) =>
+                Task.CompletedTask;
+            public Task HandleIncomingPlaceholderAsync(
+                string chatJid,
+                string participantJid,
+                string messageId,
+                bool isFromMe,
+                DateTime timestampUtc,
+                string placeholderType) => Task.CompletedTask;
+            public Task NoteMissingMessageAndRequestResendAsync(
+                string chatJid,
+                string participantJid,
+                string messageId,
+                bool isFromMe,
+                DateTime timestampUtc,
+                string reason,
+                string resendTrigger) => Task.CompletedTask;
+            public void HandlePlaceholderResendAck(string ackClass, string ackId, string ackError) { }
+            public void NotifyInboundWireAck(string ackClass, string ackId, string ackError) { }
+            public Task NotifyOutgoingStatusAsync(string messageId, string status, string error) =>
+                Task.CompletedTask;
+            public Task NotifyReceiptAsync(Unison.Baileys.Protocol.BinaryNode node) => Task.CompletedTask;
+            public void SchedulePlaceholderResendDrain(string trigger, int maxRequests = 4) { }
+            public Task RecoverPendingIncomingJournalAsync() => Task.CompletedTask;
+            public Task NotifyOfflineReplaySettledAsync(
+                string reason,
+                bool schedulePlaceholderDrain,
+                int maxDrainRequests = 8) => Task.CompletedTask;
+            public Task NotifyOfflineReplayReleasedAsync(
+                int offlineCount,
+                bool firstRelease,
+                bool transportReady) => Task.CompletedTask;
+            public Task NotifyIncomingDecryptedAsync(IncomingDecryptedNotifyRequest request) =>
+                Task.CompletedTask;
+            public Task ApplyPeerDataPlaceholderResendsAsync(
+                string stanzaId,
+                IEnumerable<Message.Types.PeerDataOperationRequestResponseMessage.Types.PeerDataOperationResult> results) =>
+                Task.CompletedTask;
+            public Task HandlePeerDataOperationResponseAsync(
+                Message.Types.PeerDataOperationRequestResponseMessage response) => Task.CompletedTask;
+            public Task NotifyGroupJoinsAsync(System.Collections.Generic.IReadOnlyList<GroupJoinNotifyRequest> joins) =>
+                Task.CompletedTask;
         }
     }
 }

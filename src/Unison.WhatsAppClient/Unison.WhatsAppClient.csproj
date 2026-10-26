@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <RootNamespace>Unison.WhatsAppClient</RootNamespace>
+    <AssemblyName>Unison.WhatsAppClient</AssemblyName>
+    <ProjectGuid>{B7E4C291-5A8F-4D3E-9C16-0F2A8E7D4B51}</ProjectGuid>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Unison.Core\Unison.Core.csproj" />
+    <ProjectReference Include="..\Unison.Socket\Unison.Socket.csproj" />
+  </ItemGroup>
+
+</Project>

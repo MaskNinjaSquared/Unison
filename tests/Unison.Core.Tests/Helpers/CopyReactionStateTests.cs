@@ -6,8 +6,8 @@
 // every bubble with a reaction chip rebinds for a message sent somewhere else.
 // =============================================================================
 using System.Collections.Generic;
-using Unison.Core.Helpers;
 using Unison.Core.Models;
+using Unison.WhatsAppClient.Helpers;
 using Xunit;
 
 namespace Unison.Core.Tests.Helpers

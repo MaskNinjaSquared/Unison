@@ -11,6 +11,7 @@ using Unison.Core.Helpers;
 using Unison.Core.Models;
 using Unison.Uwp.Data.Entities;
 using Windows.Storage;
+using Unison.WhatsAppClient.Helpers;
 
 namespace Unison.Uwp.Data
 {
@@ -1386,13 +1387,13 @@ namespace Unison.Uwp.Data
             }
 
             ChatPreviewKind kind = ChatPreviewKind.Text;
-            if (row.Kind >= (int)ChatPreviewKind.Text && row.Kind <= (int)ChatPreviewKind.Gif)
+            if (row.Kind >= (int)ChatPreviewKind.Text && row.Kind <= (int)ChatPreviewKind.GroupJoin)
             {
                 kind = (ChatPreviewKind)row.Kind;
             }
 
             ChatPreviewKind quotedKind = ChatPreviewKind.Text;
-            if (row.QuotedKind >= (int)ChatPreviewKind.Text && row.QuotedKind <= (int)ChatPreviewKind.Gif)
+            if (row.QuotedKind >= (int)ChatPreviewKind.Text && row.QuotedKind <= (int)ChatPreviewKind.GroupJoin)
             {
                 quotedKind = (ChatPreviewKind)row.QuotedKind;
             }

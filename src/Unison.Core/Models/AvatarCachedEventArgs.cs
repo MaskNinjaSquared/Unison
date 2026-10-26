@@ -3,9 +3,8 @@ using System;
 namespace Unison.Core.Models
 {
     /// <summary>
-    /// Args for <see cref="Contracts.WhatsApp.IWhatsAppService.OnAvatarCached"/>: an avatar file
-    /// is now on disk for this JID. Reports the fact only — whether that becomes a Person write
-    /// is the contacts facade's call.
+    /// Legacy args shape for a local avatar cache write. Host paths now call
+    /// <see cref="Contracts.WhatsApp.IContactService.NotifyAvatarCached"/> directly.
     /// </summary>
     public sealed class AvatarCachedEventArgs : EventArgs
     {

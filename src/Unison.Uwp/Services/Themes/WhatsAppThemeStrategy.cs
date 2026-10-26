@@ -33,6 +33,11 @@ namespace Unison.Uwp.Services.Themes
             _settingsVmFactory = settingsVmFactory ?? throw new ArgumentNullException(nameof(settingsVmFactory));
         }
 
+        /// <summary>Boot fades splash green → transparent (page theme shows through).</summary>
+        public override Color BootSurfaceColor => Colors.Transparent;
+
+        public override bool FadeBootLogoBackground => true;
+
         public override bool DisplaySyncInChatList => true;
 
         public override bool UsesMobileStatusBarProgress => false;

@@ -21,6 +21,15 @@ namespace Unison.Core.Helpers
             jid = jid.Trim();
             if (jid.EndsWith("@g.us", StringComparison.OrdinalIgnoreCase))
             {
+                // Same case rule as direct chats: the server part is lowercased. ChatStateStore
+                // / MessageIdIndex already key OrdinalIgnoreCase; this keeps Normalize itself
+                // from producing two strings for one group (@G.US vs @g.us).
+                int groupAt = jid.IndexOf('@');
+                if (groupAt > 0)
+                {
+                    return jid.Substring(0, groupAt) + "@g.us";
+                }
+
                 return jid;
             }
 

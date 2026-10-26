@@ -176,16 +176,9 @@ namespace Unison.Core.ViewModels
 
         private ChatItem CreatePlaceholder(string jid)
         {
-            string name = _contacts?.ResolveDisplayName(jid, "profile") ?? string.Empty;
-            if (!MeaningfulChatLabel.IsMeaningful(name, jid, isGroup: false))
-            {
-                name = jid;
-                int at = name.IndexOf('@');
-                if (at > 0)
-                {
-                    name = name.Substring(0, at);
-                }
-            }
+            string name = _contacts != null
+                ? _contacts.ResolvePlaceholderChatName(jid)
+                : (jid ?? string.Empty);
 
             return new ChatItem
             {

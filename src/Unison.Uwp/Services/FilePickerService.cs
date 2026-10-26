@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using Unison.Core.Contracts;
 using Unison.Core.Helpers;
 using Unison.Core.Models;
+using Unison.WhatsAppClient.Helpers;
 using Windows.Graphics.Imaging;
 using Windows.Storage;
 using Windows.Storage.Pickers;

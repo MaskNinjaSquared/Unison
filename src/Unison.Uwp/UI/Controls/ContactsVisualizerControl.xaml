@@ -1,0 +1,215 @@
+<UserControl
+    x:Class="Unison.Uwp.UI.Controls.ContactsVisualizerControl"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:Unison.Uwp.UI.Controls"
+    xmlns:templates="using:Unison.Uwp.UI.Templates"
+    Background="{ThemeResource ChatListBackgroundBrush}">
+
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <templates:ChatItemTemplates/>
+            </ResourceDictionary.MergedDictionaries>
+
+            <!-- Lightweight picker row: avatar + name only (Mobile open must stay cheap). -->
+            <DataTemplate x:Key="ContactsPickerCompactTemplate">
+                <Grid Padding="12,10" Background="Transparent">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="48"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <controls:ChatAvatarControl x:Name="RowAvatar"
+                                                Width="40" Height="40"
+                                                Size="40"
+                                                ShowBorder="True"
+                                                VerticalAlignment="Center"
+                                                AvatarUrl="{Binding AvatarUrl}"
+                                                IsGroup="{Binding IsGroup}"/>
+                    <TextBlock x:Name="RowName"
+                               Grid.Column="1"
+                               Margin="12,0,0,0"
+                               Text="{Binding Name}"
+                               FontSize="17"
+                               FontFamily="{StaticResource MainFontSemibold}"
+                               FontWeight="SemiBold"
+                               Foreground="{ThemeResource WhatsAppTextHighBrush}"
+                               VerticalAlignment="Center"
+                               TextWrapping="NoWrap"
+                               TextTrimming="CharacterEllipsis"
+                               MaxLines="1"/>
+                    <!-- Mandatory click feedback: paint on the row before ItemClickCommand. -->
+                    <controls:ModernProgressRing x:Name="RowClickBusyRing"
+                                                 Grid.ColumnSpan="2"
+                                                 Width="28"
+                                                 Height="28"
+                                                 HorizontalAlignment="Center"
+                                                 VerticalAlignment="Center"
+                                                 IsActive="False"
+                                                 IsHitTestVisible="False"
+                                                 Visibility="Collapsed"/>
+                </Grid>
+            </DataTemplate>
+
+            <!-- A–Z headers (same chrome as Favourites — no category buckets). -->
+            <DataTemplate x:Key="ContactsGroupHeaderTemplate">
+                <Border Width="36" Height="36"
+                        Margin="16,12,16,4"
+                        BorderBrush="{ThemeResource SystemControlHighlightAccentBrush}"
+                        BorderThickness="2"
+                        Background="Transparent">
+                    <TextBlock Text="{Binding Key}"
+                               FontSize="18"
+                               FontWeight="SemiBold"
+                               HorizontalAlignment="Center"
+                               VerticalAlignment="Center"
+                               Foreground="{ThemeResource SystemControlHighlightAccentBrush}"/>
+                </Border>
+            </DataTemplate>
+
+            <Style x:Key="ContactsGroupHeaderContainerStyle" TargetType="ListViewHeaderItem">
+                <Setter Property="HorizontalContentAlignment" Value="Left"/>
+                <Setter Property="VerticalContentAlignment" Value="Center"/>
+                <Setter Property="Padding" Value="0"/>
+                <Setter Property="Margin" Value="0"/>
+                <Setter Property="MinHeight" Value="0"/>
+                <Setter Property="BorderThickness" Value="0"/>
+                <Setter Property="Background" Value="Transparent"/>
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="ListViewHeaderItem">
+                            <ContentPresenter Content="{TemplateBinding Content}"
+                                              ContentTemplate="{TemplateBinding ContentTemplate}"
+                                              HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                              VerticalAlignment="{TemplateBinding VerticalContentAlignment}"/>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+
+            <DataTemplate x:Key="ContactsZoomedOutTemplate">
+                <Border Width="72" Height="72"
+                        Margin="6"
+                        Background="{ThemeResource SystemControlHighlightAccentBrush}"
+                        Opacity="{Binding Opacity}">
+                    <TextBlock Text="{Binding Key}"
+                               FontSize="36"
+                               FontWeight="SemiBold"
+                               HorizontalAlignment="Center"
+                               VerticalAlignment="Center"
+                               Foreground="White"/>
+                </Border>
+            </DataTemplate>
+        </ResourceDictionary>
+    </UserControl.Resources>
+
+    <!--
+      Reusable overlay picker: Title + ItemsSource + ItemClickCommand (+ optional BackCommand).
+      Always A–Z SemanticZoom (no category) — same jump model as Favourites.
+      Host toggles IsOpen; shell theme strategy decides compact rows / deferred bind / fade.
+    -->
+    <Grid Background="{ThemeResource ChatListBackgroundBrush}">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <Grid Grid.Row="0" Padding="4,8,16,8" Background="{ThemeResource ChatListBackgroundBrush}">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <Button x:Name="BackButton"
+                    Click="BackButton_Click"
+                    Style="{StaticResource ModernIconButtonStyle}"
+                    VerticalAlignment="Center"
+                    Margin="4,0,8,0">
+                <FontIcon Glyph="&#xE72B;" FontFamily="{StaticResource IconFont}" FontSize="18"/>
+            </Button>
+
+            <TextBlock x:Name="TitleText"
+                       Grid.Column="1"
+                       Text="{x:Bind Title, Mode=OneWay}"
+                       FontSize="20"
+                       FontFamily="{StaticResource MainFontSemibold}"
+                       FontWeight="SemiBold"
+                       Foreground="{ThemeResource WhatsAppTextHighBrush}"
+                       VerticalAlignment="Center"
+                       TextWrapping="NoWrap"
+                       TextTrimming="CharacterEllipsis"
+                       MaxLines="1"/>
+        </Grid>
+
+        <Grid Grid.Row="1">
+            <SemanticZoom x:Name="ContactsZoom"
+                          ViewChangeStarted="ContactsZoom_ViewChangeStarted"
+                          ViewChangeCompleted="ContactsZoom_ViewChangeCompleted">
+                <SemanticZoom.ZoomedInView>
+                    <ListView x:Name="ItemsList"
+                              IsItemClickEnabled="True"
+                              ItemClick="ItemsList_ItemClick"
+                              SelectionMode="None"
+                              ItemTemplate="{StaticResource ContactsPickerCompactTemplate}"
+                              Background="Transparent"
+                              ScrollViewer.IsVerticalScrollChainingEnabled="False">
+                        <ListView.GroupStyle>
+                            <GroupStyle HeaderTemplate="{StaticResource ContactsGroupHeaderTemplate}"
+                                        HeaderContainerStyle="{StaticResource ContactsGroupHeaderContainerStyle}"/>
+                        </ListView.GroupStyle>
+                        <ListView.ItemContainerStyle>
+                            <Style TargetType="ListViewItem">
+                                <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                                <Setter Property="Padding" Value="0"/>
+                                <Setter Property="MinHeight" Value="0"/>
+                            </Style>
+                        </ListView.ItemContainerStyle>
+                    </ListView>
+                </SemanticZoom.ZoomedInView>
+                <SemanticZoom.ZoomedOutView>
+                    <GridView x:Name="JumpList"
+                              HorizontalAlignment="Center"
+                              VerticalAlignment="Center"
+                              ItemTemplate="{StaticResource ContactsZoomedOutTemplate}"
+                              IsItemClickEnabled="True"
+                              ItemClick="JumpList_ItemClick"
+                              SelectionMode="None"
+                              Background="Transparent"
+                              ScrollViewer.IsHorizontalScrollChainingEnabled="False"
+                              ScrollViewer.IsVerticalScrollChainingEnabled="False">
+                        <GridView.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <ItemsWrapGrid Orientation="Horizontal"
+                                               HorizontalAlignment="Center"
+                                               MaximumRowsOrColumns="4"/>
+                            </ItemsPanelTemplate>
+                        </GridView.ItemsPanel>
+                        <GridView.ItemContainerStyle>
+                            <Style TargetType="GridViewItem">
+                                <Setter Property="HorizontalContentAlignment" Value="Center"/>
+                                <Setter Property="VerticalContentAlignment" Value="Center"/>
+                                <Setter Property="Margin" Value="0"/>
+                                <Setter Property="Padding" Value="0"/>
+                                <Setter Property="MinWidth" Value="0"/>
+                                <Setter Property="MinHeight" Value="0"/>
+                            </Style>
+                        </GridView.ItemContainerStyle>
+                    </GridView>
+                </SemanticZoom.ZoomedOutView>
+            </SemanticZoom>
+
+            <!-- Scrim while a row command runs (pairs with RowClickBusyRing on the item). -->
+            <Grid x:Name="ClickBusyOverlay"
+                  Background="#66000000"
+                  Visibility="Collapsed"
+                  IsHitTestVisible="True">
+                <controls:ModernProgressRing x:Name="ClickBusyRing"
+                                             Width="48"
+                                             Height="48"
+                                             IsActive="False"
+                                             HorizontalAlignment="Center"
+                                             VerticalAlignment="Center"/>
+            </Grid>
+        </Grid>
+    </Grid>
+</UserControl>

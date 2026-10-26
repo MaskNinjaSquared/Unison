@@ -39,11 +39,15 @@ namespace Unison.Socket.Signal
 
         private static readonly TimeSpan CacheLifetime = TimeSpan.FromDays(3);
 
+        private const int DefaultMemoryCacheMaxEntries = 1024;
+
         private readonly ILidMappingStorage _storage;
         private readonly ISocketLog _log;
-        private readonly TtlCache<string> _cache = new TtlCache<string>(CacheLifetime);
+        private readonly ILidMappingPersistPolicy _policy;
+        private readonly TtlCache<string> _cache;
 
         private readonly object _inflightGate = new object();
+        private readonly object _pendingGate = new object();
 
         private readonly Dictionary<string, Task<IReadOnlyList<LidMapping>>> _inflightLidLookups =
             new Dictionary<string, Task<IReadOnlyList<LidMapping>>>(StringComparer.Ordinal);
@@ -51,7 +55,18 @@ namespace Unison.Socket.Signal
         private readonly Dictionary<string, Task<IReadOnlyList<LidMapping>>> _inflightPnLookups =
             new Dictionary<string, Task<IReadOnlyList<LidMapping>>>(StringComparer.Ordinal);
 
-        public LidMappingStore(ILidMappingStorage storage, ISocketLog log = null)
+        /// <summary>PN user → LID user waiting for the next disk flush.</summary>
+        private readonly Dictionary<string, string> _pendingDisk =
+            new Dictionary<string, string>(StringComparer.Ordinal);
+
+        private bool _diskPersistSuppressed;
+        private readonly object _flushGate = new object();
+        private Task _flushInFlight = Task.CompletedTask;
+
+        public LidMappingStore(
+            ILidMappingStorage storage,
+            ISocketLog log = null,
+            ILidMappingPersistPolicy policy = null)
         {
             if (storage == null)
             {
@@ -60,7 +75,24 @@ namespace Unison.Socket.Signal
 
             _storage = storage;
             _log = log ?? NullSocketLog.Instance;
+            _policy = policy;
+            int maxEntries = policy != null && policy.MemoryCacheMaxEntries > 0
+                ? policy.MemoryCacheMaxEntries
+                : DefaultMemoryCacheMaxEntries;
+            // refreshOnRead: hits become MRU so actively used pairs survive the tier cap.
+            _cache = new TtlCache<string>(CacheLifetime, maxEntries, refreshOnRead: true);
+            // Write-behind starts held so history sync owns SQLite; host Releases after quiet-finalize.
+            _diskPersistSuppressed = UsesWriteBehind;
         }
+
+        /// <summary>
+        /// Host arms a debounce of this many ms. Null while tests use immediate write-through.
+        /// </summary>
+        public Action<int> ArmDebounce { get; set; }
+
+        /// <summary>True when a policy with positive batch and delay is driving write-behind.</summary>
+        private bool UsesWriteBehind =>
+            _policy != null && _policy.BatchSize > 0 && _policy.DelayMs > 0;
 
         /// <summary>
         /// Asks the server for the LIDs of phone numbers we have never seen. Set by the host once
@@ -90,8 +122,9 @@ namespace Unison.Socket.Signal
                 var lid = pair.Lid;
                 var pn = pair.Pn;
 
-                var straight = JidUtils.IsLidUser(lid) && JidUtils.IsPnUser(pn);
-                var swapped = JidUtils.IsPnUser(lid) && JidUtils.IsLidUser(pn);
+                // Hosted and plain share one user-part key; device/server are re-attached on read.
+                var straight = JidUtils.IsAnyLid(lid) && JidUtils.IsAnyPn(pn);
+                var swapped = JidUtils.IsAnyPn(lid) && JidUtils.IsAnyLid(pn);
                 if (!straight && !swapped)
                 {
                     _log.Warn("[LidMapping] Invalid LID-PN mapping: " + lid + ", " + pn);
@@ -137,14 +170,155 @@ namespace Unison.Socket.Signal
                 return;
             }
 
-            var batch = new Dictionary<string, string>(StringComparer.Ordinal);
-            foreach (var pair in toWrite)
+            if (!UsesWriteBehind)
             {
-                batch[pair.Key] = pair.Value;
-                batch[pair.Value + ReverseKeySuffix] = pair.Key;
+                await WriteThroughAsync(toWrite).ConfigureAwait(false);
+                return;
             }
 
-            await _storage.SetAsync(batch).ConfigureAwait(false);
+            // Decrypt/send need the pair before history releases disk; cache first, flush later.
+            foreach (var pair in toWrite)
+            {
+                CachePair(pair.Key, pair.Value);
+            }
+
+            int pendingCount;
+            bool suppressed;
+            lock (_pendingGate)
+            {
+                foreach (var pair in toWrite)
+                {
+                    _pendingDisk[pair.Key] = pair.Value;
+                }
+
+                pendingCount = _pendingDisk.Count;
+                suppressed = _diskPersistSuppressed;
+            }
+
+            if (suppressed)
+            {
+                _log.Trace(
+                    "[LidMapping] Queued " + toWrite.Count +
+                    " mapping(s) for disk (history gate held; pending=" + pendingCount + ")");
+                return;
+            }
+
+            if (pendingCount >= _policy.BatchSize)
+            {
+                await FlushPendingToDiskAsync().ConfigureAwait(false);
+                return;
+            }
+
+            Action<int> arm = ArmDebounce;
+            if (arm != null)
+            {
+                arm(_policy.DelayMs);
+            }
+            else
+            {
+                // No host timer yet: keep queued; Release/Flush will land them.
+                _log.Trace(
+                    "[LidMapping] Queued " + toWrite.Count +
+                    " mapping(s) pending host debounce (pending=" + pendingCount + ")");
+            }
+        }
+
+        /// <summary>
+        /// Opens paced disk writes after the first history sync (or when warm decides there
+        /// was no hold). Flushes debt immediately, then further stores use batch/delay.
+        /// </summary>
+        public Task EnableDiskPersistAsync(string reason = null)
+        {
+            if (!UsesWriteBehind)
+            {
+                return Task.CompletedTask;
+            }
+
+            bool alreadyOpen;
+            lock (_pendingGate)
+            {
+                alreadyOpen = !_diskPersistSuppressed;
+                _diskPersistSuppressed = false;
+            }
+
+            if (!alreadyOpen)
+            {
+                _log.Trace(
+                    "[LidMapping] Disk persist released" +
+                    (string.IsNullOrEmpty(reason) ? string.Empty : " (" + reason + ")"));
+            }
+
+            return FlushPendingToDiskAsync();
+        }
+
+        /// <summary>
+        /// Writes every queued pair now (suspend / dispose / batch full / gate release).
+        /// </summary>
+        public Task FlushPendingToDiskAsync()
+        {
+            if (!UsesWriteBehind)
+            {
+                return Task.CompletedTask;
+            }
+
+            Task flush;
+            lock (_flushGate)
+            {
+                flush = _flushInFlight = ContinueFlushAsync(_flushInFlight);
+            }
+
+            return flush;
+        }
+
+        private async Task ContinueFlushAsync(Task previous)
+        {
+            try
+            {
+                await previous.ConfigureAwait(false);
+            }
+            catch
+            {
+                // A prior flush failure must not block the next attempt.
+            }
+
+            Dictionary<string, string> toWrite;
+            lock (_pendingGate)
+            {
+                if (_pendingDisk.Count == 0)
+                {
+                    return;
+                }
+
+                toWrite = new Dictionary<string, string>(_pendingDisk, StringComparer.Ordinal);
+                _pendingDisk.Clear();
+            }
+
+            try
+            {
+                await WriteBatchAsync(toWrite).ConfigureAwait(false);
+                _log.Trace("[LidMapping] Flushed " + toWrite.Count + " mapping(s) to disk");
+            }
+            catch (Exception ex)
+            {
+                lock (_pendingGate)
+                {
+                    foreach (var pair in toWrite)
+                    {
+                        if (!_pendingDisk.ContainsKey(pair.Key))
+                        {
+                            _pendingDisk[pair.Key] = pair.Value;
+                        }
+                    }
+                }
+
+                _log.Warn("[LidMapping] Disk flush failed: " + ex.Message);
+                throw;
+            }
+        }
+
+        private async Task WriteThroughAsync(Dictionary<string, string> toWrite)
+        {
+            await WriteBatchAsync(toWrite).ConfigureAwait(false);
 
             // Cache only after the write succeeded, so a failed write is retried instead of
             // being masked by a memory hit.
@@ -154,6 +328,18 @@ namespace Unison.Socket.Signal
             }
 
             _log.Trace("[LidMapping] Stored " + toWrite.Count + " mapping(s)");
+        }
+
+        private Task WriteBatchAsync(Dictionary<string, string> pnToLid)
+        {
+            var batch = new Dictionary<string, string>(StringComparer.Ordinal);
+            foreach (var pair in pnToLid)
+            {
+                batch[pair.Key] = pair.Value;
+                batch[pair.Value + ReverseKeySuffix] = pair.Key;
+            }
+
+            return _storage.SetAsync(batch);
         }
 
         public async Task<string> GetLidForPnAsync(string pn)
@@ -187,6 +373,135 @@ namespace Unison.Socket.Signal
         public void Close()
         {
             _cache.Clear();
+        }
+
+        /// <summary>
+        /// Seeds the memory cache from durable storage. Production tiers use
+        /// <c>WarmMaxPairs == 0</c> (no boot warm on Mobile or High) — fill on demand.
+        /// Pass an explicit <paramref name="maxForwardPairs"/> in tests; capped loads use
+        /// <see cref="ILidMappingStorage.GetRecentForwardPairsAsync"/>.
+        /// </summary>
+        public async Task WarmCacheFromStorageAsync(int? maxForwardPairs = null)
+        {
+            int limit;
+            if (maxForwardPairs.HasValue)
+            {
+                limit = maxForwardPairs.Value;
+            }
+            else if (_policy != null)
+            {
+                limit = _policy.WarmMaxPairs;
+            }
+            else
+            {
+                // No policy (unit tests): load everything the in-memory store holds.
+                limit = -1;
+            }
+
+            if (limit == 0)
+            {
+                return;
+            }
+
+            IDictionary<string, string> rows = limit < 0
+                ? await _storage.GetAllAsync().ConfigureAwait(false)
+                : await _storage.GetRecentForwardPairsAsync(limit).ConfigureAwait(false);
+            if (rows == null || rows.Count == 0)
+            {
+                return;
+            }
+
+            int warmed = 0;
+            foreach (KeyValuePair<string, string> entry in rows)
+            {
+                if (string.IsNullOrEmpty(entry.Key) ||
+                    string.IsNullOrEmpty(entry.Value) ||
+                    entry.Key.EndsWith(ReverseKeySuffix, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                CachePair(entry.Key, entry.Value);
+                warmed++;
+            }
+
+            if (warmed > 0)
+            {
+                _log.Trace("[LidMapping] Warmed " + warmed + " pair(s) from storage");
+            }
+        }
+
+        /// <summary>
+        /// Sync peek of the memory cache for a PN user part. Used by
+        /// <c>JidAliasTable</c> so canonicalization can stay synchronous.
+        /// </summary>
+        public bool TryGetCachedLidUserForPn(string pnUser, out string lidUser)
+        {
+            lidUser = null;
+            if (string.IsNullOrEmpty(pnUser))
+            {
+                return false;
+            }
+
+            lidUser = _cache.Get(PnKey(pnUser));
+            return !string.IsNullOrEmpty(lidUser);
+        }
+
+        /// <summary>
+        /// Sync peek of the memory cache for a LID user part. Reverse of
+        /// <see cref="TryGetCachedLidUserForPn"/>.
+        /// </summary>
+        public bool TryGetCachedPnUserForLid(string lidUser, out string pnUser)
+        {
+            pnUser = null;
+            if (string.IsNullOrEmpty(lidUser))
+            {
+                return false;
+            }
+
+            pnUser = _cache.Get(LidKey(lidUser));
+            return !string.IsNullOrEmpty(pnUser);
+        }
+
+        /// <summary>
+        /// Sync paired JID for a full query address: looks up by user part, then re-attaches
+        /// the caller's device (and hosted server) the same way async resolve does.
+        /// </summary>
+        public bool TryGetCachedPairedJid(string jid, out string pairedJid)
+        {
+            pairedJid = null;
+            if (string.IsNullOrEmpty(jid))
+            {
+                return false;
+            }
+
+            if (JidUtils.IsAnyLid(jid))
+            {
+                string lidUser = JidUtils.GetUser(jid);
+                string pnUser;
+                if (string.IsNullOrEmpty(lidUser) || !TryGetCachedPnUserForLid(lidUser, out pnUser))
+                {
+                    return false;
+                }
+
+                pairedJid = BuildPnForLidQuery(jid, pnUser);
+                return !string.IsNullOrEmpty(pairedJid);
+            }
+
+            if (JidUtils.IsAnyPn(jid))
+            {
+                string pnUser = JidUtils.GetUser(jid);
+                string lidUser;
+                if (string.IsNullOrEmpty(pnUser) || !TryGetCachedLidUserForPn(pnUser, out lidUser))
+                {
+                    return false;
+                }
+
+                pairedJid = BuildLidForPnQuery(jid, lidUser);
+                return !string.IsNullOrEmpty(pairedJid);
+            }
+
+            return false;
         }
 
         private async Task<IReadOnlyList<LidMapping>> ResolveLidsForPnsAsync(IReadOnlyList<string> pns)
@@ -404,6 +719,18 @@ namespace Unison.Socket.Signal
                 if (!string.IsNullOrEmpty(cached))
                 {
                     existing[pnUser] = cached;
+                    continue;
+                }
+
+                string pendingLid;
+                lock (_pendingGate)
+                {
+                    _pendingDisk.TryGetValue(pnUser, out pendingLid);
+                }
+
+                if (!string.IsNullOrEmpty(pendingLid))
+                {
+                    existing[pnUser] = pendingLid;
                 }
                 else
                 {
@@ -445,24 +772,58 @@ namespace Unison.Socket.Signal
                 return;
             }
 
-            var device = JidUtils.GetDevice(pn);
-
-            // A hosted phone number maps onto the hosted LID server regardless of device id.
-            var lid = JidUtils.IsHostedPnUser(pn)
-                ? lidUser + (device > 0 ? ":" + device : string.Empty) + "@" + JidUtils.ServerHostedLid
-                : JidUtils.BuildLidJid(lidUser, device);
+            string lid = BuildLidForPnQuery(pn, lidUser);
+            if (string.IsNullOrEmpty(lid))
+            {
+                return;
+            }
 
             resolved[pn] = new LidMapping(lid, pn);
         }
 
         private static void AddPnPair(IDictionary<string, LidMapping> resolved, string lid, string pnUser)
         {
-            var device = JidUtils.GetDevice(lid);
-            var pn = JidUtils.IsHostedLidUser(lid)
-                ? pnUser + (device > 0 ? ":" + device : string.Empty) + "@" + JidUtils.ServerHosted
-                : JidUtils.BuildPnJid(pnUser, device);
+            string pn = BuildPnForLidQuery(lid, pnUser);
+            if (string.IsNullOrEmpty(pn))
+            {
+                return;
+            }
 
             resolved[lid] = new LidMapping(lid, pn);
+        }
+
+        private static string BuildLidForPnQuery(string pn, string lidUser)
+        {
+            if (string.IsNullOrEmpty(lidUser))
+            {
+                return null;
+            }
+
+            int device = JidUtils.GetDevice(pn);
+
+            // A hosted phone number maps onto the hosted LID server regardless of device id.
+            if (JidUtils.IsHostedPnUser(pn))
+            {
+                return lidUser + (device > 0 ? ":" + device : string.Empty) + "@" + JidUtils.ServerHostedLid;
+            }
+
+            return JidUtils.BuildLidJid(lidUser, device);
+        }
+
+        private static string BuildPnForLidQuery(string lid, string pnUser)
+        {
+            if (string.IsNullOrEmpty(pnUser))
+            {
+                return null;
+            }
+
+            int device = JidUtils.GetDevice(lid);
+            if (JidUtils.IsHostedLidUser(lid))
+            {
+                return pnUser + (device > 0 ? ":" + device : string.Empty) + "@" + JidUtils.ServerHosted;
+            }
+
+            return JidUtils.BuildPnJid(pnUser, device);
         }
 
         /// <summary>

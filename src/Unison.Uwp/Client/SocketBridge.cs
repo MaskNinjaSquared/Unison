@@ -35,6 +35,7 @@ using Unison.Baileys.Crypto;
 using Unison.Baileys.Protocol;
 using Unison.Core.Contracts;
 using Unison.Core.Helpers;
+using Unison.Core.Helpers.Groups;
 using Unison.Core.Models;
 using Unison.Socket.Abstractions;
 using Unison.Socket.AppState;
@@ -154,7 +155,11 @@ namespace Unison.Uwp.Client
         private bool _authSaveScheduled;
         private AccountInfo _persistedAccount;
 
-        public SocketBridge(AuthState authState, FileKeyStore sharedKeyStore, bool reuseLoadedKeyState)
+        public SocketBridge(
+            AuthState authState,
+            FileKeyStore sharedKeyStore,
+            bool reuseLoadedKeyState,
+            LidMappingStore lidMappings = null)
         {
             if (authState == null)
             {
@@ -169,7 +174,8 @@ namespace Unison.Uwp.Client
             _keyStore = sharedKeyStore ?? new FileKeyStore();
             _reuseLoadedKeyState = sharedKeyStore != null && reuseLoadedKeyState;
             _signal = new SignalHandler(_authState, _keyStore);
-            _lidMappings = new LidMappingStore(new SqliteLidMappingStorage());
+            // Prefer the DI singleton so JidAliasTable and ContactFacade share one cache (3.7b).
+            _lidMappings = lidMappings ?? new LidMappingStore(new SqliteLidMappingStorage());
             _log = new DelegateSocketLog(line =>
             {
                 Diag.W("[Bridge] " + line);
@@ -267,8 +273,17 @@ namespace Unison.Uwp.Client
         /// <summary>The user renamed themselves on another device.</summary>
         public Func<string, Task> SelfPushNameChanged { get; set; }
 
+        /// <summary>Full Favourites list from app-state; host replaces local membership.</summary>
+        public Func<IReadOnlyList<string>, Task> FavoritesListChanged { get; set; }
+
         /// <summary>A group was created or renamed: jid first, then the new subject.</summary>
         public Func<string, string, Task> GroupSubjectChanged { get; set; }
+
+        /// <summary>
+        /// <c>w:gp2</c> participant <c>add</c> (Baileys <c>GROUP_PARTICIPANT_ADD</c>).
+        /// Host inserts GroupJoin system lines — not stubbed on the wire as WebMessageInfo.
+        /// </summary>
+        public Func<IReadOnlyList<GroupJoinNotifyRequest>, Task> GroupParticipantsJoined { get; set; }
 
         /// <summary>A chat was deleted on another device.</summary>
         public Func<string, Task> ChatDeleted { get; set; }
@@ -496,8 +511,29 @@ namespace Unison.Uwp.Client
             }
         }
 
-        public async Task ConnectAsync()
+        /// <summary>
+        /// <see cref="IWhatsAppSocket"/> entry. The live host must call
+        /// <see cref="ConnectWithTransportsAsync"/> so WinRT construction stays outside the bridge.
+        /// </summary>
+        public Task ConnectAsync()
         {
+            throw new InvalidOperationException(
+                "SocketBridge requires ConnectWithTransportsAsync — the host supplies IWhatsAppTransport.");
+        }
+
+        /// <summary>
+        /// Opens Noise over host-supplied transports (Init(IWaTransport) shape). Tries
+        /// <paramref name="fallback"/> only when primary connect throws.
+        /// </summary>
+        public async Task ConnectWithTransportsAsync(
+            IWhatsAppTransport primary,
+            IWhatsAppTransport fallback = null)
+        {
+            if (primary == null)
+            {
+                throw new ArgumentNullException(nameof(primary));
+            }
+
             // Reconnecting through the same instance is allowed; leaving the previous session
             // attached would give us two sockets raising the same events.
             if (Current != null)
@@ -507,60 +543,48 @@ namespace Unison.Uwp.Client
 
             Raise(OnConnectionUpdate, "connecting");
 
-            // Default HEAD: Mobile = MessageWebSocket only (Creators TLS hang avoidance).
-            // ConnectionStabilityExperiment: Mobile = StreamSocket first like tag 1.8.3,
-            // with MessageWebSocket fallback if connect fails.
-            bool mobile = IsWindowsMobileDevice();
-            bool streamFirst = !mobile || ConnectionStabilityExperiment.PreferStreamSocketOnMobile;
             RuntimeDiagnosticsService.Instance.Write(
                 "transport",
                 "socket-bridge-connect-order",
-                "mobile=" + mobile +
-                "; experiment=" + ConnectionStabilityExperiment.Enabled +
-                "; primary=" + (streamFirst ? "StreamSocket-RFC6455-broker" : "MessageWebSocket-classic") +
-                "; fallback=" + (streamFirst ? "MessageWebSocket-classic" : "none"));
+                "primary=" + (primary.Name ?? "unknown") +
+                "; fallback=" + (fallback != null ? (fallback.Name ?? "unknown") : "none"));
 
-            if (streamFirst)
+            bool usedFallback = false;
+            try
             {
-                try
-                {
-                    await ConnectWithTransportAsync(new StreamSocketWebSocketTransport())
-                        .ConfigureAwait(false);
-                }
-                catch (Exception streamFailure)
-                {
-                    RuntimeDiagnosticsService.Instance.RecordException(
-                        "transport",
-                        "streamsocket-connect-failed-fallback-classic",
-                        streamFailure);
-                    Disconnect();
-                    await ConnectWithTransportAsync(new MessageWebSocketTransport())
-                        .ConfigureAwait(false);
-                }
+                await ConnectWithTransportAsync(primary).ConfigureAwait(false);
             }
-            else
+            catch (Exception primaryFailure)
             {
-                await ConnectWithTransportAsync(new MessageWebSocketTransport())
-                    .ConfigureAwait(false);
+                if (fallback == null)
+                {
+                    throw;
+                }
+
+                RuntimeDiagnosticsService.Instance.RecordException(
+                    "transport",
+                    "primary-connect-failed-fallback",
+                    primaryFailure);
+                Disconnect();
+                usedFallback = true;
+                await ConnectWithTransportAsync(fallback).ConfigureAwait(false);
+            }
+            finally
+            {
+                if (!usedFallback && fallback != null)
+                {
+                    try
+                    {
+                        fallback.Dispose();
+                    }
+                    catch
+                    {
+                    }
+                }
             }
 
             _handshakeComplete = true;
             Raise(OnConnectionUpdate, "connected");
-        }
-
-        private static bool IsWindowsMobileDevice()
-        {
-            try
-            {
-                return string.Equals(
-                    Windows.System.Profile.AnalyticsInfo.VersionInfo.DeviceFamily,
-                    "Windows.Mobile",
-                    StringComparison.OrdinalIgnoreCase);
-            }
-            catch
-            {
-                return false;
-            }
         }
 
         private async Task ConnectWithTransportAsync(IWhatsAppTransport innerTransport)
@@ -859,45 +883,54 @@ namespace Unison.Uwp.Client
             return MessageContent.GenerateMessageId(_authState.Me != null ? _authState.Me.Id : null);
         }
 
-        public async Task<BinaryNode> QueryGroupMetadataAsync(string groupJid)
+        public async Task<BinaryNode> QueryGroupMetadataAsync(
+            string groupJid,
+            CancellationToken cancellationToken = default(CancellationToken))
         {
-            var response = await QueryAsync(new BinaryNode(
-                "iq",
-                new Dictionary<string, string>
-                {
-                    { "id", NextTag() },
-                    { "type", "get" },
-                    { "xmlns", "w:g2" },
-                    { "to", groupJid }
-                },
-                new List<BinaryNode>
-                {
-                    new BinaryNode("query", new Dictionary<string, string> { { "request", "interactive" } })
-                })).ConfigureAwait(false);
+            var response = await QueryAsync(
+                new BinaryNode(
+                    "iq",
+                    new Dictionary<string, string>
+                    {
+                        { "id", NextTag() },
+                        { "type", "get" },
+                        { "xmlns", "w:g2" },
+                        { "to", groupJid }
+                    },
+                    new List<BinaryNode>
+                    {
+                        new BinaryNode("query", new Dictionary<string, string> { { "request", "interactive" } })
+                    }),
+                timeout: null,
+                cancellationToken).ConfigureAwait(false);
 
             await HarvestGroupMappingsAsync(response, "group-metadata").ConfigureAwait(false);
             return response;
         }
 
-        public async Task<BinaryNode> QueryParticipatingGroupsAsync()
+        public async Task<BinaryNode> QueryParticipatingGroupsAsync(
+            CancellationToken cancellationToken = default(CancellationToken))
         {
-            var response = await QueryAsync(new BinaryNode(
-                "iq",
-                new Dictionary<string, string>
-                {
-                    { "id", NextTag() },
-                    { "to", "@g.us" },
-                    { "xmlns", "w:g2" },
-                    { "type", "get" }
-                },
-                new List<BinaryNode>
-                {
-                    new BinaryNode("participating", null, new List<BinaryNode>
+            var response = await QueryAsync(
+                new BinaryNode(
+                    "iq",
+                    new Dictionary<string, string>
                     {
-                        new BinaryNode("participants", null),
-                        new BinaryNode("description", null)
-                    })
-                })).ConfigureAwait(false);
+                        { "id", NextTag() },
+                        { "to", "@g.us" },
+                        { "xmlns", "w:g2" },
+                        { "type", "get" }
+                    },
+                    new List<BinaryNode>
+                    {
+                        new BinaryNode("participating", null, new List<BinaryNode>
+                        {
+                            new BinaryNode("participants", null),
+                            new BinaryNode("description", null)
+                        })
+                    }),
+                timeout: null,
+                cancellationToken).ConfigureAwait(false);
 
             await HarvestGroupMappingsAsync(response, "participating-groups").ConfigureAwait(false);
             return response;
@@ -968,6 +1001,7 @@ namespace Unison.Uwp.Client
                 return new ProfilePictureResult
                 {
                     Url = result.Url,
+                    Id = result.Id,
                     TargetJid = jid,
                     TokenLookupJid = jid,
                     IsNotFound = result.IsNotFound,
@@ -1098,6 +1132,14 @@ namespace Unison.Uwp.Client
         public Task SetChatPinnedAsync(string jid, bool pinned)
         {
             return RequireAppState().Patch.ExecuteAsync(AppStatePatchFactory.Pin(jid, pinned));
+        }
+
+        /// <summary>
+        /// Replaces the account Favourites list. Pass the complete desired JID set.
+        /// </summary>
+        public Task SetFavoritesListAsync(IEnumerable<string> jids, bool add)
+        {
+            return RequireAppState().Patch.ExecuteAsync(AppStatePatchFactory.Favorites(jids, add));
         }
 
         /// <summary>
@@ -1245,9 +1287,16 @@ namespace Unison.Uwp.Client
             string explicitMessageId = null,
             System.Collections.Generic.IList<string> mentions = null,
             bool mentionAll = false,
-            OutgoingQuote quote = null)
+            OutgoingQuote quote = null,
+            bool markAsForwarded = false,
+            uint forwardingScore = 0)
         {
-            var content = new TextContent(text) { MentionAll = mentionAll };
+            var content = new TextContent(text)
+            {
+                MentionAll = mentionAll,
+                MarkAsForwarded = markAsForwarded,
+                ForwardingScore = forwardingScore
+            };
             if (mentions != null)
             {
                 for (int i = 0; i < mentions.Count; i++)
@@ -1438,7 +1487,7 @@ namespace Unison.Uwp.Client
         /// </summary>
         public void RegisterJidAlias(string jidA, string jidB, string source, bool writeLog = true)
         {
-            var mapping = ToMapping(jidA, jidB);
+            var mapping = LidMapping.TryFromAliasPair(jidA, jidB);
             if (mapping == null)
             {
                 return;
@@ -1457,7 +1506,7 @@ namespace Unison.Uwp.Client
             var mappings = new List<LidMapping>();
             foreach (var alias in aliases)
             {
-                var mapping = ToMapping(alias.Key, alias.Value);
+                var mapping = LidMapping.TryFromAliasPair(alias.Key, alias.Value);
                 if (mapping != null)
                 {
                     mappings.Add(mapping);
@@ -1465,14 +1514,6 @@ namespace Unison.Uwp.Client
             }
 
             Store(mappings, source, true);
-        }
-
-        private static LidMapping ToMapping(string jidA, string jidB)
-        {
-            var lid = JidUtils.IsLidUser(jidA) ? jidA : (JidUtils.IsLidUser(jidB) ? jidB : null);
-            var pn = JidUtils.IsPnUser(jidA) ? jidA : (JidUtils.IsPnUser(jidB) ? jidB : null);
-
-            return lid != null && pn != null ? new LidMapping(lid, pn) : null;
         }
 
         private void Store(List<LidMapping> mappings, string source, bool writeLog)
@@ -1635,6 +1676,11 @@ namespace Unison.Uwp.Client
             {
                 var changed = SelfPushNameChanged;
                 return changed != null ? changed(name) : Done;
+            };
+            appState.Actions.FavoritesChanged = ids =>
+            {
+                var changed = FavoritesListChanged;
+                return changed != null ? changed(ids) : Done;
             };
 
             appState.Attach(module);
@@ -2043,6 +2089,7 @@ namespace Unison.Uwp.Client
             }
 
             await ApplyGroupNamesAsync(batch).ConfigureAwait(false);
+            await ApplyGroupParticipantsJoinedAsync(batch).ConfigureAwait(false);
 
             IList<string> deletedChats;
             var chatDeleted = ChatDeleted;
@@ -2129,6 +2176,44 @@ namespace Unison.Uwp.Client
             }
         }
 
+        /// <summary>
+        /// <c>w:gp2</c> <c>add</c> only — synthesize GroupJoin timeline lines. Other actions
+        /// (remove / promote / …) stay event-only until their kinds exist.
+        /// </summary>
+        private async Task ApplyGroupParticipantsJoinedAsync(WaEventBatch batch)
+        {
+            var joined = GroupParticipantsJoined;
+            if (joined == null)
+            {
+                return;
+            }
+
+            GroupParticipantsUpdate update;
+            if (!batch.TryGet(WaEventKind.GroupParticipantsUpdate, out update) ||
+                update == null ||
+                update.Action != GroupParticipantAction.Add ||
+                update.Participants == null ||
+                update.Participants.Count == 0 ||
+                string.IsNullOrWhiteSpace(update.Id))
+            {
+                return;
+            }
+
+            IReadOnlyList<GroupJoinNotifyRequest> requests =
+                GroupJoinNotifyMap.FromAddParticipants(
+                    update.Id,
+                    update.Participants,
+                    update.ParticipantPhones,
+                    update.NotificationId,
+                    DateTime.UtcNow);
+            if (requests.Count == 0)
+            {
+                return;
+            }
+
+            await joined(requests).ConfigureAwait(false);
+        }
+
         // -- Plumbing --------------------------------------------------------
 
         private WhatsAppSession Current
@@ -2200,9 +2285,12 @@ namespace Unison.Uwp.Client
         /// Connection-level failures still throw, because those come from the transport rather
         /// than from the stanza.
         /// </summary>
-        private Task<BinaryNode> QueryAsync(BinaryNode node, TimeSpan? timeout = null)
+        private Task<BinaryNode> QueryAsync(
+            BinaryNode node,
+            TimeSpan? timeout = null,
+            CancellationToken cancellationToken = default(CancellationToken))
         {
-            return Require().Connection.QueryAllowingErrorAsync(node, timeout);
+            return Require().Connection.QueryAllowingErrorAsync(node, timeout, cancellationToken);
         }
 
         /// <summary>

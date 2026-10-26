@@ -1,4 +1,5 @@
 using System;
+using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
 using Unison.Core.Contracts;
 using Windows.ApplicationModel.Core;
@@ -20,7 +21,17 @@ namespace Unison.Uwp.Services
     /// </remarks>
     public sealed class UiThreadDispatcherService : IDispatcher
     {
-        public Task RunAsync(Action action)
+        private readonly UiStallWatchdog _watchdog;
+
+        public UiThreadDispatcherService(UiStallWatchdog watchdog)
+        {
+            _watchdog = watchdog ?? throw new ArgumentNullException(nameof(watchdog));
+        }
+
+        public Task RunAsync(
+            Action action,
+            [CallerMemberName] string caller = null,
+            [CallerFilePath] string callerFile = null)
         {
             if (action == null)
             {
@@ -28,11 +39,17 @@ namespace Unison.Uwp.Services
             }
 
             var dispatcher = Resolve();
-            if (dispatcher == null || dispatcher.HasThreadAccess)
+            if (dispatcher == null)
             {
                 // No window yet means no bound list either, so running inline is safe and is
                 // better than dropping the mutation on the floor.
                 action();
+                return Task.CompletedTask;
+            }
+
+            if (dispatcher.HasThreadAccess)
+            {
+                _watchdog.Run(action, "state", caller, callerFile);
                 return Task.CompletedTask;
             }
 
@@ -41,7 +58,7 @@ namespace Unison.Uwp.Services
             {
                 try
                 {
-                    action();
+                    _watchdog.Run(action, "state", caller, callerFile);
                     completion.SetResult(true);
                 }
                 catch (Exception ex)

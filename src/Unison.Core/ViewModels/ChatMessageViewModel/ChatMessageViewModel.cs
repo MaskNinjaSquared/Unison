@@ -33,6 +33,10 @@ namespace Unison.Core.ViewModels
         private readonly IDispatcher _ui;
         private readonly DeviceCategory _deviceCategory;
         private readonly IGifPlaybackCoordinator _gifPlayback;
+        private readonly IContactService _contacts;
+        private readonly IChatService _chats;
+        private readonly IPersonStore _people;
+        private readonly Action<string> _openChat;
         private bool _gifRegistered;
         private bool _hasStartedGifPlayback;
         private bool _isGifPlaying;
@@ -62,7 +66,11 @@ namespace Unison.Core.ViewModels
             ICopyService copy = null,
             IDispatcher ui = null,
             DeviceCategory deviceCategory = DeviceCategory.High,
-            IGifPlaybackCoordinator gifPlayback = null)
+            IGifPlaybackCoordinator gifPlayback = null,
+            IContactService contacts = null,
+            IChatService chats = null,
+            IPersonStore people = null,
+            Action<string> openChat = null)
         {
             Model = model ?? throw new ArgumentNullException(nameof(model));
             _strings = strings;
@@ -81,6 +89,10 @@ namespace Unison.Core.ViewModels
             _ui = ui;
             _deviceCategory = deviceCategory;
             _gifPlayback = gifPlayback;
+            _contacts = contacts;
+            _chats = chats;
+            _people = people;
+            _openChat = openChat;
 
             ShowReactionsCommand = new RelayCommand(
                 () => _ = ShowReactionsAsync(),
@@ -126,8 +138,25 @@ namespace Unison.Core.ViewModels
                 () => _ = ExportDocumentAsync(),
                 () => Model.IsDocument && !IsDocumentDownloading);
 
+            MessageContactChatCommand = new RelayCommand(
+                MessageContactChat,
+                () => CanMessageContact);
+
+            MessageContactAddCommand = new RelayCommand(
+                () => _ = MessageContactAddAsync(),
+                () => CanAddSharedContact);
+
             CopyCommand = new RelayCommand(CopyText, () => !string.IsNullOrWhiteSpace(CopyableText));
             ReplyCommand = new RelayCommand(() => ReplyRequested?.Invoke(this, EventArgs.Empty));
+            ForwardCommand = new RelayCommand(
+                () =>
+                {
+                    System.Diagnostics.Debug.WriteLine(
+                        "[Forward] ChatMessageViewModel.ForwardCommand id=" + (Model?.Id ?? "(null)") +
+                        "; listeners=" + (ForwardRequested == null ? 0 : ForwardRequested.GetInvocationList().Length));
+                    ForwardRequested?.Invoke(this, EventArgs.Empty);
+                },
+                () => !string.IsNullOrWhiteSpace(Model?.Id));
 
             PlayGifCommand = new RelayCommand(
                 StartGifPlayback,
@@ -137,10 +166,17 @@ namespace Unison.Core.ViewModels
             SyncAudioPlaybackStatusFromModel();
             EnsureGifPlaybackRegistration();
             ScheduleGifAutoDownloadIfNeeded();
+            EnsureContactCardPhoto();
         }
 
         /// <summary>User tapped the GIF glyph — play in-bubble only (no fullscreen viewer).</summary>
         public ICommand PlayGifCommand { get; }
+
+        /// <summary>Opens (or starts) a 1:1 chat with the shared contact.</summary>
+        public ICommand MessageContactChatCommand { get; }
+
+        /// <summary>Adds the shared contact to the device address book when not already saved.</summary>
+        public ICommand MessageContactAddCommand { get; }
 
         /// <summary>
         /// Drops the model subscription so cleared/trimmed timeline rows can be GC'd.
@@ -231,6 +267,16 @@ namespace Unison.Core.ViewModels
                 RaiseDocumentUiChanged();
             }
 
+            if (IsContactProperty(name))
+            {
+                RaiseContactUiChanged();
+            }
+
+            if (IsGroupJoinProperty(name))
+            {
+                Raise(nameof(IsGroupJoin));
+            }
+
             if (IsAudioProperty(name))
             {
                 RaiseAudioModelUiChanged();
@@ -317,6 +363,21 @@ namespace Unison.Core.ViewModels
             name == nameof(ChatMessage.IsDocument) ||
             name == nameof(ChatMessage.Kind);
 
+        private static bool IsContactProperty(string name) =>
+            name == nameof(ChatMessage.IsContact) ||
+            name == nameof(ChatMessage.ContactCardDisplayName) ||
+            name == nameof(ChatMessage.ContactCardJid) ||
+            name == nameof(ChatMessage.ContactCardPhone) ||
+            name == nameof(ChatMessage.ContactCardPhotoUri) ||
+            name == nameof(ChatMessage.HasContactCardPhoto) ||
+            name == nameof(ChatMessage.Kind);
+
+        private static bool IsGroupJoinProperty(string name) =>
+            name == nameof(ChatMessage.IsGroupJoin) ||
+            name == nameof(ChatMessage.GroupJoinJid) ||
+            name == nameof(ChatMessage.GroupJoinPhone) ||
+            name == nameof(ChatMessage.Kind);
+
         private static bool IsAudioProperty(string name) =>
             name == nameof(ChatMessage.NeedsAudioDownload) ||
             name == nameof(ChatMessage.CanDownloadAudio) ||
@@ -362,7 +423,12 @@ namespace Unison.Core.ViewModels
         /// <summary>Reply to this bubble. The conversation opens the composer bar.</summary>
         public ICommand ReplyCommand { get; }
 
+        /// <summary>Forward this bubble. The shell opens the people picker titled Forward.</summary>
+        public ICommand ForwardCommand { get; }
+
         public event EventHandler ReplyRequested;
+
+        public event EventHandler ForwardRequested;
 
         /// <summary>Download to cache if needed, then FileSavePicker to disk.</summary>
         public ICommand ExportDocumentCommand { get; }
@@ -817,6 +883,22 @@ namespace Unison.Core.ViewModels
             RaiseMediaCommandsChanged();
         }
 
+        private void RaiseContactUiChanged()
+        {
+            EnsureContactCardPhoto();
+            Raise(
+                nameof(IsContact),
+                nameof(ContactCardDisplayName),
+                nameof(ContactCardPhotoUri),
+                nameof(HasContactCardPhoto),
+                nameof(CanMessageContact),
+                nameof(CanAddSharedContact),
+                nameof(ShowMessageContactAddButton),
+                nameof(ShowTextContent));
+            (MessageContactChatCommand as RelayCommand)?.RaiseCanExecuteChanged();
+            (MessageContactAddCommand as RelayCommand)?.RaiseCanExecuteChanged();
+        }
+
         public string ImageUri => Model.ImageUri;
 
         /// <summary>Local picture for a minimized reply chrome. Thumbnail when the full file is not here.</summary>
@@ -1176,6 +1258,112 @@ namespace Unison.Core.ViewModels
         }
 
         public bool IsDocument => Model.IsDocument;
+
+        public bool IsContact => Model.IsContact;
+
+        public bool IsGroupJoin => Model.IsGroupJoin;
+
+        public string ContactCardDisplayName
+        {
+            get
+            {
+                if (!string.IsNullOrWhiteSpace(Model.ContactCardDisplayName))
+                {
+                    return Model.ContactCardDisplayName.Trim();
+                }
+
+                ChatPreviewNormalizer.Normalize(
+                    Model.Content,
+                    ChatPreviewKind.Contact,
+                    out _,
+                    out string fromContent);
+                return !string.IsNullOrWhiteSpace(fromContent)
+                    ? fromContent
+                    : (_strings?.Get("ChatDetail_ContactFallbackName", "Contact") ?? "Contact");
+            }
+        }
+
+        public string ContactCardPhotoUri => Model.ContactCardPhotoUri;
+
+        public bool HasContactCardPhoto => Model.HasContactCardPhoto;
+
+        /// <summary>True when the shared card has a JID we can open a chat with.</summary>
+        public bool CanMessageContact =>
+            IsContact && !string.IsNullOrWhiteSpace(Model.ContactCardJid);
+
+        /// <summary>
+        /// True when the shared contact is not already in the device agenda (Conversar + Adicionar).
+        /// When false, only Conversar is shown.
+        /// </summary>
+        public bool CanAddSharedContact =>
+            IsContact &&
+            _contacts != null &&
+            _contacts.CanAddToAddressBook(Model.ContactCardJid, Model.ContactCardPhone);
+
+        public bool ShowMessageContactAddButton => CanAddSharedContact;
+
+        private void EnsureContactCardPhoto()
+        {
+            if (!IsContact || HasContactCardPhoto || _people == null)
+            {
+                return;
+            }
+
+            string jid = Model.ContactCardJid;
+            if (string.IsNullOrWhiteSpace(jid))
+            {
+                return;
+            }
+
+            Person person = _people.TryGetCached(jid);
+            if (person != null && !string.IsNullOrWhiteSpace(person.AvatarUrl))
+            {
+                Model.ContactCardPhotoUri = person.AvatarUrl;
+            }
+        }
+
+        private void MessageContactChat()
+        {
+            string jid = Model.ContactCardJid;
+            if (string.IsNullOrWhiteSpace(jid))
+            {
+                return;
+            }
+
+            _chats?.StartNewChat(jid);
+            if (_openChat != null)
+            {
+                _openChat(jid);
+            }
+        }
+
+        private async Task MessageContactAddAsync()
+        {
+            if (!CanAddSharedContact)
+            {
+                return;
+            }
+
+            try
+            {
+                await _contacts.ShowAddToAddressBookAsync(
+                    ContactCardDisplayName,
+                    Model.ContactCardPhone,
+                    Model.ContactCardPhotoUri,
+                    Model.ContactCardJid);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine(
+                    "[ChatMessageViewModel] Add shared contact failed: " + ex.Message);
+            }
+
+            Raise(
+                nameof(CanAddSharedContact),
+                nameof(ShowMessageContactAddButton));
+            (MessageContactAddCommand as RelayCommand)?.RaiseCanExecuteChanged();
+        }
+
         public string DocumentFileName => Model.DocumentFileName;
         public string DocumentDisplayName
         {

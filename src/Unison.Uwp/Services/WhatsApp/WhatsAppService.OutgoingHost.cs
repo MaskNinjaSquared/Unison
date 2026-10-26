@@ -17,7 +17,8 @@ namespace Unison.Uwp.Services.WhatsApp
     /// Implemented explicitly so none of it shows on the client's own surface: the only way in
     /// is the <see cref="IOutgoingMessageHost"/> registration, and the only caller is the
     /// façade. Each member is one step the old send methods took inline; the order they run
-    /// in is decided by <see cref="OutgoingTextSend"/> and <see cref="OutgoingMediaSend"/>.
+    /// in is decided by <see cref="Unison.WhatsAppClient.Helpers.OutgoingTextSend"/> and
+    /// <see cref="Unison.WhatsAppClient.Helpers.OutgoingMediaSend"/>.
     /// </remarks>
     public partial class WhatsAppService : IOutgoingMessageHost
     {
@@ -49,26 +50,6 @@ namespace Unison.Uwp.Services.WhatsApp
                 document.Caption,
                 messageId);
         }
-
-        void IOutgoingMessageHost.AcceptOutgoing(string chatJid, ChatMessage message)
-        {
-            ApplyPendingStateToMessage(chatJid, message);
-            MessagesByChat.Insert(chatJid, message, MaxActiveChatMessagesInMemory, DateTime.UtcNow);
-        }
-
-        Task IOutgoingMessageHost.ShowLocalSendPreviewAsync(string chatJid, ChatMessage message, ChatPreviewKind kind)
-        {
-            return UpdateChatPreviewForLocalSendAsync(
-                chatJid,
-                message.Content,
-                message.Timestamp,
-                kind,
-                message.MentionedJids,
-                message.Id,
-                message.Status);
-        }
-
-        void IOutgoingMessageHost.NotifyChatChanged(string chatJid) => QueueChatMessagesChanged(chatJid);
 
         Task IOutgoingMessageHost.PersistLiveAsync(string chatJid, ChatMessage message)
         {
@@ -107,7 +88,9 @@ namespace Unison.Uwp.Services.WhatsApp
                     request.MessageId,
                     request.Mentions,
                     request.MentionAll,
-                    request.Quote);
+                    request.Quote,
+                    request.MarkAsForwarded,
+                    request.ForwardingScore);
                 Task completed = await Task.WhenAny(sendTask, Task.Delay(request.WriteTimeout));
                 if (completed != sendTask)
                 {
@@ -176,8 +159,5 @@ namespace Unison.Uwp.Services.WhatsApp
         }
 
         void IOutgoingMessageHost.ReportError(Exception error) => OnError?.Invoke(this, error);
-
-        Task<List<ChatMessage>> IOutgoingMessageHost.LoadLiveOverlayAsync(string chatJid) =>
-            LoadInitialMessagesAsync(chatJid);
     }
 }

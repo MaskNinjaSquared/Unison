@@ -85,5 +85,21 @@ namespace Unison.Core.Tests.Helpers
 
             Assert.Equal("5511988887777: ", prefix);
         }
+
+        [Fact]
+        public void GroupJoin_system_line_has_no_author_prefix()
+        {
+            string prefix = ChatPreviewNormalizer.FormatListAuthorPrefix(
+                new ChatMessage
+                {
+                    Kind = ChatMessageKind.GroupJoin,
+                    Content = "Ana entrou no grupo",
+                    SenderName = "Ana",
+                    ParticipantJid = "5511988887777@s.whatsapp.net"
+                },
+                isGroup: true);
+
+            Assert.Equal(string.Empty, prefix);
+        }
     }
 }

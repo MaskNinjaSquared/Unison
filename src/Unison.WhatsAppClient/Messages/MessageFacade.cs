@@ -1,0 +1,4192 @@
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
+using Proto;
+using Unison.Core.Contracts;
+using Unison.Core.Contracts.WhatsApp;
+using Unison.Core.Helpers;
+using Unison.Core.Helpers.Groups;
+using Unison.Core.Helpers.Notifications;
+using Unison.Core.Models;
+using Unison.Core.State;
+using Unison.WhatsAppClient.Abstractions;
+using Unison.WhatsAppClient.Helpers;
+
+namespace Unison.WhatsAppClient.Messages
+{
+    /// <summary>
+    /// Message facade: Person upsert, domain <see cref="ChatMessage"/> construction, then WA transport.
+    /// Prefer growing APIs here (e.g. <see cref="GetChatMessage"/>) instead of in WhatsAppService.
+    /// Owns the missing-message ledger and placeholder-resend dispatch; the host only exposes
+    /// <see cref="IPlaceholderResendSocket"/>.
+    /// </summary>
+    public sealed class MessageFacade : IMessageService, IMissingMessageChatHost
+    {
+        private readonly IPersonStore _personStore;
+        private readonly IChatMessageMapper _chatMessageMapper;
+        private readonly IReactionMapper _reactionMapper;
+        private readonly IHistoryService _history;
+        private readonly IHistoryMessageStore _historyMessageStore;
+        private readonly IJidResolver _jids;
+        /// <summary>
+        /// Concrete store: AcceptIncomingTimeline needs transitional
+        /// <see cref="ChatStateStore.MessagesByChat"/> (not on <see cref="IChatStateStore"/>).
+        /// </summary>
+        private readonly ChatStateStore _chatState;
+        private readonly INotificationService _notifications;
+        /// <summary>Matches WhatsAppService.MaxActiveChatMessagesInMemory for trim after insert.</summary>
+        private const int MaxActiveChatMessagesInMemory = 300;
+        private readonly IChatStore _chatStore;
+        private readonly OutgoingTextSend _textSend;
+        private readonly OutgoingMediaSend _mediaSend;
+        private readonly IMediaAvailability _availability;
+        private readonly IChatCatalogPersistence _catalog;
+        private readonly IMessageWireActions _wire;
+        private readonly IOutgoingMessageHost _outgoingHost;
+        private readonly IOutgoingReceiptHost _receiptHost;
+        private readonly IBoundMutationGate _boundMutations;
+        private readonly IStringResources _strings;
+        private readonly IPendingMessageFlushHost _pendingFlush;
+        private readonly PendingMessageQueue _pendingMessages;
+        private readonly IMessageStore _messageStore;
+        private readonly ActiveChat _activeChat;
+        private readonly ChatRowIndex _chatRows;
+        private readonly PendingMessageState _pendingMessageState;
+        private readonly MissingMessageLedger _missing = new MissingMessageLedger();
+        private readonly IPlaceholderResendSocket _placeholderSocket;
+        private PlaceholderResendDispatch _placeholderResends;
+        private readonly IIncomingMessageEnqueueHost _incomingEnqueue;
+        private readonly HistoryOnDemandRegistry _historyOnDemand;
+        private readonly Func<IChatService> _resolveChats;
+        private readonly Func<IContactService> _resolveContacts;
+        private readonly Func<IStatusService> _resolveStatus;
+        private readonly Func<IGroupService> _resolveGroups;
+        private readonly Func<IConnectionService> _resolveConnection;
+        private readonly IOfflineReplayHost _offlineReplay;
+        private readonly SelfProfileState _selfProfile;
+        private readonly IDispatcher _ui;
+        private readonly SyncWorkGate _syncWork;
+        private readonly InitialSyncProgressState _initialSync;
+        private readonly IAppVisibility _visibility;
+        private readonly Func<bool> _isAwaitingInitialSync;
+        private readonly ReceiptReader _receipts;
+        private readonly GroupReceiptTally _groupReceipts = new GroupReceiptTally();
+        private readonly IRuntimeDiagnostics _diagnostics;
+        private readonly int _sqlOpenPageSize;
+        private readonly int _sqlLoadMorePageSize;
+        private readonly int _thinTimelineThreshold;
+
+        public MessageFacade(
+            IPersonStore personStore,
+            IChatMessageMapper chatMessageMapper,
+            IReactionMapper reactionMapper,
+            IHistoryService history,
+            IHistoryMessageStore historyMessageStore,
+            IJidResolver jids,
+            INotificationService notifications,
+            IOutgoingMessageHost outgoingHost,
+            IMediaCache mediaCache,
+            IMediaAvailability availability,
+            IChatCatalogPersistence catalog,
+            IMessageWireActions wire,
+            IOutgoingReceiptHost receiptHost,
+            IBoundMutationGate boundMutations,
+            IPendingMessageFlushHost pendingFlush,
+            PendingMessageQueue pendingMessages,
+            IMessageStore messageStore,
+            ActiveChat activeChat,
+            ChatStateStore chatState,
+            ChatRowIndex chatRows,
+            PendingMessageState pendingMessageState,
+            IPlaceholderResendSocket placeholderSocket,
+            IIncomingMessageEnqueueHost incomingEnqueue,
+            HistoryOnDemandRegistry historyOnDemand,
+            Func<IChatService> resolveChats,
+            Func<IContactService> resolveContacts,
+            Func<IStatusService> resolveStatus,
+            Func<IGroupService> resolveGroups,
+            Func<IConnectionService> resolveConnection,
+            IOfflineReplayHost offlineReplay,
+            SelfProfileState selfProfile,
+            IDispatcher ui,
+            SyncWorkGate syncWork,
+            InitialSyncProgressState initialSync,
+            IAppVisibility visibility,
+            Func<bool> isAwaitingInitialSync,
+            IChatStore chatStore = null,
+            IStringResources strings = null,
+            ISystemInfoProvider systemInfo = null,
+            IRuntimeDiagnostics diagnostics = null)
+        {
+            _diagnostics = diagnostics;
+            _ui = ui ?? throw new ArgumentNullException(nameof(ui));
+            _syncWork = syncWork ?? throw new ArgumentNullException(nameof(syncWork));
+            _initialSync = initialSync ?? throw new ArgumentNullException(nameof(initialSync));
+            _visibility = visibility ?? throw new ArgumentNullException(nameof(visibility));
+            _isAwaitingInitialSync = isAwaitingInitialSync
+                ?? throw new ArgumentNullException(nameof(isAwaitingInitialSync));
+            _jids = jids ?? throw new ArgumentNullException(nameof(jids));
+            _personStore = personStore ?? throw new ArgumentNullException(nameof(personStore));
+            _chatMessageMapper = chatMessageMapper ?? throw new ArgumentNullException(nameof(chatMessageMapper));
+            _reactionMapper = reactionMapper ?? throw new ArgumentNullException(nameof(reactionMapper));
+            _history = history ?? throw new ArgumentNullException(nameof(history));
+            _historyMessageStore = historyMessageStore
+                ?? throw new ArgumentNullException(nameof(historyMessageStore));
+            _notifications = notifications ?? throw new ArgumentNullException(nameof(notifications));
+            _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
+            _wire = wire ?? throw new ArgumentNullException(nameof(wire));
+            _availability = availability ?? throw new ArgumentNullException(nameof(availability));
+            _chatStore = chatStore;
+            _chatState = chatState ?? throw new ArgumentNullException(nameof(chatState));
+            _outgoingHost = outgoingHost ?? throw new ArgumentNullException(nameof(outgoingHost));
+            _receiptHost = receiptHost ?? throw new ArgumentNullException(nameof(receiptHost));
+            _boundMutations = boundMutations ?? throw new ArgumentNullException(nameof(boundMutations));
+            _pendingFlush = pendingFlush ?? throw new ArgumentNullException(nameof(pendingFlush));
+            _pendingMessages = pendingMessages ?? throw new ArgumentNullException(nameof(pendingMessages));
+            _messageStore = messageStore ?? throw new ArgumentNullException(nameof(messageStore));
+            _activeChat = activeChat ?? throw new ArgumentNullException(nameof(activeChat));
+            _chatRows = chatRows ?? throw new ArgumentNullException(nameof(chatRows));
+            _pendingMessageState = pendingMessageState
+                ?? throw new ArgumentNullException(nameof(pendingMessageState));
+            _placeholderSocket = placeholderSocket
+                ?? throw new ArgumentNullException(nameof(placeholderSocket));
+            _incomingEnqueue = incomingEnqueue
+                ?? throw new ArgumentNullException(nameof(incomingEnqueue));
+            _historyOnDemand = historyOnDemand
+                ?? throw new ArgumentNullException(nameof(historyOnDemand));
+            _resolveChats = resolveChats
+                ?? throw new ArgumentNullException(nameof(resolveChats));
+            _resolveContacts = resolveContacts
+                ?? throw new ArgumentNullException(nameof(resolveContacts));
+            _resolveStatus = resolveStatus
+                ?? throw new ArgumentNullException(nameof(resolveStatus));
+            _resolveGroups = resolveGroups
+                ?? throw new ArgumentNullException(nameof(resolveGroups));
+            _resolveConnection = resolveConnection
+                ?? throw new ArgumentNullException(nameof(resolveConnection));
+            _offlineReplay = offlineReplay
+                ?? throw new ArgumentNullException(nameof(offlineReplay));
+            _selfProfile = selfProfile
+                ?? throw new ArgumentNullException(nameof(selfProfile));
+            _strings = strings;
+            _receipts = new ReceiptReader(jids);
+
+            _textSend = new OutgoingTextSend(
+                _outgoingHost,
+                _jids,
+                NotifyChatMessagesChanged,
+                AcceptOutgoingTimeline,
+                ShowOutgoingLocalPreviewAsync);
+            _mediaSend = new OutgoingMediaSend(
+                _outgoingHost,
+                _jids,
+                mediaCache ?? throw new ArgumentNullException(nameof(mediaCache)),
+                NotifyChatMessagesChanged,
+                AcceptOutgoingTimeline,
+                ShowOutgoingLocalPreviewAsync);
+            // systemInfo kept in the ctor for DI compatibility; page sizes match desktop on all devices.
+            _ = systemInfo;
+
+            // Same SQLite page sizes as desktop (Mobile used to use 30/20).
+            _sqlOpenPageSize = 50;
+            _sqlLoadMorePageSize = 30;
+            _thinTimelineThreshold = Math.Max(5, _sqlOpenPageSize - ThinTimelineOnDemandMargin);
+        }
+
+        private static readonly TimeSpan PlaceholderResendDrainDelay = TimeSpan.FromSeconds(4);
+        private static readonly TimeSpan PlaceholderResendFollowUpDrainDelay = TimeSpan.FromSeconds(18);
+        private static readonly TimeSpan PlaceholderResendDispatchDelay = TimeSpan.FromSeconds(5);
+        private static readonly TimeSpan PlaceholderResendResponseTimeout = TimeSpan.FromSeconds(15);
+
+        private PlaceholderResendDispatch PlaceholderResends
+        {
+            get
+            {
+                if (_placeholderResends == null)
+                {
+                    _placeholderResends = new PlaceholderResendDispatch(
+                        _missing,
+                        _placeholderSocket,
+                        line => Debug.WriteLine("[MessageFacade] " + line),
+                        PlaceholderResendDispatchDelay,
+                        PlaceholderResendResponseTimeout);
+                }
+
+                return _placeholderResends;
+            }
+        }
+
+        public event EventHandler<string> ChatMessagesChanged;
+
+        public event EventHandler<PresenceUpdateEventArgs> PresenceUpdated;
+
+        /// <inheritdoc />
+        public void NotifyChatMessagesChanged(string chatJid)
+        {
+            if (string.IsNullOrWhiteSpace(chatJid))
+            {
+                return;
+            }
+
+            // Host used to Post onto the UI thread before raising; View handlers touch XAML.
+            _ = _ui.RunAsync(() =>
+            {
+                Relay(
+                    () =>
+                    {
+                        ChatMessagesChanged?.Invoke(this, chatJid);
+                        _chatState.NotifyMessagesChanged(chatJid);
+                    },
+                    "ChatMessagesChanged");
+            });
+        }
+
+        /// <inheritdoc />
+        public async Task NotifyOfflineReplaySettledAsync(
+            string reason,
+            bool schedulePlaceholderDrain,
+            int maxDrainRequests = 8)
+        {
+            IChatService chats = _resolveChats();
+            if (chats != null)
+            {
+                await chats.FlushOfflineReplayTipsAsync(reason).ConfigureAwait(false);
+            }
+
+            if (schedulePlaceholderDrain)
+            {
+                SchedulePlaceholderResendDrain(reason, maxDrainRequests);
+            }
+        }
+
+        /// <inheritdoc />
+        public Task NotifyOfflineReplayReleasedAsync(
+            int offlineCount,
+            bool firstRelease,
+            bool transportReady)
+        {
+            string settleReason = "offline-complete:" + offlineCount;
+            bool drainPlaceholders = false;
+            if (firstRelease && transportReady)
+            {
+                _offlineReplay.CompleteFirstOfflineRelease(settleReason);
+                drainPlaceholders = true;
+            }
+
+            return NotifyOfflineReplaySettledAsync(
+                settleReason,
+                schedulePlaceholderDrain: drainPlaceholders,
+                maxDrainRequests: 8);
+        }
+
+        /// <inheritdoc />
+        public Task NotifyIncomingDecryptedAsync(IncomingDecryptedNotifyRequest request)
+        {
+            if (request?.Message == null)
+            {
+                return Task.CompletedTask;
+            }
+
+            bool quietForSync =
+                _initialSync.IsActive ||
+                _isAwaitingInitialSync();
+
+            if (string.IsNullOrWhiteSpace(request.SelfDisplayName))
+            {
+                request.SelfDisplayName = _selfProfile.Name;
+            }
+
+            return RouteIncomingChatEnvelopeAsync(new IncomingRoutedEnvelopeRequest
+            {
+                Message = request.Message,
+                MessageId = request.MessageId,
+                FromJid = request.FromJid,
+                RecipientJid = request.RecipientJid,
+                PeerRecipientPn = request.PeerRecipientPn,
+                PeerRecipientLid = request.PeerRecipientLid,
+                SenderLid = request.SenderLid,
+                ParticipantJid = request.ParticipantJid,
+                ParticipantAltJid = request.ParticipantAltJid,
+                VerifiedName = request.VerifiedName,
+                PushName = request.PushName,
+                Timestamp = request.Timestamp,
+                IsOffline = request.IsOffline,
+                IsFromMe = request.IsFromMe,
+                SelfDisplayName = request.SelfDisplayName,
+                QuietForSync = quietForSync,
+                IsWindowVisible = _visibility.IsWindowVisible,
+                IsActiveChat = jid => _activeChat.IsOpen(jid),
+                RouteTrace = request.RouteTrace
+            });
+        }
+
+        /// <inheritdoc />
+        public void NotifyPresenceUpdated(PresenceUpdateEventArgs e)
+        {
+            if (e == null)
+            {
+                return;
+            }
+
+            Relay(() => PresenceUpdated?.Invoke(this, e), "PresenceUpdated");
+        }
+
+        /// <inheritdoc />
+        public async Task NotifyOutgoingStatusAsync(string messageId, string status, string error)
+        {
+            try
+            {
+                await ApplyOutgoingStatusAsync(messageId, status, error).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine(
+                    "[MessageFacade] Outgoing status update failed for " +
+                    (messageId ?? "?") + ": " + ex.Message);
+            }
+        }
+
+        /// <inheritdoc />
+        public async Task NotifyReceiptAsync(Unison.Baileys.Protocol.BinaryNode node)
+        {
+            try
+            {
+                await HandleReceiptAsync(node).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine(
+                    "[MessageFacade] Receipt processing failed: " + ex.Message);
+            }
+        }
+
+        /// <inheritdoc />
+        public async Task HandleReceiptAsync(Unison.Baileys.Protocol.BinaryNode node)
+        {
+            ReceiptFacts receipt = _receipts.Read(node);
+            if (receipt == null)
+            {
+                return;
+            }
+
+            // A "sender" receipt is our own echo — whole-message status, not per-participant.
+            if (!receipt.IsGroup ||
+                string.Equals(receipt.Status, ChatMessage.StatusSent, StringComparison.OrdinalIgnoreCase))
+            {
+                foreach (string id in receipt.MessageIds)
+                {
+                    await ApplyOutgoingStatusAsync(id, receipt.Status).ConfigureAwait(false);
+                }
+
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(receipt.Participant) ||
+                _receiptHost.IsSelfLinked(receipt.Participant))
+            {
+                return;
+            }
+
+            int expectedRecipients = await ResolveExpectedGroupRecipientCountAsync(receipt.ChatJid)
+                .ConfigureAwait(false);
+            if (expectedRecipients <= 0)
+            {
+                return;
+            }
+
+            foreach (string id in receipt.MessageIds)
+            {
+                string aggregateStatus = _groupReceipts.Register(
+                    id,
+                    receipt.Participant,
+                    receipt.Status,
+                    expectedRecipients,
+                    DateTime.UtcNow);
+                if (!string.IsNullOrWhiteSpace(aggregateStatus))
+                {
+                    await ApplyOutgoingStatusAsync(id, aggregateStatus).ConfigureAwait(false);
+                }
+            }
+        }
+
+        private async Task<int> ResolveExpectedGroupRecipientCountAsync(string groupJid)
+        {
+            string canonical = _jids.GetCanonicalJid(JidHelper.Normalize(groupJid));
+            if (string.IsNullOrWhiteSpace(canonical))
+            {
+                return 0;
+            }
+
+            int cached;
+            if (_receiptHost.TryGetFreshGroupRecipientCount(canonical, out cached))
+            {
+                return cached;
+            }
+
+            Unison.Baileys.Protocol.BinaryNode response;
+            try
+            {
+                response = await _receiptHost.QueryGroupMetadataAsync(canonical).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine(
+                    "[MessageFacade] Group receipt metadata query failed for " +
+                    canonical + ": " + ex.Message);
+                return 0;
+            }
+
+            if (response == null)
+            {
+                return 0;
+            }
+
+            IGroupService groups = _resolveGroups();
+            if (groups != null)
+            {
+                try
+                {
+                    await groups.ApplyGroupMetadataFromResponseAsync(canonical, response)
+                        .ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine(
+                        "[MessageFacade] Group metadata apply failed for " +
+                        canonical + ": " + ex.Message);
+                }
+            }
+
+            int? counted = _receipts.CountRecipients(response);
+            if (counted == null)
+            {
+                return 0;
+            }
+
+            _receiptHost.RememberGroupRecipientCount(canonical, counted.Value);
+            return counted.Value;
+        }
+
+        /// <inheritdoc />
+        public async Task ApplyOutgoingStatusAsync(string messageId, string status, string error = null)
+        {
+            if (string.IsNullOrWhiteSpace(messageId) || string.IsNullOrWhiteSpace(status))
+            {
+                return;
+            }
+
+            var changedChats = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var changedMessages = new List<KeyValuePair<string, ChatMessage>>();
+
+            await _boundMutations.RunAsync(() =>
+            {
+                changedMessages = _chatState.MessagesByChat.ApplyOutgoingStatus(
+                    messageId,
+                    status,
+                    (chatJid, wireStatus) => SelfChatStatusPolicy.Resolve(
+                        wireStatus,
+                        _jids.IsSelfLinked(chatJid)));
+                for (int i = 0; i < changedMessages.Count; i++)
+                {
+                    KeyValuePair<string, ChatMessage> change = changedMessages[i];
+                    changedChats.Add(change.Key);
+                    string canonical = _jids.GetCanonicalJid(JidHelper.Normalize(change.Key));
+                    ListPreviewOutgoingSendState.Apply(
+                        _chatRows.FindConversation(canonical),
+                        change.Value,
+                        change.Value.Status);
+                }
+            }).ConfigureAwait(false);
+
+            if (changedMessages.Count == 0)
+            {
+                _pendingMessageState.HoldStatus(messageId, status);
+            }
+            else
+            {
+                _pendingMessageState.ForgetStatus(messageId);
+            }
+
+            for (int i = 0; i < changedMessages.Count; i++)
+            {
+                QueueIncomingPersist(changedMessages[i].Key, changedMessages[i].Value);
+            }
+
+            foreach (string chat in changedChats)
+            {
+                NotifyChatMessagesChanged(chat);
+            }
+
+            if (!string.IsNullOrWhiteSpace(error))
+            {
+                Debug.WriteLine(
+                    "[MessageFacade] Outgoing message " + messageId +
+                    " status=" + status + ", error=" + error);
+            }
+        }
+
+        public Task SubscribeToPresenceAsync(string jid)
+        {
+            if (string.IsNullOrWhiteSpace(jid) || !_wire.CanSubscribePresence)
+            {
+                return Task.CompletedTask;
+            }
+
+            return _wire.PresenceSubscribeAsync(jid);
+        }
+
+        private static void Relay(Action raise, string name)
+        {
+            try
+            {
+                raise();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[MessageFacade] " + name + " handler failed: " + ex.Message);
+            }
+        }
+
+        public async Task SyncMessageHistoryAsync(HistorySync sync)
+        {
+            if (sync == null)
+            {
+                return;
+            }
+
+            try
+            {
+                await UpsertPeopleFromHistoryAsync(sync).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[MessageFacade] Person upsert from history failed: " + ex.Message);
+            }
+
+            HistorySqliteChunkResult chunk = null;
+            try
+            {
+                chunk = await _history.PersistHistorySqliteChunkAsync(sync).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[MessageFacade] History SQLite chunk persist failed: " + ex.Message);
+            }
+
+            // Open chat detail listens to ChatMessagesChanged and reloads via LoadMessagesForChatAsync.
+            if (chunk?.MessageChatJids != null)
+            {
+                foreach (string jid in chunk.MessageChatJids)
+                {
+                    if (string.IsNullOrWhiteSpace(jid))
+                    {
+                        continue;
+                    }
+
+                    NotifyChatMessagesChanged(jid);
+                }
+            }
+        }
+
+        /// <summary>
+        /// A full open page is never "thin": the threshold has to follow <c>_sqlOpenPageSize</c> or the
+        /// smaller Mobile page asks the phone for history on every single open.
+        /// </summary>
+        private const int ThinTimelineOnDemandMargin = 5;
+        private const int OnDemandFetchCount = 80;
+        /// <summary>Live ChatMessagesChanged only needs the newest tail for MergeTimeline.</summary>
+        private const int SqlSyncPageSize = 30;
+
+        public async Task<List<ChatMessage>> LoadMessagesForChatAsync(string jid)
+        {
+            if (string.IsNullOrWhiteSpace(jid))
+            {
+                return new List<ChatMessage>();
+            }
+
+            var loadClock = Stopwatch.StartNew();
+            WriteChatOpenLoadStage(jid, "load-begin", "t=0");
+
+            List<ChatMessage> fromClient = null;
+            string clientError = null;
+            try
+            {
+                fromClient = await LoadLiveOverlayAsync(jid).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                clientError = ex.GetType().Name;
+                Debug.WriteLine("[MessageFacade] Client LoadMessagesForChat failed: " + ex.Message);
+            }
+
+            long liveMs = loadClock.ElapsedMilliseconds;
+            WriteChatOpenLoadStage(
+                jid,
+                "load-live",
+                "ms=" + liveMs + "; ram=" + (fromClient?.Count ?? 0));
+
+            IReadOnlyList<HistoryMessage> fromSql = null;
+            string sqlError = null;
+            try
+            {
+                fromSql = await LoadSqlHistoryRowsAsync(jid).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                sqlError = ex.GetType().Name + ": " + ex.Message;
+                Debug.WriteLine("[MessageFacade] SQLite history message load failed: " + ex.Message);
+            }
+
+            long sqlMs = loadClock.ElapsedMilliseconds;
+            WriteChatOpenLoadStage(
+                jid,
+                "load-sql",
+                "ms=" + sqlMs + "; sql=" + (fromSql?.Count ?? 0) +
+                "; liveMs=" + liveMs);
+
+            List<ChatMessage> fromSqlMapped = MapHistoryRows(fromSql);
+            List<ChatMessage> merged = OpenChatMessageMerge.Merge(fromSqlMapped, fromClient);
+
+            if (merged.Count > 0)
+            {
+                try
+                {
+                    // Seed even when rows came only from live/client so on-demand has a cursor.
+                    await _chatState.AddMissingMessagesAsync(jid, merged).ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine("[MessageFacade] SeedChatMessagesInMemory failed: " + ex.Message);
+                }
+            }
+
+            long seedMs = loadClock.ElapsedMilliseconds;
+            WriteChatOpenLoadStage(
+                jid,
+                "load-seed",
+                "ms=" + seedMs + "; merged=" + merged.Count +
+                "; sqlMs=" + sqlMs);
+
+            // RECENT history often leaves a single listable message — pull older on open.
+            bool onDemandPending = IsHistoryOnDemandPending(jid);
+            bool isThin = merged.Count > 0 && merged.Count < _thinTimelineThreshold;
+            if (isThin && !onDemandPending)
+            {
+                _ = RequestOlderHistorySafeAsync(jid, merged.Count);
+            }
+
+            await WriteChatOpenLoadAsync(
+                jid,
+                fromClient?.Count ?? 0,
+                fromSql?.Count ?? 0,
+                merged.Count,
+                isThin,
+                onDemandPending,
+                clientError,
+                sqlError).ConfigureAwait(false);
+
+            return merged;
+        }
+
+        private void WriteChatOpenLoadStage(string jid, string eventName, string details)
+        {
+            try
+            {
+                _diagnostics?.Write(
+                    "chat-open",
+                    eventName,
+                    "chat=" + DiagnosticJidMask.Apply(jid) + "; " + details);
+            }
+            catch
+            {
+            }
+        }
+
+        /// <summary>
+        /// One journal line per open. sql=0 with dbRows&gt;0 means the rows are filed under keys
+        /// this chat does not resolve to; dbRows=0 means history never reached SQLite.
+        /// </summary>
+        private async Task WriteChatOpenLoadAsync(
+            string jid,
+            int ramCount,
+            int sqlCount,
+            int mergedCount,
+            bool isThin,
+            bool onDemandPending,
+            string clientError,
+            string sqlError)
+        {
+            if (_diagnostics == null)
+            {
+                return;
+            }
+
+            try
+            {
+                List<string> keys = ResolveChatKeys(jid);
+                string dbRows = "-";
+                if (sqlCount == 0 && sqlError == null)
+                {
+                    dbRows = (await _historyMessageStore.CountAsync().ConfigureAwait(false)).ToString();
+                }
+
+                _diagnostics.Write(
+                    "chat-open",
+                    "load",
+                    "chat=" + DiagnosticJidMask.Apply(jid) +
+                    "; keys=" + string.Join(",", keys.Select(DiagnosticJidMask.Apply)) +
+                    "; ram=" + ramCount +
+                    "; sql=" + sqlCount +
+                    "; merged=" + mergedCount +
+                    "; dbRows=" + dbRows +
+                    "; thin=" + isThin +
+                    "; onDemandPending=" + onDemandPending +
+                    "; clientError=" + (clientError ?? "-") +
+                    "; sqlError=" + (sqlError ?? "-"));
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[MessageFacade] chat-open diagnostics failed: " + ex.Message);
+            }
+        }
+
+        private async Task RequestOlderHistorySafeAsync(string jid, int localCount)
+        {
+            try
+            {
+                bool requested = await EnsureHistoryOnDemandAsync(jid, OnDemandFetchCount).ConfigureAwait(false);
+                Debug.WriteLine(
+                    "[MessageFacade] Thin timeline on-demand for " + jid +
+                    " local=" + localCount + " requested=" + requested);
+                _diagnostics?.Write(
+                    "chat-open",
+                    "thin-on-demand",
+                    "chat=" + DiagnosticJidMask.Apply(jid) +
+                    "; local=" + localCount +
+                    "; requested=" + requested);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[MessageFacade] Thin timeline on-demand failed: " + ex.Message);
+                _diagnostics?.RecordException("chat-open", "thin-on-demand-failed", ex);
+            }
+        }
+
+        /// <summary>
+        /// Every SQLite key a chat can be stored under: the JID itself, its canonical form, and the
+        /// LID/PN alias (both lookup directions). History rows land under whichever the chunk used —
+        /// self-chat especially splits across PN and LID.
+        /// </summary>
+        private List<string> ResolveChatKeys(string jid)
+        {
+            return new List<string>(ChatPinStoreKeys.For(jid, _jids));
+        }
+
+        /// <inheritdoc />
+        public bool IsChatInfoMedia(ChatMessage message)
+        {
+            return ChatMediaFilter.IsMedia(message);
+        }
+
+        /// <inheritdoc />
+        public bool IsChatInfoDocument(ChatMessage message)
+        {
+            return ChatMediaFilter.IsDocument(message);
+        }
+
+        /// <inheritdoc />
+        public void CopyReactionState(ChatMessage target, ChatMessage source)
+        {
+            HistoryMessageMapper.CopyReactionState(target, source);
+        }
+
+        /// <inheritdoc />
+        public ChatMessage TryCreatePreviewFallback(ChatItem chat, string selfDisplayName = null)
+        {
+            return ChatPreviewMessageFactory.TryCreate(chat, selfDisplayName);
+        }
+
+        /// <inheritdoc />
+        public bool IsPreviewFallbackMessageId(string id)
+        {
+            return ChatPreviewMessageFactory.IsPreviewFallbackId(id);
+        }
+
+        /// <inheritdoc />
+        public bool TryReadMentionToken(string text, int caret, out int at, out string query, out int length)
+        {
+            return MentionSearch.TryReadToken(text, caret, out at, out query, out length);
+        }
+
+        /// <inheritdoc />
+        public IReadOnlyList<MentionChoice> SearchMentionChoices(
+            IEnumerable<GroupMember> members,
+            string query,
+            string everyoneLabel,
+            string everyoneDetail,
+            string everyoneAvatarUrl,
+            Func<GroupMember, bool> exclude = null)
+        {
+            return MentionSearch.Search(
+                members,
+                query,
+                everyoneLabel,
+                everyoneDetail,
+                everyoneAvatarUrl,
+                exclude);
+        }
+
+        /// <inheritdoc />
+        public bool IsTimelineDuplicateOnlyPage(int returnedCount, int prependedCount)
+        {
+            return TimelineLoadMorePage.IsDuplicateOnlyPage(returnedCount, prependedCount);
+        }
+
+        /// <inheritdoc />
+        public ChatMessage OldestTimelinePageTip(IList<ChatMessage> chronologicalPage)
+        {
+            return TimelineLoadMorePage.OldestTip(chronologicalPage);
+        }
+
+        /// <inheritdoc />
+        public ChatTimelineMergeMode ChooseTimelineMergeMode(bool followingEnd, bool isDetachedFromEnd)
+        {
+            return ChatTimelineLiveMerge.Choose(followingEnd, isDetachedFromEnd);
+        }
+
+        /// <inheritdoc />
+        public bool ShouldInsertLiveTimelineRow(
+            DateTime timestamp,
+            DateTime? newestShown,
+            bool isDetachedFromEnd)
+        {
+            return ChatTimelineLiveMerge.ShouldInsert(timestamp, newestShown, isDetachedFromEnd);
+        }
+
+        /// <inheritdoc />
+        public void SortTimelineInPlace(List<ChatMessage> list)
+        {
+            ChatMessageOrder.SortInPlace(list);
+        }
+
+        /// <inheritdoc />
+        public int FindTimelineInsertIndex(
+            int count,
+            Func<int, DateTime> getTimestamp,
+            Func<int, string> getId,
+            DateTime timestamp,
+            string id)
+        {
+            return ChatMessageOrder.FindInsertIndex(count, getTimestamp, getId, timestamp, id);
+        }
+
+        public async Task<List<ChatMessage>> LoadChatMediaIndexAsync(string jid, int limit = 400)
+        {
+            var result = new List<ChatMessage>();
+            if (string.IsNullOrWhiteSpace(jid))
+            {
+                return result;
+            }
+
+            int take = limit <= 0 ? 400 : limit;
+            var byId = new Dictionary<string, ChatMessage>(StringComparer.Ordinal);
+            var unkeyed = new List<ChatMessage>();
+
+            foreach (string key in ResolveChatKeys(jid))
+            {
+                IReadOnlyList<HistoryMessage> rows = null;
+                try
+                {
+                    rows = await _historyMessageStore.GetMediaForChatAsync(key, take).ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine("[MessageFacade] SQLite media load failed: " + ex.Message);
+                }
+
+                if (rows == null)
+                {
+                    continue;
+                }
+
+                foreach (var row in rows)
+                {
+                    ChatMessage mapped = HistoryMessageMapper.ToChatMessage(row);
+                    if (mapped == null || !ChatMediaFilter.IsMediaOrDocument(mapped))
+                    {
+                        continue;
+                    }
+
+                    if (string.IsNullOrWhiteSpace(mapped.Id))
+                    {
+                        unkeyed.Add(mapped);
+                        continue;
+                    }
+
+                    if (!byId.ContainsKey(mapped.Id))
+                    {
+                        byId[mapped.Id] = mapped;
+                    }
+                }
+            }
+
+            // Live / JSON rows win on collision: they can already carry a local file URI.
+            List<ChatMessage> cached = null;
+            try
+            {
+                cached = await LoadLiveOverlayAsync(jid).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[MessageFacade] Client media load failed: " + ex.Message);
+            }
+
+            if (cached != null)
+            {
+                foreach (var message in cached)
+                {
+                    if (message == null)
+                    {
+                        continue;
+                    }
+
+                    message.EnsureKindFromLegacyFlags();
+                    if (!ChatMediaFilter.IsMediaOrDocument(message))
+                    {
+                        continue;
+                    }
+
+                    if (string.IsNullOrWhiteSpace(message.Id))
+                    {
+                        unkeyed.Add(message);
+                        continue;
+                    }
+
+                    ChatMessage existing;
+                    if (byId.TryGetValue(message.Id, out existing))
+                    {
+                        HistoryMessageMapper.CopyMediaKeysIfMissing(message, existing);
+                        HistoryMessageMapper.CopyForwardedIfMissing(message, existing);
+                        HistoryMessageMapper.CopyQuotedParticipantIfMissing(message, existing);
+                        HistoryMessageMapper.CopyReactionsIfMissing(message, existing);
+                    }
+
+                    byId[message.Id] = message;
+                }
+            }
+
+            return byId.Values
+                .Concat(unkeyed)
+                .OrderByDescending(m => m.Timestamp)
+                .ThenBy(m => m.Id ?? string.Empty, StringComparer.Ordinal)
+                .Take(take)
+                .ToList();
+        }
+
+        private async Task<IReadOnlyList<HistoryMessage>> LoadSqlHistoryRowsAsync(string jid)
+        {
+            return await LoadSqlHistoryPageAsync(jid, _sqlOpenPageSize, null, null).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// Newest messages for an already-open chat: prefer the in-memory client overlay, and only
+        /// hit SQLite for a small tail so ChatMessagesChanged does not re-run a full open query.
+        /// </summary>
+        public async Task<List<ChatMessage>> LoadRecentMessagesForSyncAsync(string jid)
+        {
+            if (string.IsNullOrWhiteSpace(jid))
+            {
+                return new List<ChatMessage>();
+            }
+
+            List<ChatMessage> fromClient = null;
+            try
+            {
+                fromClient = await LoadLiveOverlayAsync(jid).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[MessageFacade] Client sync load failed: " + ex.Message);
+            }
+
+            IReadOnlyList<HistoryMessage> fromSql = null;
+            try
+            {
+                fromSql = await LoadSqlHistoryPageAsync(jid, SqlSyncPageSize, null, null, mergeExtras: false)
+                    .ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[MessageFacade] SQLite sync load failed: " + ex.Message);
+            }
+
+            return OpenChatMessageMerge.Merge(MapHistoryRows(fromSql), fromClient);
+        }
+
+        private static List<ChatMessage> MapHistoryRows(IReadOnlyList<HistoryMessage> fromSql)
+        {
+            if (fromSql == null || fromSql.Count == 0)
+            {
+                return null;
+            }
+
+            var mapped = new List<ChatMessage>(fromSql.Count);
+            for (int i = 0; i < fromSql.Count; i++)
+            {
+                ChatMessage message = HistoryMessageMapper.ToChatMessage(fromSql[i]);
+                if (message != null)
+                {
+                    mapped.Add(message);
+                }
+            }
+
+            return mapped;
+        }
+
+        private async Task<IReadOnlyList<HistoryMessage>> LoadSqlHistoryPageAsync(
+            string jid,
+            int limit,
+            DateTime? beforeUtc,
+            string beforeMessageId,
+            bool mergeExtras = true)
+        {
+            List<string> keys = ResolveChatKeys(jid);
+            if (keys.Count == 0)
+            {
+                return Array.Empty<HistoryMessage>();
+            }
+
+            IReadOnlyList<HistoryMessage> page =
+                await _historyMessageStore.GetForChatKeysAsync(keys, limit, beforeUtc, beforeMessageId)
+                    .ConfigureAwait(false);
+
+            if (page == null || page.Count == 0)
+            {
+                return page ?? Array.Empty<HistoryMessage>();
+            }
+
+            var ordered = page as List<HistoryMessage> ?? new List<HistoryMessage>(page);
+            if (!mergeExtras || beforeUtc.HasValue)
+            {
+                return ordered;
+            }
+
+            var pageById = new Dictionary<string, HistoryMessage>(StringComparer.Ordinal);
+            for (int i = 0; i < ordered.Count; i++)
+            {
+                if (ordered[i] != null && !string.IsNullOrWhiteSpace(ordered[i].MessageId))
+                {
+                    pageById[ordered[i].MessageId] = ordered[i];
+                }
+            }
+
+            foreach (string key in keys)
+            {
+                await MergeSqlExtrasAsync(key, pageById, ordered).ConfigureAwait(false);
+            }
+
+            return ordered
+                .OrderBy(r => r.TimestampUtc ?? DateTime.MinValue)
+                .ThenBy(r => r.MessageId, StringComparer.Ordinal)
+                .ToList();
+        }
+
+        private async Task MergeSqlExtrasAsync(
+            string key,
+            Dictionary<string, HistoryMessage> byId,
+            List<HistoryMessage> ordered)
+        {
+            IReadOnlyList<HistoryMessage> pinned = null;
+            IReadOnlyList<HistoryMessage> pending = null;
+            try
+            {
+                pinned = await _historyMessageStore.GetPinnedForChatAsync(key, 3).ConfigureAwait(false);
+                pending = await _historyMessageStore.GetPendingOutgoingAsync(key).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[MessageFacade] SQLite extras load failed: " + ex.Message);
+            }
+
+            void Add(IReadOnlyList<HistoryMessage> extra)
+            {
+                if (extra == null)
+                {
+                    return;
+                }
+
+                for (int i = 0; i < extra.Count; i++)
+                {
+                    HistoryMessage row = extra[i];
+                    if (row == null || string.IsNullOrWhiteSpace(row.MessageId))
+                    {
+                        continue;
+                    }
+
+                    if (byId.ContainsKey(row.MessageId))
+                    {
+                        continue;
+                    }
+
+                    byId[row.MessageId] = row;
+                    ordered.Add(row);
+                }
+            }
+
+            Add(pinned);
+            Add(pending);
+        }
+
+        public async Task<List<ChatMessage>> LoadMoreMessagesAsync(
+            string jid,
+            DateTime? beforeUtc = null,
+            string beforeMessageId = null)
+        {
+            var result = new List<ChatMessage>();
+            if (string.IsNullOrWhiteSpace(jid))
+            {
+                return result;
+            }
+
+            IReadOnlyList<HistoryMessage> rows = null;
+            try
+            {
+                rows = await LoadSqlHistoryPageAsync(jid, _sqlLoadMorePageSize, beforeUtc, beforeMessageId)
+                    .ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[MessageFacade] SQLite load-more failed: " + ex.Message);
+            }
+
+            if (rows == null || rows.Count == 0)
+            {
+                return result;
+            }
+
+            foreach (var row in rows)
+            {
+                ChatMessage mapped = HistoryMessageMapper.ToChatMessage(row);
+                if (mapped != null)
+                {
+                    result.Add(mapped);
+                }
+            }
+
+            return result;
+        }
+
+        public Task<bool> EnsureHistoryOnDemandAsync(string jid, int count)
+        {
+            return _history.EnsureChatPageAsync(jid, count);
+        }
+
+        public bool IsHistoryOnDemandPending(string jid)
+        {
+            return _history.IsChatPagePending(jid);
+        }
+
+        /// <summary>
+        /// Shows the bubble at once, then sends with one bounded reconnect. A transport failure
+        /// is the returned message's <see cref="ChatMessage.StatusFailed"/>, not an exception.
+        /// </summary>
+        public Task<ChatMessage> SendTextMessageAsync(string jid, string text)
+        {
+            return _textSend.SendAsync(jid, text);
+        }
+
+        public Task<ChatMessage> SendTextMessageAsync(string jid, OutgoingTextMentions message)
+        {
+            return _textSend.SendAsync(jid, message);
+        }
+
+        /// <inheritdoc />
+        public async Task<ChatMessage> ForwardMessageAsync(
+            string sourceChatJid,
+            string messageId,
+            string targetJid)
+        {
+            if (string.IsNullOrWhiteSpace(sourceChatJid))
+            {
+                throw new ArgumentException("Source chat JID is required", nameof(sourceChatJid));
+            }
+
+            if (string.IsNullOrWhiteSpace(messageId))
+            {
+                throw new ArgumentException("Message id is required", nameof(messageId));
+            }
+
+            if (string.IsNullOrWhiteSpace(targetJid))
+            {
+                throw new ArgumentException("Target chat JID is required", nameof(targetJid));
+            }
+
+            string sourceCanonical = _jids.GetCanonicalJid(JidHelper.Normalize(sourceChatJid));
+            ChatMessage source = FindLiveMessage(sourceCanonical, messageId);
+            if (source == null)
+            {
+                source = await FindPersistedMessageAsync(sourceCanonical, messageId)
+                    .ConfigureAwait(false);
+            }
+
+            string body = ResolveForwardableText(source);
+            if (string.IsNullOrWhiteSpace(body))
+            {
+                throw new InvalidOperationException(
+                    "Forward supports text or a media caption for now.");
+            }
+
+            // Baileys: score += fromMe && !force ? 0 : 1; we always force the Forward UI path.
+            uint score = source.IsForwarded ? 2u : 1u;
+            Debug.WriteLine(
+                "[MessageFacade] ForwardMessage id=" + messageId +
+                "; to=" + targetJid +
+                "; score=" + score);
+
+            return await _textSend.SendAsync(
+                targetJid,
+                new OutgoingTextMentions
+                {
+                    Text = body,
+                    MarkAsForwarded = true,
+                    ForwardingScore = score
+                }).ConfigureAwait(false);
+        }
+
+        private ChatMessage FindLiveMessage(string chatJid, string messageId)
+        {
+            if (_chatState?.MessagesByChat == null ||
+                string.IsNullOrWhiteSpace(chatJid) ||
+                string.IsNullOrWhiteSpace(messageId))
+            {
+                return null;
+            }
+
+            if (!_chatState.MessagesByChat.TryGet(chatJid, out System.Collections.Generic.List<ChatMessage> messages) ||
+                messages == null)
+            {
+                return null;
+            }
+
+            for (int i = 0; i < messages.Count; i++)
+            {
+                ChatMessage row = messages[i];
+                if (row != null &&
+                    string.Equals(row.Id, messageId, StringComparison.Ordinal))
+                {
+                    return row;
+                }
+            }
+
+            return null;
+        }
+
+        private static string ResolveForwardableText(ChatMessage message)
+        {
+            if (message == null || message.IsRevoked)
+            {
+                return null;
+            }
+
+            if (message.Kind == ChatMessageKind.Text &&
+                !string.IsNullOrWhiteSpace(message.Content))
+            {
+                return message.Content.Trim();
+            }
+
+            if (!string.IsNullOrWhiteSpace(message.Caption))
+            {
+                return message.Caption.Trim();
+            }
+
+            if (message.ShowTextContent && !string.IsNullOrWhiteSpace(message.Content))
+            {
+                return message.Content.Trim();
+            }
+
+            return null;
+        }
+
+        public Task SendImageAsync(string jid, byte[] imageBytes, string caption)
+        {
+            return _mediaSend.SendImageAsync(jid, imageBytes, caption);
+        }
+
+        public Task<IReadOnlyList<ChatMessage>> SendImagesAsync(
+            string jid,
+            IReadOnlyList<byte[]> imageBytes,
+            string caption)
+        {
+            return _mediaSend.SendImagesAsync(jid, imageBytes, caption);
+        }
+
+        public async Task<ChatMessage> SendAudioMessageAsync(string jid, byte[] audioBytes, string mimeType, uint durationSeconds, bool isVoiceMessage = false)
+        {
+            ChatMessage message = await _mediaSend.SendAudioAsync(jid, new OutgoingAudio
+            {
+                Bytes = audioBytes,
+                MimeType = mimeType,
+                DurationSeconds = durationSeconds,
+                IsVoiceMessage = isVoiceMessage
+            });
+            _availability.PrepareLocalPlaybackInBackground(message);
+            return message;
+        }
+
+        public Task<ChatMessage> SendDocumentAsync(
+            string jid,
+            byte[] documentBytes,
+            string mimeType,
+            string fileName,
+            string caption = null)
+        {
+            return _mediaSend.SendDocumentAsync(jid, new OutgoingDocument
+            {
+                Bytes = documentBytes,
+                MimeType = mimeType,
+                FileName = fileName,
+                Caption = caption
+            });
+        }
+
+        public Task<string> EnsureAudioAvailableAsync(ChatMessage message)
+        {
+            return _availability.EnsureAudioAsync(message);
+        }
+
+        public Task<string> EnsureImageAvailableAsync(ChatMessage message)
+        {
+            return _availability.EnsureImageAsync(message);
+        }
+
+        public Task<string> EnsureVideoAvailableAsync(ChatMessage message)
+        {
+            return _availability.EnsureVideoAsync(message);
+        }
+
+        public Task<string> EnsureDocumentAvailableAsync(ChatMessage message)
+        {
+            return _availability.EnsureDocumentAsync(message);
+        }
+
+        public Task HydrateIncomingImageAsync(
+            ChatMessage message,
+            Message.Types.ImageMessage image,
+            string messageId,
+            string chatJid)
+        {
+            return _availability.HydrateImageAsync(message, image, messageId, chatJid);
+        }
+
+        public Task HydrateIncomingStickerAsync(
+            ChatMessage message,
+            Message.Types.StickerMessage sticker,
+            string messageId,
+            string chatJid)
+        {
+            return _availability.HydrateStickerAsync(message, sticker, messageId, chatJid);
+        }
+
+        /// <inheritdoc />
+        public void ScheduleIncomingMediaHydration(
+            ChatMessage message,
+            Message.Types.StickerMessage sticker,
+            Message.Types.ImageMessage image,
+            string messageId,
+            string chatJid)
+        {
+            if (sticker != null)
+            {
+                ObserveIncomingWork(
+                    HydrateIncomingStickerAsync(message, sticker, messageId, chatJid),
+                    "hydrate-sticker",
+                    messageId);
+            }
+
+            if (image != null)
+            {
+                ObserveIncomingWork(
+                    HydrateIncomingImageAsync(message, image, messageId, chatJid),
+                    "hydrate-image",
+                    messageId);
+            }
+        }
+
+        private void ObserveIncomingWork(Task work, string label, string messageId)
+        {
+            if (work == null)
+            {
+                return;
+            }
+
+            _ = ObserveIncomingWorkAsync(work, label, messageId);
+        }
+
+        private async Task ObserveIncomingWorkAsync(Task work, string label, string messageId)
+        {
+            try
+            {
+                await work.ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine(
+                    "[MessageFacade] " + label + " failed for " + (messageId ?? "?") + ": " + ex.Message);
+                _diagnostics?.RecordException(
+                    "messages",
+                    label + "-failed",
+                    ex,
+                    "messageId=" + (messageId ?? string.Empty));
+            }
+        }
+
+        public async Task SetMessagePinnedAsync(string chatJid, ChatMessage message, bool pin, uint durationSeconds = 604800)
+        {
+            await _resolveConnection().EnsureConnectedAsync().ConfigureAwait(false);
+
+            if (message == null || string.IsNullOrWhiteSpace(message.Id))
+            {
+                throw new ArgumentException("A valid message is required", nameof(message));
+            }
+
+            if (!_wire.CanSendPin)
+            {
+                throw new InvalidOperationException("Not connected: the message pin was not sent.");
+            }
+
+            string canonical = _jids.GetCanonicalJid(chatJid);
+            var key = new MessageKey
+            {
+                RemoteJid = string.IsNullOrWhiteSpace(message.RemoteJid)
+                    ? canonical
+                    : JidHelper.Normalize(message.RemoteJid),
+                FromMe = message.IsFromMe,
+                Id = message.Id
+            };
+            if (!string.IsNullOrWhiteSpace(message.ParticipantJid))
+            {
+                key.Participant = message.ParticipantJid;
+            }
+
+            await _wire.SendPinInChatMessageAsync(canonical, key, pin, durationSeconds);
+            MessagePinWindow window = MessagePinWindow.FromLocal(pin, durationSeconds, DateTime.UtcNow);
+            await ApplyPinnedMessageStateAsync(
+                canonical, message.Id, pin, window.PinnedAtUtc, window.ExpiresAtUtc);
+        }
+
+        public bool TryHandleReaction(
+            Message message,
+            ChatMessageMapContext context,
+            IList<ChatMessage> chatMessages,
+            out ChatMessage updatedParent)
+        {
+            updatedParent = null;
+            PendingReaction pending;
+            if (!_chatMessageMapper.TryMapReaction(message, context, out pending) || pending == null)
+            {
+                return false;
+            }
+
+            if (chatMessages != null)
+            {
+                _reactionMapper.TryApply(chatMessages, pending, out updatedParent);
+            }
+
+            // A chip-summary bubble holds no reactor rows, so the parent upsert that follows cannot
+            // store this reaction. Write the single row on its own — it also lands ahead of a parent
+            // we have not received yet.
+            _ = PersistLiveReactionAsync(context?.ChatJid, pending);
+            return true;
+        }
+
+        private async Task PersistLiveReactionAsync(string chatJid, PendingReaction pending)
+        {
+            if (pending == null || string.IsNullOrWhiteSpace(pending.TargetMessageId))
+            {
+                return;
+            }
+
+            string jid = JidHelper.Normalize(
+                string.IsNullOrWhiteSpace(chatJid) ? pending.TargetChatJid : chatJid);
+            string reactor = JidHelper.Normalize(pending.ReactorJid);
+            if (string.IsNullOrWhiteSpace(reactor) && pending.FromMe)
+            {
+                reactor = "from-me";
+            }
+
+            if (string.IsNullOrWhiteSpace(jid) || string.IsNullOrWhiteSpace(reactor))
+            {
+                return;
+            }
+
+            try
+            {
+                await _historyMessageStore.UpsertReactionsAsync(new[]
+                {
+                    new HistoryMessageReaction
+                    {
+                        ChatJid = jid,
+                        MessageId = pending.TargetMessageId.Trim(),
+                        ReactorJid = reactor,
+                        ReactorName = pending.ReactorName,
+                        Emoji = pending.Emoji ?? string.Empty,
+                        FromMe = pending.FromMe,
+                        ReactionMessageId = pending.ReactionMessageId,
+                        TimestampUtc = pending.Timestamp == default(DateTime)
+                            ? DateTime.UtcNow
+                            : pending.Timestamp
+                    }
+                }).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[MessageFacade] Live reaction persist failed: " + ex.Message);
+            }
+        }
+
+        public bool TryBufferReaction(
+            Message message,
+            ChatMessageMapContext context,
+            out PendingReaction pending)
+        {
+            return _chatMessageMapper.TryMapReaction(message, context, out pending);
+        }
+
+        public ChatMessage GetChatMessage(ChatMessageMapContext context, ChatMessageContentSnapshot content)
+        {
+            return _chatMessageMapper.MapIndividual(context, content);
+        }
+
+        public void AttachHistoryReactions(
+            ChatMessage parent,
+            IEnumerable<Reaction> reactions,
+            ChatMessageMapContext parentContext)
+        {
+            if (parent == null || reactions == null || parentContext == null)
+            {
+                return;
+            }
+
+            foreach (var reaction in reactions)
+            {
+                var pending = _reactionMapper.MapFromHistoryReaction(reaction, parentContext);
+                if (pending != null)
+                {
+                    _reactionMapper.ApplyToMessage(parent, pending);
+                }
+            }
+        }
+
+        public IList<ChatMessage> ApplyBufferedReactions(
+            IList<ChatMessage> chatMessages,
+            IEnumerable<PendingReaction> pending)
+        {
+            return _reactionMapper.Apply(chatMessages, pending);
+        }
+
+        /// <summary>
+        /// Inserts/updates Person rows and merges the same push names into the in-memory map the
+        /// list strip reads. UpsertIfChanged skips writes when nothing changed.
+        /// </summary>
+        private async Task UpsertPeopleFromHistoryAsync(HistorySync sync)
+        {
+            await _personStore.InitializeAsync().ConfigureAwait(false);
+
+            int writes = 0;
+            var pushPairs = new List<KeyValuePair<string, string>>();
+
+            if (sync.Pushnames != null)
+            {
+                foreach (var pn in sync.Pushnames)
+                {
+                    if (string.IsNullOrWhiteSpace(pn?.Id) || string.IsNullOrWhiteSpace(pn.Pushname_))
+                    {
+                        continue;
+                    }
+
+                    string jid = JidHelper.Normalize(pn.Id);
+                    string name = pn.Pushname_.Trim();
+                    string phone = JidHelper.TryPhoneFromJid(jid);
+                    if (!string.IsNullOrWhiteSpace(jid))
+                    {
+                        pushPairs.Add(new KeyValuePair<string, string>(jid, name));
+                    }
+
+                    if (await _personStore.UpsertIfChangedAsync(
+                        jid,
+                        name,
+                        null,
+                        phone,
+                        PersonSource.Observed).ConfigureAwait(false))
+                    {
+                        writes++;
+                    }
+                }
+            }
+
+            // Same LID↔PN pairs the preview builder uses: store the name under both so
+            // ChatAuthorProjection can resolve a group strip that still holds the LID.
+            if (sync.PhoneNumberToLidMappings != null)
+            {
+                foreach (var mapping in sync.PhoneNumberToLidMappings)
+                {
+                    if (mapping == null ||
+                        string.IsNullOrWhiteSpace(mapping.LidJid) ||
+                        string.IsNullOrWhiteSpace(mapping.PnJid))
+                    {
+                        continue;
+                    }
+
+                    string lid = JidHelper.Normalize(mapping.LidJid);
+                    string pn = JidHelper.Normalize(mapping.PnJid);
+                    string name = FindPushName(pushPairs, pn) ?? FindPushName(pushPairs, lid);
+                    if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(lid))
+                    {
+                        continue;
+                    }
+
+                    if (!pushPairs.Exists(p =>
+                            string.Equals(p.Key, lid, StringComparison.OrdinalIgnoreCase)))
+                    {
+                        pushPairs.Add(new KeyValuePair<string, string>(lid, name));
+                    }
+
+                    if (await _personStore.UpsertIfChangedAsync(
+                        lid,
+                        name,
+                        null,
+                        JidHelper.TryPhoneFromJid(pn),
+                        PersonSource.Observed).ConfigureAwait(false))
+                    {
+                        writes++;
+                    }
+                }
+            }
+
+            if (sync.Conversations != null)
+            {
+                foreach (var conv in sync.Conversations)
+                {
+                    if (string.IsNullOrWhiteSpace(conv?.Id))
+                    {
+                        continue;
+                    }
+
+                    string jid = JidHelper.Normalize(conv.Id);
+                    if (string.IsNullOrEmpty(jid) || JidHelper.IsGroupJid(jid))
+                    {
+                        continue;
+                    }
+
+                    string name = !string.IsNullOrWhiteSpace(conv.Name)
+                        ? conv.Name
+                        : conv.DisplayName;
+                    if (string.IsNullOrWhiteSpace(name))
+                    {
+                        continue;
+                    }
+
+                    string phone = JidHelper.TryPhoneFromJid(jid);
+                    if (await _personStore.UpsertIfChangedAsync(
+                        jid,
+                        name,
+                        null,
+                        phone,
+                        PersonSource.DirectChat).ConfigureAwait(false))
+                    {
+                        writes++;
+                    }
+                }
+            }
+
+            if (pushPairs.Count > 0)
+            {
+                await _chatState.MergePushNamesAsync(pushPairs).ConfigureAwait(false);
+            }
+
+            Debug.WriteLine("[MessageFacade] Person upserts from history: " + writes);
+        }
+
+        private static string FindPushName(
+            List<KeyValuePair<string, string>> pairs,
+            string jid)
+        {
+            if (pairs == null || string.IsNullOrWhiteSpace(jid))
+            {
+                return null;
+            }
+
+            for (int i = 0; i < pairs.Count; i++)
+            {
+                if (string.Equals(pairs[i].Key, jid, StringComparison.OrdinalIgnoreCase) &&
+                    !string.IsNullOrWhiteSpace(pairs[i].Value))
+                {
+                    return pairs[i].Value;
+                }
+            }
+
+            return null;
+        }
+
+        public Task ResyncConversationsAsync(System.IProgress<ConversationResyncPhase> progress = null)
+        {
+            // The facade falls back to the service on its own when the legacy stack is the one
+            // connected, so there is no flag to read here.
+            return _history.ResyncConversationsAsync(progress);
+        }
+
+
+        public void NotifyLiveIncoming(
+            string chatJid,
+            string chatName,
+            string senderName,
+            string preview,
+            bool isGroup,
+            bool isFromMe,
+            bool suppressToast,
+            int totalUnread,
+            ChatItem chat)
+        {
+            if (chat != null)
+            {
+                _chatStore?.ApplyTo(chat);
+            }
+
+            bool mutedFallback = _chatStore?.TryGetCached(chatJid)?.IsMutedLocally ?? false;
+            // Belt with the pump: safe-mode history catch-up must not toast either.
+            bool quietForSync = _history != null && _history.IsInitialSyncSafeMode;
+
+            IncomingLiveAnnouncePayload payload = IncomingLiveAnnouncePayload.TryCreateFromChat(
+                chatJid,
+                chatName,
+                senderName,
+                preview,
+                isGroup,
+                isFromMe,
+                suppressToast,
+                quietForSync,
+                totalUnread,
+                chat,
+                mutedFallback);
+            if (payload == null || _notifications == null)
+            {
+                return;
+            }
+
+            // Toast / Live Tile / Start-tile work is WinRT and must not hold stage=route.
+            // Strip+announce are already detached from the pump; this Task.Run keeps WinRT off UI.
+            _ = Task.Run(() =>
+            {
+                try
+                {
+                    _notifications.NotifyIncomingMessage(
+                        payload.ChatJid,
+                        payload.ChatName,
+                        payload.SenderName,
+                        payload.Preview,
+                        payload.IsGroup,
+                        payload.IsMuted,
+                        payload.SuppressToast,
+                        payload.TotalUnread,
+                        payload.AvatarUrl,
+                        payload.ChatUnread);
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine("[MessageFacade] Live announce failed: " + ex.Message);
+                    _diagnostics?.Write(
+                        "notifications",
+                        "live-announce-failed",
+                        "jid=" + payload.ChatJid + "; error=" + ex.Message);
+                }
+            });
+        }
+
+        /// <inheritdoc />
+        public async Task ApplyIncomingRevocationAsync(
+            string chatJid,
+            string targetMessageId,
+            string envelopeMessageId = null)
+        {
+            string targetId = targetMessageId;
+            if (string.IsNullOrWhiteSpace(chatJid) || string.IsNullOrWhiteSpace(targetId))
+            {
+                return;
+            }
+
+            string canonical = _jids.GetCanonicalJid(chatJid);
+            ChatMessageCache cache = _chatState.MessagesByChat;
+            IReadOnlyList<string> aliasKeys = GetAliasCacheKeys(canonical);
+
+            // Older builds stored the revoke envelope itself as a fresh
+            // "[Message Deleted]" item. Remove that synthetic row when the same
+            // event is replayed; the real target below keeps its original timestamp.
+            if (!string.IsNullOrWhiteSpace(envelopeMessageId) &&
+                !string.Equals(envelopeMessageId, targetId, StringComparison.Ordinal))
+            {
+                for (int i = 0; i < aliasKeys.Count; i++)
+                {
+                    cache.RemoveMessage(aliasKeys[i], envelopeMessageId);
+                }
+
+                try
+                {
+                    await _messageStore.DeleteMessageAsync(canonical, envelopeMessageId)
+                        .ConfigureAwait(false);
+                }
+                catch
+                {
+                }
+            }
+
+            ChatMessage target;
+            AliasLinkedMessageFind.TryFind(cache, aliasKeys, targetId, out _, out target);
+
+            // If the chat is not resident, read the retained local window once. A revoke is
+            // an update to an existing message; it must never be inserted as a new "current" item.
+            if (target == null)
+            {
+                target = await FindPersistedMessageAsync(canonical, targetId).ConfigureAwait(false);
+            }
+
+            if (target == null)
+            {
+                return;
+            }
+
+            // Tombstone sets IsRevoked (post-1.8.3). That PropertyChanged fans into XAML bindings;
+            // apply on the UI thread when a dispatcher is attached so Mobile does not hit 0x8001010E.
+            await _boundMutations.RunAsync(
+                () => MessageRevocationContent.ApplyTombstone(target)).ConfigureAwait(false);
+
+            try
+            {
+                await _outgoingHost.PersistLiveAsync(canonical, target).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[MessageFacade] Failed to persist revoked message: " + ex.Message);
+            }
+
+            if (_activeChat.IsOpen(canonical))
+            {
+                // Host posts to NotifyChatMessagesChanged + chat-state store.
+                NotifyChatMessagesChanged(canonical);
+            }
+
+            ChatMessage latest = null;
+            List<ChatMessage> tipSource;
+            if (cache.TryGet(canonical, out tipSource))
+            {
+                latest = ChatPreviewTip.PickLatest(tipSource);
+            }
+
+            if (latest != null && string.Equals(latest.Id, target.Id, StringComparison.Ordinal))
+            {
+                await RefreshChatPreviewFromMessageAsync(canonical, target).ConfigureAwait(false);
+            }
+        }
+
+        /// <inheritdoc />
+        public void AcceptOutgoingTimeline(string chatJid, ChatMessage message)
+        {
+            if (string.IsNullOrWhiteSpace(chatJid) || message == null)
+            {
+                return;
+            }
+
+            ApplyHeldMessageState(chatJid, message);
+            _chatState.MessagesByChat.Insert(
+                chatJid,
+                message,
+                MaxActiveChatMessagesInMemory,
+                DateTime.UtcNow);
+        }
+
+        private Task ShowOutgoingLocalPreviewAsync(
+            string chatJid,
+            ChatMessage message,
+            ChatPreviewKind kind)
+        {
+            IChatService chats = _resolveChats();
+            if (chats == null || message == null)
+            {
+                return Task.CompletedTask;
+            }
+
+            return chats.ShowLocalSendPreviewAsync(
+                chatJid,
+                message.Content,
+                message.Timestamp,
+                kind,
+                message.MentionedJids,
+                message.Id,
+                message.Status);
+        }
+
+        /// <inheritdoc />
+        public bool ApplyHeldMessageState(string chatJid, ChatMessage message)
+        {
+            if (message == null || string.IsNullOrWhiteSpace(message.Id))
+            {
+                return false;
+            }
+
+            string canonical = _jids.GetCanonicalJid(chatJid);
+            return _pendingMessageState.ApplyTo(
+                message,
+                canonical,
+                held => SelfChatStatusPolicy.Resolve(held, _jids.IsSelfLinked(chatJid)));
+        }
+
+        /// <inheritdoc />
+        public Task<List<ChatMessage>> LoadLiveOverlayAsync(string chatJid)
+        {
+            string normJid = JidHelper.Normalize(chatJid);
+            if (string.IsNullOrWhiteSpace(normJid))
+            {
+                return Task.FromResult(new List<ChatMessage>());
+            }
+
+            try
+            {
+                List<ChatMessage> pending = _pendingMessages.SnapshotFor(
+                    normJid,
+                    jid => _jids.GetCanonicalJid(JidHelper.Normalize(jid)));
+                List<ChatMessage> cache = _chatState.MessagesByChat.RebuildWindow(
+                    normJid,
+                    pending,
+                    MaxActiveChatMessagesInMemory,
+                    DateTime.UtcNow);
+
+                var dirty = new List<ChatMessage>();
+                for (int i = 0; i < cache.Count; i++)
+                {
+                    if (ApplyHeldMessageState(normJid, cache[i]))
+                    {
+                        dirty.Add(cache[i]);
+                    }
+                }
+
+                for (int i = 0; i < dirty.Count; i++)
+                {
+                    QueueIncomingPersist(normJid, dirty[i]);
+                }
+
+                return Task.FromResult(new List<ChatMessage>(cache));
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[MessageFacade] LoadLiveOverlay failed: " + ex.Message);
+                return Task.FromResult(new List<ChatMessage>());
+            }
+        }
+
+        /// <inheritdoc />
+        public Task ApplyIncomingPinInChatAsync(
+            string chatJid,
+            string targetMessageId,
+            bool pin,
+            long senderTimestampMs,
+            uint durationSeconds = 0)
+        {
+            if (string.IsNullOrWhiteSpace(chatJid) || string.IsNullOrWhiteSpace(targetMessageId))
+            {
+                return Task.CompletedTask;
+            }
+
+            MessagePinWindow window = MessagePinWindow.FromIncoming(
+                pin, senderTimestampMs, durationSeconds, DateTime.UtcNow);
+            return ApplyPinnedMessageStateAsync(
+                chatJid, targetMessageId, pin, window.PinnedAtUtc, window.ExpiresAtUtc);
+        }
+
+        /// <inheritdoc />
+        public async Task<bool> ApplyAppStateDeleteMessageAsync(string chatJid, string messageId)
+        {
+            string canonical = _jids.GetCanonicalJid(chatJid);
+            if (string.IsNullOrWhiteSpace(canonical) || string.IsNullOrWhiteSpace(messageId))
+            {
+                return false;
+            }
+
+            bool removed = false;
+            List<ChatMessage> remaining = null;
+            string selfFallback = _strings != null
+                ? _strings.Get("Chat_SelfFallbackName", "You")
+                : "You";
+            string yesterday = _strings != null
+                ? _strings.Get("Common_Yesterday", "Yesterday")
+                : "Yesterday";
+
+            await _boundMutations.RunAsync(() =>
+            {
+                ChatMessageCache cache = _chatState.MessagesByChat;
+                if (!cache.TryGet(canonical, out remaining) ||
+                    remaining == null ||
+                    !cache.RemoveMessage(canonical, messageId))
+                {
+                    return;
+                }
+
+                AppStateDeleteMessagePreview.RefreshAliasRows(
+                    _chatRows.FindConversation(canonical),
+                    remaining,
+                    canonical,
+                    _jids.GetCanonicalJid,
+                    selfFallback,
+                    yesterday);
+                removed = true;
+            }).ConfigureAwait(false);
+
+            if (!removed)
+            {
+                return false;
+            }
+
+            try
+            {
+                await _messageStore.DeleteMessageAsync(canonical, messageId).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine(
+                    "[MessageFacade] Deleting " + messageId + " from storage failed: " + ex.Message);
+            }
+
+            NotifyChatMessagesChanged(canonical);
+            return true;
+        }
+
+        /// <inheritdoc />
+        public async Task<bool> ApplyPinnedMessageStateAsync(
+            string chatJid,
+            string messageId,
+            bool isPinned,
+            DateTime? pinnedAtUtc,
+            DateTime? expiresAtUtc)
+        {
+            string canonical = _jids.GetCanonicalJid(chatJid);
+            if (string.IsNullOrWhiteSpace(canonical) || string.IsNullOrWhiteSpace(messageId))
+            {
+                return false;
+            }
+
+            PendingPin state = _pendingMessageState.HoldPin(
+                canonical, messageId, isPinned, pinnedAtUtc, expiresAtUtc, DateTime.UtcNow);
+
+            ChatMessage target = null;
+            await _boundMutations.RunAsync(() =>
+            {
+                if (_chatState.MessagesByChat.TryGet(canonical, out var messages))
+                {
+                    target = messages?.FirstOrDefault(
+                        m => string.Equals(m?.Id, messageId, StringComparison.Ordinal));
+                }
+
+                if (target != null)
+                {
+                    target.IsPinned = state.IsPinned;
+                    target.PinnedAtUtc = state.PinnedAtUtc;
+                    target.PinExpiresAtUtc = state.ExpiresAtUtc;
+                }
+            }).ConfigureAwait(false);
+
+            if (target == null)
+            {
+                target = await FindPersistedMessageAsync(canonical, messageId).ConfigureAwait(false);
+                if (target != null)
+                {
+                    target.IsPinned = state.IsPinned;
+                    target.PinnedAtUtc = state.PinnedAtUtc;
+                    target.PinExpiresAtUtc = state.ExpiresAtUtc;
+                    try
+                    {
+                        await _outgoingHost.PersistLiveAsync(canonical, target).ConfigureAwait(false);
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.WriteLine("[MessageFacade] Persist pinned live failed: " + ex.Message);
+                    }
+
+                    if (_activeChat.IsOpen(canonical))
+                    {
+                        await _boundMutations.RunAsync(() =>
+                            _chatState.MessagesByChat.InsertIfAbsent(
+                                canonical, target, MaxActiveChatMessagesInMemory, DateTime.UtcNow))
+                            .ConfigureAwait(false);
+                    }
+                }
+            }
+
+            if (target != null)
+            {
+                _pendingMessageState.ForgetPin(canonical, messageId);
+                await PersistPinnedMessageToSqliteAsync(canonical, messageId, state, target)
+                    .ConfigureAwait(false);
+                QueueIncomingPersist(canonical, target);
+                NotifyChatMessagesChanged(canonical);
+                return true;
+            }
+
+            await PersistPinnedMessageToSqliteAsync(canonical, messageId, state, null)
+                .ConfigureAwait(false);
+            return false;
+        }
+
+        /// <inheritdoc />
+        public Task HandleIncomingPlaceholderAsync(
+            string chatJid,
+            string participantJid,
+            string messageId,
+            bool isFromMe,
+            DateTime timestampUtc,
+            string placeholderType)
+        {
+            return NoteMissingMessageAndRequestResendAsync(
+                chatJid,
+                participantJid,
+                messageId,
+                isFromMe,
+                timestampUtc,
+                "placeholder:" + (placeholderType ?? string.Empty),
+                "placeholder-message");
+        }
+
+        /// <inheritdoc />
+        public Task NoteMissingMessageAndRequestResendAsync(
+            string chatJid,
+            string participantJid,
+            string messageId,
+            bool isFromMe,
+            DateTime timestampUtc,
+            string reason,
+            string resendTrigger)
+        {
+            RegisterMissingMessage(
+                chatJid,
+                participantJid,
+                messageId,
+                isFromMe,
+                timestampUtc,
+                reason);
+            return TryRequestPlaceholderResendAsync(
+                chatJid,
+                messageId,
+                resendTrigger ?? "placeholder-message");
+        }
+
+        /// <inheritdoc />
+        public void NotifyInboundWireAck(string ackClass, string ackId, string ackError)
+        {
+            HandlePlaceholderResendAck(ackClass, ackId, ackError);
+            _history.HandleOnDemandAck(ackClass, ackId, ackError);
+        }
+
+        /// <inheritdoc />
+        public void HandlePlaceholderResendAck(string ackClass, string ackId, string ackError)
+        {
+            bool rejected;
+            if (!PlaceholderResendAck.TryRead(ackClass, ackId, ackError, out rejected))
+            {
+                return;
+            }
+
+            PlaceholderResendRequestState requestState;
+            if (!_missing.TryApplyAck(ackId, rejected, DateTime.UtcNow, out requestState) ||
+                requestState == null)
+            {
+                return;
+            }
+
+            if (rejected)
+            {
+                Debug.WriteLine(
+                    "[MessageFacade] placeholder resend ack rejected for " +
+                    requestState.MessageId + " in " + requestState.ChatJid +
+                    ": stanzaId=" + ackId + ", error=" + ackError);
+            }
+            else
+            {
+                Debug.WriteLine(
+                    "[MessageFacade] placeholder resend ack accepted for " +
+                    requestState.MessageId + " in " + requestState.ChatJid +
+                    ": stanzaId=" + ackId);
+            }
+        }
+
+        void IMissingMessageChatHost.ForgetMissingMessagesForChat(string chatJid) =>
+            ForgetMissingMessagesForChat(chatJid);
+
+        private void RegisterMissingMessage(
+            string chatJid,
+            string participant,
+            string messageId,
+            bool isFromMe,
+            DateTime timestamp,
+            string reason)
+        {
+            string normJid = JidHelper.Normalize(chatJid);
+            _missing.Note(normJid, messageId, participant, isFromMe, timestamp, reason, DateTime.UtcNow);
+
+            if (string.IsNullOrWhiteSpace(normJid) || string.IsNullOrWhiteSpace(messageId))
+            {
+                return;
+            }
+
+            if (!_syncWork.IsReplayDrainActive)
+            {
+                Debug.WriteLine(
+                    "[MessageFacade] Queued missing-message recovery for " + messageId +
+                    " in " + normJid + " (reason=" + reason + ")");
+            }
+        }
+
+        private void ResolveMissingMessage(string chatJid, string messageId, string source)
+        {
+            string normJid = JidHelper.Normalize(chatJid);
+            MissingMessageRemoval removal = _missing.Resolve(normJid, messageId);
+            if (string.IsNullOrWhiteSpace(normJid) || string.IsNullOrWhiteSpace(messageId))
+            {
+                return;
+            }
+
+            if (removal.ScheduledResend != null)
+            {
+                try
+                {
+                    removal.ScheduledResend.Cancel();
+                    removal.ScheduledResend.Dispose();
+                    if (!_syncWork.IsReplayDrainActive)
+                    {
+                        Debug.WriteLine(
+                            "[MessageFacade] placeholder resend cancelled for " + messageId +
+                            " in " + normJid + " (" + source + ")");
+                    }
+                }
+                catch
+                {
+                }
+            }
+
+            if (!_syncWork.IsReplayDrainActive)
+            {
+                Debug.WriteLine(
+                    "[MessageFacade] Resolved missing-message recovery for " + messageId +
+                    " in " + normJid + " via " + source);
+            }
+        }
+
+        private void ForgetMissingMessagesForChat(string chatJid)
+        {
+            string normJid = JidHelper.Normalize(chatJid);
+            if (string.IsNullOrWhiteSpace(normJid))
+            {
+                return;
+            }
+
+            _missing.Cooldowns.Remove(normJid);
+            List<MissingMessageCandidate> dropped =
+                new List<MissingMessageCandidate>(_missing.ForgetChat(normJid));
+            if (dropped.Count == 0)
+            {
+                return;
+            }
+
+            foreach (MissingMessageCandidate candidate in dropped)
+            {
+                CancellationTokenSource cts = candidate?.PlaceholderScheduleCts;
+                if (cts == null)
+                {
+                    continue;
+                }
+
+                try
+                {
+                    cts.Cancel();
+                    cts.Dispose();
+                }
+                catch
+                {
+                }
+            }
+        }
+
+        private bool TryGetMissingMessage(
+            string chatJid,
+            string messageId,
+            out MissingMessageCandidate candidate)
+        {
+            candidate = null;
+            string normJid = JidHelper.Normalize(chatJid);
+            if (string.IsNullOrWhiteSpace(normJid) || string.IsNullOrWhiteSpace(messageId))
+            {
+                return false;
+            }
+
+            lock (_missing.Gate)
+            {
+                return _missing.TryGet(normJid, messageId, out candidate);
+            }
+        }
+
+        private Task<bool> TryRequestPlaceholderResendAsync(
+            string chatJid,
+            string messageId,
+            string trigger)
+        {
+            if (!_placeholderSocket.IsHandshakeComplete)
+            {
+                return Task.FromResult(false);
+            }
+
+            if (!TryGetMissingMessage(chatJid, messageId, out MissingMessageCandidate candidate))
+            {
+                return Task.FromResult(false);
+            }
+
+            if (ShouldDeferPlaceholderResend(out string deferReason))
+            {
+                if (!_syncWork.IsReplayDrainActive)
+                {
+                    Debug.WriteLine(
+                        "[MessageFacade] Deferring placeholder resend for " +
+                        candidate.MessageId + " in " + candidate.ChatJid +
+                        " (trigger=" + trigger + ", reason=" + deferReason + ")");
+                }
+
+                return Task.FromResult(false);
+            }
+
+            Task dispatched = PlaceholderResends.TryDispatch(candidate, chatJid, messageId, trigger);
+            return Task.FromResult(dispatched != null);
+        }
+
+        private bool ShouldDeferPlaceholderResend(out string reason)
+        {
+            if (!_placeholderSocket.IsHandshakeComplete)
+            {
+                reason = null;
+                return false;
+            }
+
+            return PlaceholderResendDeferral.IsDeferred(
+                _syncWork.IsReplayDrainActive,
+                _isAwaitingInitialSync(),
+                _historyOnDemand.ChatsInFlight > 0,
+                out reason);
+        }
+
+        /// <inheritdoc />
+        public void SchedulePlaceholderResendDrain(string trigger, int maxRequests = 4)
+        {
+            SchedulePlaceholderResendDrain(trigger, maxRequests, PlaceholderResendDrainDelay);
+        }
+
+        private void SchedulePlaceholderResendDrain(string trigger, int maxRequests, TimeSpan delay)
+        {
+            Task.Run(async () =>
+            {
+                try
+                {
+                    await Task.Delay(delay).ConfigureAwait(false);
+                    await DrainPlaceholderResendsAsync(trigger, maxRequests).ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine(
+                        "[MessageFacade] Deferred placeholder resend drain failed (" +
+                        trigger + "): " + ex.Message);
+                }
+            });
+        }
+
+        private bool ShouldDeferPlaceholderResendDrain(out string reason)
+        {
+            return PlaceholderResendDeferral.IsDeferred(
+                _syncWork.IsReplayDrainActive,
+                _isAwaitingInitialSync(),
+                _historyOnDemand.ChatsInFlight > 0,
+                out reason);
+        }
+
+        private async Task DrainPlaceholderResendsAsync(string trigger, int maxRequests)
+        {
+            string deferReason;
+            if (ShouldDeferPlaceholderResendDrain(out deferReason))
+            {
+                Debug.WriteLine(
+                    "[MessageFacade] Skipping deferred placeholder resend drain (" +
+                    trigger + ") because " + deferReason);
+                return;
+            }
+
+            int totalEligible;
+            List<MissingMessageCandidate> pending =
+                _missing.SelectForDrain(maxRequests, out totalEligible);
+
+            if (pending == null || pending.Count == 0)
+            {
+                Debug.WriteLine(
+                    "[MessageFacade] Deferred placeholder resend drain found no pending messages (" +
+                    trigger + ")");
+                return;
+            }
+
+            Debug.WriteLine(
+                "[MessageFacade] Deferred placeholder resend drain selected " +
+                pending.Count + "/" + totalEligible + " eligible message(s) (" + trigger + "): " +
+                string.Join(" | ", pending.Select(MissingMessageCandidate.FormatForLog)));
+
+            int requested = 0;
+            foreach (MissingMessageCandidate candidate in pending)
+            {
+                if (ShouldDeferPlaceholderResendDrain(out deferReason))
+                {
+                    Debug.WriteLine(
+                        "[MessageFacade] Stopping deferred placeholder resend drain (" +
+                        trigger + ") because " + deferReason);
+                    break;
+                }
+
+                if (await TryRequestPlaceholderResendAsync(
+                        candidate.ChatJid,
+                        candidate.MessageId,
+                        "deferred-drain:" + trigger)
+                    .ConfigureAwait(false))
+                {
+                    requested++;
+                }
+            }
+
+            Debug.WriteLine(
+                "[MessageFacade] Deferred placeholder resend drain requested " +
+                requested + "/" + pending.Count + " message(s) (" + trigger + ")");
+
+            if (totalEligible > pending.Count)
+            {
+                SchedulePlaceholderResendDrain(
+                    "follow-up:" + trigger,
+                    maxRequests,
+                    PlaceholderResendFollowUpDrainDelay);
+            }
+        }
+
+        /// <inheritdoc />
+        public async Task RecoverPendingIncomingJournalAsync()
+        {
+            try
+            {
+                List<PendingIncomingRecord> pending =
+                    await _messageStore.LoadPendingIncomingAsync().ConfigureAwait(false);
+                if (pending == null || pending.Count == 0)
+                {
+                    return;
+                }
+
+                int recovered = 0;
+                var latestByChat = new List<KeyValuePair<string, ChatMessage>>();
+                foreach (var group in pending
+                    .Where(item => item?.Message != null && !string.IsNullOrWhiteSpace(item.ChatJid))
+                    .GroupBy(
+                        item => JidHelper.Normalize(item.ChatJid),
+                        StringComparer.OrdinalIgnoreCase))
+                {
+                    List<ChatMessage> messages = group
+                        .Select(item => item.Message)
+                        .Where(message => message != null)
+                        .OrderBy(message => ChatMessageOrder.ToComparableUtc(message.Timestamp))
+                        .ToList();
+                    if (messages.Count == 0)
+                    {
+                        continue;
+                    }
+
+                    _pendingMessages.Add(group.Key, messages, DateTime.UtcNow, scheduleFlush: false);
+                    latestByChat.Add(new KeyValuePair<string, ChatMessage>(
+                        group.Key,
+                        messages[messages.Count - 1]));
+                    recovered += messages.Count;
+                }
+
+                _diagnostics?.Write(
+                    "messages",
+                    "incoming-journal-recovered",
+                    "count=" + recovered + "; chats=" + latestByChat.Count);
+
+                // Let the socket acquire storage first. The pending snapshot already
+                // makes these messages available if a conversation is opened.
+                _ = Task.Run(async () =>
+                {
+                    await Task.Delay(5000).ConfigureAwait(false);
+                    try
+                    {
+                        await _pendingFlush.FlushOfflineReplayAsync("incoming-journal-recovery")
+                            .ConfigureAwait(false);
+
+                        IChatService chats = _resolveChats();
+                        if (chats != null)
+                        {
+                            await chats.ApplyIncomingJournalRecoveryPreviewsAsync(latestByChat)
+                                .ConfigureAwait(false);
+                        }
+
+                        _diagnostics?.Write(
+                            "messages",
+                            "incoming-journal-recovery-applied",
+                            "count=" + recovered + "; chats=" + latestByChat.Count);
+                    }
+                    catch (Exception ex)
+                    {
+                        _diagnostics?.RecordException(
+                            "messages",
+                            "incoming-journal-recovery-flush-failed",
+                            ex);
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                _diagnostics?.RecordException(
+                    "messages",
+                    "incoming-journal-recovery-failed",
+                    ex);
+            }
+        }
+
+        /// <inheritdoc />
+        public async Task ApplyPeerDataPlaceholderResendsAsync(
+            string stanzaId,
+            IEnumerable<Message.Types.PeerDataOperationRequestResponseMessage.Types.PeerDataOperationResult> results)
+        {
+            if (results == null)
+            {
+                return;
+            }
+
+            PlaceholderResendRequestState requestState =
+                _missing.TakePeerResponse(stanzaId);
+
+            foreach (var result in results)
+            {
+                var retryResponse = result?.PlaceholderMessageResendResponse;
+                if (retryResponse == null ||
+                    !retryResponse.HasWebMessageInfoBytes ||
+                    retryResponse.WebMessageInfoBytes == null)
+                {
+                    continue;
+                }
+
+                try
+                {
+                    var webMessage = WebMessageInfo.Parser.ParseFrom(retryResponse.WebMessageInfoBytes);
+                    if (webMessage?.Message == null)
+                    {
+                        continue;
+                    }
+
+                    string remoteJid = webMessage.Key?.RemoteJid;
+                    if (string.IsNullOrWhiteSpace(remoteJid))
+                    {
+                        remoteJid = requestState?.ChatJid;
+                    }
+
+                    if (string.IsNullOrWhiteSpace(remoteJid) ||
+                        string.IsNullOrWhiteSpace(webMessage.Key?.Id))
+                    {
+                        continue;
+                    }
+
+                    await Task.Delay(500).ConfigureAwait(false);
+
+                    DateTime timestampUtc = webMessage.MessageTimestamp > 0
+                        ? DateTimeOffset.FromUnixTimeSeconds((long)webMessage.MessageTimestamp).UtcDateTime
+                        : DateTime.MinValue;
+
+                    _incomingEnqueue.EnqueueRecoveredDecryptedMessage(
+                        remoteJid,
+                        WebMessageParticipant.Resolve(webMessage),
+                        webMessage.Key.Id,
+                        webMessage.Message,
+                        timestampUtc,
+                        webMessage.Key?.FromMe ?? false,
+                        webMessage.PushName);
+
+                    Debug.WriteLine(
+                        "[MessageFacade] Queued recovered message " + webMessage.Key.Id +
+                        " from placeholder-resend-response");
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine(
+                        "[MessageFacade] Failed to decode placeholder resend response for stanza " +
+                        (stanzaId ?? string.Empty) + ": " + ex.Message);
+                }
+            }
+        }
+
+        /// <inheritdoc />
+        public async Task HandlePeerDataOperationResponseAsync(
+            Message.Types.PeerDataOperationRequestResponseMessage response)
+        {
+            if (response == null)
+            {
+                return;
+            }
+
+            Debug.WriteLine(
+                "[MessageFacade] PeerDataOperationResponse received: stanzaId=" + response.StanzaId +
+                ", requestType=" + response.PeerDataOperationRequestType +
+                ", resultCount=" + (response.PeerDataOperationResult?.Count ?? 0));
+
+            HistoryOnDemandRequest historyRequestState = _historyOnDemand.Find(response.StanzaId);
+
+            foreach (var result in response.PeerDataOperationResult
+                     ?? Enumerable.Empty<Message.Types.PeerDataOperationRequestResponseMessage.Types.PeerDataOperationResult>())
+            {
+                if (result.FullHistorySyncOnDemandRequestResponse != null)
+                {
+                    Debug.WriteLine(
+                        "[MessageFacade] FullHistorySyncOnDemand response observed: stanzaId=" +
+                        response.StanzaId +
+                        ", responseCode=" + result.FullHistorySyncOnDemandRequestResponse.ResponseCode +
+                        ", requestMetadataId=" +
+                        result.FullHistorySyncOnDemandRequestResponse.RequestMetadata?.RequestId);
+                }
+
+                if (result.HistorySyncChunkRetryResponse != null)
+                {
+                    Debug.WriteLine(
+                        "[MessageFacade] HistorySyncChunkRetry response observed: stanzaId=" +
+                        response.StanzaId +
+                        ", responseCode=" + result.HistorySyncChunkRetryResponse.ResponseCode +
+                        ", canRecover=" + result.HistorySyncChunkRetryResponse.CanRecover +
+                        ", requestId=" + result.HistorySyncChunkRetryResponse.RequestId);
+                }
+
+                if (result.SyncdSnapshotFatalRecoveryResponse != null)
+                {
+                    Debug.WriteLine(
+                        "[MessageFacade] SyncD fatal recovery response observed: stanzaId=" +
+                        response.StanzaId +
+                        ", compressed=" + result.SyncdSnapshotFatalRecoveryResponse.IsCompressed +
+                        ", bytes=" +
+                        (result.SyncdSnapshotFatalRecoveryResponse.CollectionSnapshot?.Length ?? 0));
+                }
+            }
+
+            await ApplyPeerDataPlaceholderResendsAsync(
+                response.StanzaId,
+                response.PeerDataOperationResult).ConfigureAwait(false);
+
+            if (historyRequestState != null &&
+                (response.PeerDataOperationRequestType ==
+                     Message.Types.PeerDataOperationRequestType.FullHistorySyncOnDemand ||
+                 response.PeerDataOperationRequestType ==
+                     Message.Types.PeerDataOperationRequestType.HistorySyncOnDemand))
+            {
+                Debug.WriteLine(
+                    "[MessageFacade] PeerDataOperationResponse completed without immediate history payload: requestType=" +
+                    historyRequestState.TypeName +
+                    ", stanzaId=" + response.StanzaId +
+                    ", chat=" + (historyRequestState.ChatJid ?? "<full-history>") +
+                    ", baseline=" + historyRequestState.BaselineMessageCount +
+                    ", trigger=" + (historyRequestState.TriggerReason ?? "unspecified"));
+            }
+        }
+
+        /// <inheritdoc />
+        public async Task RouteIncomingChatEnvelopeAsync(IncomingRoutedEnvelopeRequest request)
+        {
+            if (request?.Message == null)
+            {
+                return;
+            }
+
+            IncomingRouteTrace trace = request.RouteTrace;
+
+            // Session-control arms before alias registration / chat routing (same order the
+            // pump used to branch on). App-state key share stays session-only here.
+            IncomingEnvelopeKind sessionKind =
+                IncomingEnvelopeDisposition.ClassifySessionControl(request.Message);
+            if (sessionKind == IncomingEnvelopeKind.PeerDataOperationResponse)
+            {
+                trace?.Mark("peer-data");
+                var response = request.Message.ProtocolMessage.PeerDataOperationRequestResponseMessage;
+                await HandlePeerDataOperationResponseAsync(response).ConfigureAwait(false);
+                return;
+            }
+
+            if (sessionKind == IncomingEnvelopeKind.AppStateSessionOnly)
+            {
+                return;
+            }
+
+            if (sessionKind == IncomingEnvelopeKind.Placeholder)
+            {
+                trace?.Mark("placeholder");
+                string placeholderType = request.Message.PlaceholderMessage != null
+                    ? request.Message.PlaceholderMessage.Type.ToString()
+                    : null;
+                await HandleIncomingPlaceholderAsync(
+                    request.FromJid,
+                    request.ParticipantJid,
+                    request.MessageId,
+                    request.IsFromMe,
+                    request.Timestamp,
+                    placeholderType).ConfigureAwait(false);
+                return;
+            }
+
+            trace?.Mark("alias-hints");
+            IContactService contacts = _resolveContacts();
+            contacts?.RegisterIncomingEnvelopeAliasHints(
+                request.SenderLid,
+                request.FromJid,
+                request.PeerRecipientPn,
+                request.PeerRecipientLid,
+                request.RecipientJid,
+                request.ParticipantJid,
+                request.ParticipantAltJid);
+
+            string normalizedFromJid = JidHelper.Normalize(request.FromJid);
+            if (IncomingEnvelopeDisposition.ClassifyAddress(normalizedFromJid) == IncomingEnvelopeKind.StatusBroadcast ||
+                IncomingEnvelopeDisposition.ClassifyAddress(request.FromJid) == IncomingEnvelopeKind.StatusBroadcast)
+            {
+                trace?.Mark("status");
+                IStatusService status = _resolveStatus();
+                if (status != null)
+                {
+                    await status.IngestLiveFromDecryptedAsync(new IncomingLiveStatusRequest
+                    {
+                        ParticipantJid = request.ParticipantJid,
+                        SelfJid = _jids.Self != null ? _jids.Self.Id : null,
+                        IsFromMe = request.IsFromMe,
+                        MessageId = request.MessageId,
+                        PushName = request.PushName,
+                        Timestamp = request.Timestamp,
+                        Message = request.Message
+                    }).ConfigureAwait(false);
+                }
+
+                return;
+            }
+
+            bool isGroup = JidHelper.IsGroupJid(normalizedFromJid);
+            if (request.IsOffline && !string.IsNullOrEmpty(request.MessageId))
+            {
+                string fastJid = _jids.GetCanonicalJid(normalizedFromJid);
+                if (TryHandleOfflineDuplicateFast(
+                    fastJid,
+                    request.MessageId,
+                    isGroup,
+                    request.IsFromMe,
+                    request.ParticipantJid,
+                    request.VerifiedName,
+                    request.PushName))
+                {
+                    return;
+                }
+            }
+
+            string routingReason = isGroup ? "group-from" : null;
+            string jid;
+            if (isGroup)
+            {
+                jid = _jids.GetCanonicalJid(normalizedFromJid);
+            }
+            else
+            {
+                IncomingLiveDirectChatRoute route = IncomingLiveDirectChatRouting.Resolve(
+                    request.IsFromMe,
+                    request.FromJid,
+                    request.RecipientJid,
+                    request.PeerRecipientPn,
+                    request.PeerRecipientLid,
+                    request.SenderLid,
+                    JidHelper.Normalize,
+                    _jids.IsSelfLinked,
+                    () => _jids.GetCanonicalJid(_jids.Self != null ? _jids.Self.Id : null),
+                    _jids.GetCanonicalJid);
+                routingReason = route.Reason;
+                jid = route.ChatJid;
+            }
+
+            if (string.IsNullOrWhiteSpace(jid))
+            {
+                jid = _jids.GetCanonicalJid(request.FromJid);
+                routingReason = routingReason ?? "fallback-from";
+            }
+
+            isGroup = JidHelper.IsGroupJid(jid);
+
+            if (!isGroup)
+            {
+                string normalizedPeerRecipientLid = JidHelper.Normalize(request.PeerRecipientLid);
+                if (IncomingSelfChatCollapseGate.ShouldCollapse(
+                        routingReason,
+                        normalizedPeerRecipientLid,
+                        jid))
+                {
+                    IChatService chats = _resolveChats();
+                    if (chats != null)
+                    {
+                        _ = chats.CollapseTransientDirectChatAsync(
+                            normalizedPeerRecipientLid,
+                            jid,
+                            "live-self-chat-collapse");
+                    }
+                }
+            }
+
+            trace?.Mark("control");
+            if (await TryApplyIncomingEnvelopeControlAsync(
+                    request.Message,
+                    jid,
+                    request.MessageId,
+                    isGroup,
+                    request.IsFromMe,
+                    request.ParticipantJid,
+                    request.SelfDisplayName,
+                    request.Timestamp)
+                .ConfigureAwait(false))
+            {
+                return;
+            }
+
+            bool isActive = request.IsActiveChat != null && request.IsActiveChat(jid);
+            await ProcessIncomingChatContentAsync(new IncomingChatContentProcessRequest
+            {
+                Message = request.Message,
+                MessageId = request.MessageId,
+                ChatJid = jid,
+                FromJid = request.FromJid,
+                ParticipantJid = request.ParticipantJid,
+                ParticipantAltJid = request.ParticipantAltJid,
+                VerifiedName = request.VerifiedName,
+                PushName = request.PushName,
+                Timestamp = request.Timestamp,
+                IsOffline = request.IsOffline,
+                IsGroup = isGroup,
+                EnvelopeIsFromMe = request.IsFromMe,
+                SelfDisplayName = request.SelfDisplayName,
+                QuietForSync = request.QuietForSync,
+                IsActiveChat = isActive,
+                IsWindowVisible = request.IsWindowVisible,
+                RouteTrace = trace
+            }).ConfigureAwait(false);
+        }
+
+        /// <inheritdoc />
+        public async Task<bool> TryApplyIncomingEnvelopeControlAsync(
+            Message message,
+            string chatJid,
+            string messageId,
+            bool isGroup,
+            bool isFromMe,
+            string participantJid,
+            string selfDisplayName,
+            DateTime timestampUtc)
+        {
+            if (message == null || string.IsNullOrWhiteSpace(chatJid))
+            {
+                return false;
+            }
+
+            IncomingEnvelopeKind chatControl = IncomingEnvelopeDisposition.ClassifyChatControl(message);
+            if (chatControl == IncomingEnvelopeKind.Revoke)
+            {
+                await ApplyIncomingRevocationAsync(
+                        chatJid,
+                        message.ProtocolMessage?.Key?.Id,
+                        messageId)
+                    .ConfigureAwait(false);
+                return true;
+            }
+
+            if (chatControl == IncomingEnvelopeKind.PinInChat)
+            {
+                var pinMessage = message.PinInChatMessage;
+                string pinTargetId = pinMessage?.Key?.Id;
+                bool pin = pinMessage != null &&
+                    pinMessage.Type == Message.Types.PinInChatMessage.Types.Type.PinForAll;
+                uint duration = message.MessageContextInfo?.MessageAddOnDurationInSecs ?? 0;
+                long senderTs = pinMessage?.SenderTimestampMs ?? 0;
+                await ApplyIncomingPinInChatAsync(chatJid, pinTargetId, pin, senderTs, duration)
+                    .ConfigureAwait(false);
+                return true;
+            }
+
+            return await ApplyIncomingReactionFromEnvelopeAsync(
+                    message,
+                    chatJid,
+                    messageId,
+                    isGroup,
+                    isFromMe,
+                    participantJid,
+                    selfDisplayName,
+                    timestampUtc)
+                .ConfigureAwait(false);
+        }
+
+        /// <inheritdoc />
+        public async Task ProcessIncomingChatContentAsync(IncomingChatContentProcessRequest request)
+        {
+            if (request?.Message == null || string.IsNullOrWhiteSpace(request.ChatJid))
+            {
+                return;
+            }
+
+            string jid = request.ChatJid;
+            bool isGroup = request.IsGroup;
+            IncomingRouteTrace trace = request.RouteTrace;
+            string selfFallback = _strings != null
+                ? _strings.Get("Chat_SelfFallbackName", "You")
+                : "You";
+
+            trace?.Mark("render");
+            MessageRenderInfo renderInfo = MessageRenderReader.Read(
+                request.Message,
+                line => Debug.WriteLine("[MessageFacade] " + line));
+            IncomingEmptyContentSkip emptySkip = IncomingEmptyContentSkip.For(
+                renderInfo?.Content,
+                request.Message.SenderKeyDistributionMessage != null,
+                !string.IsNullOrEmpty(request.MessageId));
+            if (emptySkip.ShouldSkip)
+            {
+                if (emptySkip.ClearMissingLedger && !string.IsNullOrEmpty(request.MessageId))
+                {
+                    ResolveMissingMessage(
+                        jid,
+                        request.MessageId,
+                        "empty-content");
+                }
+
+                return;
+            }
+
+            string content = renderInfo.Content;
+            string nameFromMsg = request.VerifiedName ?? request.PushName;
+            if (!string.IsNullOrEmpty(nameFromMsg))
+            {
+                trace?.Mark("push-name");
+                IContactService contacts = _resolveContacts();
+                contacts?.AcceptIncomingPushName(
+                    nameFromMsg,
+                    request.EnvelopeIsFromMe,
+                    request.ParticipantJid,
+                    request.FromJid,
+                    request.IsOffline);
+            }
+
+            trace?.Mark("sender-names");
+            string participantJid = JidHelper.Normalize(request.ParticipantJid);
+            string participantAltJid = JidHelper.Normalize(request.ParticipantAltJid);
+            string stripParticipantJid = ParticipantStripIdentity.PreferForDisplay(
+                participantJid,
+                participantAltJid);
+            IContactService nameContacts = null;
+            try
+            {
+                nameContacts = _resolveContacts();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[MessageFacade] Incoming name contacts skipped: " + ex.Message);
+            }
+
+            string resolvedParticipantName = ResolveIncomingPersonLabel(
+                nameContacts,
+                stripParticipantJid,
+                participantJid,
+                "incoming-sender");
+            string resolvedChatLabel = ResolveIncomingPersonLabel(
+                nameContacts,
+                jid,
+                null,
+                "incoming-chat");
+            IncomingSenderResolution sender = IncomingSenderResolver.Resolve(
+                isGroup,
+                request.EnvelopeIsFromMe,
+                request.SelfDisplayName,
+                selfFallback,
+                resolvedParticipantName,
+                resolvedChatLabel,
+                !string.IsNullOrEmpty(participantJid) || !string.IsNullOrEmpty(stripParticipantJid));
+            string senderName = sender.SenderName;
+            bool isActuallyFromMe = sender.IsFromMe;
+
+            IncomingAttention attention = IncomingAttention.For(
+                isActuallyFromMe,
+                request.IsActiveChat,
+                request.IsWindowVisible,
+                suppressToastForSync: request.QuietForSync);
+
+            // Strip only: "~" on push-name winners. Bubble SenderName stays unmarked.
+            string stripSenderName = senderName;
+            if (isGroup && !isActuallyFromMe)
+            {
+                IContactService stripContacts = _resolveContacts();
+                string stripKey = !string.IsNullOrEmpty(stripParticipantJid)
+                    ? stripParticipantJid
+                    : participantJid;
+                if (stripContacts != null && !string.IsNullOrEmpty(stripKey))
+                {
+                    string marked = stripContacts.ResolveDisplayName(stripKey, "strip");
+                    if (!string.IsNullOrWhiteSpace(marked))
+                    {
+                        stripSenderName = marked.Trim();
+                    }
+                }
+            }
+
+            string listAuthorPrefix = isGroup
+                ? ChatPreviewNormalizer.FormatListAuthorPrefix(
+                    new ChatMessage
+                    {
+                        SenderName = stripSenderName,
+                        IsFromMe = isActuallyFromMe,
+                        ParticipantJid = participantJid
+                    },
+                    true,
+                    selfFallback,
+                    stripParticipantJid)
+                : string.Empty;
+
+            QuotedContext quotedContext = QuotedContext.Read(request.Message);
+            string quotedSender = QuotedSenderNaming.Resolve(
+                quotedContext.QuotedParticipantJid,
+                p => _jids.IsSelfLinked(p),
+                p => _chatState.ResolveDisplayName(p),
+                p => _chatState.ResolveDisplayName(p),
+                selfFallback);
+
+            ChatMessage chatMessage = GetChatMessage(
+                new ChatMessageMapContext
+                {
+                    MessageId = request.MessageId,
+                    ChatJid = jid,
+                    RemoteJid = jid,
+                    ParticipantJid = participantJid,
+                    SenderName = senderName,
+                    IsFromMe = isActuallyFromMe,
+                    Timestamp = MessageTimestampValidity.KeepOrDiscard(request.Timestamp, DateTime.UtcNow),
+                    Status = isActuallyFromMe
+                        ? SelfChatStatusPolicy.Resolve(
+                            ChatMessage.StatusSent,
+                            _jids.IsSelfLinked(jid))
+                        : null
+                },
+                IncomingChatMessageSnapshot.FromRender(
+                    renderInfo,
+                    content,
+                    quotedContext.IsForwarded,
+                    quotedContext.QuotedText,
+                    quotedContext.QuotedKind,
+                    quotedSender,
+                    quotedContext.QuotedParticipantJid,
+                    quotedContext.QuotedMessageId,
+                    quotedContext.MentionedJids,
+                    quotedContext.MentionAll));
+
+            IncomingMediaMetadata.Apply(chatMessage, renderInfo);
+            ApplyHeldMessageState(jid, chatMessage);
+
+            ChatPreviewKind previewKind = LiveChatPreviewApplier.ResolveKind(chatMessage, renderInfo);
+            trace?.Mark("timeline");
+            IncomingTimelineAcceptResult timeline = AcceptIncomingTimeline(jid, chatMessage, isGroup);
+
+            if (timeline.Kind == IncomingTimelineAcceptKind.AliasConsolidated)
+            {
+                trace?.Mark("alias-consolidated");
+                await ApplyIncomingAliasConsolidatedAsync(new IncomingAliasConsolidatedApplyRequest
+                {
+                    ChatJid = jid,
+                    IncomingMessage = chatMessage,
+                    Timeline = timeline,
+                    DisplayContent = content,
+                    IsOffline = request.IsOffline,
+                    IsGroup = isGroup,
+                    IsFromMe = isActuallyFromMe,
+                    PreviewKind = previewKind,
+                    ListAuthorPrefix = listAuthorPrefix,
+                    StripParticipantJid = stripParticipantJid,
+                    SenderName = senderName
+                }).ConfigureAwait(false);
+                return;
+            }
+
+            if (timeline.Kind == IncomingTimelineAcceptKind.DuplicateSameChat ||
+                timeline.Kind == IncomingTimelineAcceptKind.AliasLinkedDuplicate)
+            {
+                trace?.Mark("duplicate-preview");
+                await ApplyIncomingDuplicateAsync(new IncomingDuplicateApplyRequest
+                {
+                    ChatJid = jid,
+                    IncomingMessage = chatMessage,
+                    Timeline = timeline,
+                    DisplayContent = content,
+                    IsOffline = request.IsOffline,
+                    IsGroup = isGroup,
+                    IsFromMe = isActuallyFromMe,
+                    PreviewKind = previewKind,
+                    ListAuthorPrefix = listAuthorPrefix,
+                    StripParticipantJid = stripParticipantJid,
+                    SenderName = senderName
+                }).ConfigureAwait(false);
+                return;
+            }
+
+            IncomingMediaHydrationPlan mediaPlan = IncomingMediaHydrationPlan.From(renderInfo);
+            trace?.Mark(request.IsOffline ? "inserted-offline-preview" : "inserted");
+            await ApplyIncomingInsertedAsync(new IncomingInsertedApplyRequest
+            {
+                ChatJid = jid,
+                Message = chatMessage,
+                DisplayContent = content,
+                NotifyContent = content,
+                IsOffline = request.IsOffline,
+                IsGroup = isGroup,
+                IsFromMe = isActuallyFromMe,
+                PreviewKind = previewKind,
+                ListAuthorPrefix = listAuthorPrefix,
+                StripParticipantJid = stripParticipantJid,
+                SenderName = senderName,
+                CountsAsUnread = attention.CountsAsUnread,
+                SuppressToast = attention.SuppressToast,
+                Sticker = mediaPlan.HasSticker ? mediaPlan.Sticker : null,
+                Image = mediaPlan.HasImage ? mediaPlan.Image : null
+            }).ConfigureAwait(false);
+        }
+
+        /// <inheritdoc />
+        public bool TryHandleOfflineDuplicateFast(
+            string chatJid,
+            string messageId,
+            bool isGroup,
+            bool isFromMe,
+            string participantJid,
+            string verifiedName,
+            string pushName)
+        {
+            if (string.IsNullOrWhiteSpace(chatJid) || string.IsNullOrEmpty(messageId))
+            {
+                return false;
+            }
+
+            if (!HasCachedMessageId(chatJid, messageId, isGroup))
+            {
+                return false;
+            }
+
+            EnrichOfflineDuplicateFast(
+                chatJid,
+                messageId,
+                isFromMe,
+                participantJid,
+                verifiedName,
+                pushName);
+            ResolveMissingMessage(chatJid, messageId, "offline-duplicate-fast");
+            return true;
+        }
+
+        /// <inheritdoc />
+        public Task<bool> ApplyIncomingReactionFromEnvelopeAsync(
+            Message message,
+            string chatJid,
+            string messageId,
+            bool isGroup,
+            bool isFromMe,
+            string participantJid,
+            string selfDisplayName,
+            DateTime timestampUtc)
+        {
+            if (message == null || string.IsNullOrWhiteSpace(chatJid))
+            {
+                return Task.FromResult(false);
+            }
+
+            string reactionParticipant = JidHelper.Normalize(participantJid);
+            string reactionSenderName;
+            if (isFromMe)
+            {
+                reactionSenderName = !string.IsNullOrWhiteSpace(selfDisplayName)
+                    ? selfDisplayName
+                    : (_strings != null
+                        ? _strings.Get("Chat_SelfFallbackName", "You")
+                        : "You");
+            }
+            else if (isGroup)
+            {
+                string key = !string.IsNullOrEmpty(reactionParticipant) ? reactionParticipant : chatJid;
+                reactionSenderName = _chatState.ResolveDisplayName(key);
+            }
+            else
+            {
+                reactionSenderName = _chatState.ResolveDisplayName(chatJid);
+            }
+
+            var reactionContext = new ChatMessageMapContext
+            {
+                MessageId = messageId,
+                ChatJid = chatJid,
+                RemoteJid = chatJid,
+                ParticipantJid = reactionParticipant,
+                SenderName = reactionSenderName,
+                IsFromMe = isFromMe,
+                Timestamp = MessageTimestampValidity.KeepOrDiscard(timestampUtc, DateTime.UtcNow)
+            };
+
+            return ApplyIncomingReactionAsync(message, reactionContext);
+        }
+
+        /// <inheritdoc />
+        public async Task ApplyIncomingAliasConsolidatedAsync(IncomingAliasConsolidatedApplyRequest request)
+        {
+            if (request == null ||
+                request.Timeline == null ||
+                string.IsNullOrWhiteSpace(request.ChatJid) ||
+                request.IncomingMessage == null)
+            {
+                return;
+            }
+
+            string jid = request.ChatJid;
+            IncomingTimelineAcceptResult timeline = request.Timeline;
+
+            Debug.WriteLine(
+                "[MessageFacade] Consolidated alias-linked duplicate " + request.IncomingMessage.Id +
+                " from " + timeline.AliasSourceChatJid + " into " + jid);
+
+            await FinalizeAliasConsolidateAsync(
+                    jid,
+                    timeline.AliasSourceChatJid,
+                    request.IncomingMessage.Id,
+                    timeline.ConsolidatedMessage)
+                .ConfigureAwait(false);
+
+            IChatService chats = _resolveChats();
+            if (chats != null)
+            {
+                await chats.ApplyIncomingEnvelopePreviewAsync(new IncomingEnvelopePreviewRequest
+                {
+                    Jid = jid,
+                    Preview = request.DisplayContent,
+                    Timestamp = request.IncomingMessage.Timestamp,
+                    IsGroup = request.IsGroup,
+                    IsFromMe = request.IsFromMe,
+                    IsOffline = request.IsOffline,
+                    CountUnread = false,
+                    MarkDirtyWhenOffline = true,
+                    Kind = request.PreviewKind,
+                    Status = request.IncomingMessage.Status,
+                    AuthorPrefix = request.ListAuthorPrefix,
+                    ParticipantJid = request.IsGroup ? request.StripParticipantJid : null,
+                    SenderName = request.IsGroup && !request.IsFromMe ? request.SenderName : null
+                }).ConfigureAwait(false);
+            }
+        }
+
+        /// <inheritdoc />
+        public async Task ApplyIncomingDuplicateAsync(IncomingDuplicateApplyRequest request)
+        {
+            if (request == null ||
+                request.Timeline == null ||
+                string.IsNullOrWhiteSpace(request.ChatJid) ||
+                request.IncomingMessage == null)
+            {
+                return;
+            }
+
+            string jid = request.ChatJid;
+            IncomingTimelineAcceptResult timeline = request.Timeline;
+
+            if (timeline.ExistingChanged && timeline.Message != null)
+            {
+                QueueIncomingPersist(jid, timeline.Message);
+                NotifyChatMessagesChanged(jid);
+            }
+
+            if (timeline.Kind == IncomingTimelineAcceptKind.AliasLinkedDuplicate)
+            {
+                Debug.WriteLine(
+                    "[MessageFacade] Alias-linked duplicate arrival for " + request.IncomingMessage.Id +
+                    ": existingChat=" + timeline.AliasSourceChatJid + ", finalChat=" + jid);
+            }
+
+            ResolveMissingMessage(jid, request.IncomingMessage.Id, "duplicate-arrival");
+
+            IChatService chats = _resolveChats();
+            if (chats != null)
+            {
+                await chats.ApplyIncomingEnvelopePreviewAsync(new IncomingEnvelopePreviewRequest
+                {
+                    Jid = jid,
+                    Preview = request.DisplayContent,
+                    Timestamp = request.IncomingMessage.Timestamp,
+                    IsGroup = request.IsGroup,
+                    IsFromMe = request.IsFromMe,
+                    IsOffline = request.IsOffline,
+                    CountUnread = false,
+                    MarkDirtyWhenOffline = true,
+                    Kind = request.PreviewKind,
+                    Status = request.IncomingMessage.Status,
+                    AuthorPrefix = request.ListAuthorPrefix,
+                    ParticipantJid = request.IsGroup ? request.StripParticipantJid : null,
+                    SenderName = request.IsGroup && !request.IsFromMe ? request.SenderName : null
+                }).ConfigureAwait(false);
+            }
+        }
+
+        /// <inheritdoc />
+        public async Task ApplyIncomingInsertedAsync(IncomingInsertedApplyRequest request)
+        {
+            if (request == null ||
+                string.IsNullOrWhiteSpace(request.ChatJid) ||
+                request.Message == null)
+            {
+                return;
+            }
+
+            string jid = request.ChatJid;
+            ChatMessage chatMessage = request.Message;
+
+            ResolveMissingMessage(jid, chatMessage.Id, "live-arrival");
+
+            ScheduleIncomingMediaHydration(
+                chatMessage,
+                request.Sticker,
+                request.Image,
+                chatMessage.Id,
+                jid);
+
+            IChatService chats = _resolveChats();
+
+            if (request.IsOffline)
+            {
+                if (chats != null)
+                {
+                    await chats.ApplyIncomingEnvelopePreviewAsync(new IncomingEnvelopePreviewRequest
+                    {
+                        Jid = jid,
+                        Preview = request.DisplayContent,
+                        Timestamp = chatMessage.Timestamp,
+                        IsGroup = request.IsGroup,
+                        IsFromMe = request.IsFromMe,
+                        IsOffline = true,
+                        CountUnread = true,
+                        MarkDirtyWhenOffline = false,
+                        Kind = request.PreviewKind,
+                        Status = chatMessage.Status,
+                        AuthorPrefix = request.ListAuthorPrefix,
+                        ParticipantJid = request.IsGroup ? request.StripParticipantJid : null,
+                        SenderName = request.IsGroup && !request.IsFromMe ? request.SenderName : null
+                    }).ConfigureAwait(false);
+                }
+
+                QueueIncomingPersist(jid, chatMessage);
+
+                if (_activeChat.IsOpen(jid))
+                {
+                    NotifyChatMessagesChanged(jid);
+                }
+                else
+                {
+                    UnloadMessageCacheIfInactive(jid);
+                }
+
+                return;
+            }
+
+            if (_activeChat.IsOpen(jid))
+            {
+                NotifyChatMessagesChanged(jid);
+            }
+
+            string aliasLid = null;
+            string aliasPn = null;
+            if (_jids.TryGetAlias(jid, out string aliasPair))
+            {
+                aliasLid = JidHelper.IsLidJid(jid) ? jid : aliasPair;
+                aliasPn = JidHelper.IsPhoneJid(jid) ? jid : aliasPair;
+            }
+
+            if (chats == null)
+            {
+                Debug.WriteLine("[MessageFacade] Dropping live list apply: IChatService is not attached.");
+                _diagnostics?.Write(
+                    "messages",
+                    "chat-facade-missing",
+                    "messageId=" + (chatMessage.Id ?? string.Empty));
+                return;
+            }
+
+            // Do not await the UI strip on stage=route. When the dispatcher is busy
+            // (scroll / reshuffle), awaiting High for tip+Move held the pump past 12s
+            // (health-stall → message-timeout-skip) and the list felt frozen until the
+            // next toast. Strip + announce finish on their own; route returns after persist.
+            Task<LiveIncomingChatListApplyResult> stripTask = chats.ApplyLiveIncomingChatListAsync(
+                new LiveIncomingChatListApplyRequest
+                {
+                    ChatJid = jid,
+                    PreviewText = request.DisplayContent,
+                    Timestamp = chatMessage.Timestamp,
+                    PreviewKind = request.PreviewKind,
+                    AuthorPrefix = request.ListAuthorPrefix,
+                    MentionedJids = chatMessage.MentionedJids,
+                    IsFromMe = chatMessage.IsFromMe,
+                    SendState = HistoryLiveMessageMapper.FromStatus(chatMessage.Status, chatMessage.IsFromMe),
+                    MessageId = chatMessage.Id,
+                    ParticipantJid = request.IsGroup ? request.StripParticipantJid : null,
+                    SenderName = request.IsGroup && !request.IsFromMe ? request.SenderName : null,
+                    UnreadDelta = request.CountsAsUnread ? 1 : 0,
+                    CountsAsUnread = request.CountsAsUnread,
+                    IsGroup = request.IsGroup,
+                    AliasLid = aliasLid,
+                    AliasPn = aliasPn
+                });
+
+            _ = FinishLiveStripAnnounceAsync(
+                stripTask,
+                jid,
+                request.SenderName,
+                request.IsGroup ? request.StripParticipantJid : null,
+                request.NotifyContent ?? request.DisplayContent,
+                request.IsGroup,
+                request.IsFromMe,
+                request.SuppressToast);
+
+            QueueIncomingPersist(jid, chatMessage);
+            UnloadMessageCacheIfInactive(jid);
+        }
+
+        /// <summary>
+        /// Waits for the urgent list strip, then fires toast. Never called with await from
+        /// the pump route — only fire-and-forget from <see cref="ApplyIncomingInsertedAsync"/>.
+        /// </summary>
+        private async Task FinishLiveStripAnnounceAsync(
+            Task<LiveIncomingChatListApplyResult> stripTask,
+            string jid,
+            string senderName,
+            string senderJid,
+            string preview,
+            bool isGroup,
+            bool isFromMe,
+            bool suppressToast)
+        {
+            if (stripTask == null)
+            {
+                return;
+            }
+
+            LiveIncomingChatListApplyResult listApply = null;
+            var elapsed = Stopwatch.StartNew();
+            try
+            {
+                listApply = await stripTask.ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[MessageFacade] Live strip failed: " + ex.Message);
+                _diagnostics?.Write(
+                    "messages",
+                    "live-strip-failed",
+                    "jid=" + (jid ?? string.Empty) + "; error=" + ex.Message);
+            }
+            finally
+            {
+                elapsed.Stop();
+                if (elapsed.ElapsedMilliseconds >= 1000)
+                {
+                    _diagnostics?.Write(
+                        "messages",
+                        "live-strip-slow",
+                        "jid=" + (jid ?? string.Empty) +
+                        "; elapsedMs=" + elapsed.ElapsedMilliseconds);
+                }
+            }
+
+            ChatItem notificationChat = listApply != null ? listApply.Chat : null;
+            int totalUnreadForNotify = listApply != null ? listApply.TotalUnread : 0;
+            string notificationName = notificationChat != null ? notificationChat.Name : null;
+            if (string.IsNullOrWhiteSpace(notificationName))
+            {
+                notificationName = listApply != null && !string.IsNullOrWhiteSpace(listApply.DisplayName)
+                    ? listApply.DisplayName
+                    : _chatState.ResolveDisplayName(jid);
+            }
+
+            IContactService contacts = null;
+            try
+            {
+                contacts = _resolveContacts();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[MessageFacade] Toast name contacts skipped: " + ex.Message);
+            }
+
+            // Title + group author: full contact stack (person / agenda / push), not bare @lid.
+            string toastTitle = NotificationDisplayLabel.Prefer(
+                contacts != null ? contacts.ResolveDisplayName(jid, "toast-chat") : null,
+                notificationName,
+                jid);
+            string toastSender = senderName;
+            if (isGroup && !isFromMe)
+            {
+                string lookup = !string.IsNullOrWhiteSpace(senderJid) ? senderJid : senderName;
+                toastSender = NotificationDisplayLabel.Prefer(
+                    contacts != null && !string.IsNullOrWhiteSpace(lookup)
+                        ? contacts.ResolveDisplayName(lookup, "toast-sender")
+                        : null,
+                    senderName,
+                    lookup);
+            }
+
+            NotifyLiveIncoming(
+                jid,
+                toastTitle,
+                toastSender,
+                preview,
+                isGroup,
+                isFromMe,
+                suppressToast,
+                totalUnreadForNotify,
+                notificationChat);
+        }
+
+        /// <summary>
+        /// Person label for an incoming envelope: ContactFacade first (aliases + person store),
+        /// then the chat-state push/agenda maps.
+        /// </summary>
+        private string ResolveIncomingPersonLabel(
+            IContactService contacts,
+            string primaryJid,
+            string secondaryJid,
+            string context)
+        {
+            if (contacts != null)
+            {
+                if (!string.IsNullOrEmpty(primaryJid))
+                {
+                    string fromContacts = contacts.ResolveDisplayName(primaryJid, context);
+                    if (!GroupJoinDisplayLabel.NeedsBetterName(fromContacts))
+                    {
+                        return DisplayNameResolution.StripContactIndicator(fromContacts);
+                    }
+                }
+
+                if (!string.IsNullOrEmpty(secondaryJid))
+                {
+                    string fromContacts = contacts.ResolveDisplayName(secondaryJid, context);
+                    if (!GroupJoinDisplayLabel.NeedsBetterName(fromContacts))
+                    {
+                        return DisplayNameResolution.StripContactIndicator(fromContacts);
+                    }
+                }
+            }
+
+            if (!string.IsNullOrEmpty(primaryJid))
+            {
+                string fromState = _chatState.ResolveDisplayName(primaryJid);
+                if (!string.IsNullOrWhiteSpace(fromState))
+                {
+                    return fromState;
+                }
+            }
+
+            if (!string.IsNullOrEmpty(secondaryJid))
+            {
+                return _chatState.ResolveDisplayName(secondaryJid);
+            }
+
+            return null;
+        }
+
+        /// <inheritdoc />
+        public async Task NotifyGroupJoinsAsync(IReadOnlyList<GroupJoinNotifyRequest> joins)
+        {
+            if (joins == null || joins.Count == 0)
+            {
+                return;
+            }
+
+            string template = _strings != null
+                ? _strings.Get("Message_GroupJoin", "{0} joined the group")
+                : "{0} joined the group";
+
+            IContactService contacts = null;
+            try
+            {
+                contacts = _resolveContacts();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[MessageFacade] Group-join contacts resolve skipped: " + ex.Message);
+            }
+
+            var phoneRows = new List<KeyValuePair<string, string>>(joins.Count);
+            foreach (GroupJoinNotifyRequest join in joins)
+            {
+                if (join == null || string.IsNullOrWhiteSpace(join.ParticipantJid))
+                {
+                    continue;
+                }
+
+                phoneRows.Add(new KeyValuePair<string, string>(
+                    join.ParticipantJid.Trim(),
+                    join.PhoneDigits));
+            }
+
+            if (contacts != null && phoneRows.Count > 0)
+            {
+                try
+                {
+                    await contacts.ResolveGroupJoinParticipantsAsync(phoneRows).ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine("[MessageFacade] Group-join name prep failed: " + ex.Message);
+                }
+            }
+
+            foreach (GroupJoinNotifyRequest join in joins)
+            {
+                if (join == null ||
+                    string.IsNullOrWhiteSpace(join.GroupJid) ||
+                    string.IsNullOrWhiteSpace(join.ParticipantJid))
+                {
+                    continue;
+                }
+
+                string groupJid = JidHelper.Normalize(join.GroupJid) ?? join.GroupJid.Trim();
+                if (!JidHelper.IsGroupJid(groupJid))
+                {
+                    continue;
+                }
+
+                string participant = _jids.GetCanonicalJid(join.ParticipantJid) ?? join.ParticipantJid.Trim();
+                string phoneDigits = PhoneNumberHelper.NormalizePhoneDigits(join.PhoneDigits)
+                    ?? PhoneNumberHelper.NormalizePhoneDigits(JidHelper.TryPhoneFromJid(join.PhoneDigits))
+                    ?? JidHelper.TryPhoneFromJid(participant)
+                    ?? (contacts != null ? contacts.TryResolvePhone(participant, join.PhoneDigits) : null);
+
+                string resolved = contacts != null
+                    ? contacts.ResolveDisplayName(participant, "group-join")
+                    : _chatState.ResolveDisplayName(participant);
+                string who = GroupJoinDisplayLabel.Pick(resolved, phoneDigits, participant);
+
+                string content = string.Format(
+                    System.Globalization.CultureInfo.CurrentCulture,
+                    template,
+                    who);
+
+                DateTime stamp = join.TimestampUtc == default
+                    ? DateTime.UtcNow
+                    : DateTime.SpecifyKind(join.TimestampUtc, DateTimeKind.Utc);
+
+                string id = !string.IsNullOrWhiteSpace(join.NotificationId)
+                    ? "gj-" + join.NotificationId.Trim() + "-" + participant
+                    : "gj-" + participant + "-" + stamp.Ticks.ToString(System.Globalization.CultureInfo.InvariantCulture);
+
+                var chatMessage = new ChatMessage
+                {
+                    Id = id,
+                    Kind = ChatMessageKind.GroupJoin,
+                    Content = content,
+                    Timestamp = stamp,
+                    IsFromMe = false,
+                    GroupJoinJid = participant,
+                    GroupJoinPhone = phoneDigits,
+                    ParticipantJid = participant,
+                    SenderName = who
+                };
+
+                IncomingTimelineAcceptResult timeline = AcceptIncomingTimeline(groupJid, chatMessage, isGroup: true);
+                if (timeline.Kind == IncomingTimelineAcceptKind.DuplicateSameChat ||
+                    timeline.Kind == IncomingTimelineAcceptKind.AliasLinkedDuplicate ||
+                    timeline.Kind == IncomingTimelineAcceptKind.AliasConsolidated)
+                {
+                    continue;
+                }
+
+                await ApplyIncomingInsertedAsync(new IncomingInsertedApplyRequest
+                {
+                    ChatJid = groupJid,
+                    Message = chatMessage,
+                    DisplayContent = content,
+                    NotifyContent = content,
+                    IsOffline = false,
+                    IsGroup = true,
+                    IsFromMe = false,
+                    PreviewKind = ChatPreviewKind.GroupJoin,
+                    ListAuthorPrefix = string.Empty,
+                    StripParticipantJid = participant,
+                    SenderName = who,
+                    CountsAsUnread = false,
+                    SuppressToast = true
+                }).ConfigureAwait(false);
+
+                if (contacts != null && GroupJoinDisplayLabel.NeedsBetterName(who))
+                {
+                    ScheduleGroupJoinRelabel(contacts, groupJid, chatMessage, participant, phoneDigits, template);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Second pass when the join line still shows a number/@lid: one more targeted usync
+        /// (same join phones only), then rewrite Content/SenderName on the UI thread.
+        /// </summary>
+        private void ScheduleGroupJoinRelabel(
+            IContactService contacts,
+            string groupJid,
+            ChatMessage chatMessage,
+            string participant,
+            string phoneDigits,
+            string template)
+        {
+            _ = RelabelGroupJoinWhenNamedAsync(
+                contacts,
+                groupJid,
+                chatMessage,
+                participant,
+                phoneDigits,
+                template);
+        }
+
+        private async Task RelabelGroupJoinWhenNamedAsync(
+            IContactService contacts,
+            string groupJid,
+            ChatMessage chatMessage,
+            string participant,
+            string phoneDigits,
+            string template)
+        {
+            if (contacts == null || chatMessage == null || string.IsNullOrWhiteSpace(participant))
+            {
+                return;
+            }
+
+            try
+            {
+                await contacts.ResolveGroupJoinParticipantsAsync(
+                    new[]
+                    {
+                        new KeyValuePair<string, string>(participant, phoneDigits)
+                    }).ConfigureAwait(false);
+
+                string resolved = contacts.ResolveDisplayName(participant, "group-join-relabel");
+                string who = GroupJoinDisplayLabel.Pick(resolved, phoneDigits, participant);
+                if (GroupJoinDisplayLabel.NeedsBetterName(who) ||
+                    string.Equals(who, chatMessage.SenderName, StringComparison.Ordinal))
+                {
+                    return;
+                }
+
+                string content = string.Format(
+                    System.Globalization.CultureInfo.CurrentCulture,
+                    template,
+                    who);
+
+                await _ui.RunAsync(() =>
+                {
+                    chatMessage.SenderName = who;
+                    chatMessage.Content = content;
+                    if (!string.IsNullOrWhiteSpace(phoneDigits) &&
+                        string.IsNullOrWhiteSpace(chatMessage.GroupJoinPhone))
+                    {
+                        chatMessage.GroupJoinPhone = phoneDigits;
+                    }
+
+                    foreach (ChatItem chat in _chatRows.FindConversation(groupJid))
+                    {
+                        if (chat != null &&
+                            string.Equals(
+                                chat.LastMessageId,
+                                chatMessage.Id,
+                                StringComparison.OrdinalIgnoreCase))
+                        {
+                            chat.LastMessage = content;
+                            chat.LastMessageSenderName = who;
+                        }
+                    }
+
+                    if (_activeChat.IsOpen(groupJid))
+                    {
+                        NotifyChatMessagesChanged(groupJid);
+                    }
+                }).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine(
+                    "[MessageFacade] Group-join relabel failed for " + participant + ": " + ex.Message);
+            }
+        }
+
+        private void UnloadMessageCacheIfInactive(string jid)
+        {
+            if (string.IsNullOrWhiteSpace(jid) || _activeChat.IsOpen(jid))
+            {
+                return;
+            }
+
+            string normalized = JidHelper.Normalize(jid);
+            _chatState.MessagesByChat.Remove(normalized);
+            if (!string.Equals(normalized, jid, StringComparison.OrdinalIgnoreCase))
+            {
+                _chatState.MessagesByChat.Remove(jid);
+            }
+        }
+
+        private async Task PersistPinnedMessageToSqliteAsync(
+            string canonical,
+            string messageId,
+            PendingPin state,
+            ChatMessage target)
+        {
+            if (_historyMessageStore == null ||
+                string.IsNullOrWhiteSpace(canonical) ||
+                string.IsNullOrWhiteSpace(messageId))
+            {
+                return;
+            }
+
+            try
+            {
+                List<string> keys = new List<string>(ChatPinStoreKeys.For(canonical, _jids));
+                var pins = new List<HistoryMessagePinUpdate>(keys.Count);
+                for (int i = 0; i < keys.Count; i++)
+                {
+                    pins.Add(new HistoryMessagePinUpdate
+                    {
+                        ChatJid = keys[i],
+                        MessageId = messageId,
+                        IsPinned = state.IsPinned,
+                        PinnedAtUtc = state.PinnedAtUtc,
+                        PinExpiresAtUtc = state.ExpiresAtUtc
+                    });
+                }
+
+                await _historyMessageStore.UpsertPinsAsync(pins).ConfigureAwait(false);
+
+                if (target != null)
+                {
+                    await _outgoingHost.PersistLiveAsync(canonical, target).ConfigureAwait(false);
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[MessageFacade] SQLite pin persist failed: " + ex.Message);
+            }
+        }
+
+        private async Task<ChatMessage> FindPersistedMessageAsync(string chatJid, string messageId)
+        {
+            if (_historyMessageStore == null ||
+                string.IsNullOrWhiteSpace(chatJid) ||
+                string.IsNullOrWhiteSpace(messageId))
+            {
+                return null;
+            }
+
+            List<string> keys = ResolveChatKeys(chatJid);
+            for (int i = 0; i < keys.Count; i++)
+            {
+                HistoryMessage row = await _historyMessageStore.GetAsync(keys[i], messageId)
+                    .ConfigureAwait(false);
+                ChatMessage mapped = HistoryMessageMapper.ToChatMessage(row);
+                if (mapped != null)
+                {
+                    return mapped;
+                }
+            }
+
+            return null;
+        }
+
+        /// <inheritdoc />
+        public IncomingTimelineAcceptResult AcceptIncomingTimeline(
+            string chatJid,
+            ChatMessage message,
+            bool isGroup)
+        {
+            return new IncomingTimeline(
+                    _chatState.MessagesByChat,
+                    _chatState.MessagesByChat.Ids,
+                    GetAliasLinkedDirectChatJids,
+                    JidHelper.Normalize,
+                    TrimInMemoryMessageWindow)
+                .Accept(chatJid, message, isGroup);
+        }
+
+        /// <inheritdoc />
+        public void QueueIncomingPersist(string chatJid, ChatMessage message)
+        {
+            if (string.IsNullOrWhiteSpace(chatJid) || message == null)
+            {
+                return;
+            }
+
+            PendingFlushAction action = _pendingMessages.Add(
+                chatJid,
+                new[] { message },
+                DateTime.UtcNow,
+                scheduleFlush: true);
+            _pendingFlush.ApplyFlushAction(action);
+            _catalog.Schedule();
+        }
+
+        /// <inheritdoc />
+        public bool EnrichOfflineDuplicateFast(
+            string chatJid,
+            string messageId,
+            bool isFromMe,
+            string participantJid,
+            string verifiedName,
+            string pushName)
+        {
+            if (string.IsNullOrWhiteSpace(chatJid) || string.IsNullOrEmpty(messageId))
+            {
+                return false;
+            }
+
+            ChatMessage existing = null;
+            string persistJid = chatJid;
+            ChatMessageCache cache = _chatState.MessagesByChat;
+
+            List<ChatMessage> list;
+            if (cache.TryGet(chatJid, out list) && list != null)
+            {
+                existing = list.FirstOrDefault(
+                    m => m != null && string.Equals(m.Id, messageId, StringComparison.Ordinal));
+            }
+
+            if (existing == null &&
+                AliasLinkedMessageFind.TryFind(
+                    cache,
+                    GetAliasLinkedDirectChatJids(chatJid),
+                    messageId,
+                    out string aliasChat,
+                    out ChatMessage aliasMsg) &&
+                aliasMsg != null)
+            {
+                existing = aliasMsg;
+                persistJid = aliasChat;
+            }
+
+            if (existing == null)
+            {
+                return false;
+            }
+
+            DuplicateArrivalPatch patch = DuplicateArrivalEnrichment.Compute(
+                existing.Status,
+                null,
+                isFromMe,
+                existing.ParticipantJid,
+                JidHelper.Normalize(participantJid),
+                existing.SenderName,
+                FirstNonBlankText.Pick(verifiedName, pushName));
+            if (!DuplicateArrivalEnrichment.Apply(existing, patch))
+            {
+                return false;
+            }
+
+            QueueIncomingPersist(persistJid, existing);
+            return true;
+        }
+
+        /// <inheritdoc />
+        public async Task<bool> ApplyIncomingReactionAsync(
+            Message message,
+            ChatMessageMapContext context)
+        {
+            if (message == null || context == null || string.IsNullOrWhiteSpace(context.ChatJid))
+            {
+                return false;
+            }
+
+            string jid = JidHelper.Normalize(context.ChatJid) ?? context.ChatJid;
+            IList<ChatMessage> timeline = _chatState.MessagesByChat.GetOrAdd(jid);
+            ChatMessage reactionParent = null;
+            bool handled = false;
+
+            await _boundMutations.RunAsync(() =>
+            {
+                handled = TryHandleReaction(message, context, timeline, out reactionParent);
+            }).ConfigureAwait(false);
+
+            if (!handled)
+            {
+                return false;
+            }
+
+            if (reactionParent != null)
+            {
+                try
+                {
+                    await _outgoingHost.PersistLiveAsync(jid, reactionParent).ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine("[MessageFacade] Failed to persist reaction parent: " + ex.Message);
+                }
+
+                if (_activeChat.IsOpen(jid))
+                {
+                    NotifyChatMessagesChanged(jid);
+                }
+            }
+            else
+            {
+                Debug.WriteLine(
+                    "[MessageFacade] Reaction target not found yet: chat=" + jid +
+                    ", id=" + (context.MessageId ?? "<none>"));
+            }
+
+            return true;
+        }
+
+        /// <inheritdoc />
+        public bool HasCachedMessageId(string chatJid, string messageId, bool isGroup)
+        {
+            if (string.IsNullOrWhiteSpace(chatJid) || string.IsNullOrEmpty(messageId))
+            {
+                return false;
+            }
+
+            string canonical = _jids.GetCanonicalJid(chatJid) ?? JidHelper.Normalize(chatJid);
+            ChatMessageCache cache = _chatState.MessagesByChat;
+            if (cache.KnownIds(canonical).Contains(messageId))
+            {
+                return true;
+            }
+
+            if (isGroup)
+            {
+                return false;
+            }
+
+            return AliasLinkedMessageFind.HasId(
+                cache,
+                GetAliasLinkedDirectChatJids(JidHelper.Normalize(chatJid) ?? chatJid),
+                messageId);
+        }
+
+        /// <inheritdoc />
+        public async Task FinalizeAliasConsolidateAsync(
+            string canonicalChatJid,
+            string aliasSourceChatJid,
+            string messageId,
+            ChatMessage consolidatedMessage)
+        {
+            if (string.IsNullOrWhiteSpace(canonicalChatJid) ||
+                string.IsNullOrWhiteSpace(aliasSourceChatJid) ||
+                string.IsNullOrWhiteSpace(messageId))
+            {
+                return;
+            }
+
+            try
+            {
+                await _messageStore.DeleteMessageAsync(aliasSourceChatJid, messageId)
+                    .ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[MessageFacade] Alias source delete failed: " + ex.Message);
+            }
+
+            if (consolidatedMessage != null)
+            {
+                try
+                {
+                    await _outgoingHost.PersistLiveAsync(canonicalChatJid, consolidatedMessage)
+                        .ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine("[MessageFacade] Alias survivor persist failed: " + ex.Message);
+                }
+            }
+
+            IChatService chats = _resolveChats();
+            if (chats != null)
+            {
+                await chats.DeduplicateChatListAsync("live-direct-alias-duplicate")
+                    .ConfigureAwait(false);
+            }
+        }
+
+        private void TrimInMemoryMessageWindow(string jid) =>
+            _chatState.MessagesByChat.Trim(jid, MaxActiveChatMessagesInMemory, DateTime.UtcNow);
+
+        private IReadOnlyList<string> GetAliasCacheKeys(string canonical)
+        {
+            if (string.IsNullOrWhiteSpace(canonical))
+            {
+                return Array.Empty<string>();
+            }
+
+            var keys = new List<string>();
+            foreach (string key in _chatState.MessagesByChat.ChatJids())
+            {
+                if (string.Equals(_jids.GetCanonicalJid(key), canonical, StringComparison.OrdinalIgnoreCase))
+                {
+                    keys.Add(key);
+                }
+            }
+
+            return keys;
+        }
+
+        private async Task RefreshChatPreviewFromMessageAsync(string canonical, ChatMessage message)
+        {
+            IChatService chats = _resolveChats();
+            if (chats == null || message == null || string.IsNullOrWhiteSpace(canonical))
+            {
+                return;
+            }
+
+            string selfLabel = _strings != null
+                ? _strings.Get("Chat_SelfFallbackName", "You")
+                : "You";
+
+            await chats.RefreshChatPreviewAsync(
+                canonical,
+                message.Content,
+                message.Timestamp,
+                message.IsFromMe,
+                ChatPreviewNormalizer.InferKindFromMessage(message),
+                ChatPreviewNormalizer.FormatListAuthorPrefix(
+                    message,
+                    JidHelper.IsGroupJid(canonical),
+                    selfLabel,
+                    _jids.GetCanonicalJid(message.ParticipantJid)),
+                ParticipantStripIdentity.PreferForDisplay(
+                    message.ParticipantJid,
+                    _jids.GetCanonicalJid(message.ParticipantJid)),
+                message.IsFromMe ? null : message.SenderName).ConfigureAwait(false);
+        }
+
+        private IReadOnlyList<string> GetAliasLinkedDirectChatJids(string chatJid)
+        {
+            return AliasLinkedDirectChats.Collect(
+                NameLookupCandidates.Expand(
+                    new[] { chatJid },
+                    JidHelper.Normalize,
+                    normalized =>
+                    {
+                        string alias;
+                        return _jids.TryGetAlias(normalized, out alias) ? alias : null;
+                    }),
+                JidHelper.Normalize,
+                _jids.GetCanonicalJid);
+        }
+    }
+}

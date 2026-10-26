@@ -1,0 +1,525 @@
+using System;
+using System.Diagnostics;
+using System.Threading;
+using System.Threading.Tasks;
+using Unison.Core.Constants;
+using Unison.Core.Contracts;
+using Unison.Core.Contracts.WhatsApp;
+using Unison.Core.Helpers;
+using Unison.Core.Models;
+using Unison.WhatsAppClient.Abstractions;
+using Unison.WhatsAppClient.Helpers;
+
+namespace Unison.WhatsAppClient.Connection
+{
+    /// <summary>
+    /// Facade: disconnect policy (settings + network) and session wipe / toast.
+    /// WhatsAppService reports socket facts; this layer decides and executes.
+    /// </summary>
+    public sealed class ConnectionFacade : IConnectionService, IConnectionSoftReconnect
+    {
+        private readonly ILocalSettings _localSettings;
+        private readonly INotificationService _notificationService;
+        private readonly IStringResources _strings;
+        private readonly IWhatsAppSessionProvider _sessions;
+        private readonly ILocalContactsService _localContacts;
+        private readonly IShortcutService _shortcuts;
+        private readonly ILiveTilesService _liveTiles;
+        private readonly IShellThemeService _shellTheme;
+        private readonly IStartupUiHost _startupUi;
+        private readonly INetworkAccess _network;
+        private readonly IRuntimeDiagnostics _diagnostics;
+        private readonly IConnectionEnsureHost _ensureHost;
+        private readonly IConnectionResumeHost _resumeHost;
+        private readonly IConnectionBrokerTransferHost _brokerTransferHost;
+        private readonly IConnectionSoftReconnectHost _softReconnectHost;
+        private readonly IConnectionLifecycleHost _lifecycleHost;
+        private readonly IConnectionEventSource _events;
+        private readonly IConnectionSessionHost _session;
+        private int _handlingRelink;
+
+        public ConnectionFacade(
+            ILocalSettings localSettings,
+            INotificationService notificationService,
+            IStringResources strings,
+            IWhatsAppSessionProvider sessions,
+            ILocalContactsService localContacts,
+            IShortcutService shortcuts,
+            ILiveTilesService liveTiles,
+            IShellThemeService shellTheme,
+            IStartupUiHost startupUi,
+            INetworkAccess network,
+            IConnectionEnsureHost ensureHost,
+            IConnectionResumeHost resumeHost,
+            IConnectionBrokerTransferHost brokerTransferHost,
+            IConnectionSoftReconnectHost softReconnectHost,
+            IConnectionLifecycleHost lifecycleHost,
+            IConnectionEventSource events,
+            IConnectionSessionHost session,
+            IRuntimeDiagnostics diagnostics = null)
+        {
+            _localSettings = localSettings ?? throw new ArgumentNullException(nameof(localSettings));
+            _notificationService = notificationService ?? throw new ArgumentNullException(nameof(notificationService));
+            _strings = strings ?? throw new ArgumentNullException(nameof(strings));
+            _sessions = sessions ?? throw new ArgumentNullException(nameof(sessions));
+            _localContacts = localContacts;
+            _shortcuts = shortcuts ?? throw new ArgumentNullException(nameof(shortcuts));
+            _liveTiles = liveTiles ?? throw new ArgumentNullException(nameof(liveTiles));
+            _shellTheme = shellTheme ?? throw new ArgumentNullException(nameof(shellTheme));
+            _startupUi = startupUi ?? throw new ArgumentNullException(nameof(startupUi));
+            _network = network ?? throw new ArgumentNullException(nameof(network));
+            _ensureHost = ensureHost ?? throw new ArgumentNullException(nameof(ensureHost));
+            _resumeHost = resumeHost ?? throw new ArgumentNullException(nameof(resumeHost));
+            _brokerTransferHost = brokerTransferHost
+                ?? throw new ArgumentNullException(nameof(brokerTransferHost));
+            _softReconnectHost = softReconnectHost
+                ?? throw new ArgumentNullException(nameof(softReconnectHost));
+            _lifecycleHost = lifecycleHost ?? throw new ArgumentNullException(nameof(lifecycleHost));
+            _events = events ?? throw new ArgumentNullException(nameof(events));
+            _session = session ?? throw new ArgumentNullException(nameof(session));
+            _diagnostics = diagnostics;
+
+            _events.OnQRCodeReceived += Client_OnQrCodeReceived;
+            _events.OnQrExpired += Client_OnQrExpired;
+            _events.OnConnectionUpdate += Client_OnConnectionUpdate;
+            _events.OnSessionInitialized += Client_OnSessionInitialized;
+            _events.OnSessionCleared += Client_OnSessionCleared;
+            _events.OnError += Client_OnError;
+            _events.OnStreamError += Client_OnStreamError;
+            _events.OnInvalidSessionSuspected += Client_OnInvalidSessionSuspected;
+        }
+
+        public void RequestSoftReconnect(string reason) =>
+            _softReconnectHost.ScheduleSoftReconnect(reason);
+
+        public void RequestCatchUpContinueReconnect(string reason) =>
+            _softReconnectHost.ScheduleCatchUpContinueReconnect(reason);
+
+        public event EventHandler<ConnectionEndedEventArgs> ConnectionEnded;
+
+        public bool HasInternetAccess => _network.HasInternetAccess;
+
+        public bool AutoUnlinkOnLogoutEnabled =>
+            _localSettings.Get<bool>(LocalSettingsConstants.AutoUnlinkOnLogoutEnabled);
+
+        // ---------------------------------------------------------------------
+        // Startup
+        //
+        // Forwarding, and deliberately so: the shell drives launch in a fixed order and needs one
+        // thing to drive it through. Hosts answer; the shell never names the compatibility client.
+        // ---------------------------------------------------------------------
+
+        public bool IsConnected => _ensureHost.IsConnected;
+
+        public Task InitializeConnectionStateAsync() =>
+            _session.InitializeConnectionStateAsync();
+
+        public Task<bool> IsRegisteredAsync() =>
+            _ensureHost.IsRegisteredAsync();
+
+        public Task EnsureConnectedAsync(int timeoutMs = 35000, bool forceFreshTransport = false) =>
+            _ensureHost.EnsureConnectedAsync(timeoutMs, forceFreshTransport);
+
+        public Task LoadPersistedUiStateAsync() =>
+            _startupUi.LoadPersistedUiStateAsync();
+
+        public void StartDeferredStartupMaintenance() =>
+            _startupUi.StartDeferredStartupMaintenance();
+
+        public Task ResumeAsync() =>
+            ConnectionResume.RunAsync(_resumeHost);
+
+        public Task ReleaseMemoryAsync() =>
+            _session.ReleaseMemoryAsync();
+
+        public Task<bool> TransferActiveSocketToBrokerAsync(string reason) =>
+            ConnectionBrokerTransfer.RunAsync(_brokerTransferHost, reason);
+
+        public Task PrepareForSuspendAsync() =>
+            ConnectionLifecycle.PrepareForSuspendAsync(_lifecycleHost);
+
+        public Task ShutdownAsync(bool persist = true) =>
+            ConnectionLifecycle.ShutdownAsync(_lifecycleHost, persist);
+
+        private void NotifyStreamError(string code)
+        {
+            EvaluateAndMaybeUnlink(ClassifyStreamError(code), code, "stream-error");
+        }
+
+        /// <summary>
+        /// Reported as a bad session rather than a logout on purpose. This is a guess made from
+        /// the shape of the failures - repeated closes before login - and a guess is not grounds
+        /// for deleting credentials that the phone may still consider perfectly valid. It stops
+        /// the reconnect loop and leaves the decision to unlink with the user.
+        /// </summary>
+        private void NotifySuspectedInvalidSession(string trigger)
+        {
+            EvaluateAndMaybeUnlink(DisconnectReason.BadSession, "500", trigger ?? "suspected-invalid");
+        }
+
+        public DisconnectReason ClassifyStreamError(string code)
+        {
+            if (string.IsNullOrWhiteSpace(code))
+            {
+                return DisconnectReason.Unknown;
+            }
+
+            switch (code.Trim())
+            {
+                case "401":
+                case "device_removed":
+                case "device-removed":
+                    return DisconnectReason.LoggedOut;
+                case "403":
+                    return DisconnectReason.Forbidden;
+                case "408":
+                case "428":
+                    return DisconnectReason.Network;
+                case "440":
+                    return DisconnectReason.ConnectionReplaced;
+                case "500":
+                    return DisconnectReason.BadSession;
+                case "515":
+                    return DisconnectReason.RestartRequired;
+                case "offline":
+                    return DisconnectReason.Network;
+                default:
+                    return DisconnectReason.Unknown;
+            }
+        }
+
+        public async Task LogoutAsync(string reason = null)
+        {
+            _diagnostics?.Write(
+                "connection",
+                "logout-requested",
+                "reason=" + (reason ?? "user-initiated"));
+
+            await _session.NotifyServerLogoutAsync(reason).ConfigureAwait(false);
+            await _session.ClearSessionAsync().ConfigureAwait(false);
+            if (_localContacts != null)
+            {
+                try
+                {
+                    await _localContacts.ClearPublishedAppContactsAsync().ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine("[ConnectionFacade] Clearing Windows People list failed: " + ex.Message);
+                }
+            }
+
+            await AutoRestoreDefaultAsync().ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// Puts the device back to a fresh Unison after the account is gone: the Start
+        /// shortcuts this app created, the primary live tile, and the shell theme.
+        /// Called for a disconnect the user asked for and for one the phone imposed.
+        /// </summary>
+        private async Task AutoRestoreDefaultAsync()
+        {
+            try
+            {
+                await _shortcuts.UnpinAllChatsAsync().ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[ConnectionFacade] Unpinning Start tiles failed: " + ex.Message);
+            }
+
+            try
+            {
+                _liveTiles.Clear();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[ConnectionFacade] Clearing the live tile failed: " + ex.Message);
+            }
+
+            try
+            {
+                await _shellTheme.ChangeShellAndRestartAsync(AppShell.Unison).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[ConnectionFacade] Restoring the Unison shell failed: " + ex.Message);
+            }
+        }
+
+        private void EvaluateAndMaybeUnlink(DisconnectReason reason, string code, string trigger)
+        {
+            bool online = HasInternetAccess;
+            bool autoUnlink = AutoUnlinkOnLogoutEnabled;
+
+            // 401/403 are the server refusing the credentials. An offline reading of the
+            // network profile must not turn that into "try again" — the account is gone
+            // on the phone whether Wi‑Fi looks up or not. 440/500 can still be a blip.
+            if (!online && IsRelinkReason(reason) &&
+                reason != DisconnectReason.LoggedOut &&
+                reason != DisconnectReason.Forbidden)
+            {
+                Debug.WriteLine(
+                    "[ConnectionFacade] Downgrading " + reason + " to Network (offline) trigger=" + trigger);
+                reason = DisconnectReason.Network;
+                code = string.IsNullOrWhiteSpace(code) ? "offline" : code;
+            }
+
+            string message = Describe(reason, code);
+            Debug.WriteLine(
+                "[ConnectionFacade] Evaluate code=" + (code ?? "(null)") +
+                " reason=" + reason +
+                " online=" + online +
+                " autoUnlink=" + autoUnlink +
+                " trigger=" + trigger);
+
+            _diagnostics?.Write(
+                "connection",
+                "disconnect-evaluated",
+                "code=" + (code ?? "") +
+                "; reason=" + reason +
+                "; online=" + online +
+                "; autoUnlink=" + autoUnlink +
+                "; trigger=" + trigger);
+
+            var args = new ConnectionEndedEventArgs(reason, code, message);
+
+            // Backing off and unlinking are separate decisions. A connection that was taken over
+            // (440) is not worth retrying, but the device is still linked on the phone.
+            // 401 / device_removed is the opposite: the phone already removed this companion.
+            if (args.ShouldStopReconnecting)
+            {
+                _session.SuppressReconnectFromPolicy(trigger + ":" + (code ?? ""));
+            }
+
+            if (args.RequiresRelink)
+            {
+                if (!autoUnlink)
+                {
+                    _diagnostics?.Write(
+                        "connection",
+                        "auto-unlink-forced",
+                        "reason=explicit-logout; setting-off=true; code=" + (code ?? "") +
+                        "; trigger=" + trigger);
+                }
+
+                if (Interlocked.Exchange(ref _handlingRelink, 1) == 1)
+                {
+                    return;
+                }
+
+                try
+                {
+                    _ = ExecuteAutoUnlinkAsync(args);
+                }
+                catch
+                {
+                    Interlocked.Exchange(ref _handlingRelink, 0);
+                    throw;
+                }
+            }
+
+            try
+            {
+                ConnectionEnded?.Invoke(this, args);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[ConnectionFacade] ConnectionEnded handler failed: " + ex.Message);
+            }
+        }
+
+        private async Task ExecuteAutoUnlinkAsync(ConnectionEndedEventArgs e)
+        {
+            try
+            {
+                Debug.WriteLine("[ConnectionFacade] Auto-unlink executing reason=" + e.Reason + " code=" + e.Code);
+
+                await _session.ClearSessionAsync().ConfigureAwait(false);
+
+                string title = _strings.Get("Toast_LoggedOutTitle", "Session unlinked");
+                string body = e.Reason == DisconnectReason.ConnectionReplaced
+                    ? _strings.Get(
+                        "Toast_SessionReplacedBody",
+                        "Another WhatsApp Web session took over. Scan the QR code again.")
+                    : _strings.Get(
+                        "Toast_LoggedOutBody",
+                        "The session was disconnected on your phone. Scan the QR code to link again.");
+
+                try
+                {
+                    _notificationService.ShowToast(title, body);
+                }
+                catch (Exception toastEx)
+                {
+                    Debug.WriteLine("[ConnectionFacade] Logged-out toast failed: " + toastEx.Message);
+                }
+
+                await AutoRestoreDefaultAsync().ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[ConnectionFacade] Auto-unlink failed: " + ex.Message);
+                _diagnostics?.RecordException(
+                    "connection",
+                    "auto-unlink-failed",
+                    ex);
+            }
+            finally
+            {
+                Interlocked.Exchange(ref _handlingRelink, 0);
+            }
+        }
+
+        // ---------------------------------------------------------------------
+        // Pairing
+        //
+        // Forwarding rather than re-deciding: the client raises these, and this only puts them
+        // where the pairing screen can reach them without knowing the client exists.
+        // ---------------------------------------------------------------------
+
+        public event EventHandler<string> QrReceived;
+
+        public event EventHandler QrExpired;
+
+        public event EventHandler<string> StatusChanged;
+
+        public event EventHandler SessionEstablished;
+
+        public event EventHandler<SessionClearedEventArgs> SessionCleared;
+
+        public event EventHandler<Exception> Failed;
+
+        public string CurrentStatus => _events.CurrentConnectionStatus;
+
+        public Task StartPairingAsync() =>
+            _ensureHost.ConnectAsync();
+
+        public async Task<string> RequestPairingCodeAsync(string phoneNumber)
+        {
+            if (string.IsNullOrWhiteSpace(phoneNumber))
+            {
+                return null;
+            }
+
+            var session = _sessions.Current;
+            if (session == null || !session.Connection.IsConnected)
+            {
+                // The hello IQ only works on a live unregistered socket, same as rc14
+                // waiting for the QR event before requestPairingCode.
+                await StartPairingAsync().ConfigureAwait(false);
+                session = await WaitForConnectedSessionAsync().ConfigureAwait(false);
+            }
+
+            if (session == null || !session.Connection.IsConnected)
+            {
+                Debug.WriteLine("[ConnectionFacade] Pairing by phone number is unavailable: socket is not connected");
+                return null;
+            }
+
+            return await session.RequestPairingCodeAsync(phoneNumber).ConfigureAwait(false);
+        }
+
+        private async Task<Unison.Socket.Session.WhatsAppSession> WaitForConnectedSessionAsync()
+        {
+            for (var i = 0; i < 40; i++)
+            {
+                var session = _sessions.Current;
+                if (session != null && session.Connection.IsConnected)
+                {
+                    return session;
+                }
+
+                await Task.Delay(250).ConfigureAwait(false);
+            }
+
+            return _sessions.Current;
+        }
+
+        public Task ClearLocalSessionAsync() =>
+            _session.ClearSessionAsync();
+
+        private void Client_OnStreamError(object sender, string code)
+        {
+            NotifyStreamError(code);
+        }
+
+        private void Client_OnInvalidSessionSuspected(object sender, string trigger)
+        {
+            NotifySuspectedInvalidSession(trigger);
+        }
+
+        private void Client_OnQrCodeReceived(object sender, string qr)
+        {
+            Raise(() => QrReceived?.Invoke(this, qr), "QrReceived");
+        }
+
+        private void Client_OnQrExpired(object sender, EventArgs e)
+        {
+            Raise(() => QrExpired?.Invoke(this, EventArgs.Empty), "QrExpired");
+        }
+
+        private void Client_OnConnectionUpdate(object sender, string status)
+        {
+            Debug.WriteLine("[ConnectionFacade] StatusChanged → " + (status ?? "<null>"));
+            Raise(() => StatusChanged?.Invoke(this, status), "StatusChanged");
+        }
+
+        private void Client_OnSessionInitialized(object sender, EventArgs e)
+        {
+            Raise(() => SessionEstablished?.Invoke(this, EventArgs.Empty), "SessionEstablished");
+        }
+
+        private void Client_OnSessionCleared(object sender, SessionClearedEventArgs e)
+        {
+            Raise(() => SessionCleared?.Invoke(this, e), "SessionCleared");
+        }
+
+        private void Client_OnError(object sender, Exception error)
+        {
+            Raise(() => Failed?.Invoke(this, error), "Failed");
+        }
+
+        /// <summary>
+        /// A subscriber that throws must not take the client's event loop down with it, which is
+        /// what would happen without this: these are raised from the socket's own threads.
+        /// </summary>
+        private static void Raise(Action raise, string name)
+        {
+            try
+            {
+                raise();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[ConnectionFacade] " + name + " handler failed: " + ex.Message);
+            }
+        }
+
+        private static bool IsRelinkReason(DisconnectReason reason) =>
+            RelinkDisconnectReason.Matches(reason);
+
+        private static string Describe(DisconnectReason reason, string code)
+        {
+            switch (reason)
+            {
+                case DisconnectReason.LoggedOut:
+                    return "Logged out (401). Session is invalid - please re-link your device.";
+                case DisconnectReason.ConnectionReplaced:
+                    return "Connection replaced (440). Another device connected with your session.";
+                case DisconnectReason.Forbidden:
+                    return "Forbidden (403). Access denied to this resource.";
+                case DisconnectReason.BadSession:
+                    return "Bad session (500).";
+                case DisconnectReason.RestartRequired:
+                    return "Restart required (515). Reconnecting...";
+                case DisconnectReason.Network:
+                    return "Connection lost (" + code + ").";
+                default:
+                    return string.IsNullOrWhiteSpace(code)
+                        ? "Connection ended."
+                        : "Stream error " + code;
+            }
+        }
+    }
+}
