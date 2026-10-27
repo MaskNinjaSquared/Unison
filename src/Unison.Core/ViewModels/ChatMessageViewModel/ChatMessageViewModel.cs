@@ -1497,6 +1497,20 @@ namespace Unison.Core.ViewModels
             set => Model.DateSeparatorText = value;
         }
 
+        public bool IsUnreadDivider
+        {
+            get => Model.IsUnreadDivider;
+            set => Model.IsUnreadDivider = value;
+        }
+
+        public string UnreadDividerText
+        {
+            get => Model.UnreadDividerText;
+            set => Model.UnreadDividerText = value;
+        }
+
+        public bool ShowUnreadMarker => Model.ShowUnreadMarker;
+
         public bool ShowGroupSenderName
         {
             get => Model.ShowGroupSenderName;

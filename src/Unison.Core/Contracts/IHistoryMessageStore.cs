@@ -106,6 +106,12 @@ namespace Unison.Core.Contracts
         /// <summary>True when cache cleanup already marked this message's file deleted.</summary>
         Task<bool> IsMediaDeletedAsync(string chatJid, string messageId);
 
+        /// <summary>
+        /// Marks inbound rows for these conversation keys as read (<c>IsRead = 1</c>).
+        /// Null / missing column is a no-op after ensure. Avoids a schema migration.
+        /// </summary>
+        Task MarkInboundReadAsync(IReadOnlyList<string> chatJids);
+
         event EventHandler<HistoryMessageChunkEventArgs> ChunkPersisted;
     }
 }

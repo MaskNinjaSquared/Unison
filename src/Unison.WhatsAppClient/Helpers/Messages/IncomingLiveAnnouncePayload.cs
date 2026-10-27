@@ -31,6 +31,9 @@ namespace Unison.WhatsAppClient.Helpers
 
         public int ChatUnread { get; private set; }
 
+        /// <summary>Community Avisos — toast uses the megaphone asset, not the row photo.</summary>
+        public bool IsCommunityAnnounce { get; private set; }
+
         /// <summary>
         /// Null when from-me (gate) or the jid is blank. Callers must not touch
         /// <paramref name="chat"/> after this returns — only the copied fields travel.
@@ -47,7 +50,8 @@ namespace Unison.WhatsAppClient.Helpers
             int totalUnread,
             bool isMuted,
             string avatarUrl,
-            int chatUnread)
+            int chatUnread,
+            bool isCommunityAnnounce = false)
         {
             if (!IncomingLiveNotifyGate.ShouldAnnounce(isFromMe) ||
                 string.IsNullOrWhiteSpace(chatJid))
@@ -66,7 +70,8 @@ namespace Unison.WhatsAppClient.Helpers
                 SuppressToast = suppressToast || quietForSync,
                 TotalUnread = totalUnread,
                 AvatarUrl = avatarUrl,
-                ChatUnread = chatUnread
+                ChatUnread = chatUnread,
+                IsCommunityAnnounce = isCommunityAnnounce
             };
         }
 
@@ -85,6 +90,7 @@ namespace Unison.WhatsAppClient.Helpers
             bool mutedFallback)
         {
             bool isMuted = chat != null ? chat.IsMutedLocally : mutedFallback;
+            bool isAnnounce = chat != null && chat.IsCommunityAnnounce;
             string avatar = chat != null ? chat.GetAvatarUrl(preferHigh: false) : null;
             int chatUnread = chat != null ? System.Math.Max(0, chat.UnreadCount) : -1;
             string name = chatName;
@@ -105,7 +111,8 @@ namespace Unison.WhatsAppClient.Helpers
                 totalUnread,
                 isMuted,
                 avatar,
-                chatUnread);
+                chatUnread,
+                isAnnounce);
         }
     }
 }

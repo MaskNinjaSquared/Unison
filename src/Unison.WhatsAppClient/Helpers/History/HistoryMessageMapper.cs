@@ -37,6 +37,7 @@ namespace Unison.WhatsAppClient.Helpers
                 Content = row.IsRevoked ? string.Empty : NormalizeStoredBody(row.Body, row.Kind),
                 Timestamp = AsUtc(row.TimestampUtc) ?? DateTime.UtcNow,
                 IsFromMe = row.IsFromMe,
+                IsRead = row.IsRead,
                 ParticipantJid = row.ParticipantJid,
                 SenderName = row.SenderName,
                 Kind = row.IsRevoked ? ChatMessageKind.Text : kind,

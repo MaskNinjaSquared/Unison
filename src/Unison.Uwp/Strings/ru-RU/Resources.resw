@@ -270,6 +270,12 @@
   <data name="ChatDetail_GroupOnlyAdminsCanSend.Text" xml:space="preserve">
     <value>Только администраторы могут отправлять сообщения</value>
   </data>
+  <data name="ChatDetail_UnreadMessagesFormat" xml:space="preserve">
+    <value>{0} непрочитанных сообщений</value>
+  </data>
+  <data name="ChatDetail_UnreadUpdatesFormat" xml:space="preserve">
+    <value>{0} непрочитанных обновлений</value>
+  </data>
   <data name="ChatDetail_AttachCamera.Text" xml:space="preserve">
     <value>Камера</value>
   </data>

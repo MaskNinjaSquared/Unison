@@ -770,6 +770,28 @@ namespace Unison.WhatsAppClient.Chats
             }
         }
 
+        /// <summary>
+        /// Persists inbound <c>IsRead = 1</c> for this conversation (nullable column; no migration).
+        /// Called after the first unread-divider layout so the chip survives the open paint.
+        /// </summary>
+        public async Task CommitInboundHistoryReadAsync(ChatItem chat)
+        {
+            if (chat == null || string.IsNullOrWhiteSpace(chat.JID) || _historyMessages == null)
+            {
+                return;
+            }
+
+            try
+            {
+                IReadOnlyList<string> keys = ChatPinStoreKeys.For(chat.JID, _jids);
+                await _historyMessages.MarkInboundReadAsync(keys).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[ChatFacade] CommitInboundHistoryRead failed: " + ex.Message);
+            }
+        }
+
         public async Task DeleteChatAsync(ChatItem chat)
         {
             if (chat == null || string.IsNullOrWhiteSpace(chat.JID))
@@ -1911,6 +1933,11 @@ namespace Unison.WhatsAppClient.Chats
             }
 
             chat.ApplyKind(chat.JID, _jids.IsSelfLinked(chat.JID));
+            if (chat.IsChannel)
+            {
+                // Newsletter notify / tip sender name lands on Name via existing columns.
+                ChannelIdentityApply.TryApplyName(chat, senderName);
+            }
 
             string yesterday = _strings.Get("Common_Yesterday", "Yesterday");
             if (timestamp != DateTime.MinValue)

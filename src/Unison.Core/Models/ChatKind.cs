@@ -19,6 +19,12 @@ namespace Unison.Core.Models
         /// Linked subgroups stay <see cref="Group"/> with <c>LinkedParentJid</c>;
         /// announce channels stay <see cref="Group"/> with <c>IsCommunityAnnounce</c>.
         /// </summary>
-        Community = 3
+        Community = 3,
+
+        /// <summary>
+        /// WhatsApp Channel / newsletter (<c>@newsletter</c>). Read-only for subscribers;
+        /// listed under the Channels / Canais section, not the main chat list.
+        /// </summary>
+        Channel = 4
     }
 }

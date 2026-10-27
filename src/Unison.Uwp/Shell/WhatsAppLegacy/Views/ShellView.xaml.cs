@@ -50,6 +50,7 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
         private ChatListView _hookedList;
         private ChatsView _hookedChats;
         private ArchivedChatsView _hookedArchived;
+        private ChannelsView _hookedChannels;
         private LegacyPivotPlaceholderView _hookedPlaceholder;
         private FavoritesView _hookedFavorites;
         private StatusView _hookedStatusBar;
@@ -903,6 +904,10 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             {
                 archived.ListChrome?.ClearSelection();
             }
+            else if (ActivePivotContent() is ChannelsView channels)
+            {
+                channels.ListChrome?.ClearSelection();
+            }
 
             _shell?.ClearChat();
             _detailOpen = false;
@@ -942,6 +947,7 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
         {
             return content is ChatsView
                 || content is ArchivedChatsView
+                || content is ChannelsView
                 || content is StatusView
                 || content is LegacyPivotPlaceholderView;
         }
@@ -962,6 +968,12 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                 _hookedArchived = archived;
                 _hookedList = archived.ListChrome;
                 archived.ChatOpenRequested += Archived_ChatOpenRequested;
+            }
+            else if (content is ChannelsView channels)
+            {
+                _hookedChannels = channels;
+                _hookedList = channels.ListChrome;
+                channels.ChatOpenRequested += Channels_ChatOpenRequested;
             }
             else if (content is LegacyPivotPlaceholderView placeholder)
             {
@@ -1007,6 +1019,12 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             {
                 _hookedArchived.ChatOpenRequested -= Archived_ChatOpenRequested;
                 _hookedArchived = null;
+            }
+
+            if (_hookedChannels != null)
+            {
+                _hookedChannels.ChatOpenRequested -= Channels_ChatOpenRequested;
+                _hookedChannels = null;
             }
 
             if (_hookedPlaceholder != null)
@@ -1060,6 +1078,11 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             Chats_ChatOpenRequested(sender, e);
         }
 
+        private void Channels_ChatOpenRequested(object sender, ChatSelectedEventArgs e)
+        {
+            Chats_ChatOpenRequested(sender, e);
+        }
+
         private void LegacyFavorites_ChatSelected(
             object sender,
             global::Unison.Uwp.UI.Views.ChatSelectedEventArgs e)
@@ -1108,8 +1131,9 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             SetPivotHeader(0, "Shell_Chats.Text", "chats");
             SetPivotHeader(1, "Shell_LegacyPivot_Calls.Header", "calls");
             SetPivotHeader(2, "Shell_Status.Text", "status");
-            SetPivotHeader(3, "Shell_LegacyPivot_Favorites.Header", "favorites");
-            SetPivotHeader(4, "Shell_Archived.Text", "archived");
+            SetPivotHeader(3, "Shell_Channels.Text", "channels");
+            SetPivotHeader(4, "Shell_LegacyPivot_Favorites.Header", "favorites");
+            SetPivotHeader(5, "Shell_Archived.Text", "archived");
         }
 
         private static string CapitalizeFirst(string text)
@@ -1166,6 +1190,7 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             return string.Equals(tag, "chats", StringComparison.OrdinalIgnoreCase)
                 || string.Equals(tag, "calls", StringComparison.OrdinalIgnoreCase)
                 || string.Equals(tag, "status", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(tag, "channels", StringComparison.OrdinalIgnoreCase)
                 || string.Equals(tag, "favorites", StringComparison.OrdinalIgnoreCase)
                 || string.Equals(tag, "archived", StringComparison.OrdinalIgnoreCase);
         }
@@ -1186,6 +1211,11 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             if (string.Equals(tag, "status", StringComparison.OrdinalIgnoreCase))
             {
                 return StatusPresenter;
+            }
+
+            if (string.Equals(tag, "channels", StringComparison.OrdinalIgnoreCase))
+            {
+                return ChannelsPresenter;
             }
 
             if (string.Equals(tag, "favorites", StringComparison.OrdinalIgnoreCase))
@@ -1243,6 +1273,7 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
 
             if (!string.Equals(tag, "chats", StringComparison.OrdinalIgnoreCase) &&
                 !string.Equals(tag, "archived", StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(tag, "channels", StringComparison.OrdinalIgnoreCase) &&
                 _detailOpen)
             {
                 await CloseDetailAsync();
@@ -1339,6 +1370,11 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                 return new ArchivedChatsView();
             }
 
+            if (string.Equals(tag, "channels", StringComparison.OrdinalIgnoreCase))
+            {
+                return new ChannelsView();
+            }
+
             if (string.Equals(tag, "calls", StringComparison.OrdinalIgnoreCase))
             {
                 return new LegacyPivotPlaceholderView();
@@ -1362,6 +1398,11 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             if (section is ArchivedChatsView archived)
             {
                 return archived.InitAsync(_shell);
+            }
+
+            if (section is ChannelsView channels)
+            {
+                return channels.InitAsync(_shell);
             }
 
             if (section is LegacyPivotPlaceholderView placeholder)
@@ -1658,6 +1699,11 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             if (ActivePivotContent() is ArchivedChatsView archived)
             {
                 return archived.ChatListViewModel;
+            }
+
+            if (ActivePivotContent() is ChannelsView channels)
+            {
+                return channels.ChatListViewModel;
             }
 
             return null;

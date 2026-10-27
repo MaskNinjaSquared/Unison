@@ -83,7 +83,8 @@ namespace Unison.Uwp.Services
             bool suppressToast,
             int totalUnread,
             string avatarUrl = null,
-            int chatUnread = -1)
+            int chatUnread = -1,
+            bool isCommunityAnnounce = false)
         {
             Initialize();
 
@@ -94,7 +95,8 @@ namespace Unison.Uwp.Services
                     senderName,
                     preview,
                     isGroup,
-                    avatarUrl);
+                    avatarUrl,
+                    isCommunityAnnounce);
 
             bool notificationsEnabled = IsNotificationsSettingEnabled();
             bool toastShown = false;

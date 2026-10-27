@@ -30,6 +30,9 @@ namespace Unison.Background
             "ms-appx:///Assets/Toast/avatar_contact.png";
         public const string GroupAvatarPlaceholder =
             "ms-appx:///Assets/Toast/avatar_group.png";
+        /// <summary>Community Avisos / Announcements megaphone (packaged toast glyph).</summary>
+        public const string AnnouncementsAvatarPlaceholder =
+            "ms-appx:///Assets/Toast/avatar_announcements.png";
         // PNGs regenerated from ChatAvatarControl fallbacks via scripts/generate_toast_avatars.ps1
         // (contact: Segoe Fluent Icons U+EA8C; group: Path Data; dark AvatarFallback* brushes).
 
@@ -39,7 +42,8 @@ namespace Unison.Background
             string senderName,
             string preview,
             bool isGroup,
-            string avatarUrl = null)
+            string avatarUrl = null,
+            bool isCommunityAnnounce = false)
         {
             string safeChatName = string.IsNullOrWhiteSpace(chatName)
                 ? BackgroundStrings.Get("Toast_NewMessageFallback", "New message")
@@ -65,16 +69,25 @@ namespace Unison.Background
                 ChatJid = chatJid ?? string.Empty,
                 IsRealMessage = true,
                 IsGroup = isGroup,
-                AvatarSrc = ResolveAvatarSrc(avatarUrl, isGroup)
+                AvatarSrc = ResolveAvatarSrc(avatarUrl, isGroup, isCommunityAnnounce)
             };
         }
 
         /// <summary>
-        /// Prefer a packaged/local avatar URI that toast can load; otherwise contact/group placeholder.
+        /// Prefer a packaged/local avatar URI that toast can load; otherwise contact/group/avisos placeholder.
         /// Remote http(s) URLs are not used (toast would need download first).
+        /// Community announce always uses the megaphone asset (matches header chrome).
         /// </summary>
-        public static string ResolveAvatarSrc(string avatarUrl, bool isGroup)
+        public static string ResolveAvatarSrc(
+            string avatarUrl,
+            bool isGroup,
+            bool isCommunityAnnounce = false)
         {
+            if (isCommunityAnnounce)
+            {
+                return AnnouncementsAvatarPlaceholder;
+            }
+
             if (!string.IsNullOrWhiteSpace(avatarUrl))
             {
                 string trimmed = avatarUrl.Trim();

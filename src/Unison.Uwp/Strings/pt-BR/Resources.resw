@@ -329,6 +329,12 @@ Desative depois de diagnosticar: manter ligado deixa o app lento.</value>
   <data name="ChatDetail_GroupOnlyAdminsCanSend.Text" xml:space="preserve">
     <value>Somente admins podem enviar mensagens</value>
   </data>
+  <data name="ChatDetail_UnreadMessagesFormat" xml:space="preserve">
+    <value>{0} mensagens não lidas</value>
+  </data>
+  <data name="ChatDetail_UnreadUpdatesFormat" xml:space="preserve">
+    <value>{0} atualizações não lidas</value>
+  </data>
   <data name="ChatDetail_AttachCamera.Text" xml:space="preserve">
     <value>Câmera</value>
   </data>
@@ -678,6 +684,15 @@ Desative depois de diagnosticar: manter ligado deixa o app lento.</value>
   </data>
   <data name="Shell_Favorites.Text" xml:space="preserve">
     <value>Favoritos</value>
+  </data>
+  <data name="Shell_Channels.Text" xml:space="preserve">
+    <value>Canais</value>
+  </data>
+  <data name="Shell_LegacyPivot_Channels.Header" xml:space="preserve">
+    <value>canais</value>
+  </data>
+  <data name="ChatDetail_ChannelReadOnly.Text" xml:space="preserve">
+    <value>Este canal é somente leitura</value>
   </data>
   <data name="Favorites_Header.Text" xml:space="preserve">
     <value>Favoritos</value>

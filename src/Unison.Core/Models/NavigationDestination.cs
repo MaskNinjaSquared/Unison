@@ -25,6 +25,9 @@ namespace Unison.Core.Models
         /// </summary>
         Profile = 16,
 
+        /// <summary>WhatsApp Channels / Canais (<c>@newsletter</c>) list.</summary>
+        Channels = 17,
+
         /// <summary>
         /// Tracked as the active section when settings is open; do not pass to
         /// <c>NavigateInShell</c> — use <see cref="Contracts.INavigator.OpenSettings"/>.

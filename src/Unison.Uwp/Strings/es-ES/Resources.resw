@@ -270,6 +270,12 @@ Desactívalo tras el diagnóstico: mantenerlo activo ralentiza la aplicación.</
   <data name="ChatDetail_GroupOnlyAdminsCanSend.Text" xml:space="preserve">
     <value>Solo los admins pueden enviar mensajes</value>
   </data>
+  <data name="ChatDetail_UnreadMessagesFormat" xml:space="preserve">
+    <value>{0} mensajes no leídos</value>
+  </data>
+  <data name="ChatDetail_UnreadUpdatesFormat" xml:space="preserve">
+    <value>{0} actualizaciones no leídas</value>
+  </data>
   <data name="ChatDetail_AttachCamera.Text" xml:space="preserve">
     <value>Cámara</value>
   </data>

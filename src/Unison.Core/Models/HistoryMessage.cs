@@ -15,6 +15,11 @@ namespace Unison.Core.Models
 
         public bool IsFromMe { get; set; }
 
+        /// <summary>
+        /// Local read flag for inbound rows. Null = column missing / legacy — ignore for UI.
+        /// </summary>
+        public bool? IsRead { get; set; }
+
         public string ParticipantJid { get; set; }
 
         public string SenderName { get; set; }

@@ -148,6 +148,9 @@ namespace Unison.Core.ViewModels
         /// <summary>Clears top-scroll paging flags when switching conversations.</summary>
         public void ResetTimelinePaging()
         {
+            _sessionUnreadDividerCount = 0;
+            _sessionUnreadIsChannel = false;
+            _inboundHistoryReadCommitted = false;
             _hasReachedStart = false;
             _emptyLoadAttempts = 0;
             IsLoadingMore = false;

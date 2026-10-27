@@ -1796,7 +1796,8 @@ namespace Unison.WhatsAppClient.Messages
                         payload.SuppressToast,
                         payload.TotalUnread,
                         payload.AvatarUrl,
-                        payload.ChatUnread);
+                        payload.ChatUnread,
+                        payload.IsCommunityAnnounce);
                 }
                 catch (Exception ex)
                 {
@@ -3145,6 +3146,12 @@ namespace Unison.WhatsAppClient.Messages
             }
 
             IncomingMediaHydrationPlan mediaPlan = IncomingMediaHydrationPlan.From(renderInfo);
+            if (!isActuallyFromMe)
+            {
+                // Open chat → already read; background inbound stays unread until open.
+                chatMessage.IsRead = !attention.CountsAsUnread;
+            }
+
             trace?.Mark(request.IsOffline ? "inserted-offline-preview" : "inserted");
             await ApplyIncomingInsertedAsync(new IncomingInsertedApplyRequest
             {

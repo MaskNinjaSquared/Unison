@@ -314,6 +314,12 @@ Disabilita dopo la diagnosi: lasciarlo attivo rallenta l'app.</value>
   <data name="ChatDetail_GroupOnlyAdminsCanSend.Text" xml:space="preserve">
     <value>Solo gli admin possono inviare messaggi</value>
   </data>
+  <data name="ChatDetail_UnreadMessagesFormat" xml:space="preserve">
+    <value>{0} messaggi non letti</value>
+  </data>
+  <data name="ChatDetail_UnreadUpdatesFormat" xml:space="preserve">
+    <value>{0} aggiornamenti non letti</value>
+  </data>
   <data name="ChatDetail_AttachCamera.Text" xml:space="preserve">
     <value>Fotocamera</value>
   </data>

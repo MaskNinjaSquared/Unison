@@ -100,5 +100,62 @@ namespace Unison.Core.Tests.Helpers
             Assert.True(messages[0].IsRunEnd);
             Assert.True(messages[1].IsRunStart);
         }
+
+        [Fact]
+        public void ApplyUnreadDividerUsesExplicitIsReadFalse()
+        {
+            var read = Incoming(AnaPn, "Ana");
+            read.IsRead = true;
+            var unread = Incoming(BrunoPn, "Bruno");
+            unread.IsRead = false;
+            var messages = new[] { read, unread };
+
+            MessageRunLayout.ApplyUnreadDivider(
+                messages,
+                badgeUnreadCount: 1,
+                "{0} unread messages",
+                "{0} unread updates",
+                isChannel: false);
+
+            Assert.False(messages[0].IsUnreadDivider);
+            Assert.True(messages[1].IsUnreadDivider);
+            Assert.Equal("1 unread messages", messages[1].UnreadDividerText);
+        }
+
+        [Fact]
+        public void ApplyUnreadDividerUsesChannelUpdatesCopy()
+        {
+            var unread = Incoming(AnaPn, "Ana");
+            unread.IsRead = false;
+            var messages = new[] { unread };
+
+            MessageRunLayout.ApplyUnreadDivider(
+                messages,
+                badgeUnreadCount: 3,
+                "{0} unread messages",
+                "{0} unread updates",
+                isChannel: true);
+
+            Assert.True(messages[0].IsUnreadDivider);
+            Assert.Equal("3 unread updates", messages[0].UnreadDividerText);
+        }
+
+        [Fact]
+        public void ApplyUnreadDividerFallsBackToBadgeWhenIsReadNull()
+        {
+            var older = Incoming(AnaPn, "Ana");
+            var newer = Incoming(BrunoPn, "Bruno");
+            var messages = new[] { older, newer };
+
+            MessageRunLayout.ApplyUnreadDivider(
+                messages,
+                badgeUnreadCount: 1,
+                "{0} unread messages",
+                "{0} unread updates",
+                isChannel: false);
+
+            Assert.False(messages[0].IsUnreadDivider);
+            Assert.True(messages[1].IsUnreadDivider);
+        }
     }
 }

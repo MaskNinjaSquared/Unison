@@ -207,6 +207,9 @@ namespace Unison.Core.Tests.Helpers
 
             public Task<bool> IsMediaDeletedAsync(string chatJid, string messageId) =>
                 Task.FromResult(false);
+
+            public Task MarkInboundReadAsync(IReadOnlyList<string> chatJids) =>
+                Task.CompletedTask;
         }
 
         private sealed class SpyMessageStore : IMessageStore

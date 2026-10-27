@@ -22,13 +22,13 @@ namespace Unison.Uwp.Data
     {
         private static readonly string DatabaseFileName = "unison.db";
 
-        public const int CurrentSchemaVersion = 9;
+        public const int CurrentSchemaVersion = 10;
 
         /// <summary>
         /// Timeline open / load-more: protocol thumbs live on disk (<c>MediaLocalUri</c> / poster).
         /// </summary>
         private const string TimelineSelectSql =
-            "SELECT Id, ChatJid, MessageId, IsFromMe, ParticipantJid, SenderName, Body, Kind, SendState, " +
+            "SELECT Id, ChatJid, MessageId, IsFromMe, IsRead, ParticipantJid, SenderName, Body, Kind, SendState, " +
             "MediaUrl, MediaDirectPath, MediaKeyBase64, MediaFileEncSha256Base64, MediaMimeType, " +
             "MediaDurationSeconds, MediaFileName, MediaFileLengthBytes, IsVoiceNote, IsAnimated, IsRevoked, IsForwarded, IsPinned, " +
             "PinnedAtUtc, PinExpiresAtUtc, QuotedMessageId, QuotedChatJid, QuotedParticipantJid, " +
@@ -71,6 +71,7 @@ namespace Unison.Uwp.Data
                 await _connection.CreateTableAsync<HistoryMessageReactionRow>().ConfigureAwait(false);
                 await EnsureFlagDeletedColumnAsync().ConfigureAwait(false);
                 await EnsureIsAnimatedColumnAsync().ConfigureAwait(false);
+                await EnsureIsReadColumnAsync().ConfigureAwait(false);
                 await DropLegacyThumbnailColumnAsync().ConfigureAwait(false);
                 await EnsureIndexesAsync().ConfigureAwait(false);
                 await StaleOutgoingSweep.EnsureRanAsync(_connection).ConfigureAwait(false);
@@ -1334,6 +1335,75 @@ namespace Unison.Uwp.Data
             }
         }
 
+        /// <summary>Nullable column — old rows stay NULL and the UI ignores them.</summary>
+        private async Task EnsureIsReadColumnAsync()
+        {
+            try
+            {
+                await _connection.ExecuteAsync(
+                    "ALTER TABLE history_message ADD COLUMN IsRead INTEGER NULL").ConfigureAwait(false);
+            }
+            catch (SQLiteException ex) when (
+                ex.Message != null &&
+                ex.Message.IndexOf("duplicate column name", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+            }
+        }
+
+        public async Task MarkInboundReadAsync(IReadOnlyList<string> chatJids)
+        {
+            if (chatJids == null || chatJids.Count == 0)
+            {
+                return;
+            }
+
+            await InitializeAsync().ConfigureAwait(false);
+            await EnsureIsReadColumnAsync().ConfigureAwait(false);
+
+            var keys = new List<string>();
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            for (int i = 0; i < chatJids.Count; i++)
+            {
+                string key = JidHelper.Normalize(chatJids[i]);
+                if (string.IsNullOrWhiteSpace(key) || !seen.Add(key))
+                {
+                    continue;
+                }
+
+                keys.Add(key);
+            }
+
+            if (keys.Count == 0)
+            {
+                return;
+            }
+
+            await _writeLock.WaitAsync().ConfigureAwait(false);
+            try
+            {
+                var sql = new StringBuilder(
+                    "UPDATE history_message SET IsRead = 1 WHERE IsFromMe = 0 AND (IsRead IS NULL OR IsRead = 0) AND ChatJid IN (");
+                var args = new object[keys.Count];
+                for (int i = 0; i < keys.Count; i++)
+                {
+                    if (i > 0)
+                    {
+                        sql.Append(',');
+                    }
+
+                    sql.Append('?');
+                    args[i] = keys[i];
+                }
+
+                sql.Append(')');
+                await _connection.ExecuteAsync(sql.ToString(), args).ConfigureAwait(false);
+            }
+            finally
+            {
+                _writeLock.Release();
+            }
+        }
+
         private static HistoryMessageRow ToRow(HistoryMessage model)
         {
             return new HistoryMessageRow
@@ -1342,6 +1412,7 @@ namespace Unison.Uwp.Data
                 ChatJid = model.ChatJid,
                 MessageId = model.MessageId,
                 IsFromMe = model.IsFromMe,
+                IsRead = model.IsRead,
                 ParticipantJid = model.ParticipantJid,
                 SenderName = model.SenderName,
                 Body = model.Body,
@@ -1410,6 +1481,7 @@ namespace Unison.Uwp.Data
                 ChatJid = row.ChatJid,
                 MessageId = row.MessageId,
                 IsFromMe = row.IsFromMe,
+                IsRead = row.IsRead,
                 ParticipantJid = row.ParticipantJid,
                 SenderName = row.SenderName,
                 Body = row.Body,

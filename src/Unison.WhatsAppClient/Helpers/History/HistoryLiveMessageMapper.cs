@@ -107,6 +107,8 @@ namespace Unison.WhatsAppClient.Helpers
                 ChatJid = jid,
                 MessageId = message.Id.Trim(),
                 IsFromMe = message.IsFromMe,
+                // Outgoing stays null (ignored). Inbound keeps the explicit open/unread flag.
+                IsRead = message.IsFromMe ? (bool?)null : message.IsRead,
                 ParticipantJid = JidHelper.Normalize(message.ParticipantJid),
                 SenderName = message.SenderName,
                 Body = revoked ? string.Empty : body,

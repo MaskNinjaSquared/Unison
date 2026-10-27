@@ -63,6 +63,19 @@
             <!-- Body on brand-green pane (name / phone / groups-in-common titles). Never SystemAccent. -->
             <SolidColorBrush x:Key="ChatDetailInfoPaneBodyBrush" Color="#FFFFFFFF"/>
             <SolidColorBrush x:Key="ChatDetailInfoMutedBrush" Color="#E8FFFFFF"/>
+            <!-- Info pane on green: white hyperlinks + translucent toggles. -->
+            <SolidColorBrush x:Key="SystemControlHyperlinkTextBrush" Color="#FFFFFFFF"/>
+            <SolidColorBrush x:Key="AccentTextFillColorPrimaryBrush" Color="#FFFFFFFF"/>
+            <SolidColorBrush x:Key="AccentTextFillColorSecondaryBrush" Color="#E6FFFFFF"/>
+            <SolidColorBrush x:Key="ToggleSwitchKnobFillOn" Color="#FFFFFFFF"/>
+            <SolidColorBrush x:Key="ToggleSwitchKnobFillOnPointerOver" Color="#FFFFFFFF"/>
+            <SolidColorBrush x:Key="ToggleSwitchKnobFillOnPressed" Color="#F2FFFFFF"/>
+            <SolidColorBrush x:Key="ToggleSwitchFillOn" Color="#66FFFFFF"/>
+            <SolidColorBrush x:Key="ToggleSwitchFillOnPointerOver" Color="#80FFFFFF"/>
+            <SolidColorBrush x:Key="ToggleSwitchFillOnPressed" Color="#59FFFFFF"/>
+            <SolidColorBrush x:Key="ToggleSwitchStrokeOn" Color="#66FFFFFF"/>
+            <SolidColorBrush x:Key="ToggleSwitchStrokeOnPointerOver" Color="#80FFFFFF"/>
+            <SolidColorBrush x:Key="ToggleSwitchStrokeOnPressed" Color="#59FFFFFF"/>
             <SolidColorBrush x:Key="ChatDetailPaneSeparatorBrush" Color="#FF3B3B3B"/>
             <SolidColorBrush x:Key="ChatDetailPinnedBarBackgroundBrush" Color="#FF32373B"/>
             <SolidColorBrush x:Key="ChatDetailPinnedPreviewBrush" Color="#FFFFFFFF"/>
@@ -191,6 +204,19 @@
             <!-- Body on brand-green pane (name / phone / groups-in-common titles). Never SystemAccent. -->
             <SolidColorBrush x:Key="ChatDetailInfoPaneBodyBrush" Color="#FFFFFFFF"/>
             <SolidColorBrush x:Key="ChatDetailInfoMutedBrush" Color="#E8FFFFFF"/>
+            <!-- Info pane on green: white hyperlinks + translucent toggles. -->
+            <SolidColorBrush x:Key="SystemControlHyperlinkTextBrush" Color="#FFFFFFFF"/>
+            <SolidColorBrush x:Key="AccentTextFillColorPrimaryBrush" Color="#FFFFFFFF"/>
+            <SolidColorBrush x:Key="AccentTextFillColorSecondaryBrush" Color="#E6FFFFFF"/>
+            <SolidColorBrush x:Key="ToggleSwitchKnobFillOn" Color="#FFFFFFFF"/>
+            <SolidColorBrush x:Key="ToggleSwitchKnobFillOnPointerOver" Color="#FFFFFFFF"/>
+            <SolidColorBrush x:Key="ToggleSwitchKnobFillOnPressed" Color="#F2FFFFFF"/>
+            <SolidColorBrush x:Key="ToggleSwitchFillOn" Color="#66FFFFFF"/>
+            <SolidColorBrush x:Key="ToggleSwitchFillOnPointerOver" Color="#80FFFFFF"/>
+            <SolidColorBrush x:Key="ToggleSwitchFillOnPressed" Color="#59FFFFFF"/>
+            <SolidColorBrush x:Key="ToggleSwitchStrokeOn" Color="#66FFFFFF"/>
+            <SolidColorBrush x:Key="ToggleSwitchStrokeOnPointerOver" Color="#80FFFFFF"/>
+            <SolidColorBrush x:Key="ToggleSwitchStrokeOnPressed" Color="#59FFFFFF"/>
             <SolidColorBrush x:Key="ChatDetailPaneSeparatorBrush" Color="#FF3B3B3B"/>
             <SolidColorBrush x:Key="ChatDetailPinnedBarBackgroundBrush" Color="#FF32373B"/>
             <SolidColorBrush x:Key="ChatDetailPinnedPreviewBrush" Color="#FFFFFFFF"/>
@@ -317,6 +343,19 @@
             <!-- Body on brand-green pane (name / phone / groups-in-common titles). Never SystemAccent. -->
             <SolidColorBrush x:Key="ChatDetailInfoPaneBodyBrush" Color="#FFFFFFFF"/>
             <SolidColorBrush x:Key="ChatDetailInfoMutedBrush" Color="#E8FFFFFF"/>
+            <!-- Info pane on green: white hyperlinks + translucent toggles. -->
+            <SolidColorBrush x:Key="SystemControlHyperlinkTextBrush" Color="#FFFFFFFF"/>
+            <SolidColorBrush x:Key="AccentTextFillColorPrimaryBrush" Color="#FFFFFFFF"/>
+            <SolidColorBrush x:Key="AccentTextFillColorSecondaryBrush" Color="#E6FFFFFF"/>
+            <SolidColorBrush x:Key="ToggleSwitchKnobFillOn" Color="#FFFFFFFF"/>
+            <SolidColorBrush x:Key="ToggleSwitchKnobFillOnPointerOver" Color="#FFFFFFFF"/>
+            <SolidColorBrush x:Key="ToggleSwitchKnobFillOnPressed" Color="#F2FFFFFF"/>
+            <SolidColorBrush x:Key="ToggleSwitchFillOn" Color="#66FFFFFF"/>
+            <SolidColorBrush x:Key="ToggleSwitchFillOnPointerOver" Color="#80FFFFFF"/>
+            <SolidColorBrush x:Key="ToggleSwitchFillOnPressed" Color="#59FFFFFF"/>
+            <SolidColorBrush x:Key="ToggleSwitchStrokeOn" Color="#66FFFFFF"/>
+            <SolidColorBrush x:Key="ToggleSwitchStrokeOnPointerOver" Color="#80FFFFFF"/>
+            <SolidColorBrush x:Key="ToggleSwitchStrokeOnPressed" Color="#59FFFFFF"/>
             <SolidColorBrush x:Key="ChatDetailPaneSeparatorBrush" Color="#FFE9EDEF"/>
             <SolidColorBrush x:Key="ChatDetailPinnedBarBackgroundBrush" Color="#FFFFFFFF"/>
             <SolidColorBrush x:Key="ChatDetailPinnedPreviewBrush" Color="#FF111B21"/>

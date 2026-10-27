@@ -14,7 +14,9 @@
     <x:String x:Key="LegacyGlyphAttach">&#xEB03;</x:String>
     <x:String x:Key="LegacyGlyphSend">&#xEB04;</x:String>
     <x:String x:Key="LegacyGlyphMic">&#xEB05;</x:String>
+    <!-- Speech balloon (appbar-newchat.png); also the unread badge next to the brand title. -->
     <x:String x:Key="LegacyGlyphNewChat">&#xEB06;</x:String>
+    <x:String x:Key="LegacyGlyphMessage">&#xEB06;</x:String>
     <x:String x:Key="LegacyGlyphPin">&#xEB07;</x:String>
     <x:String x:Key="LegacyGlyphPinStart">&#xEB08;</x:String>
     <x:String x:Key="LegacyGlyphPlay">&#xEB09;</x:String>
@@ -30,6 +32,7 @@
     <x:String x:Key="LegacyGlyphContact">&#xEB13;</x:String>
     <x:String x:Key="LegacyGlyphAudio">&#xEB14;</x:String>
     <x:String x:Key="LegacyGlyphLocation">&#xEB15;</x:String>
+    <x:String x:Key="LegacyGlyphChannels">&#xEB17;</x:String>
     <!-- Every LegacyIconFont glyph is centred in its em, so one size per surface keeps them uniform. -->
     <x:Double x:Key="LegacyAppBarGlyphSize">24</x:Double>
     <!-- Compact strip +6 for a 3px air gap above and below the 40px ring (was 48). -->
@@ -63,6 +66,12 @@
             <SolidColorBrush x:Key="LegacyCommandBarBackgroundBrush" Color="#FF1F1F1F"/>
             <SolidColorBrush x:Key="LegacyCommandBarForegroundBrush" Color="#FFFFFFFF"/>
             <SolidColorBrush x:Key="LegacyAppBarRingBrush" Color="#FFFFFFFF"/>
+            <!-- Page chrome back: ring only on dark canvas. -->
+            <SolidColorBrush x:Key="LegacyBackButtonFillBrush" Color="Transparent"/>
+            <SolidColorBrush x:Key="LegacyBackButtonRingBrush" Color="#FFFFFFFF"/>
+            <SolidColorBrush x:Key="LegacyBackButtonGlyphBrush" Color="#FFFFFFFF"/>
+            <SolidColorBrush x:Key="LegacyBackButtonHoverFillBrush" Color="#FFFFFFFF"/>
+            <SolidColorBrush x:Key="LegacyBackButtonHoverGlyphBrush" Color="#FF000000"/>
             <SolidColorBrush x:Key="LegacySearchBorderBrush" Color="#FFFFFFFF"/>
             <SolidColorBrush x:Key="ComboBoxBackground" Color="Transparent"/>
             <SolidColorBrush x:Key="ComboBoxBackgroundPointerOver" Color="Transparent"/>
@@ -83,11 +92,26 @@
             <SolidColorBrush x:Key="ChatListUnreadBadgeBrush" Color="#FF04564A"/>
             <SolidColorBrush x:Key="ChatListSyncStatusBrush" Color="#FF04564A"/>
             <SolidColorBrush x:Key="ChatDetailAccentBrush" Color="#FF04564A"/>
+            <SolidColorBrush x:Key="ChatDetailInfoBackgroundBrush" Color="#FF04564A"/>
             <SolidColorBrush x:Key="ChatDetailInfoLabelBrush" Color="#FFFFFFFF"/>
             <SolidColorBrush x:Key="ChatDetailInfoValueBrush" Color="#FF1DAA61"/>
-            <!-- Body on brand-green info pane — white (not accent); ValueBrush stays Legacy green for other surfaces. -->
             <SolidColorBrush x:Key="ChatDetailInfoPaneBodyBrush" Color="#FFFFFFFF"/>
             <SolidColorBrush x:Key="ChatDetailInfoMutedBrush" Color="#FFCCCCCC"/>
+            <SolidColorBrush x:Key="ChatDetailInfoCloseForegroundBrush" Color="#FFFFFFFF"/>
+            <SolidColorBrush x:Key="ChatDetailInfoCloseHoverBrush" Color="#33FFFFFF"/>
+            <SolidColorBrush x:Key="ChatDetailInfoClosePressedBrush" Color="#55FFFFFF"/>
+            <SolidColorBrush x:Key="SystemControlHyperlinkTextBrush" Color="#FFFFFFFF"/>
+            <SolidColorBrush x:Key="AccentTextFillColorPrimaryBrush" Color="#FFFFFFFF"/>
+            <SolidColorBrush x:Key="AccentTextFillColorSecondaryBrush" Color="#E6FFFFFF"/>
+            <SolidColorBrush x:Key="ToggleSwitchKnobFillOn" Color="#FFFFFFFF"/>
+            <SolidColorBrush x:Key="ToggleSwitchKnobFillOnPointerOver" Color="#FFFFFFFF"/>
+            <SolidColorBrush x:Key="ToggleSwitchKnobFillOnPressed" Color="#F2FFFFFF"/>
+            <SolidColorBrush x:Key="ToggleSwitchFillOn" Color="#66FFFFFF"/>
+            <SolidColorBrush x:Key="ToggleSwitchFillOnPointerOver" Color="#80FFFFFF"/>
+            <SolidColorBrush x:Key="ToggleSwitchFillOnPressed" Color="#59FFFFFF"/>
+            <SolidColorBrush x:Key="ToggleSwitchStrokeOn" Color="#66FFFFFF"/>
+            <SolidColorBrush x:Key="ToggleSwitchStrokeOnPointerOver" Color="#80FFFFFF"/>
+            <SolidColorBrush x:Key="ToggleSwitchStrokeOnPressed" Color="#59FFFFFF"/>
             <SolidColorBrush x:Key="WhatsAppGreenFocusBrush" Color="#FF04564A"/>
             <SolidColorBrush x:Key="ChatDetailInputBarBackgroundBrush" Color="#FF000000"/>
             <SolidColorBrush x:Key="ChatDetailInputBarTopBorderBrush" Color="#FF333333"/>
@@ -123,6 +147,11 @@
             <SolidColorBrush x:Key="LegacyCommandBarBackgroundBrush" Color="#FF1F1F1F"/>
             <SolidColorBrush x:Key="LegacyCommandBarForegroundBrush" Color="#FFFFFFFF"/>
             <SolidColorBrush x:Key="LegacyAppBarRingBrush" Color="#FFFFFFFF"/>
+            <SolidColorBrush x:Key="LegacyBackButtonFillBrush" Color="Transparent"/>
+            <SolidColorBrush x:Key="LegacyBackButtonRingBrush" Color="#FFFFFFFF"/>
+            <SolidColorBrush x:Key="LegacyBackButtonGlyphBrush" Color="#FFFFFFFF"/>
+            <SolidColorBrush x:Key="LegacyBackButtonHoverFillBrush" Color="#FFFFFFFF"/>
+            <SolidColorBrush x:Key="LegacyBackButtonHoverGlyphBrush" Color="#FF000000"/>
             <SolidColorBrush x:Key="LegacySearchBorderBrush" Color="#FFFFFFFF"/>
             <SolidColorBrush x:Key="ComboBoxBackground" Color="Transparent"/>
             <SolidColorBrush x:Key="ComboBoxBackgroundPointerOver" Color="Transparent"/>
@@ -142,11 +171,26 @@
             <SolidColorBrush x:Key="ChatListUnreadBadgeBrush" Color="#FF04564A"/>
             <SolidColorBrush x:Key="ChatListSyncStatusBrush" Color="#FF04564A"/>
             <SolidColorBrush x:Key="ChatDetailAccentBrush" Color="#FF04564A"/>
+            <SolidColorBrush x:Key="ChatDetailInfoBackgroundBrush" Color="#FF04564A"/>
             <SolidColorBrush x:Key="ChatDetailInfoLabelBrush" Color="#FFFFFFFF"/>
             <SolidColorBrush x:Key="ChatDetailInfoValueBrush" Color="#FF1DAA61"/>
-            <!-- Body on brand-green info pane — white (not accent); ValueBrush stays Legacy green for other surfaces. -->
             <SolidColorBrush x:Key="ChatDetailInfoPaneBodyBrush" Color="#FFFFFFFF"/>
             <SolidColorBrush x:Key="ChatDetailInfoMutedBrush" Color="#FFCCCCCC"/>
+            <SolidColorBrush x:Key="ChatDetailInfoCloseForegroundBrush" Color="#FFFFFFFF"/>
+            <SolidColorBrush x:Key="ChatDetailInfoCloseHoverBrush" Color="#33FFFFFF"/>
+            <SolidColorBrush x:Key="ChatDetailInfoClosePressedBrush" Color="#55FFFFFF"/>
+            <SolidColorBrush x:Key="SystemControlHyperlinkTextBrush" Color="#FFFFFFFF"/>
+            <SolidColorBrush x:Key="AccentTextFillColorPrimaryBrush" Color="#FFFFFFFF"/>
+            <SolidColorBrush x:Key="AccentTextFillColorSecondaryBrush" Color="#E6FFFFFF"/>
+            <SolidColorBrush x:Key="ToggleSwitchKnobFillOn" Color="#FFFFFFFF"/>
+            <SolidColorBrush x:Key="ToggleSwitchKnobFillOnPointerOver" Color="#FFFFFFFF"/>
+            <SolidColorBrush x:Key="ToggleSwitchKnobFillOnPressed" Color="#F2FFFFFF"/>
+            <SolidColorBrush x:Key="ToggleSwitchFillOn" Color="#66FFFFFF"/>
+            <SolidColorBrush x:Key="ToggleSwitchFillOnPointerOver" Color="#80FFFFFF"/>
+            <SolidColorBrush x:Key="ToggleSwitchFillOnPressed" Color="#59FFFFFF"/>
+            <SolidColorBrush x:Key="ToggleSwitchStrokeOn" Color="#66FFFFFF"/>
+            <SolidColorBrush x:Key="ToggleSwitchStrokeOnPointerOver" Color="#80FFFFFF"/>
+            <SolidColorBrush x:Key="ToggleSwitchStrokeOnPressed" Color="#59FFFFFF"/>
             <SolidColorBrush x:Key="WhatsAppGreenFocusBrush" Color="#FF04564A"/>
             <SolidColorBrush x:Key="ChatDetailInputBarBackgroundBrush" Color="#FF000000"/>
             <SolidColorBrush x:Key="ChatDetailInputBarTopBorderBrush" Color="#FF333333"/>
@@ -157,32 +201,60 @@
             <SolidColorBrush x:Key="SystemControlHighlightAltAccentBrush" Color="#FF04564A"/>
         </ResourceDictionary>
 
+        <!--
+          WP8 light: white page + black ink + accent highlights.
+          Application Bar is pure black with white glyphs — never a pale grey strip.
+          Bubbles use classic light WhatsApp greens/whites (WhatsApp Theme.xaml Light wrongly
+          keeps dark bubbles; override here so Legacy does not inherit that).
+        -->
         <ResourceDictionary x:Key="Light">
             <x:Double x:Key="AppBarThemeCompactHeight">54</x:Double>
             <SolidColorBrush x:Key="ApplicationPageBackgroundThemeBrush" Color="#FFFFFFFF"/>
             <SolidColorBrush x:Key="WhatsAppBackgroundBrush" Color="#FFFFFFFF"/>
             <SolidColorBrush x:Key="WhatsAppHeaderBrush" Color="#FFFFFFFF"/>
             <SolidColorBrush x:Key="WhatsAppSidebarBrush" Color="#FFFFFFFF"/>
+            <SolidColorBrush x:Key="WhatsAppItemHoverBrush" Color="#FFF5F5F5"/>
+            <SolidColorBrush x:Key="WhatsAppItemSelectedBrush" Color="#FFE8E8E8"/>
+            <SolidColorBrush x:Key="WhatsAppChatListSelectedBrush" Color="#FFE8E8E8"/>
+            <SolidColorBrush x:Key="WhatsAppChatListPointerOverBrush" Color="#FFF5F5F5"/>
+            <SolidColorBrush x:Key="WhatsAppChatListItemActiveForegroundBrush" Color="#FF04564A"/>
             <SolidColorBrush x:Key="ChatListBackgroundBrush" Color="#FFFFFFFF"/>
-            <SolidColorBrush x:Key="ChatDetailBackgroundBrush" Color="#FFFFFFFF"/>
-            <SolidColorBrush x:Key="ChatDetailWallpaperBackgroundBrush" Color="#FFFFFFFF"/>
+            <!-- Same underlay as Unison Light — tile PNG is mostly transparent. -->
+            <SolidColorBrush x:Key="ChatDetailBackgroundBrush" Color="#8A9191"/>
+            <SolidColorBrush x:Key="ChatDetailWallpaperBackgroundBrush" Color="#DDE0DB"/>
             <SolidColorBrush x:Key="ChatDetailDateSeparatorBackgroundBrush" Color="#FFF0F0F0"/>
+            <SolidColorBrush x:Key="ChatDetailDateSeparatorForegroundBrush" Color="#FF333333"/>
             <SolidColorBrush x:Key="ChatDetailHeaderBrush" Color="#FFFFFFFF"/>
-            <SolidColorBrush x:Key="CommunityHubHeaderBrush" Color="#FFE2E3E3"/>
+            <SolidColorBrush x:Key="ChatDetailHeaderTitleBrush" Color="#FF000000"/>
+            <SolidColorBrush x:Key="ChatDetailHeaderStatusBrush" Color="#FF666666"/>
+            <SolidColorBrush x:Key="CommunityHubHeaderBrush" Color="#FFE8E8E8"/>
             <SolidColorBrush x:Key="ChatListSearchBackgroundBrush" Color="#FFFFFFFF"/>
             <SolidColorBrush x:Key="ChatListSearchFocusedBackgroundBrush" Color="#FFFFFFFF"/>
+            <SolidColorBrush x:Key="ChatListSearchForegroundBrush" Color="#FF000000"/>
+            <SolidColorBrush x:Key="ChatListSearchPlaceholderBrush" Color="#FF666666"/>
+            <SolidColorBrush x:Key="ChatListSearchFocusedPlaceholderBrush" Color="#FF999999"/>
+            <SolidColorBrush x:Key="ChatListSecondaryTextBrush" Color="#FF666666"/>
             <SolidColorBrush x:Key="SettingsPageBackgroundBrush" Color="#FFFFFFFF"/>
             <SolidColorBrush x:Key="DebugPageBackgroundBrush" Color="#FFFFFFFF"/>
             <SolidColorBrush x:Key="SettingsDialogPaneBackgroundBrush" Color="#FFF5F5F5"/>
             <SolidColorBrush x:Key="SettingBoxBackgroundBrush" Color="Transparent"/>
             <SolidColorBrush x:Key="SettingBoxBorderBrush" Color="Transparent"/>
-            <SolidColorBrush x:Key="AvatarFallbackBackgroundBrush" Color="#FFE8E8E8"/>
-            <SolidColorBrush x:Key="AvatarFallbackIconBrush" Color="#FF9E9E9E"/>
+            <!-- Placeholders are white/translucent PNGs — need dark plate in light too. -->
+            <SolidColorBrush x:Key="AvatarFallbackBackgroundBrush" Color="#FF202020"/>
+            <SolidColorBrush x:Key="AvatarFallbackIconBrush" Color="#FF3B3B3B"/>
             <SolidColorBrush x:Key="WhatsAppTextHighBrush" Color="#FF000000"/>
             <SolidColorBrush x:Key="WhatsAppTextMediumBrush" Color="#FF333333"/>
-            <SolidColorBrush x:Key="LegacyCommandBarBackgroundBrush" Color="#FFF0F0F0"/>
-            <SolidColorBrush x:Key="LegacyCommandBarForegroundBrush" Color="#FF000000"/>
-            <SolidColorBrush x:Key="LegacyAppBarRingBrush" Color="#FF000000"/>
+            <SolidColorBrush x:Key="WhatsAppTextLowBrush" Color="#FF666666"/>
+            <!-- AppBar: WP8 black bar + white ink on light pages. -->
+            <SolidColorBrush x:Key="LegacyCommandBarBackgroundBrush" Color="#FF000000"/>
+            <SolidColorBrush x:Key="LegacyCommandBarForegroundBrush" Color="#FFFFFFFF"/>
+            <SolidColorBrush x:Key="LegacyAppBarRingBrush" Color="#FFFFFFFF"/>
+            <!-- WP8 light back: transparent + black ring; hover fills black + white glyph. -->
+            <SolidColorBrush x:Key="LegacyBackButtonFillBrush" Color="Transparent"/>
+            <SolidColorBrush x:Key="LegacyBackButtonRingBrush" Color="#FF000000"/>
+            <SolidColorBrush x:Key="LegacyBackButtonGlyphBrush" Color="#FF000000"/>
+            <SolidColorBrush x:Key="LegacyBackButtonHoverFillBrush" Color="#FF000000"/>
+            <SolidColorBrush x:Key="LegacyBackButtonHoverGlyphBrush" Color="#FFFFFFFF"/>
             <SolidColorBrush x:Key="LegacySearchBorderBrush" Color="#FF000000"/>
             <SolidColorBrush x:Key="ComboBoxBackground" Color="Transparent"/>
             <SolidColorBrush x:Key="ComboBoxBackgroundPointerOver" Color="Transparent"/>
@@ -200,17 +272,68 @@
             <SolidColorBrush x:Key="ChatPaneSplitterBackgroundBrush" Color="#FF04564A"/>
             <SolidColorBrush x:Key="ChatPaneSplitterGripBrush" Color="#FFFFFFFF"/>
             <SolidColorBrush x:Key="ChatListUnreadBadgeBrush" Color="#FF04564A"/>
+            <SolidColorBrush x:Key="ChatListUnreadBadgeForegroundBrush" Color="#FFFFFFFF"/>
             <SolidColorBrush x:Key="ChatListSyncStatusBrush" Color="#FF04564A"/>
             <SolidColorBrush x:Key="ChatDetailAccentBrush" Color="#FF04564A"/>
+            <!-- Info pane: white plate + dark ink (command bar stays green). -->
+            <SolidColorBrush x:Key="ChatDetailInfoBackgroundBrush" Color="#FFFFFFFF"/>
             <SolidColorBrush x:Key="ChatDetailInfoLabelBrush" Color="#FF000000"/>
-            <SolidColorBrush x:Key="ChatDetailInfoValueBrush" Color="#FF1DAA61"/>
-            <!-- Body on brand-green info pane — white (not accent). -->
-            <SolidColorBrush x:Key="ChatDetailInfoPaneBodyBrush" Color="#FFFFFFFF"/>
-            <SolidColorBrush x:Key="ChatDetailInfoMutedBrush" Color="#FF333333"/>
+            <SolidColorBrush x:Key="ChatDetailInfoValueBrush" Color="#FF04564A"/>
+            <SolidColorBrush x:Key="ChatDetailInfoPaneBodyBrush" Color="#FF000000"/>
+            <SolidColorBrush x:Key="ChatDetailInfoMutedBrush" Color="#FF666666"/>
+            <SolidColorBrush x:Key="ChatDetailInfoCloseForegroundBrush" Color="#FF000000"/>
+            <SolidColorBrush x:Key="ChatDetailInfoCloseHoverBrush" Color="#33000000"/>
+            <SolidColorBrush x:Key="ChatDetailInfoClosePressedBrush" Color="#55000000"/>
+            <SolidColorBrush x:Key="SystemControlHyperlinkTextBrush" Color="#FF000000"/>
+            <SolidColorBrush x:Key="AccentTextFillColorPrimaryBrush" Color="#FF000000"/>
+            <SolidColorBrush x:Key="AccentTextFillColorSecondaryBrush" Color="#E6000000"/>
+            <SolidColorBrush x:Key="ToggleSwitchKnobFillOn" Color="#FFFFFFFF"/>
+            <SolidColorBrush x:Key="ToggleSwitchKnobFillOnPointerOver" Color="#FFFFFFFF"/>
+            <SolidColorBrush x:Key="ToggleSwitchKnobFillOnPressed" Color="#FFF2F2F2"/>
+            <SolidColorBrush x:Key="ToggleSwitchFillOn" Color="#FF04564A"/>
+            <SolidColorBrush x:Key="ToggleSwitchFillOnPointerOver" Color="#FF057A68"/>
+            <SolidColorBrush x:Key="ToggleSwitchFillOnPressed" Color="#FF034038"/>
+            <SolidColorBrush x:Key="ToggleSwitchStrokeOn" Color="#FF04564A"/>
+            <SolidColorBrush x:Key="ToggleSwitchStrokeOnPointerOver" Color="#FF057A68"/>
+            <SolidColorBrush x:Key="ToggleSwitchStrokeOnPressed" Color="#FF034038"/>
             <SolidColorBrush x:Key="WhatsAppGreenFocusBrush" Color="#FF04564A"/>
             <SolidColorBrush x:Key="ChatDetailInputBarBackgroundBrush" Color="#FFFFFFFF"/>
             <SolidColorBrush x:Key="ChatDetailInputBarTopBorderBrush" Color="#FFCCCCCC"/>
             <SolidColorBrush x:Key="ChatDetailComposerBackgroundBrush" Color="Transparent"/>
+            <SolidColorBrush x:Key="ChatDetailComposerForegroundBrush" Color="#FF000000"/>
+            <SolidColorBrush x:Key="ChatDetailMutedTextBrush" Color="#FF666666"/>
+            <!-- Classic light bubbles (not the dark pair leaked from WhatsApp Theme Light). -->
+            <SolidColorBrush x:Key="ChatDetailSentBubbleBrush" Color="#FFDCF8C6"/>
+            <SolidColorBrush x:Key="ChatDetailSentBubbleHighlightBrush" Color="#FFC5E8B0"/>
+            <SolidColorBrush x:Key="ChatDetailReceivedBubbleBrush" Color="#FFFFFFFF"/>
+            <SolidColorBrush x:Key="ChatDetailReceivedBubbleHighlightBrush" Color="#FFF5F5F5"/>
+            <SolidColorBrush x:Key="ChatDetailSentQuoteBackgroundBrush" Color="#33000000"/>
+            <SolidColorBrush x:Key="ChatDetailReceivedQuoteBackgroundBrush" Color="#14000000"/>
+            <SolidColorBrush x:Key="ChatDetailSentMentionBrush" Color="#FF04564A"/>
+            <SolidColorBrush x:Key="ChatDetailReceivedMentionBrush" Color="#FF04564A"/>
+            <SolidColorBrush x:Key="ChatDetailSentTextBrush" Color="#FF000000"/>
+            <SolidColorBrush x:Key="ChatDetailSentMetaBrush" Color="#FF667781"/>
+            <SolidColorBrush x:Key="ChatDetailReceivedTextBrush" Color="#FF000000"/>
+            <SolidColorBrush x:Key="ChatDetailReceivedMetaBrush" Color="#FF667781"/>
+            <SolidColorBrush x:Key="ChatDetailStatusCheckSentBrush" Color="#FF667781"/>
+            <SolidColorBrush x:Key="ChatDetailStatusCheckReadBrush" Color="#FF34B7F1"/>
+            <SolidColorBrush x:Key="ChatDetailGroupSenderBrush" Color="#FF027EB5"/>
+            <SolidColorBrush x:Key="ChatDetailSentLinkBrush" Color="#FF027EB5"/>
+            <SolidColorBrush x:Key="ChatDetailReceivedLinkBrush" Color="#FF027EB5"/>
+            <SolidColorBrush x:Key="ChatDetailSentBubbleButtonBrush" Color="#FF000000"/>
+            <SolidColorBrush x:Key="ChatDetailReceivedBubbleButtonBrush" Color="#FF000000"/>
+            <SolidColorBrush x:Key="ChatDetailSentMediaDownloadOverlayBrush" Color="#FFAEB0B3"/>
+            <SolidColorBrush x:Key="ChatDetailReceivedMediaDownloadOverlayBrush" Color="#FFAEB0B3"/>
+            <SolidColorBrush x:Key="ChatDetailSentMediaDownloadIconBrush" Color="#FF000000"/>
+            <SolidColorBrush x:Key="ChatDetailReceivedMediaDownloadIconBrush" Color="#FF000000"/>
+            <SolidColorBrush x:Key="ChatDetailMediaDownloadOverlayBrush" Color="#FFAEB0B3"/>
+            <SolidColorBrush x:Key="ChatDetailMediaDownloadIconBrush" Color="#FF000000"/>
+            <SolidColorBrush x:Key="ChatDetailReactionChipSentBrush" Color="#FFDCF8C6"/>
+            <SolidColorBrush x:Key="ChatDetailReactionChipSentBorderBrush" Color="#FFB7DFA0"/>
+            <SolidColorBrush x:Key="ChatDetailReactionChipReceivedBrush" Color="#FFF0F0F0"/>
+            <SolidColorBrush x:Key="ChatDetailReactionChipReceivedBorderBrush" Color="#FFE0E0E0"/>
+            <SolidColorBrush x:Key="ChatDetailReactionChipForegroundBrush" Color="#FF000000"/>
+            <SolidColorBrush x:Key="IconButtonForegroundPointerOverBrush" Color="#FFFFFFFF"/>
             <Color x:Key="SystemAccentColor">#04564A</Color>
             <SolidColorBrush x:Key="SystemControlForegroundAccentBrush" Color="#FF04564A"/>
             <SolidColorBrush x:Key="SystemControlHighlightAccentBrush" Color="#FF04564A"/>

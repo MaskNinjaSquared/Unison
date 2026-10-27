@@ -314,6 +314,12 @@ Wyłącz po zakończeniu diagnozy: pozostawienie włączonego spowalnia aplikacj
   <data name="ChatDetail_GroupOnlyAdminsCanSend.Text" xml:space="preserve">
     <value>Tylko administratorzy mogą wysyłać wiadomości</value>
   </data>
+  <data name="ChatDetail_UnreadMessagesFormat" xml:space="preserve">
+    <value>{0} nieprzeczytanych wiadomości</value>
+  </data>
+  <data name="ChatDetail_UnreadUpdatesFormat" xml:space="preserve">
+    <value>{0} nieprzeczytanych aktualizacji</value>
+  </data>
   <data name="ChatDetail_AttachCamera.Text" xml:space="preserve">
     <value>Aparat</value>
   </data>

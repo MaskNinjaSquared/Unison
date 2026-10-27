@@ -12,12 +12,17 @@
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
             <controls:ChatDateSeparator
                 Grid.Row="0"
                 Text="{x:Bind DateSeparatorText, Mode=OneWay}"
                 Visibility="{x:Bind IsFirstOfDay, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
-            <Grid Grid.Row="1" HorizontalAlignment="Right" Margin="48,0,12,0" RightTapped="MessageBubble_RightTapped" Holding="MessageBubble_Holding">
+            <controls:ChatDateSeparator
+                Grid.Row="1"
+                Text="{x:Bind UnreadDividerText, Mode=OneWay}"
+                Visibility="{x:Bind IsUnreadDivider, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+            <Grid Grid.Row="2" HorizontalAlignment="Right" Margin="48,0,12,0" RightTapped="MessageBubble_RightTapped" Holding="MessageBubble_Holding">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="Auto"/>
@@ -615,12 +620,17 @@
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
             <controls:ChatDateSeparator
                 Grid.Row="0"
                 Text="{x:Bind DateSeparatorText, Mode=OneWay}"
                 Visibility="{x:Bind IsFirstOfDay, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
-            <Grid Grid.Row="1" HorizontalAlignment="Left" Margin="12,0,48,0" RightTapped="MessageBubble_RightTapped" Holding="MessageBubble_Holding">
+            <controls:ChatDateSeparator
+                Grid.Row="1"
+                Text="{x:Bind UnreadDividerText, Mode=OneWay}"
+                Visibility="{x:Bind IsUnreadDivider, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+            <Grid Grid.Row="2" HorizontalAlignment="Left" Margin="12,0,48,0" RightTapped="MessageBubble_RightTapped" Holding="MessageBubble_Holding">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="Auto"/>
@@ -636,11 +646,22 @@
             <Grid Grid.Row="1" HorizontalAlignment="Left">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="*"/>
                 </Grid.ColumnDefinitions>
 
+                <!-- Local unread accent (IsRead == false). Hidden after open commits read. -->
+                <Border Grid.Column="0"
+                        Width="3"
+                        MinHeight="18"
+                        Margin="0,2,6,2"
+                        CornerRadius="1.5"
+                        VerticalAlignment="Stretch"
+                        Background="{ThemeResource ChatDetailAccentBrush}"
+                        Visibility="{x:Bind ShowUnreadMarker, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+
                 <!-- Author avatar gutter (group incoming). Photo + contact fallback like the chat list. -->
-                <Grid Grid.Column="0"
+                <Grid Grid.Column="1"
                       Width="32"
                       Margin="0,0,8,0"
                       VerticalAlignment="Top"
@@ -655,7 +676,7 @@
                                                 Visibility="{x:Bind ShowContact, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
                 </Grid>
 
-                <Grid Grid.Column="1" HorizontalAlignment="Left">
+                <Grid Grid.Column="2" HorizontalAlignment="Left">
                 <controls:MessageBubbleChromeHost
                     IsFromMe="False"
                     IsRunStart="{x:Bind IsRunStart, Mode=OneWay}"
@@ -1235,6 +1256,7 @@
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
             <controls:ChatDateSeparator
                 Grid.Row="0"
@@ -1242,6 +1264,10 @@
                 Visibility="{x:Bind IsFirstOfDay, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
             <controls:ChatDateSeparator
                 Grid.Row="1"
+                Text="{x:Bind UnreadDividerText, Mode=OneWay}"
+                Visibility="{x:Bind IsUnreadDivider, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+            <controls:ChatDateSeparator
+                Grid.Row="2"
                 Text="{x:Bind Content, Mode=OneWay}"/>
         </Grid>
     </DataTemplate>

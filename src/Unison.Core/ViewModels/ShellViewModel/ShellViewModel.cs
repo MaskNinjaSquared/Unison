@@ -139,11 +139,20 @@ namespace Unison.Core.ViewModels
             _navigator.ShellNavigated += Navigator_ShellNavigated;
             _notificationCounter = new NotificationCounterWatch(_chatState.Chats);
             _notificationCounter.Changed += (s, e) =>
-                RaiseProperties(nameof(NotificationCounterBadge), nameof(NotificationCounterBadgeText));
+                RaiseProperties(
+                    nameof(NotificationCounterBadge),
+                    nameof(NotificationCounterBadgeText),
+                    nameof(HasNotificationCounterBadge));
         }
 
         /// <summary>How many chats have a notification. Same count the chat-list header shows.</summary>
         public int NotificationCounterBadge => _notificationCounter?.Count ?? 0;
+
+        /// <summary>
+        /// Legacy brand suffix (" - [speech] (n)"): dash, balloon glyph and count hide together
+        /// when nothing is unread.
+        /// </summary>
+        public bool HasNotificationCounterBadge => NotificationCounterBadge > 0;
 
         /// <summary>Parenthetical next to the Legacy brand, empty when nothing is unread.</summary>
         public string NotificationCounterBadgeText =>

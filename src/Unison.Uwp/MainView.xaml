@@ -124,6 +124,18 @@
                             </Grid>
                         </ListViewItem>
 
+                        <ListViewItem Tag="channels">
+                            <StackPanel Orientation="Horizontal" Padding="12,0">
+                                <!-- EB17 channels.png in WhatsAppLegacyIcons.ttf -->
+                                <FontIcon Glyph="&#xEB17;"
+                                          FontFamily="{StaticResource LegacyIconFont}"
+                                          FontSize="20"
+                                          Width="24"
+                                          VerticalAlignment="Center"/>
+                                <TextBlock x:Uid="Shell_Channels" Text="Channels" Margin="16,0,0,0" FontSize="14" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </ListViewItem>
+
                         <ListViewItem Tag="favorites">
                             <StackPanel Orientation="Horizontal" Padding="12,0">
                                 <TextBlock Text="&#xE735;" FontFamily="{StaticResource IconFont}" FontSize="20" VerticalAlignment="Center" Width="24"/>

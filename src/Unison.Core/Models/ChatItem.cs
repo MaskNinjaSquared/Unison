@@ -441,7 +441,7 @@ namespace Unison.Core.Models
 
         private ChatKind _kind = ChatKind.Direct;
 
-        /// <summary>Direct (1:1), Group, Personal, or Community (reserved).</summary>
+        /// <summary>Direct (1:1), Group, Personal, Community, or Channel.</summary>
         public ChatKind Kind
         {
             get => _kind;
@@ -481,6 +481,11 @@ namespace Unison.Core.Models
         /// <summary>True when <see cref="Kind"/> is <see cref="ChatKind.Community"/> (reserved).</summary>
         public bool IsCommunity => _kind == ChatKind.Community;
 
+        /// <summary>WhatsApp Channel (<c>@newsletter</c>) — listed under Canais, not Chats.</summary>
+        [Newtonsoft.Json.JsonIgnore]
+        public bool IsChannel =>
+            _kind == ChatKind.Channel || Helpers.JidHelper.IsNewsletterJid(JID);
+
         /// <summary>
         /// UI label for list/header. Uses <see cref="IStringResources"/> (DI) for Personal markers
         /// and community-announce “Avisos”. Does not mutate <see cref="Name"/>.
@@ -508,6 +513,7 @@ namespace Unison.Core.Models
                     }
 
                 case ChatKind.Group:
+                case ChatKind.Channel:
                     return Name ?? string.Empty;
 
                 case ChatKind.Community:
@@ -680,6 +686,7 @@ namespace Unison.Core.Models
                 _isAnnounceOnly = value;
                 OnPropertyChanged();
                 OnPropertyChanged(nameof(IsGroupLockedForMessages));
+                OnPropertyChanged(nameof(IsComposerLocked));
             }
         }
 
@@ -880,6 +887,12 @@ namespace Unison.Core.Models
         public bool IsGroupLockedForMessages =>
             IsGroup && _isAnnounceOnly && !IsGroupAdmin;
 
+        /// <summary>
+        /// Composer must stay closed: channel (subscriber read-only) or announce-only group.
+        /// </summary>
+        [Newtonsoft.Json.JsonIgnore]
+        public bool IsComposerLocked => IsChannel || IsGroupLockedForMessages;
+
         public string Initial => !string.IsNullOrEmpty(Name) ? Name.Substring(0, 1).ToUpper() : "?";
 
         protected void OnPropertyChanged([CallerMemberName] string propertyName = null)
@@ -922,7 +935,9 @@ namespace Unison.Core.Models
                 nameof(IsPersonal),
                 nameof(IsDirect),
                 nameof(IsCommunity),
-                nameof(IsGroupLockedForMessages));
+                nameof(IsChannel),
+                nameof(IsGroupLockedForMessages),
+                nameof(IsComposerLocked));
         }
     }
 }

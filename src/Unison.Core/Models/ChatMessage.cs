@@ -1034,6 +1034,55 @@ namespace Unison.Core.Models
             }
         }
 
+        private bool? _isRead;
+        /// <summary>
+        /// Local open-chat read flag for inbound bubbles. Null = legacy / ignore (no marker).
+        /// False until the chat is opened; then flipped to true. Outgoing stays null/true.
+        /// </summary>
+        public bool? IsRead
+        {
+            get => _isRead;
+            set
+            {
+                if (_isRead == value) return;
+                _isRead = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(ShowUnreadMarker));
+            }
+        }
+
+        /// <summary>True when this inbound bubble is known unread (<see cref="IsRead"/> == false).</summary>
+        [JsonIgnore]
+        public bool ShowUnreadMarker => IsRead == false && !IsFromMe;
+
+        private bool _isUnreadDivider;
+        /// <summary>First unread inbound in the open window — “N unread …” chip above the row.</summary>
+        [JsonIgnore]
+        public bool IsUnreadDivider
+        {
+            get => _isUnreadDivider;
+            set
+            {
+                if (_isUnreadDivider == value) return;
+                _isUnreadDivider = value;
+                OnPropertyChanged();
+            }
+        }
+
+        private string _unreadDividerText;
+        /// <summary>Layout-only unread chip label (not persisted).</summary>
+        [JsonIgnore]
+        public string UnreadDividerText
+        {
+            get => _unreadDividerText;
+            set
+            {
+                if (_unreadDividerText == value) return;
+                _unreadDividerText = value;
+                OnPropertyChanged();
+            }
+        }
+
         private string _quotedText;
         public string QuotedText
         {

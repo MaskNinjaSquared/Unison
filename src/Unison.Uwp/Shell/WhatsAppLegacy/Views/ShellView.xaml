@@ -4,11 +4,10 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:local="using:Unison.Uwp.Shell.WhatsAppLegacy.Views"
     xmlns:controls="using:Unison.Uwp.UI.Controls"
-    xmlns:toolkit="using:Microsoft.Toolkit.Uwp.UI.Controls"
-    Background="{ThemeResource ApplicationPageBackgroundThemeBrush}"
-    RequestedTheme="Dark">
+    Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
 
     <!--
+      No RequestedTheme — follow app Light/Dark like Unison MainView.
       Left: brand + pivot + list frame (+ list search).
       Right: chat detail host — column only exists when a chat is open.
     -->
@@ -34,13 +33,13 @@
                         Grid.Row="0"
                         Orientation="Horizontal"
                         Margin="0,5,10,-10"
-                        
                         VerticalAlignment="Center">
-                <toolkit:ImageEx Width="40" Height="40"
-                                 Stretch="Uniform"
-                                 Source="ms-appx:///Assets/CustomTiles/WhatsAppLegacy.png"
-                                 IsCacheEnabled="True"
-                                 VerticalAlignment="Center"/>
+                <!-- White glyph + transparent PNG → ShowAsMonochrome tints by theme ink. -->
+                <Viewbox Width="40" Height="40" VerticalAlignment="Center">
+                    <BitmapIcon UriSource="ms-appx:///Assets/CustomTiles/WhatsAppLegacy.png"
+                                ShowAsMonochrome="True"
+                                Foreground="{ThemeResource WhatsAppTextHighBrush}"/>
+                </Viewbox>
                 <TextBlock x:Name="BrandTitle"
                            x:Uid="Shell_LegacyBrand"
                            Text="WHATSAPP LEGACY"
@@ -51,14 +50,25 @@
                            FontFamily="{StaticResource MainFontLight}"
                            Foreground="{ThemeResource WhatsAppTextHighBrush}"
                            CharacterSpacing="-20"/>
-                <TextBlock Text="{Binding NotificationCounterBadgeText}"
-                           Margin="8,0,0,0"
-                           VerticalAlignment="Center"
-                           FontSize="14"
-                           FontWeight="SemiBold"
-                           FontFamily="{StaticResource MainFontLight}"
-                           Foreground="{ThemeResource ChatDetailAccentBrush}"/>
-            
+                <!-- WHATSAPP LEGACY - [speech] (n); whole suffix collapses when unread is 0.
+                     Glyph EB06 already ships in LegacyIconFont (same balloon as new-chat). -->
+                <StackPanel Orientation="Horizontal"
+                            VerticalAlignment="Center"
+                            Visibility="{Binding HasNotificationCounterBadge, Converter={StaticResource BooleanToVisibilityConverter}}">
+                    
+                    <FontIcon Glyph="{StaticResource LegacyGlyphMessage}"
+                              FontFamily="{StaticResource LegacyIconFont}"
+                              FontSize="16"
+                              Margin="10,1,4,0"
+                              VerticalAlignment="Center"
+                              Foreground="{ThemeResource ChatDetailAccentBrush}"/>
+                    <TextBlock Text="{Binding NotificationCounterBadgeText}"
+                               VerticalAlignment="Center"
+                               FontSize="14"
+                               FontWeight="SemiBold"
+                               FontFamily="{StaticResource MainFontLight}"
+                               Foreground="{ThemeResource ChatDetailAccentBrush}"/>
+                </StackPanel>
             </StackPanel>
 
             <!-- Search: back + title, then a short WP8 text box. Enter runs the pivot search. -->
@@ -117,6 +127,9 @@
                     </PivotItem>
                     <PivotItem x:Uid="Shell_LegacyPivot_Status" Header="status" Tag="status">
                         <ContentPresenter x:Name="StatusPresenter"/>
+                    </PivotItem>
+                    <PivotItem x:Uid="Shell_LegacyPivot_Channels" Header="channels" Tag="channels">
+                        <ContentPresenter x:Name="ChannelsPresenter"/>
                     </PivotItem>
                     <PivotItem x:Uid="Shell_LegacyPivot_Favorites" Header="favorites" Tag="favorites">
                         <ContentPresenter x:Name="FavoritesPresenter"/>

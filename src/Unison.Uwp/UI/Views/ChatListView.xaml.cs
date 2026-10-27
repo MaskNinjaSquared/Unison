@@ -92,14 +92,24 @@ namespace Unison.Uwp.UI.Views
 
         private void ApplyScopeChrome(ChatListScope scope)
         {
-            if (scope != ChatListScope.Archived || HeaderTitle == null || FilterButton == null)
+            if (HeaderTitle == null || FilterButton == null)
             {
                 return;
             }
 
             var strings = App.Services?.GetService<IStringResources>();
-            HeaderTitle.Text = strings?.Get("Shell_Archived.Text", "Archived chats") ?? "Archived chats";
-            FilterButton.Visibility = Visibility.Collapsed;
+            if (scope == ChatListScope.Archived)
+            {
+                HeaderTitle.Text = strings?.Get("Shell_Archived.Text", "Archived chats") ?? "Archived chats";
+                FilterButton.Visibility = Visibility.Collapsed;
+                return;
+            }
+
+            if (scope == ChatListScope.Channels)
+            {
+                HeaderTitle.Text = strings?.Get("Shell_Channels.Text", "Channels") ?? "Channels";
+                FilterButton.Visibility = Visibility.Collapsed;
+            }
         }
 
         private void ChatListView_Loaded(object sender, RoutedEventArgs e)

@@ -50,8 +50,9 @@ namespace Unison.Uwp.Services.Themes
                 case NavigationDestination.Chats:
                 case NavigationDestination.Archived:
                 case NavigationDestination.Status:
+                case NavigationDestination.Channels:
                     throw new InvalidOperationException(
-                        "WhatsApp Legacy hosts chats/status/archived in the shell pivot, not the overlay frame.");
+                        "WhatsApp Legacy hosts chats/status/channels/archived in the shell pivot, not the overlay frame.");
                 case NavigationDestination.Debug:
                     return typeof(Shell.WhatsAppLegacy.Views.DebugView);
                 case NavigationDestination.Profile:
@@ -72,6 +73,12 @@ namespace Unison.Uwp.Services.Themes
             if (content is Shell.WhatsAppLegacy.Views.ArchivedChatsView)
             {
                 destination = NavigationDestination.Archived;
+                return true;
+            }
+
+            if (content is Shell.WhatsAppLegacy.Views.ChannelsView)
+            {
+                destination = NavigationDestination.Channels;
                 return true;
             }
 

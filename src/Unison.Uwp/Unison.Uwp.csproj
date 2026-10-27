@@ -226,6 +226,9 @@
     <Compile Include="Shell\WhatsAppLegacy\Views\ArchivedChatsView.xaml.cs">
       <DependentUpon>ArchivedChatsView.xaml</DependentUpon>
     </Compile>
+    <Compile Include="Shell\WhatsAppLegacy\Views\ChannelsView.xaml.cs">
+      <DependentUpon>ChannelsView.xaml</DependentUpon>
+    </Compile>
     <Compile Include="Shell\WhatsAppLegacy\Views\StatusView.xaml.cs">
       <DependentUpon>StatusView.xaml</DependentUpon>
     </Compile>
@@ -386,6 +389,9 @@
     </Compile>
     <Compile Include="UI\Views\ArchivedChatsView.xaml.cs">
       <DependentUpon>ArchivedChatsView.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="UI\Views\ChannelsView.xaml.cs">
+      <DependentUpon>ChannelsView.xaml</DependentUpon>
     </Compile>
     <Compile Include="UI\Views\IConversationShellPage.cs" />
     <Compile Include="UI\Views\IChatDetailSurface.cs" />
@@ -631,6 +637,7 @@
     <Content Include="Assets\Tiles\profile-glyph.png" />
     <Content Include="Assets\Toast\avatar_contact.png" />
     <Content Include="Assets\Toast\avatar_group.png" />
+    <Content Include="Assets\Toast\avatar_announcements.png" />
     <Content Include="Assets\WhatsAppLegacy\default-contact-icon.png" />
     <Content Include="Assets\WhatsAppLegacy\default-group-icon.png" />
     <Content Include="Assets\WhatsAppLegacy\Icons\appbar-add.png" />
@@ -969,6 +976,10 @@
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </Page>
+    <Page Include="UI\Views\ChannelsView.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
     <Page Include="Shell\Unison\Views\ChatsView.xaml">
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
@@ -1018,6 +1029,10 @@
       <SubType>Designer</SubType>
     </Page>
     <Page Include="Shell\WhatsAppLegacy\Views\ArchivedChatsView.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Include="Shell\WhatsAppLegacy\Views\ChannelsView.xaml">
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </Page>

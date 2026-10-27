@@ -119,6 +119,106 @@ namespace Unison.Core.Helpers
         }
 
         /// <summary>
+        /// Places one unread chip above the first inbound unread bubble. Null <see cref="ChatMessage.IsRead"/>
+        /// is ignored for per-bubble markers; when every inbound is null and
+        /// <paramref name="badgeUnreadCount"/> &gt; 0, the last N inbound rows are treated as unread
+        /// for divider placement only (legacy rows before the IsRead column).
+        /// </summary>
+        public static void ApplyUnreadDivider(
+            IList<ChatMessage> messages,
+            int badgeUnreadCount,
+            string unreadMessagesFormat,
+            string unreadUpdatesFormat,
+            bool isChannel)
+        {
+            if (messages == null || messages.Count == 0)
+            {
+                return;
+            }
+
+            for (int i = 0; i < messages.Count; i++)
+            {
+                ChatMessage row = messages[i];
+                if (row == null)
+                {
+                    continue;
+                }
+
+                row.IsUnreadDivider = false;
+                row.UnreadDividerText = string.Empty;
+            }
+
+            int unreadInWindow = 0;
+            int firstUnreadIndex = -1;
+            bool anyExplicitUnread = false;
+
+            for (int i = 0; i < messages.Count; i++)
+            {
+                ChatMessage row = messages[i];
+                if (row == null || row.IsFromMe || row.IsGroupJoin)
+                {
+                    continue;
+                }
+
+                if (row.IsRead == false)
+                {
+                    anyExplicitUnread = true;
+                    unreadInWindow++;
+                    if (firstUnreadIndex < 0)
+                    {
+                        firstUnreadIndex = i;
+                    }
+                }
+            }
+
+            if (!anyExplicitUnread && badgeUnreadCount > 0)
+            {
+                // Legacy null rows, or SQL already flipped to read before the first layout —
+                // place the chip from the open-session badge count.
+                firstUnreadIndex = -1;
+                unreadInWindow = 0;
+                int need = badgeUnreadCount;
+                for (int i = messages.Count - 1; i >= 0 && need > 0; i--)
+                {
+                    ChatMessage row = messages[i];
+                    if (row == null || row.IsFromMe || row.IsGroupJoin)
+                    {
+                        continue;
+                    }
+
+                    need--;
+                    firstUnreadIndex = i;
+                    unreadInWindow++;
+                }
+            }
+
+            if (firstUnreadIndex < 0 || unreadInWindow <= 0)
+            {
+                return;
+            }
+
+            int displayCount = badgeUnreadCount > 0 ? badgeUnreadCount : unreadInWindow;
+            string format = isChannel
+                ? (string.IsNullOrWhiteSpace(unreadUpdatesFormat)
+                    ? "{0} unread updates"
+                    : unreadUpdatesFormat)
+                : (string.IsNullOrWhiteSpace(unreadMessagesFormat)
+                    ? "{0} unread messages"
+                    : unreadMessagesFormat);
+
+            ChatMessage anchor = messages[firstUnreadIndex];
+            anchor.IsUnreadDivider = true;
+            try
+            {
+                anchor.UnreadDividerText = string.Format(format, displayCount);
+            }
+            catch (FormatException)
+            {
+                anchor.UnreadDividerText = displayCount + " unread";
+            }
+        }
+
+        /// <summary>
         /// Relabels date chips after local midnight (Hoje / Ontem / date).
         /// Does not re-resolve participant names/avatars — only the date separator fields.
         /// </summary>

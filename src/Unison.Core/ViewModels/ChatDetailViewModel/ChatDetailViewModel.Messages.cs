@@ -595,6 +595,28 @@ namespace Unison.Core.ViewModels
                 yesterdayLabel,
                 QuotedMessageIdIsFromMe);
 
+            ChatItem chat = groupChat ?? ActiveChat;
+            bool isChannel = _sessionUnreadIsChannel || (chat != null && chat.IsChannel);
+            string unreadMessagesFormat = _strings != null
+                ? _strings.Get("ChatDetail_UnreadMessagesFormat", "{0} unread messages")
+                : "{0} unread messages";
+            string unreadUpdatesFormat = _strings != null
+                ? _strings.Get("ChatDetail_UnreadUpdatesFormat", "{0} unread updates")
+                : "{0} unread updates";
+
+            MessageRunLayout.ApplyUnreadDivider(
+                messages,
+                _sessionUnreadDividerCount,
+                unreadMessagesFormat,
+                unreadUpdatesFormat,
+                isChannel);
+
+            if (!_inboundHistoryReadCommitted && _chatService != null && chat != null)
+            {
+                _inboundHistoryReadCommitted = true;
+                _ = CommitOpenedInboundReadAsync(chat);
+            }
+
             System.Collections.Generic.IReadOnlyDictionary<string, string> lookup =
                 isGroup ? (groupChat ?? ActiveChat)?.MentionLookup : null;
             for (int i = 0; i < Messages.Count; i++)
@@ -606,6 +628,21 @@ namespace Unison.Core.ViewModels
                 }
 
                 row.RefreshMentions(lookup);
+            }
+        }
+
+        private async Task CommitOpenedInboundReadAsync(ChatItem chat)
+        {
+            try
+            {
+                // Persist only — keep in-memory IsRead/IsUnreadDivider for this open session
+                // so the chip and per-bubble markers stay until the next open.
+                await _chatService.CommitInboundHistoryReadAsync(chat).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine(
+                    "[ChatDetailViewModel] CommitInboundHistoryRead failed: " + ex.Message);
             }
         }
 

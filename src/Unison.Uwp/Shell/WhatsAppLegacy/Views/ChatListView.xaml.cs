@@ -124,14 +124,40 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
 
         private void ApplyScopeChrome(ChatListScope scope)
         {
-            if (FilterButton == null)
+            bool archivedOrChannels =
+                scope == ChatListScope.Archived || scope == ChatListScope.Channels;
+            bool channelsOnly = scope == ChatListScope.Channels;
+
+            if (FilterButton != null)
             {
-                return;
+                FilterButton.Visibility = archivedOrChannels
+                    ? Visibility.Collapsed
+                    : Visibility.Visible;
             }
 
-            FilterButton.Visibility = scope == ChatListScope.Archived
+            // Channels: bottom bar is search only (no new chat / add contact / overflow).
+            Visibility composeVisibility = channelsOnly
                 ? Visibility.Collapsed
                 : Visibility.Visible;
+            if (NewChatAppBarButton != null)
+            {
+                NewChatAppBarButton.Visibility = composeVisibility;
+            }
+
+            if (AddContactAppBarButton != null)
+            {
+                AddContactAppBarButton.Visibility = composeVisibility;
+            }
+
+            if (ListCommandBar != null)
+            {
+                if (channelsOnly)
+                {
+                    ListCommandBar.SecondaryCommands.Clear();
+                }
+
+                CenterPrimaryCommands(ListCommandBar);
+            }
         }
 
         private void ChatListView_Loaded(object sender, RoutedEventArgs e)

@@ -21,6 +21,9 @@ namespace Unison.Uwp.Data.Entities
 
         public bool IsFromMe { get; set; }
 
+        /// <summary>Nullable INTEGER — null means “ignore” (pre-column history).</summary>
+        public bool? IsRead { get; set; }
+
         public string ParticipantJid { get; set; }
 
         public string SenderName { get; set; }

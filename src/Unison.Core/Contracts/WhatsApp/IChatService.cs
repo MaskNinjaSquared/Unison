@@ -41,6 +41,12 @@ namespace Unison.Core.Contracts.WhatsApp
         Task MarkReadAsync(ChatItem chat);
 
         /// <summary>
+        /// After the open-session unread chip is placed, mark inbound history rows as read
+        /// (<c>IsRead = 1</c>). Null / missing column is ignored — no schema migration.
+        /// </summary>
+        Task CommitInboundHistoryReadAsync(ChatItem chat);
+
+        /// <summary>
         /// Deletes the conversation for this account everywhere: it leaves the list here, on the
         /// phone and on every other linked device. The messages are removed locally too - unlike a
         /// pin there is nothing to revert to, so this is not undoable and callers are expected to

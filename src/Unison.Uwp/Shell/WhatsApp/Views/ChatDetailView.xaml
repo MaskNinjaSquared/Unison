@@ -618,7 +618,7 @@
             <Grid Grid.Row="3"
                   Canvas.ZIndex="4"
                   Background="{ThemeResource ChatDetailInputBarBackgroundBrush}"
-                  Visibility="{Binding IsGroupLockedForMessages, Converter={StaticResource InvertedBooleanToVisibilityConverter}}">
+                  Visibility="{Binding IsComposerLocked, Converter={StaticResource InvertedBooleanToVisibilityConverter}}">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
@@ -817,7 +817,7 @@
                 </Grid><!-- ComposerHost -->
             </Grid><!-- composer / recording share row 3 -->
 
-            <!-- Group announce-only lock (replaces composer on row 3) -->
+            <!-- Announce-only group lock (replaces composer). Channels hide the whole footer. -->
             <Grid Grid.Row="3"
                   Background="{ThemeResource ChatDetailInputBarBackgroundBrush}"
                   helpers:DesktopCursor.CursorKind="Blocked"

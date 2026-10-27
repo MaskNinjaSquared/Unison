@@ -131,6 +131,14 @@ namespace Unison.Core.ViewModels
         private bool _hasReachedStart;
         private int _emptyLoadAttempts;
 
+        /// <summary>Unread badge captured when the chat was opened (chip survives MarkRead clearing it).</summary>
+        private int _sessionUnreadDividerCount;
+
+        private bool _sessionUnreadIsChannel;
+
+        /// <summary>True after <see cref="CommitInboundHistoryReadAsync"/> ran for this open.</summary>
+        private bool _inboundHistoryReadCommitted;
+
         /// <summary>
         /// Per open-chat lookup of group participant labels/avatars (plus 1:1 indexes).
         /// Owned for the VM lifetime; roster hooks detach on uninitialize without Dispose.
@@ -409,6 +417,8 @@ namespace Unison.Core.ViewModels
 
                 RaiseComposerCommandsChanged();
                 OnPropertyChanged(nameof(IsGroupLockedForMessages));
+                OnPropertyChanged(nameof(IsComposerLocked));
+                OnPropertyChanged(nameof(IsChannelReadOnly));
                 OnPropertyChanged(nameof(CanLoadMore));
                 CloseMentionMenu();
                 DismissMessageActions();
@@ -418,9 +428,15 @@ namespace Unison.Core.ViewModels
 
         /// <summary>
         /// True when the active chat is a group in announce-only mode and the current user is not an admin.
-        /// Bind the composer lock UI to this; values refresh when group metadata is applied.
+        /// Prefer <see cref="IsComposerLocked"/> for hiding the send surface (includes Channels).
         /// </summary>
         public bool IsGroupLockedForMessages => ActiveChat != null && ActiveChat.IsGroupLockedForMessages;
+
+        /// <summary>Channel subscriber or announce-only group — hide the composer.</summary>
+        public bool IsComposerLocked => ActiveChat != null && ActiveChat.IsComposerLocked;
+
+        /// <summary>WhatsApp Channel open — banner copy differs from group announce-only.</summary>
+        public bool IsChannelReadOnly => ActiveChat != null && ActiveChat.IsChannel;
 
         public string MessageText
         {
@@ -861,7 +877,7 @@ namespace Unison.Core.ViewModels
             ActiveChat != null &&
             !_isSending &&
             !_isRecording &&
-            !IsGroupLockedForMessages;
+            !IsComposerLocked;
 
         // ── Commands ──────────────────────────────────────────────────────────
 

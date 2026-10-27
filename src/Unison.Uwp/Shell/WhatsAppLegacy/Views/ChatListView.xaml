@@ -200,7 +200,8 @@
         <CommandBar x:Name="ListCommandBar"
                     Style="{StaticResource LegacyCommandBarStyle}"
                     Loaded="ListCommandBar_Loaded">
-                <AppBarButton x:Uid="Shell_LegacyAppBar_Search"
+                <AppBarButton x:Name="SearchAppBarButton"
+                          x:Uid="Shell_LegacyAppBar_Search"
                           Style="{StaticResource LegacyAppBarButtonStyle}"
                           Label="Search"
                           Click="SearchAppBar_Click">
@@ -211,7 +212,8 @@
                            HorizontalAlignment="Center"
                            VerticalAlignment="Center"/>
                 </AppBarButton>
-                <AppBarButton x:Uid="Shell_LegacyAppBar_NewChat"
+                <AppBarButton x:Name="NewChatAppBarButton"
+                          x:Uid="Shell_LegacyAppBar_NewChat"
                           Style="{StaticResource LegacyAppBarButtonStyle}"
                           Label="New chat"
                           Click="NewChatAppBar_Click">
@@ -222,7 +224,8 @@
                            HorizontalAlignment="Center"
                            VerticalAlignment="Center"/>
                 </AppBarButton>
-                <AppBarButton x:Uid="Shell_LegacyAppBar_AddContact"
+                <AppBarButton x:Name="AddContactAppBarButton"
+                          x:Uid="Shell_LegacyAppBar_AddContact"
                           Style="{StaticResource LegacyAppBarButtonStyle}"
                           Label="Add contact"
                           Command="{x:Bind ViewModel.AddContactCommand}">

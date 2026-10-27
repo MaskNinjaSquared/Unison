@@ -413,9 +413,19 @@ namespace Unison.Core.ViewModels
                 return false;
             }
 
-            return _scope == ChatListScope.Archived
-                ? chat.Status == ChatStatus.Archived
-                : chat.Status == ChatStatus.Active;
+            switch (_scope)
+            {
+                case ChatListScope.Archived:
+                    return chat.Status == ChatStatus.Archived;
+
+                case ChatListScope.Channels:
+                    return chat.Status == ChatStatus.Active && chat.IsChannel;
+
+                case ChatListScope.Active:
+                default:
+                    // Channels have their own tab — keep them out of the main list.
+                    return chat.Status == ChatStatus.Active && !chat.IsChannel;
+            }
         }
 
         /// <summary>

@@ -110,7 +110,7 @@
         </Setter>
     </Style>
 
-    <!-- WP8 back: round white/black ring, transparent fill, the Windows 8 back arrow. -->
+    <!-- WP8 back: ring only; hover/press fills the circle (dark↔light ink swap). -->
     <Style x:Key="LegacyBackButtonStyle" TargetType="Button">
         <Setter Property="Background" Value="Transparent"/>
         <Setter Property="BorderThickness" Value="0"/>
@@ -131,34 +131,34 @@
                                 <VisualState x:Name="PointerOver">
                                     <Storyboard>
                                         <ObjectAnimationUsingKeyFrames Storyboard.TargetName="Ring" Storyboard.TargetProperty="Fill">
-                                            <DiscreteObjectKeyFrame KeyTime="0" Value="{ThemeResource LegacyCommandBarForegroundBrush}"/>
+                                            <DiscreteObjectKeyFrame KeyTime="0" Value="{ThemeResource LegacyBackButtonHoverFillBrush}"/>
                                         </ObjectAnimationUsingKeyFrames>
                                         <ObjectAnimationUsingKeyFrames Storyboard.TargetName="Glyph" Storyboard.TargetProperty="Foreground">
-                                            <DiscreteObjectKeyFrame KeyTime="0" Value="{ThemeResource ApplicationPageBackgroundThemeBrush}"/>
+                                            <DiscreteObjectKeyFrame KeyTime="0" Value="{ThemeResource LegacyBackButtonHoverGlyphBrush}"/>
                                         </ObjectAnimationUsingKeyFrames>
                                     </Storyboard>
                                 </VisualState>
                                 <VisualState x:Name="Pressed">
                                     <Storyboard>
                                         <ObjectAnimationUsingKeyFrames Storyboard.TargetName="Ring" Storyboard.TargetProperty="Fill">
-                                            <DiscreteObjectKeyFrame KeyTime="0" Value="{ThemeResource LegacyCommandBarForegroundBrush}"/>
+                                            <DiscreteObjectKeyFrame KeyTime="0" Value="{ThemeResource LegacyBackButtonHoverFillBrush}"/>
                                         </ObjectAnimationUsingKeyFrames>
                                         <ObjectAnimationUsingKeyFrames Storyboard.TargetName="Glyph" Storyboard.TargetProperty="Foreground">
-                                            <DiscreteObjectKeyFrame KeyTime="0" Value="{ThemeResource ApplicationPageBackgroundThemeBrush}"/>
+                                            <DiscreteObjectKeyFrame KeyTime="0" Value="{ThemeResource LegacyBackButtonHoverGlyphBrush}"/>
                                         </ObjectAnimationUsingKeyFrames>
                                     </Storyboard>
                                 </VisualState>
                             </VisualStateGroup>
                         </VisualStateManager.VisualStateGroups>
                         <Ellipse x:Name="Ring"
-                                 Stroke="{ThemeResource LegacyAppBarRingBrush}"
+                                 Stroke="{ThemeResource LegacyBackButtonRingBrush}"
                                  StrokeThickness="2"
-                                 Fill="Transparent"/>
+                                 Fill="{ThemeResource LegacyBackButtonFillBrush}"/>
                         <FontIcon x:Name="Glyph"
                                   FontFamily="Segoe UI Symbol"
                                   Glyph="&#xE112;"
                                   FontSize="14"
-                                  Foreground="{ThemeResource LegacyCommandBarForegroundBrush}"
+                                  Foreground="{ThemeResource LegacyBackButtonGlyphBrush}"
                                   HorizontalAlignment="Center"
                                   VerticalAlignment="Center"
                                   IsHitTestVisible="False"/>

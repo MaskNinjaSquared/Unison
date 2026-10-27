@@ -24,6 +24,7 @@ Codepoints (Private Use Area):
   EB13  contact    (attach-contact.png)     attach contact tile
   EB14  audio      (attach-audio.png)       attach audio tile
   EB15  location   (attach-location.png)    attach location tile
+  EB17  channels   (channels.png)           WhatsApp Channels / Canais sidebar
 
 Ink is read from alpha only (source colour is ignored; XAML sets Foreground).
 Each glyph is cropped to its own ink and fitted into the same square box,
@@ -76,6 +77,7 @@ GLYPHS = [
     ("contact", 0xEB13, "attach-contact.png", 0.92),
     ("audio", 0xEB14, "attach-audio.png", 0.92),
     ("location", 0xEB15, "attach-location.png", 0.92),
+    ("channels", 0xEB17, "channels.png", 0.92),
 ]
 
 

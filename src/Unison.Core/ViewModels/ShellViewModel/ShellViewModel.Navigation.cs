@@ -55,6 +55,10 @@ namespace Unison.Core.ViewModels
                 {
                     _navigator.NavigateInShellAndClear(NavigationDestination.Archived);
                 }
+                else if (string.Equals(section, NavigationRoutes.Channels, StringComparison.OrdinalIgnoreCase))
+                {
+                    _navigator.NavigateInShellAndClear(NavigationDestination.Channels);
+                }
                 else if (string.Equals(section, NavigationRoutes.Profile, StringComparison.OrdinalIgnoreCase))
                 {
                     string profileJid = _pendingOpenProfileJid ?? _lastQueuedProfileJid;

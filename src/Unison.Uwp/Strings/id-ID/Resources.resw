@@ -329,6 +329,12 @@ Matikan setelah diagnosa: menjaga aplikasi tetap lambat.</value>
   <data name="ChatDetail_GroupOnlyAdminsCanSend.Text" xml:space="preserve">
     <value>Hanya admin yang dapat mengirim pesan</value>
   </data>
+  <data name="ChatDetail_UnreadMessagesFormat" xml:space="preserve">
+    <value>{0} pesan belum dibaca</value>
+  </data>
+  <data name="ChatDetail_UnreadUpdatesFormat" xml:space="preserve">
+    <value>{0} pembaruan belum dibaca</value>
+  </data>
   <data name="ChatDetail_AttachCamera.Text" xml:space="preserve">
     <value>Kamera</value>
   </data>

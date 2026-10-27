@@ -26,6 +26,11 @@ namespace Unison.Core.ViewModels
                 return;
             }
 
+            // Capture before the badge clears so ApplyMessageRunLayout can place the unread chip.
+            _sessionUnreadDividerCount = chat.UnreadCount > 0 ? chat.UnreadCount : 0;
+            _sessionUnreadIsChannel = chat.IsChannel;
+            _inboundHistoryReadCommitted = false;
+
             try
             {
                 await _chatService.MarkReadAsync(chat);
@@ -120,14 +125,19 @@ namespace Unison.Core.ViewModels
 
             if (string.IsNullOrEmpty(e.PropertyName) ||
                 e.PropertyName == nameof(ChatItem.IsGroupLockedForMessages) ||
+                e.PropertyName == nameof(ChatItem.IsComposerLocked) ||
+                e.PropertyName == nameof(ChatItem.IsChannel) ||
+                e.PropertyName == nameof(ChatItem.Kind) ||
                 e.PropertyName == nameof(ChatItem.IsAnnounceOnly) ||
                 e.PropertyName == nameof(ChatItem.MyGroupRole) ||
                 e.PropertyName == nameof(ChatItem.IsGroup) ||
                 e.PropertyName == nameof(ChatItem.IsGroupAdmin))
             {
                 OnPropertyChanged(nameof(IsGroupLockedForMessages));
+                OnPropertyChanged(nameof(IsComposerLocked));
+                OnPropertyChanged(nameof(IsChannelReadOnly));
                 RaiseComposerCommandsChanged();
-                if (ActiveChat == null || ActiveChat.IsGroupLockedForMessages)
+                if (ActiveChat == null || ActiveChat.IsComposerLocked)
                 {
                     CloseMentionMenu();
                 }

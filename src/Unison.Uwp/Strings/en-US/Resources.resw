@@ -329,6 +329,12 @@ Disable after diagnosing: keeping it on slows the app.</value>
   <data name="ChatDetail_GroupOnlyAdminsCanSend.Text" xml:space="preserve">
     <value>Only admins can send messages</value>
   </data>
+  <data name="ChatDetail_UnreadMessagesFormat" xml:space="preserve">
+    <value>{0} unread messages</value>
+  </data>
+  <data name="ChatDetail_UnreadUpdatesFormat" xml:space="preserve">
+    <value>{0} unread updates</value>
+  </data>
   <data name="ChatDetail_AttachCamera.Text" xml:space="preserve">
     <value>Camera</value>
   </data>
@@ -681,6 +687,15 @@ Disable after diagnosing: keeping it on slows the app.</value>
   </data>
   <data name="Shell_Favorites.Text" xml:space="preserve">
     <value>Favorites</value>
+  </data>
+  <data name="Shell_Channels.Text" xml:space="preserve">
+    <value>Channels</value>
+  </data>
+  <data name="Shell_LegacyPivot_Channels.Header" xml:space="preserve">
+    <value>channels</value>
+  </data>
+  <data name="ChatDetail_ChannelReadOnly.Text" xml:space="preserve">
+    <value>This channel is read-only</value>
   </data>
   <data name="Favorites_Header.Text" xml:space="preserve">
     <value>Favorites</value>
