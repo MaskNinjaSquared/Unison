@@ -32,4 +32,6 @@ Cursor project rules in `.cursor/rules/` repeat the must-not-break bits. The wik
 | `src/Unison.Socket` | Session / protocol (Baileys 7.0.0-rc14) |
 | `src/Unison.Baileys` | Noise, Signal, binary XML, proto |
 | `src/Unison.Background` | Out-of-process socket activity task |
+| `src/Unison.Desktop.Tray` | Desktop tray icon (full trust, no Unison refs, never hosts the socket) |
+| `src/Unison.Desktop.Package` | Desktop-only package (x64/ARM64): Uwp + tray |
 | `docs/wiki/` | Architecture + coding spec (GitHub wiki source) |

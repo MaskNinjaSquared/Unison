@@ -20,13 +20,32 @@
     <Platform Solution="*|x64" Project="x64" />
     <Platform Solution="*|x86" Project="x86" />
     <Platform Solution="*|Any CPU" Project="x86" />
-    <Deploy />
+    <!-- Mobile: deploy Uwp itself. Desktop x64/ARM64: Unison.Desktop.Package deploys the wrapped app. -->
+    <Deploy Solution="*|ARM" />
+    <Deploy Solution="*|x86" />
+    <Deploy Solution="*|Any CPU" />
+    <Deploy Solution="*|x64" Project="false" />
+    <Deploy Solution="*|ARM64" Project="false" />
   </Project>
   <Project Path="src/Unison.Background/Unison.Background.csproj" Id="7810e354-6a96-48b9-95e6-a4048db6ec26">
     <Platform Solution="*|ARM" Project="ARM" />
     <Platform Solution="*|ARM64" Project="ARM64" />
     <Platform Solution="*|x64" Project="x64" />
     <Platform Solution="*|x86" Project="x86" />
+  </Project>
+  <Project Path="src/Unison.Desktop.Tray/Unison.Desktop.Tray.csproj" Id="2d9b7c64-1f3e-4a85-b0c2-6e8f1a7d3b52" />
+  <Project Path="src/Unison.Desktop.Package/Unison.Desktop.Package.wapproj" Type="c7167f0d-bc9f-4e6e-afe1-012c56b48db5" Id="5c1f6e2a-8b47-4d0e-9a13-7e2d4f6b8c91">
+    <Platform Solution="*|ARM" Project="x64" />
+    <Platform Solution="*|ARM64" Project="ARM64" />
+    <Platform Solution="*|x64" Project="x64" />
+    <Platform Solution="*|x86" Project="x64" />
+    <Platform Solution="*|Any CPU" Project="x64" />
+    <Build Solution="*|ARM" Project="false" />
+    <Build Solution="*|x86" Project="false" />
+    <Build Solution="*|Any CPU" Project="false" />
+    <!-- Without Deploy, F5 says "O projeto precisa ser implantado". -->
+    <Deploy Solution="*|x64" />
+    <Deploy Solution="*|ARM64" />
   </Project>
   <Project Path="src/Unison.Core/Unison.Core.csproj" Id="0aa2854f-305b-4701-81d8-7757c510a4c2" />
   <Project Path="src/Unison.Baileys/Unison.Baileys.csproj" Id="a65f1d27-e2c9-410f-a892-015a7a9699ee" />

@@ -29,6 +29,7 @@ The **Unison.Socket** stack (Baileys **7.0.0-rc14**) is now the foundation for W
 | [Socket stack](Socket-Stack) | `Unison.Socket`, Baileys, use cases, protocol |
 | [Application layer](Application-Layer) | Core, UWP facades, DI, ViewModels |
 | [Background broker](Background-Broker) | Out-of-process socket, journal, toasts |
+| [Desktop tray](Desktop-Tray) | Start with Windows, desktop package, tray icon (spike) |
 | [UI and shell](UI-and-Shell) | Navigation, themes, i18n, chat surface |
 | [Coding standards](Coding-Standards) | Spec: MVVM, DI, folders, façades — how to write new code |
 | [Adding languages](Adding-Languages) | Tutorial: new `.resw` pack, package registration, `AppLanguage` enum |

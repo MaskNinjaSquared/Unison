@@ -1,0 +1,119 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Desktop package (x64 / ARM64): Unison.Uwp + Unison.Desktop.Tray.
+  Bridge shape matches Unigram (Telegram.Stub): ParameterGroups SystemTrayGroup /
+  LoopbackExemptGroup, AppService org.unison.bridge, runFullTrust, confirmAppClose.
+  Same Identity as src/Unison.Uwp so it replaces the UWP package on a PC.
+-->
+<Package
+  xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
+  xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+  xmlns:uap4="http://schemas.microsoft.com/appx/manifest/uap/windows10/4"
+  xmlns:uap5="http://schemas.microsoft.com/appx/manifest/uap/windows10/5"
+  xmlns:desktop="http://schemas.microsoft.com/appx/manifest/desktop/windows10"
+  xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
+  IgnorableNamespaces="uap uap4 uap5 desktop rescap">
+  <Identity Name="Unison.UWPApp" Publisher="CN=UniDev" Version="2.3.3.0" />
+  <Properties>
+    <DisplayName>Unison</DisplayName>
+    <PublisherDisplayName>UniDev</PublisherDisplayName>
+    <!-- Same Asset paths as Unison.Uwp — files come from the UWP project payload (scale-qualified). -->
+    <Logo>Assets\StoreLogo.png</Logo>
+  </Properties>
+  <Dependencies>
+    <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.16299.0" MaxVersionTested="10.0.22621.0" />
+  </Dependencies>
+  <Resources>
+    <Resource Language="en-US" />
+    <Resource Language="pt-BR" />
+    <Resource Language="es-ES" />
+    <Resource Language="nl-NL" />
+    <Resource Language="id-ID" />
+    <Resource Language="it-IT" />
+    <Resource Language="pl-PL" />
+    <Resource Language="uk-UA" />
+    <Resource Language="ru-RU" />
+    <Resource Language="de-DE" />
+  </Resources>
+  <Applications>
+    <Application Id="App" Executable="$targetnametoken$.exe" EntryPoint="$targetentrypoint$">
+      <uap:VisualElements DisplayName="Unison" Square150x150Logo="Assets\Square150x150Logo.png" Square44x44Logo="Assets\Square44x44Logo.png" Description="WhatsApp client for Windows" BackgroundColor="transparent">
+        <uap:LockScreen Notification="badgeAndTileText" BadgeLogo="Assets\BadgeLogo.png" />
+        <uap:DefaultTile Wide310x150Logo="Assets\Wide310x150Logo.png" Square310x310Logo="Assets\LargeTile.png" Square71x71Logo="Assets\SmallTile.png">
+          <uap:ShowNameOnTiles>
+            <uap:ShowOn Tile="square150x150Logo" />
+            <uap:ShowOn Tile="wide310x150Logo" />
+            <uap:ShowOn Tile="square310x310Logo" />
+          </uap:ShowNameOnTiles>
+        </uap:DefaultTile>
+        <uap:SplashScreen Image="Assets\SplashScreen.png" BackgroundColor="#20C064" />
+      </uap:VisualElements>
+      <Extensions>
+        <uap4:Extension Category="windows.contactPanel" />
+        <uap:Extension Category="windows.protocol">
+          <uap:Protocol Name="ms-ipmessaging">
+            <uap:DisplayName>Unison</uap:DisplayName>
+          </uap:Protocol>
+        </uap:Extension>
+        <uap:Extension Category="windows.protocol">
+          <uap:Protocol Name="ms-contact-profile">
+            <uap:DisplayName>Unison</uap:DisplayName>
+          </uap:Protocol>
+        </uap:Extension>
+        <uap:Extension Category="windows.shareTarget">
+          <uap:ShareTarget>
+            <uap:SupportedFileTypes>
+              <uap:FileType>.jpg</uap:FileType>
+              <uap:FileType>.jpeg</uap:FileType>
+              <uap:FileType>.png</uap:FileType>
+              <uap:FileType>.gif</uap:FileType>
+              <uap:FileType>.bmp</uap:FileType>
+              <uap:FileType>.webp</uap:FileType>
+              <uap:FileType>.pdf</uap:FileType>
+              <uap:FileType>.txt</uap:FileType>
+              <uap:FileType>.doc</uap:FileType>
+              <uap:FileType>.docx</uap:FileType>
+              <uap:FileType>.xls</uap:FileType>
+              <uap:FileType>.xlsx</uap:FileType>
+              <uap:FileType>.ppt</uap:FileType>
+              <uap:FileType>.pptx</uap:FileType>
+              <uap:FileType>.zip</uap:FileType>
+            </uap:SupportedFileTypes>
+            <uap:DataFormat>Text</uap:DataFormat>
+            <uap:DataFormat>Uri</uap:DataFormat>
+            <uap:DataFormat>StorageItems</uap:DataFormat>
+          </uap:ShareTarget>
+        </uap:Extension>
+        <Extension Category="windows.backgroundTasks" EntryPoint="Unison.Background.WhatsAppSocketActivityTask">
+          <BackgroundTasks>
+            <Task Type="systemEvent" />
+          </BackgroundTasks>
+        </Extension>
+        <uap5:Extension Category="windows.startupTask" Executable="Unison.Uwp.exe" EntryPoint="Unison.Uwp.App">
+          <uap5:StartupTask TaskId="UnisonStartup" Enabled="false" DisplayName="Unison" />
+        </uap5:Extension>
+        <!-- Unigram-shaped bridge: ParameterGroup id is what FullTrustProcessLauncher takes. -->
+        <desktop:Extension Category="windows.fullTrustProcess" Executable="Unison.Desktop.Tray\Unison.Desktop.Tray.exe">
+          <desktop:FullTrustProcess>
+            <desktop:ParameterGroup GroupId="SystemTrayGroup" Parameters="/SystemTray" />
+            <desktop:ParameterGroup GroupId="LoopbackExemptGroup" Parameters="/LoopbackExempt" />
+          </desktop:FullTrustProcess>
+        </desktop:Extension>
+        <uap:Extension Category="windows.appService">
+          <uap:AppService Name="org.unison.bridge" />
+        </uap:Extension>
+      </Extensions>
+    </Application>
+  </Applications>
+  <Capabilities>
+    <Capability Name="internetClient" />
+    <Capability Name="internetClientServer" />
+    <uap:Capability Name="contacts" />
+    <uap:Capability Name="voipCall" />
+    <rescap:Capability Name="runFullTrust" />
+    <rescap:Capability Name="confirmAppClose" />
+    <DeviceCapability Name="microphone" />
+    <DeviceCapability Name="webcam" />
+    <DeviceCapability Name="location" />
+  </Capabilities>
+</Package>

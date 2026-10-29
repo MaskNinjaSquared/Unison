@@ -9,6 +9,7 @@ Unison is split so that **WhatsApp protocol and session** live in a portable lib
 3. **Facades own policy.** Screens subscribe to `IConnectionService`, `IMessageService`, `IContactService`, and the other WhatsApp contracts — not to raw client events.
 4. **Core has no XAML.** `Unison.Core` is netstandard2.0. WinRT types stay in `Unison.Uwp` behind interfaces.
 5. **Background has no Core.** The out-of-process task references only `Unison.Baileys`, so it can decode frames and show toasts without pulling in ViewModels.
+6. **Tray has no socket.** `Unison.Desktop.Tray` (desktop package only) is a full trust notification-area icon. It references no Unison project, never hosts the WhatsApp socket and lives only while the app does; the socket stays `SocketBridge` → `WhatsAppSession` in the UWP process. See [Desktop tray](Desktop-Tray).
 
 ## Project graph
 
@@ -40,6 +41,8 @@ flowchart TB
 | `Unison.Socket` | netstandard2.0 | Baileys 7.0.0-rc14 session and protocol |
 | `Unison.Baileys` | netstandard2.0 | Crypto, Noise, Signal, protobuf, `AuthState` |
 | `Unison.Background` | UAP winmdobj | Out-of-process broker; **no** Core / Socket / Application reference |
+| `Unison.Desktop.Tray` | net48 WinExe | Desktop tray icon (full trust); AppService client only, **no** Unison references |
+| `Unison.Desktop.Package` | wapproj (x64 / ARM64) | Desktop-only package: `Unison.Uwp` + tray. The Mobile/store package is still `Unison.Uwp` (`arm`) |
 
 Solution file: `Unison.slnx`. Ignore the nested stub `src/Unison.Socket/Unison.Socket/` (empty WinUI project). The real library is `src/Unison.Socket/Unison.Socket.csproj`.
 

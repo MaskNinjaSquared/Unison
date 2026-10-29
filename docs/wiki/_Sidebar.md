@@ -5,6 +5,7 @@
 * [Socket stack](Socket-Stack)
 * [Application layer](Application-Layer)
 * [Background broker](Background-Broker)
+* [Desktop tray](Desktop-Tray)
 * [UI and shell](UI-and-Shell)
 * [Coding standards](Coding-Standards)
 * [Adding languages](Adding-Languages)

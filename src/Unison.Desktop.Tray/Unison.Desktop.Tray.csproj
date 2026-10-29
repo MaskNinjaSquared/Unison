@@ -1,0 +1,38 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Desktop-only notification-area icon for Unison. Full trust Win32 process launched by the UWP
+    app (FullTrustProcessLauncher) inside Unison.Desktop.Package. It never hosts the WhatsApp
+    socket and must not reference Unison.Core / Unison.Socket (same rule as Unison.Background).
+  -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net48</TargetFramework>
+    <RootNamespace>Unison.Desktop.Tray</RootNamespace>
+    <AssemblyName>Unison.Desktop.Tray</AssemblyName>
+    <LangVersion>7.3</LangVersion>
+    <Platforms>x64;ARM64</Platforms>
+    <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
+    <!-- Match the desktop package architecture (AnyCPU Prefer32Bit breaks full-trust launch). -->
+    <PlatformTarget Condition="'$(Platform)' == 'ARM64'">ARM64</PlatformTarget>
+    <PlatformTarget Condition="'$(Platform)' != 'ARM64'">x64</PlatformTarget>
+    <Prefer32Bit>false</Prefer32Bit>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="System.Windows.Forms" />
+    <Reference Include="System.Drawing" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- WinRT (AppServiceConnection, Package.Current) from a Win32 process. -->
+    <PackageReference Include="Microsoft.Windows.SDK.Contracts" Version="10.0.22621.2428" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- 48px (was 32): a touch larger in the notification area on 100–150% DPI. -->
+    <EmbeddedResource Include="..\Unison.Uwp\Assets\Square44x44Logo.altform-unplated_targetsize-48.png"
+                      LogicalName="Unison.Desktop.Tray.TrayIcon.png" />
+  </ItemGroup>
+
+</Project>

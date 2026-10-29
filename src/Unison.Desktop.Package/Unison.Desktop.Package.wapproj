@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Desktop-only package: Unison.Uwp (entry point) + Unison.Desktop.Tray (full trust).
+  The Mobile/store package (src/Unison.Uwp, AppxBundlePlatforms=arm) is untouched.
+-->
+<Project ToolsVersion="15.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup Condition="'$(VisualStudioVersion)' == '' or '$(VisualStudioVersion)' &lt; '15.0'">
+    <VisualStudioVersion>15.0</VisualStudioVersion>
+  </PropertyGroup>
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Debug|ARM64">
+      <Configuration>Debug</Configuration>
+      <Platform>ARM64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|ARM64">
+      <Configuration>Release</Configuration>
+      <Platform>ARM64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup>
+    <WapProjPath Condition="'$(WapProjPath)'==''">$(MSBuildExtensionsPath)\Microsoft\DesktopBridge\</WapProjPath>
+  </PropertyGroup>
+  <Import Project="$(WapProjPath)\Microsoft.DesktopBridge.props" />
+  <PropertyGroup>
+    <ProjectGuid>5c1f6e2a-8b47-4d0e-9a13-7e2d4f6b8c91</ProjectGuid>
+    <TargetPlatformVersion>10.0.22621.0</TargetPlatformVersion>
+    <TargetPlatformMinVersion>10.0.16299.0</TargetPlatformMinVersion>
+    <DefaultLanguage>en-US</DefaultLanguage>
+    <AppxPackage>true</AppxPackage>
+    <EntryPointProjectUniqueName>..\Unison.Uwp\Unison.Uwp.csproj</EntryPointProjectUniqueName>
+    <AppxBundle>Never</AppxBundle>
+    <!-- Match Unison.Uwp so the merged resources.pri keeps a default/neutral candidate
+         (0x80073B0C = NamedResource without default when WAP builds a second Images\ map). -->
+    <AppxDefaultResourceQualifiers>Language=en-US;pt-BR;es-ES;nl-NL;id-ID;it-IT;pl-PL;uk-UA;ru-RU;de-DE|Scale=200</AppxDefaultResourceQualifiers>
+    <AppxGeneratePrisForPortableLibrariesEnabled>false</AppxGeneratePrisForPortableLibrariesEnabled>
+    <!-- Same temp key as Unison.Uwp so F5 can sideload under Developer Mode. -->
+    <AppxPackageSigningEnabled>true</AppxPackageSigningEnabled>
+    <PackageCertificateKeyFile>..\Unison.Uwp\Unison.Uwp_TemporaryKey.pfx</PackageCertificateKeyFile>
+    <AppxPackageSigningTimestampDigestAlgorithm>SHA256</AppxPackageSigningTimestampDigestAlgorithm>
+    <GenerateAppInstallerFile>False</GenerateAppInstallerFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <AppxManifest Include="Package.appxmanifest">
+      <SubType>Designer</SubType>
+    </AppxManifest>
+  </ItemGroup>
+  <!-- Do not re-pack UWP Assets as Images\: that built a PRI map with only scale/targetsize
+       candidates and no default → WinRT 0x80073B0C at launch. Logos come from Unison.Uwp. -->
+  <Import Project="$(WapProjPath)\Microsoft.DesktopBridge.targets" />
+  <ItemGroup>
+    <ProjectReference Include="..\Unison.Uwp\Unison.Uwp.csproj">
+      <SkipGetTargetFrameworkProperties>true</SkipGetTargetFrameworkProperties>
+      <!-- The packaging project deploys; the UWP project must not deploy itself. -->
+      <Properties>DeployOnBuild=false;AppxBundle=Never</Properties>
+    </ProjectReference>
+    <ProjectReference Include="..\Unison.Desktop.Tray\Unison.Desktop.Tray.csproj">
+      <SkipGetTargetFrameworkProperties>true</SkipGetTargetFrameworkProperties>
+    </ProjectReference>
+  </ItemGroup>
+</Project>
