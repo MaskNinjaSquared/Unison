@@ -207,6 +207,7 @@ namespace Unison.WhatsAppClient.Helpers
                     row.MediaKeyBase64 = NullIfEmpty(message.ImageMediaKeyBase64);
                     row.MediaFileEncSha256Base64 = NullIfEmpty(message.ImageFileEncSha256Base64);
                     row.MediaMimeType = NullIfEmpty(message.ImageMimeType);
+                    row.MediaFileLengthBytes = message.MediaFileLengthBytes;
                     row.MediaLocalUri = NullIfEmpty(message.ImageUri)
                         ?? NullIfEmpty(message.ThumbnailUri);
                     break;
@@ -218,6 +219,7 @@ namespace Unison.WhatsAppClient.Helpers
                     row.MediaFileEncSha256Base64 = NullIfEmpty(message.VideoFileEncSha256Base64);
                     row.MediaMimeType = NullIfEmpty(message.VideoMimeType);
                     row.MediaDurationSeconds = message.VideoDurationSeconds;
+                    row.MediaFileLengthBytes = message.MediaFileLengthBytes;
                     row.IsAnimated = message.IsGif || message.IsAnimated;
                     row.MediaLocalUri = NullIfEmpty(message.VideoUri);
                     row.MediaPosterUri = NullIfEmpty(message.VideoPosterUri)
@@ -230,6 +232,7 @@ namespace Unison.WhatsAppClient.Helpers
                     row.MediaFileEncSha256Base64 = NullIfEmpty(message.AudioFileEncSha256Base64);
                     row.MediaMimeType = NullIfEmpty(message.AudioMimeType);
                     row.MediaDurationSeconds = message.AudioDurationSeconds;
+                    row.MediaFileLengthBytes = message.MediaFileLengthBytes;
                     row.IsVoiceNote = message.IsVoiceMessage;
                     row.MediaLocalUri = NullIfEmpty(message.AudioUri);
                     break;

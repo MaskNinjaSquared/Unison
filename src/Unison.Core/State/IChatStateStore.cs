@@ -36,11 +36,10 @@ namespace Unison.Core.State
         event EventHandler DisplayNamesChanged;
 
         /// <summary>
-        /// Raised with the group JID whose participant roster was applied. One event per apply:
-        /// a metadata reply merges fields onto every member, and a per-member notification would
-        /// be as many events as the group has people for a single answer.
+        /// Raised once per roster apply or flush, with the group and the participants that changed
+        /// (empty = the whole list), so listeners can repaint only those authors.
         /// </summary>
-        event EventHandler<string> GroupRosterChanged;
+        event EventHandler<GroupRosterChangedEventArgs> GroupRosterChanged;
 
         ChatItem FindChat(string jid);
 
@@ -103,7 +102,8 @@ namespace Unison.Core.State
         /// Announces that a group's roster was applied, so labels resolved from participants can
         /// catch up. Call once per apply, after the members are in place.
         /// </summary>
-        void NotifyGroupRosterChanged(string groupJid);
+        /// <param name="changedJids">Null or empty when the whole list was replaced.</param>
+        void NotifyGroupRosterChanged(string groupJid, IReadOnlyList<string> changedJids = null);
 
         /// <summary>Drops everything. Used when the session is wiped.</summary>
         Task ClearAsync();

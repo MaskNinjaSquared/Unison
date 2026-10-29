@@ -153,11 +153,21 @@ namespace Unison.Core.ViewModels
                 if (_batchRendering)
                 {
                     ReorderVisibleChatsInPlace();
+                    return;
                 }
-                else
+
+                // Cold populate / in-flight refresh already owns the UI turn. Nesting
+                // RefreshVisibleChats here cancelled Continues and rebuilt source twice
+                // (Mobile Low: ~500ms + ~500ms on attach, then later enrichment rebuilds).
+                // Keep _pendingVisibleRefreshSource — pin ApplyTo mutates the same ChatItem
+                // refs already in that list; nulling forced Continue to rebuild (~500ms).
+                if (_visibleColdPopulate || IsRefreshing)
                 {
-                    RefreshVisibleChats();
+                    _visibleOrderDirty = true;
+                    return;
                 }
+
+                RefreshVisibleChats();
             }).ConfigureAwait(false);
         }
 

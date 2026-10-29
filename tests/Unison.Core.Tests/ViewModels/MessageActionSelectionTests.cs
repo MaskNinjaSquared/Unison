@@ -77,6 +77,83 @@ namespace Unison.Core.Tests.ViewModels
             Assert.True(selection.CanReply);
         }
 
+        [Fact]
+        public void Delete_for_me_is_offered_on_own_and_received_messages()
+        {
+            var selection = new MessageActionSelection();
+            var mine = new ChatMessageViewModel(
+                new ChatMessage { Id = "1", Content = "oi", IsFromMe = true },
+                copy: new FakeCopy());
+            var theirs = new ChatMessageViewModel(
+                new ChatMessage { Id = "2", Content = "olá", IsFromMe = false },
+                copy: new FakeCopy());
+
+            selection.Select(mine);
+            Assert.True(selection.CanDeleteForMe);
+
+            selection.Select(theirs);
+            Assert.True(selection.CanDeleteForMe);
+        }
+
+        [Fact]
+        public void Delete_for_me_is_hidden_when_the_bubble_is_already_revoked()
+        {
+            var selection = new MessageActionSelection();
+            var message = new ChatMessageViewModel(
+                new ChatMessage { Id = "1", Content = "oi", IsFromMe = true, IsRevoked = true },
+                copy: new FakeCopy());
+
+            selection.Select(message);
+
+            Assert.False(selection.CanDeleteForMe);
+        }
+
+        [Fact]
+        public void Delete_for_everyone_follows_the_two_day_and_admin_rules()
+        {
+            DateTime now = new DateTime(2026, 10, 27, 12, 0, 0, DateTimeKind.Utc);
+            var selection = new MessageActionSelection(() => now);
+            var recentMine = new ChatMessageViewModel(
+                new ChatMessage
+                {
+                    Id = "1",
+                    Content = "oi",
+                    IsFromMe = true,
+                    Timestamp = now.AddHours(-1)
+                },
+                copy: new FakeCopy());
+            var oldMine = new ChatMessageViewModel(
+                new ChatMessage
+                {
+                    Id = "2",
+                    Content = "oi",
+                    IsFromMe = true,
+                    Timestamp = now.AddHours(-61)
+                },
+                copy: new FakeCopy());
+            var theirs = new ChatMessageViewModel(
+                new ChatMessage
+                {
+                    Id = "3",
+                    Content = "olá",
+                    IsFromMe = false,
+                    Timestamp = now.AddHours(-1)
+                },
+                copy: new FakeCopy());
+
+            selection.Select(recentMine);
+            Assert.True(selection.CanDeleteForEveryone);
+
+            selection.Select(oldMine);
+            Assert.False(selection.CanDeleteForEveryone);
+
+            selection.Select(theirs, isGroupChat: true, viewerIsGroupAdmin: false);
+            Assert.False(selection.CanDeleteForEveryone);
+
+            selection.Select(theirs, isGroupChat: true, viewerIsGroupAdmin: true);
+            Assert.True(selection.CanDeleteForEveryone);
+        }
+
         private static ChatMessageViewModel Bubble(string id, string text)
         {
             return new ChatMessageViewModel(

@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <root>
   <xsd:schema id="root" xmlns="" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">
     <xsd:import namespace="http://www.w3.org/XML/1998/namespace" />
@@ -270,6 +270,9 @@
   <data name="ChatDetail_GroupOnlyAdminsCanSend.Text" xml:space="preserve">
     <value>Только администраторы могут отправлять сообщения</value>
   </data>
+  <data name="ChatDetail_GroupNoLongerParticipant.Text" xml:space="preserve">
+    <value>Вы не можете отправлять сообщения в эту группу, потому что вы больше не участник.</value>
+  </data>
   <data name="ChatDetail_UnreadMessagesFormat" xml:space="preserve">
     <value>{0} непрочитанных сообщений</value>
   </data>
@@ -302,6 +305,27 @@
   </data>
   <data name="ChatDetail_AttachBarTooltip.Content" xml:space="preserve">
     <value>Добавить вложение</value>
+  </data>
+  <data name="ChatDetail_StickerBoxTooltip.Content" xml:space="preserve">
+    <value>Emoji</value>
+  </data>
+  <data name="StickerBox_EmojiTab.Text" xml:space="preserve">
+    <value>Emoji</value>
+  </data>
+  <data name="StickerBox_GifTab.Text" xml:space="preserve">
+    <value>GIF</value>
+  </data>
+  <data name="StickerBox_StickerTab.Text" xml:space="preserve">
+    <value>Stickers</value>
+  </data>
+  <data name="StickerBox_GifSoon.Text" xml:space="preserve">
+    <value>GIFs coming soon</value>
+  </data>
+  <data name="StickerBox_StickerSoon.Text" xml:space="preserve">
+    <value>Stickers coming soon</value>
+  </data>
+  <data name="StickerBox_SearchBox.PlaceholderText" xml:space="preserve">
+    <value>Поиск эмодзи</value>
   </data>
   <data name="ChatDetail_ScrollToBottomTooltip.Content" xml:space="preserve">
     <value>Перейти в конец</value>
@@ -757,6 +781,18 @@
   </data>
   <data name="Settings_KeepAlive.Text" xml:space="preserve">
     <value>Использует геолокацию, чтобы Windows 10 Mobile не приостанавливала работу приложения (метод Unogram). Геолокация не считывается и не передаётся. Увеличивает расход батареи.</value>
+  </data>
+  <data name="Settings_StartupLaunch.Header" xml:space="preserve">
+    <value>Start with Windows</value>
+  </data>
+  <data name="Settings_StartupLaunch.Text" xml:space="preserve">
+    <value>Opens Unison when you sign in to Windows.</value>
+  </data>
+  <data name="Settings_StartupLaunchDisabledByUser" xml:space="preserve">
+    <value>Turned off in Task Manager. To turn it back on, open Task Manager > Startup apps and enable Unison.</value>
+  </data>
+  <data name="Settings_StartupLaunchPolicy" xml:space="preserve">
+    <value>Your organization manages this setting.</value>
   </data>
   <data name="Settings_AutoUnlink.Header" xml:space="preserve">
     <value>Автоматически отвязывать при выходе</value>

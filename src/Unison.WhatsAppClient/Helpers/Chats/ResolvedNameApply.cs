@@ -48,13 +48,17 @@ namespace Unison.WhatsAppClient.Helpers
         /// <param name="resolveName">Address and context ("chat" or "sender") to the name now known.</param>
         /// <param name="isMeaningful">Whether a label is recognisable, for its address and group flag.</param>
         /// <param name="titles">Filled with each title that changed, when the caller logs them.</param>
+        /// <param name="unnamedMembersOnly">
+        /// Only members still showing a number / JID are resolved; named ones are left as they are.
+        /// </param>
         /// <returns>How many titles and member names changed.</returns>
         public static int Apply(
             IEnumerable<ChatItem> chats,
             Func<string, string, string> resolveName,
             Func<string, string, bool, bool> isMeaningful,
             bool membersToo,
-            ICollection<ResolvedNameChange> titles = null)
+            ICollection<ResolvedNameChange> titles = null,
+            bool unnamedMembersOnly = false)
         {
             if (chats == null)
             {
@@ -100,6 +104,11 @@ namespace Unison.WhatsAppClient.Helpers
                 foreach (GroupMember member in chat.GroupMembers)
                 {
                     if (member == null || string.IsNullOrWhiteSpace(member.Jid))
+                    {
+                        continue;
+                    }
+
+                    if (unnamedMembersOnly && isMeaningful(member.DisplayName, member.Jid, false))
                     {
                         continue;
                     }

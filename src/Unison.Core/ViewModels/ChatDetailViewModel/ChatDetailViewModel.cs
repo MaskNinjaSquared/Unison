@@ -53,6 +53,7 @@ namespace Unison.Core.ViewModels
 
         /// <summary>Unitary microphone capture (returns session handles).</summary>
         private readonly IAudioRecordingService _audioRecording;
+
         private readonly IUiSoundService _uiSounds;
 
         /// <summary>File pickers — chat attach uses PickChatAttachmentAsync.</summary>
@@ -123,6 +124,8 @@ namespace Unison.Core.ViewModels
         private IAudioRecordingSession _recordingSession;
         private CancellationTokenSource _elapsedCts;
         private CancellationTokenSource _presenceCts;
+        private readonly PresenceWatchGate _presenceWatch = new PresenceWatchGate();
+        private string _composerWarmedGroupJid;
         private bool _attached;
         private bool _presenceHandlerAttached;
         private bool _presenceReceived;
@@ -179,7 +182,9 @@ namespace Unison.Core.ViewModels
             IChatAuthorProjection authorProjection = null,
             IUiSoundService uiSounds = null,
             IForwardMessagePicker forwardPicker = null,
-            ICopyService copy = null)
+            ICopyService copy = null,
+            IChatAudioPlaybackService audioPlayback = null,
+            IEmojiRecentStore emojiRecents = null)
         {
             _chatService = chatService;
             _connectionService = connectionService;
@@ -189,6 +194,7 @@ namespace Unison.Core.ViewModels
             _shortcutService = shortcutService;
             _chatStore = chatStore;
             _audioRecording = audioRecording;
+            _audioPlayback = audioPlayback;
             _uiSounds = uiSounds;
             _filePicker = filePicker;
             _dialogs = dialogs;
@@ -257,7 +263,17 @@ namespace Unison.Core.ViewModels
                 () => _ = RunSafeAsync(StopAndSendRecordingAsync, "send-voice"),
                 () => _isRecording && !_isSending);
 
-            BackCommand = new RelayCommand(() => BackRequested?.Invoke(this, EventArgs.Empty));
+            BackCommand = new RelayCommand(() =>
+            {
+                if (TryCloseStickerBoxOnBack())
+                {
+                    return;
+                }
+
+                BackRequested?.Invoke(this, EventArgs.Empty);
+            });
+
+            InitializeStickerBox(emojiRecents);
             PinToStartCommand = new RelayCommand(
                 () => _ = ToggleWidgetPinAsync(),
                 () => AreLiveTilesAvailable &&
@@ -309,6 +325,9 @@ namespace Unison.Core.ViewModels
             UnpinSelectedMessageCommand = new RelayCommand(
                 () => _ = PinSelectedAsync(false, 0),
                 () => _messageActions.CanUnpin);
+            DeleteSelectedMessageCommand = new RelayCommand(
+                () => _ = PromptDeleteSelectedAsync(),
+                () => _messageActions.CanDeleteForMe);
             MuteFor8HoursCommand = new RelayCommand(
                 () => _ = SetLocalMuteAsync(_chatService.MuteUntilEightHoursFromNow()),
                 () => CanMuteActiveChat());
@@ -417,6 +436,8 @@ namespace Unison.Core.ViewModels
 
                 RaiseComposerCommandsChanged();
                 OnPropertyChanged(nameof(IsGroupLockedForMessages));
+                OnPropertyChanged(nameof(IsNoLongerGroupParticipant));
+                OnPropertyChanged(nameof(ShowsAnnounceOnlyComposerLock));
                 OnPropertyChanged(nameof(IsComposerLocked));
                 OnPropertyChanged(nameof(IsChannelReadOnly));
                 OnPropertyChanged(nameof(CanLoadMore));
@@ -431,6 +452,18 @@ namespace Unison.Core.ViewModels
         /// Prefer <see cref="IsComposerLocked"/> for hiding the send surface (includes Channels).
         /// </summary>
         public bool IsGroupLockedForMessages => ActiveChat != null && ActiveChat.IsGroupLockedForMessages;
+
+        /// <summary>
+        /// Baileys <c>chat.readOnly</c>: this account is no longer in the group.
+        /// </summary>
+        public bool IsNoLongerGroupParticipant =>
+            ActiveChat != null && ActiveChat.IsNoLongerGroupParticipant;
+
+        /// <summary>
+        /// Announce-only strip. Hidden when the account already left — that strip wins.
+        /// </summary>
+        public bool ShowsAnnounceOnlyComposerLock =>
+            IsGroupLockedForMessages && !IsNoLongerGroupParticipant;
 
         /// <summary>Channel subscriber or announce-only group — hide the composer.</summary>
         public bool IsComposerLocked => ActiveChat != null && ActiveChat.IsComposerLocked;
@@ -487,11 +520,15 @@ namespace Unison.Core.ViewModels
 
         public bool CanUnpinSelectedMessage => _messageActions.CanUnpin;
 
+        public bool CanDeleteSelectedMessage => _messageActions.CanDeleteForMe;
+
         public ICommand CopySelectedMessageCommand { get; }
 
         public ICommand ReplySelectedMessageCommand { get; }
 
         public ICommand ForwardSelectedMessageCommand { get; }
+
+        public ICommand DeleteSelectedMessageCommand { get; }
 
         public ICommand PinSelectedFor24HoursCommand { get; }
 
@@ -506,7 +543,10 @@ namespace Unison.Core.ViewModels
         /// </summary>
         public void SelectMessage(ChatMessageViewModel message)
         {
-            _messageActions.Select(message);
+            bool isGroup = ActiveChat != null && ActiveChat.IsGroup;
+            bool isAdmin = ActiveChat != null && ActiveChat.IsGroupAdmin;
+            message?.SetDeleteChatContext(isAdmin);
+            _messageActions.Select(message, isGroup, isAdmin);
         }
 
         public void DismissMessageActions()
@@ -520,6 +560,7 @@ namespace Unison.Core.ViewModels
             OnPropertyChanged(nameof(IsMessageActionsOpen));
             OnPropertyChanged(nameof(CanPinSelectedMessage));
             OnPropertyChanged(nameof(CanUnpinSelectedMessage));
+            OnPropertyChanged(nameof(CanDeleteSelectedMessage));
             (CopySelectedMessageCommand as RelayCommand)?.RaiseCanExecuteChanged();
             (ReplySelectedMessageCommand as RelayCommand)?.RaiseCanExecuteChanged();
             (ForwardSelectedMessageCommand as RelayCommand)?.RaiseCanExecuteChanged();
@@ -527,6 +568,7 @@ namespace Unison.Core.ViewModels
             (PinSelectedFor7DaysCommand as RelayCommand)?.RaiseCanExecuteChanged();
             (PinSelectedFor30DaysCommand as RelayCommand)?.RaiseCanExecuteChanged();
             (UnpinSelectedMessageCommand as RelayCommand)?.RaiseCanExecuteChanged();
+            (DeleteSelectedMessageCommand as RelayCommand)?.RaiseCanExecuteChanged();
         }
 
         private async Task PinSelectedAsync(bool pin, uint durationSeconds)
@@ -543,6 +585,32 @@ namespace Unison.Core.ViewModels
             }
 
             await message.SetPinnedAsync(pin, durationSeconds);
+        }
+
+        private async Task PromptDeleteSelectedAsync()
+        {
+            ChatMessageViewModel message = SelectedMessage;
+            if (message?.Model == null || !MessageDeleteEligibility.CanDeleteForMe(message.Model))
+            {
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(message.Model.RemoteJid) && ActiveChat != null)
+            {
+                message.Model.RemoteJid = ActiveChat.JID;
+            }
+
+            bool isAdmin = ActiveChat != null && ActiveChat.IsGroupAdmin;
+            message.SetDeleteChatContext(isAdmin);
+            MessageDeleteChoice choice = await message.PromptDeleteAsync();
+            if (choice == MessageDeleteChoice.ForMe)
+            {
+                // DeletedForMe also removes the row; call again in case the bubble was selected
+                // before CreateMessageVm wired the handler on an older instance.
+                TryRemoveTimelineMessage(message);
+            }
+
+            DismissMessageActions();
         }
 
         private bool _mentionMenuOpen;
@@ -565,7 +633,8 @@ namespace Unison.Core.ViewModels
         public void UpdateMentionQuery(string text, int caret)
         {
             MentionInsertCaret = -1;
-            if (ActiveChat == null || !ActiveChat.IsGroup || ActiveChat.IsGroupLockedForMessages)
+            NoteComposerCaret(caret);
+            if (ActiveChat == null || !ActiveChat.IsGroup || ActiveChat.IsComposerLocked)
             {
                 CloseMentionMenu();
                 return;
@@ -585,9 +654,9 @@ namespace Unison.Core.ViewModels
             _mentionTokenLength = length;
             _mentionTokenCaret = caret;
 
-            // Mobile open skips full roster; load from SQLite (then wire if empty) on first @.
+            // Known members show now; the first @ asks for everyone (store first, then one IQ).
             string ensureKey = _jids.GetCanonicalJid(ActiveChat.JID) ?? ActiveChat.JID;
-            if (!ActiveChat.HasFullGroupRoster &&
+            if (ActiveChat.RosterCompleteness != GroupRosterCompleteness.Full &&
                 _groupService != null &&
                 !string.Equals(_mentionRosterEnsureJid, ensureKey, StringComparison.OrdinalIgnoreCase))
             {
@@ -629,7 +698,7 @@ namespace Unison.Core.ViewModels
 
             try
             {
-                await _groupService.EnsureGroupRosterLoadedFromStoreAsync(groupJid)
+                await _groupService.EnsureFullRosterAsync(groupJid, "mention")
                     .ConfigureAwait(false);
 
                 ChatItem chat = ActiveChat;
@@ -643,14 +712,6 @@ namespace Unison.Core.ViewModels
                 if (!string.Equals(activeKey, wantKey, StringComparison.OrdinalIgnoreCase))
                 {
                     return;
-                }
-
-                if (!chat.HasFullGroupRoster)
-                {
-                    await _groupService.RefreshGroupSendPermissionsAsync(
-                            groupJid,
-                            includeRoster: true)
-                        .ConfigureAwait(false);
                 }
 
                 if (_dispatcher == null || !IsMentionMenuOpen)
@@ -672,6 +733,42 @@ namespace Unison.Core.ViewModels
             {
                 System.Diagnostics.Debug.WriteLine(
                     "[ChatDetailViewModel] Mention roster ensure failed: " + ex.Message);
+            }
+        }
+
+        /// <summary>
+        /// Composer got focus: warm the group roster from the local store so the first @ has
+        /// names without a network round-trip. The full fetch still waits for the @ itself.
+        /// </summary>
+        public void OnComposerFocused()
+        {
+            ChatItem chat = ActiveChat;
+            if (chat == null || !chat.IsGroup || chat.HasFullGroupRoster || _groupService == null)
+            {
+                return;
+            }
+
+            string groupJid = chat.JID;
+            if (string.IsNullOrWhiteSpace(groupJid) ||
+                string.Equals(_composerWarmedGroupJid, groupJid, StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
+            _composerWarmedGroupJid = groupJid;
+            _ = WarmRosterFromStoreAsync(groupJid);
+        }
+
+        private async Task WarmRosterFromStoreAsync(string groupJid)
+        {
+            try
+            {
+                await _groupService.EnsureGroupRosterLoadedFromStoreAsync(groupJid)
+                    .ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                _diagnostics?.RecordException("roster", "warm-store-failed", ex);
             }
         }
 
@@ -853,13 +950,14 @@ namespace Unison.Core.ViewModels
             !IsLoadingMessages &&
             !_hasReachedStart;
 
-        /// <summary>Marks the initial timeline fetch for the open chat (progress + scroll lock).</summary>
+        /// <summary>
+        /// Marks the initial timeline fetch for the open chat (progress + scroll lock).
+        /// Group subject IQ stays in <see cref="EnrichActiveChatAfterPaint"/> so Mobile can
+        /// paint NarrowDetail + ProgressBar before any open-side network work.
+        /// </summary>
         public void BeginLoadingMessages()
         {
             IsLoadingMessages = true;
-            // New groups often have only a JID placeholder until w:g2 — fetch subject once here
-            // (not on Prepare) so Mobile open still gets a name while messages load.
-            TryRefreshGroupSubjectOnce();
         }
 
         /// <summary>Clears the initial timeline fetch flag.</summary>

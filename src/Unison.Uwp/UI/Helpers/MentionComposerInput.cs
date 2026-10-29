@@ -1,18 +1,18 @@
 using Unison.Core.ViewModels;
+using Unison.Uwp.UI.Controls;
 using Windows.System;
 using Windows.UI.Core;
 using Windows.UI.Xaml;
-using Windows.UI.Xaml.Controls;
 using Windows.UI.Xaml.Input;
 
 namespace Unison.Uwp.UI.Helpers
 {
     /// <summary>
-    /// Key and caret handling the three chat surfaces share for the @ menu.
+    /// Key and caret handling the chat surfaces share for the @ menu (RichEdit composer).
     /// </summary>
     public static class MentionComposerInput
     {
-        public static void OnSelectionChanged(ChatDetailViewModel viewModel, TextBox box)
+        public static void OnSelectionChanged(ChatDetailViewModel viewModel, ChatComposerInput box)
         {
             if (viewModel == null || box == null)
             {
@@ -22,16 +22,16 @@ namespace Unison.Uwp.UI.Helpers
             if (viewModel.MentionInsertCaret >= 0)
             {
                 int caret = viewModel.MentionInsertCaret;
-                box.SelectionStart = caret;
-                viewModel.UpdateMentionQuery(box.Text, caret);
+                box.CaretIndex = caret;
+                viewModel.UpdateMentionQuery(box.GetPlainText(), caret);
                 return;
             }
 
-            viewModel.UpdateMentionQuery(box.Text, box.SelectionStart);
+            viewModel.UpdateMentionQuery(box.GetPlainText(), box.CaretIndex);
         }
 
         /// <summary>True when the key was consumed by the mention menu.</summary>
-        public static bool OnKeyDown(ChatDetailViewModel viewModel, TextBox box, KeyRoutedEventArgs e)
+        public static bool OnKeyDown(ChatDetailViewModel viewModel, ChatComposerInput box, KeyRoutedEventArgs e)
         {
             if (viewModel == null || !viewModel.IsMentionMenuOpen || e == null)
             {
@@ -70,7 +70,7 @@ namespace Unison.Uwp.UI.Helpers
 
             if (box != null && viewModel.MentionInsertCaret >= 0)
             {
-                box.SelectionStart = viewModel.MentionInsertCaret;
+                box.CaretIndex = viewModel.MentionInsertCaret;
             }
 
             e.Handled = true;

@@ -2,6 +2,137 @@
 
 Newest first.
 
+## Desktop tray — close-to-tray (X hides window)
+
+`confirmAppClose` was cancelling close with no hide, so X did nothing. Stub now receives
+`WindowId` (CoreWindow hwnd) and hides/restores the `ApplicationFrameWindow` via Win32; tray
+Open brings the window back. Process stays for the socket.
+
+## Desktop package — fix WinRT 0x80073B0C (PRI without default)
+
+Launch threw `ResourceMap … não tem um recurso padrão ou nêutro`: `Assets/LegacyLogo` was packed
+as `*.png`, so names like `Square150x150Logo.scale-100_altform-…` created a NamedResource with no
+default. Only plain-named LegacyLogo files are Content now; theme icon is
+`WhatsAppLegacyIcon.png`. Desktop manifest uses `Assets\…` (no second `Images\` PRI map).
+
+## Desktop tray — Unigram-shaped bridge
+
+Aligned with Unigram Preview (`Telegram.Stub` / `BridgeApplicationContext`):
+
+- `FullTrustProcessLauncher.LaunchFullTrustProcessForCurrentAppAsync("SystemTrayGroup")` with
+  matching `desktop:ParameterGroup` (`/SystemTray`) plus `LoopbackExemptGroup`
+- AppService `org.unison.bridge`; handshake `ProcessId` / `OpenText` / `ExitText`; unread via
+  `UnreadCount`; Exit via ValueSet `Exit`
+- Stub opens the app with `Package.GetAppListEntriesAsync().LaunchAsync()`; reconnects on
+  `CloseRequested`
+- Desktop package gains `rescap:confirmAppClose` — window close is cancelled so the process (and
+  tray) stay alive. Mobile package untouched
+
+## Start with Windows — toggle no longer snaps Off
+
+Enabling the setting raised `StartupLaunchEnabled` while the Windows state was still
+`Disabled`, so the TwoWay ToggleSwitch snapped Off and then On again. `RequestEnableAsync` also
+ran off the UI thread (`ConfigureAwait(false)`), so the system consent dialog could fail. The
+ViewModel now keeps the optimistic state while waiting, and the service stays on the UI context.
+
+## Desktop package + tray icon (spike)
+
+- New `src/Unison.Desktop.Tray` (net48 WinForms `NotifyIcon`, AppService client only, no Unison
+  references) and `src/Unison.Desktop.Package` (wapproj, x64 / ARM64, `Windows.Desktop` 16299+,
+  same Identity, `runFullTrust`, `windows.fullTrustProcess`, in-process app service `Unison.Tray`)
+- `IDesktopTrayHost` / `DesktopTrayHost`: launched after launch / startup task; unread from
+  `NotificationService.UpdateBadge`; tray "Sair" → `Application.Exit()`. Store/Mobile package: the
+  launch is skipped (no declaration)
+- `Unison.Uwp.csproj` gains `ARM64` configurations and the `WindowsDesktop` extension SDK
+  reference (guarded at runtime). Mobile `arm` bundle unchanged
+- Open questions (keep-alive while minimized, close-to-tray, Store) in [Desktop tray](Desktop-Tray)
+
+## Desktop — Start with Windows
+
+- Package declares `uap5:StartupTask` (`TaskId="UnisonStartup"`, off by default, `Executable="Unison.Uwp.exe"`
+  — `$targetnametoken$` is not expanded inside extensions). Builds before 1709 ignore it
+- `IStartupLaunchService` (Core) / `StartupLaunchService` (UWP): `StartupTask.GetAsync` +
+  `RequestEnableAsync` / `Disable`; supported only on `Windows.Desktop` with the type present, so
+  Mobile never shows the row
+- Settings (Unison, WhatsApp dialog, WhatsAppLegacy): "Iniciar com o Windows" next to background
+  mode. The toggle mirrors the Windows state, re-read on every `Initialize`; `DisabledByUser`
+  (Task Manager) and policy states lock it with a hint (`StartupLaunchPresentation`)
+- `ActivationKind.StartupTask` boots like a tile launch; breadcrumb `lifecycle|startup-task`,
+  `startup-task|set`
+- The store bundle is still `arm` only: on x64 PCs the option appears in x64 deploys until a
+  desktop package exists
+
+## Group roster — no more blinking, warm for @
+
+Every roster flush raised `GroupMembers` + `HasGroupMembers` + `MentionLookup`, and each one ran
+`RebuildParticipantLookup` + `RecomputeMessageRuns`; on Desktop it also restarted the header
+presence watch, replaying the subtitle animation. Flushes arrive in bursts (messages, quotes,
+viewport, `w:gp2`), so the open group blinked without pause.
+
+- `StartPresenceWatch` is idempotent per chat (`PresenceWatchGate`); only open / chat switch
+  restarts it
+- All `ChatDetailView` shells react only to `GroupMembers` / `MentionLookup` through
+  `RosterUiRefreshCoalescer`: one Low-priority refresh per 300 ms quiet window, deferred while
+  `IsTimelineBusy`, dropped on chat switch. Breadcrumb `roster|ui-refresh` (masked chat,
+  coalesced count, ms)
+- Composer focus warms the roster from the store (`OnComposerFocused` →
+  `EnsureGroupRosterLoadedFromStoreAsync`, once per group per session, no network) so the first
+  @ has names; the full fetch still waits for the @. Breadcrumb `roster|warm-store`
+- Mention bubbles stopped re-rendering on every flush: `ChatItem` keeps the same `MentionLookup`
+  instance while names are unchanged (`MentionLookupBuilder.SameEntries`; avatar / role flushes
+  no longer raise it), and `CommentRichService` skips `Blocks.Clear` when the resolved text and
+  link brush match what the block already shows. `GroupParticipantLookup.EnsureFresh` also keys
+  on the `GroupMembers` list reference so a same-names flush still refreshes member instances
+
+## Emoji tray flags + attach tray light + composer emoji font
+
+- Flags category is back on every device (streamed last; ProgressRing kept, accent foreground)
+- Attach menu bar paints `ChatDetailInputBarBackgroundBrush` so the dark scrim no longer shows
+  through the tray on Light; Unison Light input bar matches WhatsApp `#F0F2F5` (top rule cleared)
+- Composer RichEdit: document-native ranges + deferred re-apply of WhatsApp Color Emoji; bubbles
+  already use `EmojiRichRuns` (TextBlock). RichEdit may still fall back to Segoe for some
+  typed color-emoji codepoints — that is a platform path, not the tray font
+
+## Chat open — navigate + ProgressBar before roster/avatar enrich
+
+List→detail on Mobile was still paying `SyncActiveChat` roster rebuild, group strip, avatar
+revalidate and subject IQ on the Prepare turn — before `SelectChat` / NarrowDetail painted.
+Open bind is now split: `BindActiveChatForOpen` (chrome/composer flags only) in Prepare;
+`EnrichActiveChatAfterPaint` (lookup rebuild, strip, avatar, `w:g2` subject) runs in Complete
+after the surface-paint yield. `BeginLoadingMessages` only arms the ProgressBar; subject IQ
+moved into enrich. Same-chat rebind still uses full `SyncActiveChat`.
+
+## Group roster on demand — one rule for every device
+
+The roster is filled by the people the app actually sees, the same way on Desktop and Mobile.
+`GroupRosterIndex` (Core) keeps one entry per participant under every address (JID, LID, phone),
+with tombstones for leaves and a timestamp per role so an older sighting never undoes a newer one.
+Sources: incoming group messages and quoted authors (`MessageFacade`), every `w:gp2`
+add / remove / promote / demote / modify (`SocketBridge.GroupRosterEventReceived` →
+`IGroupService.ApplyRosterEvent`), metadata replies (`MergeAll`; a reply shorter than the member
+count — the 512 cap — stays `Partial`), the store, and the visible timeline
+(`EnsureMembersAsync`).
+
+`GroupRosterDemand` puts index changes on `ChatItem.GroupMembers` in one debounced flush per group
+(~250 ms, waits for the timeline-open gate, batches of 16 at low dispatcher priority), persists only
+what changed (`UpsertMembersAsync` / `RemoveMembersAsync`, `PersonGroup` mirror) and raises
+`GroupRosterChanged(groupJid, changedJids)`. Field updates stay in place; adds and removes hand
+the row a new list reference holding the same member instances, because the Members pivot binds
+the list itself. The @ menu and the Members pivot call `EnsureFullRosterAsync(reason)`: known
+members first, then the store, then one metadata request per group (single-flight, reused for 2
+minutes). `ChatItem.RosterCompleteness` (None / Partial / Full) replaces `HasFullGroupRoster`
+as the source of truth; Full is never persisted.
+
+Removed: `GroupMember.IsMinimal`, `EnsureMinimalMembers`, `GroupRosterRestore`,
+`ApplyRestored` / `HydrateFromStore`, `ChatAuthorProjection` `onDemand` and its 64-member tip
+cap (`ChatItem.FindGroupMember` is an O(1) address index), the 48-member avatar hook cap in
+`GroupParticipantLookup` (a member is hooked when a bubble resolves to it), and the Mobile
+"never relabel members" name refresh (frugal now relabels only members still showing a number).
+The author-strip broad pass (Start / DisplayNamesChanged) visits only rows without a usable name.
+
+Breadcrumbs: `roster|note`, `roster|flush` (n, added, removed, ms, completeness),
+`roster|ensure-full` (reason, outcome, ms, count).
+
 ## Mobile — minimal group roster for bubble photos; @ loads full from store
 
 Open still skips the 500+ member apply. Visible bubble (and quote) JIDs get

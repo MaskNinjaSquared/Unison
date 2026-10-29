@@ -337,6 +337,23 @@
                                           IsOn="{Binding LocationKeepAliveEnabled, Mode=TwoWay}"/>
                         </controls:SettingBox.Control>
                     </controls:SettingBox>
+                    <StackPanel Visibility="{Binding IsStartupLaunchSupported, Converter={StaticResource BooleanToVisibilityConverter}}">
+                        <controls:SettingBox LocalizationUid="Settings_StartupLaunch" Margin="10,0,10,4"
+                                             Header="Start with Windows"
+                                             Text="Opens Unison when you sign in to Windows.">
+                            <controls:SettingBox.Control>
+                                <ToggleSwitch OnContent="" OffContent="" MinWidth="0"
+                                              IsEnabled="{Binding IsStartupLaunchToggleEnabled}"
+                                              IsOn="{Binding StartupLaunchEnabled, Mode=TwoWay}"/>
+                            </controls:SettingBox.Control>
+                        </controls:SettingBox>
+                        <TextBlock Margin="12,0,12,4"
+                                   TextWrapping="Wrap"
+                                   Style="{ThemeResource CaptionTextBlockStyle}"
+                                   Opacity="0.7"
+                                   Text="{Binding StartupLaunchHint}"
+                                   Visibility="{Binding HasStartupLaunchHint, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                    </StackPanel>
                     <controls:SettingBox LocalizationUid="Settings_MediaCache" Margin="10,0,10,4"
                                          Header="Chat media"
                                          Text="{Binding DiskUsageText, Mode=OneWay}">

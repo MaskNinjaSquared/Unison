@@ -798,6 +798,55 @@ namespace Unison.Uwp.Data
             }
         }
 
+        /// <inheritdoc />
+        public async Task<int> DeleteMessageAsync(IReadOnlyList<string> chatJids, string messageId)
+        {
+            var keys = NormalizeChatKeys(chatJids);
+            if (keys.Count == 0 || string.IsNullOrWhiteSpace(messageId))
+            {
+                return 0;
+            }
+
+            string id = messageId.Trim();
+            await EnsureInitializedAsync().ConfigureAwait(false);
+            await _writeLock.WaitAsync().ConfigureAwait(false);
+            try
+            {
+                var placeholders = new StringBuilder();
+                var args = new object[keys.Count + 1];
+                args[0] = id;
+                for (int i = 0; i < keys.Count; i++)
+                {
+                    if (i > 0)
+                    {
+                        placeholders.Append(',');
+                    }
+
+                    placeholders.Append('?');
+                    args[i + 1] = keys[i];
+                }
+
+                string filter =
+                    " WHERE MessageId = ? AND ChatJid IN (" + placeholders + ")";
+                int removed = await _connection
+                    .ExecuteAsync("DELETE FROM history_message" + filter, args)
+                    .ConfigureAwait(false);
+                await _connection
+                    .ExecuteAsync("DELETE FROM history_message_reaction" + filter, args)
+                    .ConfigureAwait(false);
+
+                Debug.WriteLine(
+                    "[HistoryMessageStore] Deleted message " + id +
+                    " (" + removed + " row(s)) across " + keys.Count + " key(s)");
+
+                return removed;
+            }
+            finally
+            {
+                _writeLock.Release();
+            }
+        }
+
         private async Task EnsureInitializedAsync()
         {
             if (!_initialized)

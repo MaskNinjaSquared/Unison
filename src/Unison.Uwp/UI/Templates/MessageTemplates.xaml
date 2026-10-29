@@ -552,12 +552,13 @@
                                            VerticalAlignment="Center"
                                            Margin="4,0,0,0"
                                            Visibility="{x:Bind ShowVideoFooterDuration, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
-                                <TextBlock Text="{x:Bind DocumentFileLengthBytes, Mode=OneWay, Converter={StaticResource ByteSizeConverter}}"
+                                <TextBlock Text="{x:Bind MediaFileLengthBytes, Mode=OneWay, Converter={StaticResource FileSizeConverter}}"
                                            FontSize="11"
                                            FontFamily="{StaticResource MainFont}"
                                            Foreground="{ThemeResource ChatDetailSentMetaBrush}"
                                            VerticalAlignment="Center"
-                                           Visibility="{x:Bind ShowDocumentFileSize, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                                           Margin="4,0,0,0"
+                                           Visibility="{x:Bind HasMediaFileSize, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
                             </StackPanel>
                             <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
                                 <TextBlock Text="&#xE718;" FontFamily="{StaticResource IconFont}" Foreground="{ThemeResource ChatDetailSentMetaBrush}" FontSize="10" Margin="0,0,4,0"
@@ -1196,12 +1197,13 @@
                                            VerticalAlignment="Center"
                                            Margin="4,0,0,0"
                                            Visibility="{x:Bind ShowVideoFooterDuration, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
-                                <TextBlock Text="{x:Bind DocumentFileLengthBytes, Mode=OneWay, Converter={StaticResource ByteSizeConverter}}"
+                                <TextBlock Text="{x:Bind MediaFileLengthBytes, Mode=OneWay, Converter={StaticResource FileSizeConverter}}"
                                            FontSize="11"
                                            FontFamily="{StaticResource MainFont}"
                                            Foreground="{ThemeResource ChatDetailReceivedMetaBrush}"
                                            VerticalAlignment="Center"
-                                           Visibility="{x:Bind ShowDocumentFileSize, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                                           Margin="4,0,0,0"
+                                           Visibility="{x:Bind HasMediaFileSize, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
                             </StackPanel>
                             <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
                                 <TextBlock Text="&#xE718;" FontFamily="{StaticResource IconFont}" Foreground="{ThemeResource ChatDetailReceivedMetaBrush}" FontSize="10" Margin="0,0,4,0"

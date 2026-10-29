@@ -14,7 +14,6 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.Linq;
 using System.Threading.Tasks;
 using Unison.Core.Contracts;
 using Unison.Core.Helpers;
@@ -146,7 +145,10 @@ namespace Unison.WhatsAppClient.Chats
                 return 0;
             }
 
-            var newestByCanonical = new List<Tuple<string, List<string>, List<HistoryMessage>>>(work.Count);
+            bool frugal = _preferFrugal();
+            // Item1=canonical, Item2=keys, Item3=sqlite page, Item4=memory tip (resolved off UI).
+            var newestByCanonical =
+                new List<Tuple<string, List<string>, List<HistoryMessage>, ChatMessage>>(work.Count);
             for (int i = 0; i < work.Count; i++)
             {
                 string canonical = work[i].Item1;
@@ -166,13 +168,24 @@ namespace Unison.WhatsAppClient.Chats
                         "; keys=" + keys.Count);
                 }
 
+                // Memory tip on the thread pool — never Snapshot the whole cache on the
+                // dispatcher (list-full × 261 chats stalled Mobile Low for 20–60s).
+                ChatMessage memoryTip = ChatPreviewMemoryTip.FindNewest(
+                    _chatState.MessagesByChat,
+                    canonical,
+                    keys,
+                    jid => _aliases.GetCanonicalJid(jid),
+                    allowFullCacheScan: !frugal,
+                    DateTime.UtcNow);
+
                 // Always enqueue: memory tip alone can still fix the strip.
-                newestByCanonical.Add(Tuple.Create(canonical, keys, page));
+                newestByCanonical.Add(Tuple.Create(canonical, keys, page, memoryTip));
             }
 
-            bool frugal = _preferFrugal();
             int uiSlice = frugal ? UiSliceSizeFrugal : UiSliceSizeGenerous;
             int updated = 0;
+            bool chunked = chatJids != null && chatJids.Count > 0;
+            var bumpedRows = chunked ? new List<ChatItem>() : null;
             for (int start = 0; start < newestByCanonical.Count; start += uiSlice)
             {
                 await WaitWhileUiSlicesPausedAsync(tag).ConfigureAwait(false);
@@ -191,8 +204,10 @@ namespace Unison.WhatsAppClient.Chats
                             newestByCanonical[i].Item1,
                             newestByCanonical[i].Item2,
                             newestByCanonical[i].Item3,
+                            newestByCanonical[i].Item4,
                             out swapped,
-                            out kept);
+                            out kept,
+                            bumpedRows);
                         sliceSwapped += swapped;
                         sliceKept += kept;
                     }
@@ -223,9 +238,23 @@ namespace Unison.WhatsAppClient.Chats
 
             if (updated > 0)
             {
-                // SortInPlace is a no-op when already ordered — still gate on updated so a
-                // no-op reconcile never walks the collection on the UI thread.
-                await _ui.RunAsync(() => ChatDisplayOrder.SortInPlace(_chatState.Chats)).ConfigureAwait(false);
+                // list-chunk: Reposition only bumped rows. Full SortInPlace on 250+ chats during
+                // replay-progressive tip storms caused Move cascades + refresh-visible hangs on
+                // Lumia 950 XL. Full walks (post-replay / deferred-startup) still SortInPlace.
+                await _ui.RunAsync(() =>
+                {
+                    if (bumpedRows != null && bumpedRows.Count > 0)
+                    {
+                        for (int i = 0; i < bumpedRows.Count; i++)
+                        {
+                            ChatDisplayOrder.Reposition(_chatState.Chats, bumpedRows[i]);
+                        }
+                    }
+                    else
+                    {
+                        ChatDisplayOrder.SortInPlace(_chatState.Chats);
+                    }
+                }).ConfigureAwait(false);
                 Debug.WriteLine("[ChatPreviewReconciler] updated=" + updated + " reason=" + tag);
             }
 
@@ -276,14 +305,15 @@ namespace Unison.WhatsAppClient.Chats
             string canonical,
             List<string> keys,
             List<HistoryMessage> page,
+            ChatMessage memoryTip,
             out int swapped,
-            out int kept)
+            out int kept,
+            List<ChatItem> bumpedRows = null)
         {
             swapped = 0;
             kept = 0;
             ChatMessage stored = ChatPreviewTip.PickStoredTip(page, DateTime.UtcNow);
-            // Open-chat merge can show a live tip SQLite has not caught up with yet.
-            ChatMessage memoryTip = FindNewestInMemory(canonical, keys);
+            // memoryTip resolved off the UI thread (see ReconcileAsync).
             ChatMessage best = ChatPreviewTip.PickNewer(stored, memoryTip);
             if (best == null)
             {
@@ -347,6 +377,10 @@ namespace Unison.WhatsAppClient.Chats
                 {
                     updated++;
                     swapped++;
+                    if (bumpedRows != null && !bumpedRows.Contains(chat))
+                    {
+                        bumpedRows.Add(chat);
+                    }
                 }
                 else
                 {
@@ -355,66 +389,6 @@ namespace Unison.WhatsAppClient.Chats
             }
 
             return updated;
-        }
-
-        private ChatMessage FindNewestInMemory(string canonical, List<string> keys)
-        {
-            var candidates = new List<ChatMessage>();
-
-            void Consider(IList<ChatMessage> list)
-            {
-                if (list == null)
-                {
-                    return;
-                }
-
-                // Snapshot: open-chat / unload can mutate the list while reconcile runs.
-                try
-                {
-                    candidates.AddRange(list.ToArray());
-                }
-                catch (ArgumentException)
-                {
-                }
-                catch (InvalidOperationException)
-                {
-                }
-            }
-
-            ChatMessageCache messages = _chatState.MessagesByChat;
-            if (keys != null)
-            {
-                for (int i = 0; i < keys.Count; i++)
-                {
-                    string key = keys[i];
-                    if (string.IsNullOrWhiteSpace(key))
-                    {
-                        continue;
-                    }
-
-                    List<ChatMessage> list;
-                    if (messages.TryGet(key, out list))
-                    {
-                        Consider(list);
-                    }
-                }
-            }
-
-            KeyValuePair<string, List<ChatMessage>>[] pairs = messages.Snapshot();
-            for (int i = 0; i < pairs.Length; i++)
-            {
-                KeyValuePair<string, List<ChatMessage>> pair = pairs[i];
-                if (pair.Value == null ||
-                    string.IsNullOrWhiteSpace(pair.Key) ||
-                    !string.Equals(_aliases.GetCanonicalJid(pair.Key), canonical, StringComparison.OrdinalIgnoreCase))
-                {
-                    continue;
-                }
-
-                Consider(pair.Value);
-            }
-
-            return ChatPreviewTip.PickNewestReconcileCandidate(candidates, DateTime.UtcNow);
         }
 
         private void DiagWrite(string category, string eventName, string details = null)

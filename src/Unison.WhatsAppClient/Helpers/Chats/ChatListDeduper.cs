@@ -211,21 +211,55 @@ namespace Unison.WhatsAppClient.Helpers
                     .Select(group => group.ToList()));
             }
 
-            // Cache-key fold only when aliases exist; Peek keeps the walk off the promote path.
-            if (_aliases.Count > 0)
+            // Cache-key fold: only keys tied to snapshot rows (row JID, peek canonical, and
+            // the reverse alias). A full MessagesByChat.ChatJids() × PeekCanonical on every
+            // alias:app-state-contact follow-up ran 20–50s on Lumia 950 XL (267 rows, fat cache).
+            if (_aliases.Count > 0 && rows.Count > 0)
             {
-                foreach (string key in _chats.MessagesByChat.ChatJids())
+                var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                for (int i = 0; i < rows.Count; i++)
                 {
-                    string canonical = _aliases.PeekCanonicalJid(key);
-                    if (!string.IsNullOrWhiteSpace(canonical) &&
-                        !string.Equals(canonical, key, StringComparison.OrdinalIgnoreCase))
+                    string jid = rows[i].Jid;
+                    PlanCacheKeyIfAlias(jid, plan, seen);
+
+                    string canonical = _aliases.PeekCanonicalJid(jid);
+                    PlanCacheKeyIfAlias(canonical, plan, seen);
+
+                    string paired;
+                    if (_aliases.TryGetValue(jid, out paired))
                     {
-                        plan.CacheKeys.Add(key);
+                        PlanCacheKeyIfAlias(paired, plan, seen);
+                    }
+
+                    if (!string.IsNullOrWhiteSpace(canonical) &&
+                        _aliases.TryGetValue(canonical, out paired))
+                    {
+                        PlanCacheKeyIfAlias(paired, plan, seen);
                     }
                 }
             }
 
             return plan;
+        }
+
+        private void PlanCacheKeyIfAlias(string key, DedupePlan plan, HashSet<string> seen)
+        {
+            if (string.IsNullOrWhiteSpace(key) || !seen.Add(key))
+            {
+                return;
+            }
+
+            if (!_chats.MessagesByChat.Contains(key))
+            {
+                return;
+            }
+
+            string canonical = _aliases.PeekCanonicalJid(key);
+            if (!string.IsNullOrWhiteSpace(canonical) &&
+                !string.Equals(canonical, key, StringComparison.OrdinalIgnoreCase))
+            {
+                plan.CacheKeys.Add(key);
+            }
         }
 
         private void DiagSkip(PendingPass pass, long generation)

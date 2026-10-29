@@ -87,7 +87,14 @@ namespace Unison.WhatsAppClient.Groups
             bool includeRoster = false)
         {
             BinaryNode groupNode = FindGroupNode(response, groupJid);
-            return groupNode == null ? null : ReadGroup(groupNode, groupJid, null, includeRoster);
+            if (groupNode == null)
+            {
+                return null;
+            }
+
+            GroupMetadataSnapshot snapshot = ReadGroup(groupNode, groupJid, null, includeRoster);
+            snapshot.SelfIsParticipant = ResolveSelfIsParticipant(groupNode);
+            return snapshot;
         }
 
         private GroupMetadataSnapshot ReadGroup(
@@ -349,10 +356,49 @@ namespace Unison.WhatsAppClient.Groups
                     continue;
                 }
 
-                return ParseRole(Attr(participant.Attrs, "admin"));
+                // Same fallback as ReadMemberDrafts — wire may send role on type only.
+                string admin = Attr(participant.Attrs, "admin");
+                if (string.IsNullOrWhiteSpace(admin))
+                {
+                    admin = Attr(participant.Attrs, "type");
+                }
+
+                return ParseRole(admin);
             }
 
             return GroupParticipantRole.Member;
+        }
+
+        /// <summary>
+        /// Whether the signed-in account is on the participant list.
+        /// Null when the node listed nobody — absence is not evidence.
+        /// </summary>
+        public bool? ResolveSelfIsParticipant(BinaryNode groupNode)
+        {
+            if (groupNode == null)
+            {
+                return null;
+            }
+
+            bool any = false;
+            foreach (BinaryNode participant in groupNode.GetChildren("participant"))
+            {
+                if (participant?.Attrs == null)
+                {
+                    continue;
+                }
+
+                any = true;
+                string jid = Attr(participant.Attrs, "jid");
+                string phone = Attr(participant.Attrs, "phone_number");
+                string lid = Attr(participant.Attrs, "lid");
+                if (_jids.IsSelfLinked(jid) || _jids.IsSelfLinked(phone) || _jids.IsSelfLinked(lid))
+                {
+                    return true;
+                }
+            }
+
+            return any ? (bool?)false : null;
         }
 
         /// <summary>

@@ -356,4 +356,10 @@
             </Setter.Value>
         </Setter>
     </Style>
+
+    <!--
+      Shared ChatListSearchTextBoxStyle key (Unison/WhatsApp pill). Legacy shell merges
+      WhatsApp first — this override makes list + sticker-box search use WP8 chrome.
+    -->
+    <Style x:Key="ChatListSearchTextBoxStyle" TargetType="TextBox" BasedOn="{StaticResource LegacySearchBoxStyle}"/>
 </ResourceDictionary>

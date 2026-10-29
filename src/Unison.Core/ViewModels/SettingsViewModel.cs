@@ -30,6 +30,7 @@ namespace Unison.Core.ViewModels
         private readonly IDialogService _dialogService;
         private readonly IStartTilePinService _startTiles;
         private readonly IMediaDiskUsageService _diskUsage;
+        private readonly IStartupLaunchService _startupLaunch;
 
         /// <summary>Owns leaving the account: unlink on the server, then wipe locally.</summary>
         private readonly IConnectionService _connectionService;
@@ -47,6 +48,8 @@ namespace Unison.Core.ViewModels
         private bool _groupSoundChangeBusy;
         private bool _disconnectBusy;
         private bool _publishContactsBusy;
+        private bool _startupLaunchBusy;
+        private StartupLaunchState _startupLaunchState = StartupLaunchState.NotSupported;
         private bool _diskMeasured;
         private bool _diskBusy;
         private string _diskUsageText = "Calculando...";
@@ -65,9 +68,11 @@ namespace Unison.Core.ViewModels
             IConnectionService connectionService,
             ShellViewModel shell,
             IContactService contacts = null,
-            SyncStatusChannel syncStatus = null)
+            SyncStatusChannel syncStatus = null,
+            IStartupLaunchService startupLaunch = null)
         {
             _localSettings = localSettings;
+            _startupLaunch = startupLaunch;
             _liveTilesService = liveTilesService;
             _notificationService = notificationService;
             _locationKeepAlive = locationKeepAlive;
@@ -216,6 +221,51 @@ namespace Unison.Core.ViewModels
                 _ = SetLocationKeepAliveAsync(value);
             }
         }
+
+        /// <summary>"Start with Windows" row; Desktop only.</summary>
+        public bool IsStartupLaunchSupported => _startupLaunch?.IsSupported == true;
+
+        /// <summary>Mirrors what Windows will do at sign-in, not a stored preference.</summary>
+        public bool StartupLaunchEnabled
+        {
+            get => StartupLaunchPresentation.IsOn(_startupLaunchState);
+            set
+            {
+                if (_startupLaunchBusy || value == StartupLaunchEnabled)
+                {
+                    // Snap the ToggleSwitch back to the current state without starting another request.
+                    OnPropertyChanged();
+                    return;
+                }
+
+                if (!StartupLaunchPresentation.CanToggle(_startupLaunchState))
+                {
+                    OnPropertyChanged();
+                    return;
+                }
+
+                _ = SetStartupLaunchAsync(value);
+            }
+        }
+
+        /// <summary>
+        /// Locked only when Windows will not let the app change the task (Task Manager / policy).
+        /// Stay enabled while a request is in flight so the ToggleSwitch does not rebind mid-flip.
+        /// </summary>
+        public bool IsStartupLaunchToggleEnabled =>
+            StartupLaunchPresentation.CanToggle(_startupLaunchState);
+
+        /// <summary>Why the toggle is locked (Task Manager / policy); empty otherwise.</summary>
+        public string StartupLaunchHint
+        {
+            get
+            {
+                string key = StartupLaunchPresentation.HintKey(_startupLaunchState);
+                return key == null ? string.Empty : (_strings?.Get(key, string.Empty) ?? string.Empty);
+            }
+        }
+
+        public bool HasStartupLaunchHint => !string.IsNullOrEmpty(StartupLaunchHint);
 
         /// <summary>
         /// When on, revoked/logged-out sessions clear local auth and show QR.
@@ -506,6 +556,7 @@ namespace Unison.Core.ViewModels
             RaiseNotificationSoundSelectionChanged();
             RaiseAboutCopyChanged();
             RaiseProfileHeaderChanged();
+            _ = RefreshStartupLaunchAsync();
         }
 
         /// <summary>
@@ -797,6 +848,61 @@ namespace Unison.Core.ViewModels
 
         private void RaiseLocationKeepAliveChanged() =>
             OnPropertyChanged(nameof(LocationKeepAliveEnabled));
+
+        /// <summary>Reads the task state again; the user can change it in Task Manager at any time.</summary>
+        public async Task RefreshStartupLaunchAsync()
+        {
+            if (!IsStartupLaunchSupported)
+            {
+                return;
+            }
+
+            try
+            {
+                _startupLaunchState = await _startupLaunch.GetStateAsync();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine("[SettingsViewModel] Startup state read failed: " + ex.Message);
+                _startupLaunchState = StartupLaunchState.NotSupported;
+            }
+
+            RaiseStartupLaunchChanged();
+        }
+
+        private async Task SetStartupLaunchAsync(bool enabled)
+        {
+            _startupLaunchBusy = true;
+            // Keep the toggle where the user put it while Windows decides. Raising with the old
+            // Disabled state here was what made the switch snap Off and back On ("vai e volta").
+            _startupLaunchState = enabled
+                ? StartupLaunchState.Enabled
+                : StartupLaunchState.Disabled;
+            RaiseStartupLaunchChanged();
+            try
+            {
+                _startupLaunchState = await _startupLaunch.SetEnabledAsync(enabled);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine("[SettingsViewModel] Startup toggle failed: " + ex.Message);
+            }
+            finally
+            {
+                _startupLaunchBusy = false;
+                RaiseStartupLaunchChanged();
+            }
+        }
+
+        private void RaiseStartupLaunchChanged()
+        {
+            RaiseProperties(
+                nameof(IsStartupLaunchSupported),
+                nameof(StartupLaunchEnabled),
+                nameof(IsStartupLaunchToggleEnabled),
+                nameof(StartupLaunchHint),
+                nameof(HasStartupLaunchHint));
+        }
 
         private async Task SetPublishContactsToWindowsAsync(bool enabled)
         {

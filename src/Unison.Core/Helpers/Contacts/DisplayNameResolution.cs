@@ -50,6 +50,7 @@ namespace Unison.Core.Helpers
         /// <summary>
         /// Marks a name the contact chose for themselves rather than one the user saved,
         /// which is the same convention WhatsApp itself uses on the group tip strip.
+        /// Display form is always <c>~ Name</c> (tilde + space).
         /// </summary>
         public const string UnsavedContactPrefix = "~";
 
@@ -71,6 +72,34 @@ namespace Unison.Core.Helpers
             return source.IsChosenByContact()
                 ? FormatUnsavedContactName(name.Trim(), sources.IsGroup, sources.WithContactIndicator)
                 : StripContactIndicator(name.Trim());
+        }
+
+        /// <summary>
+        /// True when <paramref name="name"/> already carries the unsaved-contact mark
+        /// (<c>~</c> or legacy <c>~Name</c> / <c>~ Name</c>).
+        /// </summary>
+        public static bool HasUnsavedContactMark(string name)
+        {
+            if (string.IsNullOrWhiteSpace(name))
+            {
+                return false;
+            }
+
+            return name.TrimStart().StartsWith(UnsavedContactPrefix, StringComparison.Ordinal);
+        }
+
+        /// <summary>
+        /// WhatsApp-style unsaved label: <c>~ Gabriel</c>. Strips any prior mark first.
+        /// </summary>
+        public static string FormatUnsavedContactLabel(string name)
+        {
+            string trimmed = StripContactIndicator(name) ?? string.Empty;
+            if (string.IsNullOrEmpty(trimmed))
+            {
+                return trimmed;
+            }
+
+            return UnsavedContactPrefix + " " + trimmed;
         }
 
         /// <summary>
@@ -120,7 +149,7 @@ namespace Unison.Core.Helpers
                 return trimmed;
             }
 
-            return UnsavedContactPrefix + trimmed;
+            return FormatUnsavedContactLabel(trimmed);
         }
 
         /// <summary>

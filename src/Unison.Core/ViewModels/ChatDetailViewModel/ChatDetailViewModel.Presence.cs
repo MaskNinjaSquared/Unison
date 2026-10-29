@@ -19,14 +19,26 @@ namespace Unison.Core.ViewModels
 {
     public partial class ChatDetailViewModel
     {
+        /// <summary>
+        /// Starts the header presence watch. Idempotent per conversation: a second call for the
+        /// chat already watched keeps the running timer (roster flushes must not replay the
+        /// subtitle animation).
+        /// </summary>
         public void StartPresenceWatch(string jid)
         {
-            StopPresenceWatch();
-            if (string.IsNullOrEmpty(jid))
+            if (_presenceCts != null && !_presenceCts.IsCancellationRequested &&
+                string.Equals(_presenceWatch.WatchingJid, jid?.Trim(), StringComparison.OrdinalIgnoreCase))
             {
                 return;
             }
 
+            StopPresenceWatch();
+            if (!_presenceWatch.TryBegin(jid))
+            {
+                return;
+            }
+
+            jid = _presenceWatch.WatchingJid;
             _presenceCts = new CancellationTokenSource();
             _presenceOpenedUtc = DateTime.UtcNow;
             _presenceReceived = false;
@@ -60,6 +72,7 @@ namespace Unison.Core.ViewModels
 
             _presenceCts?.Dispose();
             _presenceCts = null;
+            _presenceWatch.Stop();
             _presenceReceived = false;
             _pendingPresenceText = null;
             DetachPresenceHandler();

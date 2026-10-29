@@ -376,8 +376,9 @@
             <SolidColorBrush x:Key="ChatDetailPaneSeparatorBrush" Color="#FFE9EDEF"/>
             <SolidColorBrush x:Key="ChatDetailPinnedBarBackgroundBrush" Color="#FFFFFFFF"/>
             <SolidColorBrush x:Key="ChatDetailPinnedPreviewBrush" Color="#FF111B21"/>
-            <SolidColorBrush x:Key="ChatDetailInputBarBackgroundBrush" Color="#FFF5FEFF"/>
-            <SolidColorBrush x:Key="ChatDetailInputBarTopBorderBrush" Color="#FF3B4A54"/>
+            <!-- Match WhatsApp Light composer / attach tray (was cyan #F5FEFF + dark top rule). -->
+            <SolidColorBrush x:Key="ChatDetailInputBarBackgroundBrush" Color="#FFF0F2F5"/>
+            <SolidColorBrush x:Key="ChatDetailInputBarTopBorderBrush" Color="Transparent"/>
             <SolidColorBrush x:Key="ChatDetailComposerBackgroundBrush" Color="Transparent"/>
             <SolidColorBrush x:Key="ChatDetailComposerForegroundBrush" Color="#FF3B4A54"/>
             <SolidColorBrush x:Key="ChatDetailSentBubbleBrush" Color="#27B867"/>

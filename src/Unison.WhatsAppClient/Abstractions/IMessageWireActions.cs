@@ -18,6 +18,12 @@ namespace Unison.WhatsAppClient.Abstractions
         /// <summary>Null socket — pin must fail rather than pretend it was sent.</summary>
         bool CanSendPin { get; }
 
+        /// <summary>Null socket — delete-for-me patch cannot be sent.</summary>
+        bool CanSendDeleteForMe { get; }
+
+        /// <summary>Null socket — delete-for-everyone revoke cannot be sent.</summary>
+        bool CanSendDeleteForEveryone { get; }
+
         Task PresenceSubscribeAsync(string jid);
 
         Task SendPinInChatMessageAsync(
@@ -25,5 +31,19 @@ namespace Unison.WhatsAppClient.Abstractions
             MessageKey targetKey,
             bool pin,
             uint durationSeconds);
+
+        /// <summary>
+        /// Account-side delete-for-me app-state patch (Baileys chatModify deleteForMe).
+        /// <paramref name="messageTimestampUnixSeconds"/> is WA message time in Unix seconds.
+        /// </summary>
+        Task DeleteMessageForMeAsync(
+            string chatJid,
+            string messageId,
+            bool fromMe,
+            long messageTimestampUnixSeconds,
+            bool deleteMedia);
+
+        /// <summary>Protocol revoke (delete for everyone) naming the target message key.</summary>
+        Task SendDeleteForEveryoneAsync(string chatJid, MessageKey targetKey);
     }
 }

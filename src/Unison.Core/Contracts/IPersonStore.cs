@@ -54,6 +54,16 @@ namespace Unison.Core.Contracts
             string groupJid,
             IReadOnlyList<PersonGroupMembership> members);
 
+        /// <summary>Inserts or replaces these (person, group) pairs; other members of the group stay.</summary>
+        Task UpsertGroupMembershipsAsync(
+            string groupJid,
+            IReadOnlyList<PersonGroupMembership> members);
+
+        /// <summary>Deletes the (person, group) pairs for these person keys.</summary>
+        Task RemoveGroupMembershipsAsync(
+            string groupJid,
+            IReadOnlyList<string> personJids);
+
         /// <summary>Groups this person is in (for groups-in-common UI).</summary>
         Task<IReadOnlyList<PersonGroupMembership>> ListGroupsForPersonAsync(string personJid);
     }

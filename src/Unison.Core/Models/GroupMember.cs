@@ -57,17 +57,6 @@ namespace Unison.Core.Models
             _role == GroupParticipantRole.Admin ||
             _role == GroupParticipantRole.SuperAdmin;
 
-        private bool _isMinimal;
-        /// <summary>
-        /// Stub from a visible timeline author (JID / name / photo only). Not a full metadata
-        /// roster row — Members / @ mention still need <see cref="ChatItem.HasFullGroupRoster"/>.
-        /// </summary>
-        public bool IsMinimal
-        {
-            get => _isMinimal;
-            set { if (_isMinimal == value) return; _isMinimal = value; OnPropertyChanged(); }
-        }
-
         private string _avatarUrl;
         /// <summary>Local cache URI when a picture is known (1:1 chat or a later fetch).</summary>
         public string AvatarUrl

@@ -4,12 +4,13 @@ using Unison.Uwp.UI.Views;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
 using Windows.UI.Xaml.Controls.Primitives;
+using Windows.UI.Xaml.Input;
 using Windows.UI.Xaml.Media;
 
 namespace Unison.Uwp.UI.Controls
 {
     /// <summary>
-    /// Unison-shell voice transport: round brand play/pause, label ↔ slider, overflow|timestamp.
+    /// Unison-shell voice transport: round brand play/pause, label ↔ slider, overflow|timestamp+speed.
     /// </summary>
     public sealed partial class UnisonChatAudioBubbleBar : UserControl
     {
@@ -31,7 +32,9 @@ namespace Unison.Uwp.UI.Controls
                 PauseButton,
                 ReadyLabel,
                 PositionSlider,
+                SpeedButton,
                 TimestampText,
+                SpeedText,
                 MoreButton,
                 OnPlayPause,
                 OnMore);
@@ -81,22 +84,32 @@ namespace Unison.Uwp.UI.Controls
             _presenter.OnPlayPauseClick();
         }
 
+        private void PlayButton_Holding(object sender, HoldingRoutedEventArgs e)
+        {
+            _presenter.OnPlayHolding(e);
+        }
+
+        private void Speed_Click(object sender, RoutedEventArgs e)
+        {
+            _presenter.OnSpeedClick();
+        }
+
         private void More_Click(object sender, RoutedEventArgs e)
         {
             _presenter.OnMoreClick();
         }
 
-        private void PositionSlider_PointerPressed(object sender, Windows.UI.Xaml.Input.PointerRoutedEventArgs e)
+        private void PositionSlider_PointerPressed(object sender, PointerRoutedEventArgs e)
         {
             _presenter.OnSliderPointerPressed();
         }
 
-        private void PositionSlider_PointerReleased(object sender, Windows.UI.Xaml.Input.PointerRoutedEventArgs e)
+        private void PositionSlider_PointerReleased(object sender, PointerRoutedEventArgs e)
         {
             _presenter.OnSliderPointerReleased();
         }
 
-        private void PositionSlider_PointerCaptureLost(object sender, Windows.UI.Xaml.Input.PointerRoutedEventArgs e)
+        private void PositionSlider_PointerCaptureLost(object sender, PointerRoutedEventArgs e)
         {
             _presenter.OnSliderPointerReleased();
         }

@@ -9,11 +9,14 @@ namespace Unison.Core.Tests.Helpers
     public class NotificationDisplayLabelTests
     {
         [Fact]
-        public void Prefers_resolved_name_and_strips_tilde()
+        public void Prefers_resolved_name_and_keeps_unsaved_tilde_with_space()
         {
             Assert.Equal(
-                "Ana",
+                "~ Ana",
                 NotificationDisplayLabel.Prefer("~Ana", "99@lid", "99@lid"));
+            Assert.Equal(
+                "~ Ana",
+                NotificationDisplayLabel.Prefer("~ Ana", "99@lid", "99@lid"));
         }
 
         [Fact]

@@ -274,7 +274,18 @@ namespace Unison.Core.ViewModels
                     _refreshDeferredForEnrichment = false;
                     if (_visibleOrderDirty)
                     {
-                        ScheduleRefreshVisibleChats();
+                        // Frugal + unfiltered list: reorder painted rows only. ScheduleRefresh
+                        // re-ran BuildVisibleRefreshSource (~10s on ARM with hubs) for pin/tip dirt.
+                        if (PreferFrugalUi &&
+                            string.IsNullOrWhiteSpace(SearchQuery) &&
+                            _activeFilter == ChatListFilter.All)
+                        {
+                            ReorderVisibleChatsInPlace();
+                        }
+                        else
+                        {
+                            ScheduleRefreshVisibleChats();
+                        }
                     }
                 }
             });
@@ -762,7 +773,20 @@ namespace Unison.Core.ViewModels
             {
                 _batchCompleted = true;
                 TraceListLifecycle("hydrate-drained-batch-complete", BuildListSnapshot());
-                ScheduleFullSqlitePreviewReconcile();
+                // PreferFrugalUi: hydrate + list-chunk already painted tips. A full 261-chat
+                // SQLite walk here (incl. after one-chat on-demand) held the UI for 20–60s
+                // on Mobile Low. Generous still does the belt-and-suspenders full pass.
+                if (!PreferFrugalUi)
+                {
+                    ScheduleFullSqlitePreviewReconcile();
+                }
+                else
+                {
+                    TraceListLifecycle(
+                        "hydrate-drained-skip-full-preview",
+                        BuildListSnapshot("reason=prefer-frugal"),
+                        flush: true);
+                }
             }
             else
             {
@@ -829,25 +853,39 @@ namespace Unison.Core.ViewModels
             // ceiling on a mutation left the list stuck at one batch for the whole session.
             RaiseVisibleTarget(_chatState.Chats.Count);
 
-            if (createdCount > 0 || updated > 0)
+            if (createdCount <= 0 && updated <= 0)
             {
-                _batchRendering = true;
-                _batchProcessed = Math.Max(_batchProcessed, _chatState.Chats.Count);
-                if (_batchTotal < _chatState.Chats.Count)
-                {
-                    _batchTotal = _chatState.Chats.Count;
-                }
-
-                IsLoadingOverlayVisible = VisibleChats.Count == 0;
-                UpdateBatchProgressText();
-                // Tip-only updates leave VisibleChats full; still re-pin order this turn.
-                if (updated > 0 && createdCount == 0 && VisibleChats.Count > 0)
-                {
-                    ReorderVisibleChatsInPlace();
-                }
-
-                EnsureBatchLoop();
+                return;
             }
+
+            // Tip-only updates leave VisibleChats full; still re-pin order this turn.
+            if (updated > 0 && createdCount == 0 && VisibleChats.Count > 0)
+            {
+                ReorderVisibleChatsInPlace();
+            }
+
+            // Painted list + tip-only hydrate (OnDemand 1 chat, live preview chunk): do not
+            // re-enter batch. That set target=store (261), drained hydrate, and scheduled
+            // list-full — Mobile Low then stalled tens of seconds in ReconcileAsync.
+            // New rows (createdCount > 0) or an empty VisibleChats still need the batch loop.
+            if (createdCount == 0 && VisibleChats.Count > 0 && !IsListHeldForSync)
+            {
+                TraceListLifecycle(
+                    "hydrate-tip-skip-batch",
+                    BuildListSnapshot("updated=" + updated + "; created=" + createdCount));
+                return;
+            }
+
+            _batchRendering = true;
+            _batchProcessed = Math.Max(_batchProcessed, _chatState.Chats.Count);
+            if (_batchTotal < _chatState.Chats.Count)
+            {
+                _batchTotal = _chatState.Chats.Count;
+            }
+
+            IsLoadingOverlayVisible = VisibleChats.Count == 0;
+            UpdateBatchProgressText();
+            EnsureBatchLoop();
         }
 
         private async void Contacts_DisplayNamesUpdated(object sender, EventArgs e)
@@ -925,11 +963,19 @@ namespace Unison.Core.ViewModels
                     // dirty or RefreshVisibleChats no-ops with reason=order-clean and the tip
                     // stays buried under older chats.
                     _visibleOrderDirty = true;
+                    bool frugalMoveMiss =
+                        PreferFrugalUi &&
+                        args.Action == NotifyCollectionChangedAction.Move;
                     TraceListLifecycle(
                         "incremental-move-miss",
                         BuildListSnapshot("action=" + args.Action),
-                        flush: true);
-                    ScheduleRefreshVisibleChats();
+                        // SortInPlace can miss many rows in one hop — flush once per coalesce.
+                        flush: !frugalMoveMiss);
+                    ScheduleRefreshVisibleChats(
+                        delayOverride: frugalMoveMiss
+                            ? MoveMissRefreshDebounceFrugal
+                            : (TimeSpan?)null,
+                        coalesceIfArmed: frugalMoveMiss);
                     return;
                 }
 

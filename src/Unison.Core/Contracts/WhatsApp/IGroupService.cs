@@ -23,8 +23,9 @@ namespace Unison.Core.Contracts.WhatsApp
         /// writes both onto the matching <see cref="ChatItem"/> so the composer can lock itself.
         /// </summary>
         /// <param name="includeRoster">
-        /// When true, also replaces <see cref="ChatItem.GroupMembers"/> from the IQ (Members pivot).
-        /// Default false: chat open only needs flags so a 500+ roster cannot freeze Mobile after paint.
+        /// When true, also folds the participant list into the roster (prefer
+        /// <see cref="EnsureFullRosterAsync"/>, which shares one request per group).
+        /// Default false: chat open only needs flags.
         /// </param>
         /// <param name="cancellationToken">Cancel when leaving Info so a large roster build stops.</param>
         Task RefreshGroupSendPermissionsAsync(
@@ -33,11 +34,53 @@ namespace Unison.Core.Contracts.WhatsApp
             CancellationToken cancellationToken = default);
 
         /// <summary>
-        /// Fills <see cref="ChatItem.GroupMembers"/> from the local roster when it is empty.
-        /// Never hits the network: the Members pivot and chat open use this before the IQ, so the
-        /// list has names to draw while the request is still in flight.
+        /// Baileys <c>chat.readOnly</c> on <c>group-participants.update</c>: when
+        /// <paramref name="participantJids"/> includes this account, <paramref name="stillMember"/>
+        /// false (leave/remove) locks the composer and true (add) unlocks it.
+        /// </summary>
+        Task NoteSelfGroupMembershipAsync(
+            string groupJid,
+            IReadOnlyList<string> participantJids,
+            bool stillMember);
+
+        /// <summary>
+        /// Adds the locally persisted roster to <see cref="ChatItem.GroupMembers"/>, once per group
+        /// per session. Never hits the network.
         /// </summary>
         Task EnsureGroupRosterLoadedFromStoreAsync(string groupJid);
+
+        /// <summary>
+        /// One participant from memory (row or roster index), or null. Cheap; bubbles and the
+        /// list strip call it per author. UI thread.
+        /// </summary>
+        GroupMember TryGetMember(string groupJid, string memberJid);
+
+        /// <summary>
+        /// An event named a participant (message author, quote, join, promote). No network; the
+        /// row follows in a batched low-priority flush.
+        /// </summary>
+        void NoteMember(string groupJid, GroupMemberHint hint);
+
+        /// <summary>A participant left or was removed at <paramref name="atUtc"/>.</summary>
+        void RemoveMember(string groupJid, string memberJid, System.DateTime atUtc);
+
+        /// <summary>
+        /// A <c>w:gp2</c> add / remove / promote / demote / modify: updates only the participants
+        /// it names. No network.
+        /// </summary>
+        void ApplyRosterEvent(GroupRosterEvent change);
+
+        /// <summary>
+        /// Makes sure these participants are on the roster (memory, then the store by key, then
+        /// the name caches). For the visible timeline; never hits the network.
+        /// </summary>
+        Task EnsureMembersAsync(string groupJid, IReadOnlyList<string> memberJids);
+
+        /// <summary>
+        /// Everyone in the group, for the @ menu and the Members pivot. Known members land first;
+        /// one metadata request per group, reused for a short window.
+        /// </summary>
+        Task EnsureFullRosterAsync(string groupJid, string reason, CancellationToken cancellationToken = default);
 
         /// <summary>Queries metadata for every group the account is in.</summary>
         Task QueryAllGroupsAsync();

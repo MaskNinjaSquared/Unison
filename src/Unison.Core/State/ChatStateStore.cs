@@ -78,7 +78,7 @@ namespace Unison.Core.State
 
         public event EventHandler DisplayNamesChanged;
 
-        public event EventHandler<string> GroupRosterChanged;
+        public event EventHandler<GroupRosterChangedEventArgs> GroupRosterChanged;
 
         // ---------------------------------------------------------------------
         // Migration seams
@@ -371,7 +371,7 @@ namespace Unison.Core.State
             RaiseDisplayNamesChanged();
         }
 
-        public void NotifyGroupRosterChanged(string groupJid)
+        public void NotifyGroupRosterChanged(string groupJid, IReadOnlyList<string> changedJids = null)
         {
             if (string.IsNullOrWhiteSpace(groupJid))
             {
@@ -381,7 +381,7 @@ namespace Unison.Core.State
             var handler = GroupRosterChanged;
             if (handler != null)
             {
-                handler(this, groupJid);
+                handler(this, new GroupRosterChangedEventArgs(groupJid, changedJids));
             }
         }
 

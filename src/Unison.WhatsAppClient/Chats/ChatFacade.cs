@@ -949,8 +949,19 @@ namespace Unison.WhatsAppClient.Chats
 
             var sw = Stopwatch.StartNew();
             List<ChatItem> changed = null;
-            await _ui.RunAsync(() => changed = ChatUnreadTally.Clear(_chatRows.FindConversation(canonical)))
-                .ConfigureAwait(false);
+            // High priority: Normal hops sit behind tip-swapped / catalog snapshot on Mobile and
+            // MarkRead then reports clearMs of tens of seconds while the badge stays lit.
+            Action clearUnread = () =>
+                changed = ChatUnreadTally.Clear(_chatRows.FindConversation(canonical));
+            if (_urgentUi != null)
+            {
+                await _urgentUi.RunUrgentAsync(clearUnread).ConfigureAwait(false);
+            }
+            else
+            {
+                await _ui.RunAsync(clearUnread).ConfigureAwait(false);
+            }
+
             long clearMs = sw.ElapsedMilliseconds;
             if (changed == null || changed.Count == 0)
             {
@@ -1721,7 +1732,8 @@ namespace Unison.WhatsAppClient.Chats
                 _ = _ui.RunAsync(() =>
                 {
                     var reorderElapsed = Stopwatch.StartNew();
-                    ChatDisplayOrder.Reposition(_chatState.Chats, toReorder);
+                    ChatItem hub = BumpCommunityHubFromLinkedChild(toReorder);
+                    ChatDisplayOrder.Reposition(_chatState.Chats, hub ?? toReorder);
                     reorderElapsed.Stop();
                     if (reorderElapsed.ElapsedMilliseconds >= 300)
                     {
@@ -1760,6 +1772,7 @@ namespace Unison.WhatsAppClient.Chats
             int created = 0;
             int updated = 0;
             int unreadAdded = 0;
+            var reorderRows = new List<ChatItem>();
 
             for (int start = 0; start < summaries.Count; start += OfflineReplayUiSliceSize)
             {
@@ -1808,6 +1821,7 @@ namespace Unison.WhatsAppClient.Chats
                         if (preferred != null && summary.Timestamp != DateTime.MinValue)
                         {
                             sliceUpdated++;
+                            CollectOfflineReplayReorderTarget(preferred, reorderRows);
                         }
 
                         if (summary.UnreadDelta > 0)
@@ -1829,7 +1843,14 @@ namespace Unison.WhatsAppClient.Chats
 
             await _ui.RunAsync(() =>
             {
-                ChatDisplayOrder.SortInPlace(_chatState.Chats);
+                // Reposition only tip-updated rows (and bumped community hubs). Full SortInPlace
+                // Moved projected-away children too → incremental-move-miss → BuildVisibleRefreshSource
+                // storms on Mobile Low during replay-progressive.
+                for (int i = 0; i < reorderRows.Count; i++)
+                {
+                    ChatDisplayOrder.Reposition(_chatState.Chats, reorderRows[i]);
+                }
+
                 int totalUnread = GetTotalUnreadCount();
                 if (_notifications != null)
                 {
@@ -1843,8 +1864,70 @@ namespace Unison.WhatsAppClient.Chats
                     "; chats=" + summaries.Count +
                     "; created=" + created +
                     "; previews=" + updated +
-                    "; unreadAdded=" + unreadAdded);
+                    "; unreadAdded=" + unreadAdded +
+                    "; repositioned=" + reorderRows.Count);
             }).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// Offline tips apply with reposition:false; collect the painted row (hub when the tip
+        /// landed on a linked child) so one Reposition covers Visible without SortInPlace.
+        /// </summary>
+        private void CollectOfflineReplayReorderTarget(ChatItem preferred, List<ChatItem> reorderRows)
+        {
+            if (preferred == null || reorderRows == null)
+            {
+                return;
+            }
+
+            ChatItem hub = BumpCommunityHubFromLinkedChild(preferred);
+            ChatItem target = hub ?? preferred;
+
+            for (int i = 0; i < reorderRows.Count; i++)
+            {
+                if (ReferenceEquals(reorderRows[i], target))
+                {
+                    return;
+                }
+            }
+
+            reorderRows.Add(target);
+        }
+
+        /// <summary>
+        /// Mirrors a linked subgroup tip onto its community hub so list order can rise without
+        /// waiting for the next CommunityListProjector rebuild.
+        /// </summary>
+        private ChatItem BumpCommunityHubFromLinkedChild(ChatItem child)
+        {
+            if (child == null || string.IsNullOrWhiteSpace(child.LinkedParentJid))
+            {
+                return null;
+            }
+
+            List<ChatItem> hubs = _chatRows.FindConversation(child.LinkedParentJid);
+            if (hubs == null || hubs.Count == 0)
+            {
+                return null;
+            }
+
+            ChatItem hub = null;
+            for (int i = 0; i < hubs.Count; i++)
+            {
+                if (hubs[i] != null)
+                {
+                    hub = hubs[i];
+                    break;
+                }
+            }
+
+            if (hub == null)
+            {
+                return null;
+            }
+
+            CommunityHubPresentation.ApplyTipIfNewer(hub, child, _strings);
+            return hub;
         }
 
         /// <summary>
@@ -1980,6 +2063,8 @@ namespace Unison.WhatsAppClient.Chats
                 }
             }
 
+            ChatItem hubFromChild = BumpCommunityHubFromLinkedChild(chat);
+
             if (!isGroup &&
                 PlaceholderChatLabel.IsPlaceholder(
                     chat.Name,
@@ -1995,7 +2080,8 @@ namespace Unison.WhatsAppClient.Chats
 
             if (reposition)
             {
-                ChatDisplayOrder.Reposition(_chatState.Chats, chat);
+                // Linked child is not on VisibleChats — move the hub the list actually paints.
+                ChatDisplayOrder.Reposition(_chatState.Chats, hubFromChild ?? chat);
             }
 
             if (unreadDelta > 0)

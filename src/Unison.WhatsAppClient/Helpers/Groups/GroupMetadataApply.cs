@@ -34,7 +34,7 @@ namespace Unison.WhatsAppClient.Helpers
         private readonly DisplayNameTable _subjects;
         private readonly Func<DateTime> _utcNow;
         private readonly ChatTimelineLoadPriorityGate _timelinePriority;
-        private readonly int _rosterBuildChunkSize;
+        private readonly GroupRosterIndex _index;
 
         public GroupMetadataApply(
             IGroupNaming naming,
@@ -47,7 +47,8 @@ namespace Unison.WhatsAppClient.Helpers
             DisplayNameTable subjects,
             Func<DateTime> utcNow = null,
             ChatTimelineLoadPriorityGate timelinePriority = null,
-            int rosterBuildChunkSize = int.MaxValue)
+            int rosterBuildChunkSize = int.MaxValue,
+            GroupRosterIndex rosterIndex = null)
         {
             _naming = naming ?? throw new ArgumentNullException(nameof(naming));
             _ui = ui ?? throw new ArgumentNullException(nameof(ui));
@@ -59,7 +60,49 @@ namespace Unison.WhatsAppClient.Helpers
             _subjects = subjects ?? throw new ArgumentNullException(nameof(subjects));
             _utcNow = utcNow ?? (() => DateTime.UtcNow);
             _timelinePriority = timelinePriority;
-            _rosterBuildChunkSize = rosterBuildChunkSize < 1 ? int.MaxValue : rosterBuildChunkSize;
+            _index = rosterIndex ?? new GroupRosterIndex(_jids.GetCanonicalJid);
+            // rosterBuildChunkSize kept for call-site compatibility; BuildMembers now runs
+            // as one Task.Run hop (chunking on the UI sync context stalled Lumia 950 XL).
+            _ = rosterBuildChunkSize;
+        }
+
+        /// <summary>
+        /// Baileys <c>chat.readOnly</c>: the account left or was removed, or joined again.
+        /// </summary>
+        public Task SetNoLongerParticipantAsync(string groupJid, bool left)
+        {
+            if (string.IsNullOrWhiteSpace(groupJid))
+            {
+                return Task.CompletedTask;
+            }
+
+            string canonical = _jids.GetCanonicalJid(groupJid);
+            return _ui.RunAsync(() =>
+            {
+                List<ChatItem> rows = _rows.FindConversation(canonical);
+                if (rows == null || rows.Count == 0)
+                {
+                    return;
+                }
+
+                bool changed = false;
+                for (int i = 0; i < rows.Count; i++)
+                {
+                    ChatItem row = rows[i];
+                    if (row == null || row.LeftGroup == left)
+                    {
+                        continue;
+                    }
+
+                    row.LeftGroup = left;
+                    changed = true;
+                }
+
+                if (changed)
+                {
+                    _catalog.Schedule();
+                }
+            });
         }
 
         /// <summary>
@@ -199,14 +242,17 @@ namespace Unison.WhatsAppClient.Helpers
         /// </summary>
         public void ApplyMembers(ChatItem chat, IList<GroupMemberDraft> drafts)
         {
-            if (chat == null || drafts == null || drafts.Count == 0)
+            if (chat == null || !HasUsableDraft(drafts))
             {
                 return;
             }
 
             CapturePrevious(chat, out Dictionary<string, GroupMember> previous, out List<GroupMember> previousList);
-            List<GroupMember> next = BuildMembers(drafts, previous, previousList);
-            List<GroupMember> applied = CommitBuiltRoster(chat, previous, previousList, next);
+            string group = _jids.GetCanonicalJid(chat.JID);
+            GroupRosterCompleteness completeness = FoldIntoIndex(
+                group, drafts, previousList, chat.GroupMemberCount, _utcNow());
+            List<GroupMember> next = BuildMembers(group, drafts, previous, previousList);
+            List<GroupMember> applied = CommitBuiltRoster(chat, previous, previousList, next, completeness);
             PersistRosterSnapshot(chat.JID, applied);
         }
 
@@ -218,19 +264,40 @@ namespace Unison.WhatsAppClient.Helpers
             IList<GroupMemberDraft> drafts,
             CancellationToken cancellationToken = default)
         {
-            if (chat == null || drafts == null || drafts.Count == 0)
+            if (chat == null || !HasUsableDraft(drafts))
             {
                 return;
             }
 
+            DateTime snapshotUtc = _utcNow();
             Dictionary<string, GroupMember> previous = null;
             List<GroupMember> previousList = null;
-            await _ui.RunAsync(() => CapturePrevious(chat, out previous, out previousList))
-                .ConfigureAwait(false);
+            int expectedCount = 0;
+            string rowJid = null;
+            await _ui.RunAsync(() =>
+            {
+                CapturePrevious(chat, out previous, out previousList);
+                expectedCount = chat.GroupMemberCount;
+                rowJid = chat.JID;
+            }).ConfigureAwait(false);
 
             cancellationToken.ThrowIfCancellationRequested();
 
-            List<GroupMember> next = await BuildMembersAsync(drafts, previous, previousList, cancellationToken)
+            // Always escape the UI SynchronizationContext: if ApplyMembersAsync was awaited
+            // from a UI hop, BuildMembers would otherwise run on tid=0 (Lumia 950 XL:
+            // 10–35s GroupMetadataApply stalls with active=ApplyMetadataAsync).
+            IList<GroupMemberDraft> draftList = drafts;
+            Dictionary<string, GroupMember> priorMap = previous;
+            List<GroupMember> priorList = previousList;
+            string group = _jids.GetCanonicalJid(rowJid);
+            GroupRosterCompleteness completeness = GroupRosterCompleteness.None;
+            List<GroupMember> next = await Task.Run(
+                    () =>
+                    {
+                        completeness = FoldIntoIndex(group, draftList, priorList, expectedCount, snapshotUtc);
+                        return BuildMembers(group, draftList, priorMap, priorList);
+                    },
+                    cancellationToken)
                 .ConfigureAwait(false);
             if (next.Count == 0)
             {
@@ -243,7 +310,7 @@ namespace Unison.WhatsAppClient.Helpers
             string groupJid = null;
             await _ui.RunAsync(() =>
             {
-                applied = CommitBuiltRoster(chat, previous, previousList, next);
+                applied = CommitBuiltRoster(chat, previous, previousList, next, completeness);
                 groupJid = chat.JID;
             }).ConfigureAwait(false);
 
@@ -291,7 +358,8 @@ namespace Unison.WhatsAppClient.Helpers
             ChatItem chat,
             Dictionary<string, GroupMember> previous,
             List<GroupMember> previousList,
-            List<GroupMember> next)
+            List<GroupMember> next,
+            GroupRosterCompleteness completeness)
         {
             if (next == null || next.Count == 0)
             {
@@ -313,15 +381,7 @@ namespace Unison.WhatsAppClient.Helpers
                 applied = next;
             }
 
-            for (int i = 0; i < applied.Count; i++)
-            {
-                if (applied[i] != null)
-                {
-                    applied[i].IsMinimal = false;
-                }
-            }
-
-            chat.HasFullGroupRoster = true;
+            chat.RosterCompleteness = completeness;
 
             if (chat.GroupMemberCount < applied.Count)
             {
@@ -360,47 +420,129 @@ namespace Unison.WhatsAppClient.Helpers
             }
         }
 
+        private static bool HasUsableDraft(IList<GroupMemberDraft> drafts)
+        {
+            if (drafts == null)
+            {
+                return false;
+            }
+
+            for (int i = 0; i < drafts.Count; i++)
+            {
+                if (drafts[i] != null && !string.IsNullOrWhiteSpace(drafts[i].Jid))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// Folds the reply into the shared roster index. Full only when the reply listed every
+        /// participant the group counts; a reply cut short (512 cap) stays Partial.
+        /// </summary>
+        private GroupRosterCompleteness FoldIntoIndex(
+            string group,
+            IList<GroupMemberDraft> drafts,
+            List<GroupMember> previousList,
+            int expectedCount,
+            DateTime snapshotUtc)
+        {
+            if (previousList != null && _index.GetCompleteness(group) == GroupRosterCompleteness.None)
+            {
+                var seeds = new List<GroupMemberHint>(previousList.Count);
+                foreach (GroupMember member in previousList)
+                {
+                    seeds.Add(GroupMemberHint.FromMember(member, GroupMemberHintSource.Store, DateTime.MinValue));
+                }
+
+                _index.Seed(group, seeds, GroupRosterCompleteness.Partial);
+            }
+
+            var hints = new List<GroupMemberHint>(drafts.Count);
+            foreach (GroupMemberDraft draft in drafts)
+            {
+                if (draft == null || string.IsNullOrWhiteSpace(draft.Jid))
+                {
+                    continue;
+                }
+
+                hints.Add(new GroupMemberHint
+                {
+                    Jid = draft.Jid,
+                    Lid = string.IsNullOrWhiteSpace(draft.Lid) ? null : draft.Lid,
+                    PhoneNumber = string.IsNullOrWhiteSpace(draft.PhoneNumber) ? null : draft.PhoneNumber,
+                    Role = draft.Role,
+                    Source = GroupMemberHintSource.Metadata,
+                    ObservedAtUtc = snapshotUtc
+                });
+            }
+
+            return _index.MergeAll(group, hints, expectedCount, snapshotUtc, markPending: false);
+        }
+
+        /// <summary>
+        /// The reply's members, minus anyone who left after it was taken, with the role the index
+        /// settled on; plus members the index knows that the reply did not list (joined later, or
+        /// past a truncated reply).
+        /// </summary>
         private List<GroupMember> BuildMembers(
+            string group,
             IList<GroupMemberDraft> drafts,
             Dictionary<string, GroupMember> previous,
             List<GroupMember> previousList)
         {
             var next = new List<GroupMember>(drafts.Count);
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var draft in drafts)
             {
-                GroupMember built = TryBuildMember(draft, previous, previousList);
-                if (built != null)
+                GroupRosterRecord record = draft == null ? null : _index.TryGet(group, draft.Jid);
+                if (record == null)
                 {
-                    next.Add(built);
+                    continue;
                 }
+
+                GroupMember built = TryBuildMember(draft, previous, previousList);
+                if (built == null || !seen.Add(record.Jid ?? built.Jid))
+                {
+                    continue;
+                }
+
+                built.Role = record.Role;
+                next.Add(built);
             }
 
-            return next;
-        }
-
-        private async Task<List<GroupMember>> BuildMembersAsync(
-            IList<GroupMemberDraft> drafts,
-            Dictionary<string, GroupMember> previous,
-            List<GroupMember> previousList,
-            CancellationToken cancellationToken)
-        {
-            var next = new List<GroupMember>(drafts.Count);
-            int sinceYield = 0;
-            for (int i = 0; i < drafts.Count; i++)
+            foreach (GroupRosterRecord record in _index.Snapshot(group))
             {
-                cancellationToken.ThrowIfCancellationRequested();
-                GroupMember built = TryBuildMember(drafts[i], previous, previousList);
-                if (built != null)
+                if (record == null || string.IsNullOrWhiteSpace(record.Jid) || seen.Contains(record.Jid))
                 {
-                    next.Add(built);
+                    continue;
                 }
 
-                sinceYield++;
-                if (_rosterBuildChunkSize < int.MaxValue && sinceYield >= _rosterBuildChunkSize)
+                GroupMember built = TryBuildMember(
+                    new GroupMemberDraft
+                    {
+                        Jid = record.Jid,
+                        Lid = record.Lid,
+                        PhoneNumber = record.PhoneNumber,
+                        Role = record.Role
+                    },
+                    previous,
+                    previousList);
+                if (built == null)
                 {
-                    sinceYield = 0;
-                    await Task.Yield();
+                    continue;
                 }
+
+                if (!string.IsNullOrWhiteSpace(record.DisplayName) &&
+                    !GroupParticipantResolver.IsUsableDisplayLabel(built.DisplayName, built.Jid))
+                {
+                    built.DisplayName = record.DisplayName;
+                }
+
+                seen.Add(record.Jid);
+                next.Add(built);
             }
 
             return next;
@@ -432,7 +574,6 @@ namespace Unison.WhatsAppClient.Helpers
                 PhoneNumber = string.IsNullOrWhiteSpace(draft.PhoneNumber) ? null : draft.PhoneNumber,
                 Lid = string.IsNullOrWhiteSpace(draft.Lid) ? null : draft.Lid,
                 Role = draft.Role,
-                IsMinimal = false,
                 DisplayName = _naming.ResolveMemberDisplayName(draft.Jid),
                 AvatarUrl = avatarUrl,
                 AvatarFetchedAtUtc = fetchedAt,
@@ -457,6 +598,10 @@ namespace Unison.WhatsAppClient.Helpers
             }
 
             chat.MyGroupRole = metadata.MyRole;
+            if (metadata.SelfIsParticipant.HasValue)
+            {
+                chat.LeftGroup = !metadata.SelfIsParticipant.Value;
+            }
             if (metadata.MemberCount > 0)
             {
                 chat.GroupMemberCount = metadata.MemberCount;

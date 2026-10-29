@@ -34,11 +34,13 @@
             <converters:InvertedStringToVisibilityConverter x:Key="InvertedStringToVisibilityConverter"/>
             <converters:BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
             <converters:InvertedBooleanToVisibilityConverter x:Key="InvertedBooleanToVisibilityConverter"/>
+            <converters:EmojiJumpFontConverter x:Key="EmojiJumpFontConverter"/>
             <converters:ChatPreviewKindToLabelConverter x:Key="ChatPreviewKindToLabelConverter"/>
             <converters:ChatPreviewKindToBrushConverter x:Key="ChatPreviewKindToBrushConverter"/>
             <converters:RelativeTimestampConverter x:Key="RelativeTimestampConverter"/>
             <converters:LocalTimeConverter x:Key="LocalTimeConverter"/>
             <converters:ByteSizeConverter x:Key="ByteSizeConverter"/>
+            <converters:FileSizeConverter x:Key="FileSizeConverter"/>
             <converters:BoolToDesktopCursorKindConverter x:Key="BoolToDesktopCursorKindConverter"/>
             
             <!-- Custom Fonts -->
@@ -52,6 +54,10 @@
             <FontFamily x:Key="UnisonIconFont">ms-appx:///Assets/Fonts/UnisonIcons.ttf#UnisonIcons</FontFamily>
             <!-- WhatsApp Legacy WP8 icons: EB01–EB17 (attach tray EB10–EB15, channels EB17). Regen: scripts/icons/generate-whatsapp-legacy-icons.ps1 -->
             <FontFamily x:Key="LegacyIconFont">ms-appx:///Assets/Fonts/WhatsAppLegacyIcons.ttf#WhatsAppLegacyIcons</FontFamily>
+            <!-- Sticker-box glyphs. Explicit emoji face (App TextBlock style uses MainFont, which
+                 has no emoji). Fallback Symbol for older W10M builds. Optional: drop
+                 WhatsAppColorEmoji.ttf into Assets/Fonts and switch the URI (~42 MB). -->
+            <FontFamily x:Key="EmojiFont">ms-appx:///Assets/Fonts/WhatsAppColorEmoji.ttf#WhatsApp Color Emoji, Segoe UI Emoji, Segoe UI Symbol</FontFamily>
 
             <!-- Branding Colors -->
             <SolidColorBrush x:Key="UnisonGreenBrush" Color="#FF20C064"/>

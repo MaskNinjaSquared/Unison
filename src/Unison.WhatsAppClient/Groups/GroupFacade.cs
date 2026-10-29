@@ -6,7 +6,7 @@
 //
 // The send-permission refresh and the roster restore run here: the w:g2 query
 // goes out through IGroupWireActions, GroupMetadataReader reads it, and the Core
-// flows (GroupMetadataApply, GroupRosterRestore) put it on the row. The listing,
+// flows (GroupMetadataApply, GroupRosterDemand) put it on the row. The listing,
 // the per-group fallback, the full-size group picture and member pictures run
 // here too. One GroupQueryWindow, so the name refresh and the background pass
 // cannot each start a listing of their own.
@@ -44,7 +44,7 @@ namespace Unison.WhatsAppClient.Groups
         private readonly IPersonStore _people;
         private readonly GroupMetadataReader _reader;
         private readonly GroupMetadataApply _apply;
-        private readonly GroupRosterRestore _rosterRestore;
+        private readonly GroupRosterDemand _rosterDemand;
         private readonly IGroupAvatarActions _avatars;
         private readonly IUsyncGate _usyncGate;
         private readonly SyncStatusChannel _syncStatus;
@@ -89,7 +89,7 @@ namespace Unison.WhatsAppClient.Groups
             Func<IContactService> contacts,
             IPersonStore people,
             GroupMetadataApply apply,
-            GroupRosterRestore rosterRestore,
+            GroupRosterDemand rosterDemand,
             IGroupAvatarActions avatars,
             IUsyncGate usyncGate,
             SyncStatusChannel syncStatus,
@@ -114,7 +114,9 @@ namespace Unison.WhatsAppClient.Groups
             _contacts = contacts ?? throw new ArgumentNullException(nameof(contacts));
             _people = people;
             _apply = apply ?? throw new ArgumentNullException(nameof(apply));
-            _rosterRestore = rosterRestore ?? throw new ArgumentNullException(nameof(rosterRestore));
+            _rosterDemand = rosterDemand ?? throw new ArgumentNullException(nameof(rosterDemand));
+            _rosterDemand.AttachFullFetch((jid, token) =>
+                QueryAndApplyMetadataAsync(jid, includeRoster: true, cancellationToken: token));
             _avatars = avatars ?? throw new ArgumentNullException(nameof(avatars));
             _usyncGate = usyncGate ?? throw new ArgumentNullException(nameof(usyncGate));
             _diagnostics = diagnostics;
@@ -221,26 +223,43 @@ namespace Unison.WhatsAppClient.Groups
             }
         }
 
-        public async Task RefreshGroupSendPermissionsAsync(
+        private void TraceListingSkipped(string reason)
+        {
+            _diagnostics?.Write(
+                "startup-phase",
+                "background-groups:skipped",
+                "reason=" + (reason ?? "?"));
+        }
+
+        public Task RefreshGroupSendPermissionsAsync(
             string groupJid,
             bool includeRoster = false,
             CancellationToken cancellationToken = default)
         {
+            return QueryAndApplyMetadataAsync(groupJid, includeRoster, cancellationToken);
+        }
+
+        /// <returns>True when a metadata reply was applied.</returns>
+        private async Task<bool> QueryAndApplyMetadataAsync(
+            string groupJid,
+            bool includeRoster,
+            CancellationToken cancellationToken)
+        {
             if (string.IsNullOrWhiteSpace(groupJid))
             {
-                return;
+                return false;
             }
 
             if (!_wire.IsHandshakeComplete)
             {
-                return;
+                return false;
             }
 
             string canonical = _jids.GetCanonicalJid(groupJid);
             if (string.IsNullOrWhiteSpace(canonical) ||
                 !canonical.EndsWith(GroupServer, StringComparison.OrdinalIgnoreCase))
             {
-                return;
+                return false;
             }
 
             try
@@ -251,6 +270,17 @@ namespace Unison.WhatsAppClient.Groups
                 // Pass includeRoster into the reader too — otherwise we still allocate up to 512
                 // drafts on every open refresh and discard them when ApplyMembers is gated off.
                 GroupMetadataSnapshot metadata = _reader.ReadMetadata(response, canonical, includeRoster);
+                if (metadata == null)
+                {
+                    if (GroupMetadataRefusal.IsNoLongerParticipant(response))
+                    {
+                        await _apply.SetNoLongerParticipantAsync(canonical, left: true)
+                            .ConfigureAwait(false);
+                    }
+
+                    return false;
+                }
+
                 _communityLinkProbed.Add(canonical);
 
                 // ReadMetadata leaves Subject null by design — extract and hand to Apply so
@@ -285,20 +315,79 @@ namespace Unison.WhatsAppClient.Groups
                     includeRoster,
                     cancellationToken,
                     subject);
+                return true;
             }
             catch (OperationCanceledException)
             {
                 Debug.WriteLine($"[GroupFacade] RefreshGroupSendPermissionsAsync cancelled for {canonical}");
+                return false;
             }
             catch (Exception ex)
             {
                 Debug.WriteLine($"[GroupFacade] RefreshGroupSendPermissionsAsync failed for {canonical}: {ex.Message}");
+                return false;
             }
         }
 
         public Task EnsureGroupRosterLoadedFromStoreAsync(string groupJid)
         {
-            return _rosterRestore.EnsureLoadedAsync(groupJid);
+            return _rosterDemand.RestoreFromStoreAsync(groupJid);
+        }
+
+        /// <inheritdoc />
+        public GroupMember TryGetMember(string groupJid, string memberJid) =>
+            _rosterDemand.TryGetMember(groupJid, memberJid);
+
+        /// <inheritdoc />
+        public void NoteMember(string groupJid, GroupMemberHint hint) =>
+            _rosterDemand.NoteMember(groupJid, hint);
+
+        /// <inheritdoc />
+        public void RemoveMember(string groupJid, string memberJid, DateTime atUtc) =>
+            _rosterDemand.RemoveMember(groupJid, memberJid, atUtc);
+
+        /// <inheritdoc />
+        public void ApplyRosterEvent(GroupRosterEvent change)
+        {
+            GroupRosterEventApply.Apply(change, _rosterDemand.NoteMember, _rosterDemand.RemoveMember);
+        }
+
+        /// <inheritdoc />
+        public Task EnsureMembersAsync(string groupJid, IReadOnlyList<string> memberJids) =>
+            _rosterDemand.EnsureMembersAsync(groupJid, memberJids);
+
+        /// <inheritdoc />
+        public Task EnsureFullRosterAsync(string groupJid, string reason, CancellationToken cancellationToken = default) =>
+            _rosterDemand.EnsureFullRosterAsync(groupJid, reason, cancellationToken);
+
+        /// <inheritdoc />
+        public Task NoteSelfGroupMembershipAsync(
+            string groupJid,
+            IReadOnlyList<string> participantJids,
+            bool stillMember)
+        {
+            if (string.IsNullOrWhiteSpace(groupJid) ||
+                participantJids == null ||
+                participantJids.Count == 0 ||
+                !IncludesSelf(participantJids))
+            {
+                return Task.CompletedTask;
+            }
+
+            return _apply.SetNoLongerParticipantAsync(groupJid, left: !stillMember);
+        }
+
+        private bool IncludesSelf(IReadOnlyList<string> jids)
+        {
+            for (int i = 0; i < jids.Count; i++)
+            {
+                if (_jids.IsSelfLinked(jids[i]))
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         /// <inheritdoc />
@@ -536,33 +625,28 @@ namespace Unison.WhatsAppClient.Groups
             if (GroupListingVisibilityGate.ShouldDeferStart(IsWindowVisible))
             {
                 Interlocked.Exchange(ref _listingRetryPending, 1);
+                TraceListingSkipped("window-hidden");
                 Debug.WriteLine(
                     "[GroupFacade] QueryAllGroupsAsync deferred (window hidden); retry armed");
                 return;
             }
 
+            // Flags/admin roles come from this listing — do not gate on ShouldDeferAvatarFetch
+            // (first-sync picture hold), or MyRole stays Member until a chat is opened.
             string heavyDeferReason;
             if (_syncWork.ShouldDeferHeavyLocalWork(out heavyDeferReason))
             {
                 Interlocked.Exchange(ref _listingRetryPending, 1);
+                TraceListingSkipped(heavyDeferReason);
                 Debug.WriteLine(
                     "[GroupFacade] QueryAllGroupsAsync skipped (" + heavyDeferReason +
                     "); retry armed");
                 return;
             }
 
-            string syncTrafficDeferReason;
-            if (_syncWork.ShouldDeferAvatarFetch(out syncTrafficDeferReason))
-            {
-                Interlocked.Exchange(ref _listingRetryPending, 1);
-                Debug.WriteLine(
-                    "[GroupFacade] QueryAllGroupsAsync skipped (sync traffic active: " +
-                    syncTrafficDeferReason + "); retry armed");
-                return;
-            }
-
             if (!_wire.IsHandshakeComplete)
             {
+                TraceListingSkipped("handshake-incomplete");
                 Debug.WriteLine("[GroupFacade] QueryAllGroupsAsync skipped (handshake not complete)");
                 return;
             }
@@ -573,6 +657,9 @@ namespace Unison.WhatsAppClient.Groups
             DateTime nowUtc = DateTime.UtcNow;
             if (_queryWindow.ShouldSkip(effectiveForce, nowUtc))
             {
+                TraceListingSkipped(
+                    "query-window; sinceSec=" +
+                    _queryWindow.Since(nowUtc).TotalSeconds.ToString("F0"));
                 Debug.WriteLine(
                     "[GroupFacade] QueryAllGroupsAsync skipped (last pass was " +
                     _queryWindow.Since(nowUtc).TotalSeconds.ToString("F0") +
@@ -582,6 +669,7 @@ namespace Unison.WhatsAppClient.Groups
 
             if (Interlocked.CompareExchange(ref _listingInFlight, 1, 0) != 0)
             {
+                TraceListingSkipped("in-flight");
                 Debug.WriteLine("[GroupFacade] QueryAllGroupsAsync skipped (listing already in flight)");
                 return;
             }
@@ -597,9 +685,16 @@ namespace Unison.WhatsAppClient.Groups
                 try
                 {
                     Debug.WriteLine("[GroupFacade] Fetching all participating groups...");
+                    _diagnostics?.Write("startup-phase", "background-groups:iq-begin");
+                    var iqClock = Stopwatch.StartNew();
                     BinaryNode response = await _wire
                         .QueryParticipatingGroupsAsync(listingToken)
                         .ConfigureAwait(false);
+                    _diagnostics?.Write(
+                        "startup-phase",
+                        "background-groups:iq-end",
+                        "elapsedMs=" + iqClock.ElapsedMilliseconds +
+                        "; hasResponse=" + (response != null));
                     if (GroupListingVisibilityGate.ShouldAbortInFlight(
                             IsWindowVisible,
                             listingToken.IsCancellationRequested))

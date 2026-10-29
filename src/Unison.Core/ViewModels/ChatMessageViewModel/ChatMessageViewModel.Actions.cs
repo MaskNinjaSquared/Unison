@@ -1,5 +1,6 @@
 using System;
 using System.Threading.Tasks;
+using Unison.Core.Contracts;
 using Unison.Core.Helpers;
 using Unison.Core.Models;
 
@@ -670,6 +671,181 @@ namespace Unison.Core.ViewModels
             {
                 LogMediaError("pin-fail", ex);
             }
+        }
+
+        /// <summary>
+        /// Single delete entry: shows for-me / for-everyone (when eligible) / cancel, then runs the choice.
+        /// </summary>
+        /// <returns>The choice that was executed (or <see cref="MessageDeleteChoice.Cancel"/>).</returns>
+        public async Task<MessageDeleteChoice> PromptDeleteAsync()
+        {
+            if (_dialogs == null || !MessageDeleteEligibility.CanDeleteForMe(Model))
+            {
+                return MessageDeleteChoice.Cancel;
+            }
+
+            bool offerEveryone = MessageDeleteEligibility.CanDeleteForEveryone(
+                Model,
+                IsDeleteGroupChat,
+                _viewerIsGroupAdmin,
+                DateTime.UtcNow);
+
+            string forMe = _strings?.Get("ChatDetail_DeleteForMe", "Delete for me")
+                ?? "Delete for me";
+            string forEveryone = _strings?.Get("ChatDetail_DeleteForEveryone", "Delete for everyone")
+                ?? "Delete for everyone";
+            string cancel = _strings?.Get("ChatDetail_DeleteCancel", "Cancel") ?? "Cancel";
+
+            MessageDeleteChoice choice;
+            try
+            {
+                choice = await _dialogs.ShowMessageDeleteAsync(
+                    BuildDeletePromptContent(),
+                    offerEveryone,
+                    forMe,
+                    forEveryone,
+                    cancel);
+            }
+            catch (Exception ex)
+            {
+                LogMediaError("delete-prompt-fail", ex);
+                return MessageDeleteChoice.Cancel;
+            }
+
+            if (choice == MessageDeleteChoice.ForEveryone)
+            {
+                await DeleteForEveryoneAsync();
+                return MessageDeleteChoice.ForEveryone;
+            }
+
+            if (choice == MessageDeleteChoice.ForMe)
+            {
+                await DeleteForMeAsync();
+                return MessageDeleteChoice.ForMe;
+            }
+
+            return MessageDeleteChoice.Cancel;
+        }
+
+        /// <summary>
+        /// Delete this bubble for the account only (sent or received). Early-returns when ineligible.
+        /// </summary>
+        public async Task DeleteForMeAsync()
+        {
+            if (_messages == null || !MessageDeleteEligibility.CanDeleteForMe(Model))
+            {
+                return;
+            }
+
+            string chatJid = Model.RemoteJid;
+            if (string.IsNullOrWhiteSpace(chatJid))
+            {
+                LogMedia("delete-for-me-skip", "no-remote-jid");
+                return;
+            }
+
+            LogMedia("delete-for-me-start", "id=" + Model.Id);
+            try
+            {
+                await _messages.DeleteMessageForMeAsync(chatJid, Model);
+                LogMedia("delete-for-me-ok", "id=" + Model.Id);
+                DeletedForMe?.Invoke(this, EventArgs.Empty);
+            }
+            catch (Exception ex)
+            {
+                LogMediaError("delete-for-me-fail", ex);
+            }
+        }
+
+        /// <summary>
+        /// Revoke for everyone when FAQ rules allow. Uses <see cref="SetDeleteChatContext"/>.
+        /// </summary>
+        public async Task DeleteForEveryoneAsync()
+        {
+            if (_messages == null ||
+                !MessageDeleteEligibility.CanDeleteForEveryone(
+                    Model,
+                    IsDeleteGroupChat,
+                    _viewerIsGroupAdmin,
+                    DateTime.UtcNow))
+            {
+                return;
+            }
+
+            string chatJid = Model.RemoteJid;
+            if (string.IsNullOrWhiteSpace(chatJid))
+            {
+                LogMedia("delete-for-everyone-skip", "no-remote-jid");
+                return;
+            }
+
+            LogMedia("delete-for-everyone-start", "id=" + Model.Id);
+            try
+            {
+                await _messages.DeleteMessageForEveryoneAsync(
+                    chatJid,
+                    Model,
+                    IsDeleteGroupChat,
+                    _viewerIsGroupAdmin);
+                LogMedia("delete-for-everyone-ok", "id=" + Model.Id);
+            }
+            catch (Exception ex)
+            {
+                LogMediaError("delete-for-everyone-fail", ex);
+            }
+        }
+
+        private string BuildDeletePromptContent()
+        {
+            if (Model != null && Model.IsFromMe)
+            {
+                return _strings?.Get(
+                           "ChatDetail_DeleteMessagePrompt",
+                           "Delete message?")
+                       ?? "Delete message?";
+            }
+
+            string author = ResolveDeleteAuthorLabel();
+            string template = _strings?.Get(
+                                  "ChatDetail_DeleteMessagePromptFrom",
+                                  "Delete message from {0}?")
+                              ?? "Delete message from {0}?";
+            try
+            {
+                return string.Format(template, author);
+            }
+            catch (FormatException)
+            {
+                return template + " " + author;
+            }
+        }
+
+        private string ResolveDeleteAuthorLabel()
+        {
+            string name = Model?.SenderName;
+            if (!string.IsNullOrWhiteSpace(name) && !SelfChatNaming.IsKnownFallback(name))
+            {
+                return name.Trim();
+            }
+
+            string jid = Model?.ParticipantJid;
+            if (string.IsNullOrWhiteSpace(jid))
+            {
+                jid = Model?.RemoteJid;
+            }
+
+            string phone = JidHelper.TryPhoneFromJid(jid);
+            if (!string.IsNullOrWhiteSpace(phone))
+            {
+                return phone;
+            }
+
+            if (!string.IsNullOrWhiteSpace(jid))
+            {
+                return jid.Trim();
+            }
+
+            return _strings?.Get("ChatDetail_DeleteAuthorFallback", "contact") ?? "contact";
         }
 
         /// <summary>Yield so bindings (ProgressRing) paint before a fast network/key failure returns.</summary>

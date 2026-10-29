@@ -255,6 +255,14 @@ namespace Unison.Core.Tests.ViewModels
                 uint durationSeconds = 0) => Task.CompletedTask;
             public Task<bool> ApplyAppStateDeleteMessageAsync(string chatJid, string messageId) =>
                 Task.FromResult(false);
+            public Task DeleteMessageForMeAsync(string chatJid, ChatMessage message) =>
+                Task.CompletedTask;
+            public Task DeleteMessageForEveryoneAsync(
+                string chatJid,
+                ChatMessage message,
+                bool isGroupChat,
+                bool viewerIsGroupAdmin) =>
+                Task.CompletedTask;
             public Task<bool> ApplyPinnedMessageStateAsync(
                 string chatJid,
                 string messageId,

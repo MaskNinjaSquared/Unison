@@ -61,7 +61,6 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
 
         private readonly IStringResources _strings;
         private readonly IChatMessageVmFactory _messageFactory;
-        private readonly IVoicePlaybackRoutingService _voiceRouting;
 
         /// <summary>
         /// The conversation as a whole: which one is on screen for the notification suppressor,
@@ -109,12 +108,8 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
         private ChatMessageViewModel _displayedPinnedMessage;
         private List<ChatMessageViewModel> _activePinnedMessages = new List<ChatMessageViewModel>();
         private int _displayedPinnedIndex;
-        private ChatMessage _playingAudioMessage;
-        private ChatMessageViewModel _playingAudioVm;
         /// <summary>Lazy camera overlay — not in XAML so Creators/Mobile chat open skips CaptureElement.</summary>
         private CameraPickView _cameraPickOverlay;
-        private MediaPlayer _audioMediaPlayer;
-        private DispatcherTimer _audioPositionTimer;
         private DispatcherTimer _dateSeparatorTimer;
         private DateTime _dateSeparatorTimerDay;
         private bool _cancelRecordingAnimating;
@@ -144,7 +139,6 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
         {
             _strings = App.Services?.GetService<IStringResources>();
             _messageFactory = App.Services?.GetService<IChatMessageVmFactory>() ?? new ChatMessageVmFactory();
-            _voiceRouting = App.Services?.GetService<IVoicePlaybackRoutingService>();
 
             if (App.Services != null)
             {
@@ -184,6 +178,7 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             HookLayoutStateChanges();
             StartDateSeparatorTimer();
             ApplyLegacyComposerChrome();
+            ViewModel?.AttachAudioPlaybackUi(AudioPlayer);
         }
 
         /// <summary>
@@ -236,7 +231,7 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                     }
                 }
 
-                // Anexo | Texto | Enviar | Áudio — glyphs from LegacyIconFont (EB03/EB04/EB05).
+                // Anexo | Sticker | Texto | Áudio | Enviar — glyphs from LegacyIconFont.
                 // Bottom-align icons so they stay on the single-line baseline while the box grows.
                 Brush attachBrush = ResolveLegacyBrush("WhatsAppTextHighBrush", Colors.White);
                 if (AttachBarButton != null)
@@ -253,11 +248,22 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                     ApplyLegacyFontIconButton(AttachFlyoutButton, "\uEB03", attachBrush);
                 }
 
-                if (SendButton != null)
+                if (StickerBoxButton != null)
                 {
-                    Grid.SetColumn(SendButton, 2);
-                    SendButton.VerticalAlignment = VerticalAlignment.Bottom;
-                    ApplyLegacyFontIconButton(SendButton, "\uEB04", ResolveLegacyBrush("WhatsAppTextHighBrush", Colors.White));
+                    Grid.SetColumn(StickerBoxButton, 1);
+                    StickerBoxButton.VerticalAlignment = VerticalAlignment.Bottom;
+                }
+
+                if (MessageInput != null)
+                {
+                    Grid.SetColumn(MessageInput, 2);
+                    MessageInput.ClearValue(FrameworkElement.HeightProperty);
+                    MessageInput.MinHeight = 40;
+                    MessageInput.MaxHeight = 192;
+                    MessageInput.TextWrapping = TextWrapping.Wrap;
+                    MessageInput.Padding = new Thickness(10, 8, 6, 5);
+                    MessageInput.VerticalAlignment = VerticalAlignment.Bottom;
+                    MessageInput.VerticalContentAlignment = VerticalAlignment.Center;
                 }
 
                 if (MicButton != null)
@@ -267,16 +273,11 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                     ApplyLegacyFontIconButton(MicButton, "\uEB05", ResolveLegacyBrush("WhatsAppTextHighBrush", Colors.White));
                 }
 
-                if (MessageInput != null)
+                if (SendButton != null)
                 {
-                    Grid.SetColumn(MessageInput, 1);
-                    MessageInput.ClearValue(FrameworkElement.HeightProperty);
-                    MessageInput.MinHeight = 40;
-                    MessageInput.MaxHeight = 192;
-                    MessageInput.TextWrapping = TextWrapping.Wrap;
-                    MessageInput.Padding = new Thickness(10, 8, 6, 5);
-                    MessageInput.VerticalAlignment = VerticalAlignment.Bottom;
-                    MessageInput.VerticalContentAlignment = VerticalAlignment.Center;
+                    Grid.SetColumn(SendButton, 4);
+                    SendButton.VerticalAlignment = VerticalAlignment.Bottom;
+                    ApplyLegacyFontIconButton(SendButton, "\uEB04", ResolveLegacyBrush("WhatsAppTextHighBrush", Colors.White));
                 }
 
                 // Header / composer tooltips were English literals; bind them to the same keys
@@ -542,6 +543,7 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
 
             if (open)
             {
+                ViewModel?.CloseStickerBox();
                 // Shown before it is measured, and measured before it is animated: the distance to
                 // travel is the bar's own height, and a collapsed element does not have one. The
                 // cap goes on in between, for the same reason - the heading and strip it discounts
@@ -620,10 +622,8 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             ClearMessageHighlight();
             TryCloseVideoViewer();
             TryCloseImageViewer();
-            StopAudioPlayback();
+            ViewModel?.DetachAudioPlaybackUi();
             StopDateSeparatorTimer();
-            _voiceRouting?.DetachPlayer();
-            TearDownAudioPlayer();
             UnhookLayoutStateChanges();
             if (ViewModel != null)
             {
@@ -637,6 +637,7 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             if (_activeChat != null)
             {
                 _activeChat.PropertyChanged -= ActiveChat_PropertyChanged;
+                _rosterUiRefresh?.Cancel();
             }
 
             // Solta tambem o handler de rolagem, senao ele sobrevive a navegacao.
@@ -731,7 +732,8 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             }
 
             if (e.PropertyName == nameof(ChatDetailViewModel.IsRecording) ||
-                e.PropertyName == nameof(ChatDetailViewModel.IsGroupLockedForMessages))
+                e.PropertyName == nameof(ChatDetailViewModel.IsGroupLockedForMessages) ||
+                e.PropertyName == nameof(ChatDetailViewModel.IsNoLongerGroupParticipant))
             {
                 UpdateScrollToBottomButton();
             }
@@ -999,6 +1001,16 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             if (_attachMenuOpen)
             {
                 SetAttachMenuOpen(false);
+                return true;
+            }
+
+            if (StickerBox != null && StickerBox.TryConsumeBack())
+            {
+                return true;
+            }
+
+            if (ViewModel != null && ViewModel.TryCloseStickerBoxOnBack())
+            {
                 return true;
             }
 
@@ -1729,7 +1741,7 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             }
 
             TryCloseImageViewer();
-            StopAudioPlayback();
+            ViewModel?.StopAudioPlayback();
 
             var viewerVm = new VideoViewerViewModel(messageVm, _strings);
             VideoViewerOverlay.CloseRequested -= VideoViewerOverlay_CloseRequested;
@@ -1743,8 +1755,38 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
         {
             string title;
             string artist;
-            ResolveAudioSmtcMetadata(messageVm?.Model, out title, out artist);
+            ResolveVideoOrAudioSmtcMetadata(messageVm?.Model, out title, out artist);
             return Tuple.Create(title, artist);
+        }
+
+        private void ResolveVideoOrAudioSmtcMetadata(ChatMessage message, out string title, out string artist)
+        {
+            var chat = ViewModel?.ActiveChat ?? _activeChat;
+            bool isGroup = chat != null &&
+                (chat.IsGroup ||
+                 (!string.IsNullOrWhiteSpace(chat.JID) &&
+                  chat.JID.IndexOf("@g.us", StringComparison.OrdinalIgnoreCase) >= 0));
+
+            artist = "Chat";
+            if (message != null)
+            {
+                if (message.IsFromMe)
+                {
+                    artist = LocalizedStrings.Get("Chat_SelfFallbackName", "You");
+                }
+                else if (!string.IsNullOrWhiteSpace(message.SenderName))
+                {
+                    artist = message.SenderName.Trim();
+                }
+                else if (!string.IsNullOrWhiteSpace(chat?.Name))
+                {
+                    artist = chat.Name.Trim();
+                }
+            }
+
+            title = isGroup
+                ? (!string.IsNullOrWhiteSpace(chat?.Name) ? chat.Name.Trim() : "Group")
+                : "Unison";
         }
 
         private void VideoViewerOverlay_CloseRequested(object sender, EventArgs e)
@@ -1821,6 +1863,7 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                     {
                         WriteChatOpenDiagnostics("rebind", chat.JID, "sameChat=true; newInstance=true");
                         _activeChat.PropertyChanged -= ActiveChat_PropertyChanged;
+                        _rosterUiRefresh?.Cancel();
                         _activeChat = chat;
                         _activeChat.PropertyChanged += ActiveChat_PropertyChanged;
                         chats?.SetActiveChatJid(chat.JID);
@@ -1849,11 +1892,12 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             if (_activeChat != null)
             {
                 _activeChat.PropertyChanged -= ActiveChat_PropertyChanged;
+                _rosterUiRefresh?.Cancel();
             }
 
             _activeChat = chat;
             chats?.SetActiveChatJid(chat?.JID);
-            // Hold before SyncActiveChat so group roster/metadata UI applies wait behind
+            // Hold before bind so group roster/metadata UI applies wait behind
             // Yield + LoadMessages (500+ members were starving Mobile open by ~40s).
             if (chat != null)
             {
@@ -1861,7 +1905,8 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                     ?.Hold("prepare-active-chat");
             }
 
-            ViewModel?.SyncActiveChat(chat);
+            // Bind only — roster/avatar enrich runs after NarrowDetail + ProgressBar paint.
+            ViewModel?.BindActiveChatForOpen(chat);
 
             // A menu belongs to the conversation it was opened over, so a different one arriving
             // takes it down with everything else that was on screen.
@@ -1924,12 +1969,11 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             _suppressLoadMoreUntilUtc = DateTime.UtcNow.AddSeconds(2.5);
 
             // Mark-read is I/O; do not hold the first paint for it.
+            // ProgressBar arms in Complete right after the host flips NarrowDetail.
             if (ViewModel != null)
             {
                 _ = ViewModel.MarkChatOpenedAsync(chat);
             }
-
-            ChatOpenMetadataProbe.WriteAsync(chat);
 
             return Task.CompletedTask;
         }
@@ -1963,6 +2007,7 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                     return;
                 }
 
+                // Host already flipped pane; keep ProgressBar on and let NarrowDetail paint.
                 ViewModel.BeginLoadingMessages();
                 await YieldForChatSurfacePaintAsync();
                 if (token.IsCancellationRequested || _activeChat == null ||
@@ -1975,6 +2020,10 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                     ViewModel.EndLoadingMessages();
                     return;
                 }
+
+                // Roster / avatar / strip — only after surface paint (was blocking Mobile navigate).
+                ViewModel.EnrichActiveChatAfterPaint(chat, chatChanged: true);
+                ChatOpenMetadataProbe.WriteAsync(chat);
 
                 // Mobile: list→detail waits 2s for NarrowDetail paint. Toast/deep-link skips
                 // that pause so tip-swapped cannot starve LoadMessages on the dispatcher.
@@ -2274,6 +2323,39 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             _messages.Clear();
         }
 
+        private RosterUiRefreshCoalescer _rosterUiRefresh;
+
+        private RosterUiRefreshCoalescer RosterUiRefresh =>
+            _rosterUiRefresh ?? (_rosterUiRefresh = new RosterUiRefreshCoalescer(
+                Dispatcher,
+                () => ViewModel?.IsTimelineBusy == true,
+                () => _activeChat?.JID,
+                RefreshRosterDependentTimeline,
+                App.Services?.GetService<IRuntimeDiagnostics>()));
+
+        /// <summary>
+        /// Sender names / runs depend on the roster. Presence is not restarted here: it already
+        /// started on open and is idempotent per chat.
+        /// </summary>
+        private void RefreshRosterDependentTimeline()
+        {
+            if (_messages == null || _messages.Count == 0 || _activeChat == null || ViewModel == null)
+            {
+                return;
+            }
+
+            bool isGroup = _activeChat.IsGroup ||
+                (!string.IsNullOrWhiteSpace(_activeChat.JID) &&
+                 _activeChat.JID.IndexOf("@g.us", StringComparison.OrdinalIgnoreCase) >= 0);
+            if (!isGroup)
+            {
+                return;
+            }
+
+            ViewModel.RebuildParticipantLookup();
+            RecomputeMessageRuns(_messages, isGroup: true);
+        }
+
         private void ActiveChat_PropertyChanged(object sender, PropertyChangedEventArgs e)
         {
             if (_activeChat == null)
@@ -2292,29 +2374,9 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                 });
             }
             else if (e.PropertyName == nameof(ChatItem.GroupMembers) ||
-                     e.PropertyName == nameof(ChatItem.HasGroupMembers) ||
                      e.PropertyName == nameof(ChatItem.MentionLookup))
             {
-                _ = Dispatcher.RunAsync(CoreDispatcherPriority.Normal, () =>
-                {
-                    if (_messages == null || _messages.Count == 0 || _activeChat == null)
-                    {
-                        return;
-                    }
-
-                    bool isGroup = _activeChat.IsGroup ||
-                        (!string.IsNullOrWhiteSpace(_activeChat.JID) &&
-                         _activeChat.JID.IndexOf("@g.us", StringComparison.OrdinalIgnoreCase) >= 0);
-                    if (isGroup)
-                    {
-                        ViewModel.RebuildParticipantLookup();
-                        RecomputeMessageRuns(_messages, isGroup: true);
-                        if (ViewModel != null && !_activeChat.IsPersonal)
-                        {
-                            ViewModel.StartPresenceWatch(_activeChat.JID);
-                        }
-                    }
-                });
+                RosterUiRefresh.Request();
             }
             else if (e.PropertyName == nameof(ChatItem.AvatarUrl) ||
                      e.PropertyName == nameof(ChatItem.AvatarHighUrl) ||
@@ -2749,6 +2811,7 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                 !_attachMenuOpen &&
                 ViewModel?.IsRecording != true &&
                 ViewModel?.IsGroupLockedForMessages != true &&
+                ViewModel?.IsNoLongerGroupParticipant != true &&
                 ComposerHost != null &&
                 ComposerHost.Visibility == Visibility.Visible;
 
@@ -2845,7 +2908,8 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
 
         private void MessageInput_KeyDown(object sender, KeyRoutedEventArgs e)
         {
-            if (MentionComposerInput.OnKeyDown(ViewModel, sender as TextBox, e))
+            var box = sender as ChatComposerInput;
+            if (MentionComposerInput.OnKeyDown(ViewModel, box, e))
             {
                 return;
             }
@@ -2866,17 +2930,16 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             if ((shift & Windows.UI.Core.CoreVirtualKeyStates.Down) ==
                 Windows.UI.Core.CoreVirtualKeyStates.Down)
             {
-                var box = sender as TextBox;
                 if (box == null)
                 {
                     return;
                 }
 
-                int start = box.SelectionStart;
-                string text = box.Text ?? string.Empty;
-                string next = text.Insert(Math.Min(start, text.Length), "\r");
-                box.Text = next;
-                box.SelectionStart = start + 1;
+                int start = box.CaretIndex;
+                string text = box.GetPlainText() ?? string.Empty;
+                string next = text.Insert(Math.Min(start, text.Length), "\n");
+                box.BoundText = next;
+                box.CaretIndex = start + 1;
                 e.Handled = true;
                 return;
             }
@@ -2891,9 +2954,14 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             ViewModel.SendMessageCommand.Execute(null);
         }
 
+        private void MessageInput_GotFocus(object sender, RoutedEventArgs e)
+        {
+            ViewModel?.OnComposerFocused();
+        }
+
         private void MessageInput_SelectionChanged(object sender, RoutedEventArgs e)
         {
-            MentionComposerInput.OnSelectionChanged(ViewModel, sender as TextBox);
+            MentionComposerInput.OnSelectionChanged(ViewModel, sender as ChatComposerInput);
         }
 
         private void MentionSuggestList_ItemClick(object sender, ItemClickEventArgs e)
@@ -2907,8 +2975,8 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             ViewModel.AcceptMention(choice);
             if (ViewModel.MentionInsertCaret >= 0)
             {
-                MessageInput.SelectionStart = ViewModel.MentionInsertCaret;
-                MessageInput.Focus(FocusState.Programmatic);
+                MessageInput.CaretIndex = ViewModel.MentionInsertCaret;
+                MessageInput.FocusProgrammatic();
             }
         }
 
@@ -2917,7 +2985,7 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
         /// </summary>
         private void MessageInput_SizeChanged(object sender, SizeChangedEventArgs e)
         {
-            var box = sender as TextBox;
+            var box = sender as ChatComposerInput;
             if (box == null || double.IsNaN(box.Height))
             {
                 return;
@@ -3248,6 +3316,12 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             CopyMessageButton.Label = LocalizedStrings.Get("ChatDetail_CopyMessage", "Copy");
             ReplyMessageButton.Label = LocalizedStrings.Get("ChatDetail_ReplyMessage", "Reply");
             ForwardMessageButton.Label = LocalizedStrings.Get("ChatDetail_ForwardMessage", "Forward");
+            if (DeleteMessageButton != null)
+            {
+                DeleteMessageButton.Label = LocalizedStrings.Get(
+                    "ChatDetail_Delete",
+                    "Delete");
+            }
             PinFor24HoursButton.Label = LocalizedStrings.Get("ChatDetail_PinFor24Hours", "Pin for 24 hours");
             PinFor7DaysButton.Label = LocalizedStrings.Get("ChatDetail_PinFor7Days", "Pin for 7 days");
             PinFor30DaysButton.Label = LocalizedStrings.Get("ChatDetail_PinFor30Days", "Pin for 30 days");
@@ -3266,16 +3340,33 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                 "; actionsOpen=" + (ViewModel?.IsMessageActionsOpen ?? false));
         }
 
-        /// <summary>Play / resume / pause for a ready local audio bubble + SMTC.</summary>
+        /// <summary>Play / resume / pause — ViewModel + IChatAudioPlaybackService.</summary>
         public async void OnAudioPlayButtonClick(object sender, RoutedEventArgs e)
         {
             var element = sender as FrameworkElement;
-            await PlayOrPauseAudioAsync(element?.DataContext as ChatMessageViewModel);
+            var vm = element?.DataContext as ChatMessageViewModel;
+            if (ViewModel != null)
+            {
+                await ViewModel.PlayOrPauseAudioAsync(vm);
+            }
+        }
+
+        public void CycleAudioPlaybackSpeed(ChatMessageViewModel vm)
+        {
+            ViewModel?.CycleAudioPlaybackSpeed(vm);
+        }
+
+        public void PlayAudioAtSpeed(ChatMessageViewModel vm, AudioPlaybackSpeed speed)
+        {
+            if (ViewModel != null)
+            {
+                _ = ViewModel.PlayAudioAtSpeedAsync(vm, speed);
+            }
         }
 
         public async void PlayOrPauseAudioFromInfo(ChatMessageViewModel vm)
         {
-            if (vm == null)
+            if (vm == null || ViewModel == null)
             {
                 return;
             }
@@ -3288,7 +3379,7 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                     return;
                 }
 
-                await PlayOrPauseAudioAsync(vm);
+                await ViewModel.PlayOrPauseAudioAsync(vm);
             }
             catch (Exception ex)
             {
@@ -3296,592 +3387,10 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             }
         }
 
-        private async System.Threading.Tasks.Task PlayOrPauseAudioAsync(ChatMessageViewModel vm)
-        {
-            if (vm != null && await vm.NotifyIfMediaDeletedAsync())
-            {
-                return;
-            }
-
-            var message = vm?.Model;
-            if (message == null || !message.IsAudio || ViewModel == null)
-            {
-                return;
-            }
-
-            try
-            {
-                EnsureAudioMediaPlayer();
-                var player = _audioMediaPlayer;
-                if (player == null)
-                {
-                    LogAudio("play-no-player", message, null);
-                    return;
-                }
-
-                // Toggle pause on the same bubble.
-                if (_playingAudioVm != null &&
-                    ReferenceEquals(_playingAudioVm, vm) &&
-                    vm.AudioPlaybackStatus == AudioPlaybackStatus.Playing)
-                {
-                    LogAudio("pause", message, null);
-                    player.Pause();
-                    vm.AudioPlaybackStatus = AudioPlaybackStatus.Paused;
-                    StopAudioPositionTimer();
-                    _voiceRouting?.EndSession();
-                    return;
-                }
-
-                // Resume paused bubble without resetting source.
-                if (_playingAudioVm != null &&
-                    ReferenceEquals(_playingAudioVm, vm) &&
-                    vm.AudioPlaybackStatus == AudioPlaybackStatus.Paused)
-                {
-                    LogAudio("resume", message, null);
-                    ApplySmtcMetadata(message);
-                    player.Play();
-                    _voiceRouting?.BeginSession();
-                    vm.AudioPlaybackStatus = AudioPlaybackStatus.Playing;
-                    StartAudioPositionTimer();
-                    return;
-                }
-
-                // Always resolve a playable URI (network if needed; ogg→wav via Concentus on Mobile).
-                if (string.IsNullOrWhiteSpace(message.AudioUri) && vm != null)
-                {
-                    vm.AudioPlaybackStatus = AudioPlaybackStatus.Downloading;
-                }
-
-                LogAudio("play-ensure", message, "uriIn=" + (message.AudioUri ?? "null"));
-                string uri = vm != null
-                    ? await vm.EnsureAudioReadyAsync(showErrorDialog: true)
-                    : null;
-                if (string.IsNullOrWhiteSpace(uri))
-                {
-                    LogAudio("play-ensure-empty", message, null);
-                    vm?.MarkAudioUnavailable();
-                    return;
-                }
-
-                // Stop any other bubble.
-                if (_playingAudioVm != null && !ReferenceEquals(_playingAudioVm, vm))
-                {
-                    _playingAudioVm.ResetAudioPlaybackToReady();
-                }
-
-                LogAudio(
-                    "play-start",
-                    message,
-                    string.Format(
-                        "uri={0} mime={1} mobile={2}",
-                        uri,
-                        message.AudioMimeType ?? "?",
-                        _isWindowsMobile));
-
-                ApplySmtcMetadata(message);
-                player.Source = MediaSource.CreateFromUri(new Uri(uri));
-                _playingAudioMessage = message;
-                _playingAudioVm = vm;
-                if (vm != null)
-                {
-                    vm.AudioPlaybackPositionSeconds = 0;
-                    vm.AudioPlaybackStatus = AudioPlaybackStatus.Playing;
-                }
-
-                player.Play();
-                // Route after Play — AudioRoutingManager needs an active Communications stream.
-                _voiceRouting?.BeginSession();
-                StartAudioPositionTimer();
-            }
-            catch (Exception ex)
-            {
-                LogAudio("play-exception", message, ex.ToString());
-                vm?.MarkAudioUnavailable();
-            }
-        }
-
-        private void EnsureAudioMediaPlayer()
-        {
-            if (_audioMediaPlayer != null)
-            {
-                return;
-            }
-
-            bool useCommunications =
-                _voiceRouting != null &&
-                string.Equals(
-                    _voiceRouting.PreferredAudioCategory,
-                    "Communications",
-                    StringComparison.OrdinalIgnoreCase);
-
-            _audioMediaPlayer = new MediaPlayer
-            {
-                // Mobile: Communications enables AudioRoutingManager (speaker ↔ earpiece).
-                // Desktop: Media uses the system default device.
-                AudioCategory = useCommunications || _isWindowsMobile
-                    ? MediaPlayerAudioCategory.Communications
-                    : MediaPlayerAudioCategory.Media,
-                AutoPlay = false
-            };
-            _audioMediaPlayer.MediaEnded += AudioMediaPlayer_MediaEnded;
-            _audioMediaPlayer.MediaFailed += AudioMediaPlayer_MediaFailed;
-            _audioMediaPlayer.MediaOpened += AudioMediaPlayer_MediaOpened;
-            _audioMediaPlayer.PlaybackSession.PlaybackStateChanged += AudioPlaybackSession_PlaybackStateChanged;
-            _audioMediaPlayer.CommandManager.IsEnabled = true;
-            AudioPlayer.SetMediaPlayer(_audioMediaPlayer);
-            _voiceRouting?.AttachPlayer(_audioMediaPlayer);
-        }
-
-        private async void AudioPlaybackSession_PlaybackStateChanged(MediaPlaybackSession sender, object args)
-        {
-            try
-            {
-                await Dispatcher.RunAsync(CoreDispatcherPriority.Normal, () =>
-                {
-                    if (_playingAudioVm == null || _audioMediaPlayer == null)
-                    {
-                        return;
-                    }
-
-                    var state = _audioMediaPlayer.PlaybackSession.PlaybackState;
-                    if (state == MediaPlaybackState.Paused &&
-                        _playingAudioVm.AudioPlaybackStatus == AudioPlaybackStatus.Playing)
-                    {
-                        // Keep current second frozen (SMTC / system pause).
-                        _playingAudioVm.AudioPlaybackStatus = AudioPlaybackStatus.Paused;
-                        StopAudioPositionTimer();
-                    }
-                    else if (state == MediaPlaybackState.Playing &&
-                             _playingAudioVm.AudioPlaybackStatus == AudioPlaybackStatus.Paused)
-                    {
-                        _playingAudioVm.AudioPlaybackStatus = AudioPlaybackStatus.Playing;
-                        StartAudioPositionTimer();
-                    }
-                });
-            }
-            catch
-            {
-            }
-        }
-
-        private void StartAudioPositionTimer()
-        {
-            if (_audioPositionTimer == null)
-            {
-                _audioPositionTimer = new DispatcherTimer
-                {
-                    Interval = TimeSpan.FromMilliseconds(250)
-                };
-                _audioPositionTimer.Tick += AudioPositionTimer_Tick;
-            }
-
-            _audioPositionTimer.Start();
-        }
-
-        private void StopAudioPositionTimer()
-        {
-            try
-            {
-                _audioPositionTimer?.Stop();
-            }
-            catch
-            {
-            }
-        }
-
-        private void AudioPositionTimer_Tick(object sender, object e)
-        {
-            try
-            {
-                if (_playingAudioVm == null ||
-                    _audioMediaPlayer == null ||
-                    _playingAudioVm.AudioPlaybackStatus != AudioPlaybackStatus.Playing)
-                {
-                    return;
-                }
-
-                double secs = _audioMediaPlayer.PlaybackSession.Position.TotalSeconds;
-                if (secs < 0)
-                {
-                    secs = 0;
-                }
-
-                _playingAudioVm.AudioPlaybackPositionSeconds = (uint)Math.Floor(secs);
-            }
-            catch
-            {
-            }
-        }
-
-        /// <summary>Seek the active bubble's MediaPlayer (Imgur PlayerSlider scrub).</summary>
+        /// <summary>Seek the active bubble via the playback service.</summary>
         public void SeekAudioPlayback(ChatMessageViewModel vm, double seconds)
         {
-            if (vm == null ||
-                _playingAudioVm == null ||
-                !ReferenceEquals(_playingAudioVm, vm) ||
-                _audioMediaPlayer == null)
-            {
-                return;
-            }
-
-            try
-            {
-                if (seconds < 0)
-                {
-                    seconds = 0;
-                }
-
-                double max = _audioMediaPlayer.PlaybackSession.NaturalDuration.TotalSeconds;
-                if (!double.IsNaN(max) && max > 0 && seconds > max)
-                {
-                    seconds = max;
-                }
-
-                _audioMediaPlayer.PlaybackSession.Position = TimeSpan.FromSeconds(seconds);
-                vm.AudioPlaybackPositionSeconds = (uint)Math.Floor(seconds);
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine("[ChatDetailView] Audio seek failed: " + ex.Message);
-            }
-        }
-
-        /// <summary>
-        /// SMTC display:
-        /// Group → Title = group name, Artist = message author.
-        /// 1:1 → Title = "Unison", Artist = message author.
-        /// Must be re-applied after Source is set (MediaOpened) — assigning Source clears DisplayUpdater.
-        /// </summary>
-        private void ApplySmtcMetadata(ChatMessage message)
-        {
-            try
-            {
-                var player = _audioMediaPlayer;
-                if (player == null || message == null)
-                {
-                    return;
-                }
-
-                var smtc = player.SystemMediaTransportControls;
-                smtc.IsEnabled = true;
-                smtc.IsPlayEnabled = true;
-                smtc.IsPauseEnabled = true;
-
-                string title;
-                string artist;
-                ResolveAudioSmtcMetadata(message, out title, out artist);
-
-                var updater = smtc.DisplayUpdater;
-                updater.ClearAll();
-                updater.Type = MediaPlaybackType.Music;
-                updater.AppMediaId = "Unison.VoiceNote";
-                updater.MusicProperties.Title = title;
-                updater.MusicProperties.Artist = artist;
-                updater.Update();
-
-                LogAudio("smtc", message, "title=\"" + title + "\" artist=\"" + artist + "\"");
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine("[ChatDetailView] SMTC update failed: " + ex.Message);
-            }
-        }
-
-        /// <summary>
-        /// Group: title = group name, artist = sender.
-        /// 1:1: title = Unison, artist = sender.
-        /// </summary>
-        private void ResolveAudioSmtcMetadata(ChatMessage message, out string title, out string artist)
-        {
-            var chat = ViewModel?.ActiveChat ?? _activeChat;
-            bool isGroup = chat != null &&
-                (chat.IsGroup ||
-                 (!string.IsNullOrWhiteSpace(chat.JID) &&
-                  chat.JID.IndexOf("@g.us", StringComparison.OrdinalIgnoreCase) >= 0));
-
-            artist = ResolveMessageAuthorForSmtc(message, chat);
-
-            if (isGroup)
-            {
-                title = !string.IsNullOrWhiteSpace(chat?.Name)
-                    ? chat.Name.Trim()
-                    : null;
-                if (string.IsNullOrWhiteSpace(title))
-                {
-                    title = chat?.GetNameResolved(_strings);
-                }
-
-                if (string.IsNullOrWhiteSpace(title))
-                {
-                    title = "Chat";
-                }
-
-                return;
-            }
-
-            title = "Unison";
-        }
-
-        private string ResolveMessageAuthorForSmtc(ChatMessage message, ChatItem chat)
-        {
-            if (message == null)
-            {
-                return "Chat";
-            }
-
-            if (message.IsFromMe)
-            {
-                return _strings != null
-                    ? _strings.Get("Chat_SelfFallbackName", "You")
-                    : "You";
-            }
-
-            if (!string.IsNullOrWhiteSpace(message.SenderName) &&
-                !string.Equals(message.SenderName, "Me", StringComparison.OrdinalIgnoreCase) &&
-                !string.Equals(message.SenderName, "You", StringComparison.OrdinalIgnoreCase))
-            {
-                return message.SenderName.Trim();
-            }
-
-            string jid = message.ParticipantJid;
-            if (string.IsNullOrWhiteSpace(jid))
-            {
-                jid = chat?.JID;
-            }
-
-            try
-            {
-                var contacts = Contacts;
-                if (contacts != null && !string.IsNullOrWhiteSpace(jid))
-                {
-                    string resolved = contacts.ResolveDisplayName(jid, "sender");
-                    if (!string.IsNullOrWhiteSpace(resolved))
-                    {
-                        return resolved.Trim();
-                    }
-                }
-            }
-            catch
-            {
-            }
-
-            if (chat != null)
-            {
-                string name = chat.GetNameResolved(_strings);
-                if (!string.IsNullOrWhiteSpace(name))
-                {
-                    return name.Trim();
-                }
-
-                if (!string.IsNullOrWhiteSpace(chat.Name))
-                {
-                    return chat.Name.Trim();
-                }
-            }
-
-            return "Chat";
-        }
-
-        /// <summary>
-        /// Releases the player itself, which <see cref="StopAudioPlayback"/> deliberately does not:
-        /// stopping also happens when a video takes over, and the next voice note reuses this
-        /// instance. Only leaving the conversation ends it.
-        /// </summary>
-        /// <remarks>
-        /// Without this the player outlived the view it was created for. Its CommandManager and
-        /// transport controls keep it registered with the system, the four handlers below keep this
-        /// page alive through it, and both survive navigation - so every conversation with a voice
-        /// note left one behind, and the lock-screen controls pointed at the oldest of them.
-        /// Mirrors TearDownPlayer in VideoViewerView.
-        /// </remarks>
-        private void TearDownAudioPlayer()
-        {
-            var player = _audioMediaPlayer;
-            if (player == null)
-            {
-                return;
-            }
-
-            _audioMediaPlayer = null;
-
-            try
-            {
-                player.MediaEnded -= AudioMediaPlayer_MediaEnded;
-                player.MediaFailed -= AudioMediaPlayer_MediaFailed;
-                player.MediaOpened -= AudioMediaPlayer_MediaOpened;
-                player.PlaybackSession.PlaybackStateChanged -= AudioPlaybackSession_PlaybackStateChanged;
-                player.CommandManager.IsEnabled = false;
-                player.Pause();
-                player.Source = null;
-            }
-            catch
-            {
-            }
-
-            try
-            {
-                player.SystemMediaTransportControls.IsEnabled = false;
-            }
-            catch
-            {
-            }
-
-            try
-            {
-                AudioPlayer.SetMediaPlayer(null);
-            }
-            catch
-            {
-            }
-
-            try
-            {
-                player.Dispose();
-            }
-            catch
-            {
-            }
-        }
-
-        private void StopAudioPlayback()
-        {
-            StopAudioPositionTimer();
-            _voiceRouting?.EndSession();
-            try
-            {
-                if (_audioMediaPlayer != null)
-                {
-                    _audioMediaPlayer.Pause();
-                    _audioMediaPlayer.Source = null;
-                    try
-                    {
-                        _audioMediaPlayer.SystemMediaTransportControls.IsEnabled = false;
-                    }
-                    catch
-                    {
-                    }
-                }
-            }
-            catch
-            {
-            }
-
-            _playingAudioVm?.ResetAudioPlaybackToReady();
-            _playingAudioVm = null;
-            _playingAudioMessage = null;
-        }
-
-        private async void AudioMediaPlayer_MediaOpened(MediaPlayer sender, object args)
-        {
-            try
-            {
-                string detail = null;
-                try
-                {
-                    var session = sender?.PlaybackSession;
-                    detail = string.Format(
-                        "durationSec={0:0.###} state={1}",
-                        session != null ? session.NaturalDuration.TotalSeconds : -1,
-                        session != null ? session.PlaybackState.ToString() : "?");
-                }
-                catch
-                {
-                    detail = "opened";
-                }
-
-                await Dispatcher.RunAsync(CoreDispatcherPriority.Normal, () =>
-                {
-                    LogAudio("media-opened", _playingAudioMessage, detail);
-                    // Source assignment clears DisplayUpdater — re-apply on open.
-                    if (_playingAudioMessage != null)
-                    {
-                        ApplySmtcMetadata(_playingAudioMessage);
-                    }
-
-                    // Stream is live — reassert speaker if session already began.
-                    if (_playingAudioVm != null &&
-                        _playingAudioVm.AudioPlaybackStatus == AudioPlaybackStatus.Playing)
-                    {
-                        _voiceRouting?.BeginSession();
-                    }
-                });
-            }
-            catch
-            {
-            }
-        }
-
-        // Media Foundation raises this on its own thread, so nothing above us catches what escapes
-        // and an exception here ends the process. Its two siblings already guard for that reason.
-        private async void AudioMediaPlayer_MediaEnded(MediaPlayer sender, object args)
-        {
-            try
-            {
-                await Dispatcher.RunAsync(CoreDispatcherPriority.Normal, () =>
-                {
-                    StopAudioPositionTimer();
-                    _voiceRouting?.EndSession();
-                    _playingAudioVm?.ResetAudioPlaybackToReady();
-                    _playingAudioVm = null;
-                    _playingAudioMessage = null;
-                });
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine(string.Format("[ChatDetailView] Audio ended handler failed: {0}", ex.Message));
-            }
-        }
-
-        private async void AudioMediaPlayer_MediaFailed(MediaPlayer sender, MediaPlayerFailedEventArgs args)
-        {
-            string detail = string.Format(
-                "error={0} ext={1} msg={2}",
-                args?.Error,
-                args?.ExtendedErrorCode,
-                args?.ErrorMessage);
-            LogAudio("media-failed", _playingAudioMessage, detail);
-            Debug.WriteLine(string.Format("[ChatDetailView] MediaPlayer failed: {0}", args?.ErrorMessage));
-            // Reached only when playback already went wrong; throwing on the way out would turn a
-            // voice note that will not open into a closed app.
-            try
-            {
-                await Dispatcher.RunAsync(CoreDispatcherPriority.Normal, () =>
-                {
-                    StopAudioPositionTimer();
-                    _voiceRouting?.EndSession();
-                    if (_playingAudioVm != null)
-                    {
-                        _playingAudioVm.MarkAudioUnavailable();
-                    }
-
-                    _playingAudioVm = null;
-                    _playingAudioMessage = null;
-                });
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine(string.Format("[ChatDetailView] Audio failure handler failed: {0}", ex.Message));
-            }
-        }
-
-        /// <summary>Session log (+ DebugView) for mobile audio diagnosis — always captured.</summary>
-        private void LogAudio(string stage, ChatMessage message, string details)
-        {
-            string id = message?.Id ?? "?";
-            string line = string.Format(
-                "[Audio/{0}] id={1} {2}",
-                stage,
-                id,
-                details ?? string.Empty);
-            try
-            {
-                Debug.WriteLine(line);
-                SessionLogger.Instance.WriteAlways(line);
-                App.Services?.GetService<IRuntimeDiagnostics>()?.Write("Audio", stage, line);
-            }
-            catch
-            {
-            }
+            ViewModel?.SeekAudioPlayback(vm, seconds);
         }
 
         /// <summary>Trash: fade timer → slide red mic onto trash → flash trash → cancel recording.</summary>

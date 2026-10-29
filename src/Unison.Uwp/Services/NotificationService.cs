@@ -27,6 +27,7 @@ namespace Unison.Uwp.Services
         private bool _initialized;
         private ILiveTilesService _liveTiles;
         private IShortcutService _shortcuts;
+        private IDesktopTrayHost _desktopTray;
 
         private NotificationService()
         {
@@ -40,6 +41,12 @@ namespace Unison.Uwp.Services
         public void AttachShortcuts(IShortcutService shortcuts)
         {
             _shortcuts = shortcuts;
+        }
+
+        /// <summary>Desktop tray tooltip follows the same total as the app badge.</summary>
+        public void AttachDesktopTray(IDesktopTrayHost tray)
+        {
+            _desktopTray = tray;
         }
 
         private ILiveTilesService LiveTiles =>
@@ -205,6 +212,7 @@ namespace Unison.Uwp.Services
 
         public void UpdateBadge(int totalUnread)
         {
+            _desktopTray?.PublishUnread(totalUnread);
             try
             {
                 var updater = BadgeUpdateManager.CreateBadgeUpdaterForApplication();

@@ -324,35 +324,76 @@ namespace Unison.Core.Models
                 _groupMembers = next;
                 if (next == null)
                 {
-                    _hasFullGroupRoster = false;
+                    _rosterCompleteness = GroupRosterCompleteness.None;
                 }
 
-                _mentionLookup = MentionLookupBuilder.FromRoster(_groupMembers);
+                bool lookupChanged = TryReplaceMentionLookup();
+                _memberByAddress = null;
                 OnPropertyChanged();
                 OnPropertyChanged(nameof(HasGroupMembers));
+                OnPropertyChanged(nameof(RosterCompleteness));
                 OnPropertyChanged(nameof(HasFullGroupRoster));
-                OnPropertyChanged(nameof(MentionLookup));
+                if (lookupChanged)
+                {
+                    OnPropertyChanged(nameof(MentionLookup));
+                }
             }
+        }
+
+        /// <summary>
+        /// Rebuilds the mention map; keeps the old instance when names are unchanged. Every bubble
+        /// with a mention re-renders on a new instance, and roster flushes are frequent.
+        /// </summary>
+        private bool TryReplaceMentionLookup()
+        {
+            System.Collections.Generic.IReadOnlyDictionary<string, string> next =
+                MentionLookupBuilder.FromRoster(_groupMembers);
+            if (MentionLookupBuilder.SameEntries(_mentionLookup, next))
+            {
+                return false;
+            }
+
+            _mentionLookup = next;
+            return true;
         }
 
         [Newtonsoft.Json.JsonIgnore]
         public bool HasGroupMembers => _groupMembers != null && _groupMembers.Count > 0;
 
-        private bool _hasFullGroupRoster;
+        private GroupRosterCompleteness _rosterCompleteness;
         /// <summary>
-        /// True after store/IQ applied the complete participant list. False while empty or only
-        /// <see cref="GroupMember.IsMinimal"/> stubs from the open timeline (Mobile).
+        /// How much of the participant list <see cref="GroupMembers"/> holds. Never persisted as
+        /// Full: a roster read back after a restart is Partial until a metadata reply confirms it.
         /// </summary>
+        [Newtonsoft.Json.JsonIgnore]
+        public GroupRosterCompleteness RosterCompleteness
+        {
+            get
+            {
+                if (_rosterCompleteness == GroupRosterCompleteness.None && HasGroupMembers)
+                {
+                    return GroupRosterCompleteness.Partial;
+                }
+
+                return _rosterCompleteness;
+            }
+            set
+            {
+                if (_rosterCompleteness == value) return;
+                _rosterCompleteness = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(HasFullGroupRoster));
+            }
+        }
+
+        /// <summary>A metadata reply listed every participant (<see cref="GroupRosterCompleteness.Full"/>).</summary>
         [Newtonsoft.Json.JsonIgnore]
         public bool HasFullGroupRoster
         {
-            get => _hasFullGroupRoster;
-            set
-            {
-                if (_hasFullGroupRoster == value) return;
-                _hasFullGroupRoster = value;
-                OnPropertyChanged();
-            }
+            get => _rosterCompleteness == GroupRosterCompleteness.Full;
+            set => RosterCompleteness = value
+                ? GroupRosterCompleteness.Full
+                : (HasGroupMembers ? GroupRosterCompleteness.Partial : GroupRosterCompleteness.None);
         }
 
         /// <summary>
@@ -367,8 +408,79 @@ namespace Unison.Core.Models
         /// </summary>
         public void RefreshMentionLookupFromRoster()
         {
-            _mentionLookup = MentionLookupBuilder.FromRoster(_groupMembers);
-            OnPropertyChanged(nameof(MentionLookup));
+            _memberByAddress = null;
+            if (TryReplaceMentionLookup())
+            {
+                OnPropertyChanged(nameof(MentionLookup));
+            }
+        }
+
+        private System.Collections.Generic.Dictionary<string, GroupMember> _memberByAddress;
+
+        /// <summary>
+        /// The roster member reachable under <paramref name="jid"/> (its JID, LID or phone),
+        /// without walking the list. No alias resolution: callers pass the canonical form too.
+        /// UI thread, like every <see cref="GroupMembers"/> read.
+        /// </summary>
+        public GroupMember FindGroupMember(string jid)
+        {
+            if (_groupMembers == null || string.IsNullOrWhiteSpace(jid))
+            {
+                return null;
+            }
+
+            var index = _memberByAddress;
+            if (index == null)
+            {
+                index = new System.Collections.Generic.Dictionary<string, GroupMember>(
+                    _groupMembers.Count * 2,
+                    StringComparer.OrdinalIgnoreCase);
+                foreach (GroupMember member in _groupMembers)
+                {
+                    if (member == null)
+                    {
+                        continue;
+                    }
+
+                    IndexMemberAddress(index, member.Jid, member);
+                    IndexMemberAddress(index, member.Lid, member);
+                    IndexMemberAddress(index, member.PhoneNumber, member);
+                }
+
+                _memberByAddress = index;
+            }
+
+            GroupMember found;
+            string key = MemberAddressKey(jid);
+            return key != null && index.TryGetValue(key, out found) ? found : null;
+        }
+
+        private static void IndexMemberAddress(
+            System.Collections.Generic.Dictionary<string, GroupMember> index,
+            string address,
+            GroupMember member)
+        {
+            string key = MemberAddressKey(address);
+            if (key != null && !index.ContainsKey(key))
+            {
+                index[key] = member;
+            }
+        }
+
+        private static string MemberAddressKey(string address)
+        {
+            if (string.IsNullOrWhiteSpace(address))
+            {
+                return null;
+            }
+
+            if (address.IndexOf('@') < 0)
+            {
+                string digits = Helpers.PhoneNumberHelper.NormalizePhoneDigits(address);
+                return string.IsNullOrEmpty(digits) ? null : digits + "@s.whatsapp.net";
+            }
+
+            return Helpers.JidHelper.Normalize(address);
         }
 
         private string _avatarPictureId;
@@ -690,6 +802,25 @@ namespace Unison.Core.Models
             }
         }
 
+        private bool _leftGroup;
+        /// <summary>
+        /// Baileys <c>chat.readOnly</c>: a <c>w:gp2</c> leave/remove named this account,
+        /// or group metadata refused with 403. Cleared when metadata or an add
+        /// shows the account is a participant again.
+        /// </summary>
+        public bool LeftGroup
+        {
+            get => _leftGroup;
+            set
+            {
+                if (_leftGroup == value) return;
+                _leftGroup = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(IsNoLongerGroupParticipant));
+                OnPropertyChanged(nameof(IsComposerLocked));
+            }
+        }
+
         private bool _isCommunityAnnounce;
         /// <summary>
         /// Community default announce channel (<c>default_sub_group</c> in w:g2).
@@ -888,10 +1019,19 @@ namespace Unison.Core.Models
             IsGroup && _isAnnounceOnly && !IsGroupAdmin;
 
         /// <summary>
-        /// Composer must stay closed: channel (subscriber read-only) or announce-only group.
+        /// True when this account left or was removed from the group. The composer
+        /// shows the "no longer a participant" strip instead of the send bar.
         /// </summary>
         [Newtonsoft.Json.JsonIgnore]
-        public bool IsComposerLocked => IsChannel || IsGroupLockedForMessages;
+        public bool IsNoLongerGroupParticipant => IsGroup && _leftGroup;
+
+        /// <summary>
+        /// Composer must stay closed: channel, announce-only group, or a group this
+        /// account is no longer in.
+        /// </summary>
+        [Newtonsoft.Json.JsonIgnore]
+        public bool IsComposerLocked =>
+            IsChannel || IsGroupLockedForMessages || IsNoLongerGroupParticipant;
 
         public string Initial => !string.IsNullOrEmpty(Name) ? Name.Substring(0, 1).ToUpper() : "?";
 
@@ -937,6 +1077,7 @@ namespace Unison.Core.Models
                 nameof(IsCommunity),
                 nameof(IsChannel),
                 nameof(IsGroupLockedForMessages),
+                nameof(IsNoLongerGroupParticipant),
                 nameof(IsComposerLocked));
         }
     }

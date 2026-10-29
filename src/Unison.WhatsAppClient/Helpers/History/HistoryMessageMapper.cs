@@ -142,6 +142,11 @@ namespace Unison.WhatsAppClient.Helpers
                     message.ImageMediaKeyBase64 = row.MediaKeyBase64;
                     message.ImageFileEncSha256Base64 = row.MediaFileEncSha256Base64;
                     message.ImageMimeType = row.MediaMimeType;
+                    if (row.MediaFileLengthBytes > 0)
+                    {
+                        message.MediaFileLengthBytes = row.MediaFileLengthBytes;
+                    }
+
                     if (!string.IsNullOrWhiteSpace(body))
                     {
                         message.Caption = body;
@@ -158,6 +163,11 @@ namespace Unison.WhatsAppClient.Helpers
                     message.VideoFileEncSha256Base64 = row.MediaFileEncSha256Base64;
                     message.VideoMimeType = row.MediaMimeType;
                     message.VideoDurationSeconds = row.MediaDurationSeconds;
+                    if (row.MediaFileLengthBytes > 0)
+                    {
+                        message.MediaFileLengthBytes = row.MediaFileLengthBytes;
+                    }
+
                     if (kind == ChatPreviewKind.Gif || row.IsAnimated)
                     {
                         message.Kind = ChatMessageKind.Gif;
@@ -180,6 +190,11 @@ namespace Unison.WhatsAppClient.Helpers
                     message.AudioFileEncSha256Base64 = row.MediaFileEncSha256Base64;
                     message.AudioMimeType = row.MediaMimeType;
                     message.AudioDurationSeconds = row.MediaDurationSeconds;
+                    if (row.MediaFileLengthBytes > 0)
+                    {
+                        message.MediaFileLengthBytes = row.MediaFileLengthBytes;
+                    }
+
                     message.NotifyAudioDownloadStateChanged();
                     break;
 
@@ -546,6 +561,11 @@ namespace Unison.WhatsAppClient.Helpers
                     target.DocumentFileLengthBytes = source.DocumentFileLengthBytes;
                 }
 
+                if (target.MediaFileLengthBytes <= 0 && source.MediaFileLengthBytes > 0)
+                {
+                    target.MediaFileLengthBytes = source.MediaFileLengthBytes;
+                }
+
                 if (target.Kind == ChatMessageKind.Text)
                 {
                     target.Kind = ChatMessageKind.Document;
@@ -564,6 +584,11 @@ namespace Unison.WhatsAppClient.Helpers
                 }
 
                 target.NotifyDocumentDownloadStateChanged();
+            }
+
+            if (target.MediaFileLengthBytes <= 0 && source.MediaFileLengthBytes > 0)
+            {
+                target.MediaFileLengthBytes = source.MediaFileLengthBytes;
             }
         }
 

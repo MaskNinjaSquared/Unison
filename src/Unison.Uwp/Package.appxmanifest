@@ -1,6 +1,6 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
-<Package xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10" xmlns:mp="http://schemas.microsoft.com/appx/2014/phone/manifest" xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10" xmlns:uap4="http://schemas.microsoft.com/appx/manifest/uap/windows10/4" IgnorableNamespaces="uap uap4 mp">
-  <Identity Name="Unison.UWPApp" Publisher="CN=UniDev" Version="2.2.60.0" />
+<Package xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10" xmlns:mp="http://schemas.microsoft.com/appx/2014/phone/manifest" xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10" xmlns:uap4="http://schemas.microsoft.com/appx/manifest/uap/windows10/4" xmlns:uap5="http://schemas.microsoft.com/appx/manifest/uap/windows10/5" IgnorableNamespaces="uap uap4 uap5 mp">
+  <Identity Name="Unison.UWPApp" Publisher="CN=UniDev" Version="2.3.3.0" />
   <mp:PhoneIdentity PhoneProductId="a1b2c3d4-e5f6-7890-abcd-ef1234567890" PhonePublisherId="00000000-0000-0000-0000-000000000000" />
   <Properties>
     <DisplayName>Unison</DisplayName>
@@ -83,6 +83,10 @@
             <Task Type="systemEvent" />
           </BackgroundTasks>
         </Extension>
+        <!-- "Start with Windows" (Desktop, 1709+). TaskId must match StartupLaunchService.TaskId. -->
+        <uap5:Extension Category="windows.startupTask" Executable="Unison.Uwp.exe" EntryPoint="Unison.Uwp.App">
+          <uap5:StartupTask TaskId="UnisonStartup" Enabled="false" DisplayName="Unison" />
+        </uap5:Extension>
       </Extensions>
     </Application>
   </Applications>

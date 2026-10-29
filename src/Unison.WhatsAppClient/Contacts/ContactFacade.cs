@@ -800,11 +800,9 @@ namespace Unison.WhatsAppClient.Contacts
                         _identity.PersistNow("dedupe:alias:" + source);
                     }
                 }
-                else
-                {
-                    // Even with no fold, authors keyed by LID need the names-changed signal.
-                    _chatState.NotifyDisplayNamesChanged();
-                }
+                // Empty plan (generation bumped, 0 merges): do not NotifyDisplayNamesChanged —
+                // each alias:app-state-contact follow-up was rebuilding author strips / list
+                // after a 6–8s BuildPlan on Lumia 950 XL with nothing to fold.
             }
             catch (Exception ex)
             {

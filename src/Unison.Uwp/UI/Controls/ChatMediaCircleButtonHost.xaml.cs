@@ -198,7 +198,7 @@ namespace Unison.Uwp.UI.Controls
             _whatsAppGlyph = new TextBlock
             {
                 FontFamily = iconFont,
-                FontSize = UseOverlayChrome ? 22 : 16,
+                FontSize = UseOverlayChrome ? 28 : 20,
                 TextLineBounds = TextLineBounds.Tight,
                 Foreground = ink,
                 HorizontalAlignment = HorizontalAlignment.Center,
@@ -207,7 +207,7 @@ namespace Unison.Uwp.UI.Controls
             _legacyRingEllipse = new Ellipse
             {
                 Stroke = ink,
-                StrokeThickness = 2,
+                StrokeThickness = 3,
                 Fill = new SolidColorBrush(Colors.Transparent)
             };
             var content = new Grid { Width = diameter, Height = diameter };

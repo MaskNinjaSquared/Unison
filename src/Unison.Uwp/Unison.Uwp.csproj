@@ -129,6 +129,32 @@
     <UseDotNetNativeToolchain>true</UseDotNetNativeToolchain>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
+  <!-- ARM64: desktop package only (Unison.Desktop.Package). -->
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|ARM64'">
+    <DebugSymbols>true</DebugSymbols>
+    <OutputPath>bin\ARM64\Debug\</OutputPath>
+    <DefineConstants>DEBUG;TRACE;NETFX_CORE;WINDOWS_UWP;GOOGLE_PROTOBUF_REFSTRUCT_COMPATIBILITY_MODE</DefineConstants>
+    <NoWarn>;2008</NoWarn>
+    <DebugType>full</DebugType>
+    <PlatformTarget>ARM64</PlatformTarget>
+    <UseVSHostingProcess>false</UseVSHostingProcess>
+    <ErrorReport>prompt</ErrorReport>
+    <Prefer32Bit>true</Prefer32Bit>
+    <AppxPackageSigningEnabled>True</AppxPackageSigningEnabled>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Release|ARM64'">
+    <OutputPath>bin\ARM64\Release\</OutputPath>
+    <DefineConstants>TRACE;NETFX_CORE;WINDOWS_UWP;GOOGLE_PROTOBUF_REFSTRUCT_COMPATIBILITY_MODE</DefineConstants>
+    <Optimize>true</Optimize>
+    <NoWarn>;2008</NoWarn>
+    <DebugType>pdbonly</DebugType>
+    <PlatformTarget>ARM64</PlatformTarget>
+    <UseVSHostingProcess>false</UseVSHostingProcess>
+    <ErrorReport>prompt</ErrorReport>
+    <Prefer32Bit>true</Prefer32Bit>
+    <UseDotNetNativeToolchain>true</UseDotNetNativeToolchain>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
   <ItemGroup>
     <Compile Include="App.xaml.cs">
       <DependentUpon>App.xaml</DependentUpon>
@@ -281,6 +307,7 @@
     <Compile Include="Services\AudioRecordingService.cs" />
     <Compile Include="Services\UiSoundService.cs" />
     <Compile Include="Services\VoicePlaybackRoutingService.cs" />
+    <Compile Include="Services\ChatAudioPlaybackService.cs" />
     <Compile Include="Services\WhatsApp\WhatsAppService.cs" />
     <Compile Include="Services\WhatsApp\WhatsAppService.Connection.cs" />
     <Compile Include="Services\WhatsApp\WhatsAppService.StartupPhases.cs" />
@@ -480,7 +507,12 @@
     <Compile Include="UI\Helpers\ChatPaneWideBothChrome.cs" />
     <Compile Include="UI\Helpers\ChatOpenPaintSchedule.cs" />
     <Compile Include="UI\Helpers\ChatOpenHostSequence.cs" />
+    <Compile Include="UI\Helpers\RosterUiRefreshCoalescer.cs" />
+    <Compile Include="Services\StartupLaunchService.cs" />
+    <Compile Include="Services\Desktop\DesktopTrayHost.cs" />
+    <Compile Include="Services\Desktop\TrayProtocol.cs" />
     <Compile Include="UI\Helpers\CommentRichService.cs" />
+    <Compile Include="UI\Helpers\EmojiRichRuns.cs" />
     <Compile Include="UI\Helpers\MentionComposerInput.cs" />
     <Compile Include="UI\Helpers\ChatDetailClipboardPaste.cs" />
     <Compile Include="UI\Helpers\ViewerEscapeKey.cs" />
@@ -493,11 +525,13 @@
     <Compile Include="UI\Converters\StringToImageSourceConverter.cs" />
     <Compile Include="UI\Converters\BooleanToVisibilityConverter.cs" />
     <Compile Include="UI\Converters\InvertedBooleanToVisibilityConverter.cs" />
+    <Compile Include="UI\Converters\EmojiJumpFontConverter.cs" />
     <Compile Include="UI\Converters\InvertedStringToVisibilityConverter.cs" />
     <Compile Include="UI\Converters\ChatPreviewKindConverters.cs" />
     <Compile Include="UI\Converters\RelativeTimestampConverter.cs" />
     <Compile Include="UI\Converters\LocalTimeConverter.cs" />
     <Compile Include="UI\Converters\ByteSizeConverter.cs" />
+    <Compile Include="UI\Converters\FileSizeConverter.cs" />
     <Compile Include="UI\Converters\BoolToDesktopCursorKindConverter.cs" />
     <Compile Include="UI\Controls\ChatListPreviewStrip.xaml.cs">
       <DependentUpon>ChatListPreviewStrip.xaml</DependentUpon>
@@ -548,6 +582,9 @@
     <Compile Include="UI\Controls\UnisonMediaCircleButton.xaml.cs">
       <DependentUpon>UnisonMediaCircleButton.xaml</DependentUpon>
     </Compile>
+    <Compile Include="UI\Controls\ChatStickerBox.xaml.cs">
+      <DependentUpon>ChatStickerBox.xaml</DependentUpon>
+    </Compile>
     <Compile Include="UI\Controls\ChatMediaCircleButtonHost.xaml.cs">
       <DependentUpon>ChatMediaCircleButtonHost.xaml</DependentUpon>
     </Compile>
@@ -555,6 +592,7 @@
       <DependentUpon>AnimationView.xaml</DependentUpon>
     </Compile>
     <Compile Include="UI\Controls\ChatAudioTransportPresenter.cs" />
+    <Compile Include="UI\Controls\ChatComposerInput.cs" />
     <Compile Include="UI\Controls\ChatMediaPlaceholderHost.cs" />
     <Compile Include="UI\Controls\ShellUi.cs" />
     <Compile Include="UI\Controls\LegacyMediaGlyphs.cs" />
@@ -700,6 +738,7 @@
     <Content Include="Assets\Fonts\SegoeIcons.ttf" />
     <Content Include="Assets\Fonts\UnisonIcons.ttf" />
     <Content Include="Assets\Fonts\WhatsAppLegacyIcons.ttf" />
+    <Content Include="Assets\Fonts\WhatsAppColorEmoji.ttf" />
     <Content Include="Assets\LargeTile.scale-100.png" />
     <Content Include="Assets\LargeTile.scale-125.png" />
     <Content Include="Assets\LargeTile.scale-150.png" />
@@ -752,7 +791,14 @@
     <Content Include="Assets\SplashScreen.scale-100.png" />
     <Content Include="Assets\WhatsAppLogo.png" />
     <Content Include="Assets\Square44x44Logo.targetsize-20_altform-unplated.png" />
-    <Content Include="Assets\LegacyLogo\*.png" />
+    <!-- Plain names only — scale/targetsize/altform filenames create NamedResources without a
+         default and throw WinRT 0x80073B0C (PRI263) when the desktop package launches. -->
+    <Content Include="Assets\LegacyLogo\WhatsAppLogo.png" />
+    <Content Include="Assets\LegacyLogo\SquareLogo.png" />
+    <Content Include="Assets\LegacyLogo\SplashScreen.png" />
+    <Content Include="Assets\LegacyLogo\WhatsAppLegacyIcon.png" />
+    <Content Include="Assets\LegacyLogo\WhatsAppLegacyWhite48.png" />
+    <Content Include="Assets\LegacyLogo\WhatsAppLegacyWhite256.png" />
     <Content Include="Assets\CustomTiles\*.png" />
   </ItemGroup>
   <ItemGroup>
@@ -869,6 +915,10 @@
       <SubType>Designer</SubType>
     </Page>
     <Page Include="UI\Controls\UnisonMediaCircleButton.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Include="UI\Controls\ChatStickerBox.xaml">
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </Page>
@@ -1283,6 +1333,10 @@
   <ItemGroup>
     <SDKReference Include="WindowsMobile, Version=10.0.22621.0">
       <Name>Windows Mobile Extensions for the UWP</Name>
+    </SDKReference>
+    <!-- FullTrustProcessLauncher (desktop tray). Guarded by ApiInformation at runtime. -->
+    <SDKReference Include="WindowsDesktop, Version=10.0.22621.0">
+      <Name>Windows Desktop Extensions for the UWP</Name>
     </SDKReference>
   </ItemGroup>
   <PropertyGroup Condition=" '$(VisualStudioVersion)' == '' or '$(VisualStudioVersion)' &lt; '14.0' ">

@@ -771,8 +771,32 @@ namespace Unison.Core.Models
                 _documentFileLengthBytes = value;
                 OnPropertyChanged();
                 OnPropertyChanged(nameof(HasDocumentFileSize));
+                if (value > 0)
+                {
+                    MediaFileLengthBytes = value;
+                }
             }
         }
+
+        private long _mediaFileLengthBytes;
+        /// <summary>
+        /// Protocol <c>fileLength</c> in bytes, available before the file is downloaded.
+        /// Zero when the message did not carry a size.
+        /// </summary>
+        public long MediaFileLengthBytes
+        {
+            get => _mediaFileLengthBytes;
+            set
+            {
+                if (_mediaFileLengthBytes == value) return;
+                _mediaFileLengthBytes = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(HasMediaFileSize));
+            }
+        }
+
+        [JsonIgnore]
+        public bool HasMediaFileSize => _mediaFileLengthBytes > 0;
 
         [JsonIgnore]
         public bool HasDocumentFileSize => DocumentFileLengthBytes > 0;

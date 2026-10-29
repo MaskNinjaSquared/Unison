@@ -1,16 +1,21 @@
 using System;
 using System.ComponentModel;
+using Unison.Core.Models;
 using Unison.Core.ViewModels;
+using Unison.Uwp.Helpers;
 using Unison.Uwp.UI.Views;
+using Windows.UI.Input;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
+using Windows.UI.Xaml.Controls.Primitives;
+using Windows.UI.Xaml.Input;
 using Windows.UI.Xaml.Media;
 using Windows.UI.Xaml.Media.Animation;
 
 namespace Unison.Uwp.UI.Controls
 {
     /// <summary>
-    /// Shared play/pause ↔ label/slider ↔ overflow|timestamp state for shell-specific audio bars.
+    /// Shared play/pause ↔ label/slider ↔ overflow|timestamp+speed state for shell-specific audio bars.
     /// </summary>
     internal sealed class ChatAudioTransportPresenter
     {
@@ -19,7 +24,9 @@ namespace Unison.Uwp.UI.Controls
         private readonly Button _pauseButton;
         private readonly TextBlock _readyLabel;
         private readonly Slider _positionSlider;
+        private readonly Button _speedButton;
         private readonly TextBlock _timestampText;
+        private readonly TextBlock _speedText;
         private readonly Button _moreButton;
         private readonly Action _onPlayPause;
         private readonly Action _onMore;
@@ -28,6 +35,7 @@ namespace Unison.Uwp.UI.Controls
         private bool _sliderDragging;
         private bool _suppressSliderCallback;
         private bool _showingSlider;
+        private bool _holdOpenedMenu;
         private Storyboard _fadeStoryboard;
 
         public ChatAudioTransportPresenter(
@@ -36,7 +44,9 @@ namespace Unison.Uwp.UI.Controls
             Button pauseButton,
             TextBlock readyLabel,
             Slider positionSlider,
+            Button speedButton,
             TextBlock timestampText,
+            TextBlock speedText,
             Button moreButton,
             Action onPlayPause,
             Action onMore)
@@ -46,7 +56,9 @@ namespace Unison.Uwp.UI.Controls
             _pauseButton = pauseButton ?? throw new ArgumentNullException(nameof(pauseButton));
             _readyLabel = readyLabel ?? throw new ArgumentNullException(nameof(readyLabel));
             _positionSlider = positionSlider ?? throw new ArgumentNullException(nameof(positionSlider));
+            _speedButton = speedButton ?? throw new ArgumentNullException(nameof(speedButton));
             _timestampText = timestampText ?? throw new ArgumentNullException(nameof(timestampText));
+            _speedText = speedText ?? throw new ArgumentNullException(nameof(speedText));
             _moreButton = moreButton ?? throw new ArgumentNullException(nameof(moreButton));
             _onPlayPause = onPlayPause ?? throw new ArgumentNullException(nameof(onPlayPause));
             _onMore = onMore ?? throw new ArgumentNullException(nameof(onMore));
@@ -101,9 +113,10 @@ namespace Unison.Uwp.UI.Controls
             _playButton.Visibility = showPlay ? Visibility.Visible : Visibility.Collapsed;
             _pauseButton.Visibility = showPause ? Visibility.Visible : Visibility.Collapsed;
             _moreButton.Visibility = showMore ? Visibility.Visible : Visibility.Collapsed;
-            _timestampText.Visibility = showBarTime ? Visibility.Visible : Visibility.Collapsed;
+            _speedButton.Visibility = showBarTime ? Visibility.Visible : Visibility.Collapsed;
             _readyLabel.Text = vm.AudioReadyLabelText ?? string.Empty;
             _timestampText.Text = vm.AudioTimestampText ?? "0:00";
+            _speedText.Text = vm.AudioSpeedLabelText ?? "x1";
 
             _suppressSliderCallback = true;
             try
@@ -137,12 +150,49 @@ namespace Unison.Uwp.UI.Controls
 
         public void OnPlayPauseClick()
         {
+            if (_holdOpenedMenu)
+            {
+                _holdOpenedMenu = false;
+                return;
+            }
+
             _onPlayPause();
         }
 
         public void OnMoreClick()
         {
             _onMore();
+        }
+
+        public void OnSpeedClick()
+        {
+            if (_vm == null)
+            {
+                return;
+            }
+
+            if (_vm.CycleAudioSpeedCommand != null &&
+                _vm.CycleAudioSpeedCommand.CanExecute(null))
+            {
+                _vm.CycleAudioSpeedCommand.Execute(null);
+                return;
+            }
+
+            FindChatDetail()?.CycleAudioPlaybackSpeed(_vm);
+        }
+
+        public void OnPlayHolding(HoldingRoutedEventArgs e)
+        {
+            if (e == null ||
+                e.HoldingState != HoldingState.Started ||
+                _vm == null)
+            {
+                return;
+            }
+
+            e.Handled = true;
+            _holdOpenedMenu = true;
+            ShowPlaySpeedMenu();
         }
 
         public void OnSliderPointerPressed()
@@ -169,6 +219,52 @@ namespace Unison.Uwp.UI.Controls
             FindChatDetail()?.SeekAudioPlayback(_vm, newValue);
         }
 
+        private void ShowPlaySpeedMenu()
+        {
+            var flyout = new MenuFlyout();
+            flyout.Items.Add(SpeedItem(
+                LocalizedStrings.Get("ChatDetail_PlayAudioAt1", "Play on 1"),
+                AudioPlaybackSpeed.Regular));
+            flyout.Items.Add(SpeedItem(
+                LocalizedStrings.Get("ChatDetail_PlayAudioAt15", "Play on 1.5"),
+                AudioPlaybackSpeed.Fast));
+            flyout.Items.Add(SpeedItem(
+                LocalizedStrings.Get("ChatDetail_PlayAudioAt2", "Play on 2"),
+                AudioPlaybackSpeed.Faster));
+
+            try
+            {
+                flyout.ShowAt(_playButton);
+            }
+            catch
+            {
+                _holdOpenedMenu = false;
+            }
+        }
+
+        private MenuFlyoutItem SpeedItem(string label, AudioPlaybackSpeed speed)
+        {
+            var item = new MenuFlyoutItem { Text = label };
+            item.Click += (s, e) =>
+            {
+                _holdOpenedMenu = false;
+                if (_vm == null)
+                {
+                    return;
+                }
+
+                if (_vm.PlayAtSpeedCommand != null &&
+                    _vm.PlayAtSpeedCommand.CanExecute(speed))
+                {
+                    _vm.PlayAtSpeedCommand.Execute(speed);
+                    return;
+                }
+
+                FindChatDetail()?.PlayAudioAtSpeed(_vm, speed);
+            };
+            return item;
+        }
+
         private void ViewModel_PropertyChanged(object sender, PropertyChangedEventArgs e)
         {
             if (e.PropertyName == nameof(ChatMessageViewModel.AudioPlaybackStatus) ||
@@ -178,6 +274,8 @@ namespace Unison.Uwp.UI.Controls
                 e.PropertyName == nameof(ChatMessageViewModel.ShowAudioBarTimestamp) ||
                 e.PropertyName == nameof(ChatMessageViewModel.AudioReadyLabelText) ||
                 e.PropertyName == nameof(ChatMessageViewModel.AudioTimestampText) ||
+                e.PropertyName == nameof(ChatMessageViewModel.AudioSpeedLabelText) ||
+                e.PropertyName == nameof(ChatMessageViewModel.AudioPlaybackSpeed) ||
                 e.PropertyName == nameof(ChatMessageViewModel.AudioSliderMaximum) ||
                 e.PropertyName == nameof(ChatMessageViewModel.HasLocalAudio))
             {

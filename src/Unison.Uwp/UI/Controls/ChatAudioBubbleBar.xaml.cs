@@ -4,12 +4,13 @@ using Unison.Uwp.UI.Views;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
 using Windows.UI.Xaml.Controls.Primitives;
+using Windows.UI.Xaml.Input;
 using Windows.UI.Xaml.Media;
 
 namespace Unison.Uwp.UI.Controls
 {
     /// <summary>
-    /// WhatsApp-shell voice transport: transparent icon play/pause, label ↔ slider, overflow|timestamp.
+    /// WhatsApp-shell voice transport: transparent icon play/pause, label ↔ slider, overflow|timestamp+speed.
     /// </summary>
     public sealed partial class ChatAudioBubbleBar : UserControl
     {
@@ -18,7 +19,13 @@ namespace Unison.Uwp.UI.Controls
                 nameof(GlyphForeground),
                 typeof(Brush),
                 typeof(ChatAudioBubbleBar),
-                new PropertyMetadata(null));
+                new PropertyMetadata(null, OnGlyphForegroundChanged));
+
+        private static void OnGlyphForegroundChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+        {
+            var bar = d as ChatAudioBubbleBar;
+            bar?.ApplyLegacySliderForeground();
+        }
 
         private ChatAudioTransportPresenter _presenter;
 
@@ -31,7 +38,9 @@ namespace Unison.Uwp.UI.Controls
                 PauseButton,
                 ReadyLabel,
                 PositionSlider,
+                SpeedButton,
                 TimestampText,
+                SpeedText,
                 MoreButton,
                 OnPlayPause,
                 OnMore);
@@ -56,6 +65,8 @@ namespace Unison.Uwp.UI.Controls
                 {
                     PlayRing.Visibility = value ? Visibility.Visible : Visibility.Collapsed;
                 }
+
+                ApplyLegacySliderForeground();
             }
         }
 
@@ -66,9 +77,6 @@ namespace Unison.Uwp.UI.Controls
             _presenter.ApplyState(animate: false);
         }
 
-        /// <summary>
-        /// Legacy: circular hit target (no square hover) + Legacy icon font for play/pause.
-        /// </summary>
         private void ApplyLegacyChrome()
         {
             if (!UseRing)
@@ -82,7 +90,10 @@ namespace Unison.Uwp.UI.Controls
                 PlayButton.Style = hitStyle;
                 PauseButton.Style = hitStyle;
                 MoreButton.Style = hitStyle;
+                SpeedButton.Style = hitStyle;
             }
+
+            ApplyLegacySliderForeground();
 
             FontFamily family = LegacyMediaGlyphs.IconFont;
             if (family == null)
@@ -92,6 +103,23 @@ namespace Unison.Uwp.UI.Controls
 
             ApplyGlyph(PlayButton, LegacyMediaGlyphs.Play, family);
             ApplyGlyph(PauseButton, LegacyMediaGlyphs.Pause, family);
+        }
+
+        /// <summary>
+        /// Accent green matches the dark sent bubble in Legacy; use bubble ink instead.
+        /// </summary>
+        private void ApplyLegacySliderForeground()
+        {
+            if (PositionSlider == null || !UseRing)
+            {
+                return;
+            }
+
+            Brush ink = GlyphForeground;
+            if (ink != null)
+            {
+                PositionSlider.Foreground = ink;
+            }
         }
 
         private static Style TryStyle(string key)
@@ -131,22 +159,32 @@ namespace Unison.Uwp.UI.Controls
             _presenter.OnPlayPauseClick();
         }
 
+        private void PlayButton_Holding(object sender, HoldingRoutedEventArgs e)
+        {
+            _presenter.OnPlayHolding(e);
+        }
+
+        private void Speed_Click(object sender, RoutedEventArgs e)
+        {
+            _presenter.OnSpeedClick();
+        }
+
         private void More_Click(object sender, RoutedEventArgs e)
         {
             _presenter.OnMoreClick();
         }
 
-        private void PositionSlider_PointerPressed(object sender, Windows.UI.Xaml.Input.PointerRoutedEventArgs e)
+        private void PositionSlider_PointerPressed(object sender, PointerRoutedEventArgs e)
         {
             _presenter.OnSliderPointerPressed();
         }
 
-        private void PositionSlider_PointerReleased(object sender, Windows.UI.Xaml.Input.PointerRoutedEventArgs e)
+        private void PositionSlider_PointerReleased(object sender, PointerRoutedEventArgs e)
         {
             _presenter.OnSliderPointerReleased();
         }
 
-        private void PositionSlider_PointerCaptureLost(object sender, Windows.UI.Xaml.Input.PointerRoutedEventArgs e)
+        private void PositionSlider_PointerCaptureLost(object sender, PointerRoutedEventArgs e)
         {
             _presenter.OnSliderPointerReleased();
         }

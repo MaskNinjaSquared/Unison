@@ -334,6 +334,16 @@ namespace Unison.Core.Tests.Helpers
                 IReadOnlyList<PersonGroupMembership> members) =>
                 Task.CompletedTask;
 
+            public Task UpsertGroupMembershipsAsync(
+                string groupJid,
+                IReadOnlyList<PersonGroupMembership> members) =>
+                Task.CompletedTask;
+
+            public Task RemoveGroupMembershipsAsync(
+                string groupJid,
+                IReadOnlyList<string> personJids) =>
+                Task.CompletedTask;
+
             public Task<IReadOnlyList<PersonGroupMembership>> ListGroupsForPersonAsync(string personJid) =>
                 Task.FromResult((IReadOnlyList<PersonGroupMembership>)Array.Empty<PersonGroupMembership>());
         }

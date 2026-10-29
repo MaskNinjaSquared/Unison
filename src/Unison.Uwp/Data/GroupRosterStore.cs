@@ -75,49 +75,66 @@ namespace Unison.Uwp.Data
                     return;
                 }
 
-                DateTime now = DateTime.UtcNow;
-                var rows = new List<GroupRosterMemberRow>(members.Count);
-                for (int i = 0; i < members.Count; i++)
+                await InsertOrReplaceAsync(ToRows(groupKey, members)).ConfigureAwait(false);
+            }
+            finally
+            {
+                _writeLock.Release();
+            }
+        }
+
+        public async Task UpsertMembersAsync(string groupJid, IReadOnlyList<GroupMember> members)
+        {
+            string groupKey = NormalizeJid(groupJid);
+            if (string.IsNullOrEmpty(groupKey) || members == null || members.Count == 0)
+            {
+                return;
+            }
+
+            await EnsureInitializedAsync().ConfigureAwait(false);
+            await _writeLock.WaitAsync().ConfigureAwait(false);
+            try
+            {
+                await InsertOrReplaceAsync(ToRows(groupKey, members)).ConfigureAwait(false);
+            }
+            finally
+            {
+                _writeLock.Release();
+            }
+        }
+
+        public async Task RemoveMembersAsync(string groupJid, IReadOnlyList<string> memberJids)
+        {
+            string groupKey = NormalizeJid(groupJid);
+            if (string.IsNullOrEmpty(groupKey) || memberJids == null || memberJids.Count == 0)
+            {
+                return;
+            }
+
+            var ids = new List<string>(memberJids.Count);
+            for (int i = 0; i < memberJids.Count; i++)
+            {
+                string memberKey = NormalizeJid(memberJids[i]);
+                if (!string.IsNullOrEmpty(memberKey))
                 {
-                    GroupMember member = members[i];
-                    if (member == null || string.IsNullOrWhiteSpace(member.Jid))
-                    {
-                        continue;
-                    }
-
-                    string memberKey = NormalizeJid(member.Jid);
-                    if (string.IsNullOrEmpty(memberKey))
-                    {
-                        continue;
-                    }
-
-                    rows.Add(new GroupRosterMemberRow
-                    {
-                        Id = GroupRosterMemberRow.MakeId(groupKey, memberKey),
-                        GroupJid = groupKey,
-                        MemberJid = memberKey,
-                        PhoneNumber = member.PhoneNumber,
-                        Lid = member.Lid,
-                        DisplayName = member.DisplayName,
-                        Role = (int)member.Role,
-                        AvatarUrl = member.AvatarUrl,
-                        AvatarFetchedAtUtc = member.AvatarFetchedAtUtc,
-                        AvatarFetchFailedAtUtc = member.AvatarFetchFailedAtUtc,
-                        AvatarFetchFailureReason = member.AvatarFetchFailureReason,
-                        UpdatedAtUtc = now
-                    });
+                    ids.Add(GroupRosterMemberRow.MakeId(groupKey, memberKey));
                 }
+            }
 
-                if (rows.Count == 0)
-                {
-                    return;
-                }
+            if (ids.Count == 0)
+            {
+                return;
+            }
 
+            await EnsureInitializedAsync().ConfigureAwait(false);
+            await _writeLock.WaitAsync().ConfigureAwait(false);
+            try
+            {
                 await _connection.RunInTransactionAsync(conn =>
                 {
-                    for (int i = 0; i < rows.Count; i++)
+                    for (int i = 0; i < ids.Count; i++)
                     {
-                        conn.InsertOrReplace(rows[i]);
+                        conn.Execute("DELETE FROM GroupRosterMember WHERE Id = ?", ids[i]);
                     }
                 }).ConfigureAwait(false);
             }
@@ -125,6 +142,92 @@ namespace Unison.Uwp.Data
             {
                 _writeLock.Release();
             }
+        }
+
+        public async Task<GroupMember> GetMemberAsync(string groupJid, string memberJid)
+        {
+            string groupKey = NormalizeJid(groupJid);
+            string memberKey = NormalizeJid(memberJid);
+            if (string.IsNullOrEmpty(groupKey) || string.IsNullOrEmpty(memberKey))
+            {
+                return null;
+            }
+
+            await EnsureInitializedAsync().ConfigureAwait(false);
+            GroupRosterMemberRow row = await _connection
+                .FindAsync<GroupRosterMemberRow>(GroupRosterMemberRow.MakeId(groupKey, memberKey))
+                .ConfigureAwait(false);
+            return row == null || string.IsNullOrWhiteSpace(row.MemberJid) ? null : ToMember(row);
+        }
+
+        private Task InsertOrReplaceAsync(List<GroupRosterMemberRow> rows)
+        {
+            if (rows.Count == 0)
+            {
+                return Task.CompletedTask;
+            }
+
+            return _connection.RunInTransactionAsync(conn =>
+            {
+                for (int i = 0; i < rows.Count; i++)
+                {
+                    conn.InsertOrReplace(rows[i]);
+                }
+            });
+        }
+
+        private static List<GroupRosterMemberRow> ToRows(string groupKey, IReadOnlyList<GroupMember> members)
+        {
+            DateTime now = DateTime.UtcNow;
+            var rows = new List<GroupRosterMemberRow>(members.Count);
+            for (int i = 0; i < members.Count; i++)
+            {
+                GroupMember member = members[i];
+                if (member == null || string.IsNullOrWhiteSpace(member.Jid))
+                {
+                    continue;
+                }
+
+                string memberKey = NormalizeJid(member.Jid);
+                if (string.IsNullOrEmpty(memberKey))
+                {
+                    continue;
+                }
+
+                rows.Add(new GroupRosterMemberRow
+                {
+                    Id = GroupRosterMemberRow.MakeId(groupKey, memberKey),
+                    GroupJid = groupKey,
+                    MemberJid = memberKey,
+                    PhoneNumber = member.PhoneNumber,
+                    Lid = member.Lid,
+                    DisplayName = member.DisplayName,
+                    Role = (int)member.Role,
+                    AvatarUrl = member.AvatarUrl,
+                    AvatarFetchedAtUtc = member.AvatarFetchedAtUtc,
+                    AvatarFetchFailedAtUtc = member.AvatarFetchFailedAtUtc,
+                    AvatarFetchFailureReason = member.AvatarFetchFailureReason,
+                    UpdatedAtUtc = now
+                });
+            }
+
+            return rows;
+        }
+
+        private static GroupMember ToMember(GroupRosterMemberRow row)
+        {
+            return new GroupMember
+            {
+                Jid = row.MemberJid,
+                PhoneNumber = row.PhoneNumber,
+                Lid = row.Lid,
+                DisplayName = row.DisplayName,
+                Role = ParseRole(row.Role),
+                AvatarUrl = row.AvatarUrl,
+                AvatarFetchedAtUtc = row.AvatarFetchedAtUtc,
+                AvatarFetchFailedAtUtc = row.AvatarFetchFailedAtUtc,
+                AvatarFetchFailureReason = row.AvatarFetchFailureReason
+            };
         }
 
         public async Task<IReadOnlyList<GroupMember>> GetForGroupAsync(string groupJid)
@@ -156,18 +259,7 @@ namespace Unison.Uwp.Data
                     continue;
                 }
 
-                list.Add(new GroupMember
-                {
-                    Jid = row.MemberJid,
-                    PhoneNumber = row.PhoneNumber,
-                    Lid = row.Lid,
-                    DisplayName = row.DisplayName,
-                    Role = ParseRole(row.Role),
-                    AvatarUrl = row.AvatarUrl,
-                    AvatarFetchedAtUtc = row.AvatarFetchedAtUtc,
-                    AvatarFetchFailedAtUtc = row.AvatarFetchFailedAtUtc,
-                    AvatarFetchFailureReason = row.AvatarFetchFailureReason
-                });
+                list.Add(ToMember(row));
             }
 
             return list;

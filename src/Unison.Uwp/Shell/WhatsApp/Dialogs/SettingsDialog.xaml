@@ -438,6 +438,25 @@
                                     </controls:SettingBox.Control>
                                 </controls:SettingBox>
 
+                                <StackPanel Visibility="{Binding IsStartupLaunchSupported, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                    <controls:SettingBox LocalizationUid="Settings_StartupLaunch"
+                                                         Margin="0,0,0,8"
+                                                         Header="Iniciar com o Windows"
+                                                         Text="Abre o Unison quando você entra no Windows.">
+                                        <controls:SettingBox.Control>
+                                            <ToggleSwitch OnContent="" OffContent="" MinWidth="0" Margin="0"
+                                                          IsEnabled="{Binding IsStartupLaunchToggleEnabled}"
+                                                          IsOn="{Binding StartupLaunchEnabled, Mode=TwoWay}"/>
+                                        </controls:SettingBox.Control>
+                                    </controls:SettingBox>
+                                    <TextBlock Margin="0,0,0,8"
+                                               TextWrapping="Wrap"
+                                               Style="{ThemeResource CaptionTextBlockStyle}"
+                                               Opacity="0.7"
+                                               Text="{Binding StartupLaunchHint}"
+                                               Visibility="{Binding HasStartupLaunchHint, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                                </StackPanel>
+
                                 <Button Click="DisconnectButton_Click"
                                         HorizontalAlignment="Left"
                                         Margin="0,16,0,8"

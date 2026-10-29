@@ -42,6 +42,7 @@ namespace Unison.WhatsAppClient.Contacts
         private readonly IChatStateStore _chatState;
         private readonly SyncWorkGate _syncWork;
         private readonly IDispatcher _ui;
+        private readonly ILowPriorityDispatcher _lowUi;
         private readonly IChatCatalogPersistence _catalog;
         private readonly IGroupService _groups;
         private readonly IContactService _contacts;
@@ -70,11 +71,17 @@ namespace Unison.WhatsAppClient.Contacts
             _sessions = sessions ?? throw new ArgumentNullException(nameof(sessions));
             _syncWork = syncWork ?? throw new ArgumentNullException(nameof(syncWork));
             _ui = ui ?? throw new ArgumentNullException(nameof(ui));
+            _lowUi = ui as ILowPriorityDispatcher;
             _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
             _chatState = chatState ?? throw new ArgumentNullException(nameof(chatState));
             _groups = groups ?? throw new ArgumentNullException(nameof(groups));
             _contacts = contacts ?? throw new ArgumentNullException(nameof(contacts));
             _jids = jids ?? throw new ArgumentNullException(nameof(jids));
+        }
+
+        private Task RunLowAsync(Action action)
+        {
+            return _lowUi != null ? _lowUi.RunLowAsync(action) : _ui.RunAsync(action);
         }
 
         /// <summary>True while a full-roster <see cref="HydrateAsync"/> pass is running.</summary>
@@ -265,7 +272,7 @@ namespace Unison.WhatsAppClient.Contacts
                         };
                     }
 
-                    await _ui.RunAsync(
+                    await RunLowAsync(
                         () => _groups.ApplyGroupMemberAvatarOutcome(member.Jid, result))
                         .ConfigureAwait(false);
 
@@ -373,7 +380,7 @@ namespace Unison.WhatsAppClient.Contacts
         {
             var batch = new List<GroupMember>();
             DateTime nowUtc = DateTime.UtcNow;
-            await _ui.RunAsync(() =>
+            await RunLowAsync(() =>
             {
                 ChatItem chat = FindGroup(groupJid);
                 if (chat?.GroupMembers == null)
@@ -429,88 +436,36 @@ namespace Unison.WhatsAppClient.Contacts
                 return batch;
             }
 
+            await _groups.EnsureMembersAsync(groupJid, memberJids).ConfigureAwait(false);
+
             DateTime nowUtc = DateTime.UtcNow;
-            await _ui.RunAsync(() =>
+            await RunLowAsync(() =>
             {
                 ChatItem chat = FindGroup(groupJid);
-                if (chat == null)
+                if (chat?.GroupMembers == null)
                 {
                     return;
                 }
 
-                // Mobile open skips full roster — seed IsMinimal stubs so hydrate can fetch.
-                GroupRosterRules.EnsureMinimalMembers(
-                    chat,
-                    memberJids,
-                    _jids,
-                    jid => _contacts.ResolveDisplayName(jid, "group-member"),
-                    jid =>
-                    {
-                        ChatItem direct = _chatState.FindChat(jid);
-                        return direct != null ? direct.GetAvatarUrl(preferHigh: false) : null;
-                    });
-
-                if (chat.GroupMembers == null)
+                var seen = new HashSet<GroupMember>();
+                foreach (string key in wanted)
                 {
-                    return;
-                }
-
-                for (int i = 0; i < chat.GroupMembers.Count; i++)
-                {
-                    GroupMember member = chat.GroupMembers[i];
-                    if (!MemberMatchesWanted(member, wanted))
+                    GroupMember member = chat.FindGroupMember(key);
+                    if (member != null && seen.Add(member) && ShouldFetch(member, nowUtc))
                     {
-                        continue;
+                        batch.Add(member);
                     }
-
-                    if (!ShouldFetch(member, nowUtc))
-                    {
-                        continue;
-                    }
-
-                    batch.Add(member);
                 }
             }).ConfigureAwait(false);
 
             return batch;
         }
 
-        private bool MemberMatchesWanted(GroupMember member, HashSet<string> wanted)
-        {
-            if (member == null || wanted == null || wanted.Count == 0)
-            {
-                return false;
-            }
-
-            if (!string.IsNullOrWhiteSpace(member.Jid) &&
-                (wanted.Contains(member.Jid) || wanted.Contains(MemberKey(member))))
-            {
-                return true;
-            }
-
-            if (!string.IsNullOrWhiteSpace(member.Lid))
-            {
-                string lidKey = _jids.GetCanonicalJid(member.Lid);
-                if (string.IsNullOrWhiteSpace(lidKey))
-                {
-                    lidKey = JidHelper.Normalize(member.Lid);
-                }
-
-                if (wanted.Contains(member.Lid) ||
-                    (!string.IsNullOrWhiteSpace(lidKey) && wanted.Contains(lidKey)))
-                {
-                    return true;
-                }
-            }
-
-            return false;
-        }
-
         private async Task<bool> HasRemainingAsync(string groupJid)
         {
             bool remaining = false;
             DateTime nowUtc = DateTime.UtcNow;
-            await _ui.RunAsync(() =>
+            await RunLowAsync(() =>
             {
                 ChatItem chat = FindGroup(groupJid);
                 if (chat?.GroupMembers == null)

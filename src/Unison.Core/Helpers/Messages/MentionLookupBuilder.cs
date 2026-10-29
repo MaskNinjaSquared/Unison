@@ -99,6 +99,44 @@ namespace Unison.Core.Helpers
             return map;
         }
 
+        /// <summary>
+        /// Same keys and names. Lets the row keep its lookup instance across roster flushes that
+        /// changed nothing a mention shows (avatar, role), so bubbles do not re-render.
+        /// </summary>
+        public static bool SameEntries(
+            IReadOnlyDictionary<string, string> a,
+            IReadOnlyDictionary<string, string> b)
+        {
+            if (ReferenceEquals(a, b))
+            {
+                return true;
+            }
+
+            int countA = a?.Count ?? 0;
+            int countB = b?.Count ?? 0;
+            if (countA != countB)
+            {
+                return false;
+            }
+
+            if (countA == 0)
+            {
+                return true;
+            }
+
+            foreach (KeyValuePair<string, string> pair in a)
+            {
+                string other;
+                if (!b.TryGetValue(pair.Key, out other) ||
+                    !string.Equals(pair.Value, other, StringComparison.Ordinal))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
         public static Dictionary<string, string> Copy(IReadOnlyDictionary<string, string> source)
         {
             var map = new Dictionary<string, string>(StringComparer.Ordinal);

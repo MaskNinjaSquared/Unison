@@ -146,7 +146,7 @@ namespace Unison.Core.Tests.State
         }
 
         [Fact]
-        public async Task Sweep_skips_huge_roster_tip_scan_and_uses_Person()
+        public async Task Sweep_finds_the_tip_at_the_end_of_a_large_roster()
         {
             var jids = new AliasJids();
             jids.Pair(Lid, Pn);
@@ -169,7 +169,7 @@ namespace Unison.Core.Tests.State
                 });
             }
 
-            // Tip at the end with a roster label that must not be reached by a capped scan.
+            // Tip at the end: the address index reaches it however big the roster is.
             members.Add(new GroupMember
             {
                 Jid = Lid,
@@ -197,14 +197,14 @@ namespace Unison.Core.Tests.State
                 dispatcher);
 
             projection.Start();
-            await WaitForAsync(() => group.LastMessageSenderName == "Ana Souza");
+            await WaitForAsync(() => group.LastMessageSenderName == "Ana Roster Only");
 
-            Assert.Equal("Ana Souza: ", group.LastMessageAuthor);
+            Assert.Equal("Ana Roster Only: ", group.LastMessageAuthor);
             Assert.True(dispatcher.MaxDepth <= 1, "BeginSweep nested depth=" + dispatcher.MaxDepth);
         }
 
         [Fact]
-        public async Task OnDemand_PersonChanged_updates_only_groups_with_that_tip()
+        public async Task Start_names_unnamed_strips_and_leaves_named_ones_alone()
         {
             var jids = new AliasJids();
             jids.Pair(Lid, Pn);
@@ -245,18 +245,9 @@ namespace Unison.Core.Tests.State
                 people,
                 jids,
                 strings: null,
-                new CountingDispatcher(),
-                onDemand: true);
+                new CountingDispatcher());
 
             projection.Start();
-            await Task.Delay(30);
-            Assert.Null(touched.LastMessageSenderName);
-            Assert.Equal("Outro Tip: ", other.LastMessageAuthor);
-
-            // Warm Person into cache, then signal only Ana's JID.
-            await people.GetAsync(Pn);
-            // Raise via the store the projection subscribed to — simulate PersonChanged.
-            people.RaisePersonChanged(Pn);
             await WaitForAsync(() => touched.LastMessageSenderName == "Ana Souza");
 
             Assert.Equal("Ana Souza: ", touched.LastMessageAuthor);
@@ -265,7 +256,7 @@ namespace Unison.Core.Tests.State
         }
 
         [Fact]
-        public async Task OnDemand_RefreshChat_updates_only_that_group()
+        public async Task RefreshChat_updates_only_that_group()
         {
             var jids = new AliasJids();
             var people = new MemoryPersonStore();
@@ -304,8 +295,7 @@ namespace Unison.Core.Tests.State
                 people,
                 jids,
                 strings: null,
-                new CountingDispatcher(),
-                onDemand: true);
+                new CountingDispatcher());
 
             projection.Start();
             projection.RefreshChat(Group);
@@ -493,6 +483,16 @@ namespace Unison.Core.Tests.State
             public Task ReplaceGroupMembershipsAsync(
                 string groupJid,
                 IReadOnlyList<PersonGroupMembership> members) =>
+                Task.CompletedTask;
+
+            public Task UpsertGroupMembershipsAsync(
+                string groupJid,
+                IReadOnlyList<PersonGroupMembership> members) =>
+                Task.CompletedTask;
+
+            public Task RemoveGroupMembershipsAsync(
+                string groupJid,
+                IReadOnlyList<string> personJids) =>
                 Task.CompletedTask;
 
             public Task<IReadOnlyList<PersonGroupMembership>> ListGroupsForPersonAsync(string personJid) =>

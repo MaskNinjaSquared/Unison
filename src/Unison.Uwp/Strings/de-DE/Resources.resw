@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <root>
   <!-- 
     Microsoft ResX Schema 
@@ -329,6 +329,9 @@ Nach der Diagnose deaktivieren: Wenn es aktiviert bleibt, wird die App langsamer
   <data name="ChatDetail_GroupOnlyAdminsCanSend.Text" xml:space="preserve">
     <value>Nur Admins können Nachrichten senden</value>
   </data>
+  <data name="ChatDetail_GroupNoLongerParticipant.Text" xml:space="preserve">
+    <value>Du kannst keine Nachrichten an diese Gruppe senden, weil du kein Teilnehmer mehr bist.</value>
+  </data>
   <data name="ChatDetail_UnreadMessagesFormat" xml:space="preserve">
     <value>{0} ungelesene Nachrichten</value>
   </data>
@@ -361,6 +364,27 @@ Nach der Diagnose deaktivieren: Wenn es aktiviert bleibt, wird die App langsamer
   </data>
   <data name="ChatDetail_AttachBarTooltip.Content" xml:space="preserve">
     <value>Anhängen</value>
+  </data>
+  <data name="ChatDetail_StickerBoxTooltip.Content" xml:space="preserve">
+    <value>Emoji</value>
+  </data>
+  <data name="StickerBox_EmojiTab.Text" xml:space="preserve">
+    <value>Emoji</value>
+  </data>
+  <data name="StickerBox_GifTab.Text" xml:space="preserve">
+    <value>GIF</value>
+  </data>
+  <data name="StickerBox_StickerTab.Text" xml:space="preserve">
+    <value>Stickers</value>
+  </data>
+  <data name="StickerBox_GifSoon.Text" xml:space="preserve">
+    <value>GIFs coming soon</value>
+  </data>
+  <data name="StickerBox_StickerSoon.Text" xml:space="preserve">
+    <value>Stickers coming soon</value>
+  </data>
+  <data name="StickerBox_SearchBox.PlaceholderText" xml:space="preserve">
+    <value>Emoji suchen</value>
   </data>
   <data name="ChatDetail_ScrollToBottomTooltip.Content" xml:space="preserve">
     <value>Zum Neuesten springen</value>
@@ -816,6 +840,18 @@ Nach der Diagnose deaktivieren: Wenn es aktiviert bleibt, wird die App langsamer
   </data>
   <data name="Settings_KeepAlive.Text" xml:space="preserve">
     <value>Verwendet den Standort nur, damit Windows 10 Mobile die App nicht einfriert (Unogram-Trick). Die Position wird weder gelesen noch gesendet. Verbraucht mehr Akku.</value>
+  </data>
+  <data name="Settings_StartupLaunch.Header" xml:space="preserve">
+    <value>Start with Windows</value>
+  </data>
+  <data name="Settings_StartupLaunch.Text" xml:space="preserve">
+    <value>Opens Unison when you sign in to Windows.</value>
+  </data>
+  <data name="Settings_StartupLaunchDisabledByUser" xml:space="preserve">
+    <value>Turned off in Task Manager. To turn it back on, open Task Manager > Startup apps and enable Unison.</value>
+  </data>
+  <data name="Settings_StartupLaunchPolicy" xml:space="preserve">
+    <value>Your organization manages this setting.</value>
   </data>
   <data name="Settings_AutoUnlink.Header" xml:space="preserve">
     <value>Beim Abmelden automatisch trennen</value>

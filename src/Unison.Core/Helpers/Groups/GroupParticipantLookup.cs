@@ -33,12 +33,13 @@ namespace Unison.Core.Helpers
         private Dictionary<string, string> _directChatNames =
             new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
-        private List<GroupMember> _hookedRosterMembers;
+        private HashSet<GroupMember> _hookedRosterMembers;
         private PropertyChangedEventHandler _rosterAvatarChangedHandler;
 
         private int _participantLookupRosterCount = -1;
         private string _participantLookupChatJid;
         private IReadOnlyDictionary<string, string> _participantLookupMentionRef;
+        private List<GroupMember> _participantLookupRosterRef;
 
         private bool _disposed;
 
@@ -52,10 +53,6 @@ namespace Unison.Core.Helpers
         private static Dictionary<string, string> _sharedDirectAvatars;
         private static Dictionary<string, string> _sharedDirectNames;
         private static bool _directChatsCollectionHooked;
-
-        /// <summary>Large rosters: skip per-member PropertyChanged (hundreds of hooks thrash Mobile).</summary>
-        private const int MaxRosterAvatarHooks = 48;
-
         /// <summary>Drop the shared 1:1 name/avatar index (chat list or display-name batch changed).</summary>
         public static void InvalidateDirectChatIndex()
         {
@@ -97,6 +94,7 @@ namespace Unison.Core.Helpers
             _participantLookupChatJid = chat?.JID;
             _participantLookupRosterCount = chat?.GroupMembers?.Count ?? 0;
             _participantLookupMentionRef = chat?.MentionLookup;
+            _participantLookupRosterRef = chat?.GroupMembers;
 
             RebuildDirectChatIndex();
 
@@ -135,7 +133,6 @@ namespace Unison.Core.Helpers
             _participantAvatars = avatars;
             _rosterByCanonical = roster;
             SeedSelfParticipantName();
-            HookRosterAvatarChanges(chat.GroupMembers);
         }
 
         public void EnsureFresh(ChatItem chat)
@@ -147,7 +144,8 @@ namespace Unison.Core.Helpers
             if (_participantLookupRosterCount == rosterCount &&
                 string.Equals(_participantLookupChatJid, jid, StringComparison.OrdinalIgnoreCase) &&
                 _participantNames != null &&
-                object.ReferenceEquals(_participantLookupMentionRef, mentionLookup))
+                object.ReferenceEquals(_participantLookupMentionRef, mentionLookup) &&
+                object.ReferenceEquals(_participantLookupRosterRef, chat?.GroupMembers))
             {
                 return;
             }
@@ -171,12 +169,12 @@ namespace Unison.Core.Helpers
             if (!string.IsNullOrWhiteSpace(canonical) &&
                 _rosterByCanonical.TryGetValue(canonical, out member))
             {
-                return member;
+                return HookOnFind(member);
             }
 
             if (_rosterByCanonical.TryGetValue(participantJid, out member))
             {
-                return member;
+                return HookOnFind(member);
             }
 
             return null;
@@ -661,18 +659,15 @@ namespace Unison.Core.Helpers
             }
         }
 
-        private void HookRosterAvatarChanges(IList<GroupMember> members)
+        /// <summary>
+        /// Watches one member's avatar, the first time a bubble resolves to it. Hooking the whole
+        /// roster on open stalled Lumia-class devices with hundreds of subscriptions.
+        /// </summary>
+        private GroupMember HookOnFind(GroupMember member)
         {
-            if (members == null || members.Count == 0)
+            if (member == null)
             {
-                return;
-            }
-
-            // Hundreds of PropertyChanged subscriptions stall Lumia-class devices on group open.
-            // Avatars still land via DisplayNamesUpdated / hydrate paths.
-            if (members.Count > MaxRosterAvatarHooks)
-            {
-                return;
+                return null;
             }
 
             if (_rosterAvatarChangedHandler == null)
@@ -680,20 +675,17 @@ namespace Unison.Core.Helpers
                 _rosterAvatarChangedHandler = OnRosterMemberPropertyChanged;
             }
 
-            var hooked = new List<GroupMember>(members.Count);
-            for (int i = 0; i < members.Count; i++)
+            if (_hookedRosterMembers == null)
             {
-                GroupMember member = members[i];
-                if (member == null)
-                {
-                    continue;
-                }
-
-                member.PropertyChanged += _rosterAvatarChangedHandler;
-                hooked.Add(member);
+                _hookedRosterMembers = new HashSet<GroupMember>();
             }
 
-            _hookedRosterMembers = hooked;
+            if (_hookedRosterMembers.Add(member))
+            {
+                member.PropertyChanged += _rosterAvatarChangedHandler;
+            }
+
+            return member;
         }
 
         private void UnhookRosterAvatarChanges()
@@ -704,13 +696,9 @@ namespace Unison.Core.Helpers
                 return;
             }
 
-            for (int i = 0; i < _hookedRosterMembers.Count; i++)
+            foreach (GroupMember member in _hookedRosterMembers)
             {
-                GroupMember member = _hookedRosterMembers[i];
-                if (member != null)
-                {
-                    member.PropertyChanged -= _rosterAvatarChangedHandler;
-                }
+                member.PropertyChanged -= _rosterAvatarChangedHandler;
             }
 
             _hookedRosterMembers = null;

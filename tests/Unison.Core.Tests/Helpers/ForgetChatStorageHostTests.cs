@@ -137,6 +137,9 @@ namespace Unison.Core.Tests.Helpers
                 return Task.FromResult(0);
             }
 
+            public Task<int> DeleteMessageAsync(IReadOnlyList<string> chatJids, string messageId) =>
+                Task.FromResult(0);
+
             public Task UpsertManyAsync(IReadOnlyList<HistoryMessage> rows) =>
                 Task.CompletedTask;
 

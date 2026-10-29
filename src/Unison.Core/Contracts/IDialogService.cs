@@ -15,6 +15,14 @@ namespace Unison.Core.Contracts
         Dismissed
     }
 
+    /// <summary>Result of the message-delete confirmation (for me / for everyone / cancel).</summary>
+    public enum MessageDeleteChoice
+    {
+        Cancel,
+        ForMe,
+        ForEveryone
+    }
+
     public interface IDialogService
     {
         Task<bool> ShowConfirmAsync(
@@ -22,6 +30,17 @@ namespace Unison.Core.Contracts
             string content,
             string primaryButtonText,
             string closeButtonText);
+
+        /// <summary>
+        /// WhatsApp-style delete prompt. When <paramref name="offerDeleteForEveryone"/> is false,
+        /// only "delete for me" and cancel are shown.
+        /// </summary>
+        Task<MessageDeleteChoice> ShowMessageDeleteAsync(
+            string content,
+            bool offerDeleteForEveryone,
+            string deleteForMeText,
+            string deleteForEveryoneText,
+            string cancelText);
 
         /// <summary>
         /// Same buttons as <see cref="ShowConfirmAsync"/>, but leaving the app

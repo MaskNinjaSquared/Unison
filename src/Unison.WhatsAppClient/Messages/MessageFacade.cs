@@ -2010,6 +2010,126 @@ namespace Unison.WhatsAppClient.Messages
         }
 
         /// <inheritdoc />
+        public async Task DeleteMessageForMeAsync(string chatJid, ChatMessage message)
+        {
+            if (!MessageDeleteEligibility.CanDeleteForMe(message))
+            {
+                return;
+            }
+
+            string canonical = _jids.GetCanonicalJid(
+                string.IsNullOrWhiteSpace(chatJid) ? message.RemoteJid : chatJid);
+            if (string.IsNullOrWhiteSpace(canonical))
+            {
+                return;
+            }
+
+            long timestampSeconds = ToUnixSeconds(message.Timestamp);
+            bool deleteMedia = message.IsImage ||
+                               message.IsVideo ||
+                               message.IsGif ||
+                               message.IsAudio ||
+                               message.IsDocument ||
+                               message.IsSticker;
+
+            if (_wire != null && _wire.CanSendDeleteForMe)
+            {
+                try
+                {
+                    await _wire.DeleteMessageForMeAsync(
+                            canonical,
+                            message.Id,
+                            fromMe: message.IsFromMe,
+                            timestampSeconds,
+                            deleteMedia)
+                        .ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine(
+                        "[MessageFacade] deleteForMe patch failed for " + message.Id + ": " + ex.Message);
+                    _diagnostics?.RecordException(
+                        "messages",
+                        "delete-for-me-patch-failed",
+                        ex,
+                        "messageId=" + message.Id + "; chatJid=" + canonical);
+                }
+            }
+
+            await ApplyAppStateDeleteMessageAsync(canonical, message.Id).ConfigureAwait(false);
+        }
+
+        /// <inheritdoc />
+        public async Task DeleteMessageForEveryoneAsync(
+            string chatJid,
+            ChatMessage message,
+            bool isGroupChat,
+            bool viewerIsGroupAdmin)
+        {
+            if (!MessageDeleteEligibility.CanDeleteForEveryone(
+                    message,
+                    isGroupChat,
+                    viewerIsGroupAdmin,
+                    DateTime.UtcNow))
+            {
+                return;
+            }
+
+            await _resolveConnection().EnsureConnectedAsync().ConfigureAwait(false);
+
+            if (_wire == null || !_wire.CanSendDeleteForEveryone)
+            {
+                throw new InvalidOperationException("Not connected: the message revoke was not sent.");
+            }
+
+            string canonical = _jids.GetCanonicalJid(
+                string.IsNullOrWhiteSpace(chatJid) ? message.RemoteJid : chatJid);
+            if (string.IsNullOrWhiteSpace(canonical))
+            {
+                return;
+            }
+
+            var key = new MessageKey
+            {
+                RemoteJid = string.IsNullOrWhiteSpace(message.RemoteJid)
+                    ? canonical
+                    : JidHelper.Normalize(message.RemoteJid),
+                FromMe = message.IsFromMe,
+                Id = message.Id
+            };
+            if (!string.IsNullOrWhiteSpace(message.ParticipantJid))
+            {
+                key.Participant = message.ParticipantJid;
+            }
+
+            try
+            {
+                await _wire.SendDeleteForEveryoneAsync(canonical, key).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine(
+                    "[MessageFacade] deleteForEveryone failed for " + message.Id + ": " + ex.Message);
+                _diagnostics?.RecordException(
+                    "messages",
+                    "delete-for-everyone-failed",
+                    ex,
+                    "messageId=" + message.Id + "; chatJid=" + canonical);
+                throw;
+            }
+
+            await ApplyIncomingRevocationAsync(canonical, message.Id).ConfigureAwait(false);
+        }
+
+        private static long ToUnixSeconds(DateTime timestamp)
+        {
+            DateTime utc = timestamp.Kind == DateTimeKind.Unspecified
+                ? DateTime.SpecifyKind(timestamp, DateTimeKind.Utc)
+                : timestamp.ToUniversalTime();
+            return new DateTimeOffset(utc).ToUnixTimeSeconds();
+        }
+
+        /// <inheritdoc />
         public async Task<bool> ApplyAppStateDeleteMessageAsync(string chatJid, string messageId)
         {
             string canonical = _jids.GetCanonicalJid(chatJid);
@@ -2030,11 +2150,30 @@ namespace Unison.WhatsAppClient.Messages
             await _boundMutations.RunAsync(() =>
             {
                 ChatMessageCache cache = _chatState.MessagesByChat;
-                if (!cache.TryGet(canonical, out remaining) ||
-                    remaining == null ||
-                    !cache.RemoveMessage(canonical, messageId))
+                IReadOnlyList<string> aliasKeys = GetAliasCacheKeys(canonical);
+                if (aliasKeys.Count == 0)
+                {
+                    aliasKeys = new[] { canonical };
+                }
+
+                for (int i = 0; i < aliasKeys.Count; i++)
+                {
+                    string key = aliasKeys[i];
+                    if (cache.RemoveMessage(key, messageId))
+                    {
+                        removed = true;
+                        cache.TryGet(key, out remaining);
+                    }
+                }
+
+                if (!removed)
                 {
                     return;
+                }
+
+                if (remaining == null)
+                {
+                    remaining = new List<ChatMessage>();
                 }
 
                 AppStateDeleteMessagePreview.RefreshAliasRows(
@@ -2044,22 +2183,46 @@ namespace Unison.WhatsAppClient.Messages
                     _jids.GetCanonicalJid,
                     selfFallback,
                     yesterday);
-                removed = true;
             }).ConfigureAwait(false);
 
-            if (!removed)
-            {
-                return false;
-            }
-
+            // Drop JSON + SQLite history. Sync merges SQL as baseline — leaving the row
+            // there brings the bubble back after ChatMessagesChanged.
             try
             {
                 await _messageStore.DeleteMessageAsync(canonical, messageId).ConfigureAwait(false);
+                removed = true;
             }
             catch (Exception ex)
             {
                 Debug.WriteLine(
-                    "[MessageFacade] Deleting " + messageId + " from storage failed: " + ex.Message);
+                    "[MessageFacade] Deleting " + messageId + " from MessageStore failed: " + ex.Message);
+            }
+
+            try
+            {
+                List<string> historyKeys = ResolveChatKeys(canonical);
+                if (historyKeys.Count == 0)
+                {
+                    historyKeys.Add(canonical);
+                }
+
+                int historyRemoved = await _historyMessageStore
+                    .DeleteMessageAsync(historyKeys, messageId)
+                    .ConfigureAwait(false);
+                if (historyRemoved > 0)
+                {
+                    removed = true;
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine(
+                    "[MessageFacade] Deleting " + messageId + " from history SQLite failed: " + ex.Message);
+            }
+
+            if (!removed)
+            {
+                return false;
             }
 
             NotifyChatMessagesChanged(canonical);
@@ -2885,6 +3048,61 @@ namespace Unison.WhatsAppClient.Messages
             }).ConfigureAwait(false);
         }
 
+        /// <summary>
+        /// The author (and the quoted author) of a group message are members: put them on the
+        /// roster as they speak, so names and badges never wait for the full list.
+        /// </summary>
+        private void NoteIncomingGroupMembers(
+            string groupJid,
+            string authorJid,
+            string authorAltJid,
+            string authorName,
+            string quotedJid,
+            string quotedName,
+            DateTime timestampUtc)
+        {
+            IGroupService groups;
+            try
+            {
+                groups = _resolveGroups();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[MessageFacade] Roster note skipped: " + ex.Message);
+                return;
+            }
+
+            if (groups == null)
+            {
+                return;
+            }
+
+            DateTime observed = MessageTimestampValidity.KeepOrDiscard(timestampUtc, DateTime.UtcNow);
+            if (!string.IsNullOrWhiteSpace(authorJid))
+            {
+                groups.NoteMember(groupJid, new GroupMemberHint
+                {
+                    Jid = authorJid,
+                    AltJid = authorAltJid,
+                    DisplayName = GroupParticipantResolver.IsUsableDisplayLabel(authorName, authorJid) ? authorName : null,
+                    Source = GroupMemberHintSource.Message,
+                    ObservedAtUtc = observed
+                });
+            }
+
+            string quoted = JidHelper.Normalize(quotedJid);
+            if (!string.IsNullOrWhiteSpace(quoted) && !_jids.IsSelfLinked(quoted))
+            {
+                groups.NoteMember(groupJid, new GroupMemberHint
+                {
+                    Jid = quoted,
+                    DisplayName = GroupParticipantResolver.IsUsableDisplayLabel(quotedName, quoted) ? quotedName : null,
+                    Source = GroupMemberHintSource.Quote,
+                    ObservedAtUtc = DateTime.MinValue
+                });
+            }
+        }
+
         /// <inheritdoc />
         public async Task<bool> TryApplyIncomingEnvelopeControlAsync(
             Message message,
@@ -3068,6 +3286,18 @@ namespace Unison.WhatsAppClient.Messages
                 p => _chatState.ResolveDisplayName(p),
                 p => _chatState.ResolveDisplayName(p),
                 selfFallback);
+
+            if (isGroup)
+            {
+                NoteIncomingGroupMembers(
+                    jid,
+                    isActuallyFromMe ? null : participantJid,
+                    participantAltJid,
+                    senderName,
+                    quotedContext.QuotedParticipantJid,
+                    quotedSender,
+                    request.Timestamp);
+            }
 
             ChatMessage chatMessage = GetChatMessage(
                 new ChatMessageMapContext

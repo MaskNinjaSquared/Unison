@@ -30,6 +30,14 @@ namespace Unison.Core.Models
 
         public GroupParticipantRole MyRole { get; set; }
 
+        /// <summary>
+        /// Null when the reply listed no participants (do not change the row).
+        /// True when the signed-in user is on that list. False when participants
+        /// were listed and the account is not among them — Baileys
+        /// <c>chat.readOnly</c> after leave/remove.
+        /// </summary>
+        public bool? SelfIsParticipant { get; set; }
+
         /// <summary>0 when the reply said nothing usable.</summary>
         public int MemberCount { get; set; }
 

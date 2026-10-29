@@ -74,7 +74,16 @@ namespace Unison.Core.ViewModels
                 vm.ReplyRequested += OnBubbleReplyRequested;
                 vm.ForwardRequested -= OnBubbleForwardRequested;
                 vm.ForwardRequested += OnBubbleForwardRequested;
+                vm.DeletedForMe -= OnBubbleDeletedForMe;
+                vm.DeletedForMe += OnBubbleDeletedForMe;
+                vm.AudioPlayPauseRequested -= OnBubbleAudioPlayPauseRequested;
+                vm.AudioPlayPauseRequested += OnBubbleAudioPlayPauseRequested;
+                vm.AudioCycleSpeedRequested -= OnBubbleAudioCycleSpeedRequested;
+                vm.AudioCycleSpeedRequested += OnBubbleAudioCycleSpeedRequested;
+                vm.AudioPlayAtSpeedRequested -= OnBubbleAudioPlayAtSpeedRequested;
+                vm.AudioPlayAtSpeedRequested += OnBubbleAudioPlayAtSpeedRequested;
                 vm.AttachMentionLookup(ActiveChat?.MentionLookup);
+                vm.SetDeleteChatContext(ActiveChat != null && ActiveChat.IsGroupAdmin);
             }
 
             return vm;
@@ -102,6 +111,36 @@ namespace Unison.Core.ViewModels
 
             ReleaseMessageVm(Messages[index]);
             Messages.RemoveAt(index);
+        }
+
+        /// <summary>Drops one bubble after delete-for-me (cache/SQL already updated).</summary>
+        public bool TryRemoveTimelineMessage(ChatMessageViewModel message)
+        {
+            if (message == null)
+            {
+                return false;
+            }
+
+            int index = Messages.IndexOf(message);
+            if (index < 0 && !string.IsNullOrWhiteSpace(message.Id))
+            {
+                for (int i = 0; i < Messages.Count; i++)
+                {
+                    if (string.Equals(Messages[i]?.Id, message.Id, StringComparison.Ordinal))
+                    {
+                        index = i;
+                        break;
+                    }
+                }
+            }
+
+            if (index < 0)
+            {
+                return false;
+            }
+
+            RemoveTimelineAt(index);
+            return true;
         }
 
         /// <summary>Drops oldest rows until <paramref name="maxCount"/> remain (live append / stick-to-bottom).</summary>
@@ -194,6 +233,10 @@ namespace Unison.Core.ViewModels
             vm.PinnedChanged -= OnBubblePinnedChanged;
             vm.ReplyRequested -= OnBubbleReplyRequested;
             vm.ForwardRequested -= OnBubbleForwardRequested;
+            vm.DeletedForMe -= OnBubbleDeletedForMe;
+            vm.AudioPlayPauseRequested -= OnBubbleAudioPlayPauseRequested;
+            vm.AudioCycleSpeedRequested -= OnBubbleAudioCycleSpeedRequested;
+            vm.AudioPlayAtSpeedRequested -= OnBubbleAudioPlayAtSpeedRequested;
             vm.Detach();
         }
 
@@ -211,6 +254,15 @@ namespace Unison.Core.ViewModels
                 "[Forward] OnBubbleForwardRequested id=" +
                 ((sender as ChatMessageViewModel)?.Model?.Id ?? "(null)"));
             BeginForward(sender as ChatMessageViewModel);
+        }
+
+        private void OnBubbleDeletedForMe(object sender, EventArgs e)
+        {
+            TryRemoveTimelineMessage(sender as ChatMessageViewModel);
+            if (ReferenceEquals(SelectedMessage, sender))
+            {
+                DismissMessageActions();
+            }
         }
 
         private ChatMessageViewModel _composerReply;

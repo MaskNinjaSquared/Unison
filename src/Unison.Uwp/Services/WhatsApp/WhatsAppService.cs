@@ -181,7 +181,7 @@ namespace Unison.Uwp.Services.WhatsApp
         private IDeferredAvatarResolution DeferredAvatars =>
             _resolveDeferredAvatars != null ? _resolveDeferredAvatars() : null;
 
-        private IGroupService Groups => _resolveGroups != null ? _resolveGroups() : null;
+        internal IGroupService Groups => _resolveGroups != null ? _resolveGroups() : null;
 
         private IHistoryService History => _resolveHistory != null ? _resolveHistory() : null;
 

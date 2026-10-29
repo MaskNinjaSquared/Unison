@@ -97,6 +97,12 @@ namespace Unison.Core.Contracts
         /// </summary>
         Task<int> DeleteForChatKeysAsync(IReadOnlyList<string> chatJids);
 
+        /// <summary>
+        /// Account-side delete-for-me: remove one message id under every conversation key
+        /// (PN / LID / canonical) plus its reaction rows.
+        /// </summary>
+        Task<int> DeleteMessageAsync(IReadOnlyList<string> chatJids, string messageId);
+
         /// <summary>Local media still on disk. Rows already marked deleted are omitted.</summary>
         Task<IReadOnlyList<CachedMediaEntry>> ListCachedMediaAsync();
 

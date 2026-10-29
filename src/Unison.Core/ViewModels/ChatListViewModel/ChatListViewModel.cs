@@ -163,6 +163,11 @@ namespace Unison.Core.ViewModels
         private static readonly TimeSpan VisibleRefreshDebounceFrugal = TimeSpan.FromMilliseconds(320);
         /// <summary>Longer coalesce after name-apply storms so one refresh covers many titles.</summary>
         private static readonly TimeSpan NamesAppliedRefreshDebounceFrugal = TimeSpan.FromMilliseconds(480);
+        /// <summary>
+        /// Offline SortInPlace / tip Moves that miss incremental apply — one rebuild after quiet,
+        /// not a re-armed debounce per miss (that stacked BuildVisibleRefreshSource on Mobile).
+        /// </summary>
+        private static readonly TimeSpan MoveMissRefreshDebounceFrugal = TimeSpan.FromMilliseconds(720);
         private const int VisibleRefreshMoveBudgetGenerous = 24;
         private const int VisibleRefreshMoveBudgetFrugal = 10;
         /// <summary>Empty VisibleChats → full store: fewer Continue rounds on reattach.</summary>

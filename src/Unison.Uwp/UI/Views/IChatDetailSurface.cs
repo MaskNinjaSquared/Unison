@@ -50,6 +50,10 @@ namespace Unison.Uwp.UI.Views
 
         void OnAudioPlayButtonClick(object sender, RoutedEventArgs e);
 
+        void CycleAudioPlaybackSpeed(ChatMessageViewModel vm);
+
+        void PlayAudioAtSpeed(ChatMessageViewModel vm, AudioPlaybackSpeed speed);
+
         void OnImageOpenButtonClick(object sender, RoutedEventArgs e);
 
         void OnVideoOpenButtonClick(object sender, RoutedEventArgs e);

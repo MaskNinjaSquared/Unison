@@ -305,6 +305,23 @@ namespace Unison.Core.Contracts.WhatsApp
         Task<bool> ApplyAppStateDeleteMessageAsync(string chatJid, string messageId);
 
         /// <summary>
+        /// Delete for this account only (Baileys deleteForMe). Sent or received bubbles.
+        /// Sends the app-state patch when a socket is available, then applies
+        /// <see cref="ApplyAppStateDeleteMessageAsync"/>. No-ops when ineligible.
+        /// </summary>
+        Task DeleteMessageForMeAsync(string chatJid, ChatMessage message);
+
+        /// <summary>
+        /// Revoke for everyone (protocol DeleteContent). Own messages inside the window, or
+        /// someone else's in a group when the viewer is admin. Applies a local tombstone after send.
+        /// </summary>
+        Task DeleteMessageForEveryoneAsync(
+            string chatJid,
+            ChatMessage message,
+            bool isGroupChat,
+            bool viewerIsGroupAdmin);
+
+        /// <summary>
         /// Local message pin / unpin onto the timeline and SQLite (pending hold when the
         /// body is not resident yet). Used by send-pin and inbound pin-in-chat.
         /// </summary>

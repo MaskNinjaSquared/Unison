@@ -1,0 +1,208 @@
+<UserControl
+    x:Class="Unison.Uwp.UI.Controls.ChatStickerBox"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:models="using:Unison.Core.Models"
+    Height="300">
+
+    <!--
+        Complement under the composer. Sequential category list (SemanticZoom jump).
+        ProgressRing covers the list until the catalog finishes its first bind.
+    -->
+    <Grid Background="{ThemeResource ChatDetailInputBarBackgroundBrush}">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="1"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <Border Grid.Row="0"
+                Background="{ThemeResource ChatDetailInputBarTopBorderBrush}"
+                IsHitTestVisible="False"/>
+
+        <Pivot Grid.Row="1"
+               Margin="10,0,0,0"
+               SelectedIndex="0"
+               Background="Transparent">
+            <Pivot.Resources>
+                <Thickness x:Key="PivotItemMargin">0</Thickness>
+                <Style TargetType="PivotHeaderItem">
+                    <Setter Property="FontSize" Value="13"/>
+                    <Setter Property="Height" Value="36"/>
+                    <Setter Property="Padding" Value="5,0,10,0"/>
+                    <Setter Property="Margin" Value="0"/>
+                    <Setter Property="MinWidth" Value="0"/>
+                </Style>
+            </Pivot.Resources>
+            <PivotItem>
+                <PivotItem.Header>
+                    <TextBlock x:Uid="StickerBox_EmojiTab"
+                               Text="Emoji"
+                               FontSize="13"
+                               FontFamily="{StaticResource MainFont}"/>
+                </PivotItem.Header>
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+                    <TextBox x:Name="EmojiSearchBox"
+                             x:Uid="StickerBox_SearchBox"
+                             Grid.Row="0"
+                             Margin="0,6,12,4"
+                             PlaceholderText="Search emoji"
+                             Style="{ThemeResource ChatListSearchTextBoxStyle}"
+                             Text="{Binding EmojiSearchQuery, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                    <Grid Grid.Row="1">
+                        <!-- Stay visible while categories stream in; ProgressRing overlays until the first section lands. -->
+                        <SemanticZoom x:Name="EmojiZoom"
+                                      CanChangeViews="True"
+                                      ViewChangeStarted="EmojiZoom_ViewChangeStarted"
+                                      ViewChangeCompleted="EmojiZoom_ViewChangeCompleted">
+                            <SemanticZoom.ZoomedInView>
+                                <ListView x:Name="EmojiCategoryList"
+                                          SelectionMode="None"
+                                          IsItemClickEnabled="False"
+                                          Background="Transparent"
+                                          Padding="0,0,4,0"
+                                          ScrollViewer.VerticalScrollBarVisibility="Auto"
+                                          ScrollViewer.VerticalScrollMode="Enabled"
+                                          ScrollViewer.HorizontalScrollMode="Disabled"
+                                          ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                          ScrollViewer.IsVerticalScrollChainingEnabled="False">
+                                    <ListView.ItemTemplate>
+                                        <DataTemplate x:DataType="models:EmojiCategory">
+                                            <StackPanel Margin="0,4,0,2">
+                                                <TextBlock Text="{x:Bind Title}"
+                                                           FontSize="11"
+                                                           FontFamily="{StaticResource MainFont}"
+                                                           Foreground="{ThemeResource ChatDetailMutedTextBrush}"
+                                                           Margin="0,0,8,2"
+                                                           Tapped="CategoryHeader_Tapped"/>
+                                                <ItemsControl ItemsSource="{Binding Glyphs}">
+                                                    <ItemsControl.ItemsPanel>
+                                                        <ItemsPanelTemplate>
+                                                            <WrapGrid Orientation="Horizontal"
+                                                                      ItemWidth="40"
+                                                                      ItemHeight="40"/>
+                                                        </ItemsPanelTemplate>
+                                                    </ItemsControl.ItemsPanel>
+                                                    <ItemsControl.ItemTemplate>
+                                                        <DataTemplate x:DataType="x:String">
+                                                            <Border Width="40" Height="40"
+                                                                    Background="Transparent"
+                                                                    Tapped="EmojiGlyph_Tapped">
+                                                                <TextBlock Text="{x:Bind}"
+                                                                           Style="{x:Null}"
+                                                                           FontSize="26"
+                                                                           FontFamily="{StaticResource EmojiFont}"
+                                                                           IsColorFontEnabled="True"
+                                                                           HorizontalAlignment="Center"
+                                                                           VerticalAlignment="Center"
+                                                                           IsHitTestVisible="False"/>
+                                                            </Border>
+                                                        </DataTemplate>
+                                                    </ItemsControl.ItemTemplate>
+                                                </ItemsControl>
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </ListView.ItemTemplate>
+                                    <ListView.ItemContainerStyle>
+                                        <Style TargetType="ListViewItem">
+                                            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                                            <Setter Property="Padding" Value="0"/>
+                                            <Setter Property="MinHeight" Value="0"/>
+                                        </Style>
+                                    </ListView.ItemContainerStyle>
+                                </ListView>
+                            </SemanticZoom.ZoomedInView>
+                            <SemanticZoom.ZoomedOutView>
+                                <GridView x:Name="EmojiJumpList"
+                                          SelectionMode="None"
+                                          IsItemClickEnabled="True"
+                                          ItemClick="EmojiJump_ItemClick"
+                                          HorizontalAlignment="Center"
+                                          VerticalAlignment="Center"
+                                          Background="Transparent"
+                                          ScrollViewer.IsHorizontalScrollChainingEnabled="False"
+                                          ScrollViewer.IsVerticalScrollChainingEnabled="False">
+                                    <GridView.ItemsPanel>
+                                        <ItemsPanelTemplate>
+                                            <ItemsWrapGrid Orientation="Horizontal"
+                                                           MaximumRowsOrColumns="4"
+                                                           HorizontalAlignment="Center"/>
+                                        </ItemsPanelTemplate>
+                                    </GridView.ItemsPanel>
+                                    <GridView.ItemContainerStyle>
+                                        <Style TargetType="GridViewItem">
+                                            <Setter Property="HorizontalContentAlignment" Value="Center"/>
+                                            <Setter Property="VerticalContentAlignment" Value="Center"/>
+                                            <Setter Property="Margin" Value="0"/>
+                                            <Setter Property="Padding" Value="0"/>
+                                            <Setter Property="MinWidth" Value="0"/>
+                                            <Setter Property="MinHeight" Value="0"/>
+                                        </Style>
+                                    </GridView.ItemContainerStyle>
+                                    <GridView.ItemTemplate>
+                                        <DataTemplate x:DataType="models:EmojiCategory">
+                                            <Border Width="56" Height="56" Margin="4"
+                                                    Background="{ThemeResource SystemControlHighlightAccentBrush}"
+                                                    ToolTipService.ToolTip="{x:Bind Title}">
+                                                <FontIcon Glyph="{x:Bind JumpGlyph}"
+                                                          FontFamily="{x:Bind JumpUsesUnisonFont, Converter={StaticResource EmojiJumpFontConverter}}"
+                                                          FontSize="{x:Bind JumpFontSize}"
+                                                          Foreground="White"
+                                                          HorizontalAlignment="Center"
+                                                          VerticalAlignment="Center"/>
+                                            </Border>
+                                        </DataTemplate>
+                                    </GridView.ItemTemplate>
+                                </GridView>
+                            </SemanticZoom.ZoomedOutView>
+                        </SemanticZoom>
+
+                        <ProgressRing Width="36"
+                                      Height="36"
+                                      IsActive="{Binding IsEmojiCatalogLoading}"
+                                      Visibility="{Binding IsEmojiCatalogLoading, Converter={StaticResource BooleanToVisibilityConverter}}"
+                                      Foreground="{ThemeResource ChatDetailAccentBrush}"
+                                      HorizontalAlignment="Center"
+                                      VerticalAlignment="Center"
+                                      Canvas.ZIndex="1"/>
+                    </Grid>
+                </Grid>
+            </PivotItem>
+
+            <PivotItem>
+                <PivotItem.Header>
+                    <TextBlock x:Uid="StickerBox_GifTab"
+                               Text="GIF"
+                               FontSize="13"
+                               FontFamily="{StaticResource MainFont}"/>
+                </PivotItem.Header>
+                <TextBlock x:Uid="StickerBox_GifSoon"
+                           Text="GIFs coming soon"
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Center"
+                           Foreground="{ThemeResource ChatDetailMutedTextBrush}"
+                           FontFamily="{StaticResource MainFont}"
+                           FontSize="14"/>
+            </PivotItem>
+
+            <PivotItem>
+                <PivotItem.Header>
+                    <TextBlock x:Uid="StickerBox_StickerTab"
+                               Text="Stickers"
+                               FontSize="13"
+                               FontFamily="{StaticResource MainFont}"/>
+                </PivotItem.Header>
+                <TextBlock x:Uid="StickerBox_StickerSoon"
+                           Text="Stickers coming soon"
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Center"
+                           Foreground="{ThemeResource ChatDetailMutedTextBrush}"
+                           FontFamily="{StaticResource MainFont}"
+                           FontSize="14"/>
+            </PivotItem>
+        </Pivot>
+    </Grid>
+</UserControl>

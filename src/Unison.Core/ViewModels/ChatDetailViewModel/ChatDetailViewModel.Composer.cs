@@ -31,6 +31,8 @@ namespace Unison.Core.ViewModels
             (StartRecordingCommand as RelayCommand)?.RaiseCanExecuteChanged();
             (CancelRecordingCommand as RelayCommand)?.RaiseCanExecuteChanged();
             (SendRecordingCommand as RelayCommand)?.RaiseCanExecuteChanged();
+            (ToggleStickerBoxCommand as RelayCommand)?.RaiseCanExecuteChanged();
+            (InsertEmojiCommand as RelayCommand<string>)?.RaiseCanExecuteChanged();
         }
 
         private void RaiseSendMessageCanExecuteChanged() =>
@@ -78,6 +80,7 @@ namespace Unison.Core.ViewModels
                     _mentions.SetText(_messageText);
                 }
 
+                RecordSentEmojis(text);
                 MessageSent?.Invoke(this, EventArgs.Empty);
                 _uiSounds?.PlayMessageSent();
                 LogSend("text-ok", "jid=" + jid);

@@ -38,6 +38,14 @@ namespace Unison.Uwp.UI.Helpers
                 "\uEA54",
                 vm.ForwardCommand,
                 useMdl2: true));
+
+            if (vm.DeleteCommand != null && vm.DeleteCommand.CanExecute(null))
+            {
+                flyout.Items.Add(Item(
+                    LocalizedStrings.Get("ChatDetail_Delete", "Delete"),
+                    "\uE74D",
+                    vm.DeleteCommand));
+            }
         }
 
         private static MenuFlyoutItem Item(

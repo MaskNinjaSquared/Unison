@@ -23,6 +23,7 @@
                      Visibility="Collapsed"/>
             <Button x:Name="PlayButton"
                     Click="PlayPause_Click"
+                    Holding="PlayButton_Holding"
                     Style="{StaticResource WhatsAppIconButtonStyle}"
                     Padding="0"
                     MinWidth="36" MinHeight="36"
@@ -79,19 +80,43 @@
                            FontSize="16"
                            Foreground="{Binding GlyphForeground, ElementName=Root}"/>
             </Button>
-            <TextBlock x:Name="TimestampText"
-                       Text="0:00"
-                       FontSize="12"
-                       FontFamily="{StaticResource MainFont}"
-                       VerticalAlignment="Center"
-                       HorizontalAlignment="Right"
-                       MaxWidth="48"
-                       TextWrapping="NoWrap"
-                       TextTrimming="CharacterEllipsis"
-                       MaxLines="1"
-                       TextAlignment="Right"
-                       Visibility="Collapsed"
-                       Foreground="{Binding GlyphForeground, ElementName=Root}"/>
+            <Button x:Name="SpeedButton"
+                    Click="Speed_Click"
+                    Style="{StaticResource WhatsAppIconButtonStyle}"
+                    Padding="2,0"
+                    MinWidth="36"
+                    MinHeight="28"
+                    HorizontalAlignment="Right"
+                    Visibility="Collapsed"
+                    AutomationProperties.Name="Playback speed">
+                <StackPanel>
+                    <TextBlock x:Name="TimestampText"
+                               Text="0:00"
+                               FontSize="12"
+                               FontFamily="{StaticResource MainFont}"
+                               HorizontalAlignment="Center"
+                               MaxWidth="56"
+                               TextWrapping="NoWrap"
+                               TextTrimming="CharacterEllipsis"
+                               MaxLines="1"
+                               Foreground="{Binding GlyphForeground, ElementName=Root}"/>
+                    <Border x:Name="SpeedBadge"
+                            CornerRadius="9"
+                            BorderThickness="1"
+                            Padding="6,1"
+                            Margin="0,2,0,0"
+                            HorizontalAlignment="Center"
+                            Background="Transparent"
+                            BorderBrush="{Binding GlyphForeground, ElementName=Root}">
+                        <TextBlock x:Name="SpeedText"
+                                   Text="x1"
+                                   FontSize="10"
+                                   FontFamily="{StaticResource MainFont}"
+                                   HorizontalAlignment="Center"
+                                   Foreground="{Binding GlyphForeground, ElementName=Root}"/>
+                    </Border>
+                </StackPanel>
+            </Button>
         </Grid>
     </Grid>
 </UserControl>

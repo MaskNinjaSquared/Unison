@@ -23,6 +23,8 @@
                         <Setter Target="MoreButton.Foreground" Value="{ThemeResource ChatDetailReceivedTextBrush}"/>
                         <Setter Target="ReadyLabel.Foreground" Value="{ThemeResource ChatDetailReceivedTextBrush}"/>
                         <Setter Target="TimestampText.Foreground" Value="{ThemeResource ChatDetailReceivedTextBrush}"/>
+                        <Setter Target="SpeedText.Foreground" Value="{ThemeResource ChatDetailReceivedTextBrush}"/>
+                        <Setter Target="SpeedBadge.BorderBrush" Value="{ThemeResource ChatDetailReceivedTextBrush}"/>
                         <Setter Target="PositionSlider.Foreground" Value="{ThemeResource ChatDetailReceivedAudioSliderFillBrush}"/>
                     </VisualState.Setters>
                 </VisualState>
@@ -35,6 +37,8 @@
                         <Setter Target="MoreButton.Foreground" Value="{ThemeResource ChatDetailSentTextBrush}"/>
                         <Setter Target="ReadyLabel.Foreground" Value="{ThemeResource ChatDetailSentTextBrush}"/>
                         <Setter Target="TimestampText.Foreground" Value="{ThemeResource ChatDetailSentTextBrush}"/>
+                        <Setter Target="SpeedText.Foreground" Value="{ThemeResource ChatDetailSentTextBrush}"/>
+                        <Setter Target="SpeedBadge.BorderBrush" Value="{ThemeResource ChatDetailSentTextBrush}"/>
                         <Setter Target="PositionSlider.Foreground" Value="{ThemeResource ChatDetailSentAudioSliderFillBrush}"/>
                     </VisualState.Setters>
                 </VisualState>
@@ -50,6 +54,7 @@
         <Grid VerticalAlignment="Center" Margin="0,0,6,0" Width="30" Height="30">
             <Button x:Name="PlayButton"
                     Click="PlayPause_Click"
+                    Holding="PlayButton_Holding"
                     Style="{StaticResource UnisonMediaCircleButtonStyle}"
                     Width="30"
                     Height="30"
@@ -111,19 +116,43 @@
                            FontSize="16"
                            Foreground="{Binding Foreground, ElementName=MoreButton}"/>
             </Button>
-            <TextBlock x:Name="TimestampText"
-                       Text="0:00"
-                       FontSize="12"
-                       FontFamily="{StaticResource MainFont}"
-                       VerticalAlignment="Center"
-                       HorizontalAlignment="Right"
-                       MaxWidth="48"
-                       TextWrapping="NoWrap"
-                       TextTrimming="CharacterEllipsis"
-                       MaxLines="1"
-                       TextAlignment="Right"
-                       Visibility="Collapsed"
-                       Foreground="{ThemeResource ChatDetailReceivedTextBrush}"/>
+            <Button x:Name="SpeedButton"
+                    Click="Speed_Click"
+                    Style="{StaticResource WhatsAppIconButtonStyle}"
+                    Padding="2,0"
+                    MinWidth="36"
+                    MinHeight="28"
+                    HorizontalAlignment="Right"
+                    Visibility="Collapsed"
+                    AutomationProperties.Name="Playback speed">
+                <StackPanel>
+                    <TextBlock x:Name="TimestampText"
+                               Text="0:00"
+                               FontSize="12"
+                               FontFamily="{StaticResource MainFont}"
+                               HorizontalAlignment="Center"
+                               MaxWidth="56"
+                               TextWrapping="NoWrap"
+                               TextTrimming="CharacterEllipsis"
+                               MaxLines="1"
+                               Foreground="{ThemeResource ChatDetailReceivedTextBrush}"/>
+                    <Border x:Name="SpeedBadge"
+                            CornerRadius="9"
+                            BorderThickness="1"
+                            Padding="6,1"
+                            Margin="0,2,0,0"
+                            HorizontalAlignment="Center"
+                            Background="Transparent"
+                            BorderBrush="{ThemeResource ChatDetailReceivedTextBrush}">
+                        <TextBlock x:Name="SpeedText"
+                                   Text="x1"
+                                   FontSize="10"
+                                   FontFamily="{StaticResource MainFont}"
+                                   HorizontalAlignment="Center"
+                                   Foreground="{ThemeResource ChatDetailReceivedTextBrush}"/>
+                    </Border>
+                </StackPanel>
+            </Button>
         </Grid>
     </Grid>
 </UserControl>

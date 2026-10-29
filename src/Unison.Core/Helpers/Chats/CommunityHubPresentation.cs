@@ -91,6 +91,64 @@ namespace Unison.Core.Helpers
         }
 
         /// <summary>
+        /// When a linked subgroup tip is newer than the hub strip, copy it onto the hub so
+        /// catalogue/visible order can rise without a full CommunityListProjector pass.
+        /// Returns true when the hub tip changed.
+        /// </summary>
+        public static bool ApplyTipIfNewer(ChatItem hub, ChatItem member, IStringResources strings = null)
+        {
+            if (hub == null || member == null)
+            {
+                return false;
+            }
+
+            DateTime memberTs = member.LastMessageTimestampUtc ?? DateTime.MinValue;
+            DateTime hubTs = hub.LastMessageTimestampUtc ?? DateTime.MinValue;
+            if (memberTs == DateTime.MinValue || memberTs < hubTs)
+            {
+                return false;
+            }
+
+            if (memberTs == hubTs &&
+                string.Equals(hub.LastMessageId, member.LastMessageId, StringComparison.Ordinal))
+            {
+                return false;
+            }
+
+            hub.LastMessage = member.LastMessage;
+            hub.LastMessageIsFromMe = member.LastMessageIsFromMe;
+            hub.LastMessageSenderName = member.LastMessageSenderName;
+            hub.LastMessageParticipantJid = member.LastMessageParticipantJid;
+            hub.LastMessageKind = member.LastMessageKind;
+            hub.LastMessageSendState = member.LastMessageSendState;
+            hub.LastMessageMentionedJids = member.LastMessageMentionedJids;
+            hub.LastMessageTimestampUtc = member.LastMessageTimestampUtc;
+            hub.LastMessageId = member.LastMessageId;
+            hub.Timestamp = member.Timestamp;
+
+            string groupLabel = member.GetNameResolved(strings);
+            if (string.IsNullOrWhiteSpace(groupLabel))
+            {
+                groupLabel = (member.Name ?? string.Empty).Trim();
+            }
+
+            if (string.IsNullOrEmpty(groupLabel))
+            {
+                hub.LastMessageAuthor = member.LastMessageAuthor;
+                hub.LastPreview.AuthorDetail = string.Empty;
+                hub.LastPreview.ShowAuthorChevron = false;
+            }
+            else
+            {
+                hub.LastMessageAuthor = groupLabel;
+                hub.LastPreview.AuthorDetail = member.LastMessageAuthor ?? string.Empty;
+                hub.LastPreview.ShowAuthorChevron = true;
+            }
+
+            return true;
+        }
+
+        /// <summary>
         /// Copies a usable hub <see cref="ChatItem.Name"/> onto each member as
         /// <see cref="ChatItem.LinkedParentDisplayName"/> for chat-detail headers.
         /// </summary>

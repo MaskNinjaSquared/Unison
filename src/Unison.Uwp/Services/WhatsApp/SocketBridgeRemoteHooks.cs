@@ -21,6 +21,7 @@ namespace Unison.Uwp.Services.WhatsApp
             IChatService chatFacade,
             IContactService contacts,
             IMessageService messages,
+            IGroupService groups,
             Func<string, string, Task<global::Proto.Message>> resolveSentMessage)
         {
             if (bridge == null)
@@ -60,6 +61,11 @@ namespace Unison.Uwp.Services.WhatsApp
                 messages != null
                     ? messages.NotifyGroupJoinsAsync(joins)
                     : Task.CompletedTask;
+            bridge.GroupSelfMembershipChanged = (groupJid, participantJids, stillMember) =>
+                groups != null
+                    ? groups.NoteSelfGroupMembershipAsync(groupJid, participantJids, stillMember)
+                    : Task.CompletedTask;
+            bridge.GroupRosterEventReceived = change => groups?.ApplyRosterEvent(change);
             bridge.ChatDeleted = jid =>
                 chatFacade != null
                     ? chatFacade.ApplyAppStateDeleteChatAsync(jid)

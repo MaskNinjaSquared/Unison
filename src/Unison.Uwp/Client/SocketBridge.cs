@@ -285,6 +285,19 @@ namespace Unison.Uwp.Client
         /// </summary>
         public Func<IReadOnlyList<GroupJoinNotifyRequest>, Task> GroupParticipantsJoined { get; set; }
 
+        /// <summary>
+        /// <c>w:gp2</c> add/remove whose participant list may include this account.
+        /// The façade decides whether any JID is self (Baileys <c>chat.readOnly</c>).
+        /// Args: group JID, participant JIDs (and phone aliases), still a member.
+        /// </summary>
+        public Func<string, IReadOnlyList<string>, bool, Task> GroupSelfMembershipChanged { get; set; }
+
+        /// <summary>
+        /// Every <c>w:gp2</c> participants change (add / remove / promote / demote / modify),
+        /// so the roster updates only the people it names.
+        /// </summary>
+        public Action<Unison.Core.Models.GroupRosterEvent> GroupRosterEventReceived { get; set; }
+
         /// <summary>A chat was deleted on another device.</summary>
         public Func<string, Task> ChatDeleted { get; set; }
 
@@ -1178,6 +1191,25 @@ namespace Unison.Uwp.Client
         }
 
         /// <summary>
+        /// Deletes one message for this account only. Other parties keep their copy.
+        /// </summary>
+        public Task DeleteMessageForMeAsync(
+            string jid,
+            string messageId,
+            bool fromMe,
+            long messageTimestampUnixSeconds,
+            bool deleteMedia = false)
+        {
+            return RequireAppState().Patch.ExecuteAsync(
+                AppStatePatchFactory.DeleteMessageForMe(
+                    jid,
+                    messageId,
+                    fromMe,
+                    messageTimestampUnixSeconds,
+                    deleteMedia));
+        }
+
+        /// <summary>
         /// The id we encode app-state writes with. RC14 reads this off creds.myAppStateKeyId;
         /// without it a pin patch cannot be built and the UI change is reverted.
         /// </summary>
@@ -1400,6 +1432,26 @@ namespace Unison.Uwp.Client
             };
 
             return SendAsync(jid, new PinContent(key, pin, (int)durationSeconds), null);
+        }
+
+        public Task<string> SendDeleteMessageAsync(
+            string jid,
+            global::Proto.MessageKey targetKey)
+        {
+            if (targetKey == null || string.IsNullOrWhiteSpace(targetKey.Id))
+            {
+                throw new ArgumentException("A valid target message key is required", nameof(targetKey));
+            }
+
+            var key = new MessageEnvelopeKey
+            {
+                Id = targetKey.Id,
+                RemoteJid = string.IsNullOrEmpty(targetKey.RemoteJid) ? jid : targetKey.RemoteJid,
+                FromMe = targetKey.FromMe,
+                Participant = targetKey.Participant
+            };
+
+            return SendAsync(jid, new DeleteContent(key), null);
         }
 
         public Task<string> RequestHistorySyncOnDemandAsync(
@@ -2089,7 +2141,9 @@ namespace Unison.Uwp.Client
             }
 
             await ApplyGroupNamesAsync(batch).ConfigureAwait(false);
+            ApplyGroupRosterEvent(batch);
             await ApplyGroupParticipantsJoinedAsync(batch).ConfigureAwait(false);
+            await ApplyGroupSelfMembershipAsync(batch).ConfigureAwait(false);
 
             IList<string> deletedChats;
             var chatDeleted = ChatDeleted;
@@ -2176,6 +2230,39 @@ namespace Unison.Uwp.Client
             }
         }
 
+        private void ApplyGroupRosterEvent(WaEventBatch batch)
+        {
+            var received = GroupRosterEventReceived;
+            GroupParticipantsUpdate update;
+            if (received == null ||
+                !batch.TryGet(WaEventKind.GroupParticipantsUpdate, out update) ||
+                update == null ||
+                string.IsNullOrWhiteSpace(update.Id) ||
+                update.Participants == null ||
+                update.Participants.Count == 0)
+            {
+                return;
+            }
+
+            var participants = new List<Unison.Core.Models.GroupRosterEventParticipant>(update.Participants.Count);
+            foreach (string jid in update.Participants)
+            {
+                string phone = null;
+                if (update.ParticipantPhones != null)
+                {
+                    update.ParticipantPhones.TryGetValue(jid, out phone);
+                }
+
+                participants.Add(new Unison.Core.Models.GroupRosterEventParticipant(jid, phone));
+            }
+
+            received(new Unison.Core.Models.GroupRosterEvent(
+                update.Id,
+                (Unison.Core.Models.GroupRosterEventKind)(int)update.Action,
+                participants,
+                DateTime.UtcNow));
+        }
+
         /// <summary>
         /// <c>w:gp2</c> <c>add</c> only — synthesize GroupJoin timeline lines. Other actions
         /// (remove / promote / …) stay event-only until their kinds exist.
@@ -2212,6 +2299,60 @@ namespace Unison.Uwp.Client
             }
 
             await joined(requests).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// Leave/remove and add. Baileys sets <c>chat.readOnly</c> when the account
+        /// is in the participant list; the façade ignores everyone else's events.
+        /// </summary>
+        private async Task ApplyGroupSelfMembershipAsync(WaEventBatch batch)
+        {
+            var changed = GroupSelfMembershipChanged;
+            if (changed == null)
+            {
+                return;
+            }
+
+            GroupParticipantsUpdate update;
+            if (!batch.TryGet(WaEventKind.GroupParticipantsUpdate, out update) ||
+                update == null ||
+                string.IsNullOrWhiteSpace(update.Id) ||
+                (update.Action != GroupParticipantAction.Add &&
+                 update.Action != GroupParticipantAction.Remove))
+            {
+                return;
+            }
+
+            var jids = new List<string>();
+            if (update.Participants != null)
+            {
+                for (int i = 0; i < update.Participants.Count; i++)
+                {
+                    if (!string.IsNullOrWhiteSpace(update.Participants[i]))
+                    {
+                        jids.Add(update.Participants[i]);
+                    }
+                }
+            }
+
+            if (update.ParticipantPhones != null)
+            {
+                foreach (var phone in update.ParticipantPhones.Values)
+                {
+                    if (!string.IsNullOrWhiteSpace(phone))
+                    {
+                        jids.Add(phone);
+                    }
+                }
+            }
+
+            if (jids.Count == 0)
+            {
+                return;
+            }
+
+            await changed(update.Id, jids, update.Action == GroupParticipantAction.Add)
+                .ConfigureAwait(false);
         }
 
         // -- Plumbing --------------------------------------------------------

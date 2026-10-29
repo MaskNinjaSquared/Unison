@@ -92,7 +92,8 @@
             <SolidColorBrush x:Key="ChatListUnreadBadgeBrush" Color="#FF04564A"/>
             <SolidColorBrush x:Key="ChatListSyncStatusBrush" Color="#FF04564A"/>
             <SolidColorBrush x:Key="ChatDetailAccentBrush" Color="#FF04564A"/>
-            <SolidColorBrush x:Key="ChatDetailInfoBackgroundBrush" Color="#FF04564A"/>
+            <!-- Info pane: black plate + light ink (command bar stays green). -->
+            <SolidColorBrush x:Key="ChatDetailInfoBackgroundBrush" Color="#FF000000"/>
             <SolidColorBrush x:Key="ChatDetailInfoLabelBrush" Color="#FFFFFFFF"/>
             <SolidColorBrush x:Key="ChatDetailInfoValueBrush" Color="#FF1DAA61"/>
             <SolidColorBrush x:Key="ChatDetailInfoPaneBodyBrush" Color="#FFFFFFFF"/>
@@ -171,7 +172,8 @@
             <SolidColorBrush x:Key="ChatListUnreadBadgeBrush" Color="#FF04564A"/>
             <SolidColorBrush x:Key="ChatListSyncStatusBrush" Color="#FF04564A"/>
             <SolidColorBrush x:Key="ChatDetailAccentBrush" Color="#FF04564A"/>
-            <SolidColorBrush x:Key="ChatDetailInfoBackgroundBrush" Color="#FF04564A"/>
+            <!-- Info pane: black plate + light ink (command bar stays green). -->
+            <SolidColorBrush x:Key="ChatDetailInfoBackgroundBrush" Color="#FF000000"/>
             <SolidColorBrush x:Key="ChatDetailInfoLabelBrush" Color="#FFFFFFFF"/>
             <SolidColorBrush x:Key="ChatDetailInfoValueBrush" Color="#FF1DAA61"/>
             <SolidColorBrush x:Key="ChatDetailInfoPaneBodyBrush" Color="#FFFFFFFF"/>

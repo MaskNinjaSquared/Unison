@@ -2,7 +2,7 @@
 // NotificationDisplayLabel
 //
 // Toast / badge title and group author: prefer a resolved person name over a
-// bare JID / @lid. Strips the unsaved "~" marker (toast is not the list strip).
+// bare JID / @lid. Unsaved (push-name) contacts keep the WhatsApp "~ Name" mark.
 // =============================================================================
 using Unison.Core.Helpers.Groups;
 
@@ -35,21 +35,22 @@ namespace Unison.Core.Helpers.Notifications
         /// <summary>
         /// Picks a toast-safe label: resolved name first, then a usable current label,
         /// then phone digits / JID fallback (same order as group-join lines).
+        /// Unsaved push-name winners keep <c>~ Name</c>.
         /// </summary>
         public static string Prefer(string resolvedDisplayName, string currentLabel, string lookupJid)
         {
             bool isGroup = JidHelper.IsGroupJid(lookupJid);
 
-            string resolved = DisplayNameResolution.StripContactIndicator(resolvedDisplayName);
-            if (IsUsableToastLabel(resolved, lookupJid, isGroup))
+            string toast = PreferUsable(resolvedDisplayName, lookupJid, isGroup);
+            if (toast != null)
             {
-                return resolved.Trim();
+                return toast;
             }
 
-            string current = DisplayNameResolution.StripContactIndicator(currentLabel);
-            if (IsUsableToastLabel(current, lookupJid, isGroup))
+            toast = PreferUsable(currentLabel, lookupJid, isGroup);
+            if (toast != null)
             {
-                return current.Trim();
+                return toast;
             }
 
             // Groups: never toast the numeric id / bare JID — Prefer would otherwise treat
@@ -62,18 +63,41 @@ namespace Unison.Core.Helpers.Notifications
             // Do not scrape digits out of an @lid / @s.whatsapp.net label — that yields the
             // LID user id, not a phone. Prefer the lookup JID's PN user part when present.
             string phone = null;
-            if (!string.IsNullOrWhiteSpace(current) && current.IndexOf('@') < 0)
+            string currentBare = DisplayNameResolution.StripContactIndicator(currentLabel);
+            if (!string.IsNullOrWhiteSpace(currentBare) && currentBare.IndexOf('@') < 0)
             {
-                phone = PhoneNumberHelper.NormalizePhoneDigits(current);
+                phone = PhoneNumberHelper.NormalizePhoneDigits(currentBare);
             }
 
             if (string.IsNullOrEmpty(phone))
             {
                 phone = JidHelper.TryPhoneFromJid(lookupJid)
-                    ?? JidHelper.TryPhoneFromJid(current);
+                    ?? JidHelper.TryPhoneFromJid(currentBare);
             }
 
-            return GroupJoinDisplayLabel.Pick(resolved, phone, lookupJid);
+            return GroupJoinDisplayLabel.Pick(
+                DisplayNameResolution.StripContactIndicator(resolvedDisplayName),
+                phone,
+                lookupJid);
+        }
+
+        private static string PreferUsable(string label, string lookupJid, bool isGroup)
+        {
+            if (string.IsNullOrWhiteSpace(label))
+            {
+                return null;
+            }
+
+            bool marked = DisplayNameResolution.HasUnsavedContactMark(label);
+            string bare = DisplayNameResolution.StripContactIndicator(label);
+            if (!IsUsableToastLabel(bare, lookupJid, isGroup))
+            {
+                return null;
+            }
+
+            return marked
+                ? DisplayNameResolution.FormatUnsavedContactLabel(bare)
+                : bare.Trim();
         }
 
         private static bool IsUsableToastLabel(string label, string lookupJid, bool isGroup)

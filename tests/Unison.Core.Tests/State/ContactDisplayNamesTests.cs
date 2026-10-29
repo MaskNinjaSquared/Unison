@@ -96,7 +96,7 @@ namespace Unison.Core.Tests.State
         {
             _pushNames.Set(Ana, "aninha");
 
-            Assert.Equal("~aninha", Build().Resolve(Ana, "strip"));
+            Assert.Equal("~ aninha", Build().Resolve(Ana, "strip"));
             Assert.Equal("aninha", Build().Resolve(Ana, "sender"));
         }
 
@@ -211,6 +211,12 @@ namespace Unison.Core.Tests.State
                 Task.FromResult<IReadOnlyList<Person>>(new List<Person>());
 
             public Task ReplaceGroupMembershipsAsync(string groupJid, IReadOnlyList<PersonGroupMembership> members) =>
+                Task.CompletedTask;
+
+            public Task UpsertGroupMembershipsAsync(string groupJid, IReadOnlyList<PersonGroupMembership> members) =>
+                Task.CompletedTask;
+
+            public Task RemoveGroupMembershipsAsync(string groupJid, IReadOnlyList<string> personJids) =>
                 Task.CompletedTask;
 
             public Task<IReadOnlyList<PersonGroupMembership>> ListGroupsForPersonAsync(string personJid) =>

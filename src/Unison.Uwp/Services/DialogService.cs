@@ -70,6 +70,69 @@ namespace Unison.Uwp.Services
             }
         }
 
+        public async Task<MessageDeleteChoice> ShowMessageDeleteAsync(
+            string content,
+            bool offerDeleteForEveryone,
+            string deleteForMeText,
+            string deleteForEveryoneText,
+            string cancelText)
+        {
+            try
+            {
+                string forMe = string.IsNullOrWhiteSpace(deleteForMeText)
+                    ? "Delete for me"
+                    : deleteForMeText;
+                string forEveryone = string.IsNullOrWhiteSpace(deleteForEveryoneText)
+                    ? "Delete for everyone"
+                    : deleteForEveryoneText;
+                string cancel = string.IsNullOrWhiteSpace(cancelText) ? "Cancel" : cancelText;
+
+                var dialog = new ContentDialog
+                {
+                    Content = content ?? string.Empty,
+                    CloseButtonText = cancel
+                };
+
+                if (offerDeleteForEveryone)
+                {
+                    // WhatsApp order: for everyone (primary) → for me (secondary) → cancel.
+                    dialog.PrimaryButtonText = forEveryone;
+                    dialog.SecondaryButtonText = forMe;
+                }
+                else
+                {
+                    dialog.PrimaryButtonText = forMe;
+                }
+
+                ContentDialogResult result = await dialog.ShowAsync();
+                if (result == ContentDialogResult.Primary)
+                {
+                    return offerDeleteForEveryone
+                        ? MessageDeleteChoice.ForEveryone
+                        : MessageDeleteChoice.ForMe;
+                }
+
+                if (result == ContentDialogResult.Secondary && offerDeleteForEveryone)
+                {
+                    return MessageDeleteChoice.ForMe;
+                }
+
+                return MessageDeleteChoice.Cancel;
+            }
+            catch (System.Runtime.InteropServices.COMException ex)
+                when (ex.Message.Contains("single ContentDialog") ||
+                      ex.HResult == unchecked((int)0x80070057))
+            {
+                System.Diagnostics.Debug.WriteLine("[DialogService] Another dialog is already open.");
+                return MessageDeleteChoice.Cancel;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine("[DialogService] ShowMessageDeleteAsync: " + ex.Message);
+                return MessageDeleteChoice.Cancel;
+            }
+        }
+
         public async Task ShowMessageAsync(string title, string content, string closeButtonText)
         {
             try

@@ -114,6 +114,14 @@ namespace Unison.Uwp.UI.Helpers
             return (string)element.GetValue(LinkBrushKeyProperty);
         }
 
+        /// <summary>What the block last rendered (resolved text + link brush key).</summary>
+        private static readonly DependencyProperty RenderedSignatureProperty =
+            DependencyProperty.RegisterAttached(
+                "RenderedSignature",
+                typeof(string),
+                typeof(CommentRichService),
+                new PropertyMetadata(null));
+
         private static void OnTextOrMentionsChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
         {
             var block = d as RichTextBlock;
@@ -122,11 +130,22 @@ namespace Unison.Uwp.UI.Helpers
                 return;
             }
 
-            Apply(
-                block,
-                GetText(block),
-                GetMentionedJids(block) as IEnumerable<string>,
-                GetMentionLookup(block) as IReadOnlyDictionary<string, string>);
+            string text = GetText(block);
+            var mentionedJids = GetMentionedJids(block) as IEnumerable<string>;
+            var lookup = GetMentionLookup(block) as IReadOnlyDictionary<string, string>;
+
+            // Roster flushes bump lookup + refresh key together; re-rendering identical runs
+            // (Blocks.Clear) is what made every mention bubble blink.
+            string signature = (GetLinkBrushKey(block) ?? string.Empty) + "\u0001" +
+                FormatMentionsPlain(text, mentionedJids, lookup);
+            if (block.Blocks.Count > 0 &&
+                string.Equals(signature, block.GetValue(RenderedSignatureProperty) as string, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            Apply(block, text, mentionedJids, lookup);
+            block.SetValue(RenderedSignatureProperty, signature);
         }
 
         /// <summary>
@@ -234,7 +253,7 @@ namespace Unison.Uwp.UI.Helpers
                         UnderlineStyle = UnderlineStyle.Single,
                         Foreground = linkBrush
                     };
-                    hyperlink.Inlines.Add(new Run { Text = segment.Text });
+                    EmojiRichRuns.AppendToHyperlink(hyperlink, segment.Text);
                     paragraph.Inlines.Add(hyperlink);
                 }
                 else
@@ -435,12 +454,11 @@ namespace Unison.Uwp.UI.Helpers
                 string displayName = ResolveMentionDisplayName(digits, mentionLookup, mentions);
                 if (MentionLookupBuilder.IsUsableName(displayName, digits))
                 {
-                    paragraph.Inlines.Add(new Run
-                    {
-                        Text = "@" + MentionLookupBuilder.CleanLabel(displayName),
-                        FontWeight = FontWeights.SemiBold,
-                        Foreground = brush
-                    });
+                    EmojiRichRuns.Append(
+                        paragraph,
+                        "@" + MentionLookupBuilder.CleanLabel(displayName),
+                        FontWeights.SemiBold,
+                        brush);
                 }
                 else
                 {
@@ -486,10 +504,7 @@ namespace Unison.Uwp.UI.Helpers
 
                 if (i > start)
                 {
-                    paragraph.Inlines.Add(new Run
-                    {
-                        Text = normalized.Substring(start, i - start)
-                    });
+                    EmojiRichRuns.Append(paragraph, normalized.Substring(start, i - start));
                 }
 
                 paragraph.Inlines.Add(new LineBreak());
@@ -498,10 +513,7 @@ namespace Unison.Uwp.UI.Helpers
 
             if (start < normalized.Length)
             {
-                paragraph.Inlines.Add(new Run
-                {
-                    Text = normalized.Substring(start)
-                });
+                EmojiRichRuns.Append(paragraph, normalized.Substring(start));
             }
         }
     }

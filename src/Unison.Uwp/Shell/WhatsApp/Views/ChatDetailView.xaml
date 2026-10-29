@@ -623,6 +623,7 @@
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
                 <reply:ReplyComposeBar Grid.Row="0"
                                        Visibility="{Binding IsReplyBarOpen, Converter={StaticResource BooleanToVisibilityConverter}}"/>
@@ -647,6 +648,7 @@
                 <Grid Padding="12"
                       Visibility="{Binding IsRecording, Converter={StaticResource InvertedBooleanToVisibilityConverter}}">
                     <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="Auto"/>
@@ -724,9 +726,22 @@
                         capped at MaxHeight (then scrolls). Icons stay Bottom so they ride the
                         single-line baseline while the box expands above them.
                     -->
-                    <TextBox Grid.Column="1" x:Name="MessageInput" x:Uid="ChatDetail_MessageInput"
+                    <Button x:Name="StickerBoxButton" Grid.Column="1"
+                            Style="{StaticResource WhatsAppIconButtonStyle}"
+                            Width="40" Height="40"
+                            VerticalAlignment="Bottom"
+                            Command="{Binding ToggleStickerBoxCommand}">
+                        <ToolTipService.ToolTip>
+                            <ToolTip x:Uid="ChatDetail_StickerBoxTooltip" Content="Emoji"/>
+                        </ToolTipService.ToolTip>
+                        <TextBlock Text="{Binding StickerToggleGlyph}"
+                                   FontFamily="{StaticResource IconFont}" FontSize="20"
+                                   Foreground="{ThemeResource ChatDetailMutedTextBrush}"/>
+                    </Button>
+
+                    <controls:ChatComposerInput Grid.Column="2" x:Name="MessageInput" x:Uid="ChatDetail_MessageInput"
                              PlaceholderText="Type a message"
-                             Text="{Binding MessageText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                             BoundText="{Binding MessageText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                              Margin="8,0"
                              MinHeight="40"
                              MaxHeight="192"
@@ -736,7 +751,6 @@
                              AcceptsReturn="False"
                              BorderThickness="0"
                              Padding="10,8,6,5"
-                             Style="{StaticResource TransparentTextBoxStyle}"
                              Background="Transparent"
                              ScrollViewer.VerticalScrollBarVisibility="Auto"
                              ScrollViewer.VerticalScrollMode="Auto"
@@ -744,9 +758,10 @@
                              ScrollViewer.HorizontalScrollMode="Disabled"
                              SizeChanged="MessageInput_SizeChanged"
                              SelectionChanged="MessageInput_SelectionChanged"
+                             GotFocus="MessageInput_GotFocus"
                              KeyDown="MessageInput_KeyDown"/>
 
-                    <Button x:Name="MicButton" Grid.Column="2"
+                    <Button x:Name="MicButton" Grid.Column="3"
                             Style="{StaticResource WhatsAppIconButtonStyle}"
                             Width="40" Height="40"
                             VerticalAlignment="Bottom"
@@ -755,7 +770,7 @@
                                    Foreground="{ThemeResource ChatDetailAccentBrush}"/>
                     </Button>
 
-                    <Button x:Name="SendButton" Grid.Column="3"
+                    <Button x:Name="SendButton" Grid.Column="4"
                             Style="{StaticResource WhatsAppIconButtonStyle}"
                             Width="40" Height="40"
                             VerticalAlignment="Bottom"
@@ -815,19 +830,44 @@
                 </Grid>
 
                 </Grid><!-- ComposerHost -->
+
+                <controls:ChatStickerBox x:Name="StickerBox"
+                                         Grid.Row="3"
+                                         Visibility="{Binding IsStickerBoxOpen, Converter={StaticResource BooleanToVisibilityConverter}}"/>
             </Grid><!-- composer / recording share row 3 -->
 
             <!-- Announce-only group lock (replaces composer). Channels hide the whole footer. -->
             <Grid Grid.Row="3"
                   Background="{ThemeResource ChatDetailInputBarBackgroundBrush}"
                   helpers:DesktopCursor.CursorKind="Blocked"
-                  Visibility="{Binding IsGroupLockedForMessages, Converter={StaticResource BooleanToVisibilityConverter}}">
+                  Visibility="{Binding ShowsAnnounceOnlyComposerLock, Converter={StaticResource BooleanToVisibilityConverter}}">
                 <Border Height="1"
                         VerticalAlignment="Top"
                         Background="{ThemeResource ChatDetailInputBarTopBorderBrush}"
                         IsHitTestVisible="False"/>
                 <TextBlock x:Uid="ChatDetail_GroupOnlyAdminsCanSend"
                            Text="Only admins can send messages"
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Center"
+                           TextAlignment="Center"
+                           TextWrapping="WrapWholeWords"
+                           Margin="16,14"
+                           FontSize="14"
+                           FontFamily="{StaticResource MainFont}"
+                           Foreground="{ThemeResource ChatDetailMutedTextBrush}"/>
+            </Grid>
+
+            <!-- Left / removed from the group (Baileys chat.readOnly). -->
+            <Grid Grid.Row="3"
+                  Background="{ThemeResource ChatDetailInputBarBackgroundBrush}"
+                  helpers:DesktopCursor.CursorKind="Blocked"
+                  Visibility="{Binding IsNoLongerGroupParticipant, Converter={StaticResource BooleanToVisibilityConverter}}">
+                <Border Height="1"
+                        VerticalAlignment="Top"
+                        Background="{ThemeResource ChatDetailInputBarTopBorderBrush}"
+                        IsHitTestVisible="False"/>
+                <TextBlock x:Uid="ChatDetail_GroupNoLongerParticipant"
+                           Text="You can't send messages to this group because you're no longer a participant."
                            HorizontalAlignment="Center"
                            VerticalAlignment="Center"
                            TextAlignment="Center"

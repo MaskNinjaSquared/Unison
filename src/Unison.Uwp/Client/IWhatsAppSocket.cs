@@ -163,6 +163,17 @@ namespace Unison.Uwp.Client
         /// </summary>
         Task DeleteChatAsync(string jid, IEnumerable<Unison.Socket.AppState.RangeMessage> lastMessages);
 
+        /// <summary>
+        /// Deletes one message for this account only (app-state deleteMessageForMe).
+        /// Timestamp is Unix seconds.
+        /// </summary>
+        Task DeleteMessageForMeAsync(
+            string jid,
+            string messageId,
+            bool fromMe,
+            long messageTimestampUnixSeconds,
+            bool deleteMedia = false);
+
         /// <summary>Clears the conversation's unread state across the account's devices.</summary>
         Task MarkChatReadAsync(string jid, IEnumerable<Unison.Socket.AppState.RangeMessage> lastMessages);
 
@@ -206,6 +217,11 @@ namespace Unison.Uwp.Client
             global::Proto.MessageKey targetKey,
             bool pin,
             uint durationSeconds = 604800);
+
+        /// <summary>Revokes a message for everyone (protocol DeleteContent).</summary>
+        Task<string> SendDeleteMessageAsync(
+            string jid,
+            global::Proto.MessageKey targetKey);
 
         Task<string> RequestHistorySyncOnDemandAsync(
             string jid,

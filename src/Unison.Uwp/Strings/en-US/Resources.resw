@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <root>
   <!-- 
     Microsoft ResX Schema 
@@ -329,6 +329,9 @@ Disable after diagnosing: keeping it on slows the app.</value>
   <data name="ChatDetail_GroupOnlyAdminsCanSend.Text" xml:space="preserve">
     <value>Only admins can send messages</value>
   </data>
+  <data name="ChatDetail_GroupNoLongerParticipant.Text" xml:space="preserve">
+    <value>You can't send messages to this group because you're no longer a participant.</value>
+  </data>
   <data name="ChatDetail_UnreadMessagesFormat" xml:space="preserve">
     <value>{0} unread messages</value>
   </data>
@@ -361,6 +364,27 @@ Disable after diagnosing: keeping it on slows the app.</value>
   </data>
   <data name="ChatDetail_AttachBarTooltip.Content" xml:space="preserve">
     <value>Attach</value>
+  </data>
+  <data name="ChatDetail_StickerBoxTooltip.Content" xml:space="preserve">
+    <value>Emoji</value>
+  </data>
+  <data name="StickerBox_EmojiTab.Text" xml:space="preserve">
+    <value>Emoji</value>
+  </data>
+  <data name="StickerBox_GifTab.Text" xml:space="preserve">
+    <value>GIF</value>
+  </data>
+  <data name="StickerBox_StickerTab.Text" xml:space="preserve">
+    <value>Stickers</value>
+  </data>
+  <data name="StickerBox_GifSoon.Text" xml:space="preserve">
+    <value>GIFs coming soon</value>
+  </data>
+  <data name="StickerBox_StickerSoon.Text" xml:space="preserve">
+    <value>Stickers coming soon</value>
+  </data>
+  <data name="StickerBox_SearchBox.PlaceholderText" xml:space="preserve">
+    <value>Search emoji</value>
   </data>
   <data name="ChatDetail_ScrollToBottomTooltip.Content" xml:space="preserve">
     <value>Jump to latest</value>
@@ -409,6 +433,39 @@ Disable after diagnosing: keeping it on slows the app.</value>
   </data>
   <data name="ChatDetail_ForwardMessage" xml:space="preserve">
     <value>Forward</value>
+  </data>
+  <data name="ChatDetail_DeleteMessage" xml:space="preserve">
+    <value>Delete</value>
+  </data>
+  <data name="ChatDetail_Delete" xml:space="preserve">
+    <value>Delete</value>
+  </data>
+  <data name="ChatDetail_DeleteForMe" xml:space="preserve">
+    <value>Delete for me</value>
+  </data>
+  <data name="ChatDetail_DeleteForEveryone" xml:space="preserve">
+    <value>Delete for everyone</value>
+  </data>
+  <data name="ChatDetail_DeleteCancel" xml:space="preserve">
+    <value>Cancel</value>
+  </data>
+  <data name="ChatDetail_DeleteMessagePrompt" xml:space="preserve">
+    <value>Delete message?</value>
+  </data>
+  <data name="ChatDetail_DeleteMessagePromptFrom" xml:space="preserve">
+    <value>Delete message from {0}?</value>
+  </data>
+  <data name="ChatDetail_DeleteAuthorFallback" xml:space="preserve">
+    <value>contact</value>
+  </data>
+  <data name="ChatDetail_PlayAudioAt1" xml:space="preserve">
+    <value>Play on 1</value>
+  </data>
+  <data name="ChatDetail_PlayAudioAt15" xml:space="preserve">
+    <value>Play on 1.5</value>
+  </data>
+  <data name="ChatDetail_PlayAudioAt2" xml:space="preserve">
+    <value>Play on 2</value>
   </data>
   <data name="ChatDetail_PinFor24Hours" xml:space="preserve">
     <value>Pin for 24 hours</value>
@@ -867,6 +924,18 @@ Disable after diagnosing: keeping it on slows the app.</value>
   </data>
   <data name="Settings_KeepAlive.Text" xml:space="preserve">
     <value>Uses location only so Windows 10 Mobile won’t freeze the app (Unogram trick). Position is not read or sent. Uses more battery.</value>
+  </data>
+  <data name="Settings_StartupLaunch.Header" xml:space="preserve">
+    <value>Start with Windows</value>
+  </data>
+  <data name="Settings_StartupLaunch.Text" xml:space="preserve">
+    <value>Opens Unison when you sign in to Windows.</value>
+  </data>
+  <data name="Settings_StartupLaunchDisabledByUser" xml:space="preserve">
+    <value>Turned off in Task Manager. To turn it back on, open Task Manager > Startup apps and enable Unison.</value>
+  </data>
+  <data name="Settings_StartupLaunchPolicy" xml:space="preserve">
+    <value>Your organization manages this setting.</value>
   </data>
   <data name="Settings_AutoUnlink.Header" xml:space="preserve">
     <value>Auto-unlink on logout</value>

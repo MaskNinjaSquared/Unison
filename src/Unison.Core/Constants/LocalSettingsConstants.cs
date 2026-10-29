@@ -119,6 +119,11 @@ namespace Unison.Core.Constants
         /// <summary>WinRT annotation list id on that account (Unigram x_annotation_list).</summary>
         public const string PublishWindowsAnnotationListId = "PublishWindowsAnnotationListId";
 
+        /// <summary>
+        /// Recently used sticker-box emoji glyphs (unit-separated string). Empty by default.
+        /// </summary>
+        public const string RecentEmojis = "RecentEmojis";
+
         public static IReadOnlyDictionary<string, object> Defaults { get; } =
             new Dictionary<string, object>
             {
@@ -150,7 +155,8 @@ namespace Unison.Core.Constants
                 { PublishContactsToWindowsEnabled, false },
                 { PublishWindowsUserDataAccountId, "" },
                 { PublishWindowsContactListId, "" },
-                { PublishWindowsAnnotationListId, "" }
+                { PublishWindowsAnnotationListId, "" },
+                { RecentEmojis, "" }
             };
     }
 }

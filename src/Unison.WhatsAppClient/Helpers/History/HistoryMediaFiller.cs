@@ -34,6 +34,7 @@ namespace Unison.WhatsAppClient.Helpers
                 target.MediaFileEncSha256Base64 = ToBase64(sticker.FileEncSha256);
                 target.MediaMimeType = NullIfEmpty(sticker.Mimetype);
                 target.MediaThumbnailJpeg = ToBytes(sticker.PngThumbnail);
+                ApplyLength(target, sticker.HasFileLength, sticker.FileLength);
                 return;
             }
 
@@ -46,6 +47,7 @@ namespace Unison.WhatsAppClient.Helpers
                 target.MediaFileEncSha256Base64 = ToBase64(image.FileEncSha256);
                 target.MediaMimeType = NullIfEmpty(image.Mimetype);
                 target.MediaThumbnailJpeg = ToBytes(image.JpegThumbnail);
+                ApplyLength(target, image.HasFileLength, image.FileLength);
                 return;
             }
 
@@ -61,6 +63,7 @@ namespace Unison.WhatsAppClient.Helpers
                 target.MediaDurationSeconds = video.Seconds;
                 target.MediaThumbnailJpeg = ToBytes(video.JpegThumbnail);
                 target.IsAnimated = video.GifPlayback;
+                ApplyLength(target, video.HasFileLength, video.FileLength);
                 return;
             }
 
@@ -74,6 +77,7 @@ namespace Unison.WhatsAppClient.Helpers
                 target.MediaMimeType = NullIfEmpty(audio.Mimetype);
                 target.MediaDurationSeconds = audio.Seconds;
                 target.IsVoiceNote = audio.Ptt;
+                ApplyLength(target, audio.HasFileLength, audio.FileLength);
                 return;
             }
 
@@ -87,15 +91,22 @@ namespace Unison.WhatsAppClient.Helpers
                 target.MediaFileEncSha256Base64 = ToBase64(document.FileEncSha256);
                 target.MediaMimeType = NullIfEmpty(document.Mimetype);
                 target.MediaFileName = NullIfEmpty(document.FileName);
-                if (document.HasFileLength && document.FileLength > 0)
-                {
-                    target.MediaFileLengthBytes = document.FileLength > long.MaxValue
-                        ? long.MaxValue
-                        : (long)document.FileLength;
-                }
+                ApplyLength(target, document.HasFileLength, document.FileLength);
 
                 target.MediaThumbnailJpeg = ToBytes(document.JpegThumbnail);
             }
+        }
+
+        private static void ApplyLength(IHistoryMediaFields target, bool hasLength, ulong length)
+        {
+            if (!hasLength || length == 0)
+            {
+                return;
+            }
+
+            target.MediaFileLengthBytes = length > (ulong)long.MaxValue
+                ? long.MaxValue
+                : (long)length;
         }
 
         private static byte[] ToBytes(Google.Protobuf.ByteString bytes)

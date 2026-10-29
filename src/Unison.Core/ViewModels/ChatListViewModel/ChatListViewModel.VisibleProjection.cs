@@ -27,7 +27,8 @@ namespace Unison.Core.ViewModels
 
         private void ScheduleRefreshVisibleChats(
             TimeSpan? delayOverride = null,
-            bool allowDuringEnrichment = false)
+            bool allowDuringEnrichment = false,
+            bool coalesceIfArmed = false)
         {
             if (_batchRendering || IsInSafeMode || IsListHeldForSync)
             {
@@ -65,6 +66,15 @@ namespace Unison.Core.ViewModels
             {
                 _refreshDeferredForEnrichment = true;
                 _visibleOrderDirty = true;
+                return;
+            }
+
+            // Move-miss storms: keep the first quiet window instead of resetting debounce
+            // (and dropping _pendingVisibleRefreshSource) on every SortInPlace Move.
+            if (coalesceIfArmed &&
+                _refreshCts != null &&
+                !_refreshCts.IsCancellationRequested)
+            {
                 return;
             }
 
@@ -223,6 +233,14 @@ namespace Unison.Core.ViewModels
                 {
                     _visibleColdPopulate = false;
                     _coldPopulateGate?.Release();
+                }
+
+                // Pins may have landed mid cold-fill (EnsureLocalChatPinsApplied deferred).
+                // One coalesced refresh now that Continues are done — not nested mid-slice.
+                if (_visibleOrderDirty)
+                {
+                    ScheduleRefreshVisibleChats(
+                        PreferFrugalUi ? MoveMissRefreshDebounceFrugal : (TimeSpan?)null);
                 }
             }
         }
@@ -664,6 +682,13 @@ namespace Unison.Core.ViewModels
                     return true;
                 }
 
+                // Linked subgroups are painted via the hub. SortInPlace Moves them in Chats
+                // during offline replay — that is not a visible tip miss (store≫visible gap).
+                if (ChatListIncrementalMove.ShouldAbsorbHiddenCatalogueMove(chat, hasVisibleRow: false))
+                {
+                    return true;
+                }
+
                 return false;
             }
 
@@ -678,10 +703,9 @@ namespace Unison.Core.ViewModels
                 return true;
             }
 
-            // Only the moved row needs CommunityListProjector (invent parent / hide child).
-            // Gating on *any* community in the catalogue forced every live tip into a full
-            // refresh (or order-clean skip) — freeze / tip buried with hubs present.
-            if (IsCommunityShapedRow(visible) || IsCommunityShapedRow(chat))
+            // Linked children still need CommunityListProjector. Hubs already on Visible
+            // reorder like any tip (was: any community shape → full rebuild → move-miss storm).
+            if (ChatListIncrementalMove.RequiresCommunityProjectionRebuild(visible, chat))
             {
                 return false;
             }
@@ -709,14 +733,6 @@ namespace Unison.Core.ViewModels
             }
 
             return true;
-        }
-
-        private static bool IsCommunityShapedRow(ChatItem chat)
-        {
-            return chat != null &&
-                   (chat.IsCommunityParent ||
-                    chat.IsCommunity ||
-                    !string.IsNullOrWhiteSpace(chat.LinkedParentJid));
         }
 
         /// <summary>
