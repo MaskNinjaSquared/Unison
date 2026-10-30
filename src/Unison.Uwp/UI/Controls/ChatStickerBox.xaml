@@ -59,9 +59,12 @@
                                       ViewChangeStarted="EmojiZoom_ViewChangeStarted"
                                       ViewChangeCompleted="EmojiZoom_ViewChangeCompleted">
                             <SemanticZoom.ZoomedInView>
-                                <ListView x:Name="EmojiCategoryList"
+                                <!-- Grouped + ItemsWrapGrid so only on-screen glyphs realize. A WrapGrid per
+                                     category realized every glyph of the section at once (UI freeze on open). -->
+                                <GridView x:Name="EmojiCategoryList"
                                           SelectionMode="None"
                                           IsItemClickEnabled="False"
+                                          IsSwipeEnabled="False"
                                           Background="Transparent"
                                           Padding="0,0,4,0"
                                           ScrollViewer.VerticalScrollBarVisibility="Auto"
@@ -69,51 +72,63 @@
                                           ScrollViewer.HorizontalScrollMode="Disabled"
                                           ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                                           ScrollViewer.IsVerticalScrollChainingEnabled="False">
-                                    <ListView.ItemTemplate>
-                                        <DataTemplate x:DataType="models:EmojiCategory">
-                                            <StackPanel Margin="0,4,0,2">
-                                                <TextBlock Text="{x:Bind Title}"
-                                                           FontSize="11"
-                                                           FontFamily="{StaticResource MainFont}"
-                                                           Foreground="{ThemeResource ChatDetailMutedTextBrush}"
-                                                           Margin="0,0,8,2"
-                                                           Tapped="CategoryHeader_Tapped"/>
-                                                <ItemsControl ItemsSource="{Binding Glyphs}">
-                                                    <ItemsControl.ItemsPanel>
-                                                        <ItemsPanelTemplate>
-                                                            <WrapGrid Orientation="Horizontal"
-                                                                      ItemWidth="40"
-                                                                      ItemHeight="40"/>
-                                                        </ItemsPanelTemplate>
-                                                    </ItemsControl.ItemsPanel>
-                                                    <ItemsControl.ItemTemplate>
-                                                        <DataTemplate x:DataType="x:String">
-                                                            <Border Width="40" Height="40"
-                                                                    Background="Transparent"
-                                                                    Tapped="EmojiGlyph_Tapped">
-                                                                <TextBlock Text="{x:Bind}"
-                                                                           Style="{x:Null}"
-                                                                           FontSize="26"
-                                                                           FontFamily="{StaticResource EmojiFont}"
-                                                                           IsColorFontEnabled="True"
-                                                                           HorizontalAlignment="Center"
-                                                                           VerticalAlignment="Center"
-                                                                           IsHitTestVisible="False"/>
-                                                            </Border>
-                                                        </DataTemplate>
-                                                    </ItemsControl.ItemTemplate>
-                                                </ItemsControl>
-                                            </StackPanel>
+                                    <GridView.ItemsPanel>
+                                        <ItemsPanelTemplate>
+                                            <ItemsWrapGrid Orientation="Horizontal"
+                                                           ItemWidth="40"
+                                                           ItemHeight="40"
+                                                           GroupHeaderPlacement="Top"/>
+                                        </ItemsPanelTemplate>
+                                    </GridView.ItemsPanel>
+                                    <GridView.GroupStyle>
+                                        <GroupStyle HidesIfEmpty="True">
+                                            <GroupStyle.HeaderContainerStyle>
+                                                <Style TargetType="GridViewHeaderItem">
+                                                    <Setter Property="Margin" Value="0"/>
+                                                    <Setter Property="Padding" Value="0,4,8,2"/>
+                                                    <Setter Property="MinHeight" Value="0"/>
+                                                    <Setter Property="BorderThickness" Value="0"/>
+                                                    <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                                                </Style>
+                                            </GroupStyle.HeaderContainerStyle>
+                                            <GroupStyle.HeaderTemplate>
+                                                <DataTemplate x:DataType="models:EmojiCategory">
+                                                    <TextBlock Text="{x:Bind Title}"
+                                                               FontSize="11"
+                                                               FontFamily="{StaticResource MainFont}"
+                                                               Foreground="{ThemeResource ChatDetailMutedTextBrush}"
+                                                               Tapped="CategoryHeader_Tapped"/>
+                                                </DataTemplate>
+                                            </GroupStyle.HeaderTemplate>
+                                        </GroupStyle>
+                                    </GridView.GroupStyle>
+                                    <GridView.ItemTemplate>
+                                        <DataTemplate x:DataType="x:String">
+                                            <Border Width="40" Height="40"
+                                                    Background="Transparent"
+                                                    Tapped="EmojiGlyph_Tapped">
+                                                <TextBlock Text="{x:Bind}"
+                                                           Style="{x:Null}"
+                                                           FontSize="26"
+                                                           FontFamily="{StaticResource EmojiFont}"
+                                                           IsColorFontEnabled="True"
+                                                           HorizontalAlignment="Center"
+                                                           VerticalAlignment="Center"
+                                                           IsHitTestVisible="False"/>
+                                            </Border>
                                         </DataTemplate>
-                                    </ListView.ItemTemplate>
-                                    <ListView.ItemContainerStyle>
-                                        <Style TargetType="ListViewItem">
-                                            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                                    </GridView.ItemTemplate>
+                                    <GridView.ItemContainerStyle>
+                                        <Style TargetType="GridViewItem">
+                                            <Setter Property="Margin" Value="0"/>
                                             <Setter Property="Padding" Value="0"/>
+                                            <Setter Property="MinWidth" Value="0"/>
                                             <Setter Property="MinHeight" Value="0"/>
+                                            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                                            <Setter Property="VerticalContentAlignment" Value="Stretch"/>
                                         </Style>
-                                    </ListView.ItemContainerStyle>
-                                </ListView>
+                                    </GridView.ItemContainerStyle>
+                                </GridView>
                             </SemanticZoom.ZoomedInView>
                             <SemanticZoom.ZoomedOutView>
                                 <GridView x:Name="EmojiJumpList"

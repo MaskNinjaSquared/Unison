@@ -89,6 +89,13 @@ namespace Unison.WhatsAppClient.Chats
         private static readonly TimeSpan OfflineReplayTipThrottle = TimeSpan.FromMilliseconds(180);
 
         /// <summary>
+        /// Later replay flushes. Each pass costs a list Move + preview reconcile on the UI thread
+        /// even for one chat; at 180 ms a trickling replay paid that per message (stalls of 3 s on
+        /// Mobile Low). Same on every device.
+        /// </summary>
+        private static readonly TimeSpan OfflineReplayTipSteadyThrottle = TimeSpan.FromMilliseconds(1000);
+
+        /// <summary>
         /// Offline tip rows per UI hop. A single foreach over the full replay used to hold the
         /// dispatcher for seconds on Mobile (each row also did an O(n) chat scan before the index).
         /// </summary>
@@ -163,7 +170,8 @@ namespace Unison.WhatsAppClient.Chats
                 _jids,
                 _offlineReplay,
                 ApplyOfflineReplayChatSummariesAsync,
-                OfflineReplayTipThrottle);
+                OfflineReplayTipThrottle,
+                OfflineReplayTipSteadyThrottle);
         }
 
         public void RecordOfflineReplayTip(OfflineReplayTipRequest request)

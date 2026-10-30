@@ -5,6 +5,7 @@ using Unison.Core.ViewModels;
 using Windows.UI.Core;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
+using Windows.UI.Xaml.Data;
 using Windows.UI.Xaml.Input;
 
 namespace Unison.Uwp.UI.Controls
@@ -17,6 +18,7 @@ namespace Unison.Uwp.UI.Controls
     {
         private ChatDetailViewModel _subscribedVm;
         private EmojiCategory _pendingJumpCategory;
+        private CollectionViewSource _groupedSource;
 
         public ChatStickerBox()
         {
@@ -125,9 +127,15 @@ namespace Unison.Uwp.UI.Controls
             }
 
             if (EmojiCategoryList != null &&
-                !ReferenceEquals(EmojiCategoryList.ItemsSource, vm.EmojiCategories))
+                (_groupedSource == null || !ReferenceEquals(_groupedSource.Source, vm.EmojiCategories)))
             {
-                EmojiCategoryList.ItemsSource = vm.EmojiCategories;
+                _groupedSource = new CollectionViewSource
+                {
+                    IsSourceGrouped = true,
+                    ItemsPath = new PropertyPath(nameof(EmojiCategory.Glyphs)),
+                    Source = vm.EmojiCategories
+                };
+                EmojiCategoryList.ItemsSource = _groupedSource.View;
             }
 
             if (EmojiJumpList != null &&
@@ -161,6 +169,8 @@ namespace Unison.Uwp.UI.Controls
                 insert.Execute(glyph);
             }
 
+            // Place the caret for the next tap without focusing the composer. Focus opens the
+            // soft keyboard on Mobile while the emoji tray should keep focus.
             _ = Dispatcher.RunAsync(CoreDispatcherPriority.Normal, () =>
             {
                 ChatDetailViewModel vm = ViewModel;
@@ -170,11 +180,15 @@ namespace Unison.Uwp.UI.Controls
                 }
 
                 ChatComposerInput box = FindMessageInput();
-                if (box != null)
+                if (box == null)
                 {
-                    box.CaretIndex = vm.MentionInsertCaret;
-                    box.FocusProgrammatic();
+                    return;
                 }
+
+                int caret = vm.MentionInsertCaret;
+                box.CaretIndex = caret;
+                // Clears MentionInsertCaret and notes the caret; does not take keyboard focus.
+                vm.UpdateMentionQuery(box.GetPlainText(), caret);
             });
         }
 
@@ -257,9 +271,10 @@ namespace Unison.Uwp.UI.Controls
 
             try
             {
+                // Grouped view: the group (category) is the zoom location; glyph strings repeat
+                // across Recents and sections, so ScrollIntoView(glyph) could land on the wrong one.
                 EmojiCategoryList.UpdateLayout();
                 EmojiCategoryList.MakeVisible(new SemanticZoomLocation { Item = category });
-                EmojiCategoryList.ScrollIntoView(category, ScrollIntoViewAlignment.Leading);
             }
             catch
             {

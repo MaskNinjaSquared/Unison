@@ -19,6 +19,13 @@ namespace Unison.Uwp.UI.Helpers
                 return;
             }
 
+            // BoundText / emoji font passes temporarily move selection; do not treat that as
+            // a caret edit or clear MentionInsertCaret before the picker finishes placing it.
+            if (box.IsDocumentSyncing)
+            {
+                return;
+            }
+
             if (viewModel.MentionInsertCaret >= 0)
             {
                 int caret = viewModel.MentionInsertCaret;

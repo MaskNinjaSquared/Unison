@@ -28,7 +28,8 @@ namespace Unison.WhatsAppClient.Helpers
 
             HistoryCatchUpFinishNext next = HistoryCatchUpFinishDecision.Decide(
                 releaseEnrichment,
-                host.IsFirstSyncListHoldInProgress);
+                host.IsFirstSyncListHoldInProgress,
+                host.IsListAwaitingFirstHistorySync);
             if (next == HistoryCatchUpFinishNext.None)
             {
                 return;
@@ -46,6 +47,14 @@ namespace Unison.WhatsAppClient.Helpers
                     processed,
                     Math.Max(processed, 1));
                 return;
+            }
+
+            if (next == HistoryCatchUpFinishNext.ReleaseListThenEnrichment)
+            {
+                host.RequestFirstSyncListReleaseAfterNames(
+                    "catch-up-finish-no-history:" + (reason ?? string.Empty),
+                    0,
+                    1);
             }
 
             host.ScheduleDeferredAvatars(

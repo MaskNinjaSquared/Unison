@@ -57,7 +57,11 @@
             <!-- Sticker-box glyphs. Explicit emoji face (App TextBlock style uses MainFont, which
                  has no emoji). Fallback Symbol for older W10M builds. Optional: drop
                  WhatsAppColorEmoji.ttf into Assets/Fonts and switch the URI (~42 MB). -->
-            <FontFamily x:Key="EmojiFont">ms-appx:///Assets/Fonts/WhatsAppColorEmoji.ttf#WhatsApp Color Emoji, Segoe UI Emoji, Segoe UI Symbol</FontFamily>
+            <FontFamily x:Key="EmojiFont">ms-appx:///Assets/Fonts/WhatsAppColorEmoji.ttf#Segoe UI Emoji, Segoe UI Symbol</FontFamily>
+            <!-- Composer RichEditBox. The packaged WhatsApp face is named "Segoe UI Emoji" (Unigram
+                 pattern) so RichEdit's own emoji font binding resolves to it, not the system face.
+                 The face maps no ASCII, so body text falls through to MainFont. -->
+            <FontFamily x:Key="ComposerEmojiFont">ms-appx:///Assets/Fonts/WhatsAppColorEmoji.ttf#Segoe UI Emoji, ms-appx:///Assets/Fonts/SegUIVar-Regular.ttf#Segoe UI Variable</FontFamily>
 
             <!-- Branding Colors -->
             <SolidColorBrush x:Key="UnisonGreenBrush" Color="#FF20C064"/>

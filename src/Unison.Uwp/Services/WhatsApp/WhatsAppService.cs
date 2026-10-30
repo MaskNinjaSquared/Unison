@@ -2646,6 +2646,9 @@ namespace Unison.Uwp.Services.WhatsApp
         bool IHistoryCatchUpFinishHost.IsFirstSyncListHoldInProgress =>
             IsFirstSyncListHoldInProgress;
 
+        bool IHistoryCatchUpFinishHost.IsListAwaitingFirstHistorySync =>
+            History?.IsAwaitingFirstHistorySync ?? false;
+
         int IHistoryCatchUpFinishHost.SqliteHistoryConversationsAccumulated =>
             _sqliteHistoryConversationsAccumulated;
 

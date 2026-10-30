@@ -5,7 +5,8 @@
 // chat list. Unread is decided once, at record time, so opening or closing the
 // chat mid-drain cannot drop the badge. The first tip arms one timer (throttle,
 // not debounce) so the first recovered chat shows while a long replay continues.
-// A failed flush puts the tips back.
+// After that first progressive flush the wider steady window applies until a
+// settle flush (any other reason) ends the replay. A failed flush puts the tips back.
 // =============================================================================
 using System;
 using System.Collections.Generic;
@@ -29,17 +30,27 @@ namespace Unison.Core.State
         private readonly IOfflineReplayHost _host;
         private readonly Func<IReadOnlyList<OfflineReplayChatSummary>, string, Task> _apply;
         private readonly TimeSpan _throttle;
+        private readonly TimeSpan _steadyThrottle;
+        private int _progressiveFlushed;
 
+        /// <param name="throttle">Window for the first progressive flush of a replay.</param>
+        /// <param name="steadyThrottle">
+        /// Window for every later progressive flush until a non-progressive flush ends the replay.
+        /// Replayed messages trickle in one by one, so a short window still moves one row per pass.
+        /// Defaults to <paramref name="throttle"/>.
+        /// </param>
         public OfflineReplayTips(
             IJidResolver jids,
             IOfflineReplayHost host,
             Func<IReadOnlyList<OfflineReplayChatSummary>, string, Task> apply,
-            TimeSpan throttle)
+            TimeSpan throttle,
+            TimeSpan? steadyThrottle = null)
         {
             _jids = jids ?? throw new ArgumentNullException(nameof(jids));
             _host = host ?? throw new ArgumentNullException(nameof(host));
             _apply = apply ?? throw new ArgumentNullException(nameof(apply));
             _throttle = throttle;
+            _steadyThrottle = steadyThrottle ?? throttle;
         }
 
         public void Record(OfflineReplayTipRequest request)
@@ -74,7 +85,7 @@ namespace Unison.Core.State
                 DateTime.UtcNow,
                 request.ParticipantJid,
                 request.SenderName,
-                _throttle,
+                Volatile.Read(ref _progressiveFlushed) == 0 ? _throttle : _steadyThrottle,
                 OnThrottleElapsed);
         }
 
@@ -84,6 +95,9 @@ namespace Unison.Core.State
             Dictionary<string, OfflineReplayChatSummary> snapshot = null;
             try
             {
+                Volatile.Write(
+                    ref _progressiveFlushed,
+                    string.Equals(reason, ProgressiveReason, StringComparison.Ordinal) ? 1 : 0);
                 snapshot = _book.Take();
                 if (snapshot == null)
                 {

@@ -18,6 +18,12 @@ namespace Unison.WhatsAppClient.Abstractions
 
         bool IsFirstSyncListHoldInProgress { get; }
 
+        /// <summary>
+        /// The chat list is still held for the first history sync of this session
+        /// (<c>IHistoryService.IsAwaitingFirstHistorySync</c>), chunk or not.
+        /// </summary>
+        bool IsListAwaitingFirstHistorySync { get; }
+
         int SqliteHistoryConversationsAccumulated { get; }
 
         int InitialSyncProcessedConversations { get; }

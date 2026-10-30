@@ -190,6 +190,18 @@ namespace Unison.Uwp.Client
                 {
                     RuntimeDiagnosticsService.Instance.Write("send", "group-skdm", line);
                 }
+                // Tells "phone never sent history" apart from "download failed / chunk skipped".
+                else if (!string.IsNullOrEmpty(line) &&
+                         line.IndexOf("[History]", StringComparison.Ordinal) >= 0)
+                {
+                    RuntimeDiagnosticsService.Instance.Write("history", "socket-chunk", line);
+                }
+                // A history notification rides an own-device message; if that fails here it never lands.
+                else if (!string.IsNullOrEmpty(line) &&
+                         line.IndexOf("[Decrypt] Failed", StringComparison.Ordinal) >= 0)
+                {
+                    RuntimeDiagnosticsService.Instance.Write("messages", "decrypt-failed", line);
+                }
             });
             _downloader = new HttpEncryptedMediaDownloader(_log);
             _events = new WaEventBuffer(_log);

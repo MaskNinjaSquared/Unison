@@ -1227,6 +1227,9 @@ namespace Unison.WhatsAppClient.History
             int stagnantStop = _workload.PacingFor(frugal)
                 .CatchUpStagnantCyclesBeforeStop;
             int maxRounds = Math.Max(0, _workload.MaxFullHistoryCatchUpRounds);
+            // Empty-ack finish on every tier: WA often acks FULL_HISTORY then sends
+            // nothing; Desktop High used to burn idle-continue while live tips moved.
+            const bool emptyAckFinish = true;
 
             HistoryCatchUpContinueResult decision = _catchUp.DecideAfterQuietLot(
                 newestUtc,
@@ -1236,7 +1239,7 @@ namespace Unison.WhatsAppClient.History
                 maxRounds,
                 out HistoryCatchUpProgress before,
                 ackAccepted,
-                finishOnEmptyAckLot: frugal);
+                finishOnEmptyAckLot: emptyAckFinish);
 
             _catchUpHost.WriteHistoryJournal(
                 "catch-up-idle-decide",
@@ -1253,7 +1256,7 @@ namespace Unison.WhatsAppClient.History
                 "; stagnant=" + before.StagnantCycles +
                 "; stagnantStop=" + stagnantStop +
                 "; frugal=" + frugal +
-                "; emptyAckFinish=" + frugal +
+                "; emptyAckFinish=" + emptyAckFinish +
                 "; action=" + decision.Action +
                 "; trigger=" + (triggerReason ?? string.Empty));
 
@@ -1277,31 +1280,19 @@ namespace Unison.WhatsAppClient.History
                     return;
 
                 case HistoryCatchUpContinueAction.FinishStagnantProgress:
-                    if (stillStale && _workload.AllowStagnantHistoryRepairCascade)
-                    {
-                        _catchUpHost.MarkForceHistoryRepairPending("stagnant-progress-still-stale");
-                    }
-
-                    _catchUpHost.FinishContinue("stagnant-progress", releaseEnrichment: true);
-                    if (stillStale && _workload.AllowStagnantHistoryRepairCascade)
-                    {
-                        _catchUpHost.StartHydrationFallback("stagnant-progress");
-                    }
-
+                    FinishCatchUpMaybeCascade(
+                        "stagnant-progress",
+                        stillStale,
+                        ackAccepted,
+                        progressSignals);
                     return;
 
                 case HistoryCatchUpContinueAction.FinishMaxContinues:
-                    if (stillStale && _workload.AllowStagnantHistoryRepairCascade)
-                    {
-                        _catchUpHost.MarkForceHistoryRepairPending("max-continues-still-stale");
-                    }
-
-                    _catchUpHost.FinishContinue("max-continues", releaseEnrichment: true);
-                    if (stillStale && _workload.AllowStagnantHistoryRepairCascade)
-                    {
-                        _catchUpHost.StartHydrationFallback("max-continues");
-                    }
-
+                    FinishCatchUpMaybeCascade(
+                        "max-continues",
+                        stillStale,
+                        ackAccepted,
+                        progressSignals);
                     return;
             }
 
@@ -1312,6 +1303,42 @@ namespace Unison.WhatsAppClient.History
                 ":stagnant=" + decision.NextStagnantCycles +
                 ":signals=" + progressSignals +
                 ":newest=" + FreshnessTimestampFormat.ForLog(newestUtc));
+        }
+
+        /// <summary>
+        /// Ends catch-up; only High's repair cascade may re-solicit, and never after an
+        /// empty-ack ghost lot (would immediately reopen hydration-then-full).
+        /// </summary>
+        private void FinishCatchUpMaybeCascade(
+            string reason,
+            bool stillStale,
+            bool ackAccepted,
+            int progressSignals)
+        {
+            bool cascade = HistoryCatchUpRepairCascade.ShouldStartAfterFinish(
+                stillStale,
+                _workload.AllowStagnantHistoryRepairCascade,
+                ackAccepted,
+                progressSignals);
+
+            if (cascade)
+            {
+                _catchUpHost.MarkForceHistoryRepairPending(reason + "-still-stale");
+            }
+
+            _catchUpHost.FinishContinue(reason, releaseEnrichment: true);
+
+            if (cascade)
+            {
+                _catchUpHost.StartHydrationFallback(reason);
+            }
+            else if (stillStale && ackAccepted && progressSignals <= 0)
+            {
+                _catchUpHost.WriteHistoryJournal(
+                    "catch-up-cascade-skipped",
+                    "reason=" + reason +
+                    "; emptyAckGhost=True; stillStale=True");
+            }
         }
 
         /// <summary>

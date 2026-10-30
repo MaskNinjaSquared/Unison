@@ -2,6 +2,66 @@
 
 Newest first.
 
+## Composer — emoji picker font + no keyboard on Mobile
+
+Tapping an emoji from the tray called `FocusProgrammatic` on the RichEditBox, which
+opened the soft keyboard on Mobile; the tray now only places the caret.
+
+The composer never showed the WhatsApp face: `ITextCharacterFormat.Name` resolves
+installed fonts only, so stamping "WhatsApp Color Emoji" per range fell back to the
+system Segoe UI Emoji. Following Unigram, the packaged `WhatsAppColorEmoji.ttf` family
+is renamed to "Segoe UI Emoji" (`EmojiFont` now `...#Segoe UI Emoji`), and the composer
+sets `FontFamily` = `ComposerEmojiFont` (emoji face first, MainFont after; the face maps
+no ASCII). The per-range stamping and deferred pass are gone.
+
+## Offline replay — wider tip window after the first flush
+
+A long offline replay trickles messages in one by one, so the 180 ms tip throttle
+flushed one chat per pass. Each pass paid a list Move, a preview reconcile and the
+badge on the UI thread (300 ms–1.3 s on Mobile Low, stalls of 3 s while a chat
+was open). `OfflineReplayTips` keeps 180 ms for the first progressive flush, then
+uses 1 s until a settle flush (`offline-complete`, journal recovery) ends the replay.
+
+## Sticker box — open fast, ring, then virtualized emoji
+
+Each emoji section was an `ItemsControl` + `WrapGrid` inside a ListView item, so
+the first section realized every glyph at once and froze the UI on Mobile. The
+emoji list is now a grouped `GridView` (`CollectionViewSource`, `ItemsPath=Glyphs`)
+on `ItemsWrapGrid`, which realizes only on-screen glyphs. The tray paints with the
+ProgressRing first (150 ms, every device) and sections stream 40 ms apart.
+
+## Composer — typing lag on the RichEditBox
+
+`ChatComposerInput` re-stamped emoji fonts over the whole document on every
+keystroke and again on the dispatcher. RichEdit raises `TextChanged` for
+format-only edits, so the deferred pass echoed into another pass, and each
+segment `SetRange` fired `SelectionChanged` (mention scan). Format-only echoes
+are now ignored, the deferred pass runs under `_syncing`, and plain text without
+emoji is not re-formatted.
+
+## Chat list — release when no history ever arrives
+
+A fresh pairing holds the list for the first history sync. When the phone sends
+no chunk, nothing completed that sync: the list kept its loading ring while
+enrichment waited on the list paint. Catch-up finish now completes the first
+sync when the list is still awaiting it (`ReleaseListThenEnrichment`), so live
+chats paint and names/avatars run.
+
+## Runtime Health — socket history and decrypt lines
+
+`SocketBridge` copies socket `[History]` lines (notification seen, skipped, not from
+us, download failed) to the journal as `history|socket-chunk`, and
+`[Decrypt] Failed` as `messages|decrypt-failed`. A pairing with no initial sync now
+shows whether the phone never sent the notification or the client dropped it.
+
+## Desktop — stop FULL_HISTORY idle-continue ghost loop
+
+Catch-up treated live tip advances (`signals=0`) as lot progress, so Desktop High
+kept `idle-continue` for dozens of rounds after WA `ack-accepted` with no history
+payload. Lot progress is chunk signals only; empty-ack quiet lots finish on every
+tier (was frugal/Mobile only). Empty-ack finish also skips High's
+`hydration-then-full` repair cascade (was reopening the same banner immediately).
+
 ## Desktop tray — close-to-tray (X hides window)
 
 `confirmAppClose` was cancelling close with no hide, so X did nothing. Stub now receives

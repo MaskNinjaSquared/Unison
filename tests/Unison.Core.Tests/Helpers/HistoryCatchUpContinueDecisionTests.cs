@@ -13,12 +13,36 @@ namespace Unison.Core.Tests.Helpers
             new DateTime(2026, 5, 20, 12, 0, 0, DateTimeKind.Utc);
 
         [Fact]
-        public void Tip_advance_resets_stagnant_and_continues()
+        public void Live_tip_advance_without_chunk_signals_is_not_lot_progress()
         {
+            // Desktop ghost: group live traffic moves newest tip while FULL_HISTORY
+            // ack-accepted delivered no chunks (signals=0). Must not reset stagnant
+            // or the idle-continue loop never reaches Finish.
             HistoryCatchUpContinueResult r = HistoryCatchUpContinueDecision.Decide(
                 newestUtc: Noon.AddHours(1),
                 watermarkUtc: Noon,
                 progressSignals: 0,
+                stillStale: false,
+                stagnantCycles: 1,
+                stagnantStop: 2,
+                continueRound: 8,
+                maxRounds: 60,
+                ackAccepted: true);
+
+            Assert.Equal(HistoryCatchUpContinueAction.FinishFreshAndStagnant, r.Action);
+            Assert.True(r.TipAdvanced);
+            Assert.False(r.MadeProgress);
+            Assert.Equal(2, r.NextStagnantCycles);
+            Assert.Equal(Noon.AddHours(1), r.NextWatermarkUtc);
+        }
+
+        [Fact]
+        public void Tip_advance_with_chunk_signals_resets_stagnant_and_continues()
+        {
+            HistoryCatchUpContinueResult r = HistoryCatchUpContinueDecision.Decide(
+                newestUtc: Noon.AddHours(1),
+                watermarkUtc: Noon,
+                progressSignals: 2,
                 stillStale: true,
                 stagnantCycles: 2,
                 stagnantStop: 2,
@@ -230,6 +254,29 @@ namespace Unison.Core.Tests.Helpers
             Assert.Equal(1, r.NextStagnantCycles);
             Assert.Equal(Noon, r.NextWatermarkUtc);
             Assert.Equal(0, r.NextContinueRound);
+        }
+
+        [Fact]
+        public void Empty_ack_with_live_tip_churn_finishes_when_empty_ack_lot_enabled()
+        {
+            // Same Desktop health shape: tipAdvanced from live, signals=0, ackAccepted.
+            HistoryCatchUpContinueResult r = HistoryCatchUpContinueDecision.Decide(
+                newestUtc: Noon.AddMinutes(5),
+                watermarkUtc: Noon,
+                progressSignals: 0,
+                stillStale: false,
+                stagnantCycles: 0,
+                stagnantStop: 2,
+                continueRound: 9,
+                maxRounds: 60,
+                ackAccepted: true,
+                finishOnEmptyAckLot: true);
+
+            Assert.Equal(HistoryCatchUpContinueAction.FinishStagnantProgress, r.Action);
+            Assert.True(r.TipAdvanced);
+            Assert.False(r.MadeProgress);
+            // Finish leaves the round where it stood (no adjacent page).
+            Assert.Equal(9, r.NextContinueRound);
         }
 
         [Fact]

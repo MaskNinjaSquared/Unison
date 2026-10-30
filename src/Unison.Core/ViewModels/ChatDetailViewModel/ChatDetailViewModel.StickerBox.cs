@@ -18,10 +18,17 @@ namespace Unison.Core.ViewModels
         private const string StickerGlyphOpen = "\uE765";
 
         /// <summary>
-        /// Gap between category adds on Low/Unsupported so WrapGrid can realize one section
-        /// before the next (Lumia hitch when dumping the full catalog in one hop).
+        /// Gap between category adds so the grid can realize one section before the next
+        /// (hitch when dumping the full catalog in one hop). Same on every device.
         /// </summary>
         private const int EmojiCategoryStreamGapMs = 40;
+
+        /// <summary>
+        /// Tray + ProgressRing must paint before the first glyphs realize: opening fast with a
+        /// short ring beats a frozen tap. Task.Yield alone does not guarantee a rendered frame.
+        /// Same on every device.
+        /// </summary>
+        private const int EmojiOpenPaintDelayMs = 150;
 
         private IEmojiRecentStore _emojiRecents;
         private bool _isStickerBoxOpen;
@@ -240,15 +247,13 @@ namespace Unison.Core.ViewModels
                     EmojiCategories.Clear();
                 }).ConfigureAwait(false);
 
-                // Let the tray + ProgressRing paint before the first WrapGrid realizes.
-                await Task.Yield();
+                await Task.Delay(EmojiOpenPaintDelayMs).ConfigureAwait(false);
                 if (generation != _emojiLoadGeneration || !IsStickerBoxOpen)
                 {
                     return;
                 }
 
                 IReadOnlyList<EmojiCategory> planned = BuildEmojiCategoryPlan();
-                bool frugal = IsFrugalEmojiDevice();
                 bool firstPainted = false;
 
                 for (int i = 0; i < planned.Count; i++)
@@ -279,14 +284,7 @@ namespace Unison.Core.ViewModels
                         break;
                     }
 
-                    if (frugal)
-                    {
-                        await Task.Delay(EmojiCategoryStreamGapMs).ConfigureAwait(false);
-                    }
-                    else
-                    {
-                        await Task.Yield();
-                    }
+                    await Task.Delay(EmojiCategoryStreamGapMs).ConfigureAwait(false);
                 }
 
                 if (generation == _emojiLoadGeneration)
@@ -337,17 +335,6 @@ namespace Unison.Core.ViewModels
             }
 
             return EmojiCatalog.Filter(full, _emojiSearchQuery);
-        }
-
-        private bool IsFrugalEmojiDevice()
-        {
-            if (_systemInfo == null)
-            {
-                return false;
-            }
-
-            DeviceCategory category = _systemInfo.GetDeviceCategory();
-            return category != DeviceCategory.High;
         }
     }
 }

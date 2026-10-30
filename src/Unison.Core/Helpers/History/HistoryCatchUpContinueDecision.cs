@@ -3,10 +3,11 @@
 //
 // After a FULL_HISTORY lot goes quiet: finish catch-up, or solicit the next page.
 //
-// Tip age alone must not stop pagination — older conversations arrive without
-// moving the newest tip. Progress is tip advance *or* chunk signals; finish only
-// after several stagnant lots (or max rounds). Decision only; socket / banner /
-// watermark fields stay with the caller.
+// Older conversations can land without moving the newest tip — so tip age alone
+// must not *stop* pagination. Lot progress is chunk/offline signals only: a live
+// tip advance with signals=0 is chat traffic, not FULL_HISTORY payload, and must
+// not reset stagnant (Desktop ghost idle-continue). Decision only; socket /
+// banner / watermark fields stay with the caller.
 // =============================================================================
 using System;
 
@@ -55,8 +56,8 @@ namespace Unison.Core.Helpers
         /// <param name="maxRounds">Hard ceiling on adjacent pages.</param>
         /// <param name="ackAccepted">Server accepted the FULL_HISTORY request.</param>
         /// <param name="finishOnEmptyAckLot">
-        /// Frugal Mobile: one quiet lot with ack and zero chunk signals finishes
-        /// catch-up (no N×idleAbort ghost rounds when WA has nothing to send).
+        /// One quiet lot with ack and zero chunk signals finishes catch-up (no
+        /// N×idleAbort ghost rounds when WA has nothing to send). Used on every tier.
         /// </param>
         public static HistoryCatchUpContinueResult Decide(
             DateTime newestUtc,
@@ -70,13 +71,14 @@ namespace Unison.Core.Helpers
             bool ackAccepted = false,
             bool finishOnEmptyAckLot = false)
         {
-            // Seeding the watermark from MinValue is not lot progress — otherwise the
-            // first quiet ack with signals=0 always looks like tipAdvanced and resets
-            // stagnant, burning an extra Continue round on Mobile before Finish.
+            // Seeding the watermark from MinValue is not tipAdvanced. Tip advance is
+            // tracked for the watermark only — lot progress requires chunk signals.
+            // Live messages move newestUtc without history payload; counting them as
+            // MadeProgress resets stagnant forever on Desktop (ack + signals=0 loop).
             bool tipAdvanced = watermarkUtc != DateTime.MinValue
                 && newestUtc != DateTime.MinValue
                 && newestUtc > watermarkUtc;
-            bool madeProgress = tipAdvanced || progressSignals > 0;
+            bool madeProgress = progressSignals > 0;
 
             int nextStagnant = madeProgress ? 0 : stagnantCycles + 1;
             DateTime nextWatermark = watermarkUtc;

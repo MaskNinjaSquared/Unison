@@ -127,6 +127,49 @@ namespace Unison.Core.Tests.State
         }
 
         [Fact]
+        public async Task After_the_first_progressive_flush_tips_wait_the_steady_window_until_the_replay_ends()
+        {
+            var host = new FakeHost();
+            var applied = new List<string>();
+            var firstApplied = new TaskCompletionSource<bool>();
+            var resetApplied = new TaskCompletionSource<bool>();
+            var tips = new OfflineReplayTips(
+                new FakeJids(),
+                host,
+                (batch, reason) =>
+                {
+                    lock (applied)
+                    {
+                        applied.Add(reason);
+                        if (applied.Count == 1) firstApplied.TrySetResult(true);
+                        if (applied.Count == 3) resetApplied.TrySetResult(true);
+                    }
+
+                    return Task.CompletedTask;
+                },
+                TimeSpan.FromMilliseconds(10),
+                NoTimer);
+
+            tips.Record(Request("111@s.whatsapp.net", countUnread: false));
+            Assert.Same(firstApplied.Task, await Task.WhenAny(firstApplied.Task, Task.Delay(5000)));
+
+            tips.Record(Request("222@s.whatsapp.net", countUnread: false));
+            await Task.Delay(200);
+            lock (applied)
+            {
+                Assert.Single(applied);
+            }
+
+            await tips.FlushAsync("offline-complete:1");
+
+            tips.Record(Request("333@s.whatsapp.net", countUnread: false));
+            Assert.Same(resetApplied.Task, await Task.WhenAny(resetApplied.Task, Task.Delay(5000)));
+            Assert.Equal(
+                new[] { OfflineReplayTips.ProgressiveReason, "offline-complete:1", OfflineReplayTips.ProgressiveReason },
+                applied);
+        }
+
+        [Fact]
         public void A_blank_address_is_not_recorded()
         {
             int applies = 0;
