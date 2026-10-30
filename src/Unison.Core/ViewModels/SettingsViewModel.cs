@@ -428,7 +428,8 @@ namespace Unison.Core.ViewModels
         public string Contributors =>
             "@MayconUs" + Environment.NewLine +
             "@Negociation (Thiago Araujo)" + Environment.NewLine +
-            "@jjb-pro";
+            "@jjb-pro" + Environment.NewLine +
+            "@ZuneTracks";
 
         private async Task ChooseStartTileAsync()
         {
