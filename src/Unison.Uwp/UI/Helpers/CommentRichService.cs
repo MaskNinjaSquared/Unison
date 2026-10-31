@@ -149,8 +149,8 @@ namespace Unison.Uwp.UI.Helpers
         }
 
         /// <summary>
-        /// Resolves @digits mentions to display names for plain TextBlock previews
-        /// (chat list strip). Does not build rich runs — layout stays reliable in list rows.
+        /// Resolves @digits mentions to display names for chat-list strip previews.
+        /// The strip paints the result with <c>EmojiRichRuns</c> (WhatsApp Color Emoji).
         /// </summary>
         public static string FormatMentionsPlain(
             string text,

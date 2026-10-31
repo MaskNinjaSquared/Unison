@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using Unison.Core.Helpers;
 using Windows.UI.Text;
 using Windows.UI.Xaml;
+using Windows.UI.Xaml.Controls;
 using Windows.UI.Xaml.Documents;
 using Windows.UI.Xaml.Media;
 
@@ -16,6 +17,27 @@ namespace Unison.Uwp.UI.Helpers
         private static FontFamily _emojiFont;
         private static bool _emojiFontResolved;
 
+        /// <summary>
+        /// Replaces <paramref name="block"/> content with mixed body/emoji runs.
+        /// Empty text clears the block (same as setting Text to empty).
+        /// </summary>
+        public static void SetTextBlock(TextBlock block, string text)
+        {
+            if (block == null)
+            {
+                return;
+            }
+
+            block.Text = string.Empty;
+            block.Inlines.Clear();
+            if (string.IsNullOrEmpty(text))
+            {
+                return;
+            }
+
+            AppendInlines(block.Inlines, text);
+        }
+
         public static void Append(
             Paragraph paragraph,
             string text,
@@ -27,6 +49,15 @@ namespace Unison.Uwp.UI.Helpers
                 return;
             }
 
+            AppendInlines(paragraph.Inlines, text, weight, foreground);
+        }
+
+        private static void AppendInlines(
+            InlineCollection inlines,
+            string text,
+            FontWeight? weight = null,
+            Brush foreground = null)
+        {
             FontFamily emojiFont = ResolveEmojiFont();
             IReadOnlyList<EmojiText.Segment> segments = EmojiText.Split(text);
             for (int i = 0; i < segments.Count; i++)
@@ -53,7 +84,7 @@ namespace Unison.Uwp.UI.Helpers
                     run.FontFamily = emojiFont;
                 }
 
-                paragraph.Inlines.Add(run);
+                inlines.Add(run);
             }
         }
 

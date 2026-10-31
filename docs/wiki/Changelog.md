@@ -2,6 +2,12 @@
 
 Newest first.
 
+## Chat list strip — WhatsApp emoji font
+
+`ChatListPreviewStrip` painted preview/author with plain `TextBlock.Text` on
+`MainFont`, so emoji fell to Segoe. It now builds the same mixed runs as bubbles
+(`EmojiRichRuns.SetTextBlock`) for preview text, author, and author detail.
+
 ## Composer — emoji picker font + no keyboard on Mobile
 
 Tapping an emoji from the tray called `FocusProgrammatic` on the RichEditBox, which

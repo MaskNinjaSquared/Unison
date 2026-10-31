@@ -82,7 +82,7 @@ namespace Unison.Uwp.UI.Controls
             Loaded += (_, __) =>
             {
                 ApplyPreviewModel();
-                RefreshPreviewText();
+                RefreshStripText();
                 SyncKindHostForeground();
                 Relayout();
             };
@@ -155,7 +155,7 @@ namespace Unison.Uwp.UI.Controls
 
             strip.HookPreview(e.NewValue as ChatListPreview);
             strip.ApplyPreviewModel();
-            strip.RefreshPreviewText();
+            strip.RefreshStripText();
             strip.Relayout();
         }
 
@@ -167,7 +167,7 @@ namespace Unison.Uwp.UI.Controls
                 return;
             }
 
-            strip.RefreshPreviewText();
+            strip.RefreshStripText();
             strip.Relayout();
         }
 
@@ -177,6 +177,11 @@ namespace Unison.Uwp.UI.Controls
             if (strip == null)
             {
                 return;
+            }
+
+            if (e.Property == AuthorProperty || e.Property == AuthorDetailProperty)
+            {
+                strip.RefreshAuthorRuns();
             }
 
             if (strip.KindHost != null)
@@ -205,7 +210,7 @@ namespace Unison.Uwp.UI.Controls
         private void Preview_PropertyChanged(object sender, PropertyChangedEventArgs e)
         {
             ApplyPreviewModel();
-            RefreshPreviewText();
+            RefreshStripText();
             Relayout();
         }
 
@@ -271,17 +276,39 @@ namespace Unison.Uwp.UI.Controls
             Relayout();
         }
 
-        private void RefreshPreviewText()
+        private void RefreshStripText()
+        {
+            RefreshAuthorRuns();
+            RefreshPreviewRuns();
+        }
+
+        private void RefreshAuthorRuns()
+        {
+            if (AuthorBlock != null)
+            {
+                EmojiRichRuns.SetTextBlock(AuthorBlock, Author ?? string.Empty);
+            }
+
+            if (AuthorDetailBlock != null)
+            {
+                EmojiRichRuns.SetTextBlock(AuthorDetailBlock, AuthorDetail ?? string.Empty);
+            }
+        }
+
+        private void RefreshPreviewRuns()
         {
             if (PreviewTextBlock == null)
             {
                 return;
             }
 
-            PreviewTextBlock.Text = CommentRichService.FormatMentionsPlain(
-                Text,
-                MentionedJids as IEnumerable<string>,
-                MentionLookup as IReadOnlyDictionary<string, string>);
+            // Mentions stay plain (resolved names); emoji graphemes use EmojiFont like bubbles.
+            EmojiRichRuns.SetTextBlock(
+                PreviewTextBlock,
+                CommentRichService.FormatMentionsPlain(
+                    Text,
+                    MentionedJids as IEnumerable<string>,
+                    MentionLookup as IReadOnlyDictionary<string, string>));
         }
 
         private void SyncKindHostForeground()
@@ -368,16 +395,17 @@ namespace Unison.Uwp.UI.Controls
             KindHost.Measure(infinite);
             PreviewTextBlock.Measure(infinite);
 
+            // Inlines (emoji runs) leave TextBlock.Text empty — use the bound props.
             bool hasAuthor = AuthorBlock.Visibility == Visibility.Visible &&
-                             !string.IsNullOrEmpty(AuthorBlock.Text);
+                             !string.IsNullOrEmpty(Author);
             bool hasChevron = AuthorChevron != null &&
                               AuthorChevron.Visibility == Visibility.Visible;
             bool hasAuthorDetail = AuthorDetailBlock != null &&
                                    AuthorDetailBlock.Visibility == Visibility.Visible &&
-                                   !string.IsNullOrEmpty(AuthorDetailBlock.Text);
+                                   !string.IsNullOrEmpty(AuthorDetail);
             // GroupJoin is plain system text — no media chip (same budget as Text).
             bool hasChip = Kind != ChatPreviewKind.Text && Kind != ChatPreviewKind.GroupJoin;
-            bool hasText = !string.IsNullOrEmpty(PreviewTextBlock.Text);
+            bool hasText = !string.IsNullOrEmpty(Text);
 
             double authorDesired = hasAuthor ? AuthorBlock.DesiredSize.Width : 0;
             double chevronDesired = hasChevron ? AuthorChevron.DesiredSize.Width : 0;
