@@ -1,5 +1,7 @@
 using Unison.Uwp.UI.Controls;
 using Unison.Uwp.UI.Views;
+using Unison.Core.Helpers;
+using Unison.Core.ViewModels;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
 using Windows.UI.Xaml.Input;
@@ -43,6 +45,26 @@ namespace Unison.Uwp.UI.Templates
         private void MessageBubble_Holding(object sender, HoldingRoutedEventArgs e)
         {
             FindChatDetail(sender)?.OnMessageBubbleHolding(sender, e);
+        }
+
+        private void MessageBubble_ManipulationCompleted(object sender, ManipulationCompletedRoutedEventArgs e)
+        {
+            if (!MessageBubbleReplySwipe.ShouldReply(
+                    e.Cumulative.Translation.X,
+                    e.Cumulative.Translation.Y))
+            {
+                return;
+            }
+
+            var bubble = sender as FrameworkElement;
+            var message = bubble?.DataContext as ChatMessageViewModel;
+            if (message == null)
+            {
+                return;
+            }
+
+            FindChatDetail(sender)?.ViewModel?.BeginReply(message);
+            e.Handled = true;
         }
 
         private void QuoteBorder_Tapped(object sender, TappedRoutedEventArgs e)
