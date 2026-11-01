@@ -245,5 +245,11 @@
             ItemsSource="{x:Bind ViewModel.SharePickerCandidates, Mode=OneWay}"
             ItemClickCommand="{x:Bind ViewModel.SelectShareChatCommand}"
             BackCommand="{x:Bind ViewModel.CloseSharePickerCommand}"/>
+
+        <!-- New conversation: tiles + A–Z above the chat list (same cover model as Share). -->
+        <controls:NewConversationView
+            x:Name="NewConversationOverlay"
+            Canvas.ZIndex="101"
+            ViewModel="{x:Bind ViewModel.NewConversation, Mode=OneWay}"/>
     </Grid>
 </Page>

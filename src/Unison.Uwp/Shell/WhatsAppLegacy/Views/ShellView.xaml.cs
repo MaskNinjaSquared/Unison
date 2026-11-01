@@ -1709,7 +1709,44 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             return null;
         }
 
-        private async Task StartNewChatAsync()
+        private Task StartNewChatAsync()
+        {
+            try
+            {
+                if (!string.Equals(_loadedSection, "chats", StringComparison.OrdinalIgnoreCase) &&
+                    SectionPivot != null)
+                {
+                    SectionPivot.SelectedIndex = 0;
+                }
+
+                if (_shell?.NewConversation != null)
+                {
+                    _shell.NewConversation.Open();
+                    return Task.CompletedTask;
+                }
+
+                return StartNewChatViaPhoneDialogAsync();
+            }
+            catch (Exception ex)
+            {
+                return StartNewChatFailedAsync(ex);
+            }
+        }
+
+        private async Task StartNewChatFailedAsync(Exception ex)
+        {
+            try
+            {
+                System.Diagnostics.Debug.WriteLine("[NewConversation] Open failed: " + ex?.Message);
+            }
+            catch
+            {
+            }
+
+            await Task.CompletedTask;
+        }
+
+        private async Task StartNewChatViaPhoneDialogAsync()
         {
             if (_dialogs == null || _newChatFactory == null || _chats == null || _chatState == null)
             {

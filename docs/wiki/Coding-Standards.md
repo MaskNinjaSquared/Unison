@@ -47,6 +47,7 @@ Agents: read this before adding a view, service, façade, or socket use case.
 | `ImageViewerView` | `ImageViewerViewModel` |
 | `VideoViewerView` | `VideoViewerViewModel` |
 | `NewChatDialog` | `NewChatDialogViewModel` |
+| `NewConversationView` (overlay) | `NewConversationViewModel` |
 
 - ViewModels inherit `Observable` (`Set` / `OnPropertyChanged` / `RaiseProperties`) unless a dedicated INPC type already exists (`ChatMessageViewModel`).
 - Commands are `RelayCommand` / `RelayCommand<T>` (`ICommand`). Bind `Command` in XAML.

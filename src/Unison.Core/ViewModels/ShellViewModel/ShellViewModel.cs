@@ -108,7 +108,8 @@ namespace Unison.Core.ViewModels
             IContactService contactService = null,
             ChatListDeepLinkHoldGate deepLinkHold = null,
             IShareTargetSession shareTarget = null,
-            IMessageService messageService = null)
+            IMessageService messageService = null,
+            NewConversationViewModel newConversation = null)
         {
             _chatState = chatState ?? throw new ArgumentNullException(nameof(chatState));
             _connectionService = connectionService ?? throw new ArgumentNullException(nameof(connectionService));
@@ -135,6 +136,7 @@ namespace Unison.Core.ViewModels
             NavigateToSectionCommand = new RelayCommand<string>(NavigateToSection);
             OpenProfileSettingsCommand = new RelayCommand(OpenProfileSettings);
             InitShareCommands();
+            InitNewConversation(newConversation);
 
             _navigator.ShellNavigated += Navigator_ShellNavigated;
             _notificationCounter = new NotificationCounterWatch(_chatState.Chats);

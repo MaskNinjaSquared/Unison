@@ -404,7 +404,19 @@ namespace Unison.Core.ViewModels
         // Menu actions
         // ---------------------------------------------------------------------
 
-        private async Task StartNewChatAsync()
+        private void OpenNewConversation()
+        {
+            if (_newConversation != null)
+            {
+                _newConversation.Open();
+                return;
+            }
+
+            // Overlay not registered (tests / early boot) — fall back to the phone dialog.
+            _ = StartNewChatViaPhoneDialogAsync();
+        }
+
+        private async Task StartNewChatViaPhoneDialogAsync()
         {
             string jid = await _dialogService.ShowNewChatDialogAsync(_newChatFactory.Create());
             if (string.IsNullOrEmpty(jid))

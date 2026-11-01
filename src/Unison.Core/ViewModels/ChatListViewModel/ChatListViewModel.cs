@@ -211,9 +211,13 @@ namespace Unison.Core.ViewModels
 
         /// <summary>
         /// Builds a fresh <see cref="NewChatDialogViewModel"/> per New Chat dialog
-        /// (clean phone/error state).
+        /// (clean phone/error state). Still used when the New Conversation overlay
+        /// opens the phone-number path.
         /// </summary>
         private readonly INewChatDialogViewModelFactory _newChatFactory;
+
+        /// <summary>Full-bleed New Conversation overlay (tiles + A–Z).</summary>
+        private readonly NewConversationViewModel _newConversation;
 
         public ChatListViewModel(
             IChatStateStore chatState,
@@ -242,7 +246,8 @@ namespace Unison.Core.ViewModels
             ChatListColdPopulateGate coldPopulateGate = null,
             ChatTimelineLoadPriorityGate timelineLoadPriority = null,
             ISystemInfoProvider systemInfo = null,
-            IAppVisibility appVisibility = null)
+            IAppVisibility appVisibility = null,
+            NewConversationViewModel newConversation = null)
         {
             _jids = jids ?? throw new ArgumentNullException(nameof(jids));
             _chatService = chatService;
@@ -270,6 +275,7 @@ namespace Unison.Core.ViewModels
             _statusBar = statusBar;
             _dialogService = dialogService;
             _newChatFactory = newChatFactory ?? throw new ArgumentNullException(nameof(newChatFactory));
+            _newConversation = newConversation;
 
             // Strategy-driven: WhatsApp always inline; Unison Mobile uses StatusBar.
             DisplaySync = theme == null || theme.DisplaySyncInChatList;
@@ -324,7 +330,7 @@ namespace Unison.Core.ViewModels
                            !string.IsNullOrWhiteSpace(request.Chat.JID) &&
                            _chatStore != null);
             OpenMenuCommand = new RelayCommand(() => MenuRequested?.Invoke(this, EventArgs.Empty));
-            NewChatCommand = new RelayCommand(() => _ = StartNewChatAsync());
+            NewChatCommand = new RelayCommand(OpenNewConversation);
             AddContactCommand = new RelayCommand(BeginAddContact);
             FilterChatsCommand = new RelayCommand<int>(ApplyChatListFilter);
         }
