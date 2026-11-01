@@ -208,6 +208,12 @@ namespace Unison.Core.Models
                 if (_unreadCount == value) return;
                 _unreadCount = value;
                 OnPropertyChanged();
+                if (_unreadCount <= 0 && _hasCitation)
+                {
+                    _hasCitation = false;
+                    OnPropertyChanged(nameof(HasCitation));
+                }
+
                 RaiseUnreadUiChanged();
             }
         }
@@ -216,6 +222,24 @@ namespace Unison.Core.Models
 
         /// <summary>True when there are unread messages (bind with BooleanToVisibilityConverter).</summary>
         public bool HasUnread => _unreadCount > 0;
+
+        private bool _hasCitation;
+
+        /// <summary>
+        /// Unread @ of this account or @all in the conversation (list badge beside the unread count).
+        /// Cleared when <see cref="UnreadCount"/> goes to zero.
+        /// </summary>
+        public bool HasCitation
+        {
+            get => _hasCitation;
+            set
+            {
+                bool next = value && _unreadCount > 0;
+                if (_hasCitation == next) return;
+                _hasCitation = next;
+                OnPropertyChanged();
+            }
+        }
 
         private bool _isFavorite;
 

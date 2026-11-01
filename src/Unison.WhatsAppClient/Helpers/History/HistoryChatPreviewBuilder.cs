@@ -94,6 +94,9 @@ namespace Unison.WhatsAppClient.Helpers
                 }
 
                 int unread = conv.HasUnreadCount ? Math.Max(0, (int)conv.UnreadCount) : 0;
+                bool hasCitation = unread > 0 &&
+                    conv.HasUnreadMentionCount &&
+                    conv.UnreadMentionCount > 0;
 
                 bool fromMe = newest.Key != null && newest.Key.FromMe;
                 string participant = HistorySyncContentFilter.ResolveParticipant(newest, jid, isGroup, fromMe);
@@ -107,7 +110,8 @@ namespace Unison.WhatsAppClient.Helpers
                         {
                             IsFromMe = fromMe,
                             SenderName = senderName,
-                            ParticipantJid = participant
+                            ParticipantJid = participant,
+                            Kind = ChatPreviewNormalizer.FromPreviewKind(kind)
                         },
                         true,
                         null,
@@ -123,6 +127,7 @@ namespace Unison.WhatsAppClient.Helpers
                     IsGroup = isGroup,
                     Status = conv.Archived ? ChatStatus.Archived : ChatStatus.Active,
                     UnreadCount = unread,
+                    HasCitation = hasCitation,
                     IsChatPinned = flags.Pinned,
                     PinnedTimestamp = flags.PinnedTimestamp,
                     AppliesMute = flags.AppliesMute,
@@ -172,6 +177,10 @@ namespace Unison.WhatsAppClient.Helpers
                 IsGroup = isGroup,
                 Status = conv.Archived ? ChatStatus.Archived : ChatStatus.Active,
                 UnreadCount = conv.HasUnreadCount ? Math.Max(0, (int)conv.UnreadCount) : 0,
+                HasCitation = conv.HasUnreadCount &&
+                    conv.UnreadCount > 0 &&
+                    conv.HasUnreadMentionCount &&
+                    conv.UnreadMentionCount > 0,
                 IsChatPinned = flags.Pinned,
                 PinnedTimestamp = flags.PinnedTimestamp,
                 AppliesMute = flags.AppliesMute,

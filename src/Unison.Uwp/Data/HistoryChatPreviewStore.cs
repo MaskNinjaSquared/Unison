@@ -20,7 +20,7 @@ namespace Unison.Uwp.Data
     {
         private static readonly string DatabaseFileName = "unison.db";
 
-        public const int CurrentSchemaVersion = 6;
+        public const int CurrentSchemaVersion = 7;
 
         private readonly SemaphoreSlim _initLock = new SemaphoreSlim(1, 1);
         private readonly SemaphoreSlim _writeLock = new SemaphoreSlim(1, 1);
@@ -59,6 +59,7 @@ namespace Unison.Uwp.Data
                 await EnsureColumnAsync("IsCommunityParent", "INTEGER NOT NULL DEFAULT 0")
                     .ConfigureAwait(false);
                 await EnsureColumnAsync("LinkedParentJid", "TEXT").ConfigureAwait(false);
+                await EnsureColumnAsync("HasCitation", "INTEGER NOT NULL DEFAULT 0").ConfigureAwait(false);
                 await _connection.ExecuteAsync(
                         "UPDATE history_chat_preview SET Status = ? WHERE DeletedAtUtc IS NOT NULL",
                         (int)ChatStatus.Deleted)
@@ -135,6 +136,7 @@ namespace Unison.Uwp.Data
                                 LastMessageTimestampUtc = model.LastMessageTimestampUtc,
                                 LastMessageId = model.LastMessageId,
                                 UnreadCount = Math.Max(0, model.UnreadCount),
+                                HasCitation = model.HasCitation,
                                 Name = model.Name,
                                 LastMessageSendState = (int)model.LastMessageSendState,
                                 IsGroup = model.IsGroup,
@@ -204,7 +206,7 @@ namespace Unison.Uwp.Data
                             string linkedParent = Carry(model.LinkedParentJid, prior.LinkedParentJid);
                             conn.Execute(
                                 "UPDATE history_chat_preview SET Status = ?, DeletedAtUtc = ?, " +
-                                "UnreadCount = ?, Name = ?, LastMessageSendState = ?, IsGroup = ?, " +
+                                "UnreadCount = ?, HasCitation = ?, Name = ?, LastMessageSendState = ?, IsGroup = ?, " +
                                 "IsCommunityAnnounce = ?, IsCommunityParent = ?, LinkedParentJid = ?, " +
                                 "LastMessageAuthor = ?, LastMessageSenderName = ?, " +
                                 "LastMessageParticipantJid = ?, LastMessageIsFromMe = ?, " +
@@ -212,6 +214,7 @@ namespace Unison.Uwp.Data
                                 (int)status,
                                 carried,
                                 Math.Max(0, model.UnreadCount),
+                                model.HasCitation ? 1 : 0,
                                 model.Name,
                                 (int)model.LastMessageSendState,
                                 model.IsGroup,
@@ -243,6 +246,7 @@ namespace Unison.Uwp.Data
                         prior.Status = (int)status;
                         prior.DeletedAtUtc = carried;
                         prior.UnreadCount = Math.Max(0, model.UnreadCount);
+                        prior.HasCitation = model.HasCitation;
                         prior.Name = model.Name;
                         prior.LastMessageSendState = (int)model.LastMessageSendState;
                         prior.IsGroup = model.IsGroup;
@@ -346,7 +350,7 @@ namespace Unison.Uwp.Data
                 var rows = await _connection
                     .QueryAsync<LifecycleSnapshot>(
                         "SELECT Jid, Status, DeletedAtUtc, LastMessageTimestampUtc, LastMessageId, " +
-                        "UnreadCount, Name, LastMessageSendState, IsGroup, IsCommunityAnnounce, " +
+                        "UnreadCount, HasCitation, Name, LastMessageSendState, IsGroup, IsCommunityAnnounce, " +
                         "IsCommunityParent, LinkedParentJid, LidJid, PnJid, " +
                         "LastMessageAuthor, LastMessageSenderName, LastMessageParticipantJid, " +
                         "LastMessageIsFromMe " +
@@ -416,6 +420,7 @@ namespace Unison.Uwp.Data
             }
 
             return prior.UnreadCount != Math.Max(0, model.UnreadCount) ||
+                   prior.HasCitation != model.HasCitation ||
                    prior.LastMessageSendState != (int)model.LastMessageSendState ||
                    prior.IsGroup != model.IsGroup ||
                    (!prior.IsCommunityAnnounce && model.IsCommunityAnnounce) ||
@@ -512,6 +517,7 @@ namespace Unison.Uwp.Data
                 LinkedParentJid = model.LinkedParentJid,
                 Status = status,
                 UnreadCount = model.UnreadCount,
+                HasCitation = model.HasCitation,
                 IsChatPinned = model.IsChatPinned,
                 PinnedTimestamp = model.PinnedTimestamp,
                 AppliesMute = model.AppliesMute,
@@ -554,6 +560,8 @@ namespace Unison.Uwp.Data
             public string LastMessageId { get; set; }
 
             public int UnreadCount { get; set; }
+
+            public bool HasCitation { get; set; }
 
             public string Name { get; set; }
 
@@ -896,6 +904,7 @@ namespace Unison.Uwp.Data
                 LinkedParentJid = Carry(model.LinkedParentJid, prior?.LinkedParentJid),
                 Status = (int)status,
                 UnreadCount = Math.Max(0, model.UnreadCount),
+                HasCitation = model.HasCitation,
                 LastMessage = model.LastMessage,
                 LastMessageAuthor = model.LastMessageAuthor,
                 LastMessageIsFromMe = model.LastMessageIsFromMe,
@@ -954,6 +963,7 @@ namespace Unison.Uwp.Data
                 LinkedParentJid = row.LinkedParentJid,
                 Status = status,
                 UnreadCount = row.UnreadCount,
+                HasCitation = row.HasCitation,
                 LastMessage = row.LastMessage,
                 LastMessageAuthor = row.LastMessageAuthor,
                 LastMessageIsFromMe = row.LastMessageIsFromMe,

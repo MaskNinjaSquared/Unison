@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <root>
   <xsd:schema id="root" xmlns="" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">
     <xsd:import namespace="http://www.w3.org/XML/1998/namespace" />
@@ -734,6 +734,40 @@
   <data name="Settings_Notifications.Text" xml:space="preserve">
     <value>Показывать уведомления и количество новых сообщений на значке.</value>
   </data>
+  <data name="Settings_LockScreenNotifications.Header" xml:space="preserve">
+    <value>Lock screen</value>
+  </data>
+  <data name="Settings_LockScreenNotifications.Text" xml:space="preserve">
+    <value>Which chats update the large Live Tile / lock screen preview.</value>
+  </data>
+  <data name="Settings_LockScreenScope_All.Content" xml:space="preserve">
+    <value>All</value>
+  </data>
+  <data name="Settings_LockScreenScope_Groups.Content" xml:space="preserve">
+    <value>Groups</value>
+  </data>
+  <data name="Settings_LockScreenScope_Direct.Content" xml:space="preserve">
+    <value>Contacts</value>
+  </data>
+  <data name="Settings_LockScreenScope_Favorites.Content" xml:space="preserve">
+    <value>Favorites</value>
+  </data>
+  <data name="Settings_NotificationFilter.Header" xml:space="preserve">
+    <value>Filter notifications</value>
+  </data>
+  <data name="Settings_NotificationFilter.Text" xml:space="preserve">
+    <value>Which chats may raise toasts and count toward the badge.</value>
+  </data>
+  <data name="Settings_NotificationFilterChoose.Content" xml:space="preserve"><value>Выбрать</value></data>
+  <data name="Settings_NotifyGroups.Content" xml:space="preserve">
+    <value>Groups</value>
+  </data>
+  <data name="Settings_NotifyDirect.Content" xml:space="preserve">
+    <value>Contacts</value>
+  </data>
+  <data name="Settings_NotifyFavorites.Content" xml:space="preserve">
+    <value>Favorites</value>
+  </data>
   <data name="Settings_MessageNotificationSound.Header" xml:space="preserve">
     <value>Уведомления сообщений</value>
   </data>
@@ -767,6 +801,9 @@
   <data name="StartTileDialog.Title" xml:space="preserve"><value>Плитка Пуска</value></data>
   <data name="StartTileDialog.PrimaryButtonText" xml:space="preserve"><value>Закрепить</value></data>
   <data name="StartTileDialog.CloseButtonText" xml:space="preserve"><value>Отмена</value></data>
+  <data name="NotificationFilterDialog.Title" xml:space="preserve"><value>Фильтр уведомлений</value></data>
+  <data name="NotificationFilterDialog.PrimaryButtonText" xml:space="preserve"><value>OK</value></data>
+  <data name="NotificationFilterDialog.CloseButtonText" xml:space="preserve"><value>Отмена</value></data>
   <data name="StartTileDialog_Unison.Content" xml:space="preserve"><value>Unison</value></data>
   <data name="StartTileDialog_WhatsAppWeb.Content" xml:space="preserve"><value>WhatsApp Web</value></data>
   <data name="StartTileDialog_WhatsAppLegacy.Content" xml:space="preserve"><value>WhatsApp Legacy</value></data>
@@ -1023,6 +1060,27 @@
   </data>
   <data name="Message_GroupJoin" xml:space="preserve">
     <value>{0} вступил(а) в группу</value>
+  </data>
+  <data name="Message_GroupAddedBy" xml:space="preserve">
+    <value>{0} added {1}</value>
+  </data>
+  <data name="Message_GroupLeft" xml:space="preserve">
+    <value>{0} left</value>
+  </data>
+  <data name="Message_GroupRemovedBy" xml:space="preserve">
+    <value>{0} removed {1}</value>
+  </data>
+  <data name="Message_GroupSubjectChangedFromTo" xml:space="preserve">
+    <value>{0} changed the group name from "{1}" to "{2}"</value>
+  </data>
+  <data name="Message_GroupSubjectChangedTo" xml:space="preserve">
+    <value>{0} changed the group name to "{1}"</value>
+  </data>
+  <data name="Message_GroupSubjectChangedFromToAnon" xml:space="preserve">
+    <value>Group name changed from "{0}" to "{1}"</value>
+  </data>
+  <data name="Message_GroupSubjectChangedToAnon" xml:space="preserve">
+    <value>Group name changed to "{0}"</value>
   </data>
   <data name="ChatDetail_AddContactLink.Content" xml:space="preserve">
     <value>Добавить контакт</value>

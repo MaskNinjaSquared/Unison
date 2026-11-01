@@ -80,5 +80,10 @@ namespace Unison.Core.Contracts.WhatsApp
             int processed,
             bool bannerActive,
             bool deferListRelease);
+
+        /// <summary>
+        /// After a FULL lot goes quiet (applied + SQLite done). Silent chain may schedule the next probe.
+        /// </summary>
+        void NotifySilentFullLotQuiet(string triggerReason, int appliedCount);
     }
 }

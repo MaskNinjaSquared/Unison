@@ -79,6 +79,9 @@ namespace Unison.WhatsAppClient.Messages
         private readonly int _sqlOpenPageSize;
         private readonly int _sqlLoadMorePageSize;
         private readonly int _thinTimelineThreshold;
+        private readonly object _sessionOpenOnDemandGate = new object();
+        private readonly HashSet<string> _sessionOpenOnDemandClaimed =
+            new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         public MessageFacade(
             IPersonStore personStore,
@@ -674,10 +677,13 @@ namespace Unison.WhatsAppClient.Messages
                 "ms=" + seedMs + "; merged=" + merged.Count +
                 "; sqlMs=" + sqlMs);
 
-            // RECENT history often leaves a single listable message — pull older on open.
+            // Pull one ON_DEMAND page after the thin timeline paints: recovers messages the
+            // initial FULL push skipped for this chat. One attempt per session; off the UI path.
             bool onDemandPending = IsHistoryOnDemandPending(jid);
             bool isThin = merged.Count > 0 && merged.Count < _thinTimelineThreshold;
-            if (isThin && !onDemandPending)
+            if (merged.Count > 0 &&
+                !onDemandPending &&
+                TryClaimSessionOpenOnDemand(jid))
             {
                 _ = RequestOlderHistorySafeAsync(jid, merged.Count);
             }
@@ -757,25 +763,42 @@ namespace Unison.WhatsAppClient.Messages
             }
         }
 
+        /// <summary>
+        /// One HISTORY_SYNC_ON_DEMAND probe per chat per process session (after paint).
+        /// </summary>
+        private bool TryClaimSessionOpenOnDemand(string jid)
+        {
+            string key = _jids.GetCanonicalJid(JidHelper.Normalize(jid)) ?? JidHelper.Normalize(jid);
+            if (string.IsNullOrWhiteSpace(key))
+            {
+                return false;
+            }
+
+            lock (_sessionOpenOnDemandGate)
+            {
+                return _sessionOpenOnDemandClaimed.Add(key);
+            }
+        }
+
         private async Task RequestOlderHistorySafeAsync(string jid, int localCount)
         {
             try
             {
                 bool requested = await EnsureHistoryOnDemandAsync(jid, OnDemandFetchCount).ConfigureAwait(false);
                 Debug.WriteLine(
-                    "[MessageFacade] Thin timeline on-demand for " + jid +
+                    "[MessageFacade] Session open on-demand for " + jid +
                     " local=" + localCount + " requested=" + requested);
                 _diagnostics?.Write(
                     "chat-open",
-                    "thin-on-demand",
+                    "session-open-on-demand",
                     "chat=" + DiagnosticJidMask.Apply(jid) +
                     "; local=" + localCount +
                     "; requested=" + requested);
             }
             catch (Exception ex)
             {
-                Debug.WriteLine("[MessageFacade] Thin timeline on-demand failed: " + ex.Message);
-                _diagnostics?.RecordException("chat-open", "thin-on-demand-failed", ex);
+                Debug.WriteLine("[MessageFacade] Session open on-demand failed: " + ex.Message);
+                _diagnostics?.RecordException("chat-open", "session-open-on-demand-failed", ex);
             }
         }
 
@@ -1780,6 +1803,15 @@ namespace Unison.WhatsAppClient.Messages
                 return;
             }
 
+            try
+            {
+                _notifications.RefreshUnreadState(_chatState?.Chats);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[MessageFacade] Badge refresh failed: " + ex.Message);
+            }
+
             // Toast / Live Tile / Start-tile work is WinRT and must not hold stage=route.
             // Strip+announce are already detached from the pump; this Task.Run keeps WinRT off UI.
             _ = Task.Run(() =>
@@ -1797,7 +1829,9 @@ namespace Unison.WhatsAppClient.Messages
                         payload.TotalUnread,
                         payload.AvatarUrl,
                         payload.ChatUnread,
-                        payload.IsCommunityAnnounce);
+                        payload.IsCommunityAnnounce,
+                        payload.IsFavorite,
+                        payload.IsChannel);
                 }
                 catch (Exception ex)
                 {
@@ -3619,6 +3653,10 @@ namespace Unison.WhatsAppClient.Messages
                         IsFromMe = request.IsFromMe,
                         IsOffline = true,
                         CountUnread = true,
+                        HasCitation = MessageMentionsSelf.Check(
+                            chatMessage.MentionAll,
+                            chatMessage.MentionedJids,
+                            _jids.IsSelfLinked),
                         MarkDirtyWhenOffline = false,
                         Kind = request.PreviewKind,
                         Status = chatMessage.Status,
@@ -3669,6 +3707,13 @@ namespace Unison.WhatsAppClient.Messages
             // (scroll / reshuffle), awaiting High for tip+Move held the pump past 12s
             // (health-stall → message-timeout-skip) and the list felt frozen until the
             // next toast. Strip + announce finish on their own; route returns after persist.
+            bool countsAsUnread = request.CountsAsUnread;
+            bool hasCitation = countsAsUnread &&
+                MessageMentionsSelf.Check(
+                    chatMessage.MentionAll,
+                    chatMessage.MentionedJids,
+                    _jids.IsSelfLinked);
+
             Task<LiveIncomingChatListApplyResult> stripTask = chats.ApplyLiveIncomingChatListAsync(
                 new LiveIncomingChatListApplyRequest
                 {
@@ -3683,8 +3728,9 @@ namespace Unison.WhatsAppClient.Messages
                     MessageId = chatMessage.Id,
                     ParticipantJid = request.IsGroup ? request.StripParticipantJid : null,
                     SenderName = request.IsGroup && !request.IsFromMe ? request.SenderName : null,
-                    UnreadDelta = request.CountsAsUnread ? 1 : 0,
-                    CountsAsUnread = request.CountsAsUnread,
+                    UnreadDelta = countsAsUnread ? 1 : 0,
+                    CountsAsUnread = countsAsUnread,
+                    HasCitation = hasCitation,
                     IsGroup = request.IsGroup,
                     AliasLid = aliasLid,
                     AliasPn = aliasPn
@@ -3899,6 +3945,17 @@ namespace Unison.WhatsAppClient.Messages
         }
 
         /// <inheritdoc />
+        /// <inheritdoc />
+        public async Task<bool> TryReactAsync(string chatJid, string messageId, string emoji)
+        {
+            // Wire send not hooked yet — always fail after a short delay so the UI can prove undo.
+            _ = chatJid;
+            _ = messageId;
+            _ = emoji;
+            await Task.Delay(3000).ConfigureAwait(false);
+            return false;
+        }
+
         public async Task NotifyGroupJoinsAsync(IReadOnlyList<GroupJoinNotifyRequest> joins)
         {
             if (joins == null || joins.Count == 0)
@@ -3906,20 +3963,277 @@ namespace Unison.WhatsAppClient.Messages
                 return;
             }
 
-            string template = _strings != null
+            string joinTemplate = _strings != null
                 ? _strings.Get("Message_GroupJoin", "{0} joined the group")
                 : "{0} joined the group";
+            string addedByTemplate = _strings != null
+                ? _strings.Get("Message_GroupAddedBy", "{0} added {1}")
+                : "{0} added {1}";
 
-            IContactService contacts = null;
+            IContactService contacts = TryResolveContactsForGroupSystem("Group-join");
+            await PrepGroupSystemPhonesAsync(contacts, CollectJoinPhones(joins)).ConfigureAwait(false);
+
+            foreach (GroupJoinNotifyRequest join in joins)
+            {
+                if (join == null ||
+                    string.IsNullOrWhiteSpace(join.GroupJid) ||
+                    string.IsNullOrWhiteSpace(join.ParticipantJid))
+                {
+                    continue;
+                }
+
+                string groupJid;
+                string participant;
+                string phoneDigits;
+                string who;
+                if (!TryResolveGroupSystemParticipant(
+                        contacts,
+                        join.GroupJid,
+                        join.ParticipantJid,
+                        join.PhoneDigits,
+                        "group-join",
+                        out groupJid,
+                        out participant,
+                        out phoneDigits,
+                        out who))
+                {
+                    continue;
+                }
+
+                string actorLabel;
+                string actorPhone;
+                ResolveGroupSystemActor(
+                    contacts,
+                    join.ActorJid,
+                    out actorLabel,
+                    out actorPhone);
+                string content = GroupSystemLineText.JoinOrAdded(
+                    joinTemplate,
+                    addedByTemplate,
+                    who,
+                    actorLabel,
+                    join.ActorJid,
+                    join.ParticipantJid,
+                    _jids.GetCanonicalJid,
+                    actorPhone,
+                    phoneDigits);
+
+                DateTime stamp = NormalizeGroupSystemStamp(join.TimestampUtc);
+                string id = BuildGroupSystemMessageId(
+                    "gj",
+                    join.NotificationId,
+                    participant,
+                    stamp);
+
+                ChatMessage chatMessage = await InsertGroupSystemLineAsync(
+                    groupJid,
+                    id,
+                    content,
+                    stamp,
+                    participant,
+                    phoneDigits,
+                    who).ConfigureAwait(false);
+                if (chatMessage == null)
+                {
+                    continue;
+                }
+
+                if (contacts != null &&
+                    GroupJoinDisplayLabel.NeedsBetterName(who) &&
+                    !GroupSystemLineText.HasDistinctActor(
+                        join.ActorJid,
+                        join.ParticipantJid,
+                        _jids.GetCanonicalJid,
+                        actorPhone,
+                        phoneDigits))
+                {
+                    ScheduleGroupJoinRelabel(
+                        contacts,
+                        groupJid,
+                        chatMessage,
+                        participant,
+                        phoneDigits,
+                        joinTemplate);
+                }
+            }
+        }
+
+        /// <inheritdoc />
+        public async Task NotifyGroupLeavesAsync(IReadOnlyList<GroupLeaveNotifyRequest> leaves)
+        {
+            if (leaves == null || leaves.Count == 0)
+            {
+                return;
+            }
+
+            string leftTemplate = _strings != null
+                ? _strings.Get("Message_GroupLeft", "{0} left")
+                : "{0} left";
+            string removedByTemplate = _strings != null
+                ? _strings.Get("Message_GroupRemovedBy", "{0} removed {1}")
+                : "{0} removed {1}";
+
+            IContactService contacts = TryResolveContactsForGroupSystem("Group-leave");
+            await PrepGroupSystemPhonesAsync(contacts, CollectLeavePhones(leaves)).ConfigureAwait(false);
+
+            foreach (GroupLeaveNotifyRequest leave in leaves)
+            {
+                if (leave == null ||
+                    string.IsNullOrWhiteSpace(leave.GroupJid) ||
+                    string.IsNullOrWhiteSpace(leave.ParticipantJid))
+                {
+                    continue;
+                }
+
+                string groupJid;
+                string participant;
+                string phoneDigits;
+                string who;
+                if (!TryResolveGroupSystemParticipant(
+                        contacts,
+                        leave.GroupJid,
+                        leave.ParticipantJid,
+                        leave.PhoneDigits,
+                        "group-leave",
+                        out groupJid,
+                        out participant,
+                        out phoneDigits,
+                        out who))
+                {
+                    continue;
+                }
+
+                string actorLabel;
+                string actorPhone;
+                ResolveGroupSystemActor(
+                    contacts,
+                    leave.ActorJid,
+                    out actorLabel,
+                    out actorPhone);
+                string content = GroupSystemLineText.LeaveOrRemoved(
+                    leftTemplate,
+                    removedByTemplate,
+                    who,
+                    actorLabel,
+                    leave.ActorJid,
+                    leave.ParticipantJid,
+                    _jids.GetCanonicalJid,
+                    actorPhone,
+                    phoneDigits);
+
+                DateTime stamp = NormalizeGroupSystemStamp(leave.TimestampUtc);
+                string id = BuildGroupSystemMessageId(
+                    "gl",
+                    leave.NotificationId,
+                    participant,
+                    stamp);
+
+                await InsertGroupSystemLineAsync(
+                    groupJid,
+                    id,
+                    content,
+                    stamp,
+                    participant,
+                    phoneDigits,
+                    who).ConfigureAwait(false);
+            }
+        }
+
+        /// <inheritdoc />
+        public async Task NotifyGroupSubjectChangedAsync(
+            GroupSubjectChangeNotifyRequest change,
+            string previousSubject)
+        {
+            if (change == null ||
+                string.IsNullOrWhiteSpace(change.GroupJid) ||
+                string.IsNullOrWhiteSpace(change.NewSubject))
+            {
+                return;
+            }
+
+            string groupJid = JidHelper.Normalize(change.GroupJid) ?? change.GroupJid.Trim();
+            if (!JidHelper.IsGroupJid(groupJid))
+            {
+                return;
+            }
+
+            string withPrevious = _strings != null
+                ? _strings.Get(
+                    "Message_GroupSubjectChangedFromTo",
+                    "{0} changed the group name from \"{1}\" to \"{2}\"")
+                : "{0} changed the group name from \"{1}\" to \"{2}\"";
+            string toOnly = _strings != null
+                ? _strings.Get(
+                    "Message_GroupSubjectChangedTo",
+                    "{0} changed the group name to \"{1}\"")
+                : "{0} changed the group name to \"{1}\"";
+            string anonWithPrevious = _strings != null
+                ? _strings.Get(
+                    "Message_GroupSubjectChangedFromToAnon",
+                    "Group name changed from \"{0}\" to \"{1}\"")
+                : "Group name changed from \"{0}\" to \"{1}\"";
+            string anonToOnly = _strings != null
+                ? _strings.Get(
+                    "Message_GroupSubjectChangedToAnon",
+                    "Group name changed to \"{0}\"")
+                : "Group name changed to \"{0}\"";
+
+            IContactService contacts = TryResolveContactsForGroupSystem("Group-subject");
+            string actorLabel;
+            string unusedActorPhone;
+            ResolveGroupSystemActor(contacts, change.AuthorJid, out actorLabel, out unusedActorPhone);
+
+            string usablePrevious = previousSubject;
+            if (!string.IsNullOrWhiteSpace(usablePrevious) &&
+                (string.Equals(usablePrevious, groupJid, StringComparison.OrdinalIgnoreCase) ||
+                 usablePrevious.IndexOf('@') >= 0 ||
+                 GroupJoinDisplayLabel.NeedsBetterName(usablePrevious)))
+            {
+                usablePrevious = null;
+            }
+
+            string content = GroupSystemLineText.SubjectChanged(
+                withPrevious,
+                toOnly,
+                actorLabel,
+                usablePrevious,
+                change.NewSubject.Trim(),
+                anonWithPrevious,
+                anonToOnly);
+
+            DateTime stamp = NormalizeGroupSystemStamp(change.TimestampUtc);
+            string id = BuildGroupSystemMessageId(
+                "gs",
+                change.NotificationId,
+                groupJid + "-" + change.NewSubject.Trim(),
+                stamp);
+
+            await InsertGroupSystemLineAsync(
+                groupJid,
+                id,
+                content,
+                stamp,
+                participant: null,
+                phoneDigits: null,
+                who: actorLabel).ConfigureAwait(false);
+        }
+
+        private IContactService TryResolveContactsForGroupSystem(string logLabel)
+        {
             try
             {
-                contacts = _resolveContacts();
+                return _resolveContacts();
             }
             catch (Exception ex)
             {
-                Debug.WriteLine("[MessageFacade] Group-join contacts resolve skipped: " + ex.Message);
+                Debug.WriteLine("[MessageFacade] " + logLabel + " contacts resolve skipped: " + ex.Message);
+                return null;
             }
+        }
 
+        private static List<KeyValuePair<string, string>> CollectJoinPhones(
+            IReadOnlyList<GroupJoinNotifyRequest> joins)
+        {
             var phoneRows = new List<KeyValuePair<string, string>>(joins.Count);
             foreach (GroupJoinNotifyRequest join in joins)
             {
@@ -3933,100 +4247,173 @@ namespace Unison.WhatsAppClient.Messages
                     join.PhoneDigits));
             }
 
-            if (contacts != null && phoneRows.Count > 0)
+            return phoneRows;
+        }
+
+        private static List<KeyValuePair<string, string>> CollectLeavePhones(
+            IReadOnlyList<GroupLeaveNotifyRequest> leaves)
+        {
+            var phoneRows = new List<KeyValuePair<string, string>>(leaves.Count);
+            foreach (GroupLeaveNotifyRequest leave in leaves)
             {
-                try
+                if (leave == null || string.IsNullOrWhiteSpace(leave.ParticipantJid))
                 {
-                    await contacts.ResolveGroupJoinParticipantsAsync(phoneRows).ConfigureAwait(false);
+                    continue;
                 }
-                catch (Exception ex)
-                {
-                    Debug.WriteLine("[MessageFacade] Group-join name prep failed: " + ex.Message);
-                }
+
+                phoneRows.Add(new KeyValuePair<string, string>(
+                    leave.ParticipantJid.Trim(),
+                    leave.PhoneDigits));
             }
 
-            foreach (GroupJoinNotifyRequest join in joins)
+            return phoneRows;
+        }
+
+        private async Task PrepGroupSystemPhonesAsync(
+            IContactService contacts,
+            List<KeyValuePair<string, string>> phoneRows)
+        {
+            if (contacts == null || phoneRows == null || phoneRows.Count == 0)
             {
-                if (join == null ||
-                    string.IsNullOrWhiteSpace(join.GroupJid) ||
-                    string.IsNullOrWhiteSpace(join.ParticipantJid))
-                {
-                    continue;
-                }
-
-                string groupJid = JidHelper.Normalize(join.GroupJid) ?? join.GroupJid.Trim();
-                if (!JidHelper.IsGroupJid(groupJid))
-                {
-                    continue;
-                }
-
-                string participant = _jids.GetCanonicalJid(join.ParticipantJid) ?? join.ParticipantJid.Trim();
-                string phoneDigits = PhoneNumberHelper.NormalizePhoneDigits(join.PhoneDigits)
-                    ?? PhoneNumberHelper.NormalizePhoneDigits(JidHelper.TryPhoneFromJid(join.PhoneDigits))
-                    ?? JidHelper.TryPhoneFromJid(participant)
-                    ?? (contacts != null ? contacts.TryResolvePhone(participant, join.PhoneDigits) : null);
-
-                string resolved = contacts != null
-                    ? contacts.ResolveDisplayName(participant, "group-join")
-                    : _chatState.ResolveDisplayName(participant);
-                string who = GroupJoinDisplayLabel.Pick(resolved, phoneDigits, participant);
-
-                string content = string.Format(
-                    System.Globalization.CultureInfo.CurrentCulture,
-                    template,
-                    who);
-
-                DateTime stamp = join.TimestampUtc == default
-                    ? DateTime.UtcNow
-                    : DateTime.SpecifyKind(join.TimestampUtc, DateTimeKind.Utc);
-
-                string id = !string.IsNullOrWhiteSpace(join.NotificationId)
-                    ? "gj-" + join.NotificationId.Trim() + "-" + participant
-                    : "gj-" + participant + "-" + stamp.Ticks.ToString(System.Globalization.CultureInfo.InvariantCulture);
-
-                var chatMessage = new ChatMessage
-                {
-                    Id = id,
-                    Kind = ChatMessageKind.GroupJoin,
-                    Content = content,
-                    Timestamp = stamp,
-                    IsFromMe = false,
-                    GroupJoinJid = participant,
-                    GroupJoinPhone = phoneDigits,
-                    ParticipantJid = participant,
-                    SenderName = who
-                };
-
-                IncomingTimelineAcceptResult timeline = AcceptIncomingTimeline(groupJid, chatMessage, isGroup: true);
-                if (timeline.Kind == IncomingTimelineAcceptKind.DuplicateSameChat ||
-                    timeline.Kind == IncomingTimelineAcceptKind.AliasLinkedDuplicate ||
-                    timeline.Kind == IncomingTimelineAcceptKind.AliasConsolidated)
-                {
-                    continue;
-                }
-
-                await ApplyIncomingInsertedAsync(new IncomingInsertedApplyRequest
-                {
-                    ChatJid = groupJid,
-                    Message = chatMessage,
-                    DisplayContent = content,
-                    NotifyContent = content,
-                    IsOffline = false,
-                    IsGroup = true,
-                    IsFromMe = false,
-                    PreviewKind = ChatPreviewKind.GroupJoin,
-                    ListAuthorPrefix = string.Empty,
-                    StripParticipantJid = participant,
-                    SenderName = who,
-                    CountsAsUnread = false,
-                    SuppressToast = true
-                }).ConfigureAwait(false);
-
-                if (contacts != null && GroupJoinDisplayLabel.NeedsBetterName(who))
-                {
-                    ScheduleGroupJoinRelabel(contacts, groupJid, chatMessage, participant, phoneDigits, template);
-                }
+                return;
             }
+
+            try
+            {
+                await contacts.ResolveGroupJoinParticipantsAsync(phoneRows).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[MessageFacade] Group-system name prep failed: " + ex.Message);
+            }
+        }
+
+        private bool TryResolveGroupSystemParticipant(
+            IContactService contacts,
+            string rawGroupJid,
+            string rawParticipantJid,
+            string rawPhone,
+            string resolveContext,
+            out string groupJid,
+            out string participant,
+            out string phoneDigits,
+            out string who)
+        {
+            groupJid = JidHelper.Normalize(rawGroupJid) ?? rawGroupJid.Trim();
+            participant = null;
+            phoneDigits = null;
+            who = null;
+            if (!JidHelper.IsGroupJid(groupJid))
+            {
+                return false;
+            }
+
+            participant = _jids.GetCanonicalJid(rawParticipantJid) ?? rawParticipantJid.Trim();
+            phoneDigits = PhoneNumberHelper.NormalizePhoneDigits(rawPhone)
+                ?? PhoneNumberHelper.NormalizePhoneDigits(JidHelper.TryPhoneFromJid(rawPhone))
+                ?? JidHelper.TryPhoneFromJid(participant)
+                ?? (contacts != null ? contacts.TryResolvePhone(participant, rawPhone) : null);
+
+            string resolved = contacts != null
+                ? contacts.ResolveDisplayName(participant, resolveContext)
+                : _chatState.ResolveDisplayName(participant);
+            who = GroupJoinDisplayLabel.Pick(resolved, phoneDigits, participant);
+            return true;
+        }
+
+        private void ResolveGroupSystemActor(
+            IContactService contacts,
+            string actorJid,
+            out string actorLabel,
+            out string actorPhone)
+        {
+            actorLabel = null;
+            actorPhone = null;
+            if (string.IsNullOrWhiteSpace(actorJid))
+            {
+                return;
+            }
+
+            string actor = _jids.GetCanonicalJid(actorJid) ?? actorJid.Trim();
+            actorPhone = JidHelper.TryPhoneFromJid(actor)
+                ?? JidHelper.TryPhoneFromJid(actorJid)
+                ?? (contacts != null ? contacts.TryResolvePhone(actor, null) : null);
+            string resolved = contacts != null
+                ? contacts.ResolveDisplayName(actor, "group-system-actor")
+                : _chatState.ResolveDisplayName(actor);
+            actorLabel = GroupJoinDisplayLabel.Pick(resolved, actorPhone, actor);
+        }
+
+        private static DateTime NormalizeGroupSystemStamp(DateTime timestampUtc)
+        {
+            return timestampUtc == default
+                ? DateTime.UtcNow
+                : DateTime.SpecifyKind(timestampUtc, DateTimeKind.Utc);
+        }
+
+        private static string BuildGroupSystemMessageId(
+            string prefix,
+            string notificationId,
+            string key,
+            DateTime stamp)
+        {
+            if (!string.IsNullOrWhiteSpace(notificationId))
+            {
+                return prefix + "-" + notificationId.Trim() + "-" + (key ?? string.Empty);
+            }
+
+            return prefix + "-" + (key ?? string.Empty) + "-" +
+                   stamp.Ticks.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        }
+
+        private async Task<ChatMessage> InsertGroupSystemLineAsync(
+            string groupJid,
+            string id,
+            string content,
+            DateTime stamp,
+            string participant,
+            string phoneDigits,
+            string who)
+        {
+            var chatMessage = new ChatMessage
+            {
+                Id = id,
+                Kind = ChatMessageKind.GroupJoin,
+                Content = content,
+                Timestamp = stamp,
+                IsFromMe = false,
+                GroupJoinJid = participant,
+                GroupJoinPhone = phoneDigits,
+                ParticipantJid = participant,
+                SenderName = who
+            };
+
+            IncomingTimelineAcceptResult timeline = AcceptIncomingTimeline(groupJid, chatMessage, isGroup: true);
+            if (timeline.Kind == IncomingTimelineAcceptKind.DuplicateSameChat ||
+                timeline.Kind == IncomingTimelineAcceptKind.AliasLinkedDuplicate ||
+                timeline.Kind == IncomingTimelineAcceptKind.AliasConsolidated)
+            {
+                return null;
+            }
+
+            await ApplyIncomingInsertedAsync(new IncomingInsertedApplyRequest
+            {
+                ChatJid = groupJid,
+                Message = chatMessage,
+                DisplayContent = content,
+                NotifyContent = content,
+                IsOffline = false,
+                IsGroup = true,
+                IsFromMe = false,
+                PreviewKind = ChatPreviewKind.GroupJoin,
+                ListAuthorPrefix = string.Empty,
+                StripParticipantJid = participant,
+                SenderName = who,
+                CountsAsUnread = false,
+                SuppressToast = true
+            }).ConfigureAwait(false);
+
+            return chatMessage;
         }
 
         /// <summary>

@@ -127,6 +127,10 @@ namespace Unison.Uwp.Shell.WhatsApp.Views
         /// <summary>Adaptive layout group (border thickness Minimal/Extended).</summary>
         private VisualStateGroup _layoutStates;
 
+        private bool _reactionEmojiDockOpen;
+        private Storyboard _reactionEmojiDockStoryboard;
+        private ChatMessage _reactionPickTarget;
+
         public ChatDetailView()
         {
             _strings = App.Services?.GetService<IStringResources>();
@@ -2916,64 +2920,184 @@ namespace Unison.Uwp.Shell.WhatsApp.Views
                 vm = ViewModel.CreateMessageVm(message);
             }
 
-            var flyout = new MenuFlyout();
-            MessageBubbleContextActions.Add(flyout, vm);
+            Flyout surface = null;
+            Action dismiss = () =>
+            {
+                try
+                {
+                    surface?.Hide();
+                }
+                catch
+                {
+                }
+            };
+
+            var actions = new StackPanel();
+            MessageBubbleContextActions.AddButtons(actions, vm, dismiss);
+            MessageBubbleContextActions.AddSeparator(actions);
             if (message.IsPinned)
             {
-                AddPinAction(
-                    flyout,
+                AddPinActionButton(
+                    actions,
                     vm,
                     LocalizedStrings.Get("ChatDetail_UnpinMessage", "Unpin message"),
                     false,
-                    0);
+                    0,
+                    dismiss);
             }
             else
             {
-                AddPinAction(
-                    flyout,
+                AddPinActionButton(
+                    actions,
                     vm,
                     LocalizedStrings.Get("ChatDetail_PinFor24Hours", "Pin for 24 hours"),
                     true,
-                    86400);
-                AddPinAction(
-                    flyout,
+                    86400,
+                    dismiss);
+                AddPinActionButton(
+                    actions,
                     vm,
                     LocalizedStrings.Get("ChatDetail_PinFor7Days", "Pin for 7 days"),
                     true,
-                    604800);
-                AddPinAction(
-                    flyout,
+                    604800,
+                    dismiss);
+                AddPinActionButton(
+                    actions,
                     vm,
                     LocalizedStrings.Get("ChatDetail_PinFor30Days", "Pin for 30 days"),
                     true,
-                    2592000);
+                    2592000,
+                    dismiss);
             }
-            // The one-argument FlyoutBase.ShowAt overload requires Windows 10 1809.
-            // Windows 10 Mobile 15063 supports the original MenuFlyout overload.
-            flyout.ShowAt(anchor, new Windows.Foundation.Point(
-                Math.Max(0, anchor.ActualWidth / 2),
-                Math.Max(0, anchor.ActualHeight / 2)));
+
+            Border chrome = MessageBubbleContextActions.WrapActionsHost(actions);
+            surface = MessageReactionContextChrome.Show(
+                anchor,
+                message,
+                ViewModel,
+                chrome,
+                openFullPicker: OpenReactionEmojiDock);
         }
 
-        private void AddPinAction(MenuFlyout flyout, ChatMessageViewModel vm, string label, bool pin, uint durationSeconds)
+        private void ReactionEmojiCloseButton_Click(object sender, RoutedEventArgs e) =>
+            SetReactionEmojiDockOpen(false);
+
+        private async void ReactionEmojiPanel_GlyphPicked(object sender, string glyph)
         {
-            var item = new MenuFlyoutItem { Text = label };
-            item.Click += async (s, e) =>
+            ChatMessage target = _reactionPickTarget;
+            SetReactionEmojiDockOpen(false);
+            if (ViewModel == null || target == null || string.IsNullOrWhiteSpace(glyph))
             {
-                if (vm?.Model == null)
-                {
-                    return;
-                }
+                return;
+            }
 
-                if (string.IsNullOrWhiteSpace(vm.Model.RemoteJid) && _activeChat != null)
-                {
-                    vm.Model.RemoteJid = _activeChat.JID;
-                }
+            await ViewModel.ReactToMessageAsync(target, glyph);
+        }
 
-                await vm.SetPinnedAsync(pin, durationSeconds);
-                UpdatePinnedBanner();
+        private void OpenReactionEmojiDock(ChatMessage message)
+        {
+            if (message == null || ViewModel == null)
+            {
+                return;
+            }
+
+            _reactionPickTarget = message;
+            _ = ViewModel.EnsureEmojiCatalogForReactionPickerAsync();
+            SetReactionEmojiDockOpen(true);
+        }
+
+        private void SetReactionEmojiDockOpen(bool open)
+        {
+            if (_reactionEmojiDockOpen == open || ReactionEmojiDock == null)
+            {
+                return;
+            }
+
+            if (open)
+            {
+                ViewModel?.CloseStickerBox();
+            }
+
+            _reactionEmojiDockOpen = open;
+            if (ComposerHost != null)
+            {
+                ComposerHost.Visibility = open ? Visibility.Collapsed : Visibility.Visible;
+            }
+
+            if (_reactionEmojiDockStoryboard != null)
+            {
+                _reactionEmojiDockStoryboard.Stop();
+                _reactionEmojiDockStoryboard = null;
+            }
+
+            if (open)
+            {
+                ReactionEmojiDock.Visibility = Visibility.Visible;
+                ReactionEmojiDock.UpdateLayout();
+            }
+            else
+            {
+                _reactionPickTarget = null;
+            }
+
+            double distance = ReactionEmojiDock.ActualHeight;
+            if (distance <= 0)
+            {
+                distance = 380;
+            }
+
+            var slide = new DoubleAnimation
+            {
+                From = open ? distance : 0,
+                To = open ? 0 : distance,
+                Duration = new Duration(TimeSpan.FromMilliseconds(220)),
+                EasingFunction = new CubicEase { EasingMode = open ? EasingMode.EaseOut : EasingMode.EaseIn }
             };
-            flyout.Items.Add(item);
+            Storyboard.SetTarget(slide, ReactionEmojiDock);
+            Storyboard.SetTargetProperty(slide, "(UIElement.RenderTransform).(TranslateTransform.Y)");
+            _reactionEmojiDockStoryboard = new Storyboard();
+            _reactionEmojiDockStoryboard.Children.Add(slide);
+            if (!open)
+            {
+                _reactionEmojiDockStoryboard.Completed += (s, e) =>
+                {
+                    if (!_reactionEmojiDockOpen && ReactionEmojiDock != null)
+                    {
+                        ReactionEmojiDock.Visibility = Visibility.Collapsed;
+                    }
+                };
+            }
+
+            _reactionEmojiDockStoryboard.Begin();
+        }
+
+        private void AddPinActionButton(
+            Panel panel,
+            ChatMessageViewModel vm,
+            string label,
+            bool pin,
+            uint durationSeconds,
+            Action dismiss)
+        {
+            panel.Children.Add(MessageBubbleContextActions.ActionButton(
+                label,
+                "\uE840",
+                async () =>
+                {
+                    dismiss?.Invoke();
+                    if (vm?.Model == null)
+                    {
+                        return;
+                    }
+
+                    if (string.IsNullOrWhiteSpace(vm.Model.RemoteJid) && _activeChat != null)
+                    {
+                        vm.Model.RemoteJid = _activeChat.JID;
+                    }
+
+                    await vm.SetPinnedAsync(pin, durationSeconds);
+                    UpdatePinnedBanner();
+                }));
         }
 
         /// <summary>Play / resume / pause — ViewModel + IChatAudioPlaybackService.</summary>

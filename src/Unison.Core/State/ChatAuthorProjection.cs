@@ -384,8 +384,19 @@ namespace Unison.Core.State
                     continue;
                 }
 
+                // Join/leave/rename already name the actor in the body; a leftover "X: " chip
+                // must be cleared even when the tip has no participant (subject change).
+                bool clearSystemAuthor = unnamedPass &&
+                    chat.LastMessageKind == ChatPreviewKind.GroupJoin &&
+                    !string.IsNullOrEmpty(chat.LastMessageAuthor);
+
                 if (string.IsNullOrWhiteSpace(chat.LastMessageParticipantJid))
                 {
+                    if (clearSystemAuthor)
+                    {
+                        _sweepWork.Add(chat);
+                    }
+
                     continue;
                 }
 
@@ -393,6 +404,7 @@ namespace Unison.Core.State
                     chat.LastMessageSenderName,
                     chat.LastMessageParticipantJid);
                 if (!unnamed &&
+                    !clearSystemAuthor &&
                     !IsPendingChat(chat, pendingChats) &&
                     !IsPendingParticipant(chat.LastMessageParticipantJid, pendingParticipants))
                 {
@@ -560,6 +572,19 @@ namespace Unison.Core.State
             string beforeSender = chat.LastMessageSenderName;
             string selfLabel = _sweepSelfLabel;
             IReadOnlyDictionary<string, string> directChatNames = _sweepDirectNames;
+
+            // Join / leave / rename lines already name the actor in the body
+            // ("X removed Y"). Re-applying "X: " doubles the author on the strip.
+            if (chat.LastMessageKind == ChatPreviewKind.GroupJoin)
+            {
+                if (!string.IsNullOrEmpty(chat.LastMessageAuthor))
+                {
+                    chat.LastMessageAuthor = string.Empty;
+                    (_sweepDirty ?? (_sweepDirty = new List<ChatItem>())).Add(chat);
+                }
+
+                return;
+            }
 
             // A strip poisoned with the group subject must not count as a real name —
             // otherwise Decide keeps it forever.

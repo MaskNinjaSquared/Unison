@@ -246,6 +246,7 @@ namespace Unison.WhatsAppClient.Chats
                     IsGroup = request.IsGroup,
                     IsFromMe = request.IsFromMe,
                     CountUnread = request.CountUnread,
+                    HasCitation = request.HasCitation,
                     Kind = request.Kind ?? ChatPreviewKind.Text,
                     Status = request.Status,
                     AuthorPrefix = request.AuthorPrefix,
@@ -1708,7 +1709,8 @@ namespace Unison.WhatsAppClient.Chats
                     reposition: false,
                     out _,
                     request.ParticipantJid,
-                    request.SenderName);
+                    request.SenderName,
+                    request.HasCitation);
 
                 result.Chat = chat;
                 result.DisplayName = chat != null ? chat.Name : null;
@@ -1819,7 +1821,8 @@ namespace Unison.WhatsAppClient.Chats
                             reposition: false,
                             out createdRow,
                             summary.ParticipantJid,
-                            summary.SenderName);
+                            summary.SenderName,
+                            summary.HasCitation);
 
                         if (createdRow)
                         {
@@ -1963,7 +1966,8 @@ namespace Unison.WhatsAppClient.Chats
             bool reposition,
             out bool createdRow,
             string participantJid = null,
-            string senderName = null)
+            string senderName = null,
+            bool hasCitation = false)
         {
             createdRow = false;
             // Index lookup — never walk Chats with GetCanonicalJid per row on the live tip hop
@@ -2094,7 +2098,11 @@ namespace Unison.WhatsAppClient.Chats
 
             if (unreadDelta > 0)
             {
-                ChatUnreadTally.Bump(chat, _chatRows.FindConversation(jid), unreadDelta);
+                ChatUnreadTally.Bump(
+                    chat,
+                    _chatRows.FindConversation(jid),
+                    unreadDelta,
+                    hasCitation);
             }
 
             return chat;

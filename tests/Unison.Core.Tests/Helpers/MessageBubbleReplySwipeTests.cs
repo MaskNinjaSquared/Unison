@@ -24,5 +24,16 @@ namespace Unison.Core.Tests.Helpers
         {
             Assert.False(MessageBubbleReplySwipe.ShouldReply(horizontal, vertical));
         }
+
+        [Theory]
+        [InlineData(0, 0)]
+        [InlineData(40, 0)]
+        [InlineData(-36, 0.5)]
+        [InlineData(-72, 1)]
+        [InlineData(-144, 1)]
+        public void Progress_fades_in_over_the_reply_threshold(double horizontal, double expected)
+        {
+            Assert.Equal(expected, MessageBubbleReplySwipe.Progress(horizontal), 3);
+        }
     }
 }

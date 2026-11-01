@@ -66,6 +66,7 @@ namespace Unison.WhatsAppClient.Helpers
                 LinkedParentJid = chat.LinkedParentJid,
                 Status = chat.Status,
                 UnreadCount = Math.Max(0, chat.UnreadCount),
+                HasCitation = chat.HasCitation,
                 LastMessage = chat.LastMessage,
                 LastMessageAuthor = chat.LastMessageAuthor,
                 LastMessageIsFromMe = chat.LastMessageIsFromMe,
@@ -119,6 +120,7 @@ namespace Unison.WhatsAppClient.Helpers
                 LastMessageTimestampUtc = preview.LastMessageTimestampUtc,
                 LastMessageId = preview.LastMessageId,
                 UnreadCount = Math.Max(0, preview.UnreadCount),
+                HasCitation = preview.HasCitation,
                 Status = preview.Status
             };
             ApplyCommunityFields(preview, chat);
@@ -172,6 +174,7 @@ namespace Unison.WhatsAppClient.Helpers
                 LastMessageTimestampUtc = preview.LastMessageTimestampUtc,
                 LastMessageId = preview.LastMessageId,
                 UnreadCount = Math.Max(0, preview.UnreadCount),
+                HasCitation = preview.HasCitation,
                 Status = preview.Status,
                 Timestamp = WhatsAppMapper.FormatTimestamp(preview.LastMessageTimestampUtc, yesterdayLabel)
             };
@@ -248,12 +251,19 @@ namespace Unison.WhatsAppClient.Helpers
                 return string.Empty;
             }
 
+            // Body already carries the actor for join/leave/rename tips.
+            if (preview.LastMessageKind == ChatPreviewKind.GroupJoin)
+            {
+                return string.Empty;
+            }
+
             string composed = ChatPreviewNormalizer.FormatListAuthorPrefix(
                 new ChatMessage
                 {
                     IsFromMe = preview.LastMessageIsFromMe,
                     SenderName = IsGroupTitleMisuse(preview) ? null : preview.LastMessageSenderName,
-                    ParticipantJid = preview.LastMessageParticipantJid
+                    ParticipantJid = preview.LastMessageParticipantJid,
+                    Kind = ChatPreviewNormalizer.FromPreviewKind(preview.LastMessageKind)
                 },
                 true,
                 selfDisplayName,
@@ -451,6 +461,12 @@ namespace Unison.WhatsAppClient.Helpers
             {
                 // Authoritative unread from history chunk when present.
                 target.UnreadCount = preview.UnreadCount;
+                changed = true;
+            }
+
+            if (target.HasCitation != preview.HasCitation)
+            {
+                target.HasCitation = preview.HasCitation;
                 changed = true;
             }
 

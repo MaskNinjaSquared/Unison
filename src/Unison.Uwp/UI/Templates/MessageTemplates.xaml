@@ -26,6 +26,7 @@
                   HorizontalAlignment="Right"
                   Margin="48,0,12,0"
                   ManipulationMode="TranslateX"
+                  ManipulationDelta="MessageBubble_ManipulationDelta"
                   ManipulationCompleted="MessageBubble_ManipulationCompleted"
                   RightTapped="MessageBubble_RightTapped"
                   Holding="MessageBubble_Holding">
@@ -42,6 +43,28 @@
                     Visibility="{x:Bind IsRunStart, Mode=OneWay, Converter={StaticResource InvertedBooleanToVisibilityConverter}}"/>
 
             <Grid Grid.Row="1" HorizontalAlignment="Right">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <!-- Reply sling handle: invisible at rest, fades in while dragging left. -->
+                <Grid Grid.Column="0"
+                      Tag="ReplySwipeHandle"
+                      Width="32"
+                      Height="32"
+                      Margin="0,0,8,0"
+                      VerticalAlignment="Center"
+                      Opacity="0"
+                      IsHitTestVisible="False">
+                    <Ellipse Fill="{ThemeResource ChatDetailAccentBrush}" Opacity="0.2"/>
+                    <FontIcon Glyph="&#xE97A;"
+                              FontFamily="{StaticResource IconFont}"
+                              FontSize="16"
+                              Foreground="{ThemeResource ChatDetailAccentBrush}"
+                              HorizontalAlignment="Center"
+                              VerticalAlignment="Center"/>
+                </Grid>
+                <Grid Grid.Column="1">
                 <controls:MessageBubbleChromeHost
                     IsFromMe="True"
                     IsRunStart="{x:Bind IsRunStart, Mode=OneWay}"
@@ -156,6 +179,10 @@
                                    VerticalAlignment="Stretch"
                                    IsHitTestVisible="False"
                                    Visibility="{x:Bind HasMediaThumbnail, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                            <Border Background="{ThemeResource ChatDetailMediaThumbScrimBrush}"
+                                    CornerRadius="4"
+                                    IsHitTestVisible="False"
+                                    Visibility="{x:Bind HasMediaThumbnail, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
                             <Image Source="{ThemeResource ChatDetailImageDownloadPlaceholder}"
                                    Stretch="Uniform"
                                    MaxWidth="160"
@@ -189,6 +216,10 @@
                                    VerticalAlignment="Stretch"
                                    IsHitTestVisible="False"
                                    Visibility="{x:Bind HasVideoPoster, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                            <Border Background="{ThemeResource ChatDetailMediaThumbScrimBrush}"
+                                    CornerRadius="4"
+                                    IsHitTestVisible="False"
+                                    Visibility="{x:Bind HasVideoPoster, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
                             <ProgressRing Width="36" Height="36"
                                           Foreground="{ThemeResource ChatDetailSentMediaDownloadIconBrush}"
                                           IsActive="{x:Bind IsVideoDownloading, Mode=OneWay}"
@@ -609,6 +640,7 @@
                         Background="#55FFFFFF"
                         CornerRadius="8"
                         Visibility="{x:Bind IsHighlighted, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                </Grid>
             </Grid>
 
             <Button Grid.Row="2"
@@ -641,6 +673,7 @@
                   HorizontalAlignment="Left"
                   Margin="12,0,48,0"
                   ManipulationMode="TranslateX"
+                  ManipulationDelta="MessageBubble_ManipulationDelta"
                   ManipulationCompleted="MessageBubble_ManipulationCompleted"
                   RightTapped="MessageBubble_RightTapped"
                   Holding="MessageBubble_Holding">
@@ -660,11 +693,30 @@
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="*"/>
                 </Grid.ColumnDefinitions>
 
+                <!-- Reply sling handle: invisible at rest, fades in while dragging left. -->
+                <Grid Grid.Column="0"
+                      Tag="ReplySwipeHandle"
+                      Width="32"
+                      Height="32"
+                      Margin="0,0,8,0"
+                      VerticalAlignment="Center"
+                      Opacity="0"
+                      IsHitTestVisible="False">
+                    <Ellipse Fill="{ThemeResource ChatDetailAccentBrush}" Opacity="0.2"/>
+                    <FontIcon Glyph="&#xE97A;"
+                              FontFamily="{StaticResource IconFont}"
+                              FontSize="16"
+                              Foreground="{ThemeResource ChatDetailAccentBrush}"
+                              HorizontalAlignment="Center"
+                              VerticalAlignment="Center"/>
+                </Grid>
+
                 <!-- Local unread accent (IsRead == false). Hidden after open commits read. -->
-                <Border Grid.Column="0"
+                <Border Grid.Column="1"
                         Width="3"
                         MinHeight="18"
                         Margin="0,2,6,2"
@@ -674,7 +726,7 @@
                         Visibility="{x:Bind ShowUnreadMarker, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
 
                 <!-- Author avatar gutter (group incoming). Photo + contact fallback like the chat list. -->
-                <Grid Grid.Column="1"
+                <Grid Grid.Column="2"
                       Width="32"
                       Margin="0,0,8,0"
                       VerticalAlignment="Top"
@@ -689,7 +741,7 @@
                                                 Visibility="{x:Bind ShowContact, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
                 </Grid>
 
-                <Grid Grid.Column="2" HorizontalAlignment="Left">
+                <Grid Grid.Column="3" HorizontalAlignment="Left">
                 <controls:MessageBubbleChromeHost
                     IsFromMe="False"
                     IsRunStart="{x:Bind IsRunStart, Mode=OneWay}"
@@ -815,6 +867,10 @@
                                    VerticalAlignment="Stretch"
                                    IsHitTestVisible="False"
                                    Visibility="{x:Bind HasMediaThumbnail, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                            <Border Background="{ThemeResource ChatDetailMediaThumbScrimBrush}"
+                                    CornerRadius="4"
+                                    IsHitTestVisible="False"
+                                    Visibility="{x:Bind HasMediaThumbnail, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
                             <Image Source="{ThemeResource ChatDetailImageDownloadPlaceholder}"
                                    Stretch="Uniform"
                                    MaxWidth="160"
@@ -846,6 +902,10 @@
                                    VerticalAlignment="Stretch"
                                    IsHitTestVisible="False"
                                    Visibility="{x:Bind HasVideoPoster, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                            <Border Background="{ThemeResource ChatDetailMediaThumbScrimBrush}"
+                                    CornerRadius="4"
+                                    IsHitTestVisible="False"
+                                    Visibility="{x:Bind HasVideoPoster, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
                             <ProgressRing Width="36" Height="36"
                                           IsActive="{x:Bind IsVideoDownloading, Mode=OneWay}"
                                           Visibility="{x:Bind IsVideoDownloading, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>

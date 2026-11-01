@@ -52,14 +52,15 @@ namespace Unison.Uwp.Services.WhatsApp
                 chatFacade is ChatFacade favoriteChats
                     ? favoriteChats.ApplyRemoteFavoritesListAsync(ids)
                     : Task.CompletedTask;
-            bridge.GroupSubjectChanged = (jid, subject) =>
-                contacts != null
-                    ? contacts.ApplyRemoteGroupSubjectsAsync(
-                        new[] { new KeyValuePair<string, string>(jid, subject) })
-                    : Task.CompletedTask;
+            bridge.GroupSubjectChanged = change =>
+                ApplyGroupSubjectChangedAsync(contacts, messages, change);
             bridge.GroupParticipantsJoined = joins =>
                 messages != null
                     ? messages.NotifyGroupJoinsAsync(joins)
+                    : Task.CompletedTask;
+            bridge.GroupParticipantsLeft = leaves =>
+                messages != null
+                    ? messages.NotifyGroupLeavesAsync(leaves)
                     : Task.CompletedTask;
             bridge.GroupSelfMembershipChanged = (groupJid, participantJids, stillMember) =>
                 groups != null
@@ -75,6 +76,41 @@ namespace Unison.Uwp.Services.WhatsApp
                     ? messages.ApplyAppStateDeleteMessageAsync(key.RemoteJid, key.Id)
                     : Task.FromResult(false);
             bridge.ResolveSentMessage = resolveSentMessage;
+        }
+
+        private static async Task ApplyGroupSubjectChangedAsync(
+            IContactService contacts,
+            IMessageService messages,
+            Unison.Core.Models.GroupSubjectChangeNotifyRequest change)
+        {
+            if (change == null || string.IsNullOrWhiteSpace(change.GroupJid))
+            {
+                return;
+            }
+
+            string previous = null;
+            if (contacts != null && change.EmitTimelineLine)
+            {
+                previous = contacts.ResolveDisplayName(change.GroupJid, "group-subject-previous");
+            }
+
+            if (contacts != null && !string.IsNullOrWhiteSpace(change.NewSubject))
+            {
+                await contacts.ApplyRemoteGroupSubjectsAsync(
+                        new[]
+                        {
+                            new KeyValuePair<string, string>(change.GroupJid, change.NewSubject)
+                        })
+                    .ConfigureAwait(false);
+            }
+
+            if (change.EmitTimelineLine &&
+                messages != null &&
+                !string.IsNullOrWhiteSpace(change.NewSubject))
+            {
+                await messages.NotifyGroupSubjectChangedAsync(change, previous)
+                    .ConfigureAwait(false);
+            }
         }
     }
 }

@@ -135,6 +135,10 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
         /// <summary>The slide in flight, kept so a fast second tap can cut the first one short.</summary>
         private Storyboard _attachMenuStoryboard;
 
+        private bool _reactionEmojiDockOpen;
+        private Storyboard _reactionEmojiDockStoryboard;
+        private ChatMessage _reactionPickTarget;
+
         public ChatDetailView()
         {
             _strings = App.Services?.GetService<IStringResources>();
@@ -507,6 +511,7 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
         {
             e.Handled = true;
             SetAttachMenuOpen(false);
+            SetReactionEmojiDockOpen(false);
         }
 
         /// <summary>Choosing an option dismisses the bar, as a flyout item would.</summary>
@@ -532,8 +537,16 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                 return;
             }
 
+            if (open)
+            {
+                SetReactionEmojiDockOpen(false);
+            }
+
             _attachMenuOpen = open;
-            VisualStateManager.GoToState(this, open ? "AttachMenuOpen" : "AttachMenuClosed", true);
+            if (!_reactionEmojiDockOpen)
+            {
+                VisualStateManager.GoToState(this, open ? "AttachMenuOpen" : "AttachMenuClosed", true);
+            }
 
             if (_attachMenuStoryboard != null)
             {
@@ -1001,6 +1014,12 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             if (_attachMenuOpen)
             {
                 SetAttachMenuOpen(false);
+                return true;
+            }
+
+            if (_reactionEmojiDockOpen)
+            {
+                SetReactionEmojiDockOpen(false);
                 return true;
             }
 
@@ -3291,7 +3310,121 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                 vm = ViewModel.CreateMessageVm(message);
             }
 
+            MessageReactionContextChrome.Show(
+                anchor,
+                message,
+                ViewModel,
+                openFullPicker: OpenReactionEmojiDock);
             ViewModel.SelectMessage(vm);
+        }
+
+        private void ReactionEmojiCloseButton_Click(object sender, RoutedEventArgs e) =>
+            SetReactionEmojiDockOpen(false);
+
+        private async void ReactionEmojiPanel_GlyphPicked(object sender, string glyph)
+        {
+            ChatMessage target = _reactionPickTarget;
+            SetReactionEmojiDockOpen(false);
+            if (ViewModel == null || target == null || string.IsNullOrWhiteSpace(glyph))
+            {
+                return;
+            }
+
+            await ViewModel.ReactToMessageAsync(target, glyph);
+        }
+
+        private void OpenReactionEmojiDock(ChatMessage message)
+        {
+            if (message == null || ViewModel == null)
+            {
+                return;
+            }
+
+            _reactionPickTarget = message;
+            _ = ViewModel.EnsureEmojiCatalogForReactionPickerAsync();
+            SetReactionEmojiDockOpen(true);
+        }
+
+        private void SetReactionEmojiDockOpen(bool open)
+        {
+            if (_reactionEmojiDockOpen == open || ReactionEmojiDock == null)
+            {
+                return;
+            }
+
+            if (open)
+            {
+                if (_attachMenuOpen)
+                {
+                    _attachMenuOpen = false;
+                    if (_attachMenuStoryboard != null)
+                    {
+                        _attachMenuStoryboard.Stop();
+                        _attachMenuStoryboard = null;
+                    }
+
+                    AttachMenuBar.Visibility = Visibility.Collapsed;
+                }
+
+                // Reaction chrome + Legacy command bar share the bubble hold; dock replaces the bar.
+                ViewModel?.DismissMessageActions();
+                ViewModel?.CloseStickerBox();
+            }
+
+            _reactionEmojiDockOpen = open;
+            if (!_attachMenuOpen)
+            {
+                VisualStateManager.GoToState(
+                    this,
+                    open ? "AttachMenuOpen" : "AttachMenuClosed",
+                    true);
+            }
+
+            if (_reactionEmojiDockStoryboard != null)
+            {
+                _reactionEmojiDockStoryboard.Stop();
+                _reactionEmojiDockStoryboard = null;
+            }
+
+            if (open)
+            {
+                ReactionEmojiDock.Visibility = Visibility.Visible;
+                ReactionEmojiDock.UpdateLayout();
+            }
+            else
+            {
+                _reactionPickTarget = null;
+            }
+
+            double distance = ReactionEmojiDock.ActualHeight;
+            if (distance <= 0)
+            {
+                distance = 380;
+            }
+
+            var slide = new DoubleAnimation
+            {
+                From = open ? distance : 0,
+                To = open ? 0 : distance,
+                Duration = new Duration(TimeSpan.FromMilliseconds(220)),
+                EasingFunction = new CubicEase { EasingMode = open ? EasingMode.EaseOut : EasingMode.EaseIn }
+            };
+            Storyboard.SetTarget(slide, ReactionEmojiDock);
+            Storyboard.SetTargetProperty(slide, "(UIElement.RenderTransform).(TranslateTransform.Y)");
+            _reactionEmojiDockStoryboard = new Storyboard();
+            _reactionEmojiDockStoryboard.Children.Add(slide);
+            if (!open)
+            {
+                _reactionEmojiDockStoryboard.Completed += (s, e) =>
+                {
+                    if (!_reactionEmojiDockOpen && ReactionEmojiDock != null)
+                    {
+                        ReactionEmojiDock.Visibility = Visibility.Collapsed;
+                    }
+                };
+            }
+
+            _reactionEmojiDockStoryboard.Begin();
         }
 
         private void MessageActionsScrim_Tapped(object sender, TappedRoutedEventArgs e)

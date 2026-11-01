@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <root>
   <!-- 
     Microsoft ResX Schema 
@@ -550,6 +550,48 @@ Desative depois de diagnosticar: manter ligado deixa o app lento.</value>
   <data name="NewChat_Error" xml:space="preserve">
     <value>Erro: {0}</value>
   </data>
+  <data name="NewConversation_Title.Text" xml:space="preserve">
+    <value>Nova conversa</value>
+  </data>
+  <data name="NewConversation_Search.PlaceholderText" xml:space="preserve">
+    <value>Buscar nome ou número</value>
+  </data>
+  <data name="NewConversation_NewGroup.Text" xml:space="preserve">
+    <value>Novo grupo</value>
+  </data>
+  <data name="NewConversation_NewGroupDesc.Text" xml:space="preserve">
+    <value>Crie um grupo com seus contatos</value>
+  </data>
+  <data name="NewConversation_NewContact.Text" xml:space="preserve">
+    <value>Novo contato</value>
+  </data>
+  <data name="NewConversation_NewContactDesc.Text" xml:space="preserve">
+    <value>Salve alguém neste dispositivo</value>
+  </data>
+  <data name="NewConversation_NewCommunity.Text" xml:space="preserve">
+    <value>Nova comunidade</value>
+  </data>
+  <data name="NewConversation_NewCommunityDesc.Text" xml:space="preserve">
+    <value>Reúna grupos relacionados</value>
+  </data>
+  <data name="NewConversation_PhoneNumber.Text" xml:space="preserve">
+    <value>Número de telefone</value>
+  </data>
+  <data name="NewConversation_PhoneNumberDesc.Text" xml:space="preserve">
+    <value>Inicie uma conversa com um número</value>
+  </data>
+  <data name="NewConversation_You" xml:space="preserve">
+    <value>Você</value>
+  </data>
+  <data name="NewConversation_MessageYourself" xml:space="preserve">
+    <value>Mensagens para mim</value>
+  </data>
+  <data name="NewConversation_ComingSoon" xml:space="preserve">
+    <value>Esta opção ainda não está disponível.</value>
+  </data>
+  <data name="NewConversation_SelfUnavailable" xml:space="preserve">
+    <value>Sua conta ainda não está pronta.</value>
+  </data>
   <data name="Profile_Title" xml:space="preserve">
     <value>Perfil</value>
   </data>
@@ -841,6 +883,40 @@ Desative depois de diagnosticar: manter ligado deixa o app lento.</value>
   <data name="Settings_Notifications.Text" xml:space="preserve">
     <value>Exibir toasts e badge ao receber mensagens.</value>
   </data>
+  <data name="Settings_LockScreenNotifications.Header" xml:space="preserve">
+    <value>Tela de bloqueio</value>
+  </data>
+  <data name="Settings_LockScreenNotifications.Text" xml:space="preserve">
+    <value>Quais chats atualizam o Live Tile grande / prévia na tela de bloqueio.</value>
+  </data>
+  <data name="Settings_LockScreenScope_All.Content" xml:space="preserve">
+    <value>Todos</value>
+  </data>
+  <data name="Settings_LockScreenScope_Groups.Content" xml:space="preserve">
+    <value>Grupos</value>
+  </data>
+  <data name="Settings_LockScreenScope_Direct.Content" xml:space="preserve">
+    <value>Contatos</value>
+  </data>
+  <data name="Settings_LockScreenScope_Favorites.Content" xml:space="preserve">
+    <value>Favoritos</value>
+  </data>
+  <data name="Settings_NotificationFilter.Header" xml:space="preserve">
+    <value>Filtrar notificações</value>
+  </data>
+  <data name="Settings_NotificationFilter.Text" xml:space="preserve">
+    <value>Quais chats podem gerar toasts e contar no badge.</value>
+  </data>
+  <data name="Settings_NotificationFilterChoose.Content" xml:space="preserve"><value>Escolher</value></data>
+  <data name="Settings_NotifyGroups.Content" xml:space="preserve">
+    <value>Grupos</value>
+  </data>
+  <data name="Settings_NotifyDirect.Content" xml:space="preserve">
+    <value>Contatos</value>
+  </data>
+  <data name="Settings_NotifyFavorites.Content" xml:space="preserve">
+    <value>Favoritos</value>
+  </data>
   <data name="Settings_MessageNotificationSound.Header" xml:space="preserve">
     <value>Notificações de mensagens</value>
   </data>
@@ -874,6 +950,9 @@ Desative depois de diagnosticar: manter ligado deixa o app lento.</value>
   <data name="StartTileDialog.Title" xml:space="preserve"><value>Tile do Início</value></data>
   <data name="StartTileDialog.PrimaryButtonText" xml:space="preserve"><value>Fixar</value></data>
   <data name="StartTileDialog.CloseButtonText" xml:space="preserve"><value>Cancelar</value></data>
+  <data name="NotificationFilterDialog.Title" xml:space="preserve"><value>Filtrar notificações</value></data>
+  <data name="NotificationFilterDialog.PrimaryButtonText" xml:space="preserve"><value>OK</value></data>
+  <data name="NotificationFilterDialog.CloseButtonText" xml:space="preserve"><value>Cancelar</value></data>
   <data name="StartTileDialog_Unison.Content" xml:space="preserve"><value>Unison</value></data>
   <data name="StartTileDialog_WhatsAppWeb.Content" xml:space="preserve"><value>WhatsApp Web</value></data>
   <data name="StartTileDialog_WhatsAppLegacy.Content" xml:space="preserve"><value>WhatsApp Legacy</value></data>
@@ -1130,6 +1209,27 @@ Desative depois de diagnosticar: manter ligado deixa o app lento.</value>
   </data>
   <data name="Message_GroupJoin" xml:space="preserve">
     <value>{0} entrou no grupo</value>
+  </data>
+  <data name="Message_GroupAddedBy" xml:space="preserve">
+    <value>{0} adicionou {1}</value>
+  </data>
+  <data name="Message_GroupLeft" xml:space="preserve">
+    <value>{0} saiu</value>
+  </data>
+  <data name="Message_GroupRemovedBy" xml:space="preserve">
+    <value>{0} removeu {1}</value>
+  </data>
+  <data name="Message_GroupSubjectChangedFromTo" xml:space="preserve">
+    <value>{0} alterou o nome do grupo de "{1}" para "{2}"</value>
+  </data>
+  <data name="Message_GroupSubjectChangedTo" xml:space="preserve">
+    <value>{0} alterou o nome do grupo para "{1}"</value>
+  </data>
+  <data name="Message_GroupSubjectChangedFromToAnon" xml:space="preserve">
+    <value>O nome do grupo foi alterado de "{0}" para "{1}"</value>
+  </data>
+  <data name="Message_GroupSubjectChangedToAnon" xml:space="preserve">
+    <value>O nome do grupo foi alterado para "{0}"</value>
   </data>
   <data name="ChatDetail_AddContactLink.Content" xml:space="preserve">
     <value>Adicionar contato</value>

@@ -465,6 +465,7 @@ namespace Unison.Core.State
             target.LastMessageId = source.LastMessageId;
             target.Timestamp = source.Timestamp;
             target.UnreadCount = source.UnreadCount;
+            target.HasCitation = source.HasCitation;
             target.AvatarUrl = source.AvatarUrl;
             target.AvatarHighUrl = source.AvatarHighUrl;
             if (source.IsGroup)

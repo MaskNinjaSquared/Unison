@@ -11,6 +11,8 @@ namespace Unison.Uwp.UI.Templates
 {
     public sealed partial class MessageTemplates : ResourceDictionary
     {
+        private const string ReplySwipeHandleTag = "ReplySwipeHandle";
+
         public MessageTemplates()
         {
             InitializeComponent();
@@ -47,8 +49,28 @@ namespace Unison.Uwp.UI.Templates
             FindChatDetail(sender)?.OnMessageBubbleHolding(sender, e);
         }
 
+        private void MessageBubble_ManipulationDelta(object sender, ManipulationDeltaRoutedEventArgs e)
+        {
+            var root = sender as UIElement;
+            if (root == null)
+            {
+                return;
+            }
+
+            double dx = e.Cumulative.Translation.X;
+            // Bubble sling: follow the finger horizontally (leftward reply gesture).
+            EnsureTranslate(root).X = dx < 0 ? dx : 0;
+            UIElement handle = FindTaggedChild(root, ReplySwipeHandleTag);
+            if (handle != null)
+            {
+                handle.Opacity = MessageBubbleReplySwipe.Progress(dx);
+            }
+        }
+
         private void MessageBubble_ManipulationCompleted(object sender, ManipulationCompletedRoutedEventArgs e)
         {
+            ResetReplySwipeVisuals(sender as UIElement);
+
             if (!MessageBubbleReplySwipe.ShouldReply(
                     e.Cumulative.Translation.X,
                     e.Cumulative.Translation.Y))
@@ -65,6 +87,61 @@ namespace Unison.Uwp.UI.Templates
 
             FindChatDetail(sender)?.ViewModel?.BeginReply(message);
             e.Handled = true;
+        }
+
+        private static void ResetReplySwipeVisuals(UIElement root)
+        {
+            if (root == null)
+            {
+                return;
+            }
+
+            EnsureTranslate(root).X = 0;
+            UIElement handle = FindTaggedChild(root, ReplySwipeHandleTag);
+            if (handle != null)
+            {
+                handle.Opacity = 0;
+            }
+        }
+
+        private static TranslateTransform EnsureTranslate(UIElement element)
+        {
+            var translate = element.RenderTransform as TranslateTransform;
+            if (translate == null)
+            {
+                translate = new TranslateTransform();
+                element.RenderTransform = translate;
+            }
+
+            return translate;
+        }
+
+        private static UIElement FindTaggedChild(DependencyObject root, string tag)
+        {
+            if (root == null || string.IsNullOrEmpty(tag))
+            {
+                return null;
+            }
+
+            int count = VisualTreeHelper.GetChildrenCount(root);
+            for (int i = 0; i < count; i++)
+            {
+                DependencyObject child = VisualTreeHelper.GetChild(root, i);
+                var element = child as FrameworkElement;
+                if (element != null &&
+                    string.Equals(element.Tag as string, tag, System.StringComparison.Ordinal))
+                {
+                    return element;
+                }
+
+                UIElement nested = FindTaggedChild(child, tag);
+                if (nested != null)
+                {
+                    return nested;
+                }
+            }
+
+            return null;
         }
 
         private void QuoteBorder_Tapped(object sender, TappedRoutedEventArgs e)

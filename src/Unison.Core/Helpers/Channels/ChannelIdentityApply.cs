@@ -1,5 +1,5 @@
 // =============================================================================
-// ChannelIdentityApply — name (and later picture) onto a @newsletter ChatItem.
+// ChannelIdentityApply — name + picture hint onto a @newsletter ChatItem.
 // Uses existing ChatItem.Name / AvatarUrl / AvatarPictureId columns — same idea
 // as Status author enrichment from Person, without a separate channel store.
 // =============================================================================

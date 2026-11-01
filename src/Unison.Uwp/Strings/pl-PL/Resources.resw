@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <root>
   <!-- 
     Microsoft ResX Schema 
@@ -712,6 +712,40 @@ Wyłącz po zakończeniu diagnozy: pozostawienie włączonego spowalnia aplikacj
   <data name="Settings_Notifications.Text" xml:space="preserve">
     <value>Pokaż powiadomienia i etykietę dla przychodzących wiadomości.</value>
   </data>
+  <data name="Settings_LockScreenNotifications.Header" xml:space="preserve">
+    <value>Lock screen</value>
+  </data>
+  <data name="Settings_LockScreenNotifications.Text" xml:space="preserve">
+    <value>Which chats update the large Live Tile / lock screen preview.</value>
+  </data>
+  <data name="Settings_LockScreenScope_All.Content" xml:space="preserve">
+    <value>All</value>
+  </data>
+  <data name="Settings_LockScreenScope_Groups.Content" xml:space="preserve">
+    <value>Groups</value>
+  </data>
+  <data name="Settings_LockScreenScope_Direct.Content" xml:space="preserve">
+    <value>Contacts</value>
+  </data>
+  <data name="Settings_LockScreenScope_Favorites.Content" xml:space="preserve">
+    <value>Favorites</value>
+  </data>
+  <data name="Settings_NotificationFilter.Header" xml:space="preserve">
+    <value>Filter notifications</value>
+  </data>
+  <data name="Settings_NotificationFilter.Text" xml:space="preserve">
+    <value>Which chats may raise toasts and count toward the badge.</value>
+  </data>
+  <data name="Settings_NotificationFilterChoose.Content" xml:space="preserve"><value>Wybierz</value></data>
+  <data name="Settings_NotifyGroups.Content" xml:space="preserve">
+    <value>Groups</value>
+  </data>
+  <data name="Settings_NotifyDirect.Content" xml:space="preserve">
+    <value>Contacts</value>
+  </data>
+  <data name="Settings_NotifyFavorites.Content" xml:space="preserve">
+    <value>Favorites</value>
+  </data>
   <data name="Settings_MessageNotificationSound.Header" xml:space="preserve">
     <value>Powiadomienia o wiadomościach</value>
   </data>
@@ -820,6 +854,9 @@ Wyłącz po zakończeniu diagnozy: pozostawienie włączonego spowalnia aplikacj
   <data name="StartTileDialog.Title" xml:space="preserve"><value>Kafelek startowy</value></data>
   <data name="StartTileDialog.PrimaryButtonText" xml:space="preserve"><value>Przypnij</value></data>
   <data name="StartTileDialog.CloseButtonText" xml:space="preserve"><value>Anuluj</value></data>
+  <data name="NotificationFilterDialog.Title" xml:space="preserve"><value>Filtruj powiadomienia</value></data>
+  <data name="NotificationFilterDialog.PrimaryButtonText" xml:space="preserve"><value>OK</value></data>
+  <data name="NotificationFilterDialog.CloseButtonText" xml:space="preserve"><value>Anuluj</value></data>
   <data name="StartTileDialog_Unison.Content" xml:space="preserve"><value>Unison</value></data>
   <data name="StartTileDialog_WhatsAppWeb.Content" xml:space="preserve"><value>WhatsApp Web</value></data>
   <data name="StartTileDialog_WhatsAppLegacy.Content" xml:space="preserve"><value>WhatsApp Legacy</value></data>
@@ -1079,6 +1116,27 @@ Wyłącz po zakończeniu diagnozy: pozostawienie włączonego spowalnia aplikacj
   </data>
   <data name="Message_GroupJoin" xml:space="preserve">
     <value>{0} dołączył do grupy</value>
+  </data>
+  <data name="Message_GroupAddedBy" xml:space="preserve">
+    <value>{0} added {1}</value>
+  </data>
+  <data name="Message_GroupLeft" xml:space="preserve">
+    <value>{0} left</value>
+  </data>
+  <data name="Message_GroupRemovedBy" xml:space="preserve">
+    <value>{0} removed {1}</value>
+  </data>
+  <data name="Message_GroupSubjectChangedFromTo" xml:space="preserve">
+    <value>{0} changed the group name from "{1}" to "{2}"</value>
+  </data>
+  <data name="Message_GroupSubjectChangedTo" xml:space="preserve">
+    <value>{0} changed the group name to "{1}"</value>
+  </data>
+  <data name="Message_GroupSubjectChangedFromToAnon" xml:space="preserve">
+    <value>Group name changed from "{0}" to "{1}"</value>
+  </data>
+  <data name="Message_GroupSubjectChangedToAnon" xml:space="preserve">
+    <value>Group name changed to "{0}"</value>
   </data>
   <data name="ChatDetail_AddContactLink.Content" xml:space="preserve">
     <value>Dodaj kontakt</value>

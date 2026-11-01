@@ -25,5 +25,25 @@ namespace Unison.Core.Helpers
             return horizontalDistance <= -MinimumDistance &&
                    Math.Abs(horizontalDistance) > Math.Abs(verticalDistance);
         }
+
+        /// <summary>
+        /// 0..1 how far a leftward drag has gone toward <see cref="MinimumDistance"/>.
+        /// Used to fade the reply circle beside the bubble during the sling.
+        /// </summary>
+        public static double Progress(double horizontalDistance)
+        {
+            if (horizontalDistance >= 0 || MinimumDistance <= 0)
+            {
+                return 0;
+            }
+
+            double progress = -horizontalDistance / MinimumDistance;
+            if (progress <= 0)
+            {
+                return 0;
+            }
+
+            return progress >= 1 ? 1 : progress;
+        }
     }
 }

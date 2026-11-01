@@ -86,7 +86,8 @@ namespace Unison.Core.State
                 request.ParticipantJid,
                 request.SenderName,
                 Volatile.Read(ref _progressiveFlushed) == 0 ? _throttle : _steadyThrottle,
-                OnThrottleElapsed);
+                OnThrottleElapsed,
+                request.HasCitation && incrementUnread);
         }
 
         public async Task FlushAsync(string reason)

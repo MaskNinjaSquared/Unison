@@ -203,6 +203,7 @@
     <Compile Include="Services\WinRtAppMemoryInfo.cs" />
     <Compile Include="Services\WhatsApp\Messages\BridgeMessageWireActions.cs" />
     <Compile Include="Services\WhatsApp\Messages\MediaAvailability.cs" />
+    <Compile Include="Services\WhatsApp\Messages\BaileysMediaDownload.cs" />
     <Compile Include="Services\Socket\DelegateSocketLog.cs" />
     <Compile Include="Services\Socket\SocketSliceProbe.cs" />
     <Compile Include="Services\Socket\SignalRepositoryAdapter.cs" />
@@ -479,6 +480,9 @@
     <Compile Include="UI\Controls\ContactsVisualizerControl.xaml.cs">
       <DependentUpon>ContactsVisualizerControl.xaml</DependentUpon>
     </Compile>
+    <Compile Include="UI\Controls\NewConversationView.xaml.cs">
+      <DependentUpon>NewConversationView.xaml</DependentUpon>
+    </Compile>
     <Compile Include="UI\Controls\FavoritesEmptyControl.xaml.cs">
       <DependentUpon>FavoritesEmptyControl.xaml</DependentUpon>
     </Compile>
@@ -585,6 +589,14 @@
     <Compile Include="UI\Controls\ChatStickerBox.xaml.cs">
       <DependentUpon>ChatStickerBox.xaml</DependentUpon>
     </Compile>
+    <Compile Include="UI\Controls\EmojiPickerPanel.xaml.cs">
+      <DependentUpon>EmojiPickerPanel.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="UI\Controls\ReactionQuickBar.xaml.cs">
+      <DependentUpon>ReactionQuickBar.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="UI\Controls\ReactionQuickBarEntry.cs"/>
+    <Compile Include="UI\Helpers\MessageReactionContextChrome.cs" />
     <Compile Include="UI\Controls\ChatMediaCircleButtonHost.xaml.cs">
       <DependentUpon>ChatMediaCircleButtonHost.xaml</DependentUpon>
     </Compile>
@@ -646,6 +658,9 @@
     </Compile>
     <Compile Include="UI\Dialogs\StartTileMarkDialog.xaml.cs">
       <DependentUpon>StartTileMarkDialog.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="UI\Dialogs\NotificationFilterDialog.xaml.cs">
+      <DependentUpon>NotificationFilterDialog.xaml</DependentUpon>
     </Compile>
     <Compile Include="UI\Dialogs\RuntimeDiagnosticsDialog.xaml.cs">
       <DependentUpon>RuntimeDiagnosticsDialog.xaml</DependentUpon>
@@ -922,6 +937,14 @@
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </Page>
+    <Page Include="UI\Controls\EmojiPickerPanel.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Include="UI\Controls\ReactionQuickBar.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
     <Page Include="UI\Controls\ChatMediaCircleButtonHost.xaml">
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
@@ -1174,6 +1197,10 @@
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </Page>
+    <Page Include="UI\Controls\NewConversationView.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
     <Page Include="UI\Views\ImageViewerView.xaml">
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
@@ -1199,6 +1226,10 @@
       <SubType>Designer</SubType>
     </Page>
     <Page Include="UI\Dialogs\DocumentSendPreviewDialog.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Include="UI\Dialogs\NotificationFilterDialog.xaml">
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </Page>

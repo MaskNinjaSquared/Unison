@@ -831,6 +831,57 @@
 
                 </Grid><!-- ComposerHost -->
 
+                <Grid x:Name="ReactionEmojiDock"
+                      Grid.Row="2"
+                      Visibility="Collapsed"
+                      Background="{ThemeResource ChatDetailInputBarBackgroundBrush}">
+                    <Grid.RenderTransform>
+                        <TranslateTransform x:Name="ReactionEmojiTranslate" Y="1000"/>
+                    </Grid.RenderTransform>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="300"/>
+                        <RowDefinition Height="64"/>
+                    </Grid.RowDefinitions>
+                    <!-- Same Pivot chrome as ChatStickerBox, but only the Emoji tab. -->
+                    <Pivot Margin="10,0,0,0"
+                           SelectedIndex="0"
+                           Background="Transparent">
+                        <Pivot.Resources>
+                            <Thickness x:Key="PivotItemMargin">0</Thickness>
+                            <Style TargetType="PivotHeaderItem">
+                                <Setter Property="FontSize" Value="13"/>
+                                <Setter Property="Height" Value="36"/>
+                                <Setter Property="Padding" Value="5,0,10,0"/>
+                                <Setter Property="Margin" Value="0"/>
+                                <Setter Property="MinWidth" Value="0"/>
+                            </Style>
+                        </Pivot.Resources>
+                        <PivotItem>
+                            <PivotItem.Header>
+                                <TextBlock x:Uid="StickerBox_EmojiTab"
+                                           Text="Emoji"
+                                           FontSize="13"
+                                           FontFamily="{StaticResource MainFont}"/>
+                            </PivotItem.Header>
+                            <controls:EmojiPickerPanel x:Name="ReactionEmojiPanel"
+                                                       CategoriesSource="{Binding EmojiCategories}"
+                                                       SearchQuery="{Binding EmojiSearchQuery, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                       IsCatalogLoading="{Binding IsEmojiCatalogLoading}"
+                                                       GlyphPicked="ReactionEmojiPanel_GlyphPicked"/>
+                        </PivotItem>
+                    </Pivot>
+                    <Grid Grid.Row="1" Padding="12,0">
+                        <Button Style="{StaticResource WhatsAppIconButtonStyle}"
+                                Width="40" Height="40"
+                                HorizontalAlignment="Left"
+                                VerticalAlignment="Center"
+                                Click="ReactionEmojiCloseButton_Click">
+                            <TextBlock Text="&#xE70D;" FontFamily="{StaticResource IconFont}" FontSize="16"
+                                       Foreground="{ThemeResource ChatDetailMutedTextBrush}"/>
+                        </Button>
+                    </Grid>
+                </Grid>
+
                 <controls:ChatStickerBox x:Name="StickerBox"
                                          Grid.Row="3"
                                          Visibility="{Binding IsStickerBoxOpen, Converter={StaticResource BooleanToVisibilityConverter}}"/>

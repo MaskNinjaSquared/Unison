@@ -29,6 +29,8 @@
                                     Visibility="{Binding Kind, Converter={StaticResource ReplyKind}, ConverterParameter=Image}"/>
             <reply:ReplyVideoChrome Margin="0,4,0,0"
                                     Visibility="{Binding Kind, Converter={StaticResource ReplyKind}, ConverterParameter=Video}"/>
+            <reply:ReplyVideoChrome Margin="0,4,0,0"
+                                    Visibility="{Binding Kind, Converter={StaticResource ReplyKind}, ConverterParameter=Gif}"/>
             <reply:ReplyStickerChrome Margin="0,4,0,0"
                                       Visibility="{Binding Kind, Converter={StaticResource ReplyKind}, ConverterParameter=Sticker}"/>
             <reply:ReplyAudioChrome Margin="0,4,0,0"

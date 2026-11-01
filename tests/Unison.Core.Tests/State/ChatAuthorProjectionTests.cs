@@ -60,6 +60,51 @@ namespace Unison.Core.Tests.State
         }
 
         [Fact]
+        public async Task Sweep_clears_author_prefix_on_group_system_tips()
+        {
+            var jids = new AliasJids();
+            jids.Pair(Lid, Pn);
+
+            var people = new MemoryPersonStore();
+            people.SeedDisk(new Person
+            {
+                Jid = Pn,
+                Name = "Ana Souza",
+                Phone = "5511988887777",
+                Source = PersonSource.Observed
+            });
+
+            var chatState = new ChatStateStore(new CountingDispatcher());
+            var group = new ChatItem
+            {
+                JID = Group,
+                Name = "Família",
+                IsGroup = true,
+                LastMessageIsFromMe = false,
+                LastMessageKind = ChatPreviewKind.GroupJoin,
+                LastMessage = "Ana Souza removeu Beltrano",
+                LastMessageParticipantJid = Lid,
+                LastMessageAuthor = "Ana Souza: ",
+                LastMessageSenderName = "Ana Souza"
+            };
+            chatState.Chats.Add(group);
+
+            var projection = new ChatAuthorProjection(
+                chatState,
+                people,
+                jids,
+                strings: null,
+                new CountingDispatcher());
+
+            projection.Start();
+            await WaitForAsync(() => group.LastMessageAuthor == string.Empty);
+
+            Assert.Equal(string.Empty, group.LastMessageAuthor);
+            // Body already names the actor — keep SenderName, but never "Author: " chip.
+            Assert.Equal("Ana Souza", group.LastMessageSenderName);
+        }
+
+        [Fact]
         public async Task Sweep_names_the_strip_from_the_1to1_chat()
         {
             var jids = new AliasJids();

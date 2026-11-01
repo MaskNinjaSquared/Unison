@@ -16,6 +16,12 @@ namespace Unison.Core.Models
         /// <summary>PN when the row is LID-addressed (<c>phone_number</c>).</summary>
         public string PhoneDigits { get; set; }
 
+        /// <summary>
+        /// Who performed the add when the server names an admin (Baileys <c>author</c>).
+        /// Blank or same as participant → "{0} joined"; distinct → "{0} added {1}".
+        /// </summary>
+        public string ActorJid { get; set; }
+
         /// <summary>Notification stanza id when present — stabilises synthetic message ids.</summary>
         public string NotificationId { get; set; }
 

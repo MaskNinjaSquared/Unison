@@ -1,4 +1,4 @@
-ï»¿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <root>
   <!-- 
     Microsoft ResX Schema 
@@ -270,7 +270,7 @@ Schakel uit na diagnostiseren: het ingeschakeld laten vertraagd de app.</value>
     <value>Dit bericht is verwijderd</value>
   </data>
   <data name="ChatList_Loading.Text" xml:space="preserve">
-    <value>Chats voorbereiedenâ€¦</value>
+    <value>Chats voorbereieden…</value>
   </data>
   <data name="ChatList_RefreshingNames" xml:space="preserve">
     <value>Contacten verversen...</value>
@@ -285,31 +285,31 @@ Schakel uit na diagnostiseren: het ingeschakeld laten vertraagd de app.</value>
     <value>Bijwerken...</value>
   </data>
   <data name="ChatList_SyncProgress" xml:space="preserve">
-    <value>Chats synchroniserenâ€¦ {0} van {1}</value>
+    <value>Chats synchroniseren… {0} van {1}</value>
   </data>
   <data name="ChatList_SyncProgressCount" xml:space="preserve">
-    <value>Chats synchroniserenâ€¦ {0} geladen</value>
+    <value>Chats synchroniseren… {0} geladen</value>
   </data>
   <data name="ChatList_SyncDone" xml:space="preserve">
     <value>Synchronisatie voltooid</value>
   </data>
   <data name="ChatList_Settling" xml:space="preserve">
-    <value>Opstarten afrondenâ€¦</value>
+    <value>Opstarten afronden…</value>
   </data>
   <data name="ChatList_ResolvingNames" xml:space="preserve">
-    <value>Namen ophalenâ€¦ {0} van {1}</value>
+    <value>Namen ophalen… {0} van {1}</value>
   </data>
   <data name="ChatList_FetchingAvatars" xml:space="preserve">
-    <value>Foto's ladenâ€¦ {0} van {1}</value>
+    <value>Foto's laden… {0} van {1}</value>
   </data>
   <data name="ChatList_FetchingGroups" xml:space="preserve">
-    <value>Groepsinfo ladenâ€¦ {0} van {1}</value>
+    <value>Groepsinfo laden… {0} van {1}</value>
   </data>
   <data name="ChatList_PausedLowMemory" xml:space="preserve">
-    <value>Gepauzeerd â€” weinig geheugen</value>
+    <value>Gepauzeerd — weinig geheugen</value>
   </data>
   <data name="ChatList_Organizing" xml:space="preserve">
-    <value>Chats organiserenâ€¦</value>
+    <value>Chats organiseren…</value>
   </data>
   <data name="ChatDetail_SelectChat.Text" xml:space="preserve">
     <value>Selecteer een chat</value>
@@ -426,7 +426,7 @@ Schakel uit na diagnostiseren: het ingeschakeld laten vertraagd de app.</value>
     <value>Bericht losmaken</value>
   </data>
   <data name="ChatDetail_CopyMessage" xml:space="preserve">
-    <value>KopiÃ«ren</value>
+    <value>Kopiëren</value>
   </data>
   <data name="ChatDetail_ReplyMessage" xml:space="preserve">
     <value>Beantwoorden</value>
@@ -450,7 +450,7 @@ Schakel uit na diagnostiseren: het ingeschakeld laten vertraagd de app.</value>
     <value>Aankondigingen</value>
   </data>
   <data name="Chat_CommunityHubSubtitle" xml:space="preserve">
-    <value>Community Â· {0} groepen</value>
+    <value>Community · {0} groepen</value>
   </data>
   <data name="Chat_CommunityFallbackName" xml:space="preserve">
     <value>Community</value>
@@ -737,7 +737,7 @@ Schakel uit na diagnostiseren: het ingeschakeld laten vertraagd de app.</value>
     <value>Apps op de achtergrond</value>
   </data>
   <data name="Login_BackgroundAccessBody" xml:space="preserve">
-    <value>Unison heeft toestemming nodig om op de achtergrond te draaien om met WhatsApp te verbinden. Zet Unison aan onder Instellingen â†’ Privacy â†’ Apps op de achtergrond en kom daarna terug.</value>
+    <value>Unison heeft toestemming nodig om op de achtergrond te draaien om met WhatsApp te verbinden. Zet Unison aan onder Instellingen ? Privacy ? Apps op de achtergrond en kom daarna terug.</value>
   </data>
   <data name="Login_BackgroundAccessRetry" xml:space="preserve">
     <value>Achtergrondtoegang staat aan. Tik op QR opnieuw laden om te verbinden.</value>
@@ -793,6 +793,40 @@ Schakel uit na diagnostiseren: het ingeschakeld laten vertraagd de app.</value>
   <data name="Settings_Notifications.Text" xml:space="preserve">
     <value>Banners en meldingen in actiecentrum weergeven voor inkomende berichten</value>
   </data>
+  <data name="Settings_LockScreenNotifications.Header" xml:space="preserve">
+    <value>Lock screen</value>
+  </data>
+  <data name="Settings_LockScreenNotifications.Text" xml:space="preserve">
+    <value>Which chats update the large Live Tile / lock screen preview.</value>
+  </data>
+  <data name="Settings_LockScreenScope_All.Content" xml:space="preserve">
+    <value>All</value>
+  </data>
+  <data name="Settings_LockScreenScope_Groups.Content" xml:space="preserve">
+    <value>Groups</value>
+  </data>
+  <data name="Settings_LockScreenScope_Direct.Content" xml:space="preserve">
+    <value>Contacts</value>
+  </data>
+  <data name="Settings_LockScreenScope_Favorites.Content" xml:space="preserve">
+    <value>Favorites</value>
+  </data>
+  <data name="Settings_NotificationFilter.Header" xml:space="preserve">
+    <value>Filter notifications</value>
+  </data>
+  <data name="Settings_NotificationFilter.Text" xml:space="preserve">
+    <value>Which chats may raise toasts and count toward the badge.</value>
+  </data>
+  <data name="Settings_NotificationFilterChoose.Content" xml:space="preserve"><value>Kiezen</value></data>
+  <data name="Settings_NotifyGroups.Content" xml:space="preserve">
+    <value>Groups</value>
+  </data>
+  <data name="Settings_NotifyDirect.Content" xml:space="preserve">
+    <value>Contacts</value>
+  </data>
+  <data name="Settings_NotifyFavorites.Content" xml:space="preserve">
+    <value>Favorites</value>
+  </data>
   <data name="Settings_MessageNotificationSound.Header" xml:space="preserve">
     <value>Berichtmeldingen</value>
   </data>
@@ -826,6 +860,9 @@ Schakel uit na diagnostiseren: het ingeschakeld laten vertraagd de app.</value>
   <data name="StartTileDialog.Title" xml:space="preserve"><value>Starttegel</value></data>
   <data name="StartTileDialog.PrimaryButtonText" xml:space="preserve"><value>Vastmaken</value></data>
   <data name="StartTileDialog.CloseButtonText" xml:space="preserve"><value>Annuleren</value></data>
+  <data name="NotificationFilterDialog.Title" xml:space="preserve"><value>Meldingen filteren</value></data>
+  <data name="NotificationFilterDialog.PrimaryButtonText" xml:space="preserve"><value>OK</value></data>
+  <data name="NotificationFilterDialog.CloseButtonText" xml:space="preserve"><value>Annuleren</value></data>
   <data name="StartTileDialog_Unison.Content" xml:space="preserve"><value>Unison</value></data>
   <data name="StartTileDialog_WhatsAppWeb.Content" xml:space="preserve"><value>WhatsApp Web</value></data>
   <data name="StartTileDialog_WhatsAppLegacy.Content" xml:space="preserve"><value>WhatsApp Legacy</value></data>
@@ -944,7 +981,7 @@ Schakel uit na diagnostiseren: het ingeschakeld laten vertraagd de app.</value>
     <value>Welkom bij Unison</value>
   </data>
   <data name="Start_Description.Text" xml:space="preserve">
-    <value>Een simpele, betrouwbare en privÃ© manier om WhatsApp te gebruiken op je computer</value>
+    <value>Een simpele, betrouwbare en privé manier om WhatsApp te gebruiken op je computer</value>
   </data>
   <data name="Start_GetStarted.Content" xml:space="preserve">
     <value>Beginnen</value>
@@ -1079,6 +1116,27 @@ Schakel uit na diagnostiseren: het ingeschakeld laten vertraagd de app.</value>
   </data>
   <data name="Message_GroupJoin" xml:space="preserve">
     <value>{0} is lid geworden van de groep</value>
+  </data>
+  <data name="Message_GroupAddedBy" xml:space="preserve">
+    <value>{0} added {1}</value>
+  </data>
+  <data name="Message_GroupLeft" xml:space="preserve">
+    <value>{0} left</value>
+  </data>
+  <data name="Message_GroupRemovedBy" xml:space="preserve">
+    <value>{0} removed {1}</value>
+  </data>
+  <data name="Message_GroupSubjectChangedFromTo" xml:space="preserve">
+    <value>{0} changed the group name from "{1}" to "{2}"</value>
+  </data>
+  <data name="Message_GroupSubjectChangedTo" xml:space="preserve">
+    <value>{0} changed the group name to "{1}"</value>
+  </data>
+  <data name="Message_GroupSubjectChangedFromToAnon" xml:space="preserve">
+    <value>Group name changed from "{0}" to "{1}"</value>
+  </data>
+  <data name="Message_GroupSubjectChangedToAnon" xml:space="preserve">
+    <value>Group name changed to "{0}"</value>
   </data>
   <data name="ChatDetail_AddContactLink.Content" xml:space="preserve">
     <value>Contact toevoegen</value>
@@ -1249,7 +1307,7 @@ Schakel uit na diagnostiseren: het ingeschakeld laten vertraagd de app.</value>
     <value>Sluiten</value>
   </data>
   <data name="ChatList_SyncingHistory" xml:space="preserve">
-    <value>Geschiedenis synchroniserenâ€¦</value>
+    <value>Geschiedenis synchroniseren…</value>
   </data>
   <data name="Debug_RuntimeDialogHint.Text" xml:space="preserve">
     <value>Houd vast / rechtsklik op Chats (of QR) om te openen. Geen berichttekst.</value>
@@ -1267,7 +1325,7 @@ Schakel uit na diagnostiseren: het ingeschakeld laten vertraagd de app.</value>
     <value>Request Full History On-demand</value>
   </data>
   <data name="Debug_FullHistoryRequesting" xml:space="preserve">
-    <value>Requesting full historyâ€¦</value>
+    <value>Requesting full history…</value>
   </data>
   <data name="Debug_FullHistoryRequested" xml:space="preserve">
     <value>Full history on-demand requested.</value>
@@ -1366,7 +1424,7 @@ Schakel uit na diagnostiseren: het ingeschakeld laten vertraagd de app.</value>
     <value>Audio afspelen</value>
   </data>
 <data name="ChatDetail_DocumentSaveAs.Label" xml:space="preserve">
-    <value>Opslaan alsâ€¦</value>
+    <value>Opslaan als…</value>
   </data>
   <data name="ChatDetail_Back.ToolTip" xml:space="preserve">
     <value>Terug</value>
@@ -1480,7 +1538,7 @@ Schakel uit na diagnostiseren: het ingeschakeld laten vertraagd de app.</value>
     <value>Add people or groups</value>
   </data>
   <data name="Share_PickChat.Text" xml:space="preserve">
-    <value>Send toâ€¦</value>
+    <value>Send to…</value>
   </data>
   <data name="Favorites_SortAlphabetical.Text" xml:space="preserve">
     <value>A-Z</value>

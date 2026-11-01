@@ -259,6 +259,7 @@ namespace Unison.Core.ViewModels
                 name == nameof(ChatMessage.Kind))
             {
                 (CopyCommand as RelayCommand)?.RaiseCanExecuteChanged();
+                RaiseCore(nameof(ReplyDockPreviewText));
             }
 
             if (name == nameof(ChatMessage.IsFromMe) ||
@@ -1063,6 +1064,40 @@ namespace Unison.Core.ViewModels
         public bool ShowStickerError => Model.ShowStickerError;
         public bool ShowStickerLoading => Model.ShowStickerLoading;
         public string Caption => Model.Caption;
+
+        /// <summary>
+        /// Reply compose bar preview: caption, else a localized Photo/Video/Gif label, else content.
+        /// Keeps the dock readable when media has no caption (plain Caption binding looked empty).
+        /// </summary>
+        public string ReplyDockPreviewText
+        {
+            get
+            {
+                if (!string.IsNullOrWhiteSpace(Caption))
+                {
+                    return Caption;
+                }
+
+                if (IsImage || Kind == ChatMessageKind.Image)
+                {
+                    return _strings?.Get("ChatList_PreviewPhoto", "Photo") ?? "Photo";
+                }
+
+                if (IsVideo || Kind == ChatMessageKind.Video || Kind == ChatMessageKind.Gif)
+                {
+                    return Kind == ChatMessageKind.Gif
+                        ? (_strings?.Get("ChatList_PreviewGif", "GIF") ?? "GIF")
+                        : (_strings?.Get("ChatList_PreviewVideo", "Video") ?? "Video");
+                }
+
+                if (!string.IsNullOrWhiteSpace(Content))
+                {
+                    return Content;
+                }
+
+                return string.Empty;
+            }
+        }
 
         private string CopyableText
         {

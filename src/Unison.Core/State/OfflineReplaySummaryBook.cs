@@ -34,7 +34,8 @@ namespace Unison.Core.State
             string participantJid,
             string senderName,
             TimeSpan debounce,
-            Action onDue)
+            Action onDue,
+            bool hasCitation = false)
         {
             if (string.IsNullOrWhiteSpace(canonicalJid))
             {
@@ -62,7 +63,8 @@ namespace Unison.Core.State
                     incrementUnread,
                     nowUtc,
                     participantJid,
-                    senderName);
+                    senderName,
+                    hasCitation);
 
                 if (_timer == null && onDue != null)
                 {
@@ -97,9 +99,12 @@ namespace Unison.Core.State
                         IsGroup = value.IsGroup,
                         IsFromMe = value.IsFromMe,
                         UnreadDelta = value.UnreadDelta,
+                        HasCitation = value.HasCitation,
                         Kind = value.Kind,
                         Status = value.Status,
-                        AuthorPrefix = value.AuthorPrefix
+                        AuthorPrefix = value.AuthorPrefix,
+                        ParticipantJid = value.ParticipantJid,
+                        SenderName = value.SenderName
                     };
                 }
 

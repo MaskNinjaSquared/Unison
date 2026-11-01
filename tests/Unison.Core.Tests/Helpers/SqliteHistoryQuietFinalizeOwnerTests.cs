@@ -91,6 +91,10 @@ namespace Unison.Core.Tests.Helpers
             {
             }
 
+            public void NotifySilentFullLotQuiet(string triggerReason, int appliedCount)
+            {
+            }
+
             public void FinishHistoryCatchUpContinue(string reason, bool releaseEnrichment)
             {
             }

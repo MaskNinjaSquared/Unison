@@ -3099,64 +3099,87 @@ namespace Unison.Uwp.UI.Views
                 vm = ViewModel.CreateMessageVm(message);
             }
 
-            var flyout = new MenuFlyout();
-            MessageBubbleContextActions.Add(flyout, vm);
+            Flyout surface = null;
+            Action dismiss = () =>
+            {
+                try
+                {
+                    surface?.Hide();
+                }
+                catch
+                {
+                }
+            };
+
+            var actions = new StackPanel();
+            MessageBubbleContextActions.AddButtons(actions, vm, dismiss);
+            MessageBubbleContextActions.AddSeparator(actions);
             if (message.IsPinned)
             {
-                AddPinAction(
-                    flyout,
+                AddPinActionButton(
+                    actions,
                     vm,
                     LocalizedStrings.Get("ChatDetail_UnpinMessage", "Unpin message"),
                     false,
-                    0);
+                    0,
+                    dismiss);
             }
             else
             {
-                AddPinAction(
-                    flyout,
+                AddPinActionButton(
+                    actions,
                     vm,
                     LocalizedStrings.Get("ChatDetail_PinFor24Hours", "Pin for 24 hours"),
                     true,
-                    86400);
-                AddPinAction(
-                    flyout,
+                    86400,
+                    dismiss);
+                AddPinActionButton(
+                    actions,
                     vm,
                     LocalizedStrings.Get("ChatDetail_PinFor7Days", "Pin for 7 days"),
                     true,
-                    604800);
-                AddPinAction(
-                    flyout,
+                    604800,
+                    dismiss);
+                AddPinActionButton(
+                    actions,
                     vm,
                     LocalizedStrings.Get("ChatDetail_PinFor30Days", "Pin for 30 days"),
                     true,
-                    2592000);
+                    2592000,
+                    dismiss);
             }
-            // The one-argument FlyoutBase.ShowAt overload requires Windows 10 1809.
-            // Windows 10 Mobile 15063 supports the original MenuFlyout overload.
-            flyout.ShowAt(anchor, new Windows.Foundation.Point(
-                Math.Max(0, anchor.ActualWidth / 2),
-                Math.Max(0, anchor.ActualHeight / 2)));
+
+            Border chrome = MessageBubbleContextActions.WrapActionsHost(actions);
+            surface = MessageReactionContextChrome.Show(anchor, message, ViewModel, chrome);
         }
 
-        private void AddPinAction(MenuFlyout flyout, ChatMessageViewModel vm, string label, bool pin, uint durationSeconds)
+        private void AddPinActionButton(
+            Panel panel,
+            ChatMessageViewModel vm,
+            string label,
+            bool pin,
+            uint durationSeconds,
+            Action dismiss)
         {
-            var item = new MenuFlyoutItem { Text = label };
-            item.Click += async (s, e) =>
-            {
-                if (vm?.Model == null)
+            panel.Children.Add(MessageBubbleContextActions.ActionButton(
+                label,
+                "\uE840",
+                async () =>
                 {
-                    return;
-                }
+                    dismiss?.Invoke();
+                    if (vm?.Model == null)
+                    {
+                        return;
+                    }
 
-                if (string.IsNullOrWhiteSpace(vm.Model.RemoteJid) && _activeChat != null)
-                {
-                    vm.Model.RemoteJid = _activeChat.JID;
-                }
+                    if (string.IsNullOrWhiteSpace(vm.Model.RemoteJid) && _activeChat != null)
+                    {
+                        vm.Model.RemoteJid = _activeChat.JID;
+                    }
 
-                await vm.SetPinnedAsync(pin, durationSeconds);
-                UpdatePinnedBanner();
-            };
-            flyout.Items.Add(item);
+                    await vm.SetPinnedAsync(pin, durationSeconds);
+                    UpdatePinnedBanner();
+                }));
         }
 
         /// <summary>Play / resume / pause — ViewModel + IChatAudioPlaybackService.</summary>

@@ -143,6 +143,13 @@ namespace Unison.Uwp.Client
 
         Task<ProfilePictureResult> GetProfilePictureUrlResultAsync(string jid, string type = "preview");
 
+        /// <summary>
+        /// Channel (@newsletter) metadata via WMex — name + picture id/path.
+        /// Do not use <see cref="GetProfilePictureUrlResultAsync"/> for newsletters.
+        /// </summary>
+        Task<Unison.Socket.UseCases.Newsletter.NewsletterMetadataResult> GetNewsletterMetadataAsync(
+            string jid);
+
         Task<byte[]> DownloadAndDecryptMediaAsync(
             string url,
             string directPath,

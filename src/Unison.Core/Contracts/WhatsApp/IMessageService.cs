@@ -585,9 +585,30 @@ namespace Unison.Core.Contracts.WhatsApp
             Message.Types.PeerDataOperationRequestResponseMessage response);
 
         /// <summary>
+        /// Send (or confirm) a from-me reaction. Empty <paramref name="emoji"/> removes the
+        /// current from-me reaction. Returns false to roll back an optimistic local chip.
+        /// Current host may fake failure for UI testing.
+        /// </summary>
+        Task<bool> TryReactAsync(string chatJid, string messageId, string emoji);
+
+        /// <summary>
         /// <c>w:gp2</c> participant <c>add</c>: insert GroupJoin system lines (Baileys
         /// <c>GROUP_PARTICIPANT_ADD</c>). No toast; list strip is plain text.
         /// </summary>
         Task NotifyGroupJoinsAsync(System.Collections.Generic.IReadOnlyList<GroupJoinNotifyRequest> joins);
+
+        /// <summary>
+        /// <c>w:gp2</c> participant <c>remove</c>: leave / removed-by system lines
+        /// (Baileys <c>GROUP_PARTICIPANT_LEAVE</c> / <c>REMOVE</c>).
+        /// </summary>
+        Task NotifyGroupLeavesAsync(System.Collections.Generic.IReadOnlyList<GroupLeaveNotifyRequest> leaves);
+
+        /// <summary>
+        /// Group rename system line after the subject was applied to the catalog
+        /// (Baileys <c>GROUP_CHANGE_SUBJECT</c>).
+        /// </summary>
+        Task NotifyGroupSubjectChangedAsync(
+            GroupSubjectChangeNotifyRequest change,
+            string previousSubject);
     }
 }

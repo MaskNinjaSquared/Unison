@@ -599,6 +599,13 @@ namespace Unison.Uwp
                 new DelegateSocketLog(line => Diag.W("[Media] " + line))));
             services.AddSingleton(sp => new MediaDownloadGate(
                 () => (sp.GetRequiredService<WhatsAppService>()).UsesSingleMediaDownloadSlot));
+            // SocketBridge is owned by WhatsAppService (rebuilt on reconnect), not a DI singleton.
+            services.AddSingleton<IBaileysMediaDownload>(sp => new BaileysMediaDownload(
+                () =>
+                {
+                    var bridge = sp.GetRequiredService<WhatsAppService>().Socket as SocketBridge;
+                    return bridge != null ? bridge.TryGetMediaModule() : null;
+                }));
             services.AddSingleton<IMediaAvailability>(sp => new MediaAvailability(
                 sp.GetRequiredService<IConnectionService>(),
                 sp.GetRequiredService<IMediaDownloadHost>(),
@@ -609,7 +616,8 @@ namespace Unison.Uwp
                 sp.GetRequiredService<IMediaCache>(),
                 sp.GetRequiredService<MediaDerivationService>(),
                 sp.GetRequiredService<MediaDownloadGate>(),
-                sp.GetRequiredService<IChatCatalogPersistence>()));
+                sp.GetRequiredService<IChatCatalogPersistence>(),
+                sp.GetRequiredService<IBaileysMediaDownload>()));
             services.AddSingleton<IMessageWireActions>(sp => new BridgeMessageWireActions(
                 sp.GetRequiredService<UwpSessionProvider>()));
             services.AddSingleton<IOutgoingReceiptHost>(
@@ -938,6 +946,7 @@ namespace Unison.Uwp
 
             services.AddTransient<LoginViewModel>();
             services.AddTransient<StartViewModel>();
+            services.AddSingleton<NewConversationViewModel>();
             services.AddSingleton<ShellViewModel>();
             services.AddSingleton<IForwardMessagePicker>(sp =>
                 sp.GetRequiredService<ShellViewModel>());

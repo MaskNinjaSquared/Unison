@@ -39,6 +39,11 @@ namespace Unison.Core.Models
         public int UnreadCount { get; set; }
 
         /// <summary>
+        /// Unread @ of self / @all from Conversation.UnreadMentionCount (list HasCitation).
+        /// </summary>
+        public bool HasCitation { get; set; }
+
+        /// <summary>
         /// Pin from the history Conversation. Null means this chunk did not speak about pin.
         /// </summary>
         public bool? IsChatPinned { get; set; }

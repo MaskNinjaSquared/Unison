@@ -2,6 +2,123 @@
 
 Newest first.
 
+## New conversation overlay
+
+The chat-list New Chat action opens a full-bleed overlay (not a Frame
+page): back title, search, tiles for New group / contact / community /
+phone number (existing dialog), a message-yourself row with your photo,
+then A–Z contacts like the share picker. Dedicated
+`NewConversationViewModel` + `NewConversationView`.
+
+## Reaction action flyout — WP/W10M chrome
+
+Action rows under the quick bar use solid `#232323`, 1px border, 2px radius,
+44px rows, and a hairline before pin items (not the translucent input-bar card).
+Quick bar background matches the same solid chrome.
+
+## Reaction + opens bottom emoji dock
+
+The full emoji picker from reaction `+` is no longer a Flyout. It slides up
+from the bottom like the attachment dock (scrim + composer swap on Unison /
+Legacy; same slide on WhatsApp). Quick-bar 12 stay in the bubble Flyout.
+
+## Reaction chrome — one Flyout (Unison / WhatsApp)
+
+Unison and WhatsApp no longer open MenuFlyout on top of the reaction Flyout
+(UWP dismisses the first). Copy/Reply/Forward/Pin live in the same surface
+under the quick bar. Legacy keeps its CommandBar dock + reaction-only Flyout.
+Quick bar: 12 glyphs scroll, `+` fixed outside; MaxWidth capped to the window.
+
+## Group system tip strip — no author chip
+
+Join / leave / rename list tips already include the actor in the body
+(`X removed Y`). The author projection no longer re-applies `X: ` on
+`ChatPreviewKind.GroupJoin`, and cold-start clears leftover chips.
+
+## Media thumbs — Baileys retry + history placeholders + scrim
+
+On-demand image download goes through `DownloadMediaUseCase` when the socket
+media module is up (CDN, then one phone media-retry for DM/group; channels skip
+retry). Low/Unsupported sync now materializes `jpegThumbnail` to disk so group
+and 1:1 placeholders survive. Download grids add a theme scrim over the thumb
+(light: white; dark: dark) so the download icon stays readable.
+
+## Reaction toggle — tap own emoji to remove
+
+Quick bar / full picker: tapping the from-me emoji already on the bubble
+removes it immediately (optimistic), calls `TryReactAsync` with empty text,
+and restores the chip if the command fails. The matching glyph is marked in
+the quick strip. One from-me reaction per bubble: picking another emoji
+replaces the previous; failed send restores the old one.
+
+## Toast filter — choice dialog like Start tile
+
+Settings → Filter notifications opens a ContentDialog (All / Groups /
+Contacts / Favorites), same single-select model as the Start tile picker
+and lock-screen scope. Checkboxes removed; stored allow-list still uses
+`groups;direct;favorites`.
+
+## Notification filter — lock screen + toasts
+
+Settings → Notifications: ComboBox for Live Tile / lock-screen audience
+(All / Groups / Contacts / Favorites). Toast allow-list uses the same
+scopes via dialog (see above). Contacts = 1:1 (`direct`); channels only
+via Favorites or All. Badge follows the toast filter.
+
+## Channel avatars via newsletterMetadata
+
+`@newsletter` rows no longer use `w:profile:picture`. Avatar batch calls WMex
+`newsletterMetadata` (`FetchNewsletterMetadataUseCase`), resolves
+`picture`/`preview` `direct_path` on `pps.whatsapp.net`, applies name + picture
+hint through `ChannelIdentityApply`, then caches like other avatars.
+
+## Silent FULL — empty-lot cap + residual banner
+
+Silent chain stops soliciting after 4 consecutive quiet lots with zero applied
+messages (`empty-cap`). A productive lot resets the streak. Catch-up banner still
+rises when silent history applies after the chain is disarmed (progress + quiet).
+
+## Reaction quick bar + reusable emoji picker
+
+Bubble hold/right-tap opens a horizontal strip of 12 common reactions plus a
+fixed `+` above the existing context menu. `+` opens `EmojiPickerPanel` (no
+pivot) for a full pick. Glyph click applies optimistically; `TryReactAsync` is
+a 3s fake that always returns false so the chip rolls back (wire send later).
+Composer sticker box emoji tab hosts the same panel with `InsertEmojiCommand`.
+Unigram GIF search is TDLib-bot only — not portable to WhatsApp; GIF tab stays
+placeholder.
+
+## Emoji jump icons — UnisonIcons refresh
+
+Category jump tiles for Recents / Nature / Food / Activities / Symbols use new
+PNG-traced glyphs in `UnisonIcons.ttf` (EA05–EA09). Recents switched from Segoe
+clock to Unison `EA09`.
+
+## Chat list — green @ for unread citations
+
+`ChatItem.HasCitation` lights when an unread message @mentions this account or
+`@all` (live + offline replay), or when history sync reports
+`Conversation.UnreadMentionCount`. Cleared with unread on mark-read. The list
+shows a green `@` beside the unread badge.
+
+## Group system lines — leave, remove, rename, added-by
+
+`w:gp2` remove and `groups.update` subject now insert the same GroupJoin-chrome
+timeline lines as joins. Distinct `author` → “{0} added {1}” / “{0} removed {1}”;
+same or blank actor → “joined” / “left”. Rename captures the previous catalog
+subject before applying the new one. Upsert still updates names only (no fake
+rename line).
+
+## Silent FULL history chain + open-chat ON_DEMAND + reply sling
+
+After init, sequential `FULL_HISTORY_SYNC_ON_DEMAND` probes wait for each lot’s
+socket+SQLite quiet before the next (Unsupported 5 min / Low 3 / High 2). Banner
+only when a silent lot applied data; empty lots journal `history|silent-sync` only.
+Opening a chat requests one per-session `HISTORY_SYNC_ON_DEMAND` page off the UI
+thread after the thin timeline paints. Reply swipe shows a circular reply icon
+beside the bubble while dragging; reply dock Photo/Video/Gif use
+`ReplyDockPreviewText` (caption or localized label).
+
 ## Chat list strip — WhatsApp emoji font
 
 `ChatListPreviewStrip` painted preview/author with plain `TextBlock.Text` on

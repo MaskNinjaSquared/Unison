@@ -47,7 +47,7 @@ using Unison.WhatsAppClient.Helpers;
 
 namespace Unison.Uwp.Services.WhatsApp
 {
-    public partial class WhatsAppService : INotifyPropertyChanged, IConnectionEventSource, IConnectionSessionHost, IOfflineReplayHost, IOfflineReplayFlushIoHost, IChatCatalogPersistHost, IPostReplayMaintenanceHost, IPostMessageEnrichmentHost, IPlaceholderResendSocket, IHistoryOnDemandSocket, IRuntimeSnapshotSource, IBackgroundResolutionGate, IConversationResyncHost, IHistorySyncHost, IHistoryCatchUpHost, IConnectionEnsureHost, IConnectionResumeHost, IConnectionPairingStage2Host, IConnectionBrokerTransferHost, IConnectionSoftReconnectHost, IConnectionLifecycleHost, IConnectionConnectGateSource, IConnectionConnectPrepareHost, IConnectionSocketAssignment, IConnectionAssignedSocketClearHost, ISocketAliasRegistrar, IStartupUiHost, IIncomingMessageEnqueueHost, IResolvedNameApplyHost, IHistoryHydrationBackfillHost, ISqliteHistoryQuietFinalizeHost, IHistoryPostOfflineFreshnessHost, IHistoryCatchUpFinishHost, IUserResyncFullHistoryHost, IFreshnessReconnectFallbackHost, ICatchUpContinueReconnectHost, IFirstSyncListReleaseHost, IFullHistoryCatchUpProgressHost, IHistorySqliteChunkAppliedHost, IAcceptedHistoryRequestTimeoutHost, IAutoReconnectLoopHost, IConversationResyncWaitHost, IFullHistoryOnDemandClearHost, IInitializeConnectionStateHost, IHistorySqliteChunkStartedHost, IFullHistoryCatchUpWatchdogHost, IPeriodicFullHistorySafetyHost, IReconnectHistoryCatchUpHost, IHydrationFallbackPipelineHost, IHydrationDayRetryIoHost, ISoftReconnectIoHost, IRequestFullHistoryOnDemandTrackedHost, IBrokerReconnectConsumeHost, IForceHistoryRepairConsumeHost, IForceHistoryRepairPendingHost, IPublishConnectionUpdateHost, ICompleteUserResyncHistoryWaitHost, ITearDownSocketForSoftReconnectHost, IMarkPairingRestartPendingHost, IDropCurrentSocketForFastResumeHost, IPersistAuthStateHost, IWaitForSessionEstablishedHost, IConnectionHealthMonitorIoHost, ITryStartPairingStage2ReconnectHost, IIsCurrentSocketHealthyHost, IConnectAsyncHost, IResyncConversationsHost, IPostSyncMaintenanceIoHost, IBuildHistoryHydrationCandidatesHost, IPeriodicFullHistorySafetyLoopHost, IWaitForHistoryHydrationSettleHost
+    public partial class WhatsAppService : INotifyPropertyChanged, IConnectionEventSource, IConnectionSessionHost, IOfflineReplayHost, IOfflineReplayFlushIoHost, IChatCatalogPersistHost, IPostReplayMaintenanceHost, IPostMessageEnrichmentHost, IPlaceholderResendSocket, IHistoryOnDemandSocket, IRuntimeSnapshotSource, IBackgroundResolutionGate, IConversationResyncHost, IHistorySyncHost, IHistoryCatchUpHost, IConnectionEnsureHost, IConnectionResumeHost, IConnectionPairingStage2Host, IConnectionBrokerTransferHost, IConnectionSoftReconnectHost, IConnectionLifecycleHost, IConnectionConnectGateSource, IConnectionConnectPrepareHost, IConnectionSocketAssignment, IConnectionAssignedSocketClearHost, ISocketAliasRegistrar, IStartupUiHost, IIncomingMessageEnqueueHost, IResolvedNameApplyHost, IHistoryHydrationBackfillHost, ISqliteHistoryQuietFinalizeHost, IHistoryPostOfflineFreshnessHost, IHistoryCatchUpFinishHost, IUserResyncFullHistoryHost, IFreshnessReconnectFallbackHost, ICatchUpContinueReconnectHost, IFirstSyncListReleaseHost, IFullHistoryCatchUpProgressHost, IHistorySqliteChunkAppliedHost, IAcceptedHistoryRequestTimeoutHost, IAutoReconnectLoopHost, IConversationResyncWaitHost, IFullHistoryOnDemandClearHost, IInitializeConnectionStateHost, IHistorySqliteChunkStartedHost, IFullHistoryCatchUpWatchdogHost, IPeriodicFullHistorySafetyHost, IReconnectHistoryCatchUpHost, IHydrationFallbackPipelineHost, IHydrationDayRetryIoHost, ISoftReconnectIoHost, IRequestFullHistoryOnDemandTrackedHost, IBrokerReconnectConsumeHost, IForceHistoryRepairConsumeHost, IForceHistoryRepairPendingHost, IPublishConnectionUpdateHost, ICompleteUserResyncHistoryWaitHost, ITearDownSocketForSoftReconnectHost, IMarkPairingRestartPendingHost, IDropCurrentSocketForFastResumeHost, IPersistAuthStateHost, IWaitForSessionEstablishedHost, IConnectionHealthMonitorIoHost, ITryStartPairingStage2ReconnectHost, IIsCurrentSocketHealthyHost, IConnectAsyncHost, IResyncConversationsHost, IPostSyncMaintenanceIoHost, IBuildHistoryHydrationCandidatesHost, IPeriodicFullHistorySafetyLoopHost, IWaitForHistoryHydrationSettleHost, ISilentFullHistoryChainHost
     {
         public event PropertyChangedEventHandler PropertyChanged;
         protected void OnPropertyChanged([CallerMemberName] string propertyName = null)
@@ -501,8 +501,11 @@ namespace Unison.Uwp.Services.WhatsApp
         /// abort while tips/chunks are still arriving on Mobile. ACK/banner only refresh the idle
         /// clock; they must not bump <see cref="HistoryOnDemandRequest.ProgressSignalCount"/>.
         /// </summary>
-        private void NoteFullHistoryCatchUpProgress(string reason) =>
+        private void NoteFullHistoryCatchUpProgress(string reason)
+        {
             FullHistoryCatchUpProgressDispatch.Run(this, reason);
+            MaybeBeginSilentCatchUpBannerFromProgress(reason);
+        }
 
         RuntimeDiagnosticsSnapshot IRuntimeSnapshotSource.CaptureRuntimeSnapshot()
         {
@@ -3073,11 +3076,164 @@ namespace Unison.Uwp.Services.WhatsApp
                 DateTime.UtcNow);
         }
 
-        private void StartPeriodicFullHistorySafety() =>
+        private void StartPeriodicFullHistorySafety()
+        {
             _healthMonitors.StartPeriodicSafety();
+            // Sequential silent FULL probes (banner only when a quiet lot applied data).
+            SilentFullHistoryChainDispatch.Arm(this, "post-init");
+        }
 
-        private void StopPeriodicFullHistorySafety(string reason) =>
+        private void StopPeriodicFullHistorySafety(string reason)
+        {
+            SilentFullHistoryChainDispatch.Stop(this, reason);
             _healthMonitors.StopPeriodicSafety(reason);
+        }
+
+        // --- Silent FULL chain (ISilentFullHistoryChainHost) ------------------
+
+        private bool _silentChainArmed;
+        private bool _previousSilentLotQuiet = true;
+        private int _consecutiveEmptySilentLots;
+        private CancellationTokenSource _silentScheduleCts;
+
+        bool ISilentFullHistoryChainHost.IsSilentChainArmed => _silentChainArmed;
+
+        bool ISilentFullHistoryChainHost.IsPreviousSilentLotQuiet => _previousSilentLotQuiet;
+
+        int ISilentFullHistoryChainHost.ConsecutiveEmptySilentLots => _consecutiveEmptySilentLots;
+
+        bool ISilentFullHistoryChainHost.IsSocketReadyForSilentFull
+        {
+            get
+            {
+                var socket = _socket;
+                return IsConnected &&
+                       socket != null &&
+                       socket.IsHandshakeComplete;
+            }
+        }
+
+        bool ISilentFullHistoryChainHost.IsHistoryCatchUpActive => IsHistoryCatchUpActive();
+
+        bool ISilentFullHistoryChainHost.IsFullHistoryClaimed => _historyRequests.IsFullClaimed;
+
+        DeviceCategory ISilentFullHistoryChainHost.DeviceCategory =>
+            _workload.Category;
+
+        void ISilentFullHistoryChainHost.MarkSilentChainArmed(bool armed) =>
+            _silentChainArmed = armed;
+
+        void ISilentFullHistoryChainHost.MarkPreviousSilentLotQuiet(bool quiet) =>
+            _previousSilentLotQuiet = quiet;
+
+        void ISilentFullHistoryChainHost.MarkConsecutiveEmptySilentLots(int count) =>
+            _consecutiveEmptySilentLots = count < 0 ? 0 : count;
+
+        void ISilentFullHistoryChainHost.CancelSilentSchedule()
+        {
+            try
+            {
+                _silentScheduleCts?.Cancel();
+            }
+            catch
+            {
+            }
+
+            _silentScheduleCts?.Dispose();
+            _silentScheduleCts = null;
+        }
+
+        CancellationTokenSource ISilentFullHistoryChainHost.CreateSilentScheduleCts()
+        {
+            var cts = new CancellationTokenSource();
+            _silentScheduleCts = cts;
+            return cts;
+        }
+
+        void ISilentFullHistoryChainHost.StartSilentScheduleTask(Func<Task> work)
+        {
+            if (work == null)
+            {
+                return;
+            }
+
+            _ = Task.Run(work);
+        }
+
+        Task ISilentFullHistoryChainHost.DelayAsync(TimeSpan delay, CancellationToken token) =>
+            Task.Delay(delay, token);
+
+        Task<bool> ISilentFullHistoryChainHost.RequestSilentFullHistoryAsync(string reason) =>
+            RequestFullHistoryOnDemandTrackedAsync(
+                reason ?? SilentFullHistoryPolicy.ReasonPrefix + "tick",
+                isFreshnessRepair: false);
+
+        void ISilentFullHistoryChainHost.BeginHistoryCatchUpBanner(string reason) =>
+            BeginHistoryCatchUpBanner(reason);
+
+        void ISilentFullHistoryChainHost.EndHistoryCatchUpBanner(string reason) =>
+            EndHistoryCatchUpBanner(reason);
+
+        void ISilentFullHistoryChainHost.WriteSilentJournal(string eventName, string detail) =>
+            RuntimeDiagnosticsService.Instance.Write(
+                "history",
+                "silent-sync",
+                "event=" + (eventName ?? string.Empty) +
+                "; " + (detail ?? string.Empty));
+
+        void ISilentFullHistoryChainHost.LogSilentChainFailed(string message) =>
+            Debug.WriteLine("[WhatsAppService] Silent FULL chain failed: " + message);
+
+        private void MaybeBeginSilentCatchUpBannerFromProgress(string reason)
+        {
+            // Do not gate on _silentChainArmed: after empty-cap the chain disarms, but
+            // residual silent applies (or late chunks) should still raise the banner.
+            if (string.IsNullOrEmpty(reason))
+            {
+                return;
+            }
+
+            if (reason.IndexOf("sqlite-applied:", StringComparison.OrdinalIgnoreCase) < 0)
+            {
+                return;
+            }
+
+            int conversations = 0;
+            int idx = reason.IndexOf("conversations=", StringComparison.OrdinalIgnoreCase);
+            if (idx >= 0)
+            {
+                string tail = reason.Substring(idx + "conversations=".Length);
+                int end = 0;
+                while (end < tail.Length && char.IsDigit(tail[end]))
+                {
+                    end++;
+                }
+
+                if (end > 0)
+                {
+                    int.TryParse(tail.Substring(0, end), out conversations);
+                }
+            }
+
+            if (conversations <= 0)
+            {
+                return;
+            }
+
+            _historyRequests.ReadFullDiagnostics(out _, out _, out HistoryOnDemandRequest tracked);
+            if (tracked == null ||
+                !SilentFullHistoryPolicy.IsSilentReason(tracked.TriggerReason))
+            {
+                return;
+            }
+
+            BeginHistoryCatchUpBanner(tracked.TriggerReason);
+        }
+
+        private void NotifySilentFullLotQuiet(string triggerReason, int appliedCount)
+        {
+            SilentFullHistoryChainDispatch.OnLotQuiet(this, triggerReason, appliedCount);
+        }
 
         private Task PeriodicFullHistorySafetyLoopAsync(CancellationToken token) =>
             PeriodicFullHistorySafetyLoopDispatch.RunAsync(this, token);
@@ -3651,6 +3807,11 @@ namespace Unison.Uwp.Services.WhatsApp
             int processed,
             int total) =>
             RequestFirstSyncListReleaseAfterNames(reason, processed, total);
+
+        void ISqliteHistoryQuietFinalizeHost.NotifySilentFullLotQuiet(
+            string triggerReason,
+            int appliedCount) =>
+            NotifySilentFullLotQuiet(triggerReason, appliedCount);
 
         void ISqliteHistoryQuietFinalizeHost.NotifyCatchUpIdleBatch(
             string lotRequestId,

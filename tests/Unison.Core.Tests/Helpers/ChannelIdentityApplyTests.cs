@@ -39,5 +39,24 @@ namespace Unison.Core.Tests.Helpers
             Assert.Equal(ChatKind.Channel, JidHelper.ResolveKind(Channel, isSelfChat: false));
             Assert.True(JidHelper.IsNewsletterJid(Channel));
         }
+
+        [Fact]
+        public void TryApplyPictureHint_sets_id_and_remote_url_when_blank()
+        {
+            var chat = new ChatItem { JID = Channel };
+            chat.ApplyKind(Channel, isSelfChat: false);
+
+            Assert.True(ChannelIdentityApply.TryApplyPictureHint(
+                chat,
+                "pic-1",
+                "https://pps.whatsapp.net/v/t61/x.jpg"));
+            Assert.Equal("pic-1", chat.AvatarPictureId);
+            Assert.Equal("https://pps.whatsapp.net/v/t61/x.jpg", chat.AvatarRemoteUrl);
+
+            Assert.False(ChannelIdentityApply.TryApplyPictureHint(
+                chat,
+                "pic-1",
+                "https://pps.whatsapp.net/v/other.jpg"));
+        }
     }
 }
