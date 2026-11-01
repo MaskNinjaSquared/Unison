@@ -193,6 +193,12 @@ namespace Unison.Core.Mappers
                 var existing = list[i];
                 if (existing == null) continue;
 
+                // One from-me slot per bubble (WhatsApp): replace even when LID vs PN differs.
+                if (pending.FromMe && existing.FromMe)
+                {
+                    return i;
+                }
+
                 if (!string.IsNullOrWhiteSpace(pending.ReactorJid) &&
                     !string.IsNullOrWhiteSpace(existing.ReactorJid) &&
                     string.Equals(existing.ReactorJid, pending.ReactorJid, StringComparison.OrdinalIgnoreCase))
@@ -203,13 +209,6 @@ namespace Unison.Core.Mappers
                 if (!string.IsNullOrWhiteSpace(pending.ReactionMessageId) &&
                     !string.IsNullOrWhiteSpace(existing.ReactionMessageId) &&
                     string.Equals(existing.ReactionMessageId, pending.ReactionMessageId, StringComparison.Ordinal))
-                {
-                    return i;
-                }
-
-                if (pending.FromMe && existing.FromMe &&
-                    string.IsNullOrWhiteSpace(pending.ReactorJid) &&
-                    string.IsNullOrWhiteSpace(existing.ReactorJid))
                 {
                     return i;
                 }

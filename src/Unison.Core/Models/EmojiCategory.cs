@@ -35,7 +35,7 @@ namespace Unison.Core.Models
         public string JumpGlyph { get; }
 
         /// <summary>
-        /// True when <see cref="JumpGlyph"/> is from UnisonIcons (sports / nature / food / symbols).
+        /// True when <see cref="JumpGlyph"/> is from UnisonIcons (recent / sports / nature / food / symbols).
         /// </summary>
         public bool JumpUsesUnisonFont { get; }
 

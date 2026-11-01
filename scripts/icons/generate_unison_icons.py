@@ -10,6 +10,7 @@ Codepoints (Private Use Area):
   EA06  emoji-nature   (scripts/icons/unison-emoji/emoji-nature.png)
   EA07  emoji-food     (scripts/icons/unison-emoji/emoji-food.png)
   EA08  emoji-symbols  (scripts/icons/unison-emoji/emoji-symbols.png)
+  EA09  emoji-recent   (scripts/icons/unison-emoji/emoji-recent.png)
 
 Ink is read from alpha only. Regen: scripts/icons/generate-unison-icons.ps1
 
@@ -41,6 +42,7 @@ PNG_GLYPHS = [
     ("emoji-nature", 0xEA06, "emoji-nature.png", 0.92),
     ("emoji-food", 0xEA07, "emoji-food.png", 0.92),
     ("emoji-symbols", 0xEA08, "emoji-symbols.png", 0.92),
+    ("emoji-recent", 0xEA09, "emoji-recent.png", 0.92),
 ]
 
 
@@ -228,7 +230,7 @@ def main() -> int:
             "styleName": "Regular",
             "uniqueFontIdentifier": "UnisonIcons",
             "fullName": "UnisonIcons",
-            "version": "Version 1.2",
+            "version": "Version 1.3",
             "psName": "UnisonIcons",
             "description": "Unison custom icons (filter, new-chat, checks, emoji categories). Regenerate via scripts/icons/generate-unison-icons.ps1",
         }
@@ -240,7 +242,7 @@ def main() -> int:
     print(f"Wrote {FONT_PATH}")
     print(
         "  EA01 filter | EA02 new-chat | EA03 check | EA04 double-check | "
-        "EA05 sports | EA06 nature | EA07 food | EA08 symbols"
+        "EA05 sports | EA06 nature | EA07 food | EA08 symbols | EA09 recent"
     )
     return 0
 

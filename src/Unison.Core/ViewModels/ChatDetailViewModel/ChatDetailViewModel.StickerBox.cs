@@ -218,7 +218,11 @@ namespace Unison.Core.ViewModels
             _emojiRecents.RecordFromSentText(sentText);
         }
 
-        private async Task EnsureEmojiCategoriesAsync(bool force)
+        /// <param name="requireStickerBox">
+        /// Composer tray loads require the sticker box open. Reaction full-picker passes
+        /// false so catalog warm is not cancelled when the tray is closed.
+        /// </param>
+        private async Task EnsureEmojiCategoriesAsync(bool force, bool requireStickerBox = true)
         {
             if (!force && !_emojiCategoriesDirty && EmojiCategories.Count > 0)
             {
@@ -233,7 +237,20 @@ namespace Unison.Core.ViewModels
 
             int generation = ++_emojiLoadGeneration;
             _emojiLoadInFlight = true;
-            IsEmojiCatalogLoading = true;
+
+            bool StillWanted() =>
+                generation == _emojiLoadGeneration &&
+                (!requireStickerBox || IsStickerBoxOpen);
+
+            await _dispatcher.RunAsync(() =>
+            {
+                if (generation != _emojiLoadGeneration)
+                {
+                    return;
+                }
+
+                IsEmojiCatalogLoading = true;
+            }).ConfigureAwait(false);
 
             try
             {
@@ -248,7 +265,7 @@ namespace Unison.Core.ViewModels
                 }).ConfigureAwait(false);
 
                 await Task.Delay(EmojiOpenPaintDelayMs).ConfigureAwait(false);
-                if (generation != _emojiLoadGeneration || !IsStickerBoxOpen)
+                if (!StillWanted())
                 {
                     return;
                 }
@@ -258,7 +275,7 @@ namespace Unison.Core.ViewModels
 
                 for (int i = 0; i < planned.Count; i++)
                 {
-                    if (generation != _emojiLoadGeneration || !IsStickerBoxOpen)
+                    if (!StillWanted())
                     {
                         return;
                     }
@@ -266,7 +283,7 @@ namespace Unison.Core.ViewModels
                     EmojiCategory section = planned[i];
                     await _dispatcher.RunAsync(() =>
                     {
-                        if (generation != _emojiLoadGeneration || !IsStickerBoxOpen)
+                        if (!StillWanted())
                         {
                             return;
                         }
@@ -297,15 +314,18 @@ namespace Unison.Core.ViewModels
                 if (generation == _emojiLoadGeneration)
                 {
                     _emojiLoadInFlight = false;
-                    if (IsEmojiCatalogLoading)
+                    await _dispatcher.RunAsync(() =>
                     {
-                        IsEmojiCatalogLoading = false;
-                    }
+                        if (generation == _emojiLoadGeneration && IsEmojiCatalogLoading)
+                        {
+                            IsEmojiCatalogLoading = false;
+                        }
+                    }).ConfigureAwait(false);
 
                     // A search/recents change arrived while we streamed — run again.
-                    if (_emojiCategoriesDirty && IsStickerBoxOpen)
+                    if (_emojiCategoriesDirty && StillWanted())
                     {
-                        _ = EnsureEmojiCategoriesAsync(force: true);
+                        _ = EnsureEmojiCategoriesAsync(force: true, requireStickerBox);
                     }
                 }
             }
@@ -320,8 +340,8 @@ namespace Unison.Core.ViewModels
                 full.Add(new EmojiCategory(
                     EmojiCatalog.RecentsId,
                     "Recents",
-                    "\uE81C",
-                    false,
+                    "\uEA09",
+                    true,
                     recents));
             }
 

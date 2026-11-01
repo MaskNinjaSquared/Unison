@@ -2,12 +2,11 @@
     x:Class="Unison.Uwp.UI.Controls.ChatStickerBox"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:models="using:Unison.Core.Models"
+    xmlns:controls="using:Unison.Uwp.UI.Controls"
     Height="300">
 
     <!--
-        Complement under the composer. Sequential category list (SemanticZoom jump).
-        ProgressRing covers the list until the catalog finishes its first bind.
+        Complement under the composer. Pivot Emoji / GIF / Stickers; emoji body is EmojiPickerPanel.
     -->
     <Grid Background="{ThemeResource ChatDetailInputBarBackgroundBrush}">
         <Grid.RowDefinitions>
@@ -40,151 +39,12 @@
                                FontSize="13"
                                FontFamily="{StaticResource MainFont}"/>
                 </PivotItem.Header>
-                <Grid>
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="*"/>
-                    </Grid.RowDefinitions>
-                    <TextBox x:Name="EmojiSearchBox"
-                             x:Uid="StickerBox_SearchBox"
-                             Grid.Row="0"
-                             Margin="0,6,12,4"
-                             PlaceholderText="Search emoji"
-                             Style="{ThemeResource ChatListSearchTextBoxStyle}"
-                             Text="{Binding EmojiSearchQuery, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
-                    <Grid Grid.Row="1">
-                        <!-- Stay visible while categories stream in; ProgressRing overlays until the first section lands. -->
-                        <SemanticZoom x:Name="EmojiZoom"
-                                      CanChangeViews="True"
-                                      ViewChangeStarted="EmojiZoom_ViewChangeStarted"
-                                      ViewChangeCompleted="EmojiZoom_ViewChangeCompleted">
-                            <SemanticZoom.ZoomedInView>
-                                <!-- Grouped + ItemsWrapGrid so only on-screen glyphs realize. A WrapGrid per
-                                     category realized every glyph of the section at once (UI freeze on open). -->
-                                <GridView x:Name="EmojiCategoryList"
-                                          SelectionMode="None"
-                                          IsItemClickEnabled="False"
-                                          IsSwipeEnabled="False"
-                                          Background="Transparent"
-                                          Padding="0,0,4,0"
-                                          ScrollViewer.VerticalScrollBarVisibility="Auto"
-                                          ScrollViewer.VerticalScrollMode="Enabled"
-                                          ScrollViewer.HorizontalScrollMode="Disabled"
-                                          ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                                          ScrollViewer.IsVerticalScrollChainingEnabled="False">
-                                    <GridView.ItemsPanel>
-                                        <ItemsPanelTemplate>
-                                            <ItemsWrapGrid Orientation="Horizontal"
-                                                           ItemWidth="40"
-                                                           ItemHeight="40"
-                                                           GroupHeaderPlacement="Top"/>
-                                        </ItemsPanelTemplate>
-                                    </GridView.ItemsPanel>
-                                    <GridView.GroupStyle>
-                                        <GroupStyle HidesIfEmpty="True">
-                                            <GroupStyle.HeaderContainerStyle>
-                                                <Style TargetType="GridViewHeaderItem">
-                                                    <Setter Property="Margin" Value="0"/>
-                                                    <Setter Property="Padding" Value="0,4,8,2"/>
-                                                    <Setter Property="MinHeight" Value="0"/>
-                                                    <Setter Property="BorderThickness" Value="0"/>
-                                                    <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
-                                                </Style>
-                                            </GroupStyle.HeaderContainerStyle>
-                                            <GroupStyle.HeaderTemplate>
-                                                <DataTemplate x:DataType="models:EmojiCategory">
-                                                    <TextBlock Text="{x:Bind Title}"
-                                                               FontSize="11"
-                                                               FontFamily="{StaticResource MainFont}"
-                                                               Foreground="{ThemeResource ChatDetailMutedTextBrush}"
-                                                               Tapped="CategoryHeader_Tapped"/>
-                                                </DataTemplate>
-                                            </GroupStyle.HeaderTemplate>
-                                        </GroupStyle>
-                                    </GridView.GroupStyle>
-                                    <GridView.ItemTemplate>
-                                        <DataTemplate x:DataType="x:String">
-                                            <Border Width="40" Height="40"
-                                                    Background="Transparent"
-                                                    Tapped="EmojiGlyph_Tapped">
-                                                <TextBlock Text="{x:Bind}"
-                                                           Style="{x:Null}"
-                                                           FontSize="26"
-                                                           FontFamily="{StaticResource EmojiFont}"
-                                                           IsColorFontEnabled="True"
-                                                           HorizontalAlignment="Center"
-                                                           VerticalAlignment="Center"
-                                                           IsHitTestVisible="False"/>
-                                            </Border>
-                                        </DataTemplate>
-                                    </GridView.ItemTemplate>
-                                    <GridView.ItemContainerStyle>
-                                        <Style TargetType="GridViewItem">
-                                            <Setter Property="Margin" Value="0"/>
-                                            <Setter Property="Padding" Value="0"/>
-                                            <Setter Property="MinWidth" Value="0"/>
-                                            <Setter Property="MinHeight" Value="0"/>
-                                            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
-                                            <Setter Property="VerticalContentAlignment" Value="Stretch"/>
-                                        </Style>
-                                    </GridView.ItemContainerStyle>
-                                </GridView>
-                            </SemanticZoom.ZoomedInView>
-                            <SemanticZoom.ZoomedOutView>
-                                <GridView x:Name="EmojiJumpList"
-                                          SelectionMode="None"
-                                          IsItemClickEnabled="True"
-                                          ItemClick="EmojiJump_ItemClick"
-                                          HorizontalAlignment="Center"
-                                          VerticalAlignment="Center"
-                                          Background="Transparent"
-                                          ScrollViewer.IsHorizontalScrollChainingEnabled="False"
-                                          ScrollViewer.IsVerticalScrollChainingEnabled="False">
-                                    <GridView.ItemsPanel>
-                                        <ItemsPanelTemplate>
-                                            <ItemsWrapGrid Orientation="Horizontal"
-                                                           MaximumRowsOrColumns="4"
-                                                           HorizontalAlignment="Center"/>
-                                        </ItemsPanelTemplate>
-                                    </GridView.ItemsPanel>
-                                    <GridView.ItemContainerStyle>
-                                        <Style TargetType="GridViewItem">
-                                            <Setter Property="HorizontalContentAlignment" Value="Center"/>
-                                            <Setter Property="VerticalContentAlignment" Value="Center"/>
-                                            <Setter Property="Margin" Value="0"/>
-                                            <Setter Property="Padding" Value="0"/>
-                                            <Setter Property="MinWidth" Value="0"/>
-                                            <Setter Property="MinHeight" Value="0"/>
-                                        </Style>
-                                    </GridView.ItemContainerStyle>
-                                    <GridView.ItemTemplate>
-                                        <DataTemplate x:DataType="models:EmojiCategory">
-                                            <Border Width="56" Height="56" Margin="4"
-                                                    Background="{ThemeResource SystemControlHighlightAccentBrush}"
-                                                    ToolTipService.ToolTip="{x:Bind Title}">
-                                                <FontIcon Glyph="{x:Bind JumpGlyph}"
-                                                          FontFamily="{x:Bind JumpUsesUnisonFont, Converter={StaticResource EmojiJumpFontConverter}}"
-                                                          FontSize="{x:Bind JumpFontSize}"
-                                                          Foreground="White"
-                                                          HorizontalAlignment="Center"
-                                                          VerticalAlignment="Center"/>
-                                            </Border>
-                                        </DataTemplate>
-                                    </GridView.ItemTemplate>
-                                </GridView>
-                            </SemanticZoom.ZoomedOutView>
-                        </SemanticZoom>
-
-                        <ProgressRing Width="36"
-                                      Height="36"
-                                      IsActive="{Binding IsEmojiCatalogLoading}"
-                                      Visibility="{Binding IsEmojiCatalogLoading, Converter={StaticResource BooleanToVisibilityConverter}}"
-                                      Foreground="{ThemeResource ChatDetailAccentBrush}"
-                                      HorizontalAlignment="Center"
-                                      VerticalAlignment="Center"
-                                      Canvas.ZIndex="1"/>
-                    </Grid>
-                </Grid>
+                <controls:EmojiPickerPanel x:Name="EmojiPanel"
+                                           CategoriesSource="{Binding EmojiCategories}"
+                                           GlyphCommand="{Binding InsertEmojiCommand}"
+                                           SearchQuery="{Binding EmojiSearchQuery, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                           IsCatalogLoading="{Binding IsEmojiCatalogLoading}"
+                                           GlyphPicked="EmojiPanel_GlyphPicked"/>
             </PivotItem>
 
             <PivotItem>

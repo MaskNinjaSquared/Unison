@@ -155,8 +155,8 @@ namespace Unison.Core.Helpers
         /// Built-in sections without Recents. The ViewModel prepends Recents from the store.
         /// Declared after the glyph arrays so static init sees non-null lists.
         /// </summary>
-        // Jump tiles: Segoe Fluent / MDL2 where possible; UnisonIcons EA05–08 for
-        // sports / nature / beverage / symbols (Fluent has no matching category glyphs).
+        // Jump tiles: Segoe Fluent / MDL2 where possible; UnisonIcons EA05–09 for
+        // sports / nature / food / symbols / recents (Fluent has no matching category glyphs).
         public static IReadOnlyList<EmojiCategory> BuiltInCategories { get; } = new[]
         {
             new EmojiCategory(SmileysId, "Smileys & People", "\uE76E", false, SmileysAndPeople),
