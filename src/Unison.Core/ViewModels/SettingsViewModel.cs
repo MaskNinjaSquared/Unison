@@ -7,6 +7,7 @@ using Unison.Core.Constants;
 using Unison.Core.Contracts;
 using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Helpers;
+using Unison.Core.Helpers.Notifications;
 using Unison.Core.Mappers;
 using Unison.Core.Models;
 using Unison.Core.State;
@@ -46,6 +47,8 @@ namespace Unison.Core.ViewModels
         private bool _timeFormatChangeBusy;
         private bool _messageSoundChangeBusy;
         private bool _groupSoundChangeBusy;
+        private bool _lockScreenScopeChangeBusy;
+        private bool _notificationFilterBusy;
         private bool _disconnectBusy;
         private bool _publishContactsBusy;
         private bool _startupLaunchBusy;
@@ -91,6 +94,7 @@ namespace Unison.Core.ViewModels
 
             LeaveCommand = new RelayCommand(() => LeaveRequested?.Invoke(this, EventArgs.Empty));
             ChooseStartTileCommand = new RelayCommand(() => { _ = ChooseStartTileAsync(); });
+            ChooseNotificationFilterCommand = new RelayCommand(() => { _ = ChooseNotificationFilterAsync(); });
             CleanMediaCacheCommand = new RelayCommand(
                 () => { _ = CleanMediaCacheAsync(); },
                 () => CanCleanMediaCache);
@@ -138,6 +142,15 @@ namespace Unison.Core.ViewModels
                 }
 
                 ChangeGroupNotificationSound(index);
+            });
+            ChangeLockScreenNotificationScopeCommand = new RelayCommand<int>(index =>
+            {
+                if (_lockScreenScopeChangeBusy)
+                {
+                    return;
+                }
+
+                ChangeLockScreenNotificationScope(index);
             });
             DisconnectCommand = new RelayCommand(() =>
             {
@@ -415,6 +428,36 @@ namespace Unison.Core.ViewModels
         /// <summary>ComboBox SelectedIndex for group toast sound.</summary>
         public int SelectedGroupNotificationSoundIndex => (int)SelectedGroupNotificationSound;
 
+        /// <summary>Live Tile / lock-screen audience filter.</summary>
+        public LockScreenNotificationScope SelectedLockScreenNotificationScope
+        {
+            get
+            {
+                int raw = _localSettings.Get<int>(LocalSettingsConstants.LockScreenNotificationScope);
+                return Enum.IsDefined(typeof(LockScreenNotificationScope), raw)
+                    ? (LockScreenNotificationScope)raw
+                    : LockScreenNotificationScope.All;
+            }
+        }
+
+        /// <summary>ComboBox SelectedIndex for lock-screen scope.</summary>
+        public int SelectedLockScreenNotificationScopeIndex => (int)SelectedLockScreenNotificationScope;
+
+        /// <summary>Toast / badge audience (same options as lock-screen scope).</summary>
+        public LockScreenNotificationScope SelectedNotificationFilterScope
+        {
+            get
+            {
+                string raw = _localSettings.Get<string>(LocalSettingsConstants.NotificationFilter);
+                if (string.IsNullOrWhiteSpace(raw))
+                {
+                    raw = NotificationFilterCodec.DefaultSerialized;
+                }
+
+                return NotificationFilterCodec.ToScope(NotificationFilterCodec.Parse(raw));
+            }
+        }
+
         public string AppTitle => "Unison";
 
         public string AppVersion
@@ -445,6 +488,36 @@ namespace Unison.Core.ViewModels
             _localSettings.Set(LocalSettingsConstants.StartTileMark, (int)chosen.Mark);
             _localSettings.Set(LocalSettingsConstants.StartTileTransparent, chosen.Transparent);
             await _startTiles.PinAsync(chosen.Mark, chosen.Transparent);
+        }
+
+        private async Task ChooseNotificationFilterAsync()
+        {
+            if (_notificationFilterBusy)
+            {
+                return;
+            }
+
+            LockScreenNotificationScope current = SelectedNotificationFilterScope;
+            LockScreenNotificationScope? chosen =
+                await _dialogService.ShowNotificationFilterAsync(current);
+            if (chosen == null || chosen.Value == current)
+            {
+                return;
+            }
+
+            _notificationFilterBusy = true;
+            try
+            {
+                _localSettings.Set(
+                    LocalSettingsConstants.NotificationFilter,
+                    NotificationFilterCodec.Format(chosen.Value));
+                _notificationService.OnNotificationsConfigChanged();
+            }
+            finally
+            {
+                _notificationFilterBusy = false;
+                RaiseNotificationFilterChanged();
+            }
         }
 
         public async Task LoadDiskUsageAsync()
@@ -513,6 +586,9 @@ namespace Unison.Core.ViewModels
         /// <summary>Opens the Start-tile picker and pins the chosen glyph.</summary>
         public ICommand ChooseStartTileCommand { get; }
 
+        /// <summary>Opens the toast / badge audience picker (All / Groups / Contacts / Favorites).</summary>
+        public ICommand ChooseNotificationFilterCommand { get; }
+
         /// <summary>Shown while media size is being measured, then the total.</summary>
         public string DiskUsageText
         {
@@ -543,6 +619,9 @@ namespace Unison.Core.ViewModels
         /// <summary>Applies group toast sound. Parameter: <see cref="NotificationSound"/> index.</summary>
         public ICommand ChangeGroupNotificationSoundCommand { get; }
 
+        /// <summary>Applies lock-screen / Live Tile audience. Parameter: <see cref="LockScreenNotificationScope"/> index.</summary>
+        public ICommand ChangeLockScreenNotificationScopeCommand { get; }
+
         /// <summary>Confirms, then wipes local auth/session and returns to pairing.</summary>
         public ICommand DisconnectCommand { get; }
 
@@ -555,6 +634,8 @@ namespace Unison.Core.ViewModels
             RaiseLanguageSelectionChanged();
             RaiseTimeFormatSelectionChanged();
             RaiseNotificationSoundSelectionChanged();
+            RaiseLockScreenScopeChanged();
+            RaiseNotificationFilterChanged();
             RaiseAboutCopyChanged();
             RaiseProfileHeaderChanged();
             _ = RefreshStartupLaunchAsync();
@@ -654,6 +735,44 @@ namespace Unison.Core.ViewModels
                 nameof(SelectedMessageNotificationSoundIndex),
                 nameof(SelectedGroupNotificationSound),
                 nameof(SelectedGroupNotificationSoundIndex));
+        }
+
+        private void RaiseLockScreenScopeChanged()
+        {
+            RaiseProperties(
+                nameof(SelectedLockScreenNotificationScope),
+                nameof(SelectedLockScreenNotificationScopeIndex));
+        }
+
+        private void RaiseNotificationFilterChanged()
+        {
+            RaiseProperties(nameof(SelectedNotificationFilterScope));
+        }
+
+        private void ChangeLockScreenNotificationScope(int index)
+        {
+            if (!Enum.IsDefined(typeof(LockScreenNotificationScope), index))
+            {
+                return;
+            }
+
+            var scope = (LockScreenNotificationScope)index;
+            if (scope == SelectedLockScreenNotificationScope)
+            {
+                return;
+            }
+
+            _lockScreenScopeChangeBusy = true;
+            try
+            {
+                _localSettings.Set(LocalSettingsConstants.LockScreenNotificationScope, (int)scope);
+                _ = _liveTilesService.OnLiveTilesConfigChangedAsync();
+            }
+            finally
+            {
+                _lockScreenScopeChangeBusy = false;
+                RaiseLockScreenScopeChanged();
+            }
         }
 
         private void ChangeTimeFormat(int index)

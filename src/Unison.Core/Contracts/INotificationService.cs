@@ -22,7 +22,9 @@ namespace Unison.Core.Contracts
             int totalUnread,
             string avatarUrl = null,
             int chatUnread = -1,
-            bool isCommunityAnnounce = false);
+            bool isCommunityAnnounce = false,
+            bool isFavorite = false,
+            bool isChannel = false);
 
         /// <summary>Generic toast (e.g. session logged out). Respects notifications setting.</summary>
         void ShowToast(string title, string body);

@@ -26,6 +26,18 @@ namespace Unison.Core.Constants
         /// <summary>Toast notifications for incoming messages (foreground).</summary>
         public const string NotificationsEnabled = "NotificationsEnabled";
 
+        /// <summary>
+        /// Live Tile / lock-screen audience (<see cref="LockScreenNotificationScope"/> as int).
+        /// Default <see cref="LockScreenNotificationScope.All"/>.
+        /// </summary>
+        public const string LockScreenNotificationScope = "LockScreenNotificationScope";
+
+        /// <summary>
+        /// Toast allow-list as semicolon tokens: groups;direct;favorites.
+        /// Default all three (see <see cref="Helpers.Notifications.NotificationFilterCodec.DefaultSerialized"/>).
+        /// </summary>
+        public const string NotificationFilter = "NotificationFilter";
+
         /// <summary>Chat-list line that reports synchronization. On by default.</summary>
         public const string ShowSyncStatus = "ShowSyncStatus";
 
@@ -137,6 +149,8 @@ namespace Unison.Core.Constants
                 { ReconnectToastActive, false },
                 { SuppressReconnectToast, false },
                 { NotificationsEnabled, true },
+                { LockScreenNotificationScope, (int)Models.LockScreenNotificationScope.All },
+                { NotificationFilter, "groups;direct;favorites" },
                 { ShowSyncStatus, true },
                 { MessageNotificationSound, (int)NotificationSound.SystemDefault },
                 { GroupNotificationSound, (int)NotificationSound.SystemDefault },

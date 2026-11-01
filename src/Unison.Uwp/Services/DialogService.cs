@@ -411,6 +411,37 @@ namespace Unison.Uwp.Services
             }
         }
 
+        public async Task<LockScreenNotificationScope?> ShowNotificationFilterAsync(
+            LockScreenNotificationScope current)
+        {
+            try
+            {
+                var dialog = new NotificationFilterDialog();
+                dialog.Bind(current);
+                ContentDialogResult result = await dialog.ShowAsync();
+                if (result != ContentDialogResult.Primary)
+                {
+                    return null;
+                }
+
+                return dialog.Result;
+            }
+            catch (System.Runtime.InteropServices.COMException ex)
+                when (ex.Message.Contains("single ContentDialog") ||
+                      ex.HResult == unchecked((int)0x80070057))
+            {
+                System.Diagnostics.Debug.WriteLine(
+                    "[DialogService] Another dialog is already open (notification filter).");
+                return null;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine(
+                    "[DialogService] ShowNotificationFilterAsync: " + ex.Message);
+                return null;
+            }
+        }
+
         public Task ShowQrFullscreenAsync(LoginViewModel loginVm)
         {
             if (loginVm == null || string.IsNullOrEmpty(loginVm.QRData))

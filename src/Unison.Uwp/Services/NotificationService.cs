@@ -6,6 +6,7 @@ using Windows.UI.Notifications;
 using Unison.Background;
 using Unison.Core.Constants;
 using Unison.Core.Contracts;
+using Unison.Core.Helpers.Notifications;
 using Unison.Core.Models;
 using Unison.Uwp.Helpers;
 
@@ -13,7 +14,7 @@ namespace Unison.Uwp.Services
 {
     /// <summary>
     /// Native Windows 10 toast and badge integration.
-    /// Respects LocalSettingsConstants.NotificationsEnabled.
+    /// Respects LocalSettingsConstants.NotificationsEnabled and NotificationFilter.
     /// Live Tile updates go through <see cref="ILiveTilesService"/>.
     /// </summary>
     public sealed class NotificationService : INotificationService
@@ -66,6 +67,24 @@ namespace Unison.Uwp.Services
             }
         }
 
+        private static HashSet<string> ReadToastFilter()
+        {
+            try
+            {
+                string raw = LocalSettingsAccess.Current.Get<string>(LocalSettingsConstants.NotificationFilter);
+                if (string.IsNullOrWhiteSpace(raw))
+                {
+                    raw = NotificationFilterCodec.DefaultSerialized;
+                }
+
+                return NotificationFilterCodec.Parse(raw);
+            }
+            catch
+            {
+                return NotificationFilterCodec.Parse(NotificationFilterCodec.DefaultSerialized);
+            }
+        }
+
         public void Initialize()
         {
             lock (_sync)
@@ -91,7 +110,9 @@ namespace Unison.Uwp.Services
             int totalUnread,
             string avatarUrl = null,
             int chatUnread = -1,
-            bool isCommunityAnnounce = false)
+            bool isCommunityAnnounce = false,
+            bool isFavorite = false,
+            bool isChannel = false)
         {
             Initialize();
 
@@ -105,14 +126,26 @@ namespace Unison.Uwp.Services
                     avatarUrl,
                     isCommunityAnnounce);
 
+            bool isDirect = !isGroup && !isChannel;
+            bool toastAllowed = NotificationAudience.MatchesToastFilter(
+                ReadToastFilter(),
+                isGroup,
+                isDirect,
+                isFavorite,
+                isChannel);
+
             bool notificationsEnabled = IsNotificationsSettingEnabled();
             bool toastShown = false;
             string toastError = string.Empty;
-            if (notificationsEnabled && !isMuted && !suppressToast)
+            if (notificationsEnabled && !isMuted && !suppressToast && toastAllowed)
             {
                 toastShown = BackgroundToastPresenter.ShowRealMessage(
                     content,
                     out toastError);
+            }
+            else if (!toastAllowed && !suppressToast && !isMuted)
+            {
+                toastError = "filtered";
             }
 
             RuntimeDiagnosticsService.Instance.Write(
@@ -122,7 +155,10 @@ namespace Unison.Uwp.Services
                 "; enabled=" + notificationsEnabled +
                 "; muted=" + isMuted +
                 "; suppressed=" + suppressToast +
+                "; toastAllowed=" + toastAllowed +
                 "; group=" + isGroup +
+                "; favorite=" + isFavorite +
+                "; channel=" + isChannel +
                 "; hasAvatar=" + (!string.IsNullOrWhiteSpace(avatarUrl)) +
                 "; previewLength=" + content.Preview.Length +
                 "; error=" + toastError);
@@ -131,9 +167,13 @@ namespace Unison.Uwp.Services
                 content.Title,
                 content.Preview,
                 chatJid,
-                totalUnread);
+                totalUnread,
+                isGroup,
+                isFavorite,
+                isChannel);
 
-            UpdateBadge(notificationsEnabled ? totalUnread : 0);
+            // Badge is stamped from RefreshUnreadState (toast-filter aware), not the
+            // unfiltered totalUnread snapshot on this path.
 
             if (chatUnread >= 0 && Shortcuts != null)
             {
@@ -195,10 +235,11 @@ namespace Unison.Uwp.Services
         public void RefreshUnreadState(IEnumerable<ChatItem> chats)
         {
             int totalUnread = 0;
+            HashSet<string> filter = ReadToastFilter();
             if (chats != null)
             {
                 totalUnread = chats
-                    .Where(c => c != null)
+                    .Where(c => c != null && NotificationAudience.MatchesToastFilter(filter, c))
                     .Sum(c => Math.Max(0, c.UnreadCount));
             }
 

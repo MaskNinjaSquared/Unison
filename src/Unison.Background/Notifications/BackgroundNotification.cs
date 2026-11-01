@@ -17,6 +17,9 @@ namespace Unison.Background
         /// </summary>
         public string AvatarSrc { get; set; }
         public bool IsGroup { get; set; }
+
+        /// <summary>When known; background decode often leaves this false.</summary>
+        public bool IsFavorite { get; set; }
     }
 
     /// <summary>
@@ -346,6 +349,9 @@ namespace Unison.Background
         private const string MessageNotificationSoundSetting = "MessageNotificationSound";
         /// <summary>Same key as LocalSettingsConstants.GroupNotificationSound (int).</summary>
         private const string GroupNotificationSoundSetting = "GroupNotificationSound";
+        /// <summary>Same key as LocalSettingsConstants.NotificationFilter (groups;direct;favorites).</summary>
+        private const string NotificationFilterSetting = "NotificationFilter";
+        private const string NotificationFilterDefault = "groups;direct;favorites";
         /// <summary>Matches Unison.Core.Models.NotificationSound.SystemDefault.</summary>
         private const int NotificationSoundSystemDefault = 0;
         /// <summary>Same container/key as AuthStore (WhatsAppAuth / auth_state).</summary>
@@ -443,6 +449,72 @@ namespace Unison.Background
             {
                 return true;
             }
+        }
+
+        /// <summary>
+        /// Minimal copy of Core NotificationAudience / NotificationFilterCodec for the OOP task
+        /// (Background must not reference Unison.Core).
+        /// </summary>
+        private static bool IsToastAudienceAllowed(BackgroundNotificationContent content)
+        {
+            string raw = NotificationFilterDefault;
+            try
+            {
+                object value =
+                    ApplicationData.Current.LocalSettings.Values[NotificationFilterSetting];
+                if (value is string s && !string.IsNullOrWhiteSpace(s))
+                {
+                    raw = s;
+                }
+            }
+            catch
+            {
+            }
+
+            bool groups = false;
+            bool direct = false;
+            bool favorites = false;
+            string[] parts = raw.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries);
+            for (int i = 0; i < parts.Length; i++)
+            {
+                string token = parts[i].Trim().ToLowerInvariant();
+                if (token == "groups")
+                {
+                    groups = true;
+                }
+                else if (token == "direct")
+                {
+                    direct = true;
+                }
+                else if (token == "favorites")
+                {
+                    favorites = true;
+                }
+            }
+
+            if (!groups && !direct && !favorites)
+            {
+                return false;
+            }
+
+            if (content.IsFavorite && favorites)
+            {
+                return true;
+            }
+
+            bool isChannel = !string.IsNullOrWhiteSpace(content.ChatJid) &&
+                             content.ChatJid.IndexOf("@newsletter", StringComparison.OrdinalIgnoreCase) >= 0;
+            if (isChannel)
+            {
+                return false;
+            }
+
+            if (content.IsGroup)
+            {
+                return groups;
+            }
+
+            return direct;
         }
 
         /// <summary>
@@ -588,6 +660,12 @@ namespace Unison.Background
             if (content == null || !content.IsRealMessage)
             {
                 error = "InvalidRealMessageContent";
+                return false;
+            }
+
+            if (!IsToastAudienceAllowed(content))
+            {
+                error = "Filtered";
                 return false;
             }
 

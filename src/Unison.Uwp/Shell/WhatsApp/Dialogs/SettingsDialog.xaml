@@ -299,6 +299,42 @@
                                     </controls:SettingBox.Control>
                                 </controls:SettingBox>
 
+                                <controls:SettingBox LocalizationUid="Settings_LockScreenNotifications"
+                                                     Margin="0,0,0,8"
+                                                     Header="Lock screen"
+                                                     Text="Which chats update the large Live Tile / lock screen preview.">
+                                    <controls:SettingBox.Control>
+                                        <ComboBox x:Name="LockScreenScopeComboBox"
+                                                  MinWidth="160"
+                                                  Margin="0,0,4,0"
+                                                  SelectedIndex="{Binding SelectedLockScreenNotificationScopeIndex, Mode=OneWay}">
+                                            <Interactivity:Interaction.Behaviors>
+                                                <Core:EventTriggerBehavior EventName="SelectionChanged">
+                                                    <Core:InvokeCommandAction
+                                                        Command="{Binding ChangeLockScreenNotificationScopeCommand}"
+                                                        CommandParameter="{Binding SelectedIndex, ElementName=LockScreenScopeComboBox}"/>
+                                                </Core:EventTriggerBehavior>
+                                            </Interactivity:Interaction.Behaviors>
+                                            <ComboBoxItem x:Uid="Settings_LockScreenScope_All" Content="All"/>
+                                            <ComboBoxItem x:Uid="Settings_LockScreenScope_Groups" Content="Groups"/>
+                                            <ComboBoxItem x:Uid="Settings_LockScreenScope_Direct" Content="Contacts"/>
+                                            <ComboBoxItem x:Uid="Settings_LockScreenScope_Favorites" Content="Favorites"/>
+                                        </ComboBox>
+                                    </controls:SettingBox.Control>
+                                </controls:SettingBox>
+
+                                <controls:SettingBox LocalizationUid="Settings_NotificationFilter"
+                                                     Margin="0,0,0,8"
+                                                     Header="Filter notifications"
+                                                     Text="Which chats may raise toasts and count toward the badge.">
+                                    <controls:SettingBox.Control>
+                                        <Button x:Uid="Settings_NotificationFilterChoose"
+                                                Content="Choose"
+                                                Margin="0,0,4,0"
+                                                Command="{Binding ChooseNotificationFilterCommand}"/>
+                                    </controls:SettingBox.Control>
+                                </controls:SettingBox>
+
                                 <controls:SettingBox LocalizationUid="Settings_MessageNotificationSound"
                                                      Margin="0,0,0,8"
                                                      Header="Message notifications"

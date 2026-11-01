@@ -119,5 +119,11 @@ namespace Unison.Core.Contracts
         /// The caller pins the tile only after a choice.
         /// </summary>
         Task<StartTileSelection> ShowStartTileMarkAsync(StartTileMark current, bool transparent);
+
+        /// <summary>
+        /// Picks the toast / badge audience (All / Groups / Contacts / Favorites).
+        /// Returns null when the user cancels.
+        /// </summary>
+        Task<LockScreenNotificationScope?> ShowNotificationFilterAsync(LockScreenNotificationScope current);
     }
 }
