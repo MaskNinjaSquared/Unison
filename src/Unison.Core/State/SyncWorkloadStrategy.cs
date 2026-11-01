@@ -207,7 +207,8 @@ namespace Unison.Core.State
 
         public override int HistoryPersistSubBatchSize => 80;
 
-        public override bool MaterializeHistoryThumbsDuringSync => false;
+        // Keep protocol jpegThumbnails — dropping them loses group/DM placeholders forever.
+        public override bool MaterializeHistoryThumbsDuringSync => true;
 
         public override int ChatListReleaseBatchSize => 6;
 
@@ -291,9 +292,9 @@ namespace Unison.Core.State
         // SQLite round-trips without approaching High's 500-row transactions.
         public override int HistoryPersistSubBatchSize => 220;
 
-        // Thumbs during FULL_HISTORY compete with tip paint + SQLite on 1 GB Mobile.
-        // Decode on open / media pass instead.
-        public override bool MaterializeHistoryThumbsDuringSync => false;
+        // Materialize jpegThumbnails during sync so group/DM image placeholders survive
+        // (bytes are discarded after write; deferring meant permanent empty thumbs).
+        public override bool MaterializeHistoryThumbsDuringSync => true;
 
         public override int ChatListReleaseBatchSize => 8;
 

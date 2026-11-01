@@ -197,6 +197,7 @@
             <SolidColorBrush x:Key="ChatDetailInputBarBackgroundBrush" Color="#FF000000"/>
             <SolidColorBrush x:Key="ChatDetailInputBarTopBorderBrush" Color="#FF333333"/>
             <SolidColorBrush x:Key="ChatDetailComposerBackgroundBrush" Color="Transparent"/>
+            <SolidColorBrush x:Key="ChatDetailMediaThumbScrimBrush" Color="#802A2A2A"/>
             <Color x:Key="SystemAccentColor">#04564A</Color>
             <SolidColorBrush x:Key="SystemControlForegroundAccentBrush" Color="#FF04564A"/>
             <SolidColorBrush x:Key="SystemControlHighlightAccentBrush" Color="#FF04564A"/>
@@ -326,6 +327,7 @@
             <SolidColorBrush x:Key="ChatDetailReceivedBubbleButtonBrush" Color="#FF000000"/>
             <SolidColorBrush x:Key="ChatDetailSentMediaDownloadOverlayBrush" Color="#FFAEB0B3"/>
             <SolidColorBrush x:Key="ChatDetailReceivedMediaDownloadOverlayBrush" Color="#FFAEB0B3"/>
+            <SolidColorBrush x:Key="ChatDetailMediaThumbScrimBrush" Color="#80FFFFFF"/>
             <SolidColorBrush x:Key="ChatDetailSentMediaDownloadIconBrush" Color="#FF000000"/>
             <SolidColorBrush x:Key="ChatDetailReceivedMediaDownloadIconBrush" Color="#FF000000"/>
             <SolidColorBrush x:Key="ChatDetailMediaDownloadOverlayBrush" Color="#FFAEB0B3"/>

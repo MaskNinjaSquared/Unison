@@ -372,6 +372,14 @@ namespace Unison.Core.Tests.ViewModels
                 Message.Types.PeerDataOperationRequestResponseMessage response) => Task.CompletedTask;
             public Task NotifyGroupJoinsAsync(System.Collections.Generic.IReadOnlyList<GroupJoinNotifyRequest> joins) =>
                 Task.CompletedTask;
+            public Task NotifyGroupLeavesAsync(System.Collections.Generic.IReadOnlyList<GroupLeaveNotifyRequest> leaves) =>
+                Task.CompletedTask;
+            public Task NotifyGroupSubjectChangedAsync(
+                GroupSubjectChangeNotifyRequest change,
+                string previousSubject) =>
+                Task.CompletedTask;
+            public Task<bool> TryReactAsync(string chatJid, string messageId, string emoji) =>
+                Task.FromResult(false);
         }
     }
 }

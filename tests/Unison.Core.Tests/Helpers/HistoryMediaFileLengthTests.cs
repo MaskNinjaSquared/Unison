@@ -38,6 +38,27 @@ namespace Unison.Core.Tests.Helpers
         }
 
         [Fact]
+        public void Image_history_keeps_jpeg_thumbnail_bytes_for_dm_and_group()
+        {
+            byte[] jpeg = { 0xFF, 0xD8, 0xFF, 0x00, 0x01, 0x02 };
+            var row = new HistoryMessage();
+            HistoryMediaFiller.Apply(row, new WebMessageInfo
+            {
+                Message = new Message
+                {
+                    ImageMessage = new Message.Types.ImageMessage
+                    {
+                        Mimetype = "image/jpeg",
+                        JpegThumbnail = Google.Protobuf.ByteString.CopyFrom(jpeg)
+                    }
+                }
+            });
+
+            Assert.NotNull(row.MediaThumbnailJpeg);
+            Assert.Equal(jpeg, row.MediaThumbnailJpeg);
+        }
+
+        [Fact]
         public void Reloaded_image_row_exposes_the_stored_length()
         {
             var message = new ChatMessage();

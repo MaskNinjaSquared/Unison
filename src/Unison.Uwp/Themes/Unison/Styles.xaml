@@ -94,6 +94,7 @@
             <SolidColorBrush x:Key="ChatDetailReceivedMentionBrush" Color="#FF25D366"/>
             <SolidColorBrush x:Key="ChatDetailSentMediaDownloadOverlayBrush" Color="#FF2A2A2A"/>
             <SolidColorBrush x:Key="ChatDetailReceivedMediaDownloadOverlayBrush" Color="#FF2A2A2A"/>
+            <SolidColorBrush x:Key="ChatDetailMediaThumbScrimBrush" Color="#802A2A2A"/>
             <SolidColorBrush x:Key="ChatDetailSentMediaDownloadIconBrush" Color="#FF25D366"/>
             <SolidColorBrush x:Key="ChatDetailReceivedMediaDownloadIconBrush" Color="#FF25D366"/>
             <SolidColorBrush x:Key="ChatDetailSentTextBrush" Color="#FFFFFFFF"/>
@@ -243,6 +244,7 @@
             <SolidColorBrush x:Key="ChatDetailReceivedMentionBrush" Color="#FF25D366"/>
             <SolidColorBrush x:Key="ChatDetailSentMediaDownloadOverlayBrush" Color="#FF2A2A2A"/>
             <SolidColorBrush x:Key="ChatDetailReceivedMediaDownloadOverlayBrush" Color="#FF2A2A2A"/>
+            <SolidColorBrush x:Key="ChatDetailMediaThumbScrimBrush" Color="#802A2A2A"/>
             <SolidColorBrush x:Key="ChatDetailSentMediaDownloadIconBrush" Color="#FF25D366"/>
             <SolidColorBrush x:Key="ChatDetailReceivedMediaDownloadIconBrush" Color="#FF25D366"/>
             <SolidColorBrush x:Key="ChatDetailSentTextBrush" Color="#FFFFFFFF"/>
@@ -391,6 +393,7 @@
             <SolidColorBrush x:Key="ChatDetailReceivedMentionBrush" Color="#FF25D366"/>
             <SolidColorBrush x:Key="ChatDetailSentMediaDownloadOverlayBrush" Color="#FF5BC46A"/>
             <SolidColorBrush x:Key="ChatDetailReceivedMediaDownloadOverlayBrush" Color="#FFF9F9F9"/>
+            <SolidColorBrush x:Key="ChatDetailMediaThumbScrimBrush" Color="#80FFFFFF"/>
             <SolidColorBrush x:Key="ChatDetailSentMediaDownloadIconBrush" Color="#FFFFFFFF"/>
             <SolidColorBrush x:Key="ChatDetailReceivedMediaDownloadIconBrush" Color="#FF20C064"/>
             <SolidColorBrush x:Key="ChatDetailSentTextBrush" Color="#FFFFFFFF"/>

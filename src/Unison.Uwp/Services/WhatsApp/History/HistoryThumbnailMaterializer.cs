@@ -67,8 +67,11 @@ namespace Unison.Uwp.Services.WhatsApp.History
                                 message.MediaPosterUri = uri;
                             }
                         }
-                        else if (string.IsNullOrWhiteSpace(message.MediaLocalUri))
+                        else if (string.IsNullOrWhiteSpace(message.MediaLocalUri) ||
+                                 HistoryMessageMapper.IsThumbCacheUri(message.MediaLocalUri))
                         {
+                            // Prefer protocol thumb over a stale/empty local path so cold-start
+                            // bubbles in groups and 1:1 still show a download placeholder.
                             message.MediaLocalUri = uri;
                         }
 

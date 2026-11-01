@@ -31,6 +31,7 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
         private readonly MediaDerivationService _derivation;
         private readonly MediaDownloadGate _gate;
         private readonly IChatCatalogPersistence _catalog;
+        private readonly IBaileysMediaDownload _baileysMedia;
 
         public MediaAvailability(
             IConnectionService connection,
@@ -42,7 +43,8 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
             IMediaCache cache,
             MediaDerivationService derivation,
             MediaDownloadGate gate,
-            IChatCatalogPersistence catalog)
+            IChatCatalogPersistence catalog,
+            IBaileysMediaDownload baileysMedia = null)
         {
             _connection = connection ?? throw new ArgumentNullException(nameof(connection));
             _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
@@ -54,6 +56,7 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
             _cache = cache ?? throw new ArgumentNullException(nameof(cache));
             _derivation = derivation ?? throw new ArgumentNullException(nameof(derivation));
             _gate = gate ?? throw new ArgumentNullException(nameof(gate));
+            _baileysMedia = baileysMedia;
         }
 
         public async Task<string> EnsureAudioAsync(ChatMessage message)
@@ -213,12 +216,7 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
                     return await EnsureWebPDisplayUriAsync(message);
                 }
 
-                var bytes = await DownloadAsync(
-                    plan.Url,
-                    plan.DirectPath,
-                    plan.MediaKey,
-                    plan.MediaType,
-                    plan.ExpectedSha256);
+                byte[] bytes = await DownloadImageBytesAsync(message, plan, isSticker);
                 string uri = await SaveImageBytesForDisplayAsync(bytes, plan.FileBase, plan.MimeType);
                 if (string.IsNullOrWhiteSpace(uri))
                 {
@@ -240,8 +238,17 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
                 await RememberAsync(message);
                 return uri;
             }
-            catch (Exception)
+            catch (Exception ex)
             {
+                Debug.WriteLine(string.Format(
+                    "[Media/ensure-image] failed id={0} hasKey={1} hasPath={2} hasUrl={3} jid={4}: {5}",
+                    message.Id ?? "?",
+                    plan.HasKey,
+                    !string.IsNullOrWhiteSpace(plan.DirectPath),
+                    !string.IsNullOrWhiteSpace(plan.Url),
+                    message.RemoteJid ?? "?",
+                    ex.Message));
+
                 if (isSticker)
                 {
                     message.IsStickerFailed = true;
@@ -254,6 +261,49 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
             {
                 _gate.Release();
             }
+        }
+
+        /// <summary>
+        /// Prefers Baileys <c>DownloadMediaUseCase</c> (CDN + phone retry for DM/group).
+        /// Channels skip phone retry. Falls back to plain HTTP when the media module is down.
+        /// </summary>
+        private async Task<byte[]> DownloadImageBytesAsync(
+            ChatMessage message,
+            MediaDownloadPlan plan,
+            bool isSticker)
+        {
+            bool newsletter = JidHelper.IsNewsletterJid(message.RemoteJid);
+            if (_baileysMedia != null)
+            {
+                try
+                {
+                    byte[] viaBaileys = await _baileysMedia.TryDownloadImageOrStickerAsync(
+                        message,
+                        isSticker,
+                        allowPhoneRetry: !newsletter);
+                    if (viaBaileys != null && viaBaileys.Length > 0)
+                    {
+                        return viaBaileys;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine(
+                        "[Media/ensure-image] Baileys download failed: " + ex.Message +
+                        (newsletter ? " (channel; no phone retry)" : " — falling back to plain HTTP"));
+                    if (newsletter)
+                    {
+                        throw;
+                    }
+                }
+            }
+
+            return await DownloadAsync(
+                plan.Url,
+                plan.DirectPath,
+                plan.MediaKey,
+                plan.MediaType,
+                plan.ExpectedSha256);
         }
 
         public async Task<string> EnsureVideoAsync(ChatMessage message)
