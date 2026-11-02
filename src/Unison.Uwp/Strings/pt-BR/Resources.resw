@@ -763,6 +763,12 @@ Desative depois de diagnosticar: manter ligado deixa o app lento.</value>
   <data name="StatusDetail_EmptySubtitle.Text" xml:space="preserve">
     <value>Compartilhe fotos, vídeos e textos que desaparecem após 24 horas.</value>
   </data>
+  <data name="StatusDetail_Download.AutomationProperties.Name" xml:space="preserve">
+    <value>Salvar status</value>
+  </data>
+  <data name="StatusDetail_Download.ToolTipService.ToolTip" xml:space="preserve">
+    <value>Salvar este status no dispositivo</value>
+  </data>
   <data name="Shell_Starred.Text" xml:space="preserve">
     <value>Mensagens favoritas</value>
   </data>

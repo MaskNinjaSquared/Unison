@@ -2,6 +2,31 @@
 
 Newest first.
 
+## Favourites — app-state regular_low resilience
+
+Undecryptable syncd snapshot/patch records are skipped with a warning
+instead of aborting the whole `regular_low` collection. Snapshot MAC softens
+when records were skipped. Before refusing a favourite write on a fabricated
+v0, `SendAppPatchUseCase` forces one snapshot resync. Favourite JID collect
+stays off the UI thread / store-only.
+
+## Status — save current media
+
+Status viewer top-right download saves the current photo/video via the file
+picker (`StatusDetailViewModel.DownloadCurrentAsync`). Localized tooltip /
+automation name on all locales.
+
+## Message bubbles — Unigram MaxWidth wrap
+
+Sent/received bubble roots and body panels cap at 432 (`MessageMaxWidth`).
+Text uses `WrapWholeWords`. Fixes single-line overflow when Auto columns
+measured the RichTextBlock with infinite width. Debug tap probe optional.
+
+## Legacy shell — search header + Calls empty glyph
+
+Legacy search title matches Settings (FontSize 22, tighter margins). Calls
+empty pane uses the larger EB18 new-call glyph.
+
 ## Incoming toasts quiet during history waves
 
 Live/offline envelopes no longer toast while initial sync, history catch-up /

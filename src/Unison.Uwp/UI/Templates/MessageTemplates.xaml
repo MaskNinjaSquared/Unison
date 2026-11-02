@@ -32,10 +32,17 @@
                   ManipulationMode="TranslateX"
                   ManipulationDelta="MessageBubble_ManipulationDelta"
                   ManipulationCompleted="MessageBubble_ManipulationCompleted"
+                  Tapped="MessageBubble_Tapped"
                   RightTapped="MessageBubble_RightTapped"
                   Holding="MessageBubble_Holding">
-            <!-- MaxWidth applied from slot SizeChanged (slot width comes from ListViewItem). -->
-            <Grid x:Name="SentBubbleContent" HorizontalAlignment="Right">
+            <!--
+              Unigram pattern: MaxWidth on the bubble + star column for the body.
+              Auto|Auto measured the RichTextBlock with infinite width → single-line overflow.
+              Ceiling 432 (MessageMaxWidth); SizeChanged further caps to the slot width.
+            -->
+            <Grid x:Name="SentBubbleContent"
+                  HorizontalAlignment="Right"
+                  MaxWidth="432">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="Auto"/>
@@ -70,7 +77,15 @@
                               HorizontalAlignment="Center"
                               VerticalAlignment="Center"/>
                 </Grid>
-                <Grid Grid.Column="1">
+                <!--
+                  MaxWidth on this panel (not only the slot): Auto columns measure children
+                  with infinity; without a ceiling the RichTextBlock never wraps (Unigram
+                  puts MessageMaxWidth on the bubble root for the same reason).
+                -->
+                <Grid x:Name="SentBubblePanel"
+                      Grid.Column="1"
+                      HorizontalAlignment="Right"
+                      MaxWidth="432">
                 <controls:MessageBubbleChromeHost
                     IsFromMe="True"
                     IsRunStart="{x:Bind IsRunStart, Mode=OneWay}"
@@ -313,7 +328,7 @@
                                        x:Load="{x:Bind HasCaption, Mode=OneWay}"
                                        Foreground="{ThemeResource ChatDetailSentTextBrush}"
                                        IsTextSelectionEnabled="True"
-                                       TextWrapping="Wrap"
+                                       TextWrapping="WrapWholeWords"
                                        FontSize="15"
                                        LineHeight="20"
                                        Margin="0,0,0,2"/>
@@ -514,7 +529,7 @@
                                        x:Load="{x:Bind ShowTextContent, Mode=OneWay}"
                                        Foreground="{ThemeResource ChatDetailSentTextBrush}"
                                        IsTextSelectionEnabled="True"
-                                       TextWrapping="Wrap"
+                                       TextWrapping="WrapWholeWords"
                                        TextTrimming="CharacterEllipsis"
                                        MaxLines="{x:Bind ContentMaxLines, Mode=OneWay}"
                                        FontSize="15"
@@ -686,10 +701,13 @@
                   ManipulationMode="TranslateX"
                   ManipulationDelta="MessageBubble_ManipulationDelta"
                   ManipulationCompleted="MessageBubble_ManipulationCompleted"
+                  Tapped="MessageBubble_Tapped"
                   RightTapped="MessageBubble_RightTapped"
                   Holding="MessageBubble_Holding">
-            <!-- MaxWidth applied from slot SizeChanged (slot width comes from ListViewItem). -->
-            <Grid x:Name="ReceivedBubbleContent" HorizontalAlignment="Left">
+            <!-- Same Unigram ceiling as SentBubbleContent — see comment there. -->
+            <Grid x:Name="ReceivedBubbleContent"
+                  HorizontalAlignment="Left"
+                  MaxWidth="432">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="Auto"/>
@@ -707,7 +725,7 @@
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
 
                 <!-- Reply sling handle: invisible at rest, fades in while dragging left. -->
@@ -754,7 +772,10 @@
                                                 Visibility="{x:Bind ShowContact, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
                 </Grid>
 
-                <Grid Grid.Column="3" HorizontalAlignment="Left">
+                <Grid x:Name="ReceivedBubblePanel"
+                      Grid.Column="3"
+                      HorizontalAlignment="Left"
+                      MaxWidth="432">
                 <controls:MessageBubbleChromeHost
                     IsFromMe="False"
                     IsRunStart="{x:Bind IsRunStart, Mode=OneWay}"
@@ -1004,7 +1025,7 @@
                                        x:Load="{x:Bind HasCaption, Mode=OneWay}"
                                        Foreground="{ThemeResource ChatDetailReceivedTextBrush}"
                                        IsTextSelectionEnabled="True"
-                                       TextWrapping="Wrap"
+                                       TextWrapping="WrapWholeWords"
                                        FontSize="15"
                                        LineHeight="20"
                                        FontFamily="{StaticResource MainFont}"
@@ -1200,7 +1221,7 @@
                                        x:Load="{x:Bind ShowTextContent, Mode=OneWay}"
                                        Foreground="{ThemeResource ChatDetailReceivedTextBrush}"
                                        IsTextSelectionEnabled="True"
-                                       TextWrapping="Wrap"
+                                       TextWrapping="WrapWholeWords"
                                        TextTrimming="CharacterEllipsis"
                                        MaxLines="{x:Bind ContentMaxLines, Mode=OneWay}"
                                        FontSize="15"

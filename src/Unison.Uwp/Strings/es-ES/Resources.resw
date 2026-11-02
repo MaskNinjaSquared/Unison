@@ -635,6 +635,12 @@ Desactívalo tras el diagnóstico: mantenerlo activo ralentiza la aplicación.</
   <data name="StatusDetail_EmptySubtitle.Text" xml:space="preserve">
     <value>Comparte fotos, videos y textos que desaparecen después de 24 horas.</value>
   </data>
+  <data name="StatusDetail_Download.AutomationProperties.Name" xml:space="preserve">
+    <value>Save status</value>
+  </data>
+  <data name="StatusDetail_Download.ToolTipService.ToolTip" xml:space="preserve">
+    <value>Save this status to your device</value>
+  </data>
   <data name="Shell_Starred.Text" xml:space="preserve">
     <value>Mensajes destacados</value>
   </data>

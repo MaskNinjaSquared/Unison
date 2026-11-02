@@ -20,7 +20,7 @@
                 <!-- Same glyph as Unison sidebar Status (MainView E7C9). -->
                 <FontIcon Glyph="&#xE7C9;"
                           FontFamily="{StaticResource IconFont}"
-                          FontSize="56"
+                          FontSize="100"
                           HorizontalAlignment="Center"
                           Margin="0,0,0,20"
                           Foreground="{ThemeResource WhatsAppTextMediumBrush}"/>
@@ -123,6 +123,7 @@
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
 
                     <Button Command="{x:Bind ViewModel.CloseCommand, Mode=OneWay}"
@@ -148,6 +149,17 @@
                                    TextTrimming="CharacterEllipsis"
                                    MaxLines="1"/>
                     </StackPanel>
+
+                    <!-- Unison-only: save Status media to disk (top-right, mirrors Back). -->
+                    <Button Grid.Column="2"
+                            x:Uid="StatusDetail_Download"
+                            Command="{x:Bind ViewModel.DownloadCommand, Mode=OneWay}"
+                            Style="{StaticResource CircleIconButtonStyle}"
+                            Width="34" Height="34"
+                            Margin="8,0,4,0"
+                            VerticalAlignment="Top"
+                            Content="&#xE896;"
+                            Visibility="{x:Bind ViewModel.CanDownload, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
                 </Grid>
             </Grid>
 

@@ -6,10 +6,10 @@
 //
 // Every mutation is checked twice before it is believed: the value MAC proves
 // the ciphertext was not altered, and the index MAC proves the decrypted action
-// really belongs to the index it was filed under. A failure throws rather than
-// skipping, because a collection that has quietly diverged from the phone is
-// worse than one that is known to be broken - the caller can resync from zero,
-// but only if it is told.
+// really belongs to the index it was filed under. A missing key still throws
+// (ask the phone). Corrupt / undecryptable records and aggregate MAC mismatches
+// are skipped with a warning — Baileys resilience: one bad record must not wipe
+// an entire regular_low snapshot (favourites / pin / mute writes depend on it).
 //
 // Large patches do not travel inline. When the server points at an external blob
 // the mutations are downloaded and take the place of the inline list, which is
@@ -110,16 +110,44 @@ namespace Unison.Socket.AppState
             var generator = new LtHashGenerator(name, new LtHashState(name));
             var result = new AppStateDecodeResult();
 
+            int skipped = 0;
             foreach (var record in snapshot.Records)
             {
-                await ApplyRecordAsync(name, record, false, generator, result, collectMutations)
-                    .ConfigureAwait(false);
+                try
+                {
+                    await ApplyRecordAsync(name, record, false, generator, result, collectMutations)
+                        .ConfigureAwait(false);
+                }
+                catch (AppStateKeyMissingException)
+                {
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    skipped++;
+                    _log.Warn(
+                        "[AppState] " + name + " snapshot: skipped undecryptable record: " +
+                        ex.Message);
+                }
             }
 
             result.State = generator.Finish(name, version);
 
-            await VerifySnapshotMacAsync(name, snapshot.Mac, snapshot.KeyId, result.State, version)
+            await VerifySnapshotMacAsync(
+                    name,
+                    snapshot.Mac,
+                    snapshot.KeyId,
+                    result.State,
+                    version,
+                    soft: skipped > 0)
                 .ConfigureAwait(false);
+
+            if (skipped > 0)
+            {
+                _log.Warn(
+                    "[AppState] " + name + " snapshot at v" + version +
+                    ": kept partial state after skipping " + skipped + " record(s)");
+            }
 
             return result;
         }
@@ -157,10 +185,25 @@ namespace Unison.Socket.AppState
                 var mutations = await ResolveMutationsAsync(patch).ConfigureAwait(false);
                 var version = patch.Version != null ? unchecked((long)patch.Version.Version) : current.Version;
 
-                await VerifyPatchMacAsync(name, patch, mutations, version).ConfigureAwait(false);
+                try
+                {
+                    await VerifyPatchMacAsync(name, patch, mutations, version).ConfigureAwait(false);
+                }
+                catch (AppStateKeyMissingException)
+                {
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    _log.Warn(
+                        "[AppState] " + name + " v" + version +
+                        ": skipping patch after MAC/decode failure: " + ex.Message);
+                    break;
+                }
 
                 var collectMutations = !minimumVersion.HasValue || version > minimumVersion.Value;
                 var generator = new LtHashGenerator(name, current);
+                int skippedRecords = 0;
 
                 foreach (var mutation in mutations)
                 {
@@ -170,8 +213,28 @@ namespace Unison.Socket.AppState
                     }
 
                     var isRemove = mutation.Operation == global::Proto.SyncdMutation.Types.SyncdOperation.Remove;
-                    await ApplyRecordAsync(name, mutation.Record, isRemove, generator, result, collectMutations)
-                        .ConfigureAwait(false);
+                    try
+                    {
+                        await ApplyRecordAsync(
+                                name,
+                                mutation.Record,
+                                isRemove,
+                                generator,
+                                result,
+                                collectMutations)
+                            .ConfigureAwait(false);
+                    }
+                    catch (AppStateKeyMissingException)
+                    {
+                        throw;
+                    }
+                    catch (Exception ex)
+                    {
+                        skippedRecords++;
+                        _log.Warn(
+                            "[AppState] " + name + " v" + version +
+                            ": skipped undecryptable mutation: " + ex.Message);
+                    }
                 }
 
                 current = generator.Finish(name, version);
@@ -183,7 +246,13 @@ namespace Unison.Socket.AppState
                         " removal(s) with no known previous value");
                 }
 
-                await VerifySnapshotMacAsync(name, patch.SnapshotMac, patch.KeyId, current, version)
+                await VerifySnapshotMacAsync(
+                        name,
+                        patch.SnapshotMac,
+                        patch.KeyId,
+                        current,
+                        version,
+                        soft: skippedRecords > 0)
                     .ConfigureAwait(false);
             }
 
@@ -331,7 +400,8 @@ namespace Unison.Socket.AppState
             ByteString mac,
             global::Proto.KeyId keyId,
             LtHashState state,
-            long version)
+            long version,
+            bool soft = false)
         {
             if (mac == null || keyId == null || keyId.Id == null)
             {
@@ -343,8 +413,16 @@ namespace Unison.Socket.AppState
 
             if (!AppStateKeys.ConstantTimeEquals(expected, mac.ToByteArray()))
             {
-                throw new InvalidOperationException(
-                    "App-state snapshot MAC mismatch in " + name + " at v" + version);
+                string detail = "App-state snapshot MAC mismatch in " + name + " at v" + version;
+                if (soft)
+                {
+                    // Partial decode after skipped records cannot match the server MAC;
+                    // keep the partial state so favourites/pin writes are not blocked forever.
+                    _log.Warn("[AppState] " + detail + "; keeping partial state");
+                    return;
+                }
+
+                throw new InvalidOperationException(detail);
             }
         }
 

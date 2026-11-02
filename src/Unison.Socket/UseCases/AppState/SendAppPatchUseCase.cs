@@ -98,11 +98,24 @@ namespace Unison.Socket.UseCases.AppState
 
                 var incoming = await _resync.ExecuteAsync(new[] { name }).ConfigureAwait(false);
 
-                // Resync clears the store on MAC failure and, after MaxAttempts, leaves it null
+                // Resync clears the store on hard failure and, after MaxAttempts, leaves it null
                 // ("Giving up"). Inventing a fresh v0 here used to still encode + send — the
                 // server can accept that IQ while the phone stays on a high version, then every
                 // later regular_low sync MAC-mismatches. Favourites/pin/mute all share this path.
                 var current = await _store.GetAsync(name).ConfigureAwait(false);
+                if (current == null)
+                {
+                    // One forced snapshot pass (same as pin recovery) before refusing the write.
+                    _log.Warn(
+                        "[AppState] " + name +
+                        " missing after resync; forcing snapshot before write of " +
+                        Describe(create));
+                    incoming = await _resync
+                        .ExecuteAsync(new[] { name }, reportAllMutations: true)
+                        .ConfigureAwait(false);
+                    current = await _store.GetAsync(name).ConfigureAwait(false);
+                }
+
                 if (current == null)
                 {
                     throw new InvalidOperationException(

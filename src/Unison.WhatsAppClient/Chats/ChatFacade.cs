@@ -416,17 +416,36 @@ namespace Unison.WhatsAppClient.Chats
 
             try
             {
+                // Store-only collect: _chatState.Chats is an ObservableCollection and must not be
+                // read off the UI thread after ConfigureAwait(false). ApplyLocalFavoriteAsync
+                // already wrote RememberFavorite + SQLite, so the cache is the wire source of truth.
                 IList<string> fullList = CollectFavoriteJids();
+                Debug.WriteLine(
+                    "[ChatFacade] Favorite patch sending favorite=" + favorite +
+                    "; chatJid=" + chat.JID +
+                    "; canonicalJid=" + canonicalJid +
+                    "; listCount=" + fullList.Count);
                 await _account.SetFavoritesListAsync(fullList, add: true).ConfigureAwait(false);
+                Debug.WriteLine("[ChatFacade] Favorite patch ok; listCount=" + fullList.Count);
             }
             catch (Exception ex)
             {
                 // Keep local membership (same as offline). Rolling back made the Favourites
                 // picker look dead: overlay closed, then the star vanished after a failed
                 // regular_low patch (MAC / LT-hash). Wire catches up on the next good sync.
+                string details =
+                    "chatJid=" + chat.JID +
+                    "; canonicalJid=" + canonicalJid +
+                    "; requestedFavorite=" + favorite +
+                    "; previousFavorite=" + wasFavorite;
                 Debug.WriteLine(
                     "[ChatFacade] Favorite patch failed; keeping local membership: " +
-                    ex.Message + Environment.NewLine + ex);
+                    details + Environment.NewLine + ex);
+                DiagRecordException(
+                    "app-state",
+                    "chat-favorite-patch-failed",
+                    ex,
+                    details);
             }
         }
 
@@ -538,45 +557,37 @@ namespace Unison.WhatsAppClient.Chats
             await _chatStore.SetFavoriteAsync(canonicalJid, favorite).ConfigureAwait(false);
         }
 
+        /// <summary>
+        /// Full Favourites JID set for <c>favoritesAction</c>. Built from the local-state cache
+        /// only — never from <see cref="ChatStateStore.Chats"/> (not thread-safe off the UI).
+        /// </summary>
         private IList<string> CollectFavoriteJids()
         {
             var ids = new List<string>();
             var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-            void Offer(string raw)
+            IReadOnlyList<string> remembered = _chatStore.ListFavoriteJids();
+            if (remembered == null)
             {
-                if (string.IsNullOrWhiteSpace(raw))
-                {
-                    return;
-                }
-
-                string canonical = _jids.GetCanonicalJid(raw);
-                if (string.IsNullOrWhiteSpace(canonical) || !seen.Add(canonical))
-                {
-                    return;
-                }
-
-                ids.Add(canonical);
+                return ids;
             }
 
-            foreach (ChatItem chat in _chatState.Chats)
+            for (int i = 0; i < remembered.Count; i++)
             {
-                if (chat == null || !chat.IsFavorite)
+                string raw = remembered[i];
+                if (string.IsNullOrWhiteSpace(raw))
                 {
                     continue;
                 }
 
-                Offer(chat.JID);
-            }
-
-            // Cold favourites live only in the store until their chat row appears.
-            IReadOnlyList<string> remembered = _chatStore.ListFavoriteJids();
-            if (remembered != null)
-            {
-                for (int i = 0; i < remembered.Count; i++)
+                // Prefer PN when the alias table knows both (same rule as pin / mark-read).
+                string canonical = _jids.GetCanonicalJid(raw);
+                if (string.IsNullOrWhiteSpace(canonical) || !seen.Add(canonical))
                 {
-                    Offer(remembered[i]);
+                    continue;
                 }
+
+                ids.Add(canonical);
             }
 
             return ids;

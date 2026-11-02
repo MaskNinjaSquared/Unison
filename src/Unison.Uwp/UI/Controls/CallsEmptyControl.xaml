@@ -17,7 +17,7 @@
             <!-- EB18 newcall phone (WhatsAppLegacyIcons) — same silhouette as Legacy New Call. -->
             <FontIcon Glyph="&#xEB18;"
                       FontFamily="{StaticResource LegacyIconFont}"
-                      FontSize="56"
+                      FontSize="100"
                       HorizontalAlignment="Center"
                       Margin="0,0,0,20"
                       Foreground="{ThemeResource WhatsAppTextMediumBrush}"/>

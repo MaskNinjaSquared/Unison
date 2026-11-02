@@ -45,7 +45,10 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
             IWhatsAppSocket socket = _sessions.Socket;
             if (socket == null)
             {
-                return Task.CompletedTask;
+                // Do not pretend success — ChatFacade.IsAvailable can race a drop between
+                // the check and this call; a completed task left Favourites local-only forever.
+                throw new InvalidOperationException(
+                    "Cannot send favoritesAction: WhatsApp socket is not connected.");
             }
 
             return socket.SetFavoritesListAsync(jids, add);

@@ -694,6 +694,12 @@
   <data name="StatusDetail_EmptySubtitle.Text" xml:space="preserve">
     <value>Діліться фото, відео та текстом, які зникають через 24 години.</value>
   </data>
+  <data name="StatusDetail_Download.AutomationProperties.Name" xml:space="preserve">
+    <value>Save status</value>
+  </data>
+  <data name="StatusDetail_Download.ToolTipService.ToolTip" xml:space="preserve">
+    <value>Save this status to your device</value>
+  </data>
   <data name="Shell_Starred.Text" xml:space="preserve">
     <value>Позначені зірочкою</value>
   </data>
