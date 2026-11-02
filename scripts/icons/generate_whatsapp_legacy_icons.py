@@ -25,6 +25,7 @@ Codepoints (Private Use Area):
   EB14  audio      (attach-audio.png)       attach audio tile
   EB15  location   (attach-location.png)    attach location tile
   EB17  channels   (channels.png)           WhatsApp Channels / Canais sidebar
+  EB18  newcall    (appbar-newcall.png)     phone handset — Calls “New call”
 
 Ink is read from alpha only (source colour is ignored; XAML sets Foreground).
 Each glyph is cropped to its own ink and fitted into the same square box,
@@ -78,6 +79,7 @@ GLYPHS = [
     ("audio", 0xEB14, "attach-audio.png", 0.92),
     ("location", 0xEB15, "attach-location.png", 0.92),
     ("channels", 0xEB17, "channels.png", 0.92),
+    ("newcall", 0xEB18, "appbar-newcall.png", 0.90),
 ]
 
 

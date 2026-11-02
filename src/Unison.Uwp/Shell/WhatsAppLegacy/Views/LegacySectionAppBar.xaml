@@ -15,7 +15,7 @@
                       Label="New call"
                       Click="NewCall_Click"
                       Visibility="Collapsed">
-            <TextBlock Text="&#xEB06;"
+            <TextBlock Text="&#xEB18;"
                        FontFamily="{StaticResource LegacyIconFont}"
                        FontSize="{StaticResource LegacyAppBarGlyphSize}"
                        TextLineBounds="Tight"
