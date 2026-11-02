@@ -22,6 +22,19 @@
                        HorizontalAlignment="Center"
                        VerticalAlignment="Center"/>
         </AppBarButton>
+        <AppBarButton x:Name="AddAppBarButton"
+                      x:Uid="Shell_LegacyAppBar_AddContact"
+                      Style="{StaticResource LegacyAppBarButtonStyle}"
+                      Label="Add"
+                      Click="Add_Click"
+                      Visibility="Collapsed">
+            <TextBlock Text="&#xEB02;"
+                       FontFamily="{StaticResource LegacyIconFont}"
+                       FontSize="{StaticResource LegacyAppBarGlyphSize}"
+                       TextLineBounds="Tight"
+                       HorizontalAlignment="Center"
+                       VerticalAlignment="Center"/>
+        </AppBarButton>
         <AppBarButton x:Uid="Shell_LegacyAppBar_Search"
                       Style="{StaticResource LegacyAppBarButtonStyle}"
                       Label="Search"

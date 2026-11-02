@@ -650,8 +650,11 @@ Desactívalo tras el diagnóstico: mantenerlo activo ralentiza la aplicación.</
   <data name="Calls_Header.Text" xml:space="preserve">
     <value>Llamadas</value>
   </data>
-  <data name="Calls_Empty.Text" xml:space="preserve">
-    <value>Para iniciar una llamada, selecciona un contacto y pulsa Llamar.</value>
+  <data name="Calls_EmptyTitle.Text" xml:space="preserve">
+    <value>Llamadas de voz y video</value>
+  </data>
+  <data name="Calls_EmptyBody.Text" xml:space="preserve">
+    <value>Comparte tu pantalla, reacciona con emojis y mucho más con hasta 32 personas…</value>
   </data>
   <data name="Calls_FavoritesSection.Text" xml:space="preserve">
     <value>FAVORITES</value>

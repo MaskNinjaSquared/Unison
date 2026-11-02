@@ -650,8 +650,11 @@
   <data name="Calls_Header.Text" xml:space="preserve">
     <value>Звонки</value>
   </data>
-  <data name="Calls_Empty.Text" xml:space="preserve">
-    <value>Чтобы начать звонок, выберите контакт и нажмите Позвонить.</value>
+  <data name="Calls_EmptyTitle.Text" xml:space="preserve">
+    <value>Голосовые и видеозвонки</value>
+  </data>
+  <data name="Calls_EmptyBody.Text" xml:space="preserve">
+    <value>Демонстрируйте экран, реагируйте эмодзи и многое другое — до 32 участников…</value>
   </data>
   <data name="Calls_FavoritesSection.Text" xml:space="preserve">
     <value>FAVORITES</value>

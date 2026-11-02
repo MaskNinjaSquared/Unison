@@ -18,6 +18,8 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
 
         public event EventHandler NewCallRequested;
 
+        public event EventHandler AddRequested;
+
         public event EventHandler ProfileRequested;
 
         public event EventHandler DebugRequested;
@@ -30,6 +32,15 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             if (NewCallAppBarButton != null)
             {
                 NewCallAppBarButton.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
+            }
+        }
+
+        /// <summary>Shows the primary “+” add action (Favorites pivot).</summary>
+        public void SetAddVisible(bool visible)
+        {
+            if (AddAppBarButton != null)
+            {
+                AddAppBarButton.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
             }
         }
 
@@ -80,6 +91,11 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
         private void NewCall_Click(object sender, RoutedEventArgs e)
         {
             NewCallRequested?.Invoke(this, EventArgs.Empty);
+        }
+
+        private void Add_Click(object sender, RoutedEventArgs e)
+        {
+            AddRequested?.Invoke(this, EventArgs.Empty);
         }
 
         private void Profile_Click(object sender, RoutedEventArgs e)

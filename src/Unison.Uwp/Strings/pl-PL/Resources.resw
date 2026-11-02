@@ -977,8 +977,11 @@ Wyłącz po zakończeniu diagnozy: pozostawienie włączonego spowalnia aplikacj
   <data name="Calls_Header.Text" xml:space="preserve">
     <value>Połączenia</value>
   </data>
-  <data name="Calls_Empty.Text" xml:space="preserve">
-    <value>Aby rozpocząć połączenie, wybierz kontakt i naciśnij Zadzwoń.</value>
+  <data name="Calls_EmptyTitle.Text" xml:space="preserve">
+    <value>Połączenia głosowe i wideo</value>
+  </data>
+  <data name="Calls_EmptyBody.Text" xml:space="preserve">
+    <value>Udostępniaj ekran, reaguj emoji i korzystaj z wielu innych funkcji — nawet z 32 osobami…</value>
   </data>
   <data name="Calls_FavoritesSection.Text" xml:space="preserve">
     <value>FAVORITES</value>

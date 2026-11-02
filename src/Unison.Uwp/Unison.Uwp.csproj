@@ -267,6 +267,9 @@
     <Compile Include="Shell\WhatsAppLegacy\Views\CallsView.xaml.cs">
       <DependentUpon>CallsView.xaml</DependentUpon>
     </Compile>
+    <Compile Include="Shell\WhatsAppLegacy\Views\FavoritesView.xaml.cs">
+      <DependentUpon>FavoritesView.xaml</DependentUpon>
+    </Compile>
     <Compile Include="Shell\WhatsAppLegacy\Views\DebugView.xaml.cs">
       <DependentUpon>DebugView.xaml</DependentUpon>
     </Compile>
@@ -492,6 +495,9 @@
     </Compile>
     <Compile Include="UI\Controls\CallsListControl.xaml.cs">
       <DependentUpon>CallsListControl.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="UI\Controls\FavoritesListControl.xaml.cs">
+      <DependentUpon>FavoritesListControl.xaml</DependentUpon>
     </Compile>
     <Compile Include="UI\Controls\ContactsVisualizerControl.xaml.cs">
       <DependentUpon>ContactsVisualizerControl.xaml</DependentUpon>
@@ -1141,6 +1147,10 @@
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </Page>
+    <Page Include="Shell\WhatsAppLegacy\Views\FavoritesView.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
     <Page Include="Shell\WhatsAppLegacy\Views\DebugView.xaml">
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
@@ -1218,6 +1228,10 @@
       <SubType>Designer</SubType>
     </Page>
     <Page Include="UI\Controls\CallsListControl.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Include="UI\Controls\FavoritesListControl.xaml">
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </Page>

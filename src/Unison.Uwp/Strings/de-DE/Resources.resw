@@ -709,8 +709,11 @@ Nach der Diagnose deaktivieren: Wenn es aktiviert bleibt, wird die App langsamer
   <data name="Calls_Header.Text" xml:space="preserve">
     <value>Anrufe</value>
   </data>
-  <data name="Calls_Empty.Text" xml:space="preserve">
-    <value>Um einen Anruf zu starten, wähle einen Kontakt und tippe auf Anrufen.</value>
+  <data name="Calls_EmptyTitle.Text" xml:space="preserve">
+    <value>Sprachanrufe und Videoanrufe</value>
+  </data>
+  <data name="Calls_EmptyBody.Text" xml:space="preserve">
+    <value>Teilen Sie Ihren Bildschirm, reagieren Sie mit Emojis und vieles mehr mit bis zu 32 Personen…</value>
   </data>
   <data name="Calls_FavoritesSection.Text" xml:space="preserve">
     <value>FAVORITES</value>

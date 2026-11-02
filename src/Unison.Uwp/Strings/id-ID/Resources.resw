@@ -709,8 +709,11 @@ Matikan setelah diagnosa: menjaga aplikasi tetap lambat.</value>
   <data name="Calls_Header.Text" xml:space="preserve">
     <value>Panggilan</value>
   </data>
-  <data name="Calls_Empty.Text" xml:space="preserve">
-    <value>Untuk memulai panggilan, pilih kontak lalu ketuk Panggil.</value>
+  <data name="Calls_EmptyTitle.Text" xml:space="preserve">
+    <value>Panggilan suara dan video</value>
+  </data>
+  <data name="Calls_EmptyBody.Text" xml:space="preserve">
+    <value>Bagikan layar Anda, bereaksi dengan emoji, dan masih banyak lagi bersama hingga 32 orang…</value>
   </data>
   <data name="Calls_FavoritesSection.Text" xml:space="preserve">
     <value>FAVORITES</value>

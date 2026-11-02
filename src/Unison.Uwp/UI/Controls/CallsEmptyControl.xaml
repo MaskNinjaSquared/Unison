@@ -8,37 +8,40 @@
     d:DesignHeight="400"
     d:DesignWidth="400">
 
-    <!-- Desktop (≥720): message at the top-left. Mobile: centered in the pane. -->
+    <!-- Same empty layout as StatusDetail / chat empty: centered icon + title + body. -->
     <Grid Background="Transparent">
-        <VisualStateManager.VisualStateGroups>
-            <VisualStateGroup x:Name="LayoutStates">
-                <VisualState x:Name="Narrow"/>
-                <VisualState x:Name="Wide">
-                    <VisualState.StateTriggers>
-                        <AdaptiveTrigger MinWindowWidth="720"/>
-                    </VisualState.StateTriggers>
-                    <VisualState.Setters>
-                        <Setter Target="MessageText.HorizontalAlignment" Value="Left"/>
-                        <Setter Target="MessageText.VerticalAlignment" Value="Top"/>
-                        <Setter Target="MessageText.TextAlignment" Value="Left"/>
-                        <Setter Target="MessageText.Margin" Value="24,24,48,24"/>
-                    </VisualState.Setters>
-                </VisualState>
-            </VisualStateGroup>
-        </VisualStateManager.VisualStateGroups>
+        <StackPanel HorizontalAlignment="Center"
+                    VerticalAlignment="Center"
+                    MaxWidth="420"
+                    Margin="32,24">
+            <!-- EB18 newcall phone (WhatsAppLegacyIcons) — same silhouette as Legacy New Call. -->
+            <FontIcon Glyph="&#xEB18;"
+                      FontFamily="{StaticResource LegacyIconFont}"
+                      FontSize="56"
+                      HorizontalAlignment="Center"
+                      Margin="0,0,0,20"
+                      Foreground="{ThemeResource WhatsAppTextMediumBrush}"/>
 
-        <TextBlock x:Name="MessageText"
-                   x:Uid="Calls_Empty"
-                   Text="To start a call, select a contact and tap Call."
-                   HorizontalAlignment="Center"
-                   VerticalAlignment="Center"
-                   TextAlignment="Center"
-                   TextWrapping="WrapWholeWords"
-                   Margin="24"
-                   MaxWidth="420"
-                   FontSize="15"
-                   LineHeight="22"
-                   Foreground="{ThemeResource WhatsAppTextMediumBrush}"
-                   FontFamily="{StaticResource MainFont}"/>
+            <TextBlock x:Uid="Calls_EmptyTitle"
+                       Text="Voice and video calls"
+                       HorizontalAlignment="Center"
+                       TextAlignment="Center"
+                       TextWrapping="WrapWholeWords"
+                       FontSize="28"
+                       FontWeight="SemiBold"
+                       FontFamily="{StaticResource MainFontSemibold}"
+                       Foreground="{ThemeResource WhatsAppTextHighBrush}"/>
+
+            <TextBlock x:Uid="Calls_EmptyBody"
+                       Text="Share your screen, react with emojis and much more with up to 32 people…"
+                       HorizontalAlignment="Center"
+                       TextAlignment="Center"
+                       TextWrapping="WrapWholeWords"
+                       Margin="0,12,0,0"
+                       FontSize="14"
+                       LineHeight="22"
+                       Foreground="{ThemeResource WhatsAppTextMediumBrush}"
+                       FontFamily="{StaticResource MainFont}"/>
+        </StackPanel>
     </Grid>
 </UserControl>

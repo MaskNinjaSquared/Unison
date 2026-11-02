@@ -4,12 +4,13 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:local="using:Unison.Uwp.Shell.WhatsAppLegacy.Views"
     xmlns:controls="using:Unison.Uwp.UI.Controls"
+    xmlns:views="using:Unison.Uwp.UI.Views"
     Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
 
     <!--
       No RequestedTheme — follow app Light/Dark like Unison MainView.
       Left: brand + pivot + list frame (+ list search).
-      Right: chat detail host — column only exists when a chat is open.
+      Right: DetailHost for chat / status / calls (not inside Pivot).
     -->
     <Grid x:Name="RootContentGrid"
           Background="{ThemeResource ApplicationPageBackgroundThemeBrush}"
@@ -197,12 +198,22 @@
             </Border>
         </Border>
 
-        <!-- RIGHT: only when a chat is open (wide) or fullscreen (narrow) -->
+        <!-- RIGHT: chat / status / calls detail (wide) or fullscreen (narrow) — not inside Pivot. -->
         <Border x:Name="DetailHost"
                 Grid.Column="1"
                 Background="{ThemeResource ApplicationPageBackgroundThemeBrush}"
                 Visibility="Collapsed">
-            <local:ChatDetailView x:Name="ShellChatDetail"/>
+            <Grid>
+                <local:ChatDetailView x:Name="ShellChatDetail"/>
+                <views:StatusDetailView x:Name="ShellStatusDetail"
+                                        Visibility="Collapsed"/>
+                <Grid x:Name="ShellCallsDetailRoot"
+                      Visibility="Collapsed">
+                    <controls:CallsEmptyControl x:Name="ShellCallsEmpty"/>
+                    <controls:CallDetailsControl x:Name="ShellCallDetails"
+                                                 Visibility="Collapsed"/>
+                </Grid>
+            </Grid>
         </Border>
 
         <!-- Settings and debug. Spans both columns so an open chat cannot stay beside them. -->

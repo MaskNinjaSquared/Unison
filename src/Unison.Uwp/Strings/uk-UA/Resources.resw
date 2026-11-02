@@ -709,8 +709,11 @@
   <data name="Calls_Header.Text" xml:space="preserve">
     <value>Виклики</value>
   </data>
-  <data name="Calls_Empty.Text" xml:space="preserve">
-    <value>Щоб почати виклик, виберіть контакт і натисніть Виклик.</value>
+  <data name="Calls_EmptyTitle.Text" xml:space="preserve">
+    <value>Голосові та відеодзвінки</value>
+  </data>
+  <data name="Calls_EmptyBody.Text" xml:space="preserve">
+    <value>Діліться екраном, реагуйте емодзі та користуйтеся іншими можливостями — до 32 учасників…</value>
   </data>
   <data name="Calls_FavoritesSection.Text" xml:space="preserve">
     <value>FAVORITES</value>

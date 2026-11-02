@@ -709,8 +709,11 @@ Schakel uit na diagnostiseren: het ingeschakeld laten vertraagd de app.</value>
   <data name="Calls_Header.Text" xml:space="preserve">
     <value>Oproepen</value>
   </data>
-  <data name="Calls_Empty.Text" xml:space="preserve">
-    <value>Om een oproep te starten, selecteer je een contact en tik je op Bellen.</value>
+  <data name="Calls_EmptyTitle.Text" xml:space="preserve">
+    <value>Spraak- en videogesprekken</value>
+  </data>
+  <data name="Calls_EmptyBody.Text" xml:space="preserve">
+    <value>Deel je scherm, reageer met emoji's en nog veel meer met maximaal 32 personen…</value>
   </data>
   <data name="Calls_FavoritesSection.Text" xml:space="preserve">
     <value>FAVORITES</value>

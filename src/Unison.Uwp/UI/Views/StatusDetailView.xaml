@@ -17,6 +17,13 @@
               Padding="32,24"
               Visibility="{x:Bind ViewModel.HasOpenAuthor, Mode=OneWay, Converter={StaticResource InvertedBooleanToVisibilityConverter}}">
             <StackPanel>
+                <!-- Same glyph as Unison sidebar Status (MainView E7C9). -->
+                <FontIcon Glyph="&#xE7C9;"
+                          FontFamily="{StaticResource IconFont}"
+                          FontSize="56"
+                          HorizontalAlignment="Center"
+                          Margin="0,0,0,20"
+                          Foreground="{ThemeResource WhatsAppTextMediumBrush}"/>
                 <TextBlock x:Uid="StatusDetail_EmptyTitle"
                            Text="Share status updates"
                            FontSize="28"

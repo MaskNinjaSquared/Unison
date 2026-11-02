@@ -859,8 +859,11 @@ Disable after diagnosing: keeping it on slows the app.</value>
   <data name="Calls_Header.Text" xml:space="preserve">
     <value>Calls</value>
   </data>
-  <data name="Calls_Empty.Text" xml:space="preserve">
-    <value>To start a call, select a contact and tap Call.</value>
+  <data name="Calls_EmptyTitle.Text" xml:space="preserve">
+    <value>Voice and video calls</value>
+  </data>
+  <data name="Calls_EmptyBody.Text" xml:space="preserve">
+    <value>Share your screen, react with emojis and much more with up to 32 people…</value>
   </data>
   <data name="Calls_FavoritesSection.Text" xml:space="preserve">
     <value>FAVORITES</value>
