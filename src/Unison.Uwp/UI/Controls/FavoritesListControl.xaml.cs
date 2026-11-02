@@ -3,6 +3,7 @@ using System.ComponentModel;
 using Unison.Core.Helpers;
 using Unison.Core.Models;
 using Unison.Core.ViewModels;
+using Unison.Uwp.UI.Views;
 using Windows.UI.Core;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;

@@ -23,7 +23,8 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
 
         public event EventHandler SettingsRequested;
 
-        public event EventHandler<ChatSelectedEventArgs> ChatSelected;
+        /// <summary>Uses the shared UI.Views args type so Shell DetailHost wiring stays one shape.</summary>
+        public event EventHandler<global::Unison.Uwp.UI.Views.ChatSelectedEventArgs> ChatSelected;
 
         public FavoritesViewModel ViewModel { get; private set; }
 
@@ -101,7 +102,9 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
         {
             if (chat != null)
             {
-                ChatSelected?.Invoke(this, new ChatSelectedEventArgs(chat));
+                ChatSelected?.Invoke(
+                    this,
+                    new global::Unison.Uwp.UI.Views.ChatSelectedEventArgs(chat));
             }
         }
     }
