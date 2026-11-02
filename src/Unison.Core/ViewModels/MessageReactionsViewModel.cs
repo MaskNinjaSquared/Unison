@@ -121,7 +121,9 @@ namespace Unison.Core.ViewModels
             }
 
             IReadOnlyList<HistoryMessageReaction> rows =
-                await _historyMessages.GetReactionsForMessageAsync(model.RemoteJid, model.Id)
+                await _historyMessages.GetReactionsForMessageAsync(
+                        BuildReactionStoreKeys(model.RemoteJid),
+                        model.Id)
                     .ConfigureAwait(true);
 
             var list = new List<MessageReaction>(rows?.Count ?? 0);
@@ -199,6 +201,57 @@ namespace Unison.Core.ViewModels
 
             string canonical = _jids?.GetCanonicalJid(jid);
             return string.IsNullOrWhiteSpace(canonical) ? JidHelper.Normalize(jid) : canonical;
+        }
+
+        /// <summary>
+        /// PN / LID / canonical spellings so a reaction stored under a twin JID still loads.
+        /// </summary>
+        private IReadOnlyList<string> BuildReactionStoreKeys(string chatJid)
+        {
+            var keys = new List<string>(3);
+            AddReactionStoreKey(keys, chatJid);
+            if (_jids == null)
+            {
+                return keys;
+            }
+
+            string canonical = _jids.GetCanonicalJid(chatJid);
+            AddReactionStoreKey(keys, canonical);
+
+            string alias;
+            string lookup = JidHelper.Normalize(chatJid) ?? chatJid;
+            if (_jids.TryGetAlias(lookup, out alias))
+            {
+                AddReactionStoreKey(keys, alias);
+            }
+
+            string canonicalLookup = JidHelper.Normalize(canonical) ?? canonical;
+            if (!string.IsNullOrWhiteSpace(canonicalLookup) &&
+                _jids.TryGetAlias(canonicalLookup, out alias))
+            {
+                AddReactionStoreKey(keys, alias);
+            }
+
+            return keys;
+        }
+
+        private static void AddReactionStoreKey(List<string> keys, string jid)
+        {
+            string normalized = JidHelper.Normalize(jid);
+            if (string.IsNullOrWhiteSpace(normalized))
+            {
+                return;
+            }
+
+            for (int i = 0; i < keys.Count; i++)
+            {
+                if (string.Equals(keys[i], normalized, StringComparison.OrdinalIgnoreCase))
+                {
+                    return;
+                }
+            }
+
+            keys.Add(normalized);
         }
 
         private async Task<Person> LoadPersonAsync(string canonical, string rawJid)

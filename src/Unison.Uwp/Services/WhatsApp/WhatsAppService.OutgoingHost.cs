@@ -37,7 +37,8 @@ namespace Unison.Uwp.Services.WhatsApp
                 audio.MimeType,
                 audio.DurationSeconds,
                 audio.IsVoiceMessage,
-                messageId);
+                messageId,
+                audio.ViewOnce);
         }
 
         Task IOutgoingMessageHost.SendDocumentAsync(string jid, OutgoingDocument document, string messageId)
@@ -51,10 +52,8 @@ namespace Unison.Uwp.Services.WhatsApp
                 messageId);
         }
 
-        Task IOutgoingMessageHost.PersistLiveAsync(string chatJid, ChatMessage message)
-        {
-            return PersistLiveMessagesAsync(chatJid, new[] { message });
-        }
+        Task IOutgoingMessageHost.PersistLiveAsync(string chatJid, ChatMessage message) =>
+            _liveMessages.PersistLiveAsync(chatJid, message);
 
         void IOutgoingMessageHost.QueueForPersist(string chatJid, ChatMessage message)
         {

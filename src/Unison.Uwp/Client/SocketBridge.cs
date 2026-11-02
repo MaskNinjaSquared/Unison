@@ -48,6 +48,7 @@ using Unison.Socket.Models;
 using Unison.Socket.Session;
 using Unison.Socket.Signal;
 using Unison.Socket.Sync;
+using Unison.Socket.UseCases.Groups;
 using Unison.Socket.UseCases.Auth;
 using Unison.Socket.UseCases.Chats;
 using Unison.Socket.UseCases.Messages;
@@ -190,6 +191,18 @@ namespace Unison.Uwp.Client
                 {
                     RuntimeDiagnosticsService.Instance.Write("send", "group-skdm", line);
                 }
+                // Tells "phone never sent history" apart from "download failed / chunk skipped".
+                else if (!string.IsNullOrEmpty(line) &&
+                         line.IndexOf("[History]", StringComparison.Ordinal) >= 0)
+                {
+                    RuntimeDiagnosticsService.Instance.Write("history", "socket-chunk", line);
+                }
+                // A history notification rides an own-device message; if that fails here it never lands.
+                else if (!string.IsNullOrEmpty(line) &&
+                         line.IndexOf("[Decrypt] Failed", StringComparison.Ordinal) >= 0)
+                {
+                    RuntimeDiagnosticsService.Instance.Write("messages", "decrypt-failed", line);
+                }
             });
             _downloader = new HttpEncryptedMediaDownloader(_log);
             _events = new WaEventBuffer(_log);
@@ -276,14 +289,41 @@ namespace Unison.Uwp.Client
         /// <summary>Full Favourites list from app-state; host replaces local membership.</summary>
         public Func<IReadOnlyList<string>, Task> FavoritesListChanged { get; set; }
 
-        /// <summary>A group was created or renamed: jid first, then the new subject.</summary>
-        public Func<string, string, Task> GroupSubjectChanged { get; set; }
+        /// <summary>
+        /// Group subject from upsert/update. Host updates the name cache; when
+        /// <see cref="GroupSubjectChangeNotifyRequest.EmitTimelineLine"/> is true it also
+        /// inserts a rename system line.
+        /// </summary>
+        public Func<GroupSubjectChangeNotifyRequest, Task> GroupSubjectChanged { get; set; }
 
         /// <summary>
         /// <c>w:gp2</c> participant <c>add</c> (Baileys <c>GROUP_PARTICIPANT_ADD</c>).
         /// Host inserts GroupJoin system lines — not stubbed on the wire as WebMessageInfo.
         /// </summary>
         public Func<IReadOnlyList<GroupJoinNotifyRequest>, Task> GroupParticipantsJoined { get; set; }
+
+        /// <summary>
+        /// Live <c>CallHandler</c> / <c>WaEventKind.Call</c> terminal statuses → chat chrome.
+        /// </summary>
+        public Func<IReadOnlyList<CallEventNotifyRequest>, Task> CallEvents { get; set; }
+
+        /// <summary>
+        /// <c>w:gp2</c> participant <c>remove</c> (leave / kick). Host inserts leave system lines.
+        /// </summary>
+        public Func<IReadOnlyList<GroupLeaveNotifyRequest>, Task> GroupParticipantsLeft { get; set; }
+
+        /// <summary>
+        /// <c>w:gp2</c> add/remove whose participant list may include this account.
+        /// The façade decides whether any JID is self (Baileys <c>chat.readOnly</c>).
+        /// Args: group JID, participant JIDs (and phone aliases), still a member.
+        /// </summary>
+        public Func<string, IReadOnlyList<string>, bool, Task> GroupSelfMembershipChanged { get; set; }
+
+        /// <summary>
+        /// Every <c>w:gp2</c> participants change (add / remove / promote / demote / modify),
+        /// so the roster updates only the people it names.
+        /// </summary>
+        public Action<Unison.Core.Models.GroupRosterEvent> GroupRosterEventReceived { get; set; }
 
         /// <summary>A chat was deleted on another device.</summary>
         public Func<string, Task> ChatDeleted { get; set; }
@@ -936,6 +976,111 @@ namespace Unison.Uwp.Client
             return response;
         }
 
+        public Task LeaveGroupAsync(string groupJid)
+        {
+            GroupsModule groups;
+            lock (_gate)
+            {
+                groups = _groups;
+            }
+
+            if (groups == null)
+            {
+                throw new InvalidOperationException("Not connected: leave group was not sent.");
+            }
+
+            return groups.Settings.LeaveAsync(groupJid);
+        }
+
+        public async Task<IReadOnlyList<CommunityLinkedGroupSnapshot>> FetchCommunityLinkedGroupsAsync(
+            string communityOrGroupJid,
+            CancellationToken cancellationToken = default(CancellationToken))
+        {
+            GroupsModule groups;
+            lock (_gate)
+            {
+                groups = _groups;
+            }
+
+            if (groups == null)
+            {
+                throw new InvalidOperationException("Not connected: linked groups were not fetched.");
+            }
+
+            cancellationToken.ThrowIfCancellationRequested();
+            CommunityLinkedGroupsResult result = await groups.LinkedGroups
+                .ExecuteAsync(communityOrGroupJid)
+                .ConfigureAwait(false);
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var list = new List<CommunityLinkedGroupSnapshot>();
+            if (result?.LinkedGroups == null)
+            {
+                return list;
+            }
+
+            for (int i = 0; i < result.LinkedGroups.Count; i++)
+            {
+                CommunityLinkedGroupInfo info = result.LinkedGroups[i];
+                if (info == null || string.IsNullOrWhiteSpace(info.Jid))
+                {
+                    continue;
+                }
+
+                list.Add(new CommunityLinkedGroupSnapshot
+                {
+                    Jid = info.Jid,
+                    Subject = info.Subject,
+                    CreationUnixSeconds = info.CreationUnixSeconds,
+                    Owner = info.Owner,
+                    Size = info.Size
+                });
+            }
+
+            return list;
+        }
+
+        public async Task<bool> JoinGroupAsync(
+            string groupJid,
+            string inviteCode = null,
+            CancellationToken cancellationToken = default(CancellationToken))
+        {
+            GroupsModule groups;
+            lock (_gate)
+            {
+                groups = _groups;
+            }
+
+            if (groups == null)
+            {
+                throw new InvalidOperationException("Not connected: join group was not sent.");
+            }
+
+            cancellationToken.ThrowIfCancellationRequested();
+            if (!string.IsNullOrWhiteSpace(inviteCode))
+            {
+                JoinGroupResult accepted = await groups.Join
+                    .AcceptInviteAsync(inviteCode)
+                    .ConfigureAwait(false);
+                return accepted != null && accepted.Succeeded;
+            }
+
+            string selfJid = _authState != null && _authState.Me != null
+                ? _authState.Me.Id
+                : null;
+
+            JoinGroupResult joined = await groups.Join
+                .JoinByJidAsync(groupJid, selfJid)
+                .ConfigureAwait(false);
+            return joined != null && joined.Succeeded;
+        }
+
+        public Task UpdateBlockStatusAsync(string jid, bool block)
+        {
+            var session = Require();
+            return new BlocklistUseCase(session.Connection).UpdateAsync(jid, block);
+        }
+
         /// <summary>
         /// Reads the LID/phone pairs out of the participant lists the reply already carries.
         /// </summary>
@@ -983,6 +1128,12 @@ namespace Unison.Uwp.Client
                 return new ProfilePictureResult { FailureReason = "empty-jid" };
             }
 
+            // Channels need newsletterMetadata (WMex), not w:profile:picture.
+            if (JidUtils.IsNewsletter(jid))
+            {
+                return await GetNewsletterProfilePictureResultAsync(jid).ConfigureAwait(false);
+            }
+
             var session = Require();
 
             try
@@ -1025,6 +1176,75 @@ namespace Unison.Uwp.Client
                     FailureReason = ex.GetBaseException().Message
                 };
             }
+        }
+
+        public async Task<Unison.Socket.UseCases.Newsletter.NewsletterMetadataResult> GetNewsletterMetadataAsync(
+            string jid)
+        {
+            if (string.IsNullOrWhiteSpace(jid))
+            {
+                return new Unison.Socket.UseCases.Newsletter.NewsletterMetadataResult
+                {
+                    IsNotFound = true,
+                    FailureReason = "empty-jid"
+                };
+            }
+
+            var session = Require();
+            try
+            {
+                var fetch = new Unison.Socket.UseCases.Newsletter.FetchNewsletterMetadataUseCase(
+                    session.Connection);
+                return await fetch.ExecuteAsync(jid, "jid").ConfigureAwait(false);
+            }
+            catch (TimeoutException)
+            {
+                return new Unison.Socket.UseCases.Newsletter.NewsletterMetadataResult
+                {
+                    FailureReason = "timeout"
+                };
+            }
+            catch (Exception ex)
+            {
+                return new Unison.Socket.UseCases.Newsletter.NewsletterMetadataResult
+                {
+                    FailureReason = ex.GetBaseException().Message
+                };
+            }
+        }
+
+        private async Task<ProfilePictureResult> GetNewsletterProfilePictureResultAsync(string jid)
+        {
+            Unison.Socket.UseCases.Newsletter.NewsletterMetadataResult meta =
+                await GetNewsletterMetadataAsync(jid).ConfigureAwait(false);
+            if (meta == null)
+            {
+                return new ProfilePictureResult
+                {
+                    TargetJid = jid,
+                    IsNotFound = true,
+                    FailureReason = "newsletter-null"
+                };
+            }
+
+            string url = meta.ResolvedPictureUrl;
+            if (!string.IsNullOrWhiteSpace(url))
+            {
+                return new ProfilePictureResult
+                {
+                    Url = url,
+                    Id = meta.PictureId,
+                    TargetJid = jid,
+                    TokenLookupJid = jid
+                };
+            }
+
+            return new ProfilePictureResult
+            {
+                TargetJid = jid,
+                IsNotFound = meta.IsNotFound || string.IsNullOrEmpty(meta.FailureReason),
+                FailureReason = meta.FailureReason ?? "not-found"
+            };
         }
 
         private async Task<TcTokenData> GetValidProfilePictureTokenAsync(string jid)
@@ -1111,6 +1331,18 @@ namespace Unison.Uwp.Client
             });
         }
 
+        /// <summary>
+        /// Live <see cref="MediaModule"/> for on-demand download + phone media-retry.
+        /// Null when the session is not open.
+        /// </summary>
+        internal MediaModule TryGetMediaModule()
+        {
+            lock (_gate)
+            {
+                return _media;
+            }
+        }
+
         public Task PresenceSubscribeAsync(string toJid)
         {
             var session = Require();
@@ -1175,6 +1407,25 @@ namespace Unison.Uwp.Client
         public Task DeleteChatAsync(string jid, IEnumerable<RangeMessage> lastMessages)
         {
             return RequireAppState().Patch.ExecuteAsync(AppStatePatchFactory.DeleteChat(jid, lastMessages));
+        }
+
+        /// <summary>
+        /// Deletes one message for this account only. Other parties keep their copy.
+        /// </summary>
+        public Task DeleteMessageForMeAsync(
+            string jid,
+            string messageId,
+            bool fromMe,
+            long messageTimestampUnixSeconds,
+            bool deleteMedia = false)
+        {
+            return RequireAppState().Patch.ExecuteAsync(
+                AppStatePatchFactory.DeleteMessageForMe(
+                    jid,
+                    messageId,
+                    fromMe,
+                    messageTimestampUnixSeconds,
+                    deleteMedia));
         }
 
         /// <summary>
@@ -1349,14 +1600,16 @@ namespace Unison.Uwp.Client
             string mimeType,
             uint durationSeconds,
             bool isVoiceMessage = false,
-            string explicitMessageId = null)
+            string explicitMessageId = null,
+            bool viewOnce = false)
         {
             var content = new MediaContent(
                 audioBytes,
                 isVoiceMessage ? Unison.Socket.Media.MediaType.Ptt : Unison.Socket.Media.MediaType.Audio)
             {
                 Mimetype = string.IsNullOrWhiteSpace(mimeType) ? "audio/mp4" : mimeType,
-                Seconds = (int)durationSeconds
+                Seconds = (int)durationSeconds,
+                ViewOnce = viewOnce
             };
 
             return SendAsync(jid, content, explicitMessageId);
@@ -1400,6 +1653,47 @@ namespace Unison.Uwp.Client
             };
 
             return SendAsync(jid, new PinContent(key, pin, (int)durationSeconds), null);
+        }
+
+        public Task<string> SendDeleteMessageAsync(
+            string jid,
+            global::Proto.MessageKey targetKey)
+        {
+            if (targetKey == null || string.IsNullOrWhiteSpace(targetKey.Id))
+            {
+                throw new ArgumentException("A valid target message key is required", nameof(targetKey));
+            }
+
+            var key = new MessageEnvelopeKey
+            {
+                Id = targetKey.Id,
+                RemoteJid = string.IsNullOrEmpty(targetKey.RemoteJid) ? jid : targetKey.RemoteJid,
+                FromMe = targetKey.FromMe,
+                Participant = targetKey.Participant
+            };
+
+            return SendAsync(jid, new DeleteContent(key), null);
+        }
+
+        public Task<string> SendReactionMessageAsync(
+            string jid,
+            global::Proto.MessageKey targetKey,
+            string emoji)
+        {
+            if (targetKey == null || string.IsNullOrWhiteSpace(targetKey.Id))
+            {
+                throw new ArgumentException("A valid target message key is required", nameof(targetKey));
+            }
+
+            var key = new MessageEnvelopeKey
+            {
+                Id = targetKey.Id,
+                RemoteJid = string.IsNullOrEmpty(targetKey.RemoteJid) ? jid : targetKey.RemoteJid,
+                FromMe = targetKey.FromMe,
+                Participant = targetKey.Participant
+            };
+
+            return SendAsync(jid, new ReactionContent(key, emoji ?? string.Empty), null);
         }
 
         public Task<string> RequestHistorySyncOnDemandAsync(
@@ -2089,7 +2383,11 @@ namespace Unison.Uwp.Client
             }
 
             await ApplyGroupNamesAsync(batch).ConfigureAwait(false);
+            ApplyGroupRosterEvent(batch);
             await ApplyGroupParticipantsJoinedAsync(batch).ConfigureAwait(false);
+            await ApplyGroupParticipantsLeftAsync(batch).ConfigureAwait(false);
+            await ApplyGroupSelfMembershipAsync(batch).ConfigureAwait(false);
+            await ApplyCallEventsAsync(batch).ConfigureAwait(false);
 
             IList<string> deletedChats;
             var chatDeleted = ChatDeleted;
@@ -2146,6 +2444,7 @@ namespace Unison.Uwp.Client
         /// A group announcing itself or being renamed. Without this the subject only ever arrives
         /// through history sync or an explicit metadata query, so a group created or renamed while
         /// the app is running keeps showing its id until the next cold start.
+        /// Upsert refreshes the catalog only; update may also emit a rename timeline line.
         /// </summary>
         private async Task ApplyGroupNamesAsync(WaEventBatch batch)
         {
@@ -2161,7 +2460,14 @@ namespace Unison.Uwp.Client
                 foreach (var group in created)
                 {
                     if (group == null || string.IsNullOrEmpty(group.Subject)) continue;
-                    await subjectChanged(group.Id, group.Subject).ConfigureAwait(false);
+                    await subjectChanged(new GroupSubjectChangeNotifyRequest
+                    {
+                        GroupJid = group.Id,
+                        NewSubject = group.Subject,
+                        AuthorJid = group.SubjectOwner,
+                        TimestampUtc = DateTime.UtcNow,
+                        EmitTimelineLine = false
+                    }).ConfigureAwait(false);
                 }
             }
 
@@ -2171,14 +2477,123 @@ namespace Unison.Uwp.Client
                 foreach (var group in updated)
                 {
                     if (group == null || string.IsNullOrEmpty(group.Subject)) continue;
-                    await subjectChanged(group.Id, group.Subject).ConfigureAwait(false);
+                    await subjectChanged(new GroupSubjectChangeNotifyRequest
+                    {
+                        GroupJid = group.Id,
+                        NewSubject = group.Subject,
+                        AuthorJid = !string.IsNullOrWhiteSpace(group.Author)
+                            ? group.Author
+                            : group.SubjectOwner,
+                        TimestampUtc = group.SubjectTime.HasValue
+                            ? DateTimeOffset.FromUnixTimeSeconds(group.SubjectTime.Value).UtcDateTime
+                            : DateTime.UtcNow,
+                        EmitTimelineLine = true
+                    }).ConfigureAwait(false);
                 }
             }
         }
 
+        private void ApplyGroupRosterEvent(WaEventBatch batch)
+        {
+            var received = GroupRosterEventReceived;
+            GroupParticipantsUpdate update;
+            if (received == null ||
+                !batch.TryGet(WaEventKind.GroupParticipantsUpdate, out update) ||
+                update == null ||
+                string.IsNullOrWhiteSpace(update.Id) ||
+                update.Participants == null ||
+                update.Participants.Count == 0)
+            {
+                return;
+            }
+
+            var participants = new List<Unison.Core.Models.GroupRosterEventParticipant>(update.Participants.Count);
+            foreach (string jid in update.Participants)
+            {
+                string phone = null;
+                if (update.ParticipantPhones != null)
+                {
+                    update.ParticipantPhones.TryGetValue(jid, out phone);
+                }
+
+                participants.Add(new Unison.Core.Models.GroupRosterEventParticipant(jid, phone));
+            }
+
+            received(new Unison.Core.Models.GroupRosterEvent(
+                update.Id,
+                (Unison.Core.Models.GroupRosterEventKind)(int)update.Action,
+                participants,
+                DateTime.UtcNow));
+        }
+
         /// <summary>
-        /// <c>w:gp2</c> <c>add</c> only — synthesize GroupJoin timeline lines. Other actions
-        /// (remove / promote / …) stay event-only until their kinds exist.
+        /// Live <c>CallHandler</c> statuses → Offer (toast), Missed/Completed (CallLog + chrome).
+        /// </summary>
+        private async Task ApplyCallEventsAsync(WaEventBatch batch)
+        {
+            var sink = CallEvents;
+            if (sink == null)
+            {
+                return;
+            }
+
+            List<Unison.Socket.Models.CallOffer> calls;
+            if (!batch.TryGet(WaEventKind.Call, out calls) || calls == null || calls.Count == 0)
+            {
+                return;
+            }
+
+            var requests = new List<CallEventNotifyRequest>();
+            foreach (Unison.Socket.Models.CallOffer call in calls)
+            {
+                if (call == null)
+                {
+                    continue;
+                }
+
+                CallEventChromeKind? chrome =
+                    Unison.Core.Helpers.Calls.CallEventChromeMap.FromStatusName(call.Status.ToString());
+                if (chrome == null)
+                {
+                    continue;
+                }
+
+                // Outer stanza "from" is often a @call relay — use call-creator / peer instead.
+                string chatJid = Unison.Core.Helpers.Calls.CallPeerJid.Resolve(
+                    call.ChatId,
+                    call.From,
+                    call.GroupJid,
+                    call.IsGroup);
+                if (string.IsNullOrWhiteSpace(chatJid))
+                {
+                    continue;
+                }
+
+                DateTime stamp = call.Date > 0
+                    ? DateTimeOffset.FromUnixTimeSeconds(call.Date).UtcDateTime
+                    : DateTime.UtcNow;
+
+                requests.Add(new CallEventNotifyRequest
+                {
+                    ChatJid = chatJid,
+                    CallId = call.Id,
+                    Kind = chrome.Value,
+                    IsVideo = call.IsVideo,
+                    TimestampUtc = stamp,
+                    CallerJid = call.From
+                });
+            }
+
+            if (requests.Count == 0)
+            {
+                return;
+            }
+
+            await sink(requests).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// <c>w:gp2</c> <c>add</c> — synthesize GroupJoin / added-by timeline lines.
         /// </summary>
         private async Task ApplyGroupParticipantsJoinedAsync(WaEventBatch batch)
         {
@@ -2205,13 +2620,106 @@ namespace Unison.Uwp.Client
                     update.Participants,
                     update.ParticipantPhones,
                     update.NotificationId,
-                    DateTime.UtcNow);
+                    DateTime.UtcNow,
+                    update.Author);
             if (requests.Count == 0)
             {
                 return;
             }
 
             await joined(requests).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// <c>w:gp2</c> <c>remove</c> — leave / removed-by timeline lines.
+        /// </summary>
+        private async Task ApplyGroupParticipantsLeftAsync(WaEventBatch batch)
+        {
+            var left = GroupParticipantsLeft;
+            if (left == null)
+            {
+                return;
+            }
+
+            GroupParticipantsUpdate update;
+            if (!batch.TryGet(WaEventKind.GroupParticipantsUpdate, out update) ||
+                update == null ||
+                update.Action != GroupParticipantAction.Remove ||
+                update.Participants == null ||
+                update.Participants.Count == 0 ||
+                string.IsNullOrWhiteSpace(update.Id))
+            {
+                return;
+            }
+
+            IReadOnlyList<GroupLeaveNotifyRequest> requests =
+                GroupJoinNotifyMap.FromRemoveParticipants(
+                    update.Id,
+                    update.Participants,
+                    update.ParticipantPhones,
+                    update.NotificationId,
+                    DateTime.UtcNow,
+                    update.Author);
+            if (requests.Count == 0)
+            {
+                return;
+            }
+
+            await left(requests).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// Leave/remove and add. Baileys sets <c>chat.readOnly</c> when the account
+        /// is in the participant list; the façade ignores everyone else's events.
+        /// </summary>
+        private async Task ApplyGroupSelfMembershipAsync(WaEventBatch batch)
+        {
+            var changed = GroupSelfMembershipChanged;
+            if (changed == null)
+            {
+                return;
+            }
+
+            GroupParticipantsUpdate update;
+            if (!batch.TryGet(WaEventKind.GroupParticipantsUpdate, out update) ||
+                update == null ||
+                string.IsNullOrWhiteSpace(update.Id) ||
+                (update.Action != GroupParticipantAction.Add &&
+                 update.Action != GroupParticipantAction.Remove))
+            {
+                return;
+            }
+
+            var jids = new List<string>();
+            if (update.Participants != null)
+            {
+                for (int i = 0; i < update.Participants.Count; i++)
+                {
+                    if (!string.IsNullOrWhiteSpace(update.Participants[i]))
+                    {
+                        jids.Add(update.Participants[i]);
+                    }
+                }
+            }
+
+            if (update.ParticipantPhones != null)
+            {
+                foreach (var phone in update.ParticipantPhones.Values)
+                {
+                    if (!string.IsNullOrWhiteSpace(phone))
+                    {
+                        jids.Add(phone);
+                    }
+                }
+            }
+
+            if (jids.Count == 0)
+            {
+                return;
+            }
+
+            await changed(update.Id, jids, update.Action == GroupParticipantAction.Add)
+                .ConfigureAwait(false);
         }
 
         // -- Plumbing --------------------------------------------------------

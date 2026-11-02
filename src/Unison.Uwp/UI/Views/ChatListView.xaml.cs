@@ -92,14 +92,24 @@ namespace Unison.Uwp.UI.Views
 
         private void ApplyScopeChrome(ChatListScope scope)
         {
-            if (scope != ChatListScope.Archived || HeaderTitle == null || FilterButton == null)
+            if (HeaderTitle == null || FilterButton == null)
             {
                 return;
             }
 
             var strings = App.Services?.GetService<IStringResources>();
-            HeaderTitle.Text = strings?.Get("Shell_Archived.Text", "Archived chats") ?? "Archived chats";
-            FilterButton.Visibility = Visibility.Collapsed;
+            if (scope == ChatListScope.Archived)
+            {
+                HeaderTitle.Text = strings?.Get("Shell_Archived.Text", "Archived chats") ?? "Archived chats";
+                FilterButton.Visibility = Visibility.Collapsed;
+                return;
+            }
+
+            if (scope == ChatListScope.Channels)
+            {
+                HeaderTitle.Text = strings?.Get("Shell_Channels.Text", "Channels") ?? "Channels";
+                FilterButton.Visibility = Visibility.Collapsed;
+            }
         }
 
         private void ChatListView_Loaded(object sender, RoutedEventArgs e)
@@ -215,6 +225,32 @@ namespace Unison.Uwp.UI.Views
             ViewModel.SelectCommunityGroup(group);
             // Keep hub open and this row selected (do not clear SelectedItem).
             ChatSelected?.Invoke(this, new ChatSelectedEventArgs(group));
+        }
+
+        private void CommunityJoinableList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (_suppressSelectionChanged || ViewModel == null)
+            {
+                return;
+            }
+
+            var list = sender as ListView;
+            var group = list?.SelectedItem as ChatItem;
+            if (group == null)
+            {
+                return;
+            }
+
+            ViewModel.SelectCommunityGroup(group);
+            try
+            {
+                _suppressSelectionChanged = true;
+                list.SelectedItem = null;
+            }
+            finally
+            {
+                _suppressSelectionChanged = false;
+            }
         }
 
         private void ViewModel_SelectionRestored(object sender, ChatItem chat)

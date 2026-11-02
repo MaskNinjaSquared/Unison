@@ -176,19 +176,54 @@
                     </StackPanel>
                 </Grid>
             </Border>
-            <ListView x:Name="CommunityHubList"
-                      Grid.Row="1"
-                      ItemsSource="{Binding ActiveCommunity.CommunityMembers}"
-                      ItemTemplate="{StaticResource ChatItemTemplate}"
-                      ItemContainerStyle="{StaticResource WhatsAppChatListItemStyle}"
-                      SelectionMode="Single"
-                      IsRightTapEnabled="True"
-                      SelectionChanged="CommunityHubList_SelectionChanged"
-                      ContainerContentChanging="CommunityHubList_ContainerContentChanging"
-                      PointerPressed="ChatList_PointerPressed"
-                      RightTapped="ChatList_RightTapped"
-                      ContextRequested="ChatList_ContextRequested"
-                      ShowsScrollingPlaceholders="False"/>
+            <ScrollViewer Grid.Row="1"
+                          VerticalScrollBarVisibility="Auto"
+                          HorizontalScrollBarVisibility="Disabled">
+                <StackPanel>
+                    <TextBlock x:Uid="Community_YourGroupsHeader"
+                               Text="YOUR GROUPS"
+                               Margin="16,12,16,4"
+                               FontSize="13"
+                               FontFamily="{StaticResource MainFontSemibold}"
+                               FontWeight="SemiBold"
+                               Foreground="{ThemeResource ChatDetailHeaderStatusBrush}"
+                               CharacterSpacing="40"/>
+                    <ListView x:Name="CommunityHubList"
+                              ItemsSource="{Binding ActiveCommunity.CommunityMembers}"
+                              ItemTemplate="{StaticResource ChatItemTemplate}"
+                              ItemContainerStyle="{StaticResource WhatsAppChatListItemStyle}"
+                              SelectionMode="Single"
+                              IsRightTapEnabled="True"
+                              SelectionChanged="CommunityHubList_SelectionChanged"
+                              ContainerContentChanging="CommunityHubList_ContainerContentChanging"
+                              PointerPressed="ChatList_PointerPressed"
+                              RightTapped="ChatList_RightTapped"
+                              ContextRequested="ChatList_ContextRequested"
+                              ShowsScrollingPlaceholders="False"
+                              ScrollViewer.VerticalScrollMode="Disabled"
+                              ScrollViewer.VerticalScrollBarVisibility="Disabled"/>
+
+                    <TextBlock x:Uid="Community_CanJoinHeader"
+                               Text="GROUPS YOU CAN JOIN"
+                               Margin="16,16,16,4"
+                               FontSize="13"
+                               FontFamily="{StaticResource MainFontSemibold}"
+                               FontWeight="SemiBold"
+                               Foreground="{ThemeResource ChatDetailHeaderStatusBrush}"
+                               CharacterSpacing="40"
+                               Visibility="{Binding ActiveCommunity.HasCommunityJoinableMembers, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                    <ListView x:Name="CommunityJoinableList"
+                              ItemsSource="{Binding ActiveCommunity.CommunityJoinableMembers}"
+                              ItemTemplate="{StaticResource ChatItemTemplate}"
+                              ItemContainerStyle="{StaticResource WhatsAppChatListItemStyle}"
+                              SelectionMode="Single"
+                              SelectionChanged="CommunityJoinableList_SelectionChanged"
+                              ShowsScrollingPlaceholders="False"
+                              ScrollViewer.VerticalScrollMode="Disabled"
+                              ScrollViewer.VerticalScrollBarVisibility="Disabled"
+                              Visibility="{Binding ActiveCommunity.HasCommunityJoinableMembers, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                </StackPanel>
+            </ScrollViewer>
         </Grid>
 
         <!-- List-side only: collapses with the list in NarrowDetail (chat fullscreen).
@@ -200,7 +235,8 @@
         <CommandBar x:Name="ListCommandBar"
                     Style="{StaticResource LegacyCommandBarStyle}"
                     Loaded="ListCommandBar_Loaded">
-                <AppBarButton x:Uid="Shell_LegacyAppBar_Search"
+                <AppBarButton x:Name="SearchAppBarButton"
+                          x:Uid="Shell_LegacyAppBar_Search"
                           Style="{StaticResource LegacyAppBarButtonStyle}"
                           Label="Search"
                           Click="SearchAppBar_Click">
@@ -211,7 +247,8 @@
                            HorizontalAlignment="Center"
                            VerticalAlignment="Center"/>
                 </AppBarButton>
-                <AppBarButton x:Uid="Shell_LegacyAppBar_NewChat"
+                <AppBarButton x:Name="NewChatAppBarButton"
+                          x:Uid="Shell_LegacyAppBar_NewChat"
                           Style="{StaticResource LegacyAppBarButtonStyle}"
                           Label="New chat"
                           Click="NewChatAppBar_Click">
@@ -222,7 +259,8 @@
                            HorizontalAlignment="Center"
                            VerticalAlignment="Center"/>
                 </AppBarButton>
-                <AppBarButton x:Uid="Shell_LegacyAppBar_AddContact"
+                <AppBarButton x:Name="AddContactAppBarButton"
+                          x:Uid="Shell_LegacyAppBar_AddContact"
                           Style="{StaticResource LegacyAppBarButtonStyle}"
                           Label="Add contact"
                           Command="{x:Bind ViewModel.AddContactCommand}">

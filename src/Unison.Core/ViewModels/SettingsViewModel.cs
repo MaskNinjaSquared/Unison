@@ -7,6 +7,7 @@ using Unison.Core.Constants;
 using Unison.Core.Contracts;
 using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Helpers;
+using Unison.Core.Helpers.Notifications;
 using Unison.Core.Mappers;
 using Unison.Core.Models;
 using Unison.Core.State;
@@ -30,6 +31,7 @@ namespace Unison.Core.ViewModels
         private readonly IDialogService _dialogService;
         private readonly IStartTilePinService _startTiles;
         private readonly IMediaDiskUsageService _diskUsage;
+        private readonly IStartupLaunchService _startupLaunch;
 
         /// <summary>Owns leaving the account: unlink on the server, then wipe locally.</summary>
         private readonly IConnectionService _connectionService;
@@ -45,8 +47,12 @@ namespace Unison.Core.ViewModels
         private bool _timeFormatChangeBusy;
         private bool _messageSoundChangeBusy;
         private bool _groupSoundChangeBusy;
+        private bool _lockScreenScopeChangeBusy;
+        private bool _notificationFilterBusy;
         private bool _disconnectBusy;
         private bool _publishContactsBusy;
+        private bool _startupLaunchBusy;
+        private StartupLaunchState _startupLaunchState = StartupLaunchState.NotSupported;
         private bool _diskMeasured;
         private bool _diskBusy;
         private string _diskUsageText = "Calculando...";
@@ -65,9 +71,11 @@ namespace Unison.Core.ViewModels
             IConnectionService connectionService,
             ShellViewModel shell,
             IContactService contacts = null,
-            SyncStatusChannel syncStatus = null)
+            SyncStatusChannel syncStatus = null,
+            IStartupLaunchService startupLaunch = null)
         {
             _localSettings = localSettings;
+            _startupLaunch = startupLaunch;
             _liveTilesService = liveTilesService;
             _notificationService = notificationService;
             _locationKeepAlive = locationKeepAlive;
@@ -86,6 +94,7 @@ namespace Unison.Core.ViewModels
 
             LeaveCommand = new RelayCommand(() => LeaveRequested?.Invoke(this, EventArgs.Empty));
             ChooseStartTileCommand = new RelayCommand(() => { _ = ChooseStartTileAsync(); });
+            ChooseNotificationFilterCommand = new RelayCommand(() => { _ = ChooseNotificationFilterAsync(); });
             CleanMediaCacheCommand = new RelayCommand(
                 () => { _ = CleanMediaCacheAsync(); },
                 () => CanCleanMediaCache);
@@ -134,6 +143,15 @@ namespace Unison.Core.ViewModels
 
                 ChangeGroupNotificationSound(index);
             });
+            ChangeLockScreenNotificationScopeCommand = new RelayCommand<int>(index =>
+            {
+                if (_lockScreenScopeChangeBusy)
+                {
+                    return;
+                }
+
+                ChangeLockScreenNotificationScope(index);
+            });
             DisconnectCommand = new RelayCommand(() =>
             {
                 if (_disconnectBusy)
@@ -170,6 +188,18 @@ namespace Unison.Core.ViewModels
             set
             {
                 _localSettings.Set(LocalSettingsConstants.NotificationsEnabled, value);
+                _notificationService.OnNotificationsConfigChanged();
+                OnPropertyChanged();
+            }
+        }
+
+        /// <summary>Toast + missed Live Tile for WhatsApp call alerts on the companion.</summary>
+        public bool CallNotificationsEnabled
+        {
+            get => _localSettings.Get<bool>(LocalSettingsConstants.CallNotificationsEnabled);
+            set
+            {
+                _localSettings.Set(LocalSettingsConstants.CallNotificationsEnabled, value);
                 _notificationService.OnNotificationsConfigChanged();
                 OnPropertyChanged();
             }
@@ -216,6 +246,51 @@ namespace Unison.Core.ViewModels
                 _ = SetLocationKeepAliveAsync(value);
             }
         }
+
+        /// <summary>"Start with Windows" row; Desktop only.</summary>
+        public bool IsStartupLaunchSupported => _startupLaunch?.IsSupported == true;
+
+        /// <summary>Mirrors what Windows will do at sign-in, not a stored preference.</summary>
+        public bool StartupLaunchEnabled
+        {
+            get => StartupLaunchPresentation.IsOn(_startupLaunchState);
+            set
+            {
+                if (_startupLaunchBusy || value == StartupLaunchEnabled)
+                {
+                    // Snap the ToggleSwitch back to the current state without starting another request.
+                    OnPropertyChanged();
+                    return;
+                }
+
+                if (!StartupLaunchPresentation.CanToggle(_startupLaunchState))
+                {
+                    OnPropertyChanged();
+                    return;
+                }
+
+                _ = SetStartupLaunchAsync(value);
+            }
+        }
+
+        /// <summary>
+        /// Locked only when Windows will not let the app change the task (Task Manager / policy).
+        /// Stay enabled while a request is in flight so the ToggleSwitch does not rebind mid-flip.
+        /// </summary>
+        public bool IsStartupLaunchToggleEnabled =>
+            StartupLaunchPresentation.CanToggle(_startupLaunchState);
+
+        /// <summary>Why the toggle is locked (Task Manager / policy); empty otherwise.</summary>
+        public string StartupLaunchHint
+        {
+            get
+            {
+                string key = StartupLaunchPresentation.HintKey(_startupLaunchState);
+                return key == null ? string.Empty : (_strings?.Get(key, string.Empty) ?? string.Empty);
+            }
+        }
+
+        public bool HasStartupLaunchHint => !string.IsNullOrEmpty(StartupLaunchHint);
 
         /// <summary>
         /// When on, revoked/logged-out sessions clear local auth and show QR.
@@ -365,6 +440,36 @@ namespace Unison.Core.ViewModels
         /// <summary>ComboBox SelectedIndex for group toast sound.</summary>
         public int SelectedGroupNotificationSoundIndex => (int)SelectedGroupNotificationSound;
 
+        /// <summary>Live Tile / lock-screen audience filter.</summary>
+        public LockScreenNotificationScope SelectedLockScreenNotificationScope
+        {
+            get
+            {
+                int raw = _localSettings.Get<int>(LocalSettingsConstants.LockScreenNotificationScope);
+                return Enum.IsDefined(typeof(LockScreenNotificationScope), raw)
+                    ? (LockScreenNotificationScope)raw
+                    : LockScreenNotificationScope.All;
+            }
+        }
+
+        /// <summary>ComboBox SelectedIndex for lock-screen scope.</summary>
+        public int SelectedLockScreenNotificationScopeIndex => (int)SelectedLockScreenNotificationScope;
+
+        /// <summary>Toast / badge audience (same options as lock-screen scope).</summary>
+        public LockScreenNotificationScope SelectedNotificationFilterScope
+        {
+            get
+            {
+                string raw = _localSettings.Get<string>(LocalSettingsConstants.NotificationFilter);
+                if (string.IsNullOrWhiteSpace(raw))
+                {
+                    raw = NotificationFilterCodec.DefaultSerialized;
+                }
+
+                return NotificationFilterCodec.ToScope(NotificationFilterCodec.Parse(raw));
+            }
+        }
+
         public string AppTitle => "Unison";
 
         public string AppVersion
@@ -378,7 +483,8 @@ namespace Unison.Core.ViewModels
         public string Contributors =>
             "@MayconUs" + Environment.NewLine +
             "@Negociation (Thiago Araujo)" + Environment.NewLine +
-            "@jjb-pro";
+            "@jjb-pro" + Environment.NewLine +
+            "@ZuneTracks";
 
         private async Task ChooseStartTileAsync()
         {
@@ -394,6 +500,36 @@ namespace Unison.Core.ViewModels
             _localSettings.Set(LocalSettingsConstants.StartTileMark, (int)chosen.Mark);
             _localSettings.Set(LocalSettingsConstants.StartTileTransparent, chosen.Transparent);
             await _startTiles.PinAsync(chosen.Mark, chosen.Transparent);
+        }
+
+        private async Task ChooseNotificationFilterAsync()
+        {
+            if (_notificationFilterBusy)
+            {
+                return;
+            }
+
+            LockScreenNotificationScope current = SelectedNotificationFilterScope;
+            LockScreenNotificationScope? chosen =
+                await _dialogService.ShowNotificationFilterAsync(current);
+            if (chosen == null || chosen.Value == current)
+            {
+                return;
+            }
+
+            _notificationFilterBusy = true;
+            try
+            {
+                _localSettings.Set(
+                    LocalSettingsConstants.NotificationFilter,
+                    NotificationFilterCodec.Format(chosen.Value));
+                _notificationService.OnNotificationsConfigChanged();
+            }
+            finally
+            {
+                _notificationFilterBusy = false;
+                RaiseNotificationFilterChanged();
+            }
         }
 
         public async Task LoadDiskUsageAsync()
@@ -462,6 +598,9 @@ namespace Unison.Core.ViewModels
         /// <summary>Opens the Start-tile picker and pins the chosen glyph.</summary>
         public ICommand ChooseStartTileCommand { get; }
 
+        /// <summary>Opens the toast / badge audience picker (All / Groups / Contacts / Favorites).</summary>
+        public ICommand ChooseNotificationFilterCommand { get; }
+
         /// <summary>Shown while media size is being measured, then the total.</summary>
         public string DiskUsageText
         {
@@ -492,6 +631,9 @@ namespace Unison.Core.ViewModels
         /// <summary>Applies group toast sound. Parameter: <see cref="NotificationSound"/> index.</summary>
         public ICommand ChangeGroupNotificationSoundCommand { get; }
 
+        /// <summary>Applies lock-screen / Live Tile audience. Parameter: <see cref="LockScreenNotificationScope"/> index.</summary>
+        public ICommand ChangeLockScreenNotificationScopeCommand { get; }
+
         /// <summary>Confirms, then wipes local auth/session and returns to pairing.</summary>
         public ICommand DisconnectCommand { get; }
 
@@ -504,8 +646,11 @@ namespace Unison.Core.ViewModels
             RaiseLanguageSelectionChanged();
             RaiseTimeFormatSelectionChanged();
             RaiseNotificationSoundSelectionChanged();
+            RaiseLockScreenScopeChanged();
+            RaiseNotificationFilterChanged();
             RaiseAboutCopyChanged();
             RaiseProfileHeaderChanged();
+            _ = RefreshStartupLaunchAsync();
         }
 
         /// <summary>
@@ -551,6 +696,7 @@ namespace Unison.Core.ViewModels
         {
             RaiseProperties(
                 nameof(NotificationsEnabled),
+                nameof(CallNotificationsEnabled),
                 nameof(ShowSyncStatus),
                 nameof(LiveTilesEnabled),
                 nameof(LocationKeepAliveEnabled),
@@ -602,6 +748,44 @@ namespace Unison.Core.ViewModels
                 nameof(SelectedMessageNotificationSoundIndex),
                 nameof(SelectedGroupNotificationSound),
                 nameof(SelectedGroupNotificationSoundIndex));
+        }
+
+        private void RaiseLockScreenScopeChanged()
+        {
+            RaiseProperties(
+                nameof(SelectedLockScreenNotificationScope),
+                nameof(SelectedLockScreenNotificationScopeIndex));
+        }
+
+        private void RaiseNotificationFilterChanged()
+        {
+            RaiseProperties(nameof(SelectedNotificationFilterScope));
+        }
+
+        private void ChangeLockScreenNotificationScope(int index)
+        {
+            if (!Enum.IsDefined(typeof(LockScreenNotificationScope), index))
+            {
+                return;
+            }
+
+            var scope = (LockScreenNotificationScope)index;
+            if (scope == SelectedLockScreenNotificationScope)
+            {
+                return;
+            }
+
+            _lockScreenScopeChangeBusy = true;
+            try
+            {
+                _localSettings.Set(LocalSettingsConstants.LockScreenNotificationScope, (int)scope);
+                _ = _liveTilesService.OnLiveTilesConfigChangedAsync();
+            }
+            finally
+            {
+                _lockScreenScopeChangeBusy = false;
+                RaiseLockScreenScopeChanged();
+            }
         }
 
         private void ChangeTimeFormat(int index)
@@ -797,6 +981,61 @@ namespace Unison.Core.ViewModels
 
         private void RaiseLocationKeepAliveChanged() =>
             OnPropertyChanged(nameof(LocationKeepAliveEnabled));
+
+        /// <summary>Reads the task state again; the user can change it in Task Manager at any time.</summary>
+        public async Task RefreshStartupLaunchAsync()
+        {
+            if (!IsStartupLaunchSupported)
+            {
+                return;
+            }
+
+            try
+            {
+                _startupLaunchState = await _startupLaunch.GetStateAsync();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine("[SettingsViewModel] Startup state read failed: " + ex.Message);
+                _startupLaunchState = StartupLaunchState.NotSupported;
+            }
+
+            RaiseStartupLaunchChanged();
+        }
+
+        private async Task SetStartupLaunchAsync(bool enabled)
+        {
+            _startupLaunchBusy = true;
+            // Keep the toggle where the user put it while Windows decides. Raising with the old
+            // Disabled state here was what made the switch snap Off and back On ("vai e volta").
+            _startupLaunchState = enabled
+                ? StartupLaunchState.Enabled
+                : StartupLaunchState.Disabled;
+            RaiseStartupLaunchChanged();
+            try
+            {
+                _startupLaunchState = await _startupLaunch.SetEnabledAsync(enabled);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine("[SettingsViewModel] Startup toggle failed: " + ex.Message);
+            }
+            finally
+            {
+                _startupLaunchBusy = false;
+                RaiseStartupLaunchChanged();
+            }
+        }
+
+        private void RaiseStartupLaunchChanged()
+        {
+            RaiseProperties(
+                nameof(IsStartupLaunchSupported),
+                nameof(StartupLaunchEnabled),
+                nameof(IsStartupLaunchToggleEnabled),
+                nameof(StartupLaunchHint),
+                nameof(HasStartupLaunchHint));
+        }
 
         private async Task SetPublishContactsToWindowsAsync(bool enabled)
         {

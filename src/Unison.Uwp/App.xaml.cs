@@ -1,4 +1,5 @@
 using System;
+using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
 using Windows.ApplicationModel;
@@ -10,6 +11,7 @@ using Windows.Graphics.Display;
 using Windows.Storage;
 using Windows.UI;
 using Windows.UI.Core;
+using Windows.UI.Core.Preview;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
 using Windows.UI.Xaml.Media;
@@ -20,6 +22,7 @@ using Unison.Baileys.Client;
 using Unison.Core.Constants;
 using Unison.Core.Contracts;
 using Unison.Core.Contracts.WhatsApp;
+using Unison.Core.Services;
 using Unison.Core.Diagnostics;
 using Unison.Core.Factories;
 using Unison.Core.Helpers;
@@ -33,6 +36,7 @@ using Unison.Socket.Signal;
 using Unison.Uwp.Client;
 using Unison.Uwp.Data;
 using Unison.Uwp.Services;
+using Unison.Uwp.Services.Desktop;
 using Unison.Uwp.Services.Network;
 using Unison.Uwp.Services.Socket;
 using Unison.Uwp.Services.Themes;
@@ -44,6 +48,7 @@ using Unison.Uwp.Services.WhatsApp.Contacts;
 using Unison.Uwp.Services.WhatsApp.Diagnostics;
 using Unison.Uwp.Services.WhatsApp.Groups;
 using Unison.Uwp.Services.WhatsApp.History;
+using Unison.Uwp.Services.WhatsApp.Identity;
 using Unison.Uwp.Services.WhatsApp.Messages;
 using Unison.Uwp.Services.WhatsApp.Status;
 using Unison.WhatsAppClient.Contacts;
@@ -215,6 +220,10 @@ namespace Unison.Uwp
             //
             // The concrete type is registered too because WhatsAppService still reaches the
             // transitional dictionaries on it. That registration goes away with those.
+            services.AddSingleton<ICallLogStore, Unison.Uwp.Data.CallLogStore>();
+            services.AddSingleton<ICallLogService>(sp => new CallLogService(
+                sp.GetRequiredService<IJidResolver>(),
+                sp.GetRequiredService<ICallLogStore>()));
             services.AddSingleton<ChatStateStore>(sp => new ChatStateStore(
                 new UiThreadDispatcherService(sp.GetRequiredService<UiStallWatchdog>())));
             services.AddSingleton<IChatStateStore>(sp => sp.GetRequiredService<ChatStateStore>());
@@ -222,6 +231,7 @@ namespace Unison.Uwp
             services.AddSingleton<IStartTilePinService, StartTilePinService>();
             services.AddSingleton<IMediaDiskUsageService, MediaDiskUsageService>();
             services.AddSingleton<ILocalSettings, LocalSettingsService>();
+            services.AddSingleton<IEmojiRecentStore, EmojiRecentStore>();
             services.AddSingleton<IAppMemoryInfo, WinRtAppMemoryInfo>();
             services.AddSingleton<ShellThemeService>();
             services.AddSingleton<IShellThemeService>(sp => sp.GetRequiredService<ShellThemeService>());
@@ -305,8 +315,14 @@ namespace Unison.Uwp
             {
                 ChatStateStore chatState = sp.GetRequiredService<ChatStateStore>();
                 JidAliasTable aliases = sp.GetRequiredService<JidAliasTable>();
-                return new ChatRowIndex(() => chatState.Chats, aliases.GetCanonicalJid);
+                // Peek only: GetCanonicalJid promotes misses and can fire Alias.Changed mid-Build,
+                // which Invalidates the index and turns ClearUnread / FindConversation into a
+                // multi-second rebuild loop on Mobile (267 rows × alias flood).
+                return new ChatRowIndex(() => chatState.Chats, aliases.PeekCanonicalJid);
             });
+            // One roster index for every device; Peek for the same reason as ChatRowIndex.
+            services.AddSingleton(sp => new GroupRosterIndex(
+                sp.GetRequiredService<JidAliasTable>().PeekCanonicalJid));
             // ChatFacade opens and closes the conversation; the client reads it in the incoming
             // pump and drops the previous conversation's messages from memory on a change.
             services.AddSingleton(sp => new ActiveChat(
@@ -417,6 +433,18 @@ namespace Unison.Uwp
             // Shared by send/receipt/pin/open — one hold table for statuses and pins.
             services.AddSingleton(_ => new PendingMessageState());
             // Concrete first so host ports resolve WhatsAppService without an aggregating façade contract.
+            // Decrypted inbound queue owns enqueue + drain; the client only forwards health/reset.
+            services.AddSingleton(sp => new IncomingMessagePump(
+                () => sp.GetRequiredService<IMessageService>(),
+                RuntimeDiagnosticsService.Instance));
+            services.AddSingleton<IIncomingMessageEnqueueHost>(
+                sp => sp.GetRequiredService<IncomingMessagePump>());
+            services.AddSingleton<IIncomingPumpControl>(
+                sp => sp.GetRequiredService<IncomingMessagePump>());
+            services.AddSingleton(sp => new LiveMessagePersist(
+                sp.GetRequiredService<IHistoryMessageStore>()));
+            services.AddSingleton<ILiveMessagePersist>(
+                sp => sp.GetRequiredService<LiveMessagePersist>());
             services.AddSingleton(sp => WhatsAppService.Create(
                 sp.GetRequiredService<ChatStateStore>(),
                 sp.GetRequiredService<ChatRowIndex>(),
@@ -452,12 +480,12 @@ namespace Unison.Uwp
                 () => sp.GetRequiredService<IChatService>(),
                 () => sp.GetRequiredService<IGroupService>(),
                 () => sp.GetRequiredService<IHistoryService>(),
-                () => sp.GetRequiredService<IDeferredAvatarResolution>()));
+                () => sp.GetRequiredService<IDeferredAvatarResolution>(),
+                sp.GetRequiredService<IncomingMessagePump>(),
+                sp.GetRequiredService<LiveMessagePersist>()));
             // The send flow lives on MessageFacade; the timeline caches and the socket it writes
             // through are still the client's, reached only through this narrow port.
             services.AddSingleton<IOutgoingMessageHost>(
-                sp => sp.GetRequiredService<WhatsAppService>());
-            services.AddSingleton<IHistoryOnDemandSocket>(
                 sp => sp.GetRequiredService<WhatsAppService>());
             // Asking "is this the same person?" no longer means naming the client.
             services.AddSingleton<IJidResolver>(
@@ -476,6 +504,13 @@ namespace Unison.Uwp
             services.AddSingleton<UwpSessionProvider>(sp => sp.GetRequiredService<BridgeSessionProvider>());
             services.AddSingleton<AppSessionProvider>(
                 sp => sp.GetRequiredService<BridgeSessionProvider>());
+            services.AddSingleton<IHistoryOnDemandSocket>(sp => new BridgeHistoryOnDemandSocket(
+                sp.GetRequiredService<UwpSessionProvider>()));
+            services.AddSingleton<ISelfIdentityHealHost>(
+                sp => sp.GetRequiredService<WhatsAppService>());
+            services.AddSingleton<ISocketAliasRegistrar>(sp => new BridgeSocketAliasRegistrar(
+                sp.GetRequiredService<UwpSessionProvider>(),
+                sp.GetRequiredService<ISelfIdentityHealHost>()));
 
             services.AddSingleton<IProfileService>(sp => new AppProfileFacade(
                 sp.GetRequiredService<AppSessionProvider>(),
@@ -503,6 +538,7 @@ namespace Unison.Uwp
                 sp.GetRequiredService<IConnectionSoftReconnect>(),
                 sp.GetRequiredService<HistoryCatchUpContinuation>(),
                 sp.GetRequiredService<IJidAliasPersistence>(),
+                sp.GetRequiredService<IJidResolver>(),
                 sp.GetRequiredService<IMessageStore>(),
                 sp.GetRequiredService<ILocalSettings>(),
                 sp.GetRequiredService<HistoryOnDemandRegistry>(),
@@ -556,8 +592,6 @@ namespace Unison.Uwp
             });
             services.AddSingleton<IBackgroundResolutionGate>(
                 sp => sp.GetRequiredService<WhatsAppService>());
-            services.AddSingleton<ISocketAliasRegistrar>(
-                sp => sp.GetRequiredService<WhatsAppService>());
             services.AddSingleton<IConnectionSoftReconnectHost>(
                 sp => sp.GetRequiredService<WhatsAppService>());
             services.AddSingleton<IConnectionLifecycleHost>(
@@ -589,6 +623,13 @@ namespace Unison.Uwp
                 new DelegateSocketLog(line => Diag.W("[Media] " + line))));
             services.AddSingleton(sp => new MediaDownloadGate(
                 () => (sp.GetRequiredService<WhatsAppService>()).UsesSingleMediaDownloadSlot));
+            // SocketBridge is owned by WhatsAppService (rebuilt on reconnect), not a DI singleton.
+            services.AddSingleton<IBaileysMediaDownload>(sp => new BaileysMediaDownload(
+                () =>
+                {
+                    var bridge = sp.GetRequiredService<WhatsAppService>().Socket as SocketBridge;
+                    return bridge != null ? bridge.TryGetMediaModule() : null;
+                }));
             services.AddSingleton<IMediaAvailability>(sp => new MediaAvailability(
                 sp.GetRequiredService<IConnectionService>(),
                 sp.GetRequiredService<IMediaDownloadHost>(),
@@ -599,7 +640,8 @@ namespace Unison.Uwp
                 sp.GetRequiredService<IMediaCache>(),
                 sp.GetRequiredService<MediaDerivationService>(),
                 sp.GetRequiredService<MediaDownloadGate>(),
-                sp.GetRequiredService<IChatCatalogPersistence>()));
+                sp.GetRequiredService<IChatCatalogPersistence>(),
+                sp.GetRequiredService<IBaileysMediaDownload>()));
             services.AddSingleton<IMessageWireActions>(sp => new BridgeMessageWireActions(
                 sp.GetRequiredService<UwpSessionProvider>()));
             services.AddSingleton<IOutgoingReceiptHost>(
@@ -618,6 +660,7 @@ namespace Unison.Uwp
                 sp.GetRequiredService<IJidResolver>(),
                 sp.GetRequiredService<INotificationService>(),
                 sp.GetRequiredService<IOutgoingMessageHost>(),
+                sp.GetRequiredService<ILiveMessagePersist>(),
                 sp.GetRequiredService<IMediaCache>(),
                 sp.GetRequiredService<IMediaAvailability>(),
                 sp.GetRequiredService<IChatCatalogPersistence>(),
@@ -645,11 +688,13 @@ namespace Unison.Uwp
                 sp.GetRequiredService<SyncWorkGate>(),
                 sp.GetRequiredService<InitialSyncProgressState>(),
                 sp.GetRequiredService<IAppVisibility>(),
-                () => (sp.GetRequiredService<WhatsAppService>()).Socket?.IsAwaitingInitialSync ?? false,
+                () => sp.GetRequiredService<UwpSessionProvider>().Socket?.IsAwaitingInitialSync ?? false,
                 sp.GetRequiredService<IChatStore>(),
                 sp.GetService<IStringResources>(),
                 sp.GetRequiredService<ISystemInfoProvider>(),
-                sp.GetRequiredService<IRuntimeDiagnostics>()));
+                sp.GetRequiredService<IRuntimeDiagnostics>(),
+                sp.GetRequiredService<IGroupNaming>(),
+                sp.GetRequiredService<ICallLogService>()));
             // AttachedUiDispatcher (not IDispatcher/DispatcherService): PropertyChanged from the
             // incoming pump must marshal onto the live frame dispatcher, or IsRevoked/HasReactions
             // bindings throw RPC_E_WRONG_THREAD on Mobile.
@@ -677,6 +722,8 @@ namespace Unison.Uwp
                     delayChatListUntilConversationReady: false)));
             services.AddSingleton<IChatDetailInfoViewModelFactory, ChatDetailInfoViewModelFactory>();
             services.AddSingleton<INewChatDialogViewModelFactory, NewChatDialogViewModelFactory>();
+            services.AddSingleton<IGroupPreviewDialogViewModelFactory, GroupPreviewDialogViewModelFactory>();
+            services.AddSingleton<IChatExportService, Unison.Core.Services.ChatExportService>();
             services.AddSingleton<ILocalContactsService, LocalContactsService>();
 
             services.AddSingleton<IAvatarFetchActions>(sp => sp.GetRequiredService<AvatarFetcher>());
@@ -690,6 +737,8 @@ namespace Unison.Uwp
                 sp.GetRequiredService<IAvatarCache>(),
                 sp.GetRequiredService<AttachedUiDispatcher>(),
                 sp.GetRequiredService<IChatCatalogPersistence>()));
+            services.AddSingleton<IContactBlockActions>(sp => new BridgeContactBlockActions(
+                sp.GetRequiredService<UwpSessionProvider>()));
             services.AddSingleton<IContactService>(sp => new ContactFacade(
                 sp.GetRequiredService<AppSessionProvider>(),
                 sp.GetRequiredService<ILocalContactsService>(),
@@ -727,7 +776,8 @@ namespace Unison.Uwp
                 sp.GetRequiredService<IJidAliasPersistence>(),
                 sp.GetRequiredService<IChatIdentityPersistence>(),
                 sp.GetRequiredService<IResolvedNameApplyHost>(),
-                sp.GetRequiredService<IRuntimeDiagnostics>()));
+                sp.GetRequiredService<IRuntimeDiagnostics>(),
+                sp.GetRequiredService<IContactBlockActions>()));
             services.AddSingleton<IJidAliasPersistence>(sp => new JidAliasPersistence(
                 sp.GetRequiredService<JidAliasTable>(),
                 sp.GetRequiredService<ISocketAliasRegistrar>(),
@@ -744,8 +794,6 @@ namespace Unison.Uwp
             // After IMessageService: ChatFacade forgets repairs when a row is deleted/collapsed.
             services.AddSingleton<IMissingMessageChatHost>(
                 sp => (IMissingMessageChatHost)sp.GetRequiredService<IMessageService>());
-            services.AddSingleton<IIncomingMessageEnqueueHost>(
-                sp => sp.GetRequiredService<WhatsAppService>());
             services.AddSingleton<IChatAccountActions>(sp => new BridgeChatAccountActions(
                 sp.GetRequiredService<UwpSessionProvider>()));
             services.AddSingleton<IChatService>(sp => new ChatFacade(
@@ -779,15 +827,17 @@ namespace Unison.Uwp
                 sp.GetRequiredService<IDialogService>(),
                 sp.GetRequiredService<IRuntimeDiagnostics>()));
             // After IChatService: the projection persists resolved strip rows so cold start keeps names.
+            // AttachedUiDispatcher (not IDispatcher/DispatcherService): same live frame as
+            // GroupMetadataApply / ChatFacade so strip passes share the pump; DispatcherService
+            // also ran inline on HasThreadAccess and stacked BeginSweep inside metadata hops.
             services.AddSingleton<IChatAuthorProjection>(sp => new ChatAuthorProjection(
                 sp.GetRequiredService<IChatStateStore>(),
                 sp.GetRequiredService<IPersonStore>(),
                 sp.GetRequiredService<IJidResolver>(),
                 sp.GetRequiredService<IStringResources>(),
-                sp.GetRequiredService<IDispatcher>(),
+                sp.GetRequiredService<AttachedUiDispatcher>(),
                 sp.GetRequiredService<IContactService>(),
                 sp.GetRequiredService<IChatService>(),
-                onDemand: sp.GetRequiredService<ISystemInfoProvider>().IsMobile(),
                 timelinePriority: sp.GetRequiredService<ChatTimelineLoadPriorityGate>()));
             // The group apply and the roster restore live in Core and run from GroupFacade; they
             // label members and rows through the shared contact-name resolver.
@@ -811,17 +861,31 @@ namespace Unison.Uwp
                     sp.GetRequiredService<IGroupNaming>(),
                     sp.GetRequiredService<AttachedUiDispatcher>(),
                     sp.GetRequiredService<IChatCatalogPersistence>(),
-                    new GroupRosterWriter(
-                        sp.GetRequiredService<IGroupRosterStore>(),
-                        sp.GetRequiredService<IPersonStore>()),
+                    sp.GetRequiredService<GroupRosterWriter>(),
                     sp.GetRequiredService<IJidResolver>(),
                     sp.GetRequiredService<IChatStateStore>(),
                     sp.GetRequiredService<ChatRowIndex>(),
                     sp.GetRequiredService<ChatStateStore>().GroupSubjects,
                     utcNow: null,
                     timelinePriority: sp.GetRequiredService<ChatTimelineLoadPriorityGate>(),
-                    rosterBuildChunkSize: rosterChunk);
+                    rosterBuildChunkSize: rosterChunk,
+                    rosterIndex: sp.GetRequiredService<GroupRosterIndex>());
             });
+            services.AddSingleton(sp => new GroupRosterWriter(
+                sp.GetRequiredService<IGroupRosterStore>(),
+                sp.GetRequiredService<IPersonStore>()));
+            // Members land one by one from events; the full list only when @ / Members asks.
+            services.AddSingleton(sp => new GroupRosterDemand(
+                sp.GetRequiredService<GroupRosterIndex>(),
+                sp.GetRequiredService<AttachedUiDispatcher>(),
+                sp.GetRequiredService<IJidResolver>(),
+                sp.GetRequiredService<IChatStateStore>(),
+                sp.GetRequiredService<ChatRowIndex>(),
+                sp.GetRequiredService<IGroupNaming>(),
+                sp.GetRequiredService<IGroupRosterStore>(),
+                sp.GetRequiredService<GroupRosterWriter>(),
+                sp.GetRequiredService<ChatTimelineLoadPriorityGate>(),
+                sp.GetRequiredService<IRuntimeDiagnostics>()));
             services.AddSingleton<IGroupService>(sp => new GroupFacade(
                 sp.GetRequiredService<IGroupWireActions>(),
                 sp.GetRequiredService<IGroupNaming>(),
@@ -830,13 +894,7 @@ namespace Unison.Uwp
                 () => sp.GetRequiredService<IContactService>(),
                 sp.GetRequiredService<IPersonStore>(),
                 sp.GetRequiredService<GroupMetadataApply>(),
-                new GroupRosterRestore(
-                    sp.GetRequiredService<IGroupNaming>(),
-                    sp.GetRequiredService<AttachedUiDispatcher>(),
-                    sp.GetRequiredService<IJidResolver>(),
-                    sp.GetRequiredService<IChatStateStore>(),
-                    sp.GetRequiredService<IGroupRosterStore>(),
-                    sp.GetRequiredService<ChatTimelineLoadPriorityGate>()),
+                sp.GetRequiredService<GroupRosterDemand>(),
                 sp.GetRequiredService<IGroupAvatarActions>(),
                 sp.GetRequiredService<IUsyncGate>(),
                 sp.GetRequiredService<SyncStatusChannel>(),
@@ -854,6 +912,7 @@ namespace Unison.Uwp
                 var notifications = NotificationService.Instance;
                 notifications.AttachLiveTiles(sp.GetRequiredService<ILiveTilesService>());
                 notifications.AttachShortcuts(sp.GetRequiredService<IShortcutService>());
+                notifications.AttachDesktopTray(sp.GetRequiredService<IDesktopTrayHost>());
                 return notifications;
             });
             services.AddSingleton<IRuntimeDiagnostics>(_ => RuntimeDiagnosticsService.Instance);
@@ -872,6 +931,7 @@ namespace Unison.Uwp
             services.AddSingleton<IAudioRecordingService, AudioRecordingService>();
             services.AddSingleton<IUiSoundService, UiSoundService>();
             services.AddSingleton<IVoicePlaybackRoutingService, VoicePlaybackRoutingService>();
+            services.AddSingleton<IChatAudioPlaybackService, ChatAudioPlaybackService>();
             services.AddSingleton<IReactionMapper, ReactionMapper>();
             services.AddSingleton<IChatMessageMapper, ChatMessageMapper>();
             services.AddSingleton<IStringResources, StringResourcesService>();
@@ -900,6 +960,9 @@ namespace Unison.Uwp
             services.AddSingleton<ISystemInfoProvider, SystemInfoProvider>();
             services.AddSingleton<IStatusBarService, StatusBarService>();
             services.AddSingleton<ILocationKeepAliveService, LocationKeepAliveService>();
+            services.AddSingleton<IStartupLaunchService, StartupLaunchService>();
+            services.AddSingleton<DesktopTrayHost>();
+            services.AddSingleton<IDesktopTrayHost>(sp => sp.GetRequiredService<DesktopTrayHost>());
             services.AddSingleton<IAppLanguageService, AppLanguageService>();
 
             // Validation harness for the Unison.Socket rewrite. Reachable only from the debug
@@ -912,6 +975,7 @@ namespace Unison.Uwp
 
             services.AddTransient<LoginViewModel>();
             services.AddTransient<StartViewModel>();
+            services.AddSingleton<NewConversationViewModel>();
             services.AddSingleton<ShellViewModel>();
             services.AddSingleton<IForwardMessagePicker>(sp =>
                 sp.GetRequiredService<ShellViewModel>());
@@ -921,6 +985,7 @@ namespace Unison.Uwp
                 sp.GetRequiredService<IRuntimeDiagnostics>()));
             services.AddTransient<ChatListViewModel>();
             services.AddTransient<FavoritesViewModel>();
+            services.AddTransient<CallsViewModel>();
             services.AddTransient<ChatDetailViewModel>();
             services.AddTransient<StatusListViewModel>();
             services.AddTransient<StatusDetailViewModel>();
@@ -951,6 +1016,8 @@ namespace Unison.Uwp
             // Display keep-awake is owned by HistoryFacade Hold/Release (constructed above).
             // Rewrites group author strips as names resolve, list open or not.
             Services.GetRequiredService<IChatAuthorProjection>().Start();
+            // Call Recents survive process restarts (unison.db call_log).
+            _ = Services.GetRequiredService<ICallLogService>().InitializeAsync();
 #if DEBUG
             Services.GetRequiredService<IDebugSendService>().Start();
 #endif
@@ -993,6 +1060,9 @@ namespace Unison.Uwp
             // (and again on the next dispatcher turns — the OS can reset caption chrome).
             Window.Current.Activate();
             ApplyWindowChromeBootstrap();
+            // FullTrustProcessLauncher after Activate — launching before the view is up
+            // surfaces as winrt::hresult_error / UnauthorizedAccessException in the debugger.
+            StartDesktopTray();
 
             // Classic: empty frame → Boot once. Warm process keeps current page (Login/Shell).
             // Do not remount Boot/Login for language — Mobile Exit + cold start handles that.
@@ -1092,7 +1162,142 @@ namespace Unison.Uwp
                 return;
             }
 
+            if (args != null && args.Kind == ActivationKind.StartupTask)
+            {
+                // "Start with Windows": same boot as a tile launch, with no deep link.
+                RuntimeDiagnosticsService.Instance.Write(
+                    "lifecycle",
+                    "startup-task",
+                    "previousState=" + args.PreviousExecutionState);
+                NotificationService.Instance.Initialize();
+                LiveTilesService.Instance.Initialize();
+                EnsureWindowVisibilityTracking();
+                ReloadLanguageFromSettings();
+                ApplyTimeFormatFromSettings();
+                _ = ApplyLocationKeepAliveConfigAsync();
+                ActivateWithRouter(args.PreviousExecutionState, null, null);
+                StartDesktopTray();
+                return;
+            }
+
             base.OnActivated(args);
+        }
+
+        /// <summary>In-process app service: the desktop tray connecting (desktop package only).</summary>
+        protected override void OnBackgroundActivated(BackgroundActivatedEventArgs args)
+        {
+            base.OnBackgroundActivated(args);
+            if (Services?.GetService<DesktopTrayHost>()?.TryAttach(args?.TaskInstance) == true)
+            {
+                return;
+            }
+
+            RuntimeDiagnosticsService.Instance.Write(
+                "lifecycle",
+                "background-activated-unhandled",
+                "trigger=" + (args?.TaskInstance?.TriggerDetails?.GetType().Name ?? "<null>"));
+        }
+
+        private bool _desktopTrayExitHooked;
+        private bool _closeRequestedHooked;
+
+        /// <summary>
+        /// Desktop package: Unigram-shaped tray launch (<c>SystemTrayGroup</c>). Store/Mobile has
+        /// no full-trust process — <see cref="IDesktopTrayHost.StartAsync"/> returns false.
+        /// </summary>
+        private void StartDesktopTray()
+        {
+            IDesktopTrayHost tray = Services?.GetService<IDesktopTrayHost>();
+            if (tray == null || !tray.IsAvailable)
+            {
+                return;
+            }
+
+            if (!_desktopTrayExitHooked)
+            {
+                _desktopTrayExitHooked = true;
+                CoreDispatcher dispatcher = Window.Current?.Dispatcher;
+                tray.ExitRequested += (s, e) =>
+                {
+                    if (dispatcher == null)
+                    {
+                        Exit();
+                        return;
+                    }
+
+                    _ = dispatcher.RunAsync(CoreDispatcherPriority.Normal, Exit);
+                };
+            }
+
+            EnsureCloseToTrayHook(tray);
+            _ = tray.StartAsync();
+        }
+
+        /// <summary>
+        /// <c>rescap:confirmAppClose</c> (desktop package): cancel close and ask the tray stub
+        /// to hide the ApplicationFrameWindow (close-to-tray). Process + socket stay alive.
+        /// </summary>
+        private void EnsureCloseToTrayHook(IDesktopTrayHost tray)
+        {
+            if (_closeRequestedHooked || tray == null || !tray.IsAvailable)
+            {
+                return;
+            }
+
+            if (!ApiInformation.IsTypePresent(
+                    "Windows.UI.Core.Preview.SystemNavigationManagerPreview"))
+            {
+                return;
+            }
+
+            try
+            {
+                SystemNavigationManagerPreview.GetForCurrentView().CloseRequested += (s, e)
+                    =>
+                {
+                    e.Handled = true;
+                    tray.NotifyCloseRequested(TryGetCoreWindowHandle());
+                    RuntimeDiagnosticsService.Instance.Write("desktop-tray", "close-to-tray");
+                };
+                _closeRequestedHooked = true;
+            }
+            catch (Exception ex)
+            {
+                RuntimeDiagnosticsService.Instance.Write(
+                    "desktop-tray",
+                    "close-hook-failed",
+                    "reason=" + ex.GetType().Name);
+            }
+        }
+
+        /// <summary>CoreWindow hwnd for the tray stub (Win32 hide/show of the frame).</summary>
+        private static long TryGetCoreWindowHandle()
+        {
+            try
+            {
+                CoreWindow core = Window.Current?.CoreWindow;
+                if (core == null)
+                {
+                    return 0;
+                }
+
+                var interop = (ICoreWindowInterop)(object)core;
+                return interop.WindowHandle.ToInt64();
+            }
+            catch
+            {
+                return 0;
+            }
+        }
+
+        [ComImport]
+        [System.Runtime.InteropServices.Guid("45D64A29-A63E-4CB6-B498-5781D298CB4F")]
+        [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+        private interface ICoreWindowInterop
+        {
+            IntPtr WindowHandle { get; }
+
+            bool MessageHandled { set; }
         }
 
         protected override async void OnShareTargetActivated(ShareTargetActivatedEventArgs args)
@@ -1658,9 +1863,10 @@ namespace Unison.Uwp
             RuntimeDiagnosticsService.Instance.Write("lifecycle", "resuming-start");
             try
             {
-                // Mobile often survives shell-change Exit(); resume never hits OnLaunched, so
-                // re-read SelectedShell + pending applied toast before chrome/reconnect.
-                ApplyShellThemeFromSettings();
+                // Mobile often survives shell-change Exit(); resume never hits OnLaunched.
+                // Do not remount Theme.xaml on every resume (FileOpenPicker white flash on
+                // Legacy) — only when SelectedShell changed or a pending shell toast is owed.
+                ApplyShellThemeFromSettingsIfChanged();
                 ApplyWindowChromeBootstrap();
                 // Suspension intentionally closes the WebSocket. On Windows 10 Mobile
                 // OnLaunched is not called again when the process is resumed, so the
@@ -1700,6 +1906,26 @@ namespace Unison.Uwp
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine("[App] Apply shell theme: " + ex.Message);
+            }
+        }
+
+        /// <summary>
+        /// Resume path: skip Theme.xaml remount when the shell dictionaries are already current.
+        /// </summary>
+        private void ApplyShellThemeFromSettingsIfChanged()
+        {
+            try
+            {
+                if (Services == null)
+                {
+                    return;
+                }
+
+                Services.GetRequiredService<IShellThemeService>().ApplyFromSettingsIfShellChanged();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine("[App] Apply shell theme if changed: " + ex.Message);
             }
         }
 

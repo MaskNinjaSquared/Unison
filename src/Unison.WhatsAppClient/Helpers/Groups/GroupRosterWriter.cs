@@ -45,6 +45,69 @@ namespace Unison.WhatsAppClient.Helpers
             _ = SaveMembershipsAsync(groupJid, rows);
         }
 
+        /// <summary>
+        /// Writes only what a flush changed: the members that came or changed, the ones that left,
+        /// and their person-to-group rows. Detached copies only.
+        /// </summary>
+        public Task SaveChangesAsync(
+            string groupJid,
+            IReadOnlyList<GroupMember> upserted,
+            IReadOnlyList<string> removedJids,
+            IReadOnlyList<PersonGroupMembership> memberships,
+            IReadOnlyList<string> removedPersonKeys)
+        {
+            bool nothing =
+                (upserted == null || upserted.Count == 0) &&
+                (removedJids == null || removedJids.Count == 0);
+            return nothing
+                ? Task.CompletedTask
+                : SaveChangesCoreAsync(groupJid, upserted, removedJids, memberships, removedPersonKeys);
+        }
+
+        private async Task SaveChangesCoreAsync(
+            string groupJid,
+            IReadOnlyList<GroupMember> upserted,
+            IReadOnlyList<string> removedJids,
+            IReadOnlyList<PersonGroupMembership> memberships,
+            IReadOnlyList<string> removedPersonKeys)
+        {
+            try
+            {
+                await _rosters.InitializeAsync().ConfigureAwait(false);
+                if (removedJids != null && removedJids.Count > 0)
+                {
+                    await _rosters.RemoveMembersAsync(groupJid, removedJids).ConfigureAwait(false);
+                }
+
+                if (upserted != null && upserted.Count > 0)
+                {
+                    await _rosters.UpsertMembersAsync(groupJid, upserted).ConfigureAwait(false);
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[GroupRosterWriter] Incremental roster persist failed: " + ex.Message);
+            }
+
+            try
+            {
+                await _people.InitializeAsync().ConfigureAwait(false);
+                if (removedPersonKeys != null && removedPersonKeys.Count > 0)
+                {
+                    await _people.RemoveGroupMembershipsAsync(groupJid, removedPersonKeys).ConfigureAwait(false);
+                }
+
+                if (memberships != null && memberships.Count > 0)
+                {
+                    await _people.UpsertGroupMembershipsAsync(groupJid, memberships).ConfigureAwait(false);
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[GroupRosterWriter] Incremental PersonGroup persist failed: " + ex.Message);
+            }
+        }
+
         private async Task SaveRosterAsync(string groupJid, List<GroupMember> members)
         {
             try

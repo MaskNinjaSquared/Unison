@@ -12,13 +12,16 @@ namespace Unison.Core.Contracts
 
         /// <summary>
         /// Updates medium/wide/large bindings with the latest message preview.
-        /// No-op when LiveTilesEnabled setting is false.
+        /// No-op when LiveTilesEnabled is off or the chat fails the lock-screen scope filter.
         /// </summary>
         void UpdateFromMessage(
             string title,
             string preview,
             string chatJid,
-            int totalUnread);
+            int totalUnread,
+            bool isGroup = false,
+            bool isFavorite = false,
+            bool isChannel = false);
 
         void Clear();
 

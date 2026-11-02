@@ -49,6 +49,13 @@ namespace Unison.WhatsAppClient.Helpers
                 return false;
             }
 
+            // Live / offline-replay chat summaries — not FULL_HISTORY payload. Counting
+            // them resets stagnant and can escalate a silent lot into loud idle-continue.
+            if (reason.StartsWith("offline-summary:", StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
             return true;
         }
     }

@@ -94,9 +94,9 @@ namespace Unison.Core.ViewModels
                 {
                     if (_groups != null)
                     {
-                        await _groups.RefreshGroupSendPermissionsAsync(
+                        await _groups.EnsureFullRosterAsync(
                                 _source.JID,
-                                includeRoster: true,
+                                "members",
                                 GetMembersRosterToken())
                             .ConfigureAwait(false);
                     }
@@ -139,9 +139,9 @@ namespace Unison.Core.ViewModels
 
             try
             {
-                await _groups.RefreshGroupSendPermissionsAsync(
+                await _groups.EnsureFullRosterAsync(
                         _source.JID,
-                        includeRoster: true,
+                        "members",
                         GetMembersRosterToken())
                     .ConfigureAwait(false);
             }
@@ -713,7 +713,13 @@ namespace Unison.Core.ViewModels
                 OnPropertyChanged(nameof(DisplayName));
                 OnPropertyChanged(nameof(PhoneValue));
                 OnPropertyChanged(nameof(HasPhone));
+                OnPropertyChanged(nameof(BlockContactLabel));
                 RaiseCanAddToAddressBook();
+            }
+            else if (e.PropertyName == nameof(ChatItem.LeftGroup))
+            {
+                OnPropertyChanged(nameof(CanLeaveGroup));
+                (LeaveGroupCommand as RelayCommand)?.RaiseCanExecuteChanged();
             }
             else if (e.PropertyName == nameof(ChatItem.AvatarUrl) ||
                      e.PropertyName == nameof(ChatItem.AvatarHighUrl))

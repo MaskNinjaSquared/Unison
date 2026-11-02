@@ -17,23 +17,6 @@ namespace Unison.Uwp.Services.WhatsApp
     /// </summary>
     public partial class WhatsAppService : IBoundMutationGate
     {
-        void IIncomingMessageEnqueueHost.EnqueueRecoveredDecryptedMessage(
-            string fromJid,
-            string participant,
-            string messageId,
-            Message message,
-            DateTime timestampUtc,
-            bool isFromMe,
-            string pushName) =>
-            _incomingPump.EnqueueRecoveredDecryptedMessage(
-                fromJid,
-                participant,
-                messageId,
-                message,
-                timestampUtc,
-                isFromMe,
-                pushName);
-
         bool IPlaceholderResendSocket.IsHandshakeComplete =>
             _socket != null && _socket.IsHandshakeComplete;
 

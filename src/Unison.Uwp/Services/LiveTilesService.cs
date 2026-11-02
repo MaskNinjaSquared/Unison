@@ -5,6 +5,8 @@ using Windows.UI.Notifications;
 using Unison.Core.Constants;
 using Unison.Core.Contracts;
 using Unison.Core.Helpers;
+using Unison.Core.Helpers.Notifications;
+using Unison.Core.Models;
 using Unison.Uwp.Helpers;
 
 namespace Unison.Uwp.Services
@@ -65,9 +67,24 @@ namespace Unison.Uwp.Services
             string title,
             string preview,
             string chatJid,
-            int totalUnread)
+            int totalUnread,
+            bool isGroup = false,
+            bool isFavorite = false,
+            bool isChannel = false)
         {
             if (!IsLiveTilesSettingEnabled())
+            {
+                return;
+            }
+
+            LockScreenNotificationScope scope = ReadLockScreenScope();
+            bool isDirect = !isGroup && !isChannel;
+            if (!NotificationAudience.MatchesLockScreen(
+                    scope,
+                    isGroup,
+                    isDirect,
+                    isFavorite,
+                    isChannel))
             {
                 return;
             }
@@ -140,6 +157,22 @@ namespace Unison.Uwp.Services
             }
 
             return Task.CompletedTask;
+        }
+
+        private static LockScreenNotificationScope ReadLockScreenScope()
+        {
+            try
+            {
+                int raw = LocalSettingsAccess.Current.Get<int>(
+                    LocalSettingsConstants.LockScreenNotificationScope);
+                return Enum.IsDefined(typeof(LockScreenNotificationScope), raw)
+                    ? (LockScreenNotificationScope)raw
+                    : LockScreenNotificationScope.All;
+            }
+            catch
+            {
+                return LockScreenNotificationScope.All;
+            }
         }
 
         private static string BuildLaunchArgument(string chatJid)

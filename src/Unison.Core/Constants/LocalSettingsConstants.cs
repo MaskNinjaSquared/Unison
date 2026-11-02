@@ -26,6 +26,21 @@ namespace Unison.Core.Constants
         /// <summary>Toast notifications for incoming messages (foreground).</summary>
         public const string NotificationsEnabled = "NotificationsEnabled";
 
+        /// <summary>Toast (and missed Live Tile) for WhatsApp call alerts on the companion.</summary>
+        public const string CallNotificationsEnabled = "CallNotificationsEnabled";
+
+        /// <summary>
+        /// Live Tile / lock-screen audience (<see cref="LockScreenNotificationScope"/> as int).
+        /// Default <see cref="LockScreenNotificationScope.All"/>.
+        /// </summary>
+        public const string LockScreenNotificationScope = "LockScreenNotificationScope";
+
+        /// <summary>
+        /// Toast allow-list as semicolon tokens: groups;direct;favorites.
+        /// Default all three (see <see cref="Helpers.Notifications.NotificationFilterCodec.DefaultSerialized"/>).
+        /// </summary>
+        public const string NotificationFilter = "NotificationFilter";
+
         /// <summary>Chat-list line that reports synchronization. On by default.</summary>
         public const string ShowSyncStatus = "ShowSyncStatus";
 
@@ -119,6 +134,11 @@ namespace Unison.Core.Constants
         /// <summary>WinRT annotation list id on that account (Unigram x_annotation_list).</summary>
         public const string PublishWindowsAnnotationListId = "PublishWindowsAnnotationListId";
 
+        /// <summary>
+        /// Recently used sticker-box emoji glyphs (unit-separated string). Empty by default.
+        /// </summary>
+        public const string RecentEmojis = "RecentEmojis";
+
         public static IReadOnlyDictionary<string, object> Defaults { get; } =
             new Dictionary<string, object>
             {
@@ -132,6 +152,9 @@ namespace Unison.Core.Constants
                 { ReconnectToastActive, false },
                 { SuppressReconnectToast, false },
                 { NotificationsEnabled, true },
+                { CallNotificationsEnabled, true },
+                { LockScreenNotificationScope, (int)Models.LockScreenNotificationScope.All },
+                { NotificationFilter, "groups;direct;favorites" },
                 { ShowSyncStatus, true },
                 { MessageNotificationSound, (int)NotificationSound.SystemDefault },
                 { GroupNotificationSound, (int)NotificationSound.SystemDefault },
@@ -150,7 +173,8 @@ namespace Unison.Core.Constants
                 { PublishContactsToWindowsEnabled, false },
                 { PublishWindowsUserDataAccountId, "" },
                 { PublishWindowsContactListId, "" },
-                { PublishWindowsAnnotationListId, "" }
+                { PublishWindowsAnnotationListId, "" },
+                { RecentEmojis, "" }
             };
     }
 }

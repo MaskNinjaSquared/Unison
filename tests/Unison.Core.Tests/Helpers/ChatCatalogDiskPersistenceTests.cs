@@ -99,6 +99,8 @@ namespace Unison.Core.Tests.Helpers
 
             public bool IsLoadingPersistedChats => false;
             public bool IsInitialSyncSafeMode => false;
+
+            public bool IsHistoryCatchUpQuiet => false;
             public bool IsAwaitingFirstHistorySync => false;
             public bool PreferFrugalSyncBudget => false;
             public int InitialSyncProcessedConversations => 0;

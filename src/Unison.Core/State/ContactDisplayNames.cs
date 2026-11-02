@@ -122,10 +122,26 @@ namespace Unison.Core.State
                 WhatsAppName = _pushNames.FindBest(canonical, normalized),
                 CanonicalJid = canonical,
                 IsGroup = isGroup,
-                // Strip only: chat titles / favourites / bubbles must stay unmarked so
-                // SemanticZoom letter keys stay A–Z (not a "~" bucket).
-                WithContactIndicator = string.Equals(context, "strip", StringComparison.OrdinalIgnoreCase)
+                // Strip + toast: chat titles / favourites / bubbles stay unmarked so
+                // SemanticZoom letter keys stay A–Z (not a "~" bucket). Toasts show "~ Name".
+                WithContactIndicator = WantsUnsavedContactMark(context)
             });
+        }
+
+        private static bool WantsUnsavedContactMark(string context)
+        {
+            if (string.IsNullOrEmpty(context))
+            {
+                return false;
+            }
+
+            if (string.Equals(context, "strip", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            // toast-chat / toast-sender / toast-*
+            return context.StartsWith("toast", StringComparison.OrdinalIgnoreCase);
         }
 
         /// <summary>The first usable push name under any of the addresses or their aliases.</summary>

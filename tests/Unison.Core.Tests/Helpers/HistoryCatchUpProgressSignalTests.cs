@@ -48,11 +48,19 @@ namespace Unison.Core.Tests.Helpers
         [InlineData("sqlite-applied:Full:conversations=12")]
         [InlineData("sqlite-started:RECENT:conversations=3")]
         [InlineData("offline-drain:8")]
-        [InlineData("offline-summary:flush:chats=2")]
         public void Real_payload_notes_count(string reason)
         {
             Assert.True(HistoryCatchUpProgressSignal.CountsAsLotProgress(reason));
             Assert.False(HistoryCatchUpProgressSignal.IsLocalTipNoise(reason));
+        }
+
+        [Theory]
+        [InlineData("offline-summary:flush:chats=2")]
+        [InlineData("offline-summary:replay-progressive:chats=1")]
+        [InlineData("OFFLINE-SUMMARY:replay-progressive:chats=7")]
+        public void Offline_replay_summary_does_not_count(string reason)
+        {
+            Assert.False(HistoryCatchUpProgressSignal.CountsAsLotProgress(reason));
         }
     }
 }

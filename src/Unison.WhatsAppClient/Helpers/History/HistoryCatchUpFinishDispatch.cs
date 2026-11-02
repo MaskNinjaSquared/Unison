@@ -25,10 +25,14 @@ namespace Unison.WhatsAppClient.Helpers
             HistoryCatchUpProgress last = host.FinishCatchUpProgress();
             host.WriteCatchUpFinishJournal(reason, last);
             host.EndHistoryCatchUpBanner(reason ?? "catch-up-finish");
+            // Every finish path (including early None): kick silent when tip still
+            // stale, or disarm when fresh. Silent-lot-idle is a no-op kick.
+            host.NotifySilentChainAfterLoudCatchUpFinish(reason ?? string.Empty);
 
             HistoryCatchUpFinishNext next = HistoryCatchUpFinishDecision.Decide(
                 releaseEnrichment,
-                host.IsFirstSyncListHoldInProgress);
+                host.IsFirstSyncListHoldInProgress,
+                host.IsListAwaitingFirstHistorySync);
             if (next == HistoryCatchUpFinishNext.None)
             {
                 return;
@@ -46,6 +50,14 @@ namespace Unison.WhatsAppClient.Helpers
                     processed,
                     Math.Max(processed, 1));
                 return;
+            }
+
+            if (next == HistoryCatchUpFinishNext.ReleaseListThenEnrichment)
+            {
+                host.RequestFirstSyncListReleaseAfterNames(
+                    "catch-up-finish-no-history:" + (reason ?? string.Empty),
+                    0,
+                    1);
             }
 
             host.ScheduleDeferredAvatars(

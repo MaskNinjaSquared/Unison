@@ -35,6 +35,12 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
 
         public bool CanSendPin => _sessions.Socket != null;
 
+        public bool CanSendDeleteForMe => _sessions.Socket != null;
+
+        public bool CanSendDeleteForEveryone => _sessions.Socket != null;
+
+        public bool CanSendReaction => _sessions.Socket != null;
+
         public Task PresenceSubscribeAsync(string jid)
         {
             IWhatsAppSocket socket = _sessions.Socket;
@@ -59,6 +65,49 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
             }
 
             return socket.SendPinInChatMessageAsync(chatJid, targetKey, pin, durationSeconds);
+        }
+
+        public Task DeleteMessageForMeAsync(
+            string chatJid,
+            string messageId,
+            bool fromMe,
+            long messageTimestampUnixSeconds,
+            bool deleteMedia)
+        {
+            IWhatsAppSocket socket = _sessions.Socket;
+            if (socket == null)
+            {
+                return Task.CompletedTask;
+            }
+
+            return socket.DeleteMessageForMeAsync(
+                chatJid,
+                messageId,
+                fromMe,
+                messageTimestampUnixSeconds,
+                deleteMedia);
+        }
+
+        public Task SendDeleteForEveryoneAsync(string chatJid, MessageKey targetKey)
+        {
+            IWhatsAppSocket socket = _sessions.Socket;
+            if (socket == null)
+            {
+                throw new InvalidOperationException("Not connected: the message revoke was not sent.");
+            }
+
+            return socket.SendDeleteMessageAsync(chatJid, targetKey);
+        }
+
+        public Task SendReactionMessageAsync(string chatJid, MessageKey targetKey, string emoji)
+        {
+            IWhatsAppSocket socket = _sessions.Socket;
+            if (socket == null)
+            {
+                throw new InvalidOperationException("Not connected: the reaction was not sent.");
+            }
+
+            return socket.SendReactionMessageAsync(chatJid, targetKey, emoji);
         }
     }
 }

@@ -6,6 +6,7 @@ using Windows.UI.Notifications;
 using Unison.Background;
 using Unison.Core.Constants;
 using Unison.Core.Contracts;
+using Unison.Core.Helpers.Notifications;
 using Unison.Core.Models;
 using Unison.Uwp.Helpers;
 
@@ -13,7 +14,7 @@ namespace Unison.Uwp.Services
 {
     /// <summary>
     /// Native Windows 10 toast and badge integration.
-    /// Respects LocalSettingsConstants.NotificationsEnabled.
+    /// Respects LocalSettingsConstants.NotificationsEnabled and NotificationFilter.
     /// Live Tile updates go through <see cref="ILiveTilesService"/>.
     /// </summary>
     public sealed class NotificationService : INotificationService
@@ -27,6 +28,7 @@ namespace Unison.Uwp.Services
         private bool _initialized;
         private ILiveTilesService _liveTiles;
         private IShortcutService _shortcuts;
+        private IDesktopTrayHost _desktopTray;
 
         private NotificationService()
         {
@@ -40,6 +42,12 @@ namespace Unison.Uwp.Services
         public void AttachShortcuts(IShortcutService shortcuts)
         {
             _shortcuts = shortcuts;
+        }
+
+        /// <summary>Desktop tray tooltip follows the same total as the app badge.</summary>
+        public void AttachDesktopTray(IDesktopTrayHost tray)
+        {
+            _desktopTray = tray;
         }
 
         private ILiveTilesService LiveTiles =>
@@ -56,6 +64,36 @@ namespace Unison.Uwp.Services
             catch
             {
                 return true;
+            }
+        }
+
+        private static bool IsCallNotificationsSettingEnabled()
+        {
+            try
+            {
+                return LocalSettingsAccess.Current.Get<bool>(LocalSettingsConstants.CallNotificationsEnabled);
+            }
+            catch
+            {
+                return true;
+            }
+        }
+
+        private static HashSet<string> ReadToastFilter()
+        {
+            try
+            {
+                string raw = LocalSettingsAccess.Current.Get<string>(LocalSettingsConstants.NotificationFilter);
+                if (string.IsNullOrWhiteSpace(raw))
+                {
+                    raw = NotificationFilterCodec.DefaultSerialized;
+                }
+
+                return NotificationFilterCodec.Parse(raw);
+            }
+            catch
+            {
+                return NotificationFilterCodec.Parse(NotificationFilterCodec.DefaultSerialized);
             }
         }
 
@@ -83,7 +121,10 @@ namespace Unison.Uwp.Services
             bool suppressToast,
             int totalUnread,
             string avatarUrl = null,
-            int chatUnread = -1)
+            int chatUnread = -1,
+            bool isCommunityAnnounce = false,
+            bool isFavorite = false,
+            bool isChannel = false)
         {
             Initialize();
 
@@ -94,16 +135,29 @@ namespace Unison.Uwp.Services
                     senderName,
                     preview,
                     isGroup,
-                    avatarUrl);
+                    avatarUrl,
+                    isCommunityAnnounce);
+
+            bool isDirect = !isGroup && !isChannel;
+            bool toastAllowed = NotificationAudience.MatchesToastFilter(
+                ReadToastFilter(),
+                isGroup,
+                isDirect,
+                isFavorite,
+                isChannel);
 
             bool notificationsEnabled = IsNotificationsSettingEnabled();
             bool toastShown = false;
             string toastError = string.Empty;
-            if (notificationsEnabled && !isMuted && !suppressToast)
+            if (notificationsEnabled && !isMuted && !suppressToast && toastAllowed)
             {
                 toastShown = BackgroundToastPresenter.ShowRealMessage(
                     content,
                     out toastError);
+            }
+            else if (!toastAllowed && !suppressToast && !isMuted)
+            {
+                toastError = "filtered";
             }
 
             RuntimeDiagnosticsService.Instance.Write(
@@ -113,7 +167,10 @@ namespace Unison.Uwp.Services
                 "; enabled=" + notificationsEnabled +
                 "; muted=" + isMuted +
                 "; suppressed=" + suppressToast +
+                "; toastAllowed=" + toastAllowed +
                 "; group=" + isGroup +
+                "; favorite=" + isFavorite +
+                "; channel=" + isChannel +
                 "; hasAvatar=" + (!string.IsNullOrWhiteSpace(avatarUrl)) +
                 "; previewLength=" + content.Preview.Length +
                 "; error=" + toastError);
@@ -122,9 +179,13 @@ namespace Unison.Uwp.Services
                 content.Title,
                 content.Preview,
                 chatJid,
-                totalUnread);
+                totalUnread,
+                isGroup,
+                isFavorite,
+                isChannel);
 
-            UpdateBadge(notificationsEnabled ? totalUnread : 0);
+            // Badge is stamped from RefreshUnreadState (toast-filter aware), not the
+            // unfiltered totalUnread snapshot on this path.
 
             if (chatUnread >= 0 && Shortcuts != null)
             {
@@ -145,6 +206,48 @@ namespace Unison.Uwp.Services
                 return;
             }
 
+            ShowToastCore(title, body);
+        }
+
+        public void NotifyCallAlert(
+            string title,
+            string body,
+            string chatJid = null,
+            bool updateLiveTile = false,
+            bool isFavorite = false)
+        {
+            Initialize();
+
+            bool master = IsNotificationsSettingEnabled();
+            bool calls = IsCallNotificationsSettingEnabled();
+            if (master && calls)
+            {
+                ShowToastCore(title, body);
+            }
+
+            if (updateLiveTile && calls && !string.IsNullOrWhiteSpace(chatJid))
+            {
+                LiveTiles.UpdateFromMessage(
+                    title ?? string.Empty,
+                    body ?? string.Empty,
+                    chatJid,
+                    totalUnread: 0,
+                    isGroup: false,
+                    isFavorite: isFavorite,
+                    isChannel: false);
+            }
+
+            RuntimeDiagnosticsService.Instance.Write(
+                "notifications",
+                "call-alert",
+                "master=" + master +
+                "; calls=" + calls +
+                "; tile=" + updateLiveTile +
+                "; jid=" + (chatJid ?? string.Empty));
+        }
+
+        private static void ShowToastCore(string title, string body)
+        {
             try
             {
                 string safeTitle = EscapeXml(title ?? string.Empty);
@@ -186,10 +289,11 @@ namespace Unison.Uwp.Services
         public void RefreshUnreadState(IEnumerable<ChatItem> chats)
         {
             int totalUnread = 0;
+            HashSet<string> filter = ReadToastFilter();
             if (chats != null)
             {
                 totalUnread = chats
-                    .Where(c => c != null)
+                    .Where(c => c != null && NotificationAudience.MatchesToastFilter(filter, c))
                     .Sum(c => Math.Max(0, c.UnreadCount));
             }
 
@@ -203,6 +307,7 @@ namespace Unison.Uwp.Services
 
         public void UpdateBadge(int totalUnread)
         {
+            _desktopTray?.PublishUnread(totalUnread);
             try
             {
                 var updater = BadgeUpdateManager.CreateBadgeUpdaterForApplication();

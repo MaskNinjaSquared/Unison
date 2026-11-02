@@ -26,6 +26,11 @@ namespace Unison.Core.ViewModels
                 return;
             }
 
+            // Capture before the badge clears so ApplyMessageRunLayout can place the unread chip.
+            _sessionUnreadDividerCount = chat.UnreadCount > 0 ? chat.UnreadCount : 0;
+            _sessionUnreadIsChannel = chat.IsChannel;
+            _inboundHistoryReadCommitted = false;
+
             try
             {
                 await _chatService.MarkReadAsync(chat);
@@ -36,7 +41,23 @@ namespace Unison.Core.ViewModels
             }
         }
 
+        /// <summary>
+        /// Full bind used for same-chat rebind (no pane flip). New opens use
+        /// <see cref="BindActiveChatForOpen"/> then <see cref="EnrichActiveChatAfterPaint"/> after
+        /// NarrowDetail + ProgressBar have painted.
+        /// </summary>
         public void SyncActiveChat(ChatItem chat)
+        {
+            bool chatChanged = BindActiveChatForOpen(chat);
+            EnrichActiveChatAfterPaint(chat, chatChanged);
+        }
+
+        /// <summary>
+        /// Lightweight open bind: ActiveChat + composer flags only. Keeps list→detail navigation
+        /// off the roster/avatar cold path that used to hang Mobile before NarrowDetail painted.
+        /// </summary>
+        /// <returns>True when the conversation JID changed (or cleared).</returns>
+        public bool BindActiveChatForOpen(ChatItem chat)
         {
             string previousJid = ActiveChat?.JID;
             string nextJid = chat?.JID;
@@ -46,7 +67,6 @@ namespace Unison.Core.ViewModels
             if (chat != null && _chatStore != null)
             {
                 _chatStore.ApplyTo(chat);
-                _ = SyncLocalStateAsync(chat);
             }
 
             if (chatChanged || chat == null)
@@ -54,11 +74,8 @@ namespace Unison.Core.ViewModels
                 CloseChatDetailInfo();
                 ResetTimelinePaging();
                 _groupSubjectRefreshJid = null;
+                _mentionRosterEnsureJid = null;
             }
-
-            // EnsureFresh: 2nd open of the same group reuses the warm 1:1 index / roster maps.
-            // Full Rebuild on every SyncActiveChat was re-paying the cold DirectChatIndex walk.
-            RebuildParticipantLookup();
 
             RaisePinToStartCanExecuteChanged();
             RaiseMuteCommandsCanExecuteChanged();
@@ -68,13 +85,52 @@ namespace Unison.Core.ViewModels
             OnPropertyChanged(nameof(ShowMuteDurationOptions));
             OnPropertyChanged(nameof(ShowUnmuteOption));
             OnPropertyChanged(nameof(IsGroupLockedForMessages));
+            OnPropertyChanged(nameof(IsNoLongerGroupParticipant));
+            OnPropertyChanged(nameof(ShowsAnnounceOnlyComposerLock));
             RaiseCanAddToAddressBook();
+
+            if (chat == null)
+            {
+                MessageText = string.Empty;
+                StopPresenceWatch();
+                _ = CancelRecordingCoreAsync();
+            }
+
+            CloseStickerBox();
+            return chatChanged;
+        }
+
+        /// <summary>
+        /// Roster index / group strip / avatar revalidate — only after the host has flipped to
+        /// NarrowDetail and <see cref="BeginLoadingMessages"/> has shown the ProgressBar.
+        /// </summary>
+        public void EnrichActiveChatAfterPaint(ChatItem chat, bool chatChanged)
+        {
+            if (chat == null)
+            {
+                return;
+            }
+
+            if (!ReferenceEquals(ActiveChat, chat) &&
+                !string.Equals(ActiveChat?.JID, chat.JID, StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
+            if (_chatStore != null)
+            {
+                _ = SyncLocalStateAsync(chat);
+            }
+
+            // EnsureFresh: 2nd open of the same group reuses the warm 1:1 index / roster maps.
+            RebuildParticipantLookup();
+
             if (LooksLikeGroupChat(chat))
             {
-                // Strip after Yield only. Subject/meta IQ runs once from BeginLoadingMessages so
-                // a brand-new group still gets a name while the timeline loads (socket often
-                // not ready yet on the Prepare turn).
+                // Strip after Yield only. Subject/meta IQ once here (not on ProgressBar arm) so
+                // a brand-new group still gets a name while the timeline loads.
                 _ = DeferGroupOpenEnrichmentAsync(chat.JID);
+                TryRefreshGroupSubjectOnce();
             }
 
             bool isMobile = _systemInfo != null && _systemInfo.IsMobile();
@@ -84,13 +140,6 @@ namespace Unison.Core.ViewModels
                 // Force past the 7-day interval: Mobile revalidates on every open; Apply skips
                 // the CDN download when picture id/url matches what we already cached.
                 _contactService.RequestAvatarRefresh(chat, force: true);
-            }
-
-            if (chat == null)
-            {
-                MessageText = string.Empty;
-                StopPresenceWatch();
-                _ = CancelRecordingCoreAsync();
             }
         }
 
@@ -119,16 +168,27 @@ namespace Unison.Core.ViewModels
 
             if (string.IsNullOrEmpty(e.PropertyName) ||
                 e.PropertyName == nameof(ChatItem.IsGroupLockedForMessages) ||
+                e.PropertyName == nameof(ChatItem.IsNoLongerGroupParticipant) ||
+                e.PropertyName == nameof(ChatItem.LeftGroup) ||
+                e.PropertyName == nameof(ChatItem.IsComposerLocked) ||
+                e.PropertyName == nameof(ChatItem.IsChannel) ||
+                e.PropertyName == nameof(ChatItem.Kind) ||
                 e.PropertyName == nameof(ChatItem.IsAnnounceOnly) ||
                 e.PropertyName == nameof(ChatItem.MyGroupRole) ||
                 e.PropertyName == nameof(ChatItem.IsGroup) ||
                 e.PropertyName == nameof(ChatItem.IsGroupAdmin))
             {
                 OnPropertyChanged(nameof(IsGroupLockedForMessages));
+                OnPropertyChanged(nameof(IsNoLongerGroupParticipant));
+                OnPropertyChanged(nameof(ShowsAnnounceOnlyComposerLock));
+                OnPropertyChanged(nameof(IsComposerLocked));
+                OnPropertyChanged(nameof(IsChannelReadOnly));
                 RaiseComposerCommandsChanged();
-                if (ActiveChat == null || ActiveChat.IsGroupLockedForMessages)
+                RefreshTimelineDeleteContext();
+                if (ActiveChat == null || ActiveChat.IsComposerLocked)
                 {
                     CloseMentionMenu();
+                    CloseStickerBox();
                 }
             }
 
@@ -136,6 +196,19 @@ namespace Unison.Core.ViewModels
             {
                 UpdateMentionQuery(_messageText, _mentionTokenCaret);
             }
+        }
+
+        /// <summary>Propagates group-admin changes onto open bubbles and the action bar.</summary>
+        private void RefreshTimelineDeleteContext()
+        {
+            bool isAdmin = ActiveChat != null && ActiveChat.IsGroupAdmin;
+            bool isGroup = ActiveChat != null && ActiveChat.IsGroup;
+            for (int i = 0; i < Messages.Count; i++)
+            {
+                Messages[i]?.SetDeleteChatContext(isAdmin);
+            }
+
+            _messageActions.UpdateChatContext(isGroup, isAdmin);
         }
 
         /// <summary>
@@ -162,22 +235,15 @@ namespace Unison.Core.ViewModels
         }
 
         /// <summary>
-        /// One w:g2 refresh per open (flags + subject). Apply still waits on the timeline Hold.
-        /// Skips when the row already has a real subject so warm opens stay quiet.
+        /// One w:g2 flags-only refresh per open (MyRole / announce / subject). Roster stays off —
+        /// Members pivot loads that on demand. Always runs once even when the subject is already
+        /// known so <see cref="ChatItem.IsGroupAdmin"/> is not stale from listing skips.
         /// </summary>
         private void TryRefreshGroupSubjectOnce()
         {
             ChatItem chat = ActiveChat;
             if (!LooksLikeGroupChat(chat) || string.IsNullOrWhiteSpace(chat.JID))
             {
-                return;
-            }
-
-            if (!NeedsGroupSubjectRefresh(chat))
-            {
-                System.Diagnostics.Debug.WriteLine(
-                    "[ChatDetailViewModel] Group subject refresh skipped (already named); jid=" +
-                    chat.JID);
                 return;
             }
 
@@ -189,18 +255,11 @@ namespace Unison.Core.ViewModels
 
             _groupSubjectRefreshJid = jid;
             System.Diagnostics.Debug.WriteLine(
-                "[ChatDetailViewModel] Group subject refresh once during timeline load; jid=" + jid);
+                "[ChatDetailViewModel] Group send-permissions refresh once during timeline load; jid=" +
+                jid +
+                "; subjectPlaceholder=" +
+                GroupIdPlaceholder.IsIdPlaceholder(chat.Name, chat.JID));
             _ = RefreshGroupSendPermissionsSafeAsync(jid);
-        }
-
-        private static bool NeedsGroupSubjectRefresh(ChatItem chat)
-        {
-            if (chat == null)
-            {
-                return false;
-            }
-
-            return GroupIdPlaceholder.IsIdPlaceholder(chat.Name, chat.JID);
         }
 
         private async Task RefreshGroupSendPermissionsSafeAsync(string groupJid)
@@ -349,9 +408,131 @@ namespace Unison.Core.ViewModels
             (MuteFor1WeekCommand as RelayCommand)?.RaiseCanExecuteChanged();
             (MuteForeverCommand as RelayCommand)?.RaiseCanExecuteChanged();
             (UnmuteLocalCommand as RelayCommand)?.RaiseCanExecuteChanged();
+            (ExportChatCommand as RelayCommand)?.RaiseCanExecuteChanged();
         }
 
-        /// <summary>
-        /// Finds a loaded bubble VM by protocol message id.
+        private bool CanExportChat()
+        {
+            return ActiveChat != null &&
+                   !string.IsNullOrWhiteSpace(ActiveChat.JID) &&
+                   _chatExport != null &&
+                   _dialogs != null;
+        }
+
+        private async Task ExportChatAsync()
+        {
+            ChatItem chat = ActiveChat;
+            if (chat == null || _chatExport == null || _dialogs == null)
+            {
+                return;
+            }
+
+            bool proceed = await _dialogs.ShowChatExportOptionsAsync().ConfigureAwait(true);
+            if (!proceed || ActiveChat == null ||
+                !string.Equals(ActiveChat.JID, chat.JID, StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
+            string selfName = null;
+            try
+            {
+                Profile profile = _profile?.GetCurrentProfile();
+                selfName = profile?.Name;
+                if (string.IsNullOrWhiteSpace(selfName))
+                {
+                    selfName = profile?.Phone;
+                }
+            }
+            catch
+            {
+            }
+
+            string displayName = chat.GetNameResolved(_strings) ?? chat.Name ?? chat.JID;
+            string outputDir = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "UnisonChatExport");
+            ChatExportResult result;
+            try
+            {
+                ChatExportRequest request = new ChatExportRequest
+                {
+                    ChatJid = chat.JID,
+                    ChatDisplayName = displayName,
+                    SelfDisplayName = selfName,
+                    IncludeMedia = false,
+                    OutputDirectory = outputDir
+                };
+                result = await Task.Run(
+                    () => _chatExport.HandleAsync(request)).ConfigureAwait(true);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine("[ChatDetailViewModel] ExportChat failed: " + ex.Message);
+                await _dialogs.ShowMessageAsync(
+                    _strings?.Get("ChatExport_FailedTitle", "Export failed") ?? "Export failed",
+                    ex.Message,
+                    _strings?.Get("Common_OK", "OK") ?? "OK").ConfigureAwait(true);
+                return;
+            }
+
+            if (result == null || string.IsNullOrWhiteSpace(result.ZipPath))
+            {
+                return;
+            }
+
+            string info = FormatExportInfo(result);
+            ChatExportReadyChoice choice = await _dialogs
+                .ShowChatExportReadyAsync(result.FileName, info)
+                .ConfigureAwait(true);
+
+            if (choice == ChatExportReadyChoice.Share && _share != null)
+            {
+                try
+                {
+                    await _share.ShareLocalFileAsync(result.FileName, result.ZipPath).ConfigureAwait(true);
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine("[ChatDetailViewModel] Export share failed: " + ex.Message);
+                }
+            }
+            else if (choice == ChatExportReadyChoice.Save && _filePicker != null)
+            {
+                try
+                {
+                    await _filePicker.PickSaveLocalFileAsync(
+                        result.ZipPath,
+                        result.FileName,
+                        "application/zip").ConfigureAwait(true);
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine("[ChatDetailViewModel] Export save failed: " + ex.Message);
+                }
+            }
+        }
+
+        private static string FormatExportInfo(ChatExportResult result)
+        {
+            if (result == null)
+            {
+                return string.Empty;
+            }
+
+            string size;
+            if (result.ByteLength >= 1024 * 1024)
+            {
+                size = (result.ByteLength / (1024.0 * 1024.0)).ToString("0.0") + " MB";
+            }
+            else if (result.ByteLength >= 1024)
+            {
+                size = (result.ByteLength / 1024.0).ToString("0") + " KB";
+            }
+            else
+            {
+                size = result.ByteLength + " B";
+            }
+
+            return result.MessageCount + " messages · " + size;
+        }
     }
 }

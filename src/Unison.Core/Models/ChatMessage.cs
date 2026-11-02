@@ -454,6 +454,9 @@ namespace Unison.Core.Models
         [JsonIgnore]
         public bool IsGroupJoin => _kind == ChatMessageKind.GroupJoin;
 
+        /// <summary>Call chrome line (missed / completed) — same system-line visual as GroupJoin.</summary>
+        public bool IsCallEvent => _kind == ChatMessageKind.CallEvent;
+
         private string _groupJoinJid;
         /// <summary>JID of the member who joined (protocol participant jid).</summary>
         public string GroupJoinJid
@@ -771,8 +774,32 @@ namespace Unison.Core.Models
                 _documentFileLengthBytes = value;
                 OnPropertyChanged();
                 OnPropertyChanged(nameof(HasDocumentFileSize));
+                if (value > 0)
+                {
+                    MediaFileLengthBytes = value;
+                }
             }
         }
+
+        private long _mediaFileLengthBytes;
+        /// <summary>
+        /// Protocol <c>fileLength</c> in bytes, available before the file is downloaded.
+        /// Zero when the message did not carry a size.
+        /// </summary>
+        public long MediaFileLengthBytes
+        {
+            get => _mediaFileLengthBytes;
+            set
+            {
+                if (_mediaFileLengthBytes == value) return;
+                _mediaFileLengthBytes = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(HasMediaFileSize));
+            }
+        }
+
+        [JsonIgnore]
+        public bool HasMediaFileSize => _mediaFileLengthBytes > 0;
 
         [JsonIgnore]
         public bool HasDocumentFileSize => DocumentFileLengthBytes > 0;
@@ -1030,6 +1057,55 @@ namespace Unison.Core.Models
             {
                 if (_dateSeparatorText == value) return;
                 _dateSeparatorText = value;
+                OnPropertyChanged();
+            }
+        }
+
+        private bool? _isRead;
+        /// <summary>
+        /// Local open-chat read flag for inbound bubbles. Null = legacy / ignore (no marker).
+        /// False until the chat is opened; then flipped to true. Outgoing stays null/true.
+        /// </summary>
+        public bool? IsRead
+        {
+            get => _isRead;
+            set
+            {
+                if (_isRead == value) return;
+                _isRead = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(ShowUnreadMarker));
+            }
+        }
+
+        /// <summary>True when this inbound bubble is known unread (<see cref="IsRead"/> == false).</summary>
+        [JsonIgnore]
+        public bool ShowUnreadMarker => IsRead == false && !IsFromMe;
+
+        private bool _isUnreadDivider;
+        /// <summary>First unread inbound in the open window — “N unread …” chip above the row.</summary>
+        [JsonIgnore]
+        public bool IsUnreadDivider
+        {
+            get => _isUnreadDivider;
+            set
+            {
+                if (_isUnreadDivider == value) return;
+                _isUnreadDivider = value;
+                OnPropertyChanged();
+            }
+        }
+
+        private string _unreadDividerText;
+        /// <summary>Layout-only unread chip label (not persisted).</summary>
+        [JsonIgnore]
+        public string UnreadDividerText
+        {
+            get => _unreadDividerText;
+            set
+            {
+                if (_unreadDividerText == value) return;
+                _unreadDividerText = value;
                 OnPropertyChanged();
             }
         }

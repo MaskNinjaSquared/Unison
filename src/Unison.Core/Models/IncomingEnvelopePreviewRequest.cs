@@ -19,6 +19,9 @@ namespace Unison.Core.Models
         /// <summary>False for a duplicate: tip refresh without adding to the badge.</summary>
         public bool CountUnread { get; set; }
 
+        /// <summary>True when this message @mentioned self or @all.</summary>
+        public bool HasCitation { get; set; }
+
         /// <summary>
         /// When offline, also mark the chat dirty on the pending persist queue
         /// (duplicate / alias paths). Fresh inserts skip this.

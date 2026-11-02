@@ -53,6 +53,88 @@
                   ItemContainerStyle="{StaticResource WhatsAppChatListItemStyle}"
                   SelectionMode="Single"
                   SelectionChanged="AuthorList_SelectionChanged">
+            <ListView.Header>
+                <StackPanel>
+                    <Button Command="{x:Bind ViewModel.NewStatusCommand}"
+                            HorizontalAlignment="Stretch"
+                            HorizontalContentAlignment="Stretch"
+                            Background="Transparent"
+                            BorderThickness="0"
+                            Padding="0"
+                            MinHeight="0"
+                            MinWidth="0">
+                        <Button.Template>
+                            <ControlTemplate TargetType="Button">
+                                <Border Background="{TemplateBinding Background}">
+                                    <ContentPresenter HorizontalAlignment="Stretch"
+                                                      VerticalAlignment="Stretch"/>
+                                </Border>
+                            </ControlTemplate>
+                        </Button.Template>
+                        <Grid Height="72" Padding="12,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="64"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+
+                            <!-- Same footprint as StatusListAvatarControl (56 outer / 48 photo). -->
+                            <Grid Width="56" Height="56"
+                                  HorizontalAlignment="Left"
+                                  VerticalAlignment="Center">
+                                <controls:ChatAvatarControl Width="48" Height="48"
+                                                            Size="48"
+                                                            HorizontalAlignment="Center"
+                                                            VerticalAlignment="Center"
+                                                            AvatarUrl="{x:Bind ViewModel.SelfAvatarUrl, Mode=OneWay}"/>
+                                <Grid Width="22" Height="22"
+                                      HorizontalAlignment="Right"
+                                      VerticalAlignment="Bottom"
+                                      Margin="0,0,0,0"
+                                      IsHitTestVisible="False">
+                                    <Ellipse Fill="{ThemeResource WhatsAppGreenFocusBrush}"/>
+                                    <FontIcon Glyph="&#xE710;"
+                                              FontFamily="{StaticResource IconFont}"
+                                              FontSize="11"
+                                              Foreground="White"
+                                              HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"/>
+                                </Grid>
+                            </Grid>
+
+                            <StackPanel Grid.Column="1"
+                                        VerticalAlignment="Center"
+                                        Margin="12,0,12,0">
+                                <TextBlock x:Uid="StatusList_MyStatus"
+                                           Text="My status"
+                                           FontSize="18"
+                                           FontFamily="{StaticResource MainFontSemibold}"
+                                           FontWeight="SemiBold"
+                                           Foreground="{ThemeResource WhatsAppTextHighBrush}"
+                                           TextWrapping="NoWrap"
+                                           TextTrimming="CharacterEllipsis"/>
+                                <TextBlock x:Uid="StatusList_MyStatusHint"
+                                           Text="Tap to update your status…"
+                                           FontSize="13"
+                                           Opacity="0.75"
+                                           Margin="0,2,0,0"
+                                           FontFamily="{StaticResource MainFont}"
+                                           Foreground="{ThemeResource WhatsAppTextMediumBrush}"
+                                           TextWrapping="NoWrap"
+                                           TextTrimming="CharacterEllipsis"/>
+                            </StackPanel>
+                        </Grid>
+                    </Button>
+
+                    <TextBlock x:Uid="StatusList_RecentHeader"
+                               Text="RECENT"
+                               Margin="16,12,16,8"
+                               FontSize="13"
+                               FontFamily="{StaticResource MainFontSemibold}"
+                               FontWeight="SemiBold"
+                               Foreground="{ThemeResource WhatsAppTextMediumBrush}"
+                               CharacterSpacing="40"/>
+                </StackPanel>
+            </ListView.Header>
             <ListView.ItemTemplate>
                 <DataTemplate x:DataType="models:StatusAuthorItem">
                     <Grid Height="72" Padding="12,0">

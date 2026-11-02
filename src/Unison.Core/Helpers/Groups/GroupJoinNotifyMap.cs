@@ -1,8 +1,9 @@
 // =============================================================================
 // GroupJoinNotifyMap
 //
-// Pure map from a group "add" participant list → GroupJoinNotifyRequest rows.
-// SocketBridge / session hosts call this; Core stays free of WaEvent types.
+// Pure map from a group participant list → GroupJoinNotifyRequest /
+// GroupLeaveNotifyRequest rows. SocketBridge / session hosts call this; Core
+// stays free of WaEvent types.
 // =============================================================================
 using System;
 using System.Collections.Generic;
@@ -23,7 +24,8 @@ namespace Unison.Core.Helpers.Groups
             // IDictionary does not implement IReadOnlyDictionary on this target.
             IDictionary<string, string> participantPhones,
             string notificationId,
-            DateTime timestampUtc)
+            DateTime timestampUtc,
+            string actorJid = null)
         {
             if (string.IsNullOrWhiteSpace(groupJid) || participants == null)
             {
@@ -49,6 +51,7 @@ namespace Unison.Core.Helpers.Groups
                     GroupJid = groupJid,
                     ParticipantJid = participant,
                     PhoneDigits = phone,
+                    ActorJid = actorJid,
                     NotificationId = notificationId,
                     TimestampUtc = timestampUtc
                 });
@@ -56,6 +59,50 @@ namespace Unison.Core.Helpers.Groups
 
             return requests.Count == 0
                 ? (IReadOnlyList<GroupJoinNotifyRequest>)Array.Empty<GroupJoinNotifyRequest>()
+                : requests;
+        }
+
+        /// <summary>Same map for leave/remove (<c>w:gp2</c> remove).</summary>
+        public static IReadOnlyList<GroupLeaveNotifyRequest> FromRemoveParticipants(
+            string groupJid,
+            IEnumerable<string> participants,
+            IDictionary<string, string> participantPhones,
+            string notificationId,
+            DateTime timestampUtc,
+            string actorJid = null)
+        {
+            if (string.IsNullOrWhiteSpace(groupJid) || participants == null)
+            {
+                return Array.Empty<GroupLeaveNotifyRequest>();
+            }
+
+            var requests = new List<GroupLeaveNotifyRequest>();
+            foreach (string participant in participants)
+            {
+                if (string.IsNullOrWhiteSpace(participant))
+                {
+                    continue;
+                }
+
+                string phone = null;
+                if (participantPhones != null)
+                {
+                    participantPhones.TryGetValue(participant, out phone);
+                }
+
+                requests.Add(new GroupLeaveNotifyRequest
+                {
+                    GroupJid = groupJid,
+                    ParticipantJid = participant,
+                    PhoneDigits = phone,
+                    ActorJid = actorJid,
+                    NotificationId = notificationId,
+                    TimestampUtc = timestampUtc
+                });
+            }
+
+            return requests.Count == 0
+                ? (IReadOnlyList<GroupLeaveNotifyRequest>)Array.Empty<GroupLeaveNotifyRequest>()
                 : requests;
         }
     }

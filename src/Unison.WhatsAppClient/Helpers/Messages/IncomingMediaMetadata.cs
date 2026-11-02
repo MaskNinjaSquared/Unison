@@ -95,6 +95,7 @@ namespace Unison.WhatsAppClient.Helpers
             target.AudioDirectPath = audio.DirectPath;
             target.AudioMediaKeyBase64 = ToBase64(audio.MediaKey);
             target.AudioFileEncSha256Base64 = ToBase64(audio.FileEncSha256);
+            ApplyFileLength(target, audio.HasFileLength, audio.FileLength);
             target.NotifyAudioDownloadStateChanged();
         }
 
@@ -140,6 +141,7 @@ namespace Unison.WhatsAppClient.Helpers
                 target.Caption = image.Caption;
             }
 
+            ApplyFileLength(target, image.HasFileLength, image.FileLength);
             target.NotifyImageDownloadStateChanged();
         }
 
@@ -157,6 +159,7 @@ namespace Unison.WhatsAppClient.Helpers
             target.ImageDirectPath = sticker.DirectPath;
             target.ImageMediaKeyBase64 = ToBase64(sticker.MediaKey);
             target.ImageFileEncSha256Base64 = ToBase64(sticker.FileEncSha256);
+            ApplyFileLength(target, sticker.HasFileLength, sticker.FileLength);
             target.NotifyImageDownloadStateChanged();
         }
 
@@ -180,7 +183,20 @@ namespace Unison.WhatsAppClient.Helpers
                 target.Caption = video.Caption;
             }
 
+            ApplyFileLength(target, video.HasFileLength, video.FileLength);
             target.NotifyVideoDownloadStateChanged();
+        }
+
+        private static void ApplyFileLength(ChatMessage target, bool hasLength, ulong length)
+        {
+            if (!hasLength || length == 0)
+            {
+                return;
+            }
+
+            target.MediaFileLengthBytes = length > (ulong)long.MaxValue
+                ? long.MaxValue
+                : (long)length;
         }
 
         private static string ToBase64(Google.Protobuf.ByteString bytes)

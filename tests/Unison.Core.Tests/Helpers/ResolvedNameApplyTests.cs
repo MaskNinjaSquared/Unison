@@ -110,6 +110,46 @@ namespace Unison.Core.Tests.Helpers
         }
 
         [Fact]
+        public void UnnamedMembersOnlyRelabelsNumbersAndNeverAsksForNamedOnes()
+        {
+            const string Bob = "5511999990002@s.whatsapp.net";
+            var asked = new List<string>();
+            string Track(string jid, string context)
+            {
+                if (context == "sender")
+                {
+                    asked.Add(jid);
+                    return "Ana";
+                }
+
+                return "Team";
+            }
+
+            var chat = new ChatItem
+            {
+                JID = Group,
+                Name = "Team",
+                GroupMembers = new List<GroupMember>
+                {
+                    new GroupMember { Jid = Ana, DisplayName = "+55 11 99999-0001" },
+                    new GroupMember { Jid = Bob, DisplayName = "Team" }
+                }
+            };
+
+            int changed = ResolvedNameApply.Apply(
+                new[] { chat },
+                Track,
+                Meaningful,
+                membersToo: true,
+                unnamedMembersOnly: true);
+
+            Assert.Equal(1, changed);
+            Assert.Equal("Ana", chat.GroupMembers[0].DisplayName);
+            Assert.Equal("Team", chat.GroupMembers[1].DisplayName);
+            Assert.Equal(new[] { Ana }, asked);
+        }
+
+        [Fact]
         public void BlankAndIdenticalMemberNamesAreSkipped()
         {
             var chat = new ChatItem

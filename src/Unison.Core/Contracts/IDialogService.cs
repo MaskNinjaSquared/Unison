@@ -15,6 +15,14 @@ namespace Unison.Core.Contracts
         Dismissed
     }
 
+    /// <summary>Result of the message-delete confirmation (for me / for everyone / cancel).</summary>
+    public enum MessageDeleteChoice
+    {
+        Cancel,
+        ForMe,
+        ForEveryone
+    }
+
     public interface IDialogService
     {
         Task<bool> ShowConfirmAsync(
@@ -22,6 +30,17 @@ namespace Unison.Core.Contracts
             string content,
             string primaryButtonText,
             string closeButtonText);
+
+        /// <summary>
+        /// WhatsApp-style delete prompt. When <paramref name="offerDeleteForEveryone"/> is false,
+        /// only "delete for me" and cancel are shown.
+        /// </summary>
+        Task<MessageDeleteChoice> ShowMessageDeleteAsync(
+            string content,
+            bool offerDeleteForEveryone,
+            string deleteForMeText,
+            string deleteForEveryoneText,
+            string cancelText);
 
         /// <summary>
         /// Same buttons as <see cref="ShowConfirmAsync"/>, but leaving the app
@@ -50,6 +69,11 @@ namespace Unison.Core.Contracts
 
         /// <summary>Opens the new-chat dialog bound to the supplied VM. Returns resolved JID or null.</summary>
         Task<string> ShowNewChatDialogAsync(NewChatDialogViewModel newChatVm);
+
+        /// <summary>
+        /// Group preview (avatar / title / creator / join). Returns true when the user joined.
+        /// </summary>
+        Task<bool> ShowGroupPreviewAsync(GroupPreviewDialogViewModel previewVm);
 
         /// <summary>
         /// Image send confirmation with preview and an optional caption box.
@@ -100,5 +124,29 @@ namespace Unison.Core.Contracts
         /// The caller pins the tile only after a choice.
         /// </summary>
         Task<StartTileSelection> ShowStartTileMarkAsync(StartTileMark current, bool transparent);
+
+        /// <summary>
+        /// Picks the toast / badge audience (All / Groups / Contacts / Favorites).
+        /// Returns null when the user cancels.
+        /// </summary>
+        Task<LockScreenNotificationScope?> ShowNotificationFilterAsync(LockScreenNotificationScope current);
+
+        /// <summary>
+        /// Pre-export: without media (primary). With-media is absent in this slice.
+        /// Returns false when cancelled.
+        /// </summary>
+        Task<bool> ShowChatExportOptionsAsync();
+
+        /// <summary>
+        /// After export: file row (ChatInfo layout) with Share / Save. Returns the choice.
+        /// </summary>
+        Task<ChatExportReadyChoice> ShowChatExportReadyAsync(string fileName, string infoText);
+    }
+
+    public enum ChatExportReadyChoice
+    {
+        Dismissed,
+        Share,
+        Save
     }
 }

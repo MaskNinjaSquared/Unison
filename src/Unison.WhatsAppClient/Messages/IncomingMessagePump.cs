@@ -22,7 +22,8 @@ namespace Unison.WhatsAppClient.Messages
     public sealed class IncomingMessagePump :
         IIncomingPumpDrainHost,
         IHandleDecryptedMessageHost,
-        IIncomingMessageEnqueueHost
+        IIncomingMessageEnqueueHost,
+        IIncomingPumpControl
     {
         private readonly IncomingMessageQueue<IncomingDecryptedNotifyRequest> _queue =
             new IncomingMessageQueue<IncomingDecryptedNotifyRequest>(

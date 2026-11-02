@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Windows.Input;
 using Microsoft.Extensions.DependencyInjection;
 using Unison.Core.Contracts;
@@ -460,15 +461,25 @@ namespace Unison.Uwp.UI.Controls
                     {
                         ItemClickCommand.Execute(selected);
                     }
+                    else
+                    {
+                        Debug.WriteLine(
+                            "[ContactsVisualizer] ItemClickCommand skipped; null=" +
+                            (ItemClickCommand == null) +
+                            " canExecute=" +
+                            (ItemClickCommand != null && ItemClickCommand.CanExecute(selected)));
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine("[ContactsVisualizer] ItemClickCommand failed: " + ex.Message);
                 }
                 finally
                 {
-                    // Picker usually closes via IsOpen; if the command left it open, clear busy.
-                    if (IsOpen)
-                    {
-                        _clickBusy = false;
-                        HideClickBusy();
-                    }
+                    // Always clear busy — Favourites closes the overlay inside the command;
+                    // leaving _clickBusy stuck made the next open look dead.
+                    _clickBusy = false;
+                    HideClickBusy();
                 }
             });
         }

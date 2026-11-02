@@ -45,7 +45,7 @@ namespace Unison.Uwp.Services.Themes
         public override string ShellBrandName => "WhatsApp Web";
 
         public override string ShellBrandIcon =>
-            "ms-appx:///Assets/LegacyLogo/Square44x44Logo.targetsize-256_altform-unplated.png";
+            "ms-appx:///Assets/LegacyLogo/WhatsAppLegacyIcon.png";
 
         public override Type ResolveShellPage(NavigationDestination destination)
         {

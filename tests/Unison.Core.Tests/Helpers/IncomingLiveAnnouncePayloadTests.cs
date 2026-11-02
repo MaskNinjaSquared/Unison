@@ -98,5 +98,34 @@ namespace Unison.Core.Tests.Helpers
             Assert.True(payload.IsMuted);
             Assert.Equal(-1, payload.ChatUnread);
         }
+
+        [Fact]
+        public void Community_announce_flags_toast_megaphone()
+        {
+            var chat = new ChatItem
+            {
+                Name = "WireSubject",
+                AvatarUrl = "ms-appdata:///row.jpg",
+                UnreadCount = 2,
+                IsCommunityAnnounce = true
+            };
+
+            IncomingLiveAnnouncePayload payload = IncomingLiveAnnouncePayload.TryCreateFromChat(
+                chatJid: "avisos@g.us",
+                chatName: null,
+                senderName: "Admin",
+                preview: "hello",
+                isGroup: true,
+                isFromMe: false,
+                suppressToast: false,
+                quietForSync: false,
+                totalUnread: 5,
+                chat: chat,
+                mutedFallback: false);
+
+            Assert.NotNull(payload);
+            Assert.True(payload.IsCommunityAnnounce);
+            Assert.True(payload.IsGroup);
+        }
     }
 }

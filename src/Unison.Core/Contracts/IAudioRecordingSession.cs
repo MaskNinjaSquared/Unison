@@ -13,10 +13,19 @@ namespace Unison.Core.Contracts
         /// <summary>False after Stop/Cancel or if superseded by a newer Start.</summary>
         bool IsActive { get; }
 
+        /// <summary>True while capture is paused (elapsed frozen).</summary>
+        bool IsPaused { get; }
+
         DateTime StartedAtUtc { get; }
 
-        /// <summary>UtcNow - StartedAtUtc while active; Zero when inactive.</summary>
+        /// <summary>Active capture time excluding pauses; Zero when inactive.</summary>
         TimeSpan Elapsed { get; }
+
+        /// <summary>Pauses capture without finishing the session.</summary>
+        Task PauseAsync();
+
+        /// <summary>Resumes a paused capture.</summary>
+        Task ResumeAsync();
 
         /// <summary>Stops capture and returns the audio payload (voice note).</summary>
         Task<AudioRecordingResult> StopAsync();

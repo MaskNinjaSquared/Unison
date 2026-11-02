@@ -157,6 +157,33 @@ namespace Unison.Core.ViewModels
                     ForwardRequested?.Invoke(this, EventArgs.Empty);
                 },
                 () => !string.IsNullOrWhiteSpace(Model?.Id));
+            DeleteCommand = new RelayCommand(
+                () => _ = PromptDeleteAsync(),
+                () => MessageDeleteEligibility.CanDeleteForMe(Model) && _dialogs != null);
+            DeleteForMeCommand = new RelayCommand(
+                () => _ = DeleteForMeAsync(),
+                () => MessageDeleteEligibility.CanDeleteForMe(Model));
+            DeleteForEveryoneCommand = new RelayCommand(
+                () => _ = DeleteForEveryoneAsync(),
+                () => MessageDeleteEligibility.CanDeleteForEveryone(
+                    Model,
+                    IsDeleteGroupChat,
+                    _viewerIsGroupAdmin,
+                    DateTime.UtcNow));
+
+            PlayPauseAudioCommand = new RelayCommand(
+                () => AudioPlayPauseRequested?.Invoke(this, EventArgs.Empty),
+                () => Model != null && Model.IsAudio);
+            CycleAudioSpeedCommand = new RelayCommand(
+                () => AudioCycleSpeedRequested?.Invoke(this, EventArgs.Empty),
+                () => ShowAudioBarTimestamp);
+            PlayAtSpeedCommand = new RelayCommand<AudioPlaybackSpeed>(
+                speed =>
+                {
+                    AudioPlaybackSpeed = speed;
+                    AudioPlayAtSpeedRequested?.Invoke(this, speed);
+                },
+                _ => Model != null && Model.IsAudio);
 
             PlayGifCommand = new RelayCommand(
                 StartGifPlayback,
@@ -232,6 +259,18 @@ namespace Unison.Core.ViewModels
                 name == nameof(ChatMessage.Kind))
             {
                 (CopyCommand as RelayCommand)?.RaiseCanExecuteChanged();
+                RaiseCore(nameof(ReplyDockPreviewText));
+            }
+
+            if (name == nameof(ChatMessage.IsFromMe) ||
+                name == nameof(ChatMessage.IsRevoked) ||
+                name == nameof(ChatMessage.Id) ||
+                name == nameof(ChatMessage.Timestamp) ||
+                name == nameof(ChatMessage.RemoteJid))
+            {
+                (DeleteCommand as RelayCommand)?.RaiseCanExecuteChanged();
+                (DeleteForMeCommand as RelayCommand)?.RaiseCanExecuteChanged();
+                (DeleteForEveryoneCommand as RelayCommand)?.RaiseCanExecuteChanged();
             }
 
             if (name == nameof(ChatMessage.MentionedJids))
@@ -250,6 +289,13 @@ namespace Unison.Core.ViewModels
             {
                 RaiseCore(nameof(ShowQuotedAuthorLink));
                 RaiseCore(nameof(CanOpenQuotedAuthor));
+            }
+
+            if (name == nameof(ChatMessage.MediaFileLengthBytes) ||
+                name == nameof(ChatMessage.HasMediaFileSize) ||
+                name == nameof(ChatMessage.DocumentFileLengthBytes))
+            {
+                Raise(nameof(MediaFileLengthBytes), nameof(HasMediaFileSize));
             }
 
             if (IsImageOrStickerProperty(name))
@@ -275,6 +321,7 @@ namespace Unison.Core.ViewModels
             if (IsGroupJoinProperty(name))
             {
                 Raise(nameof(IsGroupJoin));
+                Raise(nameof(IsCallEvent));
             }
 
             if (IsAudioProperty(name))
@@ -426,12 +473,61 @@ namespace Unison.Core.ViewModels
         /// <summary>Forward this bubble. The shell opens the people picker titled Forward.</summary>
         public ICommand ForwardCommand { get; }
 
+        /// <summary>Opens the delete dialog (for me / for everyone when eligible / cancel).</summary>
+        public ICommand DeleteCommand { get; }
+
+        /// <summary>Delete for me — any non-revoked bubble on this account.</summary>
+        public ICommand DeleteForMeCommand { get; }
+
+        /// <summary>Delete for everyone — FAQ window + own / group-admin rules.</summary>
+        public ICommand DeleteForEveryoneCommand { get; }
+
         public event EventHandler ReplyRequested;
 
         public event EventHandler ForwardRequested;
 
+        /// <summary>Raised after a successful delete-for-me so the open chat can drop the bubble.</summary>
+        public event EventHandler DeletedForMe;
+
+        /// <summary>Play / pause this bubble — chat host orchestrates <see cref="Contracts.IChatAudioPlaybackService"/>.</summary>
+        public event EventHandler AudioPlayPauseRequested;
+
+        /// <summary>Timer tapped — host applies <see cref="AudioPlaybackSpeed"/> to the player.</summary>
+        public event EventHandler AudioCycleSpeedRequested;
+
+        /// <summary>Hold-menu play at a chosen speed.</summary>
+        public event EventHandler<AudioPlaybackSpeed> AudioPlayAtSpeedRequested;
+
+        /// <summary>Play / pause this voice bubble.</summary>
+        public ICommand PlayPauseAudioCommand { get; }
+
+        /// <summary>Cycle x1 → x1.5 → x2 while the bar clock is visible.</summary>
+        public ICommand CycleAudioSpeedCommand { get; }
+
+        /// <summary>Start (or resume) at a specific <see cref="AudioPlaybackSpeed"/>.</summary>
+        public ICommand PlayAtSpeedCommand { get; }
+
         /// <summary>Download to cache if needed, then FileSavePicker to disk.</summary>
         public ICommand ExportDocumentCommand { get; }
+
+        /// <summary>
+        /// Group-admin flag for delete-for-everyone. Call when the open chat's role is known.
+        /// </summary>
+        public void SetDeleteChatContext(bool viewerIsGroupAdmin)
+        {
+            if (_viewerIsGroupAdmin == viewerIsGroupAdmin)
+            {
+                return;
+            }
+
+            _viewerIsGroupAdmin = viewerIsGroupAdmin;
+            (DeleteForEveryoneCommand as RelayCommand)?.RaiseCanExecuteChanged();
+        }
+
+        private bool IsDeleteGroupChat =>
+            Model != null && JidHelper.IsGroupJid(Model.RemoteJid);
+
+        private bool _viewerIsGroupAdmin;
 
         public bool IsExpanded
         {
@@ -502,6 +598,7 @@ namespace Unison.Core.ViewModels
 
         private AudioPlaybackStatus _audioPlaybackStatus = AudioPlaybackStatus.NotDownloaded;
         private uint _audioPlaybackPositionSeconds;
+        private AudioPlaybackSpeed _audioPlaybackSpeed = AudioPlaybackSpeed.Regular;
 
         /// <summary>Download / play / pause / unavailable state for this bubble.</summary>
         public AudioPlaybackStatus AudioPlaybackStatus
@@ -537,6 +634,32 @@ namespace Unison.Core.ViewModels
                     nameof(AudioButtonText),
                     nameof(AudioTimestampText));
             }
+        }
+
+        /// <summary>Playback rate for this bubble (resets to Regular when ready after end).</summary>
+        public AudioPlaybackSpeed AudioPlaybackSpeed
+        {
+            get => _audioPlaybackSpeed;
+            set
+            {
+                if (_audioPlaybackSpeed == value)
+                {
+                    return;
+                }
+
+                _audioPlaybackSpeed = value;
+                Raise(nameof(AudioPlaybackSpeed), nameof(AudioSpeedLabelText));
+                (CycleAudioSpeedCommand as RelayCommand)?.RaiseCanExecuteChanged();
+            }
+        }
+
+        /// <summary>Compact speed label under the bar clock (x1 / x1.5 / x2).</summary>
+        public string AudioSpeedLabelText => _audioPlaybackSpeed.ToLabel();
+
+        /// <summary>Advances Regular → Fast → Faster → Regular.</summary>
+        public void CycleAudioPlaybackSpeed()
+        {
+            AudioPlaybackSpeed = AudioPlaybackSpeed.Next();
         }
 
         public string AudioButtonText
@@ -736,10 +859,12 @@ namespace Unison.Core.ViewModels
         public void ResetAudioPlaybackToReady()
         {
             _audioPlaybackPositionSeconds = 0;
+            AudioPlaybackSpeed = AudioPlaybackSpeed.Regular;
             AudioPlaybackStatus = Model.HasLocalAudio
                 ? AudioPlaybackStatus.Ready
                 : (Model.CanDownloadAudio ? AudioPlaybackStatus.NotDownloaded : AudioPlaybackStatus.NotAvailable);
-            Raise(nameof(AudioPlaybackPositionSeconds), nameof(AudioButtonText));
+            Raise(nameof(AudioPlaybackPositionSeconds), nameof(AudioButtonText), nameof(AudioSpeedLabelText));
+            (CycleAudioSpeedCommand as RelayCommand)?.RaiseCanExecuteChanged();
         }
 
         private void RaiseAudioPlaybackUiChanged()
@@ -761,12 +886,16 @@ namespace Unison.Core.ViewModels
                 nameof(AudioButtonText),
                 nameof(AudioReadyLabelText),
                 nameof(AudioTimestampText),
+                nameof(AudioSpeedLabelText),
+                nameof(AudioPlaybackSpeed),
                 nameof(ShowAudioFooterDuration),
                 nameof(AudioFooterDurationText),
                 nameof(MediaBadgeDurationText),
                 nameof(AudioSliderMaximum),
                 nameof(AudioSliderValue));
             RaiseMediaCommandsChanged();
+            (CycleAudioSpeedCommand as RelayCommand)?.RaiseCanExecuteChanged();
+            (PlayPauseAudioCommand as RelayCommand)?.RaiseCanExecuteChanged();
         }
 
         private void RaiseAudioModelUiChanged()
@@ -936,6 +1065,40 @@ namespace Unison.Core.ViewModels
         public bool ShowStickerError => Model.ShowStickerError;
         public bool ShowStickerLoading => Model.ShowStickerLoading;
         public string Caption => Model.Caption;
+
+        /// <summary>
+        /// Reply compose bar preview: caption, else a localized Photo/Video/Gif label, else content.
+        /// Keeps the dock readable when media has no caption (plain Caption binding looked empty).
+        /// </summary>
+        public string ReplyDockPreviewText
+        {
+            get
+            {
+                if (!string.IsNullOrWhiteSpace(Caption))
+                {
+                    return Caption;
+                }
+
+                if (IsImage || Kind == ChatMessageKind.Image)
+                {
+                    return _strings?.Get("ChatList_PreviewPhoto", "Photo") ?? "Photo";
+                }
+
+                if (IsVideo || Kind == ChatMessageKind.Video || Kind == ChatMessageKind.Gif)
+                {
+                    return Kind == ChatMessageKind.Gif
+                        ? (_strings?.Get("ChatList_PreviewGif", "GIF") ?? "GIF")
+                        : (_strings?.Get("ChatList_PreviewVideo", "Video") ?? "Video");
+                }
+
+                if (!string.IsNullOrWhiteSpace(Content))
+                {
+                    return Content;
+                }
+
+                return string.Empty;
+            }
+        }
 
         private string CopyableText
         {
@@ -1263,6 +1426,8 @@ namespace Unison.Core.ViewModels
 
         public bool IsGroupJoin => Model.IsGroupJoin;
 
+        public bool IsCallEvent => Model.IsCallEvent;
+
         public string ContactCardDisplayName
         {
             get
@@ -1386,6 +1551,10 @@ namespace Unison.Core.ViewModels
         public string DocumentUri => Model.DocumentUri;
         public long DocumentFileLengthBytes => Model.DocumentFileLengthBytes;
         public bool HasDocumentFileSize => Model.HasDocumentFileSize;
+        /// <summary>Protocol file size in bytes. Zero when the message carried none.</summary>
+        public long MediaFileLengthBytes =>
+            Model.MediaFileLengthBytes > 0 ? Model.MediaFileLengthBytes : Model.DocumentFileLengthBytes;
+        public bool HasMediaFileSize => MediaFileLengthBytes > 0;
         public bool HasLocalDocument => Model.HasLocalDocument;
         public bool NeedsDocumentDownload => Model.NeedsDocumentDownload;
         /// <summary>Always allow the download tap; missing keys surface as failed + red badge.</summary>
@@ -1496,6 +1665,20 @@ namespace Unison.Core.ViewModels
             get => Model.DateSeparatorText;
             set => Model.DateSeparatorText = value;
         }
+
+        public bool IsUnreadDivider
+        {
+            get => Model.IsUnreadDivider;
+            set => Model.IsUnreadDivider = value;
+        }
+
+        public string UnreadDividerText
+        {
+            get => Model.UnreadDividerText;
+            set => Model.UnreadDividerText = value;
+        }
+
+        public bool ShowUnreadMarker => Model.ShowUnreadMarker;
 
         public bool ShowGroupSenderName
         {

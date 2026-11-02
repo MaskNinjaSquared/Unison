@@ -160,41 +160,8 @@ namespace Unison.WhatsAppClient.Helpers
                 return;
             }
 
-            hub.LastMessage = newest.LastMessage;
-            hub.LastMessageIsFromMe = newest.LastMessageIsFromMe;
-            hub.LastMessageSenderName = newest.LastMessageSenderName;
-            hub.LastMessageParticipantJid = newest.LastMessageParticipantJid;
-            hub.LastMessageKind = newest.LastMessageKind;
-            hub.LastMessageSendState = newest.LastMessageSendState;
-            hub.LastMessageMentionedJids = newest.LastMessageMentionedJids;
-            hub.LastMessageTimestampUtc = newest.LastMessageTimestampUtc;
-            hub.LastMessageId = newest.LastMessageId;
-            hub.Timestamp = newest.Timestamp;
-
             // Community list strip: "Geral › Alice: …" — group name + chevron + sender prefix.
-            // Must pass strings so announce groups resolve to Avisos (pt-BR), not "Announcements".
-            string groupLabel = newest.GetNameResolved(strings);
-            if (string.IsNullOrWhiteSpace(groupLabel))
-            {
-                groupLabel = (newest.Name ?? string.Empty).Trim();
-            }
-
-            if (string.IsNullOrEmpty(groupLabel))
-            {
-                hub.LastMessageAuthor = newest.LastMessageAuthor;
-                hub.LastPreview.AuthorDetail = string.Empty;
-                hub.LastPreview.ShowAuthorChevron = false;
-            }
-            else
-            {
-                hub.LastMessageAuthor = groupLabel;
-                hub.LastPreview.AuthorDetail = newest.LastMessageAuthor ?? string.Empty;
-                hub.LastPreview.ShowAuthorChevron = true;
-            }
-
-            // No RaiseLastPreviewChanged: each field setter / ChatListPreview.Set already
-            // notifies, and the strip hooks nested PropertyChanged. A final raise only
-            // re-applied the same DP values and flashed rows on no-op tip copies.
+            CommunityHubPresentation.ApplyTipIfNewer(hub, newest, strings);
         }
 
         private static string Canonical(Func<string, string> getCanonical, string jid)

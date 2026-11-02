@@ -72,6 +72,7 @@ namespace Unison.Core.ViewModels
         private readonly IStringResources _strings;
         private readonly IStatusBarService _statusBar;
         private readonly IDialogService _dialogService;
+        private readonly IGroupPreviewDialogViewModelFactory _groupPreviewFactory;
         private readonly ISessionLogger _sessionLogger;
         private readonly IRuntimeDiagnostics _diagnostics;
         private readonly ILocalSettings _localSettings;
@@ -163,6 +164,11 @@ namespace Unison.Core.ViewModels
         private static readonly TimeSpan VisibleRefreshDebounceFrugal = TimeSpan.FromMilliseconds(320);
         /// <summary>Longer coalesce after name-apply storms so one refresh covers many titles.</summary>
         private static readonly TimeSpan NamesAppliedRefreshDebounceFrugal = TimeSpan.FromMilliseconds(480);
+        /// <summary>
+        /// Offline SortInPlace / tip Moves that miss incremental apply — one rebuild after quiet,
+        /// not a re-armed debounce per miss (that stacked BuildVisibleRefreshSource on Mobile).
+        /// </summary>
+        private static readonly TimeSpan MoveMissRefreshDebounceFrugal = TimeSpan.FromMilliseconds(720);
         private const int VisibleRefreshMoveBudgetGenerous = 24;
         private const int VisibleRefreshMoveBudgetFrugal = 10;
         /// <summary>Empty VisibleChats → full store: fewer Continue rounds on reattach.</summary>
@@ -206,9 +212,13 @@ namespace Unison.Core.ViewModels
 
         /// <summary>
         /// Builds a fresh <see cref="NewChatDialogViewModel"/> per New Chat dialog
-        /// (clean phone/error state).
+        /// (clean phone/error state). Still used when the New Conversation overlay
+        /// opens the phone-number path.
         /// </summary>
         private readonly INewChatDialogViewModelFactory _newChatFactory;
+
+        /// <summary>Full-bleed New Conversation overlay (tiles + A–Z).</summary>
+        private readonly NewConversationViewModel _newConversation;
 
         public ChatListViewModel(
             IChatStateStore chatState,
@@ -228,6 +238,7 @@ namespace Unison.Core.ViewModels
             IChatService chatService = null,
             IGroupService groupService = null,
             IGroupNaming groupNaming = null,
+            IGroupPreviewDialogViewModelFactory groupPreviewFactory = null,
             ISessionLogger sessionLogger = null,
             IRuntimeDiagnostics diagnostics = null,
             ILocalSettings localSettings = null,
@@ -237,7 +248,8 @@ namespace Unison.Core.ViewModels
             ChatListColdPopulateGate coldPopulateGate = null,
             ChatTimelineLoadPriorityGate timelineLoadPriority = null,
             ISystemInfoProvider systemInfo = null,
-            IAppVisibility appVisibility = null)
+            IAppVisibility appVisibility = null,
+            NewConversationViewModel newConversation = null)
         {
             _jids = jids ?? throw new ArgumentNullException(nameof(jids));
             _chatService = chatService;
@@ -264,7 +276,9 @@ namespace Unison.Core.ViewModels
             _strings = strings;
             _statusBar = statusBar;
             _dialogService = dialogService;
+            _groupPreviewFactory = groupPreviewFactory;
             _newChatFactory = newChatFactory ?? throw new ArgumentNullException(nameof(newChatFactory));
+            _newConversation = newConversation;
 
             // Strategy-driven: WhatsApp always inline; Unison Mobile uses StatusBar.
             DisplaySync = theme == null || theme.DisplaySyncInChatList;
@@ -319,7 +333,7 @@ namespace Unison.Core.ViewModels
                            !string.IsNullOrWhiteSpace(request.Chat.JID) &&
                            _chatStore != null);
             OpenMenuCommand = new RelayCommand(() => MenuRequested?.Invoke(this, EventArgs.Empty));
-            NewChatCommand = new RelayCommand(() => _ = StartNewChatAsync());
+            NewChatCommand = new RelayCommand(OpenNewConversation);
             AddContactCommand = new RelayCommand(BeginAddContact);
             FilterChatsCommand = new RelayCommand<int>(ApplyChatListFilter);
         }

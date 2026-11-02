@@ -1,0 +1,22 @@
+<Page
+    x:Class="Unison.Uwp.Shell.WhatsAppLegacy.Views.CallsView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:Unison.Uwp.Shell.WhatsAppLegacy.Views"
+    xmlns:controls="using:Unison.Uwp.UI.Controls"
+    Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
+
+    <!-- List only — call details open on ShellView DetailHost (same as Chats/Channels). -->
+    <Grid Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <controls:CallsListControl x:Name="CallsList"
+                                   Grid.Row="0"/>
+
+        <local:LegacySectionAppBar x:Name="CallsAppBar"
+                                   Grid.Row="1"/>
+    </Grid>
+</Page>

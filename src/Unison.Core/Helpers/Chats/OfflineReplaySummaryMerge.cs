@@ -45,7 +45,8 @@ namespace Unison.Core.Helpers
             bool incrementUnread,
             DateTime utcNow,
             string participantJid = null,
-            string senderName = null)
+            string senderName = null,
+            bool hasCitation = false)
         {
             if (summary == null)
             {
@@ -75,6 +76,10 @@ namespace Unison.Core.Helpers
             if (incrementUnread)
             {
                 summary.UnreadDelta++;
+                if (hasCitation)
+                {
+                    summary.HasCitation = true;
+                }
             }
         }
 
@@ -107,6 +112,10 @@ namespace Unison.Core.Helpers
             }
 
             current.UnreadDelta += returned.UnreadDelta;
+            if (returned.HasCitation)
+            {
+                current.HasCitation = true;
+            }
         }
 
         private static void WriteTip(

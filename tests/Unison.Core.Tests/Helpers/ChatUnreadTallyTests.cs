@@ -218,5 +218,30 @@ namespace Unison.Core.Tests.Helpers
             Assert.Empty(ChatUnreadTally.Clear(new List<ChatItem> { Row(0) }));
             Assert.Empty(ChatUnreadTally.Clear(null!));
         }
+
+        [Fact]
+        public void Bump_with_citation_lights_HasCitation_on_siblings()
+        {
+            var pn = Row(1);
+            var lid = Row(0);
+
+            ChatUnreadTally.Bump(pn, new List<ChatItem> { pn, lid }, 1, hasCitation: true);
+
+            Assert.True(pn.HasCitation);
+            Assert.True(lid.HasCitation);
+        }
+
+        [Fact]
+        public void Clearing_also_clears_citation_on_unread_rows()
+        {
+            var chat = Row(2);
+            chat.HasCitation = true;
+
+            List<ChatItem> changed = ChatUnreadTally.Clear(new List<ChatItem> { chat });
+
+            Assert.Same(chat, Assert.Single(changed));
+            Assert.False(chat.HasCitation);
+            Assert.Equal(0, chat.UnreadCount);
+        }
     }
 }

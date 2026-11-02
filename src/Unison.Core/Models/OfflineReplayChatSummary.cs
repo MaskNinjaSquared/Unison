@@ -12,6 +12,10 @@ namespace Unison.Core.Models
         public bool IsGroup { get; set; }
         public bool IsFromMe { get; set; }
         public int UnreadDelta { get; set; }
+
+        /// <summary>True when any unread tip in this summary @mentioned self or @all.</summary>
+        public bool HasCitation { get; set; }
+
         public ChatPreviewKind Kind { get; set; }
 
         /// <summary>

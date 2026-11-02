@@ -189,6 +189,26 @@ namespace Unison.Core.Tests.Helpers
         }
 
         [Fact]
+        public void Tip_bump_without_Reposition_leaves_store_order_unchanged()
+        {
+            // Live strip applies the tip first and defers Reposition so toast does not wait
+            // on ObservableCollection.Move. Order stays stale until the Normal hop runs.
+            var bumped = Chat("c", Utc(1));
+            var chats = new ObservableCollection<ChatItem>
+            {
+                Chat("a", Utc(10)),
+                Chat("b", Utc(5)),
+                bumped
+            };
+
+            bumped.LastMessageTimestampUtc = Utc(20);
+
+            Assert.Equal(new[] { "a", "b", "c" }, Names(chats));
+            ChatDisplayOrder.Reposition(chats, bumped);
+            Assert.Equal(new[] { "c", "a", "b" }, Names(chats));
+        }
+
+        [Fact]
         public void Reposition_moves_a_stale_chat_down_to_its_new_place()
         {
             var stale = Chat("a", Utc(20));

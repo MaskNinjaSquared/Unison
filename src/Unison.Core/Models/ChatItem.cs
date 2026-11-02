@@ -208,6 +208,12 @@ namespace Unison.Core.Models
                 if (_unreadCount == value) return;
                 _unreadCount = value;
                 OnPropertyChanged();
+                if (_unreadCount <= 0 && _hasCitation)
+                {
+                    _hasCitation = false;
+                    OnPropertyChanged(nameof(HasCitation));
+                }
+
                 RaiseUnreadUiChanged();
             }
         }
@@ -216,6 +222,24 @@ namespace Unison.Core.Models
 
         /// <summary>True when there are unread messages (bind with BooleanToVisibilityConverter).</summary>
         public bool HasUnread => _unreadCount > 0;
+
+        private bool _hasCitation;
+
+        /// <summary>
+        /// Unread @ of this account or @all in the conversation (list badge beside the unread count).
+        /// Cleared when <see cref="UnreadCount"/> goes to zero.
+        /// </summary>
+        public bool HasCitation
+        {
+            get => _hasCitation;
+            set
+            {
+                bool next = value && _unreadCount > 0;
+                if (_hasCitation == next) return;
+                _hasCitation = next;
+                OnPropertyChanged();
+            }
+        }
 
         private bool _isFavorite;
 
@@ -322,15 +346,79 @@ namespace Unison.Core.Models
                 var next = (value != null && value.Count > 0) ? value : null;
                 if (ReferenceEquals(_groupMembers, next)) return;
                 _groupMembers = next;
-                _mentionLookup = MentionLookupBuilder.FromRoster(_groupMembers);
+                if (next == null)
+                {
+                    _rosterCompleteness = GroupRosterCompleteness.None;
+                }
+
+                bool lookupChanged = TryReplaceMentionLookup();
+                _memberByAddress = null;
                 OnPropertyChanged();
                 OnPropertyChanged(nameof(HasGroupMembers));
-                OnPropertyChanged(nameof(MentionLookup));
+                OnPropertyChanged(nameof(RosterCompleteness));
+                OnPropertyChanged(nameof(HasFullGroupRoster));
+                if (lookupChanged)
+                {
+                    OnPropertyChanged(nameof(MentionLookup));
+                }
             }
+        }
+
+        /// <summary>
+        /// Rebuilds the mention map; keeps the old instance when names are unchanged. Every bubble
+        /// with a mention re-renders on a new instance, and roster flushes are frequent.
+        /// </summary>
+        private bool TryReplaceMentionLookup()
+        {
+            System.Collections.Generic.IReadOnlyDictionary<string, string> next =
+                MentionLookupBuilder.FromRoster(_groupMembers);
+            if (MentionLookupBuilder.SameEntries(_mentionLookup, next))
+            {
+                return false;
+            }
+
+            _mentionLookup = next;
+            return true;
         }
 
         [Newtonsoft.Json.JsonIgnore]
         public bool HasGroupMembers => _groupMembers != null && _groupMembers.Count > 0;
+
+        private GroupRosterCompleteness _rosterCompleteness;
+        /// <summary>
+        /// How much of the participant list <see cref="GroupMembers"/> holds. Never persisted as
+        /// Full: a roster read back after a restart is Partial until a metadata reply confirms it.
+        /// </summary>
+        [Newtonsoft.Json.JsonIgnore]
+        public GroupRosterCompleteness RosterCompleteness
+        {
+            get
+            {
+                if (_rosterCompleteness == GroupRosterCompleteness.None && HasGroupMembers)
+                {
+                    return GroupRosterCompleteness.Partial;
+                }
+
+                return _rosterCompleteness;
+            }
+            set
+            {
+                if (_rosterCompleteness == value) return;
+                _rosterCompleteness = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(HasFullGroupRoster));
+            }
+        }
+
+        /// <summary>A metadata reply listed every participant (<see cref="GroupRosterCompleteness.Full"/>).</summary>
+        [Newtonsoft.Json.JsonIgnore]
+        public bool HasFullGroupRoster
+        {
+            get => _rosterCompleteness == GroupRosterCompleteness.Full;
+            set => RosterCompleteness = value
+                ? GroupRosterCompleteness.Full
+                : (HasGroupMembers ? GroupRosterCompleteness.Partial : GroupRosterCompleteness.None);
+        }
 
         /// <summary>
         /// Digit → name map from <see cref="GroupMembers"/>, rebuilt when the roster is replaced.
@@ -344,8 +432,79 @@ namespace Unison.Core.Models
         /// </summary>
         public void RefreshMentionLookupFromRoster()
         {
-            _mentionLookup = MentionLookupBuilder.FromRoster(_groupMembers);
-            OnPropertyChanged(nameof(MentionLookup));
+            _memberByAddress = null;
+            if (TryReplaceMentionLookup())
+            {
+                OnPropertyChanged(nameof(MentionLookup));
+            }
+        }
+
+        private System.Collections.Generic.Dictionary<string, GroupMember> _memberByAddress;
+
+        /// <summary>
+        /// The roster member reachable under <paramref name="jid"/> (its JID, LID or phone),
+        /// without walking the list. No alias resolution: callers pass the canonical form too.
+        /// UI thread, like every <see cref="GroupMembers"/> read.
+        /// </summary>
+        public GroupMember FindGroupMember(string jid)
+        {
+            if (_groupMembers == null || string.IsNullOrWhiteSpace(jid))
+            {
+                return null;
+            }
+
+            var index = _memberByAddress;
+            if (index == null)
+            {
+                index = new System.Collections.Generic.Dictionary<string, GroupMember>(
+                    _groupMembers.Count * 2,
+                    StringComparer.OrdinalIgnoreCase);
+                foreach (GroupMember member in _groupMembers)
+                {
+                    if (member == null)
+                    {
+                        continue;
+                    }
+
+                    IndexMemberAddress(index, member.Jid, member);
+                    IndexMemberAddress(index, member.Lid, member);
+                    IndexMemberAddress(index, member.PhoneNumber, member);
+                }
+
+                _memberByAddress = index;
+            }
+
+            GroupMember found;
+            string key = MemberAddressKey(jid);
+            return key != null && index.TryGetValue(key, out found) ? found : null;
+        }
+
+        private static void IndexMemberAddress(
+            System.Collections.Generic.Dictionary<string, GroupMember> index,
+            string address,
+            GroupMember member)
+        {
+            string key = MemberAddressKey(address);
+            if (key != null && !index.ContainsKey(key))
+            {
+                index[key] = member;
+            }
+        }
+
+        private static string MemberAddressKey(string address)
+        {
+            if (string.IsNullOrWhiteSpace(address))
+            {
+                return null;
+            }
+
+            if (address.IndexOf('@') < 0)
+            {
+                string digits = Helpers.PhoneNumberHelper.NormalizePhoneDigits(address);
+                return string.IsNullOrEmpty(digits) ? null : digits + "@s.whatsapp.net";
+            }
+
+            return Helpers.JidHelper.Normalize(address);
         }
 
         private string _avatarPictureId;
@@ -418,7 +577,7 @@ namespace Unison.Core.Models
 
         private ChatKind _kind = ChatKind.Direct;
 
-        /// <summary>Direct (1:1), Group, Personal, or Community (reserved).</summary>
+        /// <summary>Direct (1:1), Group, Personal, Community, or Channel.</summary>
         public ChatKind Kind
         {
             get => _kind;
@@ -458,6 +617,11 @@ namespace Unison.Core.Models
         /// <summary>True when <see cref="Kind"/> is <see cref="ChatKind.Community"/> (reserved).</summary>
         public bool IsCommunity => _kind == ChatKind.Community;
 
+        /// <summary>WhatsApp Channel (<c>@newsletter</c>) — listed under Canais, not Chats.</summary>
+        [Newtonsoft.Json.JsonIgnore]
+        public bool IsChannel =>
+            _kind == ChatKind.Channel || Helpers.JidHelper.IsNewsletterJid(JID);
+
         /// <summary>
         /// UI label for list/header. Uses <see cref="IStringResources"/> (DI) for Personal markers
         /// and community-announce “Avisos”. Does not mutate <see cref="Name"/>.
@@ -485,6 +649,7 @@ namespace Unison.Core.Models
                     }
 
                 case ChatKind.Group:
+                case ChatKind.Channel:
                     return Name ?? string.Empty;
 
                 case ChatKind.Community:
@@ -657,6 +822,68 @@ namespace Unison.Core.Models
                 _isAnnounceOnly = value;
                 OnPropertyChanged();
                 OnPropertyChanged(nameof(IsGroupLockedForMessages));
+                OnPropertyChanged(nameof(IsComposerLocked));
+            }
+        }
+
+        private bool _leftGroup;
+        /// <summary>
+        /// Baileys <c>chat.readOnly</c>: a <c>w:gp2</c> leave/remove named this account,
+        /// or group metadata refused with 403. Cleared when metadata or an add
+        /// shows the account is a participant again.
+        /// </summary>
+        public bool LeftGroup
+        {
+            get => _leftGroup;
+            set
+            {
+                if (_leftGroup == value) return;
+                _leftGroup = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(IsNoLongerGroupParticipant));
+                OnPropertyChanged(nameof(IsComposerLocked));
+            }
+        }
+
+        private bool _canJoin;
+        /// <summary>
+        /// Community linked subgroup this account has not joined — hub “can join” section only.
+        /// </summary>
+        public bool CanJoin
+        {
+            get => _canJoin;
+            set
+            {
+                if (_canJoin == value) return;
+                _canJoin = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(IsComposerLocked));
+            }
+        }
+
+        private string _groupCreatorJid;
+        /// <summary>Creator JID from community <c>sub_groups</c> / metadata (preview dialog).</summary>
+        public string GroupCreatorJid
+        {
+            get => _groupCreatorJid;
+            set
+            {
+                if (string.Equals(_groupCreatorJid, value, StringComparison.Ordinal)) return;
+                _groupCreatorJid = value;
+                OnPropertyChanged();
+            }
+        }
+
+        private long _groupCreationUnixSeconds;
+        /// <summary>Unix creation from community <c>sub_groups</c> (preview dialog).</summary>
+        public long GroupCreationUnixSeconds
+        {
+            get => _groupCreationUnixSeconds;
+            set
+            {
+                if (_groupCreationUnixSeconds == value) return;
+                _groupCreationUnixSeconds = value;
+                OnPropertyChanged();
             }
         }
 
@@ -744,11 +971,23 @@ namespace Unison.Core.Models
         private readonly ObservableCollection<ChatItem> _communityMembers =
             new ObservableCollection<ChatItem>();
 
+        private readonly ObservableCollection<ChatItem> _communityJoinableMembers =
+            new ObservableCollection<ChatItem>();
+
         /// <summary>
         /// Runtime-only linked groups under this community hub. Not persisted.
         /// </summary>
         [Newtonsoft.Json.JsonIgnore]
         public ObservableCollection<ChatItem> CommunityMembers => _communityMembers;
+
+        /// <summary>
+        /// Runtime-only linked subgroups this account can still join. Not persisted.
+        /// </summary>
+        [Newtonsoft.Json.JsonIgnore]
+        public ObservableCollection<ChatItem> CommunityJoinableMembers => _communityJoinableMembers;
+
+        [Newtonsoft.Json.JsonIgnore]
+        public bool HasCommunityJoinableMembers => _communityJoinableMembers.Count > 0;
 
         /// <summary>Number of linked groups currently attached to this hub.</summary>
         [Newtonsoft.Json.JsonIgnore]
@@ -813,17 +1052,40 @@ namespace Unison.Core.Models
             OnPropertyChanged(nameof(CommunityGroupCount));
         }
 
+        /// <summary>Replaces hub can-join rows from a community linked-groups fetch.</summary>
+        public void ReplaceCommunityJoinableGroups(IReadOnlyList<ChatItem> groups)
+        {
+            _communityJoinableMembers.Clear();
+            if (groups != null)
+            {
+                for (int i = 0; i < groups.Count; i++)
+                {
+                    ChatItem group = groups[i];
+                    if (group != null)
+                    {
+                        _communityJoinableMembers.Add(group);
+                    }
+                }
+            }
+
+            OnPropertyChanged(nameof(CommunityJoinableMembers));
+            OnPropertyChanged(nameof(HasCommunityJoinableMembers));
+        }
+
         /// <summary>Clears runtime members when this row is no longer a hub in the list.</summary>
         public void ClearCommunityGroups()
         {
-            if (_communityMembers.Count == 0)
+            if (_communityMembers.Count == 0 && _communityJoinableMembers.Count == 0)
             {
                 return;
             }
 
             _communityMembers.Clear();
+            _communityJoinableMembers.Clear();
             OnPropertyChanged(nameof(CommunityMembers));
             OnPropertyChanged(nameof(CommunityGroupCount));
+            OnPropertyChanged(nameof(CommunityJoinableMembers));
+            OnPropertyChanged(nameof(HasCommunityJoinableMembers));
         }
 
         private GroupParticipantRole _myGroupRole = GroupParticipantRole.Member;
@@ -856,6 +1118,21 @@ namespace Unison.Core.Models
         [Newtonsoft.Json.JsonIgnore]
         public bool IsGroupLockedForMessages =>
             IsGroup && _isAnnounceOnly && !IsGroupAdmin;
+
+        /// <summary>
+        /// True when this account left or was removed from the group. The composer
+        /// shows the "no longer a participant" strip instead of the send bar.
+        /// </summary>
+        [Newtonsoft.Json.JsonIgnore]
+        public bool IsNoLongerGroupParticipant => IsGroup && _leftGroup;
+
+        /// <summary>
+        /// Composer must stay closed: channel, announce-only group, or a group this
+        /// account is no longer in.
+        /// </summary>
+        [Newtonsoft.Json.JsonIgnore]
+        public bool IsComposerLocked =>
+            IsChannel || IsGroupLockedForMessages || IsNoLongerGroupParticipant || CanJoin;
 
         public string Initial => !string.IsNullOrEmpty(Name) ? Name.Substring(0, 1).ToUpper() : "?";
 
@@ -899,7 +1176,10 @@ namespace Unison.Core.Models
                 nameof(IsPersonal),
                 nameof(IsDirect),
                 nameof(IsCommunity),
-                nameof(IsGroupLockedForMessages));
+                nameof(IsChannel),
+                nameof(IsGroupLockedForMessages),
+                nameof(IsNoLongerGroupParticipant),
+                nameof(IsComposerLocked));
         }
     }
 }

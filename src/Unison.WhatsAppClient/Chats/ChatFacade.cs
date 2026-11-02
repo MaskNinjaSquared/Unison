@@ -40,6 +40,8 @@ namespace Unison.WhatsAppClient.Chats
 {
     public sealed class ChatFacade : IChatService
     {
+        public event EventHandler FavoritesMembershipChanged;
+
         /// <summary>
         /// How far back a mark-read reaches. The server only needs enough of the tail to place
         /// the mark, and a chat opened after a long absence should not turn into a receipt for
@@ -87,6 +89,24 @@ namespace Unison.WhatsAppClient.Chats
 
         /// <summary>Short enough that the first recovered chat shows while a long replay continues.</summary>
         private static readonly TimeSpan OfflineReplayTipThrottle = TimeSpan.FromMilliseconds(180);
+
+        /// <summary>
+        /// Later replay flushes. Each pass costs a list Move + preview reconcile on the UI thread
+        /// even for one chat; at 180 ms a trickling replay paid that per message (stalls of 3 s on
+        /// Mobile Low). Same on every device.
+        /// </summary>
+        private static readonly TimeSpan OfflineReplayTipSteadyThrottle = TimeSpan.FromMilliseconds(1000);
+
+        /// <summary>
+        /// Offline tip rows per UI hop. Each row can cascade into preview reconcile / list moves;
+        /// 12 still held Lumia for ~17s on a 2-chat flush. Keep the hop tiny on every device.
+        /// </summary>
+        private const int OfflineReplayUiSliceSize = 4;
+
+        private static readonly TimeSpan OfflineReplayUiSliceGap = TimeSpan.FromMilliseconds(24);
+
+        /// <summary>Reposition hops — SortInPlace-style moves must not batch the whole flush.</summary>
+        private const int OfflineReplayReorderSliceSize = 8;
 
         private readonly object _fullPreviewReconcileGate = new object();
         private Task _inflightFullPreviewReconcile;
@@ -157,7 +177,8 @@ namespace Unison.WhatsAppClient.Chats
                 _jids,
                 _offlineReplay,
                 ApplyOfflineReplayChatSummariesAsync,
-                OfflineReplayTipThrottle);
+                OfflineReplayTipThrottle,
+                OfflineReplayTipSteadyThrottle);
         }
 
         public void RecordOfflineReplayTip(OfflineReplayTipRequest request)
@@ -232,6 +253,7 @@ namespace Unison.WhatsAppClient.Chats
                     IsGroup = request.IsGroup,
                     IsFromMe = request.IsFromMe,
                     CountUnread = request.CountUnread,
+                    HasCitation = request.HasCitation,
                     Kind = request.Kind ?? ChatPreviewKind.Text,
                     Status = request.Status,
                     AuthorPrefix = request.AuthorPrefix,
@@ -384,6 +406,7 @@ namespace Unison.WhatsAppClient.Chats
             }
 
             await ApplyLocalFavoriteAsync(canonicalJid, favorite).ConfigureAwait(false);
+            RaiseFavoritesMembershipChanged();
 
             if (!_account.IsAvailable)
             {
@@ -393,27 +416,36 @@ namespace Unison.WhatsAppClient.Chats
 
             try
             {
+                // Store-only collect: _chatState.Chats is an ObservableCollection and must not be
+                // read off the UI thread after ConfigureAwait(false). ApplyLocalFavoriteAsync
+                // already wrote RememberFavorite + SQLite, so the cache is the wire source of truth.
                 IList<string> fullList = CollectFavoriteJids();
+                Debug.WriteLine(
+                    "[ChatFacade] Favorite patch sending favorite=" + favorite +
+                    "; chatJid=" + chat.JID +
+                    "; canonicalJid=" + canonicalJid +
+                    "; listCount=" + fullList.Count);
                 await _account.SetFavoritesListAsync(fullList, add: true).ConfigureAwait(false);
+                Debug.WriteLine("[ChatFacade] Favorite patch ok; listCount=" + fullList.Count);
             }
             catch (Exception ex)
             {
-                // Common when regular_low LT-hash is corrupt (MAC mismatch → resync give-up):
-                // local membership rolls back; wire stays unchanged until app-state recovers.
+                // Keep local membership (same as offline). Rolling back made the Favourites
+                // picker look dead: overlay closed, then the star vanished after a failed
+                // regular_low patch (MAC / LT-hash). Wire catches up on the next good sync.
+                string details =
+                    "chatJid=" + chat.JID +
+                    "; canonicalJid=" + canonicalJid +
+                    "; requestedFavorite=" + favorite +
+                    "; previousFavorite=" + wasFavorite;
                 Debug.WriteLine(
-                    "[ChatFacade] Favorite patch failed; rolling back local membership: " +
-                    ex.Message + Environment.NewLine + ex);
-                try
-                {
-                    await ApplyLocalFavoriteAsync(canonicalJid, wasFavorite).ConfigureAwait(false);
-                }
-                catch (Exception rollbackEx)
-                {
-                    Debug.WriteLine(
-                        "[ChatFacade] Favorite rollback failed" + Environment.NewLine + rollbackEx);
-                }
-
-                throw;
+                    "[ChatFacade] Favorite patch failed; keeping local membership: " +
+                    details + Environment.NewLine + ex);
+                DiagRecordException(
+                    "app-state",
+                    "chat-favorite-patch-failed",
+                    ex,
+                    details);
             }
         }
 
@@ -469,6 +501,30 @@ namespace Unison.WhatsAppClient.Chats
                 _chatStore.RememberFavorite(jid, true);
                 await _chatStore.SetFavoriteAsync(jid, true).ConfigureAwait(false);
             }
+
+            // Drop cold favourites the server no longer lists (store-only JIDs).
+            foreach (string canonical in FavoriteListReconcile.ColdFavoritesToClear(
+                         _chatStore.ListFavoriteJids(),
+                         wanted,
+                         raw => _jids.GetCanonicalJid(raw)))
+            {
+                _chatStore.RememberFavorite(canonical, false);
+                await _chatStore.SetFavoriteAsync(canonical, false).ConfigureAwait(false);
+            }
+
+            RaiseFavoritesMembershipChanged();
+        }
+
+        private void RaiseFavoritesMembershipChanged()
+        {
+            try
+            {
+                FavoritesMembershipChanged?.Invoke(this, EventArgs.Empty);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[ChatFacade] FavoritesMembershipChanged handler failed: " + ex.Message);
+            }
         }
 
         private async Task ApplyLocalFavoriteAsync(string canonicalJid, bool favorite)
@@ -501,18 +557,31 @@ namespace Unison.WhatsAppClient.Chats
             await _chatStore.SetFavoriteAsync(canonicalJid, favorite).ConfigureAwait(false);
         }
 
+        /// <summary>
+        /// Full Favourites JID set for <c>favoritesAction</c>. Built from the local-state cache
+        /// only — never from <see cref="ChatStateStore.Chats"/> (not thread-safe off the UI).
+        /// </summary>
         private IList<string> CollectFavoriteJids()
         {
             var ids = new List<string>();
             var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (ChatItem chat in _chatState.Chats)
+
+            IReadOnlyList<string> remembered = _chatStore.ListFavoriteJids();
+            if (remembered == null)
             {
-                if (chat == null || !chat.IsFavorite || string.IsNullOrWhiteSpace(chat.JID))
+                return ids;
+            }
+
+            for (int i = 0; i < remembered.Count; i++)
+            {
+                string raw = remembered[i];
+                if (string.IsNullOrWhiteSpace(raw))
                 {
                     continue;
                 }
 
-                string canonical = _jids.GetCanonicalJid(chat.JID);
+                // Prefer PN when the alias table knows both (same rule as pin / mark-read).
+                string canonical = _jids.GetCanonicalJid(raw);
                 if (string.IsNullOrWhiteSpace(canonical) || !seen.Add(canonical))
                 {
                     continue;
@@ -764,6 +833,28 @@ namespace Unison.WhatsAppClient.Chats
             }
         }
 
+        /// <summary>
+        /// Persists inbound <c>IsRead = 1</c> for this conversation (nullable column; no migration).
+        /// Called after the first unread-divider layout so the chip survives the open paint.
+        /// </summary>
+        public async Task CommitInboundHistoryReadAsync(ChatItem chat)
+        {
+            if (chat == null || string.IsNullOrWhiteSpace(chat.JID) || _historyMessages == null)
+            {
+                return;
+            }
+
+            try
+            {
+                IReadOnlyList<string> keys = ChatPinStoreKeys.For(chat.JID, _jids);
+                await _historyMessages.MarkInboundReadAsync(keys).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[ChatFacade] CommitInboundHistoryRead failed: " + ex.Message);
+            }
+        }
+
         public async Task DeleteChatAsync(ChatItem chat)
         {
             if (chat == null || string.IsNullOrWhiteSpace(chat.JID))
@@ -921,8 +1012,19 @@ namespace Unison.WhatsAppClient.Chats
 
             var sw = Stopwatch.StartNew();
             List<ChatItem> changed = null;
-            await _ui.RunAsync(() => changed = ChatUnreadTally.Clear(_chatRows.FindConversation(canonical)))
-                .ConfigureAwait(false);
+            // High priority: Normal hops sit behind tip-swapped / catalog snapshot on Mobile and
+            // MarkRead then reports clearMs of tens of seconds while the badge stays lit.
+            Action clearUnread = () =>
+                changed = ChatUnreadTally.Clear(_chatRows.FindConversation(canonical));
+            if (_urgentUi != null)
+            {
+                await _urgentUi.RunUrgentAsync(clearUnread).ConfigureAwait(false);
+            }
+            else
+            {
+                await _ui.RunAsync(clearUnread).ConfigureAwait(false);
+            }
+
             long clearMs = sw.ElapsedMilliseconds;
             if (changed == null || changed.Count == 0)
             {
@@ -1636,9 +1738,11 @@ namespace Unison.WhatsAppClient.Chats
             }
 
             LiveIncomingChatListApplyResult result = new LiveIncomingChatListApplyResult();
-            // High priority so Normal reshuffles do not starve the tip Move. Callers on the
-            // live pump must not await this for stage=route — MessageFacade detaches strip+toast.
-            var stripElapsed = Stopwatch.StartNew();
+            // Tip at High priority; Reposition (store Move → VisibleChats.Move) at Normal and
+            // not awaited — toast/Live Tile must not wait on list layout. Callers on the live
+            // pump must not await this for stage=route — MessageFacade detaches strip+toast.
+            ChatItem chatForReorder = null;
+            var tipElapsed = Stopwatch.StartNew();
             await RunLiveStripAsync(() =>
             {
                 ChatItem chat = ApplyStripOnUiThread(
@@ -1656,22 +1760,54 @@ namespace Unison.WhatsAppClient.Chats
                     request.AliasLid,
                     request.AliasPn,
                     createAtFront: true,
+                    reposition: false,
                     out _,
                     request.ParticipantJid,
-                    request.SenderName);
+                    request.SenderName,
+                    request.HasCitation);
 
                 result.Chat = chat;
                 result.DisplayName = chat != null ? chat.Name : null;
                 result.TotalUnread = GetTotalUnreadCount();
+                chatForReorder = chat;
             }).ConfigureAwait(false);
-            stripElapsed.Stop();
-            if (stripElapsed.ElapsedMilliseconds >= 1000)
+            tipElapsed.Stop();
+            if (tipElapsed.ElapsedMilliseconds >= 1000)
             {
                 DiagWrite(
                     "messages",
                     "live-strip-ui-slow",
                     "jid=" + request.ChatJid +
-                    "; elapsedMs=" + stripElapsed.ElapsedMilliseconds);
+                    "; phase=tip; elapsedMs=" + tipElapsed.ElapsedMilliseconds);
+            }
+            else if (tipElapsed.ElapsedMilliseconds >= 300)
+            {
+                DiagWrite(
+                    "messages",
+                    "strip-tip",
+                    "jid=" + request.ChatJid +
+                    "; elapsedMs=" + tipElapsed.ElapsedMilliseconds);
+            }
+
+            if (chatForReorder != null)
+            {
+                ChatItem toReorder = chatForReorder;
+                string reorderJid = request.ChatJid;
+                _ = _ui.RunAsync(() =>
+                {
+                    var reorderElapsed = Stopwatch.StartNew();
+                    ChatItem hub = BumpCommunityHubFromLinkedChild(toReorder);
+                    ChatDisplayOrder.Reposition(_chatState.Chats, hub ?? toReorder);
+                    reorderElapsed.Stop();
+                    if (reorderElapsed.ElapsedMilliseconds >= 300)
+                    {
+                        DiagWrite(
+                            "messages",
+                            "strip-reorder",
+                            "jid=" + reorderJid +
+                            "; elapsedMs=" + reorderElapsed.ElapsedMilliseconds);
+                    }
+                });
             }
 
             return result;
@@ -1697,56 +1833,102 @@ namespace Unison.WhatsAppClient.Chats
                 return;
             }
 
+            int created = 0;
+            int updated = 0;
+            int unreadAdded = 0;
+            var reorderRows = new List<ChatItem>();
+
+            for (int start = 0; start < summaries.Count; start += OfflineReplayUiSliceSize)
+            {
+                int sliceStart = start;
+                int sliceEnd = Math.Min(summaries.Count, start + OfflineReplayUiSliceSize);
+                int sliceCreated = 0;
+                int sliceUpdated = 0;
+                int sliceUnread = 0;
+
+                await _ui.RunAsync(() =>
+                {
+                    for (int i = sliceStart; i < sliceEnd; i++)
+                    {
+                        OfflineReplayChatSummary summary = summaries[i];
+                        if (summary == null || string.IsNullOrWhiteSpace(summary.Jid))
+                        {
+                            continue;
+                        }
+
+                        bool createdRow;
+                        ChatItem preferred = ApplyStripOnUiThread(
+                            summary.Jid,
+                            summary.Preview ?? string.Empty,
+                            summary.Timestamp,
+                            summary.Kind,
+                            summary.AuthorPrefix,
+                            mentionedJids: null,
+                            summary.IsFromMe,
+                            HistoryLiveMessageMapper.FromStatus(summary.Status, summary.IsFromMe),
+                            messageId: null,
+                            summary.UnreadDelta,
+                            summary.IsGroup,
+                            aliasLid: null,
+                            aliasPn: null,
+                            createAtFront: false,
+                            reposition: false,
+                            out createdRow,
+                            summary.ParticipantJid,
+                            summary.SenderName,
+                            summary.HasCitation);
+
+                        if (createdRow)
+                        {
+                            sliceCreated++;
+                        }
+
+                        if (preferred != null && summary.Timestamp != DateTime.MinValue)
+                        {
+                            sliceUpdated++;
+                            CollectOfflineReplayReorderTarget(preferred, reorderRows);
+                        }
+
+                        if (summary.UnreadDelta > 0)
+                        {
+                            sliceUnread += summary.UnreadDelta;
+                        }
+                    }
+                }).ConfigureAwait(false);
+
+                created += sliceCreated;
+                updated += sliceUpdated;
+                unreadAdded += sliceUnread;
+
+                if (sliceEnd < summaries.Count)
+                {
+                    await Task.Delay(OfflineReplayUiSliceGap).ConfigureAwait(false);
+                }
+            }
+
+            for (int start = 0; start < reorderRows.Count; start += OfflineReplayReorderSliceSize)
+            {
+                int from = start;
+                int end = Math.Min(reorderRows.Count, start + OfflineReplayReorderSliceSize);
+                await _ui.RunAsync(() =>
+                {
+                    // Reposition only tip-updated rows (and bumped community hubs). Full SortInPlace
+                    // Moved projected-away children too → incremental-move-miss → BuildVisibleRefreshSource
+                    // storms on Mobile Low during replay-progressive.
+                    for (int i = from; i < end; i++)
+                    {
+                        ChatDisplayOrder.Reposition(_chatState.Chats, reorderRows[i]);
+                    }
+                }).ConfigureAwait(false);
+
+                if (end < reorderRows.Count)
+                {
+                    await Task.Delay(OfflineReplayUiSliceGap).ConfigureAwait(false);
+                }
+            }
+
             await _ui.RunAsync(() =>
             {
-                int created = 0;
-                int updated = 0;
-                int unreadAdded = 0;
-
-                foreach (OfflineReplayChatSummary summary in summaries)
-                {
-                    if (summary == null || string.IsNullOrWhiteSpace(summary.Jid))
-                    {
-                        continue;
-                    }
-
-                    bool createdRow;
-                    ChatItem preferred = ApplyStripOnUiThread(
-                        summary.Jid,
-                        summary.Preview ?? string.Empty,
-                        summary.Timestamp,
-                        summary.Kind,
-                        summary.AuthorPrefix,
-                        mentionedJids: null,
-                        summary.IsFromMe,
-                        HistoryLiveMessageMapper.FromStatus(summary.Status, summary.IsFromMe),
-                        messageId: null,
-                        summary.UnreadDelta,
-                        summary.IsGroup,
-                        aliasLid: null,
-                        aliasPn: null,
-                        createAtFront: false,
-                        out createdRow,
-                        summary.ParticipantJid,
-                        summary.SenderName);
-
-                    if (createdRow)
-                    {
-                        created++;
-                    }
-
-                    if (preferred != null && summary.Timestamp != DateTime.MinValue)
-                    {
-                        updated++;
-                    }
-
-                    if (summary.UnreadDelta > 0)
-                    {
-                        unreadAdded += summary.UnreadDelta;
-                    }
-                }
-
-                ChatDisplayOrder.SortInPlace(_chatState.Chats);
                 int totalUnread = GetTotalUnreadCount();
                 if (_notifications != null)
                 {
@@ -1760,13 +1942,79 @@ namespace Unison.WhatsAppClient.Chats
                     "; chats=" + summaries.Count +
                     "; created=" + created +
                     "; previews=" + updated +
-                    "; unreadAdded=" + unreadAdded);
+                    "; unreadAdded=" + unreadAdded +
+                    "; repositioned=" + reorderRows.Count);
             }).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// Offline tips apply with reposition:false; collect the painted row (hub when the tip
+        /// landed on a linked child) so one Reposition covers Visible without SortInPlace.
+        /// </summary>
+        private void CollectOfflineReplayReorderTarget(ChatItem preferred, List<ChatItem> reorderRows)
+        {
+            if (preferred == null || reorderRows == null)
+            {
+                return;
+            }
+
+            ChatItem hub = BumpCommunityHubFromLinkedChild(preferred);
+            ChatItem target = hub ?? preferred;
+
+            for (int i = 0; i < reorderRows.Count; i++)
+            {
+                if (ReferenceEquals(reorderRows[i], target))
+                {
+                    return;
+                }
+            }
+
+            reorderRows.Add(target);
+        }
+
+        /// <summary>
+        /// Mirrors a linked subgroup tip onto its community hub so list order can rise without
+        /// waiting for the next CommunityListProjector rebuild.
+        /// </summary>
+        private ChatItem BumpCommunityHubFromLinkedChild(ChatItem child)
+        {
+            if (child == null || string.IsNullOrWhiteSpace(child.LinkedParentJid))
+            {
+                return null;
+            }
+
+            List<ChatItem> hubs = _chatRows.FindConversation(child.LinkedParentJid);
+            if (hubs == null || hubs.Count == 0)
+            {
+                return null;
+            }
+
+            ChatItem hub = null;
+            for (int i = 0; i < hubs.Count; i++)
+            {
+                if (hubs[i] != null)
+                {
+                    hub = hubs[i];
+                    break;
+                }
+            }
+
+            if (hub == null)
+            {
+                return null;
+            }
+
+            CommunityHubPresentation.ApplyTipIfNewer(hub, child, _strings);
+            return hub;
         }
 
         /// <summary>
         /// Shared live / offline strip write. Caller must already be on the UI thread.
         /// </summary>
+        /// <param name="reposition">
+        /// When true, moves the row in the store now. Live incoming passes false and schedules
+        /// <see cref="ChatDisplayOrder.Reposition"/> on a Normal hop so toast does not wait.
+        /// </param>
         private ChatItem ApplyStripOnUiThread(
             string jid,
             string previewText,
@@ -1782,18 +2030,28 @@ namespace Unison.WhatsAppClient.Chats
             string aliasLid,
             string aliasPn,
             bool createAtFront,
+            bool reposition,
             out bool createdRow,
             string participantJid = null,
-            string senderName = null)
+            string senderName = null,
+            bool hasCitation = false)
         {
             createdRow = false;
-            string canonicalLookup = _jids.GetCanonicalJid(jid) ?? jid;
-            ChatItem chat = _chatState.Chats.FirstOrDefault(c =>
-                c != null &&
-                string.Equals(
-                    _jids.GetCanonicalJid(c.JID),
-                    canonicalLookup,
-                    StringComparison.OrdinalIgnoreCase));
+            // Index lookup — never walk Chats with GetCanonicalJid per row on the live tip hop
+            // (Mobile: that O(n) scan stacked into multi-second urgent:RunLiveStripAsync stalls).
+            List<ChatItem> indexed = _chatRows.FindConversation(jid);
+            ChatItem chat = null;
+            if (indexed != null)
+            {
+                for (int i = 0; i < indexed.Count; i++)
+                {
+                    if (indexed[i] != null)
+                    {
+                        chat = indexed[i];
+                        break;
+                    }
+                }
+            }
 
             if (chat == null)
             {
@@ -1837,6 +2095,11 @@ namespace Unison.WhatsAppClient.Chats
             }
 
             chat.ApplyKind(chat.JID, _jids.IsSelfLinked(chat.JID));
+            if (chat.IsChannel)
+            {
+                // Newsletter notify / tip sender name lands on Name via existing columns.
+                ChannelIdentityApply.TryApplyName(chat, senderName);
+            }
 
             string yesterday = _strings.Get("Common_Yesterday", "Yesterday");
             if (timestamp != DateTime.MinValue)
@@ -1879,6 +2142,8 @@ namespace Unison.WhatsAppClient.Chats
                 }
             }
 
+            ChatItem hubFromChild = BumpCommunityHubFromLinkedChild(chat);
+
             if (!isGroup &&
                 PlaceholderChatLabel.IsPlaceholder(
                     chat.Name,
@@ -1892,14 +2157,19 @@ namespace Unison.WhatsAppClient.Chats
                 }
             }
 
-            if (createAtFront)
+            if (reposition)
             {
-                ChatDisplayOrder.Reposition(_chatState.Chats, chat);
+                // Linked child is not on VisibleChats — move the hub the list actually paints.
+                ChatDisplayOrder.Reposition(_chatState.Chats, hubFromChild ?? chat);
             }
 
             if (unreadDelta > 0)
             {
-                ChatUnreadTally.Bump(chat, _chatRows.FindConversation(jid), unreadDelta);
+                ChatUnreadTally.Bump(
+                    chat,
+                    _chatRows.FindConversation(jid),
+                    unreadDelta,
+                    hasCitation);
             }
 
             return chat;
@@ -2433,5 +2703,9 @@ namespace Unison.WhatsAppClient.Chats
         /// <inheritdoc />
         public bool MatchesListEnrichmentPhase(string syncStatus) =>
             ListEnrichmentPhase.Matches(syncStatus);
+
+        /// <inheritdoc />
+        public void ClearInMemoryTimelines() =>
+            _chatState.MessagesByChat.Clear();
     }
 }

@@ -176,8 +176,17 @@ namespace Unison.WhatsAppClient.Contacts
                     await _groups.QueryAllGroupsAsync(force);
                 }
 
-                await _addressBook.RefreshAsync(force);
-                await _nameRefresh.ApplyAsync();
+                IReadOnlyList<string> mapped =
+                    await _addressBook.RefreshAsync(force).ConfigureAwait(false);
+                if (mapped != null && mapped.Count > 0)
+                {
+                    await _nameRefresh.ApplyAsync(mapped).ConfigureAwait(false);
+                }
+                else if (directJids.Count > 0)
+                {
+                    await _nameRefresh.ApplyAsync(directJids).ConfigureAwait(false);
+                }
+
                 _catalog.Schedule();
                 _lastRefreshUtc = DateTime.UtcNow;
 
@@ -318,8 +327,17 @@ namespace Unison.WhatsAppClient.Contacts
 
             try
             {
-                await _addressBook.RefreshAsync(force: false);
-                await _nameRefresh.ApplyAsync();
+                IReadOnlyList<string> mapped =
+                    await _addressBook.RefreshAsync(force: false).ConfigureAwait(false);
+                if (mapped != null && mapped.Count > 0)
+                {
+                    await _nameRefresh.ApplyAsync(mapped).ConfigureAwait(false);
+                }
+                else
+                {
+                    await _nameRefresh.ApplyAsync(missingList).ConfigureAwait(false);
+                }
+
                 _catalog.Schedule();
             }
             catch (Exception exPost)

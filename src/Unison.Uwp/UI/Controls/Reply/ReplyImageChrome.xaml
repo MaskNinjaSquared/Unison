@@ -13,12 +13,12 @@
         <TextBlock Grid.Column="1"
                    Margin="8,0,0,0"
                    VerticalAlignment="Center"
-                   Text="{Binding Caption}"
+                   Text="{Binding ReplyDockPreviewText}"
+                   Foreground="{ThemeResource ChatDetailMutedTextBrush}"
                    MaxLines="2"
                    TextTrimming="CharacterEllipsis"
                    TextWrapping="Wrap"
                    FontFamily="{StaticResource MainFont}"
-                   FontSize="13"
-                   Opacity="0.8"/>
+                   FontSize="13"/>
     </Grid>
 </UserControl>

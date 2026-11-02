@@ -21,7 +21,7 @@ namespace Unison.Core.Tests.State
 
             Assert.Equal(50, s.MaxMessagesPerConversation);
             Assert.Equal(80, s.HistoryPersistSubBatchSize);
-            Assert.False(s.MaterializeHistoryThumbsDuringSync);
+            Assert.True(s.MaterializeHistoryThumbsDuringSync);
             Assert.Equal(6, s.ChatListReleaseBatchSize);
             Assert.Equal(1, s.AvatarFetchBatchSize);
             Assert.Equal(256u, s.HistoryStorageQuotaMb);
@@ -82,7 +82,8 @@ namespace Unison.Core.Tests.State
 
             Assert.True(low.MaxMessagesPerConversation > unsupported.MaxMessagesPerConversation);
             Assert.True(low.MaxMessagesPerConversation < high.MaxMessagesPerConversation);
-            Assert.False(low.MaterializeHistoryThumbsDuringSync);
+            Assert.True(low.MaterializeHistoryThumbsDuringSync);
+            Assert.True(high.MaterializeHistoryThumbsDuringSync);
             Assert.Equal(1, low.AvatarFetchBatchSize);
             Assert.Equal(4, low.MaxFullHistoryCatchUpRounds);
             Assert.Equal(0, unsupported.MaxFullHistoryCatchUpRounds);

@@ -52,6 +52,8 @@ namespace Unison.Socket.Groups
             Create = new CreateGroupUseCase(connection);
             Participants = new ModifyGroupParticipantsUseCase(connection);
             Invites = new GroupInviteUseCase(connection);
+            LinkedGroups = new FetchCommunityLinkedGroupsUseCase(connection, Metadata);
+            Join = new JoinGroupUseCase(connection, Invites);
 
             _cache = cache ?? new GroupMetadataProvider(Metadata, log: session.Log);
 
@@ -81,6 +83,12 @@ namespace Unison.Socket.Groups
         public UpdateGroupSettingsUseCase Settings { get; }
 
         public GroupInviteUseCase Invites { get; }
+
+        /// <summary>Baileys <c>communityFetchLinkedGroups</c> — subgroups including not joined.</summary>
+        public FetchCommunityLinkedGroupsUseCase LinkedGroups { get; }
+
+        /// <summary>Join a group by invite code or direct IQ (community can-join).</summary>
+        public JoinGroupUseCase Join { get; }
 
         /// <summary>
         /// Drops a group from the send path's cache. Changes made through this module normally

@@ -2,6 +2,402 @@
 
 Newest first.
 
+## Favourites — app-state regular_low resilience
+
+Undecryptable syncd snapshot/patch records are skipped with a warning
+instead of aborting the whole `regular_low` collection. Snapshot MAC softens
+when records were skipped. Before refusing a favourite write on a fabricated
+v0, `SendAppPatchUseCase` forces one snapshot resync. Favourite JID collect
+stays off the UI thread / store-only.
+
+## Status — save current media
+
+Status viewer top-right download saves the current photo/video via the file
+picker (`StatusDetailViewModel.DownloadCurrentAsync`). Localized tooltip /
+automation name on all locales.
+
+## Message bubbles — Unigram MaxWidth wrap
+
+Sent/received bubble roots and body panels cap at 432 (`MessageMaxWidth`).
+Text uses `WrapWholeWords`. Fixes single-line overflow when Auto columns
+measured the RichTextBlock with infinite width. Debug tap probe optional.
+
+## Legacy shell — search header + Calls empty glyph
+
+Legacy search title matches Settings (FontSize 22, tighter margins). Calls
+empty pane uses the larger EB18 new-call glyph.
+
+## Incoming toasts quiet during history waves
+
+Live/offline envelopes no longer toast while initial sync, history catch-up /
+silent FULL lots, or offline buffers are in flight. Messages older than five
+minutes are also quiet (history bleed labeled as live). Unread still updates.
+
+## New conversation overlay
+
+The chat-list New Chat action opens a full-bleed overlay (not a Frame
+page): back title, search, tiles for New group / contact / community /
+phone number (existing dialog), a message-yourself row with your photo,
+then A–Z contacts like the share picker. Dedicated
+`NewConversationViewModel` + `NewConversationView`.
+
+## Reaction action flyout — WP/W10M chrome
+
+Action rows under the quick bar use solid `#232323`, 1px border, 2px radius,
+44px rows, and a hairline before pin items (not the translucent input-bar card).
+Quick bar background matches the same solid chrome.
+
+## Reaction + opens bottom emoji dock
+
+The full emoji picker from reaction `+` is no longer a Flyout. It slides up
+from the bottom like the attachment dock (scrim + composer swap on Unison /
+Legacy; same slide on WhatsApp). Quick-bar 12 stay in the bubble Flyout.
+
+## Reaction chrome — one Flyout (Unison / WhatsApp)
+
+Unison and WhatsApp no longer open MenuFlyout on top of the reaction Flyout
+(UWP dismisses the first). Copy/Reply/Forward/Pin live in the same surface
+under the quick bar. Legacy keeps its CommandBar dock + reaction-only Flyout.
+Quick bar: 12 glyphs scroll, `+` fixed outside; MaxWidth capped to the window.
+
+## Group system tip strip — no author chip
+
+Join / leave / rename list tips already include the actor in the body
+(`X removed Y`). The author projection no longer re-applies `X: ` on
+`ChatPreviewKind.GroupJoin`, and cold-start clears leftover chips.
+
+## Media thumbs — Baileys retry + history placeholders + scrim
+
+On-demand image download goes through `DownloadMediaUseCase` when the socket
+media module is up (CDN, then one phone media-retry for DM/group; channels skip
+retry). Low/Unsupported sync now materializes `jpegThumbnail` to disk so group
+and 1:1 placeholders survive. Download grids add a theme scrim over the thumb
+(light: white; dark: dark) so the download icon stays readable.
+
+## Reaction toggle — tap own emoji to remove
+
+Quick bar / full picker: tapping the from-me emoji already on the bubble
+removes it immediately (optimistic), calls `TryReactAsync` with empty text,
+and restores the chip if the command fails. The matching glyph is marked in
+the quick strip. One from-me reaction per bubble: picking another emoji
+replaces the previous; failed send restores the old one.
+
+## Toast filter — choice dialog like Start tile
+
+Settings → Filter notifications opens a ContentDialog (All / Groups /
+Contacts / Favorites), same single-select model as the Start tile picker
+and lock-screen scope. Checkboxes removed; stored allow-list still uses
+`groups;direct;favorites`.
+
+## Notification filter — lock screen + toasts
+
+Settings → Notifications: ComboBox for Live Tile / lock-screen audience
+(All / Groups / Contacts / Favorites). Toast allow-list uses the same
+scopes via dialog (see above). Contacts = 1:1 (`direct`); channels only
+via Favorites or All. Badge follows the toast filter.
+
+## Channel avatars via newsletterMetadata
+
+`@newsletter` rows no longer use `w:profile:picture`. Avatar batch calls WMex
+`newsletterMetadata` (`FetchNewsletterMetadataUseCase`), resolves
+`picture`/`preview` `direct_path` on `pps.whatsapp.net`, applies name + picture
+hint through `ChannelIdentityApply`, then caches like other avatars.
+
+## Silent FULL — empty-lot cap + residual banner
+
+Silent chain stops soliciting after 4 consecutive quiet lots with zero applied
+messages (`empty-cap`). A productive lot resets the streak. Catch-up banner still
+rises when silent history applies after the chain is disarmed (progress + quiet).
+
+## Reaction quick bar + reusable emoji picker
+
+Bubble hold/right-tap opens a horizontal strip of 12 common reactions plus a
+fixed `+` above the existing context menu. `+` opens `EmojiPickerPanel` (no
+pivot) for a full pick. Glyph click applies optimistically; `TryReactAsync` is
+a 3s fake that always returns false so the chip rolls back (wire send later).
+Composer sticker box emoji tab hosts the same panel with `InsertEmojiCommand`.
+Unigram GIF search is TDLib-bot only — not portable to WhatsApp; GIF tab stays
+placeholder.
+
+## Emoji jump icons — UnisonIcons refresh
+
+Category jump tiles for Recents / Nature / Food / Activities / Symbols use new
+PNG-traced glyphs in `UnisonIcons.ttf` (EA05–EA09). Recents switched from Segoe
+clock to Unison `EA09`.
+
+## Chat list — green @ for unread citations
+
+`ChatItem.HasCitation` lights when an unread message @mentions this account or
+`@all` (live + offline replay), or when history sync reports
+`Conversation.UnreadMentionCount`. Cleared with unread on mark-read. The list
+shows a green `@` beside the unread badge.
+
+## Group system lines — leave, remove, rename, added-by
+
+`w:gp2` remove and `groups.update` subject now insert the same GroupJoin-chrome
+timeline lines as joins. Distinct `author` → “{0} added {1}” / “{0} removed {1}”;
+same or blank actor → “joined” / “left”. Rename captures the previous catalog
+subject before applying the new one. Upsert still updates names only (no fake
+rename line).
+
+## Silent FULL history chain + open-chat ON_DEMAND + reply sling
+
+After init, sequential `FULL_HISTORY_SYNC_ON_DEMAND` probes wait for each lot’s
+socket+SQLite quiet before the next (Unsupported 5 min / Low 3 / High 2). Banner
+only when a silent lot applied data; empty lots journal `history|silent-sync` only.
+Opening a chat requests one per-session `HISTORY_SYNC_ON_DEMAND` page off the UI
+thread after the thin timeline paints. Reply swipe shows a circular reply icon
+beside the bubble while dragging; reply dock Photo/Video/Gif use
+`ReplyDockPreviewText` (caption or localized label).
+
+## Chat list strip — WhatsApp emoji font
+
+`ChatListPreviewStrip` painted preview/author with plain `TextBlock.Text` on
+`MainFont`, so emoji fell to Segoe. It now builds the same mixed runs as bubbles
+(`EmojiRichRuns.SetTextBlock`) for preview text, author, and author detail.
+
+## Composer — emoji picker font + no keyboard on Mobile
+
+Tapping an emoji from the tray called `FocusProgrammatic` on the RichEditBox, which
+opened the soft keyboard on Mobile; the tray now only places the caret.
+
+The composer never showed the WhatsApp face: `ITextCharacterFormat.Name` resolves
+installed fonts only, so stamping "WhatsApp Color Emoji" per range fell back to the
+system Segoe UI Emoji. Following Unigram, the packaged `WhatsAppColorEmoji.ttf` family
+is renamed to "Segoe UI Emoji" (`EmojiFont` now `...#Segoe UI Emoji`), and the composer
+sets `FontFamily` = `ComposerEmojiFont` (emoji face first, MainFont after; the face maps
+no ASCII). The per-range stamping and deferred pass are gone.
+
+## Offline replay — wider tip window after the first flush
+
+A long offline replay trickles messages in one by one, so the 180 ms tip throttle
+flushed one chat per pass. Each pass paid a list Move, a preview reconcile and the
+badge on the UI thread (300 ms–1.3 s on Mobile Low, stalls of 3 s while a chat
+was open). `OfflineReplayTips` keeps 180 ms for the first progressive flush, then
+uses 1 s until a settle flush (`offline-complete`, journal recovery) ends the replay.
+
+## Sticker box — open fast, ring, then virtualized emoji
+
+Each emoji section was an `ItemsControl` + `WrapGrid` inside a ListView item, so
+the first section realized every glyph at once and froze the UI on Mobile. The
+emoji list is now a grouped `GridView` (`CollectionViewSource`, `ItemsPath=Glyphs`)
+on `ItemsWrapGrid`, which realizes only on-screen glyphs. The tray paints with the
+ProgressRing first (150 ms, every device) and sections stream 40 ms apart.
+
+## Composer — typing lag on the RichEditBox
+
+`ChatComposerInput` re-stamped emoji fonts over the whole document on every
+keystroke and again on the dispatcher. RichEdit raises `TextChanged` for
+format-only edits, so the deferred pass echoed into another pass, and each
+segment `SetRange` fired `SelectionChanged` (mention scan). Format-only echoes
+are now ignored, the deferred pass runs under `_syncing`, and plain text without
+emoji is not re-formatted.
+
+## Chat list — release when no history ever arrives
+
+A fresh pairing holds the list for the first history sync. When the phone sends
+no chunk, nothing completed that sync: the list kept its loading ring while
+enrichment waited on the list paint. Catch-up finish now completes the first
+sync when the list is still awaiting it (`ReleaseListThenEnrichment`), so live
+chats paint and names/avatars run.
+
+## Runtime Health — socket history and decrypt lines
+
+`SocketBridge` copies socket `[History]` lines (notification seen, skipped, not from
+us, download failed) to the journal as `history|socket-chunk`, and
+`[Decrypt] Failed` as `messages|decrypt-failed`. A pairing with no initial sync now
+shows whether the phone never sent the notification or the client dropped it.
+
+## Desktop — stop FULL_HISTORY idle-continue ghost loop
+
+Catch-up treated live tip advances (`signals=0`) as lot progress, so Desktop High
+kept `idle-continue` for dozens of rounds after WA `ack-accepted` with no history
+payload. Lot progress is chunk signals only; empty-ack quiet lots finish on every
+tier (was frugal/Mobile only). Empty-ack finish also skips High's
+`hydration-then-full` repair cascade (was reopening the same banner immediately).
+
+## Desktop tray — close-to-tray (X hides window)
+
+`confirmAppClose` was cancelling close with no hide, so X did nothing. Stub now receives
+`WindowId` (CoreWindow hwnd) and hides/restores the `ApplicationFrameWindow` via Win32; tray
+Open brings the window back. Process stays for the socket.
+
+## Desktop package — fix WinRT 0x80073B0C (PRI without default)
+
+Launch threw `ResourceMap … não tem um recurso padrão ou nêutro`: `Assets/LegacyLogo` was packed
+as `*.png`, so names like `Square150x150Logo.scale-100_altform-…` created a NamedResource with no
+default. Only plain-named LegacyLogo files are Content now; theme icon is
+`WhatsAppLegacyIcon.png`. Desktop manifest uses `Assets\…` (no second `Images\` PRI map).
+
+## Desktop tray — Unigram-shaped bridge
+
+Aligned with Unigram Preview (`Telegram.Stub` / `BridgeApplicationContext`):
+
+- `FullTrustProcessLauncher.LaunchFullTrustProcessForCurrentAppAsync("SystemTrayGroup")` with
+  matching `desktop:ParameterGroup` (`/SystemTray`) plus `LoopbackExemptGroup`
+- AppService `org.unison.bridge`; handshake `ProcessId` / `OpenText` / `ExitText`; unread via
+  `UnreadCount`; Exit via ValueSet `Exit`
+- Stub opens the app with `Package.GetAppListEntriesAsync().LaunchAsync()`; reconnects on
+  `CloseRequested`
+- Desktop package gains `rescap:confirmAppClose` — window close is cancelled so the process (and
+  tray) stay alive. Mobile package untouched
+
+## Start with Windows — toggle no longer snaps Off
+
+Enabling the setting raised `StartupLaunchEnabled` while the Windows state was still
+`Disabled`, so the TwoWay ToggleSwitch snapped Off and then On again. `RequestEnableAsync` also
+ran off the UI thread (`ConfigureAwait(false)`), so the system consent dialog could fail. The
+ViewModel now keeps the optimistic state while waiting, and the service stays on the UI context.
+
+## Desktop package + tray icon (spike)
+
+- New `src/Unison.Desktop.Tray` (net48 WinForms `NotifyIcon`, AppService client only, no Unison
+  references) and `src/Unison.Desktop.Package` (wapproj, x64 / ARM64, `Windows.Desktop` 16299+,
+  same Identity, `runFullTrust`, `windows.fullTrustProcess`, in-process app service `Unison.Tray`)
+- `IDesktopTrayHost` / `DesktopTrayHost`: launched after launch / startup task; unread from
+  `NotificationService.UpdateBadge`; tray "Sair" → `Application.Exit()`. Store/Mobile package: the
+  launch is skipped (no declaration)
+- `Unison.Uwp.csproj` gains `ARM64` configurations and the `WindowsDesktop` extension SDK
+  reference (guarded at runtime). Mobile `arm` bundle unchanged
+- Open questions (keep-alive while minimized, close-to-tray, Store) in [Desktop tray](Desktop-Tray)
+
+## Desktop — Start with Windows
+
+- Package declares `uap5:StartupTask` (`TaskId="UnisonStartup"`, off by default, `Executable="Unison.Uwp.exe"`
+  — `$targetnametoken$` is not expanded inside extensions). Builds before 1709 ignore it
+- `IStartupLaunchService` (Core) / `StartupLaunchService` (UWP): `StartupTask.GetAsync` +
+  `RequestEnableAsync` / `Disable`; supported only on `Windows.Desktop` with the type present, so
+  Mobile never shows the row
+- Settings (Unison, WhatsApp dialog, WhatsAppLegacy): "Iniciar com o Windows" next to background
+  mode. The toggle mirrors the Windows state, re-read on every `Initialize`; `DisabledByUser`
+  (Task Manager) and policy states lock it with a hint (`StartupLaunchPresentation`)
+- `ActivationKind.StartupTask` boots like a tile launch; breadcrumb `lifecycle|startup-task`,
+  `startup-task|set`
+- The store bundle is still `arm` only: on x64 PCs the option appears in x64 deploys until a
+  desktop package exists
+
+## Group roster — no more blinking, warm for @
+
+Every roster flush raised `GroupMembers` + `HasGroupMembers` + `MentionLookup`, and each one ran
+`RebuildParticipantLookup` + `RecomputeMessageRuns`; on Desktop it also restarted the header
+presence watch, replaying the subtitle animation. Flushes arrive in bursts (messages, quotes,
+viewport, `w:gp2`), so the open group blinked without pause.
+
+- `StartPresenceWatch` is idempotent per chat (`PresenceWatchGate`); only open / chat switch
+  restarts it
+- All `ChatDetailView` shells react only to `GroupMembers` / `MentionLookup` through
+  `RosterUiRefreshCoalescer`: one Low-priority refresh per 300 ms quiet window, deferred while
+  `IsTimelineBusy`, dropped on chat switch. Breadcrumb `roster|ui-refresh` (masked chat,
+  coalesced count, ms)
+- Composer focus warms the roster from the store (`OnComposerFocused` →
+  `EnsureGroupRosterLoadedFromStoreAsync`, once per group per session, no network) so the first
+  @ has names; the full fetch still waits for the @. Breadcrumb `roster|warm-store`
+- Mention bubbles stopped re-rendering on every flush: `ChatItem` keeps the same `MentionLookup`
+  instance while names are unchanged (`MentionLookupBuilder.SameEntries`; avatar / role flushes
+  no longer raise it), and `CommentRichService` skips `Blocks.Clear` when the resolved text and
+  link brush match what the block already shows. `GroupParticipantLookup.EnsureFresh` also keys
+  on the `GroupMembers` list reference so a same-names flush still refreshes member instances
+
+## Emoji tray flags + attach tray light + composer emoji font
+
+- Flags category is back on every device (streamed last; ProgressRing kept, accent foreground)
+- Attach menu bar paints `ChatDetailInputBarBackgroundBrush` so the dark scrim no longer shows
+  through the tray on Light; Unison Light input bar matches WhatsApp `#F0F2F5` (top rule cleared)
+- Composer RichEdit: document-native ranges + deferred re-apply of WhatsApp Color Emoji; bubbles
+  already use `EmojiRichRuns` (TextBlock). RichEdit may still fall back to Segoe for some
+  typed color-emoji codepoints — that is a platform path, not the tray font
+
+## Chat open — navigate + ProgressBar before roster/avatar enrich
+
+List→detail on Mobile was still paying `SyncActiveChat` roster rebuild, group strip, avatar
+revalidate and subject IQ on the Prepare turn — before `SelectChat` / NarrowDetail painted.
+Open bind is now split: `BindActiveChatForOpen` (chrome/composer flags only) in Prepare;
+`EnrichActiveChatAfterPaint` (lookup rebuild, strip, avatar, `w:g2` subject) runs in Complete
+after the surface-paint yield. `BeginLoadingMessages` only arms the ProgressBar; subject IQ
+moved into enrich. Same-chat rebind still uses full `SyncActiveChat`.
+
+## Group roster on demand — one rule for every device
+
+The roster is filled by the people the app actually sees, the same way on Desktop and Mobile.
+`GroupRosterIndex` (Core) keeps one entry per participant under every address (JID, LID, phone),
+with tombstones for leaves and a timestamp per role so an older sighting never undoes a newer one.
+Sources: incoming group messages and quoted authors (`MessageFacade`), every `w:gp2`
+add / remove / promote / demote / modify (`SocketBridge.GroupRosterEventReceived` →
+`IGroupService.ApplyRosterEvent`), metadata replies (`MergeAll`; a reply shorter than the member
+count — the 512 cap — stays `Partial`), the store, and the visible timeline
+(`EnsureMembersAsync`).
+
+`GroupRosterDemand` puts index changes on `ChatItem.GroupMembers` in one debounced flush per group
+(~250 ms, waits for the timeline-open gate, batches of 16 at low dispatcher priority), persists only
+what changed (`UpsertMembersAsync` / `RemoveMembersAsync`, `PersonGroup` mirror) and raises
+`GroupRosterChanged(groupJid, changedJids)`. Field updates stay in place; adds and removes hand
+the row a new list reference holding the same member instances, because the Members pivot binds
+the list itself. The @ menu and the Members pivot call `EnsureFullRosterAsync(reason)`: known
+members first, then the store, then one metadata request per group (single-flight, reused for 2
+minutes). `ChatItem.RosterCompleteness` (None / Partial / Full) replaces `HasFullGroupRoster`
+as the source of truth; Full is never persisted.
+
+Removed: `GroupMember.IsMinimal`, `EnsureMinimalMembers`, `GroupRosterRestore`,
+`ApplyRestored` / `HydrateFromStore`, `ChatAuthorProjection` `onDemand` and its 64-member tip
+cap (`ChatItem.FindGroupMember` is an O(1) address index), the 48-member avatar hook cap in
+`GroupParticipantLookup` (a member is hooked when a bubble resolves to it), and the Mobile
+"never relabel members" name refresh (frugal now relabels only members still showing a number).
+The author-strip broad pass (Start / DisplayNamesChanged) visits only rows without a usable name.
+
+Breadcrumbs: `roster|note`, `roster|flush` (n, added, removed, ms, completeness),
+`roster|ensure-full` (reason, outcome, ms, count).
+
+## Mobile — minimal group roster for bubble photos; @ loads full from store
+
+Open still skips the 500+ member apply. Visible bubble (and quote) JIDs get
+`GroupMember.IsMinimal` stubs so `HydrateVisible` can fetch photos; full restore
+merges over stubs (`HasFullGroupRoster`) and keeps avatar/name. First `@`
+ensures roster from SQLite (wire only if still empty) and refreshes the mention
+menu — not on every chat open.
+
+## Mobile — live strip tip vs reorder; alias dedupe skip
+
+Live incoming list apply writes the tip/unread on the urgent UI hop and
+schedules `ChatDisplayOrder.Reposition` on a Normal hop that toast does not
+await — so a slow `VisibleChats.Move` no longer holds the announce ~80s.
+`ChatListDeduper` skips `BuildPlan` when `JidAliasTable.ChangeGeneration` is
+unchanged since the last pass, plans with `PeekCanonicalJid` (no LidMapping
+promote storms), and only walks message-cache keys when aliases exist.
+Breadcrumbs: `strip-tip` / `strip-reorder` / `chat-list-dedupe|skip-unchanged`.
+
+## Notifications — community subgroup titles use GroupNaming
+
+Live toast chat title for `@g.us` no longer prefers `ContactDisplayNames`
+(agenda/push). It uses `ChatItem.GetNameResolved` then
+`IGroupNaming.ResolveChatDisplayName` (GroupSubjects first) — same policy as
+the community hub list — so linked subgroups stop toasting the wrong/parent
+name. Avisos still forced via `PreferChatTitle`.
+
+## ChatDetailInfo — name / phone / groups-in-common white on Unison
+
+Pane body text (group title, contact name, phone, groups-in-common titles)
+uses a dedicated `ChatDetailInfoPaneBodyBrush` (always white on the brand-green
+info pane). Stops WinUI HyperlinkButton / `SystemControlHyperlinkTextBrush`
+accent green and Legacy `ChatDetailInfoValueBrush` green from painting those
+fields. Local overrides in `ChatDetailInfoPivotStyles` also pin hyperlink
+accent fills to white inside the pane.
+
+## Notifications — community Avisos toast uses localized label
+
+Live toast title for `IsCommunityAnnounce` chats always uses
+`Chat_CommunityAnnouncements` (Avisos / Announcements) via
+`NotificationDisplayLabel.PreferChatTitle` — never the wire subject.
+
+## Resume — skip Theme.xaml remount; community subject cache; group toast ids
+
+`OnResuming` calls `ApplyFromSettingsIfShellChanged` — remounts shell Theme.xaml
+only when `SelectedShell` differs from the last applied shell or a pending
+“shell applied” toast is owed (stops Legacy white flash after FileOpenPicker).
+`GroupMetadataApply` files wire subjects even when the chat row is missing
+(synthetic community hubs). Toast `NotificationDisplayLabel` rejects group id
+placeholders so Mobile notifications no longer prefer bare numeric JIDs over
+real subjects.
+
 ## Notifications — resolve toast title/author past bare JID/@lid
 
 Live toast announce (`FinishLiveStripAnnounceAsync`) runs chat + group-author

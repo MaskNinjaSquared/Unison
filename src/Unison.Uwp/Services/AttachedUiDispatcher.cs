@@ -16,7 +16,7 @@ namespace Unison.Uwp.Services
     /// unlike <see cref="DispatcherService"/> and <see cref="UiThreadDispatcherService"/>, which
     /// run inline when they find no dispatcher.
     /// </remarks>
-    public sealed class AttachedUiDispatcher : IDispatcher, IUrgentDispatcher
+    public sealed class AttachedUiDispatcher : IDispatcher, IUrgentDispatcher, ILowPriorityDispatcher
     {
         private readonly IRuntimeDiagnostics _diagnostics;
         private readonly UiStallWatchdog _watchdog;
@@ -69,6 +69,13 @@ namespace Unison.Uwp.Services
             [CallerMemberName] string caller = null,
             [CallerFilePath] string callerFile = null) =>
             RunCoreAsync(action, CoreDispatcherPriority.High, "urgent", caller, callerFile);
+
+        /// <inheritdoc />
+        public Task RunLowAsync(
+            Action action,
+            [CallerMemberName] string caller = null,
+            [CallerFilePath] string callerFile = null) =>
+            RunCoreAsync(action, CoreDispatcherPriority.Low, "low", caller, callerFile);
 
         private async Task RunCoreAsync(
             Action action,

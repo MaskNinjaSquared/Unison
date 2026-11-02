@@ -47,6 +47,7 @@ namespace Unison.WhatsAppClient.Helpers
         private readonly object _gate = new object();
         private PendingPass _running;
         private PendingPass _queued;
+        private long _plannedAgainstGeneration = -1;
 
         public ChatListDeduper(
             IDispatcher ui,
@@ -125,6 +126,14 @@ namespace Unison.WhatsAppClient.Helpers
             var result = new ChatListDeduperResult();
             var clock = Stopwatch.StartNew();
 
+            long generation = _aliases.ChangeGeneration;
+            if (generation == _plannedAgainstGeneration)
+            {
+                result.SkippedUnchangedAliases = true;
+                DiagSkip(pass, generation);
+                return result;
+            }
+
             List<RowAddress> rows = null;
             await _ui.RunAsync(() =>
             {
@@ -145,6 +154,7 @@ namespace Unison.WhatsAppClient.Helpers
             }
 
             // The snapshot hop runs inline when the caller is already on the UI thread.
+            // PeekCanonical avoids LidMapping promotes (and Changed storms) while planning.
             DedupePlan plan = await Task.Run(() => BuildPlan(rows)).ConfigureAwait(false);
             long planMs = clock.ElapsedMilliseconds - snapshotMs;
 
@@ -170,6 +180,7 @@ namespace Unison.WhatsAppClient.Helpers
                 hops++;
             }
 
+            _plannedAgainstGeneration = generation;
             long applyMs = clock.ElapsedMilliseconds - snapshotMs - planMs;
             Trace(pass, rows.Count, plan, result, snapshotMs, planMs, applyMs, hops);
             return result;
@@ -183,7 +194,7 @@ namespace Unison.WhatsAppClient.Helpers
             {
                 foreach (RowAddress row in rows)
                 {
-                    string canonical = _aliases.GetCanonicalJid(row.Jid);
+                    string canonical = _aliases.PeekCanonicalJid(row.Jid);
                     if (!string.Equals(canonical, row.Jid, StringComparison.Ordinal))
                     {
                         plan.Readdress.Add(new KeyValuePair<RowAddress, string>(row, canonical));
@@ -194,23 +205,76 @@ namespace Unison.WhatsAppClient.Helpers
             {
                 plan.Groups.AddRange(rows
                     .GroupBy(
-                        row => _aliases.GetCanonicalJid(JidHelper.Normalize(row.Jid)),
+                        row => _aliases.PeekCanonicalJid(JidHelper.Normalize(row.Jid)),
                         StringComparer.OrdinalIgnoreCase)
                     .Where(group => group.Count() > 1)
                     .Select(group => group.ToList()));
             }
 
-            foreach (string key in _chats.MessagesByChat.ChatJids())
+            // Cache-key fold: only keys tied to snapshot rows (row JID, peek canonical, and
+            // the reverse alias). A full MessagesByChat.ChatJids() × PeekCanonical on every
+            // alias:app-state-contact follow-up ran 20–50s on Lumia 950 XL (267 rows, fat cache).
+            if (_aliases.Count > 0 && rows.Count > 0)
             {
-                string canonical = _aliases.GetCanonicalJid(key);
-                if (!string.IsNullOrWhiteSpace(canonical) &&
-                    !string.Equals(canonical, key, StringComparison.OrdinalIgnoreCase))
+                var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                for (int i = 0; i < rows.Count; i++)
                 {
-                    plan.CacheKeys.Add(key);
+                    string jid = rows[i].Jid;
+                    PlanCacheKeyIfAlias(jid, plan, seen);
+
+                    string canonical = _aliases.PeekCanonicalJid(jid);
+                    PlanCacheKeyIfAlias(canonical, plan, seen);
+
+                    string paired;
+                    if (_aliases.TryGetValue(jid, out paired))
+                    {
+                        PlanCacheKeyIfAlias(paired, plan, seen);
+                    }
+
+                    if (!string.IsNullOrWhiteSpace(canonical) &&
+                        _aliases.TryGetValue(canonical, out paired))
+                    {
+                        PlanCacheKeyIfAlias(paired, plan, seen);
+                    }
                 }
             }
 
             return plan;
+        }
+
+        private void PlanCacheKeyIfAlias(string key, DedupePlan plan, HashSet<string> seen)
+        {
+            if (string.IsNullOrWhiteSpace(key) || !seen.Add(key))
+            {
+                return;
+            }
+
+            if (!_chats.MessagesByChat.Contains(key))
+            {
+                return;
+            }
+
+            string canonical = _aliases.PeekCanonicalJid(key);
+            if (!string.IsNullOrWhiteSpace(canonical) &&
+                !string.Equals(canonical, key, StringComparison.OrdinalIgnoreCase))
+            {
+                plan.CacheKeys.Add(key);
+            }
+        }
+
+        private void DiagSkip(PendingPass pass, long generation)
+        {
+            if (_diagnostics == null)
+            {
+                return;
+            }
+
+            _diagnostics.Write(
+                Category,
+                "skip-unchanged",
+                "reason=" + (pass.Reason ?? "?") +
+                "; requests=" + pass.Requests +
+                "; generation=" + generation);
         }
 
         /// <summary>UI thread. Folds only the rows still listed under the address the plan saw.</summary>
@@ -375,5 +439,10 @@ namespace Unison.WhatsAppClient.Helpers
         public int Merged { get; set; }
 
         public int NormalizedKeys { get; set; }
+
+        /// <summary>
+        /// True when the alias table generation matched the last planned pass — no BuildPlan.
+        /// </summary>
+        public bool SkippedUnchangedAliases { get; set; }
     }
 }

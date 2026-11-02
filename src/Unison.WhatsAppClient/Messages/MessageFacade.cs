@@ -9,6 +9,7 @@ using Unison.Core.Contracts;
 using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Helpers;
 using Unison.Core.Helpers.Groups;
+using Unison.Core.Helpers.Messages;
 using Unison.Core.Helpers.Notifications;
 using Unison.Core.Models;
 using Unison.Core.State;
@@ -46,6 +47,7 @@ namespace Unison.WhatsAppClient.Messages
         private readonly IChatCatalogPersistence _catalog;
         private readonly IMessageWireActions _wire;
         private readonly IOutgoingMessageHost _outgoingHost;
+        private readonly ILiveMessagePersist _livePersist;
         private readonly IOutgoingReceiptHost _receiptHost;
         private readonly IBoundMutationGate _boundMutations;
         private readonly IStringResources _strings;
@@ -65,6 +67,7 @@ namespace Unison.WhatsAppClient.Messages
         private readonly Func<IStatusService> _resolveStatus;
         private readonly Func<IGroupService> _resolveGroups;
         private readonly Func<IConnectionService> _resolveConnection;
+        private readonly IGroupNaming _groupNaming;
         private readonly IOfflineReplayHost _offlineReplay;
         private readonly SelfProfileState _selfProfile;
         private readonly IDispatcher _ui;
@@ -75,9 +78,13 @@ namespace Unison.WhatsAppClient.Messages
         private readonly ReceiptReader _receipts;
         private readonly GroupReceiptTally _groupReceipts = new GroupReceiptTally();
         private readonly IRuntimeDiagnostics _diagnostics;
+        private readonly ICallLogService _callLog;
         private readonly int _sqlOpenPageSize;
         private readonly int _sqlLoadMorePageSize;
         private readonly int _thinTimelineThreshold;
+        private readonly object _sessionOpenOnDemandGate = new object();
+        private readonly HashSet<string> _sessionOpenOnDemandClaimed =
+            new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         public MessageFacade(
             IPersonStore personStore,
@@ -88,6 +95,7 @@ namespace Unison.WhatsAppClient.Messages
             IJidResolver jids,
             INotificationService notifications,
             IOutgoingMessageHost outgoingHost,
+            ILiveMessagePersist livePersist,
             IMediaCache mediaCache,
             IMediaAvailability availability,
             IChatCatalogPersistence catalog,
@@ -119,9 +127,12 @@ namespace Unison.WhatsAppClient.Messages
             IChatStore chatStore = null,
             IStringResources strings = null,
             ISystemInfoProvider systemInfo = null,
-            IRuntimeDiagnostics diagnostics = null)
+            IRuntimeDiagnostics diagnostics = null,
+            IGroupNaming groupNaming = null,
+            ICallLogService callLog = null)
         {
             _diagnostics = diagnostics;
+            _callLog = callLog;
             _ui = ui ?? throw new ArgumentNullException(nameof(ui));
             _syncWork = syncWork ?? throw new ArgumentNullException(nameof(syncWork));
             _initialSync = initialSync ?? throw new ArgumentNullException(nameof(initialSync));
@@ -142,6 +153,7 @@ namespace Unison.WhatsAppClient.Messages
             _chatStore = chatStore;
             _chatState = chatState ?? throw new ArgumentNullException(nameof(chatState));
             _outgoingHost = outgoingHost ?? throw new ArgumentNullException(nameof(outgoingHost));
+            _livePersist = livePersist ?? throw new ArgumentNullException(nameof(livePersist));
             _receiptHost = receiptHost ?? throw new ArgumentNullException(nameof(receiptHost));
             _boundMutations = boundMutations ?? throw new ArgumentNullException(nameof(boundMutations));
             _pendingFlush = pendingFlush ?? throw new ArgumentNullException(nameof(pendingFlush));
@@ -172,6 +184,8 @@ namespace Unison.WhatsAppClient.Messages
             _selfProfile = selfProfile
                 ?? throw new ArgumentNullException(nameof(selfProfile));
             _strings = strings;
+            // Optional: older hosts omit it; group toast titles then fall back to chat.Name.
+            _groupNaming = groupNaming;
             _receipts = new ReceiptReader(jids);
 
             _textSend = new OutgoingTextSend(
@@ -290,9 +304,13 @@ namespace Unison.WhatsAppClient.Messages
                 return Task.CompletedTask;
             }
 
-            bool quietForSync =
-                _initialSync.IsActive ||
-                _isAwaitingInitialSync();
+            bool quietForSync = IncomingToastSuppression.ShouldQuiet(
+                initialSyncActive: _initialSync.IsActive,
+                awaitingInitialSync: _isAwaitingInitialSync(),
+                historyCatchUpQuiet: _history != null && _history.IsHistoryCatchUpQuiet,
+                isOfflineEnvelope: request.IsOffline,
+                messageTimestamp: request.Timestamp,
+                nowUtc: DateTime.UtcNow);
 
             if (string.IsNullOrWhiteSpace(request.SelfDisplayName))
             {
@@ -670,10 +688,13 @@ namespace Unison.WhatsAppClient.Messages
                 "ms=" + seedMs + "; merged=" + merged.Count +
                 "; sqlMs=" + sqlMs);
 
-            // RECENT history often leaves a single listable message — pull older on open.
+            // Pull one ON_DEMAND page after the thin timeline paints: recovers messages the
+            // initial FULL push skipped for this chat. One attempt per session; off the UI path.
             bool onDemandPending = IsHistoryOnDemandPending(jid);
             bool isThin = merged.Count > 0 && merged.Count < _thinTimelineThreshold;
-            if (isThin && !onDemandPending)
+            if (merged.Count > 0 &&
+                !onDemandPending &&
+                TryClaimSessionOpenOnDemand(jid))
             {
                 _ = RequestOlderHistorySafeAsync(jid, merged.Count);
             }
@@ -753,25 +774,42 @@ namespace Unison.WhatsAppClient.Messages
             }
         }
 
+        /// <summary>
+        /// One HISTORY_SYNC_ON_DEMAND probe per chat per process session (after paint).
+        /// </summary>
+        private bool TryClaimSessionOpenOnDemand(string jid)
+        {
+            string key = _jids.GetCanonicalJid(JidHelper.Normalize(jid)) ?? JidHelper.Normalize(jid);
+            if (string.IsNullOrWhiteSpace(key))
+            {
+                return false;
+            }
+
+            lock (_sessionOpenOnDemandGate)
+            {
+                return _sessionOpenOnDemandClaimed.Add(key);
+            }
+        }
+
         private async Task RequestOlderHistorySafeAsync(string jid, int localCount)
         {
             try
             {
                 bool requested = await EnsureHistoryOnDemandAsync(jid, OnDemandFetchCount).ConfigureAwait(false);
                 Debug.WriteLine(
-                    "[MessageFacade] Thin timeline on-demand for " + jid +
+                    "[MessageFacade] Session open on-demand for " + jid +
                     " local=" + localCount + " requested=" + requested);
                 _diagnostics?.Write(
                     "chat-open",
-                    "thin-on-demand",
+                    "session-open-on-demand",
                     "chat=" + DiagnosticJidMask.Apply(jid) +
                     "; local=" + localCount +
                     "; requested=" + requested);
             }
             catch (Exception ex)
             {
-                Debug.WriteLine("[MessageFacade] Thin timeline on-demand failed: " + ex.Message);
-                _diagnostics?.RecordException("chat-open", "thin-on-demand-failed", ex);
+                Debug.WriteLine("[MessageFacade] Session open on-demand failed: " + ex.Message);
+                _diagnostics?.RecordException("chat-open", "session-open-on-demand-failed", ex);
             }
         }
 
@@ -1323,14 +1361,21 @@ namespace Unison.WhatsAppClient.Messages
             return _mediaSend.SendImagesAsync(jid, imageBytes, caption);
         }
 
-        public async Task<ChatMessage> SendAudioMessageAsync(string jid, byte[] audioBytes, string mimeType, uint durationSeconds, bool isVoiceMessage = false)
+        public async Task<ChatMessage> SendAudioMessageAsync(
+            string jid,
+            byte[] audioBytes,
+            string mimeType,
+            uint durationSeconds,
+            bool isVoiceMessage = false,
+            bool viewOnce = false)
         {
             ChatMessage message = await _mediaSend.SendAudioAsync(jid, new OutgoingAudio
             {
                 Bytes = audioBytes,
                 MimeType = mimeType,
                 DurationSeconds = durationSeconds,
-                IsVoiceMessage = isVoiceMessage
+                IsVoiceMessage = isVoiceMessage,
+                ViewOnce = viewOnce
             });
             _availability.PrepareLocalPlaybackInBackground(message);
             return message;
@@ -1497,8 +1542,14 @@ namespace Unison.WhatsAppClient.Messages
 
             // A chip-summary bubble holds no reactor rows, so the parent upsert that follows cannot
             // store this reaction. Write the single row on its own — it also lands ahead of a parent
-            // we have not received yet.
-            _ = PersistLiveReactionAsync(context?.ChatJid, pending);
+            // we have not received yet. Persist under the canonical chat key (PN/LID fold).
+            string persistJid = context?.ChatJid;
+            if (!string.IsNullOrWhiteSpace(persistJid))
+            {
+                persistJid = _jids.GetCanonicalJid(persistJid) ?? persistJid;
+            }
+
+            _ = PersistLiveReactionAsync(persistJid, pending);
             return true;
         }
 
@@ -1509,8 +1560,8 @@ namespace Unison.WhatsAppClient.Messages
                 return;
             }
 
-            string jid = JidHelper.Normalize(
-                string.IsNullOrWhiteSpace(chatJid) ? pending.TargetChatJid : chatJid);
+            string raw = string.IsNullOrWhiteSpace(chatJid) ? pending.TargetChatJid : chatJid;
+            string jid = _jids.GetCanonicalJid(raw) ?? JidHelper.Normalize(raw);
             string reactor = JidHelper.Normalize(pending.ReactorJid);
             if (string.IsNullOrWhiteSpace(reactor) && pending.FromMe)
             {
@@ -1756,8 +1807,14 @@ namespace Unison.WhatsAppClient.Messages
             }
 
             bool mutedFallback = _chatStore?.TryGetCached(chatJid)?.IsMutedLocally ?? false;
-            // Belt with the pump: safe-mode history catch-up must not toast either.
-            bool quietForSync = _history != null && _history.IsInitialSyncSafeMode;
+            // Belt with the pump: initial sync + catch-up / silent FULL waves must not toast.
+            bool quietForSync = IncomingToastSuppression.ShouldQuiet(
+                initialSyncActive: _history != null && _history.IsInitialSyncSafeMode,
+                awaitingInitialSync: _isAwaitingInitialSync(),
+                historyCatchUpQuiet: _history != null && _history.IsHistoryCatchUpQuiet,
+                isOfflineEnvelope: false,
+                messageTimestamp: default(DateTime),
+                nowUtc: DateTime.UtcNow);
 
             IncomingLiveAnnouncePayload payload = IncomingLiveAnnouncePayload.TryCreateFromChat(
                 chatJid,
@@ -1776,6 +1833,15 @@ namespace Unison.WhatsAppClient.Messages
                 return;
             }
 
+            try
+            {
+                _notifications.RefreshUnreadState(_chatState?.Chats);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[MessageFacade] Badge refresh failed: " + ex.Message);
+            }
+
             // Toast / Live Tile / Start-tile work is WinRT and must not hold stage=route.
             // Strip+announce are already detached from the pump; this Task.Run keeps WinRT off UI.
             _ = Task.Run(() =>
@@ -1792,7 +1858,10 @@ namespace Unison.WhatsAppClient.Messages
                         payload.SuppressToast,
                         payload.TotalUnread,
                         payload.AvatarUrl,
-                        payload.ChatUnread);
+                        payload.ChatUnread,
+                        payload.IsCommunityAnnounce,
+                        payload.IsFavorite,
+                        payload.IsChannel);
                 }
                 catch (Exception ex)
                 {
@@ -1864,7 +1933,7 @@ namespace Unison.WhatsAppClient.Messages
 
             try
             {
-                await _outgoingHost.PersistLiveAsync(canonical, target).ConfigureAwait(false);
+                await _livePersist.PersistLiveAsync(canonical, target).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
@@ -2005,6 +2074,126 @@ namespace Unison.WhatsAppClient.Messages
         }
 
         /// <inheritdoc />
+        public async Task DeleteMessageForMeAsync(string chatJid, ChatMessage message)
+        {
+            if (!MessageDeleteEligibility.CanDeleteForMe(message))
+            {
+                return;
+            }
+
+            string canonical = _jids.GetCanonicalJid(
+                string.IsNullOrWhiteSpace(chatJid) ? message.RemoteJid : chatJid);
+            if (string.IsNullOrWhiteSpace(canonical))
+            {
+                return;
+            }
+
+            long timestampSeconds = ToUnixSeconds(message.Timestamp);
+            bool deleteMedia = message.IsImage ||
+                               message.IsVideo ||
+                               message.IsGif ||
+                               message.IsAudio ||
+                               message.IsDocument ||
+                               message.IsSticker;
+
+            if (_wire != null && _wire.CanSendDeleteForMe)
+            {
+                try
+                {
+                    await _wire.DeleteMessageForMeAsync(
+                            canonical,
+                            message.Id,
+                            fromMe: message.IsFromMe,
+                            timestampSeconds,
+                            deleteMedia)
+                        .ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine(
+                        "[MessageFacade] deleteForMe patch failed for " + message.Id + ": " + ex.Message);
+                    _diagnostics?.RecordException(
+                        "messages",
+                        "delete-for-me-patch-failed",
+                        ex,
+                        "messageId=" + message.Id + "; chatJid=" + canonical);
+                }
+            }
+
+            await ApplyAppStateDeleteMessageAsync(canonical, message.Id).ConfigureAwait(false);
+        }
+
+        /// <inheritdoc />
+        public async Task DeleteMessageForEveryoneAsync(
+            string chatJid,
+            ChatMessage message,
+            bool isGroupChat,
+            bool viewerIsGroupAdmin)
+        {
+            if (!MessageDeleteEligibility.CanDeleteForEveryone(
+                    message,
+                    isGroupChat,
+                    viewerIsGroupAdmin,
+                    DateTime.UtcNow))
+            {
+                return;
+            }
+
+            await _resolveConnection().EnsureConnectedAsync().ConfigureAwait(false);
+
+            if (_wire == null || !_wire.CanSendDeleteForEveryone)
+            {
+                throw new InvalidOperationException("Not connected: the message revoke was not sent.");
+            }
+
+            string canonical = _jids.GetCanonicalJid(
+                string.IsNullOrWhiteSpace(chatJid) ? message.RemoteJid : chatJid);
+            if (string.IsNullOrWhiteSpace(canonical))
+            {
+                return;
+            }
+
+            var key = new MessageKey
+            {
+                RemoteJid = string.IsNullOrWhiteSpace(message.RemoteJid)
+                    ? canonical
+                    : JidHelper.Normalize(message.RemoteJid),
+                FromMe = message.IsFromMe,
+                Id = message.Id
+            };
+            if (!string.IsNullOrWhiteSpace(message.ParticipantJid))
+            {
+                key.Participant = message.ParticipantJid;
+            }
+
+            try
+            {
+                await _wire.SendDeleteForEveryoneAsync(canonical, key).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine(
+                    "[MessageFacade] deleteForEveryone failed for " + message.Id + ": " + ex.Message);
+                _diagnostics?.RecordException(
+                    "messages",
+                    "delete-for-everyone-failed",
+                    ex,
+                    "messageId=" + message.Id + "; chatJid=" + canonical);
+                throw;
+            }
+
+            await ApplyIncomingRevocationAsync(canonical, message.Id).ConfigureAwait(false);
+        }
+
+        private static long ToUnixSeconds(DateTime timestamp)
+        {
+            DateTime utc = timestamp.Kind == DateTimeKind.Unspecified
+                ? DateTime.SpecifyKind(timestamp, DateTimeKind.Utc)
+                : timestamp.ToUniversalTime();
+            return new DateTimeOffset(utc).ToUnixTimeSeconds();
+        }
+
+        /// <inheritdoc />
         public async Task<bool> ApplyAppStateDeleteMessageAsync(string chatJid, string messageId)
         {
             string canonical = _jids.GetCanonicalJid(chatJid);
@@ -2025,11 +2214,30 @@ namespace Unison.WhatsAppClient.Messages
             await _boundMutations.RunAsync(() =>
             {
                 ChatMessageCache cache = _chatState.MessagesByChat;
-                if (!cache.TryGet(canonical, out remaining) ||
-                    remaining == null ||
-                    !cache.RemoveMessage(canonical, messageId))
+                IReadOnlyList<string> aliasKeys = GetAliasCacheKeys(canonical);
+                if (aliasKeys.Count == 0)
+                {
+                    aliasKeys = new[] { canonical };
+                }
+
+                for (int i = 0; i < aliasKeys.Count; i++)
+                {
+                    string key = aliasKeys[i];
+                    if (cache.RemoveMessage(key, messageId))
+                    {
+                        removed = true;
+                        cache.TryGet(key, out remaining);
+                    }
+                }
+
+                if (!removed)
                 {
                     return;
+                }
+
+                if (remaining == null)
+                {
+                    remaining = new List<ChatMessage>();
                 }
 
                 AppStateDeleteMessagePreview.RefreshAliasRows(
@@ -2039,22 +2247,46 @@ namespace Unison.WhatsAppClient.Messages
                     _jids.GetCanonicalJid,
                     selfFallback,
                     yesterday);
-                removed = true;
             }).ConfigureAwait(false);
 
-            if (!removed)
-            {
-                return false;
-            }
-
+            // Drop JSON + SQLite history. Sync merges SQL as baseline — leaving the row
+            // there brings the bubble back after ChatMessagesChanged.
             try
             {
                 await _messageStore.DeleteMessageAsync(canonical, messageId).ConfigureAwait(false);
+                removed = true;
             }
             catch (Exception ex)
             {
                 Debug.WriteLine(
-                    "[MessageFacade] Deleting " + messageId + " from storage failed: " + ex.Message);
+                    "[MessageFacade] Deleting " + messageId + " from MessageStore failed: " + ex.Message);
+            }
+
+            try
+            {
+                List<string> historyKeys = ResolveChatKeys(canonical);
+                if (historyKeys.Count == 0)
+                {
+                    historyKeys.Add(canonical);
+                }
+
+                int historyRemoved = await _historyMessageStore
+                    .DeleteMessageAsync(historyKeys, messageId)
+                    .ConfigureAwait(false);
+                if (historyRemoved > 0)
+                {
+                    removed = true;
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine(
+                    "[MessageFacade] Deleting " + messageId + " from history SQLite failed: " + ex.Message);
+            }
+
+            if (!removed)
+            {
+                return false;
             }
 
             NotifyChatMessagesChanged(canonical);
@@ -2081,18 +2313,18 @@ namespace Unison.WhatsAppClient.Messages
             ChatMessage target = null;
             await _boundMutations.RunAsync(() =>
             {
-                if (_chatState.MessagesByChat.TryGet(canonical, out var messages))
+                if (_chatState.MessagesByChat.TryApplyPinFields(
+                        canonical,
+                        messageId,
+                        state.IsPinned,
+                        state.PinnedAtUtc,
+                        state.ExpiresAtUtc,
+                        out target))
                 {
-                    target = messages?.FirstOrDefault(
-                        m => string.Equals(m?.Id, messageId, StringComparison.Ordinal));
+                    return;
                 }
 
-                if (target != null)
-                {
-                    target.IsPinned = state.IsPinned;
-                    target.PinnedAtUtc = state.PinnedAtUtc;
-                    target.PinExpiresAtUtc = state.ExpiresAtUtc;
-                }
+                target = null;
             }).ConfigureAwait(false);
 
             if (target == null)
@@ -2105,7 +2337,7 @@ namespace Unison.WhatsAppClient.Messages
                     target.PinExpiresAtUtc = state.ExpiresAtUtc;
                     try
                     {
-                        await _outgoingHost.PersistLiveAsync(canonical, target).ConfigureAwait(false);
+                        await _livePersist.PersistLiveAsync(canonical, target).ConfigureAwait(false);
                     }
                     catch (Exception ex)
                     {
@@ -2880,6 +3112,61 @@ namespace Unison.WhatsAppClient.Messages
             }).ConfigureAwait(false);
         }
 
+        /// <summary>
+        /// The author (and the quoted author) of a group message are members: put them on the
+        /// roster as they speak, so names and badges never wait for the full list.
+        /// </summary>
+        private void NoteIncomingGroupMembers(
+            string groupJid,
+            string authorJid,
+            string authorAltJid,
+            string authorName,
+            string quotedJid,
+            string quotedName,
+            DateTime timestampUtc)
+        {
+            IGroupService groups;
+            try
+            {
+                groups = _resolveGroups();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[MessageFacade] Roster note skipped: " + ex.Message);
+                return;
+            }
+
+            if (groups == null)
+            {
+                return;
+            }
+
+            DateTime observed = MessageTimestampValidity.KeepOrDiscard(timestampUtc, DateTime.UtcNow);
+            if (!string.IsNullOrWhiteSpace(authorJid))
+            {
+                groups.NoteMember(groupJid, new GroupMemberHint
+                {
+                    Jid = authorJid,
+                    AltJid = authorAltJid,
+                    DisplayName = GroupParticipantResolver.IsUsableDisplayLabel(authorName, authorJid) ? authorName : null,
+                    Source = GroupMemberHintSource.Message,
+                    ObservedAtUtc = observed
+                });
+            }
+
+            string quoted = JidHelper.Normalize(quotedJid);
+            if (!string.IsNullOrWhiteSpace(quoted) && !_jids.IsSelfLinked(quoted))
+            {
+                groups.NoteMember(groupJid, new GroupMemberHint
+                {
+                    Jid = quoted,
+                    DisplayName = GroupParticipantResolver.IsUsableDisplayLabel(quotedName, quoted) ? quotedName : null,
+                    Source = GroupMemberHintSource.Quote,
+                    ObservedAtUtc = DateTime.MinValue
+                });
+            }
+        }
+
         /// <inheritdoc />
         public async Task<bool> TryApplyIncomingEnvelopeControlAsync(
             Message message,
@@ -3064,6 +3351,18 @@ namespace Unison.WhatsAppClient.Messages
                 p => _chatState.ResolveDisplayName(p),
                 selfFallback);
 
+            if (isGroup)
+            {
+                NoteIncomingGroupMembers(
+                    jid,
+                    isActuallyFromMe ? null : participantJid,
+                    participantAltJid,
+                    senderName,
+                    quotedContext.QuotedParticipantJid,
+                    quotedSender,
+                    request.Timestamp);
+            }
+
             ChatMessage chatMessage = GetChatMessage(
                 new ChatMessageMapContext
                 {
@@ -3141,6 +3440,12 @@ namespace Unison.WhatsAppClient.Messages
             }
 
             IncomingMediaHydrationPlan mediaPlan = IncomingMediaHydrationPlan.From(renderInfo);
+            if (!isActuallyFromMe)
+            {
+                // Open chat → already read; background inbound stays unread until open.
+                chatMessage.IsRead = !attention.CountsAsUnread;
+            }
+
             trace?.Mark(request.IsOffline ? "inserted-offline-preview" : "inserted");
             await ApplyIncomingInsertedAsync(new IncomingInsertedApplyRequest
             {
@@ -3378,6 +3683,10 @@ namespace Unison.WhatsAppClient.Messages
                         IsFromMe = request.IsFromMe,
                         IsOffline = true,
                         CountUnread = true,
+                        HasCitation = MessageMentionsSelf.Check(
+                            chatMessage.MentionAll,
+                            chatMessage.MentionedJids,
+                            _jids.IsSelfLinked),
                         MarkDirtyWhenOffline = false,
                         Kind = request.PreviewKind,
                         Status = chatMessage.Status,
@@ -3428,6 +3737,13 @@ namespace Unison.WhatsAppClient.Messages
             // (scroll / reshuffle), awaiting High for tip+Move held the pump past 12s
             // (health-stall → message-timeout-skip) and the list felt frozen until the
             // next toast. Strip + announce finish on their own; route returns after persist.
+            bool countsAsUnread = request.CountsAsUnread;
+            bool hasCitation = countsAsUnread &&
+                MessageMentionsSelf.Check(
+                    chatMessage.MentionAll,
+                    chatMessage.MentionedJids,
+                    _jids.IsSelfLinked);
+
             Task<LiveIncomingChatListApplyResult> stripTask = chats.ApplyLiveIncomingChatListAsync(
                 new LiveIncomingChatListApplyRequest
                 {
@@ -3442,8 +3758,9 @@ namespace Unison.WhatsAppClient.Messages
                     MessageId = chatMessage.Id,
                     ParticipantJid = request.IsGroup ? request.StripParticipantJid : null,
                     SenderName = request.IsGroup && !request.IsFromMe ? request.SenderName : null,
-                    UnreadDelta = request.CountsAsUnread ? 1 : 0,
-                    CountsAsUnread = request.CountsAsUnread,
+                    UnreadDelta = countsAsUnread ? 1 : 0,
+                    CountsAsUnread = countsAsUnread,
+                    HasCitation = hasCitation,
                     IsGroup = request.IsGroup,
                     AliasLid = aliasLid,
                     AliasPn = aliasPn
@@ -3529,11 +3846,19 @@ namespace Unison.WhatsAppClient.Messages
                 Debug.WriteLine("[MessageFacade] Toast name contacts skipped: " + ex.Message);
             }
 
-            // Title + group author: full contact stack (person / agenda / push), not bare @lid.
-            string toastTitle = NotificationDisplayLabel.Prefer(
-                contacts != null ? contacts.ResolveDisplayName(jid, "toast-chat") : null,
+            // Title: 1:1 uses the contact stack; groups use subjects-first (same as the community
+            // list / GroupNaming) so agenda/push under @g.us cannot rename a subgroup toast.
+            // Community Avisos: always the localized string — never the wire subject name.
+            bool isCommunityAnnounce = notificationChat != null && notificationChat.IsCommunityAnnounce;
+            string announcementsLabel = isCommunityAnnounce && notificationChat != null
+                ? notificationChat.GetNameResolved(_strings)
+                : null;
+            string toastTitle = NotificationDisplayLabel.PreferChatTitle(
+                ResolveToastChatTitle(isGroup, jid, notificationChat, notificationName, contacts),
                 notificationName,
-                jid);
+                jid,
+                isCommunityAnnounce,
+                announcementsLabel);
             string toastSender = senderName;
             if (isGroup && !isFromMe)
             {
@@ -3556,6 +3881,49 @@ namespace Unison.WhatsAppClient.Messages
                 suppressToast,
                 totalUnreadForNotify,
                 notificationChat);
+        }
+
+        /// <summary>
+        /// Toast chat title. Groups: row <see cref="ChatItem.GetNameResolved"/> (Avisos / subject),
+        /// then <see cref="IGroupNaming.ResolveChatDisplayName"/> (GroupSubjects), then strip name.
+        /// Never ContactDisplayNames for @g.us — that path lets agenda/push beat a live subject
+        /// (community subgroups looked right in the hub list, wrong on the toast).
+        /// </summary>
+        private string ResolveToastChatTitle(
+            bool isGroup,
+            string jid,
+            ChatItem notificationChat,
+            string notificationName,
+            IContactService contacts)
+        {
+            if (!isGroup)
+            {
+                return contacts != null
+                    ? contacts.ResolveDisplayName(jid, "toast-chat")
+                    : null;
+            }
+
+            if (notificationChat != null)
+            {
+                string fromRow = notificationChat.GetNameResolved(_strings);
+                if (!string.IsNullOrWhiteSpace(fromRow) &&
+                    !GroupIdPlaceholder.IsIdPlaceholder(fromRow, jid))
+                {
+                    return fromRow.Trim();
+                }
+            }
+
+            if (_groupNaming != null)
+            {
+                string fromSubjects = _groupNaming.ResolveChatDisplayName(jid);
+                if (!string.IsNullOrWhiteSpace(fromSubjects) &&
+                    _groupNaming.IsMeaningfulGroupLabel(fromSubjects, jid))
+                {
+                    return fromSubjects.Trim();
+                }
+            }
+
+            return notificationName;
         }
 
         /// <summary>
@@ -3607,6 +3975,334 @@ namespace Unison.WhatsAppClient.Messages
         }
 
         /// <inheritdoc />
+        /// <inheritdoc />
+        public async Task<bool> TryReactAsync(string chatJid, ChatMessage message, string emoji)
+        {
+            if (message == null || string.IsNullOrWhiteSpace(message.Id))
+            {
+                return false;
+            }
+
+            try
+            {
+                await _resolveConnection().EnsureConnectedAsync().ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[MessageFacade] TryReactAsync connect failed: " + ex.Message);
+                return false;
+            }
+
+            if (_wire == null || !_wire.CanSendReaction)
+            {
+                return false;
+            }
+
+            string canonical = _jids.GetCanonicalJid(
+                string.IsNullOrWhiteSpace(chatJid) ? message.RemoteJid : chatJid);
+            if (string.IsNullOrWhiteSpace(canonical))
+            {
+                return false;
+            }
+
+            var key = new MessageKey
+            {
+                RemoteJid = string.IsNullOrWhiteSpace(message.RemoteJid)
+                    ? canonical
+                    : JidHelper.Normalize(message.RemoteJid),
+                FromMe = message.IsFromMe,
+                Id = message.Id
+            };
+            if (!string.IsNullOrWhiteSpace(message.ParticipantJid))
+            {
+                key.Participant = message.ParticipantJid;
+            }
+
+            try
+            {
+                await _wire.SendReactionMessageAsync(canonical, key, emoji ?? string.Empty)
+                    .ConfigureAwait(false);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine(
+                    "[MessageFacade] TryReactAsync failed for " + message.Id + ": " + ex.Message);
+                _diagnostics?.RecordException(
+                    "messages",
+                    "react-send-failed",
+                    ex,
+                    "messageId=" + message.Id + "; chatJid=" + canonical);
+                return false;
+            }
+        }
+
+        public Task NotifyCallEventsAsync(IReadOnlyList<CallEventNotifyRequest> events)
+        {
+            if (events == null || events.Count == 0)
+            {
+                return Task.CompletedTask;
+            }
+
+            foreach (CallEventNotifyRequest callEvent in events)
+            {
+                if (callEvent == null || string.IsNullOrWhiteSpace(callEvent.ChatJid))
+                {
+                    continue;
+                }
+
+                string chatJid = _jids != null
+                    ? _jids.GetCanonicalJid(callEvent.ChatJid)
+                    : callEvent.ChatJid;
+                if (string.IsNullOrWhiteSpace(chatJid))
+                {
+                    continue;
+                }
+
+                DateTime stamp = callEvent.TimestampUtc == default
+                    ? DateTime.UtcNow
+                    : DateTime.SpecifyKind(callEvent.TimestampUtc, DateTimeKind.Utc);
+
+                bool callerIsSelf = !string.IsNullOrWhiteSpace(callEvent.CallerJid) &&
+                    _jids != null &&
+                    _jids.IsSelfLinked(callEvent.CallerJid);
+
+                ChatItem existingChat = FindExistingDirectChat(chatJid);
+                RaiseCallAlertIfNeeded(callEvent, chatJid, callerIsSelf, existingChat);
+
+                if (!Unison.Core.Helpers.Calls.CallAlertPolicy.ShouldPersistCallLog(callEvent.Kind))
+                {
+                    continue;
+                }
+
+                CallDirection direction = Unison.Core.Helpers.Calls.CallDirectionMap.FromChrome(
+                    callEvent.Kind,
+                    callerIsSelf);
+
+                string category = ResolveCallDirectionLabel(direction);
+                string timeLabel = FormatCallTimestampLabel(stamp);
+
+                if (_callLog != null)
+                {
+                    _callLog.Upsert(new CallHistoryEntry
+                    {
+                        CallId = callEvent.CallId,
+                        CanonicalJid = chatJid,
+                        Direction = direction,
+                        DirectionGlyph = Unison.Core.Helpers.Calls.CallDirectionGlyphs.For(direction),
+                        ChromeKind = callEvent.Kind,
+                        IsVideo = callEvent.IsVideo,
+                        TimestampUtc = stamp,
+                        CategoryLabel = category,
+                        TimestampLabel = timeLabel
+                    });
+                }
+
+                if (!Unison.Core.Helpers.Calls.CallAlertPolicy.ShouldWriteChatChrome(callEvent.Kind))
+                {
+                    continue;
+                }
+
+                // Chrome only when a DM already exists — never create/bump the chat list.
+                if (existingChat == null)
+                {
+                    continue;
+                }
+
+                string timelineJid = existingChat.JID ?? chatJid;
+                string content = Unison.Core.Helpers.Calls.CallEventChromeMap.ResolveContent(
+                    callEvent.Kind,
+                    callEvent.IsVideo,
+                    _strings);
+                string id = "call-" +
+                    (string.IsNullOrWhiteSpace(callEvent.CallId)
+                        ? Guid.NewGuid().ToString("N")
+                        : callEvent.CallId.Trim()) +
+                    "-" + callEvent.Kind;
+
+                var chatMessage = new ChatMessage
+                {
+                    Id = id,
+                    Kind = ChatMessageKind.CallEvent,
+                    Content = content,
+                    Timestamp = stamp,
+                    IsFromMe = callerIsSelf
+                };
+
+                IncomingTimelineAcceptResult timeline =
+                    AcceptIncomingTimeline(timelineJid, chatMessage, isGroup: false);
+                if (timeline.Kind == IncomingTimelineAcceptKind.DuplicateSameChat ||
+                    timeline.Kind == IncomingTimelineAcceptKind.AliasLinkedDuplicate ||
+                    timeline.Kind == IncomingTimelineAcceptKind.AliasConsolidated)
+                {
+                    continue;
+                }
+
+                QueueIncomingPersist(timelineJid, chatMessage);
+                if (_activeChat.IsOpen(timelineJid))
+                {
+                    NotifyChatMessagesChanged(timelineJid);
+                }
+            }
+
+            return Task.CompletedTask;
+        }
+
+        private void RaiseCallAlertIfNeeded(
+            CallEventNotifyRequest callEvent,
+            string chatJid,
+            bool callerIsSelf,
+            ChatItem existingChat)
+        {
+            if (callEvent == null || _notifications == null)
+            {
+                return;
+            }
+
+            // Same quiet window as inbound message toasts: initial + silent FULL catch-up.
+            // Incoming Offer toasts are noise in that storm; Missed still surfaces.
+            bool historySyncQuiet = IncomingToastSuppression.ShouldQuiet(
+                initialSyncActive: _initialSync.IsActive ||
+                    (_history != null && _history.IsInitialSyncSafeMode),
+                awaitingInitialSync: _isAwaitingInitialSync(),
+                historyCatchUpQuiet: _history != null && _history.IsHistoryCatchUpQuiet,
+                isOfflineEnvelope: false,
+                messageTimestamp: default(DateTime),
+                nowUtc: DateTime.UtcNow);
+
+            bool toast = Unison.Core.Helpers.Calls.CallAlertPolicy.ShouldShowToast(
+                callEvent.Kind,
+                callerIsSelf,
+                historySyncQuiet);
+            bool tile = Unison.Core.Helpers.Calls.CallAlertPolicy.ShouldUpdateLiveTile(
+                callEvent.Kind,
+                callerIsSelf);
+            if (!toast && !tile)
+            {
+                return;
+            }
+
+            string title = ResolveCallAlertTitle(chatJid, existingChat);
+            string body = ResolveCallAlertBody(callEvent.Kind, callEvent.IsVideo);
+            bool isFavorite = existingChat != null && existingChat.IsFavorite;
+
+            _notifications.NotifyCallAlert(
+                title,
+                body,
+                chatJid,
+                updateLiveTile: tile,
+                isFavorite: isFavorite);
+        }
+
+        private string ResolveCallAlertTitle(string chatJid, ChatItem existingChat)
+        {
+            if (existingChat != null)
+            {
+                string fromChat = existingChat.GetNameResolved(_strings);
+                if (!string.IsNullOrWhiteSpace(fromChat))
+                {
+                    return fromChat.Trim();
+                }
+            }
+
+            if (_personStore != null && !string.IsNullOrWhiteSpace(chatJid))
+            {
+                Person person = _personStore.TryGetCached(chatJid);
+                if (person == null && _jids != null)
+                {
+                    string alias;
+                    if (_jids.TryGetAlias(chatJid, out alias) && !string.IsNullOrWhiteSpace(alias))
+                    {
+                        person = _personStore.TryGetCached(alias);
+                    }
+                }
+
+                if (person != null && !string.IsNullOrWhiteSpace(person.Name))
+                {
+                    return person.Name.Trim();
+                }
+            }
+
+            string phone = Unison.Core.Helpers.JidHelper.TryPhoneFromJid(chatJid);
+            if (!string.IsNullOrWhiteSpace(phone))
+            {
+                return phone;
+            }
+
+            return chatJid ?? string.Empty;
+        }
+
+        private string ResolveCallAlertBody(CallEventChromeKind kind, bool isVideo)
+        {
+            if (kind == CallEventChromeKind.Incoming)
+            {
+                return _strings?.Get(
+                           "Notification_IncomingCallBody",
+                           "Incoming Call (Answer on Primary Phone)")
+                       ?? "Incoming Call (Answer on Primary Phone)";
+            }
+
+            if (kind == CallEventChromeKind.Missed)
+            {
+                return isVideo
+                    ? (_strings?.Get("Notification_MissedVideoCall", "Missed video call")
+                       ?? "Missed video call")
+                    : (_strings?.Get("Notification_MissedCall", "Missed call")
+                       ?? "Missed call");
+            }
+
+            return string.Empty;
+        }
+
+        private ChatItem FindExistingDirectChat(string jid)
+        {
+            if (_chatState == null || string.IsNullOrWhiteSpace(jid))
+            {
+                return null;
+            }
+
+            ChatItem chat = _chatState.FindChat(jid);
+            if (chat != null)
+            {
+                return chat;
+            }
+
+            string alias;
+            if (_jids != null && _jids.TryGetAlias(jid, out alias) && !string.IsNullOrWhiteSpace(alias))
+            {
+                return _chatState.FindChat(alias);
+            }
+
+            return null;
+        }
+
+        private string ResolveCallDirectionLabel(CallDirection direction)
+        {
+            switch (direction)
+            {
+                case CallDirection.Outgoing:
+                    return _strings?.Get("Calls_Outgoing", "Outgoing") ?? "Outgoing";
+                case CallDirection.Incoming:
+                    return _strings?.Get("Calls_Incoming", "Incoming") ?? "Incoming";
+                case CallDirection.Missed:
+                    return _strings?.Get("Calls_Missed", "Missed") ?? "Missed";
+                default:
+                    return string.Empty;
+            }
+        }
+
+        private static string FormatCallTimestampLabel(DateTime utc)
+        {
+            try
+            {
+                return utc.ToLocalTime().ToString("t");
+            }
+            catch
+            {
+                return string.Empty;
+            }
+        }
+
         public async Task NotifyGroupJoinsAsync(IReadOnlyList<GroupJoinNotifyRequest> joins)
         {
             if (joins == null || joins.Count == 0)
@@ -3614,20 +4310,277 @@ namespace Unison.WhatsAppClient.Messages
                 return;
             }
 
-            string template = _strings != null
+            string joinTemplate = _strings != null
                 ? _strings.Get("Message_GroupJoin", "{0} joined the group")
                 : "{0} joined the group";
+            string addedByTemplate = _strings != null
+                ? _strings.Get("Message_GroupAddedBy", "{0} added {1}")
+                : "{0} added {1}";
 
-            IContactService contacts = null;
+            IContactService contacts = TryResolveContactsForGroupSystem("Group-join");
+            await PrepGroupSystemPhonesAsync(contacts, CollectJoinPhones(joins)).ConfigureAwait(false);
+
+            foreach (GroupJoinNotifyRequest join in joins)
+            {
+                if (join == null ||
+                    string.IsNullOrWhiteSpace(join.GroupJid) ||
+                    string.IsNullOrWhiteSpace(join.ParticipantJid))
+                {
+                    continue;
+                }
+
+                string groupJid;
+                string participant;
+                string phoneDigits;
+                string who;
+                if (!TryResolveGroupSystemParticipant(
+                        contacts,
+                        join.GroupJid,
+                        join.ParticipantJid,
+                        join.PhoneDigits,
+                        "group-join",
+                        out groupJid,
+                        out participant,
+                        out phoneDigits,
+                        out who))
+                {
+                    continue;
+                }
+
+                string actorLabel;
+                string actorPhone;
+                ResolveGroupSystemActor(
+                    contacts,
+                    join.ActorJid,
+                    out actorLabel,
+                    out actorPhone);
+                string content = GroupSystemLineText.JoinOrAdded(
+                    joinTemplate,
+                    addedByTemplate,
+                    who,
+                    actorLabel,
+                    join.ActorJid,
+                    join.ParticipantJid,
+                    _jids.GetCanonicalJid,
+                    actorPhone,
+                    phoneDigits);
+
+                DateTime stamp = NormalizeGroupSystemStamp(join.TimestampUtc);
+                string id = BuildGroupSystemMessageId(
+                    "gj",
+                    join.NotificationId,
+                    participant,
+                    stamp);
+
+                ChatMessage chatMessage = await InsertGroupSystemLineAsync(
+                    groupJid,
+                    id,
+                    content,
+                    stamp,
+                    participant,
+                    phoneDigits,
+                    who).ConfigureAwait(false);
+                if (chatMessage == null)
+                {
+                    continue;
+                }
+
+                if (contacts != null &&
+                    GroupJoinDisplayLabel.NeedsBetterName(who) &&
+                    !GroupSystemLineText.HasDistinctActor(
+                        join.ActorJid,
+                        join.ParticipantJid,
+                        _jids.GetCanonicalJid,
+                        actorPhone,
+                        phoneDigits))
+                {
+                    ScheduleGroupJoinRelabel(
+                        contacts,
+                        groupJid,
+                        chatMessage,
+                        participant,
+                        phoneDigits,
+                        joinTemplate);
+                }
+            }
+        }
+
+        /// <inheritdoc />
+        public async Task NotifyGroupLeavesAsync(IReadOnlyList<GroupLeaveNotifyRequest> leaves)
+        {
+            if (leaves == null || leaves.Count == 0)
+            {
+                return;
+            }
+
+            string leftTemplate = _strings != null
+                ? _strings.Get("Message_GroupLeft", "{0} left")
+                : "{0} left";
+            string removedByTemplate = _strings != null
+                ? _strings.Get("Message_GroupRemovedBy", "{0} removed {1}")
+                : "{0} removed {1}";
+
+            IContactService contacts = TryResolveContactsForGroupSystem("Group-leave");
+            await PrepGroupSystemPhonesAsync(contacts, CollectLeavePhones(leaves)).ConfigureAwait(false);
+
+            foreach (GroupLeaveNotifyRequest leave in leaves)
+            {
+                if (leave == null ||
+                    string.IsNullOrWhiteSpace(leave.GroupJid) ||
+                    string.IsNullOrWhiteSpace(leave.ParticipantJid))
+                {
+                    continue;
+                }
+
+                string groupJid;
+                string participant;
+                string phoneDigits;
+                string who;
+                if (!TryResolveGroupSystemParticipant(
+                        contacts,
+                        leave.GroupJid,
+                        leave.ParticipantJid,
+                        leave.PhoneDigits,
+                        "group-leave",
+                        out groupJid,
+                        out participant,
+                        out phoneDigits,
+                        out who))
+                {
+                    continue;
+                }
+
+                string actorLabel;
+                string actorPhone;
+                ResolveGroupSystemActor(
+                    contacts,
+                    leave.ActorJid,
+                    out actorLabel,
+                    out actorPhone);
+                string content = GroupSystemLineText.LeaveOrRemoved(
+                    leftTemplate,
+                    removedByTemplate,
+                    who,
+                    actorLabel,
+                    leave.ActorJid,
+                    leave.ParticipantJid,
+                    _jids.GetCanonicalJid,
+                    actorPhone,
+                    phoneDigits);
+
+                DateTime stamp = NormalizeGroupSystemStamp(leave.TimestampUtc);
+                string id = BuildGroupSystemMessageId(
+                    "gl",
+                    leave.NotificationId,
+                    participant,
+                    stamp);
+
+                await InsertGroupSystemLineAsync(
+                    groupJid,
+                    id,
+                    content,
+                    stamp,
+                    participant,
+                    phoneDigits,
+                    who).ConfigureAwait(false);
+            }
+        }
+
+        /// <inheritdoc />
+        public async Task NotifyGroupSubjectChangedAsync(
+            GroupSubjectChangeNotifyRequest change,
+            string previousSubject)
+        {
+            if (change == null ||
+                string.IsNullOrWhiteSpace(change.GroupJid) ||
+                string.IsNullOrWhiteSpace(change.NewSubject))
+            {
+                return;
+            }
+
+            string groupJid = JidHelper.Normalize(change.GroupJid) ?? change.GroupJid.Trim();
+            if (!JidHelper.IsGroupJid(groupJid))
+            {
+                return;
+            }
+
+            string withPrevious = _strings != null
+                ? _strings.Get(
+                    "Message_GroupSubjectChangedFromTo",
+                    "{0} changed the group name from \"{1}\" to \"{2}\"")
+                : "{0} changed the group name from \"{1}\" to \"{2}\"";
+            string toOnly = _strings != null
+                ? _strings.Get(
+                    "Message_GroupSubjectChangedTo",
+                    "{0} changed the group name to \"{1}\"")
+                : "{0} changed the group name to \"{1}\"";
+            string anonWithPrevious = _strings != null
+                ? _strings.Get(
+                    "Message_GroupSubjectChangedFromToAnon",
+                    "Group name changed from \"{0}\" to \"{1}\"")
+                : "Group name changed from \"{0}\" to \"{1}\"";
+            string anonToOnly = _strings != null
+                ? _strings.Get(
+                    "Message_GroupSubjectChangedToAnon",
+                    "Group name changed to \"{0}\"")
+                : "Group name changed to \"{0}\"";
+
+            IContactService contacts = TryResolveContactsForGroupSystem("Group-subject");
+            string actorLabel;
+            string unusedActorPhone;
+            ResolveGroupSystemActor(contacts, change.AuthorJid, out actorLabel, out unusedActorPhone);
+
+            string usablePrevious = previousSubject;
+            if (!string.IsNullOrWhiteSpace(usablePrevious) &&
+                (string.Equals(usablePrevious, groupJid, StringComparison.OrdinalIgnoreCase) ||
+                 usablePrevious.IndexOf('@') >= 0 ||
+                 GroupJoinDisplayLabel.NeedsBetterName(usablePrevious)))
+            {
+                usablePrevious = null;
+            }
+
+            string content = GroupSystemLineText.SubjectChanged(
+                withPrevious,
+                toOnly,
+                actorLabel,
+                usablePrevious,
+                change.NewSubject.Trim(),
+                anonWithPrevious,
+                anonToOnly);
+
+            DateTime stamp = NormalizeGroupSystemStamp(change.TimestampUtc);
+            string id = BuildGroupSystemMessageId(
+                "gs",
+                change.NotificationId,
+                groupJid + "-" + change.NewSubject.Trim(),
+                stamp);
+
+            await InsertGroupSystemLineAsync(
+                groupJid,
+                id,
+                content,
+                stamp,
+                participant: null,
+                phoneDigits: null,
+                who: actorLabel).ConfigureAwait(false);
+        }
+
+        private IContactService TryResolveContactsForGroupSystem(string logLabel)
+        {
             try
             {
-                contacts = _resolveContacts();
+                return _resolveContacts();
             }
             catch (Exception ex)
             {
-                Debug.WriteLine("[MessageFacade] Group-join contacts resolve skipped: " + ex.Message);
+                Debug.WriteLine("[MessageFacade] " + logLabel + " contacts resolve skipped: " + ex.Message);
+                return null;
             }
+        }
 
+        private static List<KeyValuePair<string, string>> CollectJoinPhones(
+            IReadOnlyList<GroupJoinNotifyRequest> joins)
+        {
             var phoneRows = new List<KeyValuePair<string, string>>(joins.Count);
             foreach (GroupJoinNotifyRequest join in joins)
             {
@@ -3641,100 +4594,173 @@ namespace Unison.WhatsAppClient.Messages
                     join.PhoneDigits));
             }
 
-            if (contacts != null && phoneRows.Count > 0)
+            return phoneRows;
+        }
+
+        private static List<KeyValuePair<string, string>> CollectLeavePhones(
+            IReadOnlyList<GroupLeaveNotifyRequest> leaves)
+        {
+            var phoneRows = new List<KeyValuePair<string, string>>(leaves.Count);
+            foreach (GroupLeaveNotifyRequest leave in leaves)
             {
-                try
+                if (leave == null || string.IsNullOrWhiteSpace(leave.ParticipantJid))
                 {
-                    await contacts.ResolveGroupJoinParticipantsAsync(phoneRows).ConfigureAwait(false);
+                    continue;
                 }
-                catch (Exception ex)
-                {
-                    Debug.WriteLine("[MessageFacade] Group-join name prep failed: " + ex.Message);
-                }
+
+                phoneRows.Add(new KeyValuePair<string, string>(
+                    leave.ParticipantJid.Trim(),
+                    leave.PhoneDigits));
             }
 
-            foreach (GroupJoinNotifyRequest join in joins)
+            return phoneRows;
+        }
+
+        private async Task PrepGroupSystemPhonesAsync(
+            IContactService contacts,
+            List<KeyValuePair<string, string>> phoneRows)
+        {
+            if (contacts == null || phoneRows == null || phoneRows.Count == 0)
             {
-                if (join == null ||
-                    string.IsNullOrWhiteSpace(join.GroupJid) ||
-                    string.IsNullOrWhiteSpace(join.ParticipantJid))
-                {
-                    continue;
-                }
-
-                string groupJid = JidHelper.Normalize(join.GroupJid) ?? join.GroupJid.Trim();
-                if (!JidHelper.IsGroupJid(groupJid))
-                {
-                    continue;
-                }
-
-                string participant = _jids.GetCanonicalJid(join.ParticipantJid) ?? join.ParticipantJid.Trim();
-                string phoneDigits = PhoneNumberHelper.NormalizePhoneDigits(join.PhoneDigits)
-                    ?? PhoneNumberHelper.NormalizePhoneDigits(JidHelper.TryPhoneFromJid(join.PhoneDigits))
-                    ?? JidHelper.TryPhoneFromJid(participant)
-                    ?? (contacts != null ? contacts.TryResolvePhone(participant, join.PhoneDigits) : null);
-
-                string resolved = contacts != null
-                    ? contacts.ResolveDisplayName(participant, "group-join")
-                    : _chatState.ResolveDisplayName(participant);
-                string who = GroupJoinDisplayLabel.Pick(resolved, phoneDigits, participant);
-
-                string content = string.Format(
-                    System.Globalization.CultureInfo.CurrentCulture,
-                    template,
-                    who);
-
-                DateTime stamp = join.TimestampUtc == default
-                    ? DateTime.UtcNow
-                    : DateTime.SpecifyKind(join.TimestampUtc, DateTimeKind.Utc);
-
-                string id = !string.IsNullOrWhiteSpace(join.NotificationId)
-                    ? "gj-" + join.NotificationId.Trim() + "-" + participant
-                    : "gj-" + participant + "-" + stamp.Ticks.ToString(System.Globalization.CultureInfo.InvariantCulture);
-
-                var chatMessage = new ChatMessage
-                {
-                    Id = id,
-                    Kind = ChatMessageKind.GroupJoin,
-                    Content = content,
-                    Timestamp = stamp,
-                    IsFromMe = false,
-                    GroupJoinJid = participant,
-                    GroupJoinPhone = phoneDigits,
-                    ParticipantJid = participant,
-                    SenderName = who
-                };
-
-                IncomingTimelineAcceptResult timeline = AcceptIncomingTimeline(groupJid, chatMessage, isGroup: true);
-                if (timeline.Kind == IncomingTimelineAcceptKind.DuplicateSameChat ||
-                    timeline.Kind == IncomingTimelineAcceptKind.AliasLinkedDuplicate ||
-                    timeline.Kind == IncomingTimelineAcceptKind.AliasConsolidated)
-                {
-                    continue;
-                }
-
-                await ApplyIncomingInsertedAsync(new IncomingInsertedApplyRequest
-                {
-                    ChatJid = groupJid,
-                    Message = chatMessage,
-                    DisplayContent = content,
-                    NotifyContent = content,
-                    IsOffline = false,
-                    IsGroup = true,
-                    IsFromMe = false,
-                    PreviewKind = ChatPreviewKind.GroupJoin,
-                    ListAuthorPrefix = string.Empty,
-                    StripParticipantJid = participant,
-                    SenderName = who,
-                    CountsAsUnread = false,
-                    SuppressToast = true
-                }).ConfigureAwait(false);
-
-                if (contacts != null && GroupJoinDisplayLabel.NeedsBetterName(who))
-                {
-                    ScheduleGroupJoinRelabel(contacts, groupJid, chatMessage, participant, phoneDigits, template);
-                }
+                return;
             }
+
+            try
+            {
+                await contacts.ResolveGroupJoinParticipantsAsync(phoneRows).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[MessageFacade] Group-system name prep failed: " + ex.Message);
+            }
+        }
+
+        private bool TryResolveGroupSystemParticipant(
+            IContactService contacts,
+            string rawGroupJid,
+            string rawParticipantJid,
+            string rawPhone,
+            string resolveContext,
+            out string groupJid,
+            out string participant,
+            out string phoneDigits,
+            out string who)
+        {
+            groupJid = JidHelper.Normalize(rawGroupJid) ?? rawGroupJid.Trim();
+            participant = null;
+            phoneDigits = null;
+            who = null;
+            if (!JidHelper.IsGroupJid(groupJid))
+            {
+                return false;
+            }
+
+            participant = _jids.GetCanonicalJid(rawParticipantJid) ?? rawParticipantJid.Trim();
+            phoneDigits = PhoneNumberHelper.NormalizePhoneDigits(rawPhone)
+                ?? PhoneNumberHelper.NormalizePhoneDigits(JidHelper.TryPhoneFromJid(rawPhone))
+                ?? JidHelper.TryPhoneFromJid(participant)
+                ?? (contacts != null ? contacts.TryResolvePhone(participant, rawPhone) : null);
+
+            string resolved = contacts != null
+                ? contacts.ResolveDisplayName(participant, resolveContext)
+                : _chatState.ResolveDisplayName(participant);
+            who = GroupJoinDisplayLabel.Pick(resolved, phoneDigits, participant);
+            return true;
+        }
+
+        private void ResolveGroupSystemActor(
+            IContactService contacts,
+            string actorJid,
+            out string actorLabel,
+            out string actorPhone)
+        {
+            actorLabel = null;
+            actorPhone = null;
+            if (string.IsNullOrWhiteSpace(actorJid))
+            {
+                return;
+            }
+
+            string actor = _jids.GetCanonicalJid(actorJid) ?? actorJid.Trim();
+            actorPhone = JidHelper.TryPhoneFromJid(actor)
+                ?? JidHelper.TryPhoneFromJid(actorJid)
+                ?? (contacts != null ? contacts.TryResolvePhone(actor, null) : null);
+            string resolved = contacts != null
+                ? contacts.ResolveDisplayName(actor, "group-system-actor")
+                : _chatState.ResolveDisplayName(actor);
+            actorLabel = GroupJoinDisplayLabel.Pick(resolved, actorPhone, actor);
+        }
+
+        private static DateTime NormalizeGroupSystemStamp(DateTime timestampUtc)
+        {
+            return timestampUtc == default
+                ? DateTime.UtcNow
+                : DateTime.SpecifyKind(timestampUtc, DateTimeKind.Utc);
+        }
+
+        private static string BuildGroupSystemMessageId(
+            string prefix,
+            string notificationId,
+            string key,
+            DateTime stamp)
+        {
+            if (!string.IsNullOrWhiteSpace(notificationId))
+            {
+                return prefix + "-" + notificationId.Trim() + "-" + (key ?? string.Empty);
+            }
+
+            return prefix + "-" + (key ?? string.Empty) + "-" +
+                   stamp.Ticks.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        }
+
+        private async Task<ChatMessage> InsertGroupSystemLineAsync(
+            string groupJid,
+            string id,
+            string content,
+            DateTime stamp,
+            string participant,
+            string phoneDigits,
+            string who)
+        {
+            var chatMessage = new ChatMessage
+            {
+                Id = id,
+                Kind = ChatMessageKind.GroupJoin,
+                Content = content,
+                Timestamp = stamp,
+                IsFromMe = false,
+                GroupJoinJid = participant,
+                GroupJoinPhone = phoneDigits,
+                ParticipantJid = participant,
+                SenderName = who
+            };
+
+            IncomingTimelineAcceptResult timeline = AcceptIncomingTimeline(groupJid, chatMessage, isGroup: true);
+            if (timeline.Kind == IncomingTimelineAcceptKind.DuplicateSameChat ||
+                timeline.Kind == IncomingTimelineAcceptKind.AliasLinkedDuplicate ||
+                timeline.Kind == IncomingTimelineAcceptKind.AliasConsolidated)
+            {
+                return null;
+            }
+
+            await ApplyIncomingInsertedAsync(new IncomingInsertedApplyRequest
+            {
+                ChatJid = groupJid,
+                Message = chatMessage,
+                DisplayContent = content,
+                NotifyContent = content,
+                IsOffline = false,
+                IsGroup = true,
+                IsFromMe = false,
+                PreviewKind = ChatPreviewKind.GroupJoin,
+                ListAuthorPrefix = string.Empty,
+                StripParticipantJid = participant,
+                SenderName = who,
+                CountsAsUnread = false,
+                SuppressToast = true
+            }).ConfigureAwait(false);
+
+            return chatMessage;
         }
 
         /// <summary>
@@ -3876,7 +4902,7 @@ namespace Unison.WhatsAppClient.Messages
 
                 if (target != null)
                 {
-                    await _outgoingHost.PersistLiveAsync(canonical, target).ConfigureAwait(false);
+                    await _livePersist.PersistLiveAsync(canonical, target).ConfigureAwait(false);
                 }
             }
             catch (Exception ex)
@@ -4011,14 +5037,53 @@ namespace Unison.WhatsAppClient.Messages
                 return false;
             }
 
-            string jid = JidHelper.Normalize(context.ChatJid) ?? context.ChatJid;
-            IList<ChatMessage> timeline = _chatState.MessagesByChat.GetOrAdd(jid);
+            string canonical = _jids.GetCanonicalJid(context.ChatJid)
+                ?? JidHelper.Normalize(context.ChatJid)
+                ?? context.ChatJid;
+            IReadOnlyList<string> aliasKeys = GetAliasCacheKeys(canonical);
+            if (aliasKeys.Count == 0)
+            {
+                aliasKeys = new[] { canonical };
+            }
+
             ChatMessage reactionParent = null;
+            string parentTimelineJid = canonical;
             bool handled = false;
 
             await _boundMutations.RunAsync(() =>
             {
-                handled = TryHandleReaction(message, context, timeline, out reactionParent);
+                PendingReaction pending;
+                if (!_chatMessageMapper.TryMapReaction(message, context, out pending) || pending == null)
+                {
+                    handled = false;
+                    return;
+                }
+
+                ChatMessageCache cache = _chatState.MessagesByChat;
+                string foundKey;
+                ChatMessage foundParent;
+                IList<ChatMessage> timeline = null;
+                if (AliasLinkedMessageFind.TryFind(
+                        cache,
+                        aliasKeys,
+                        pending.TargetMessageId,
+                        out foundKey,
+                        out foundParent) &&
+                    !string.IsNullOrWhiteSpace(foundKey))
+                {
+                    parentTimelineJid = foundKey;
+                    timeline = cache.GetOrAdd(foundKey);
+                }
+                else
+                {
+                    // Parent not resident under any alias — still persist the reaction row.
+                    timeline = cache.GetOrAdd(canonical);
+                    parentTimelineJid = canonical;
+                }
+
+                _reactionMapper.TryApply(timeline, pending, out reactionParent);
+                _ = PersistLiveReactionAsync(canonical, pending);
+                handled = true;
             }).ConfigureAwait(false);
 
             if (!handled)
@@ -4030,22 +5095,23 @@ namespace Unison.WhatsAppClient.Messages
             {
                 try
                 {
-                    await _outgoingHost.PersistLiveAsync(jid, reactionParent).ConfigureAwait(false);
+                    await _livePersist.PersistLiveAsync(parentTimelineJid, reactionParent)
+                        .ConfigureAwait(false);
                 }
                 catch (Exception ex)
                 {
                     Debug.WriteLine("[MessageFacade] Failed to persist reaction parent: " + ex.Message);
                 }
 
-                if (_activeChat.IsOpen(jid))
+                if (_activeChat.IsOpen(canonical) || _activeChat.IsOpen(parentTimelineJid))
                 {
-                    NotifyChatMessagesChanged(jid);
+                    NotifyChatMessagesChanged(parentTimelineJid);
                 }
             }
             else
             {
                 Debug.WriteLine(
-                    "[MessageFacade] Reaction target not found yet: chat=" + jid +
+                    "[MessageFacade] Reaction target not found yet: chat=" + canonical +
                     ", id=" + (context.MessageId ?? "<none>"));
             }
 
@@ -4106,7 +5172,7 @@ namespace Unison.WhatsAppClient.Messages
             {
                 try
                 {
-                    await _outgoingHost.PersistLiveAsync(canonicalChatJid, consolidatedMessage)
+                    await _livePersist.PersistLiveAsync(canonicalChatJid, consolidatedMessage)
                         .ConfigureAwait(false);
                 }
                 catch (Exception ex)

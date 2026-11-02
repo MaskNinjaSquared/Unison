@@ -265,6 +265,15 @@ namespace Unison.Uwp.UI.Controls
                 MembersValue.Text = vm.MembersCountText ?? "—";
             }
 
+            if (CreatedByYouText != null)
+            {
+                bool hasCaption = vm.HasCreatedByYouText;
+                CreatedByYouText.Text = hasCaption ? vm.CreatedByYouText : string.Empty;
+                CreatedByYouText.Visibility = hasCaption
+                    ? Visibility.Visible
+                    : Visibility.Collapsed;
+            }
+
             ApplyMembersLoadingUi();
         }
 

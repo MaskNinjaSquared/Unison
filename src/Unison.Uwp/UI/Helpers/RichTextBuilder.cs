@@ -152,7 +152,7 @@ namespace Unison.Uwp.UI.Helpers
                 Match m = matches[i];
                 if (m.Index > index)
                 {
-                    paragraph.Inlines.Add(new Run { Text = text.Substring(index, m.Index - index) });
+                    EmojiRichRuns.Append(paragraph, text.Substring(index, m.Index - index));
                 }
 
                 string handle = m.Value;
@@ -164,7 +164,7 @@ namespace Unison.Uwp.UI.Helpers
                 }
                 else
                 {
-                    paragraph.Inlines.Add(new Run { Text = handle });
+                    EmojiRichRuns.Append(paragraph, handle);
                 }
 
                 index = m.Index + m.Length;
@@ -172,7 +172,7 @@ namespace Unison.Uwp.UI.Helpers
 
             if (index < text.Length)
             {
-                paragraph.Inlines.Add(new Run { Text = text.Substring(index) });
+                EmojiRichRuns.Append(paragraph, text.Substring(index));
             }
         }
 
@@ -184,7 +184,7 @@ namespace Unison.Uwp.UI.Helpers
                 UnderlineStyle = UnderlineStyle.Single,
                 Foreground = linkBrush
             };
-            hyperlink.Inlines.Add(new Run { Text = display });
+            EmojiRichRuns.AppendToHyperlink(hyperlink, display);
             return hyperlink;
         }
     }

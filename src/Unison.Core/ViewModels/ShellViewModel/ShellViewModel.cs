@@ -63,6 +63,7 @@ namespace Unison.Core.ViewModels
         private bool _isNarrowWindow;
         private bool _hasActiveChat;
         private bool _statusDetailOpen;
+        private bool _callDetailOpen;
         private ChatItem _pendingChat;
         private string _pendingOpenChatJid;
         private string _pendingOpenProfileJid;
@@ -71,7 +72,6 @@ namespace Unison.Core.ViewModels
         private readonly ChatListDeepLinkHoldGate _deepLinkHold;
         private bool _initialized;
         private bool _eventsHooked;
-        private bool _startInProgress;
 
         /// <summary>
         /// In-flight cold start. Concurrent Boot remounts (Mobile double/triple OnLaunched)
@@ -108,7 +108,8 @@ namespace Unison.Core.ViewModels
             IContactService contactService = null,
             ChatListDeepLinkHoldGate deepLinkHold = null,
             IShareTargetSession shareTarget = null,
-            IMessageService messageService = null)
+            IMessageService messageService = null,
+            NewConversationViewModel newConversation = null)
         {
             _chatState = chatState ?? throw new ArgumentNullException(nameof(chatState));
             _connectionService = connectionService ?? throw new ArgumentNullException(nameof(connectionService));
@@ -135,15 +136,25 @@ namespace Unison.Core.ViewModels
             NavigateToSectionCommand = new RelayCommand<string>(NavigateToSection);
             OpenProfileSettingsCommand = new RelayCommand(OpenProfileSettings);
             InitShareCommands();
+            InitNewConversation(newConversation);
 
             _navigator.ShellNavigated += Navigator_ShellNavigated;
             _notificationCounter = new NotificationCounterWatch(_chatState.Chats);
             _notificationCounter.Changed += (s, e) =>
-                RaiseProperties(nameof(NotificationCounterBadge), nameof(NotificationCounterBadgeText));
+                RaiseProperties(
+                    nameof(NotificationCounterBadge),
+                    nameof(NotificationCounterBadgeText),
+                    nameof(HasNotificationCounterBadge));
         }
 
         /// <summary>How many chats have a notification. Same count the chat-list header shows.</summary>
         public int NotificationCounterBadge => _notificationCounter?.Count ?? 0;
+
+        /// <summary>
+        /// Legacy brand suffix (" - [speech] (n)"): dash, balloon glyph and count hide together
+        /// when nothing is unread.
+        /// </summary>
+        public bool HasNotificationCounterBadge => NotificationCounterBadge > 0;
 
         /// <summary>Parenthetical next to the Legacy brand, empty when nothing is unread.</summary>
         public string NotificationCounterBadgeText =>
@@ -270,12 +281,22 @@ namespace Unison.Core.ViewModels
         }
 
         /// <summary>
-        /// Legacy search box, Enter. The open pivot decides the target: chats and archived
-        /// write that list's query; the other pivots have nothing to search yet.
+        /// Legacy search box, Enter. Chats/archived write the list query; Favourites write theirs.
         /// </summary>
         public void InvokeFromPivotCommand(string pivotTag, string query, ChatListViewModel target)
         {
             if (!LegacyPivotSearch.AppliesToChatList(pivotTag) || target == null)
+            {
+                return;
+            }
+
+            target.SearchQuery = query?.Trim() ?? string.Empty;
+        }
+
+        /// <summary>Favourites pivot search box.</summary>
+        public void InvokeFavoritesSearch(string pivotTag, string query, FavoritesViewModel target)
+        {
+            if (!LegacyPivotSearch.AppliesToFavorites(pivotTag) || target == null)
             {
                 return;
             }
@@ -424,6 +445,65 @@ namespace Unison.Core.ViewModels
         }
 
         public bool HasOpenStatusDetail => _statusDetailOpen;
+
+        /// <summary>
+        /// Call details open/close — same ChatPane NarrowDetail/NarrowList flip as status.
+        /// </summary>
+        public void SelectCallDetail(bool open)
+        {
+            bool wasOpen = _callDetailOpen;
+            _callDetailOpen = open;
+            if (IsNarrowWindow)
+            {
+                ChatPane = open ? PaneNarrowDetail : PaneNarrowList;
+            }
+
+            if (wasOpen != open)
+            {
+                OnPropertyChanged(nameof(HasOpenCallDetail));
+                OnPropertyChanged(nameof(HidesLegacyShellChrome));
+            }
+
+            RaiseSystemBackButtonChanged();
+        }
+
+        /// <summary>Entering Calls shell page: default to list (or WideBoth).</summary>
+        public void EnterCallsSurface()
+        {
+            if (_callDetailOpen)
+            {
+                _callDetailOpen = false;
+                OnPropertyChanged(nameof(HasOpenCallDetail));
+                OnPropertyChanged(nameof(HidesLegacyShellChrome));
+            }
+
+            SyncCallsPane();
+        }
+
+        /// <summary>Leaving Calls: restore chat list/detail pane rules.</summary>
+        public void LeaveCallsSurface()
+        {
+            if (_callDetailOpen)
+            {
+                _callDetailOpen = false;
+                OnPropertyChanged(nameof(HasOpenCallDetail));
+                OnPropertyChanged(nameof(HidesLegacyShellChrome));
+            }
+
+            if (IsNarrowWindow)
+            {
+                bool showDetail = HasActiveChat && PendingChat != null;
+                ChatPane = showDetail ? PaneNarrowDetail : PaneNarrowList;
+            }
+            else
+            {
+                ChatPane = PaneWideBoth;
+            }
+
+            RaiseSystemBackButtonChanged();
+        }
+
+        public bool HasOpenCallDetail => _callDetailOpen;
 
         /// <summary>
         /// Chat the page should open in ChatDetail (set by SelectChat / cleared by ClearChat).

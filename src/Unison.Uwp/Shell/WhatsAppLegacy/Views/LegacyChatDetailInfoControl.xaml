@@ -10,7 +10,6 @@
     d:DesignWidth="400">
 
     <UserControl.Resources>
-        <SolidColorBrush x:Key="ChatDetailInfoBackgroundBrush" Color="#04564A"/>
         <SolidColorBrush x:Key="ChatDetailInfoCommandBarBrush" Color="#04564A"/>
         <SolidColorBrush x:Key="ChatDetailInfoToggleOnBrush" Color="#04564A"/>
         <SolidColorBrush x:Key="ChatDetailInfoToggleOnHoverBrush" Color="#007A80"/>
@@ -66,12 +65,9 @@
                 </Setter.Value>
             </Setter>
         </Style>
-        <SolidColorBrush x:Key="ChatDetailInfoCloseHoverBrush" Color="#33FFFFFF"/>
-        <SolidColorBrush x:Key="ChatDetailInfoClosePressedBrush" Color="#55FFFFFF"/>
-
         <Style x:Key="ChatDetailInfoCloseButtonStyle" TargetType="Button">
             <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="Foreground" Value="{ThemeResource ChatDetailInfoCloseForegroundBrush}"/>
             <Setter Property="BorderBrush" Value="Transparent"/>
             <Setter Property="BorderThickness" Value="0"/>
             <Setter Property="Padding" Value="4"/>
@@ -99,7 +95,7 @@
                                             <ObjectAnimationUsingKeyFrames Storyboard.TargetName="Root"
                                                                            Storyboard.TargetProperty="Background">
                                                 <DiscreteObjectKeyFrame KeyTime="0"
-                                                                        Value="{StaticResource ChatDetailInfoCloseHoverBrush}"/>
+                                                                        Value="{ThemeResource ChatDetailInfoCloseHoverBrush}"/>
                                             </ObjectAnimationUsingKeyFrames>
                                         </Storyboard>
                                     </VisualState>
@@ -108,7 +104,7 @@
                                             <ObjectAnimationUsingKeyFrames Storyboard.TargetName="Root"
                                                                            Storyboard.TargetProperty="Background">
                                                 <DiscreteObjectKeyFrame KeyTime="0"
-                                                                        Value="{StaticResource ChatDetailInfoClosePressedBrush}"/>
+                                                                        Value="{ThemeResource ChatDetailInfoClosePressedBrush}"/>
                                             </ObjectAnimationUsingKeyFrames>
                                         </Storyboard>
                                     </VisualState>
@@ -133,7 +129,8 @@
         </Style>
     </UserControl.Resources>
 
-    <Grid Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
+    <!-- Plate + body ink from Chrome ThemeDictionaries (white/dark in light). -->
+    <Grid Background="{ThemeResource ChatDetailInfoBackgroundBrush}">
         <Grid.RowDefinitions>
             <RowDefinition Height="*"/>
             <RowDefinition Height="Auto"/>
@@ -191,7 +188,8 @@
                     Style="{StaticResource ChatDetailInfoCloseButtonStyle}"
                     Click="CloseButton_Click"
                     ToolTipService.ToolTip="Close">
-                <FontIcon Glyph="&#xE711;" FontFamily="{StaticResource IconFont}" FontSize="16" Foreground="White"/>
+                <FontIcon Glyph="&#xE711;" FontFamily="{StaticResource IconFont}" FontSize="16"
+                          Foreground="{ThemeResource ChatDetailInfoCloseForegroundBrush}"/>
             </Button>
         </Grid>
 
@@ -238,6 +236,20 @@
                                        HorizontalAlignment="Center"
                                        VerticalAlignment="Center"/>
                         </Button>
+                        <Button x:Name="LeaveGroupButton"
+                                Style="{StaticResource LegacyInfoBarButtonStyle}"
+                                Visibility="Collapsed"
+                                Click="LeaveGroupButton_Click"
+                                ToolTipService.ToolTip="Leave group">
+                            <FontIcon Glyph="&#xE89B;" FontFamily="{StaticResource IconFont}" FontSize="18" Foreground="White"/>
+                        </Button>
+                        <Button x:Name="BlockContactButton"
+                                Style="{StaticResource LegacyInfoBarButtonStyle}"
+                                Visibility="Collapsed"
+                                Click="BlockContactButton_Click"
+                                ToolTipService.ToolTip="Block contact">
+                            <FontIcon Glyph="&#xE8F8;" FontFamily="{StaticResource IconFont}" FontSize="18" Foreground="White"/>
+                        </Button>
                         <Button x:Name="DeleteChatButton"
                                 Style="{StaticResource LegacyInfoBarButtonStyle}"
                                 Visibility="Collapsed"
@@ -264,6 +276,10 @@
                                TextAlignment="Center" TextWrapping="Wrap" Foreground="White"/>
                     <TextBlock x:Name="PinCaption" Text="pin to start" Width="50" Margin="9,0" FontSize="11"
                                TextAlignment="Center" TextWrapping="Wrap" Foreground="White"/>
+                    <TextBlock x:Name="LeaveGroupCaption" Text="leave group" Width="50" Margin="9,0" FontSize="11"
+                               TextAlignment="Center" TextWrapping="Wrap" Foreground="White" Visibility="Collapsed"/>
+                    <TextBlock x:Name="BlockContactCaption" Text="block contact" Width="50" Margin="9,0" FontSize="11"
+                               TextAlignment="Center" TextWrapping="Wrap" Foreground="White" Visibility="Collapsed"/>
                     <TextBlock x:Name="DeleteCaption" Text="delete chat" Width="50" Margin="9,0" FontSize="11"
                                TextAlignment="Center" TextWrapping="Wrap" Foreground="White" Visibility="Collapsed"/>
                 </StackPanel>

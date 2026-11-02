@@ -9,7 +9,9 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.ComponentModel;
+using System.Diagnostics;
 using System.Linq;
+using System.Threading.Tasks;
 using System.Windows.Input;
 using Unison.Core.Contracts;
 using Unison.Core.Contracts.WhatsApp;
@@ -27,6 +29,7 @@ namespace Unison.Core.ViewModels
         private readonly IDispatcher _ui;
         private bool _isPickerOpen;
         private bool _hasFavorites;
+        private string _searchQuery = string.Empty;
         private ObservableCollection<AlphabetChatGroup> _groupedFavorites =
             new ObservableCollection<AlphabetChatGroup>();
         private ObservableCollection<AlphabetJumpTile> _jumpTiles =
@@ -53,6 +56,7 @@ namespace Unison.Core.ViewModels
             OpenMenuCommand = new RelayCommand(() => MenuRequested?.Invoke(this, EventArgs.Empty));
 
             _chatState.Chats.CollectionChanged += OnChatsCollectionChanged;
+            _chats.FavoritesMembershipChanged += OnFavoritesMembershipChanged;
             foreach (ChatItem chat in _chatState.Chats)
             {
                 AttachChat(chat);
@@ -129,7 +133,26 @@ namespace Unison.Core.ViewModels
             }
         }
 
-        public bool ShowEmptyState => !HasFavorites;
+        public bool ShowEmptyState => !HasFavorites && string.IsNullOrWhiteSpace(SearchQuery);
+
+        /// <summary>Legacy / shell search box filter over favourite display names and JIDs.</summary>
+        public string SearchQuery
+        {
+            get => _searchQuery ?? string.Empty;
+            set
+            {
+                string next = value?.Trim() ?? string.Empty;
+                if (string.Equals(_searchQuery, next, StringComparison.Ordinal))
+                {
+                    return;
+                }
+
+                _searchQuery = next;
+                OnPropertyChanged(nameof(SearchQuery));
+                OnPropertyChanged(nameof(ShowEmptyState));
+                Rebuild();
+            }
+        }
 
         public bool IsPickerOpen
         {
@@ -176,8 +199,7 @@ namespace Unison.Core.ViewModels
                 return;
             }
 
-            _ = _chats.SetFavoriteAsync(chat, favorite: true);
-            IsPickerOpen = false;
+            _ = RunFavoriteChangeAsync(chat, favorite: true, closePickerOnSuccess: true);
         }
 
         private void RemoveFavorite(ChatItem chat)
@@ -187,7 +209,27 @@ namespace Unison.Core.ViewModels
                 return;
             }
 
-            _ = _chats.SetFavoriteAsync(chat, favorite: false);
+            _ = RunFavoriteChangeAsync(chat, favorite: false, closePickerOnSuccess: false);
+        }
+
+        private async Task RunFavoriteChangeAsync(ChatItem chat, bool favorite, bool closePickerOnSuccess)
+        {
+            try
+            {
+                await _chats.SetFavoriteAsync(chat, favorite).ConfigureAwait(true);
+                if (closePickerOnSuccess)
+                {
+                    IsPickerOpen = false;
+                }
+
+                ScheduleRebuild();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine(
+                    "[FavoritesViewModel] SetFavorite failed favorite=" + favorite + ": " + ex.Message);
+                ScheduleRebuild();
+            }
         }
 
         private void OpenChat(ChatItem chat)
@@ -265,6 +307,11 @@ namespace Unison.Core.ViewModels
             }
         }
 
+        private void OnFavoritesMembershipChanged(object sender, EventArgs e)
+        {
+            ScheduleRebuild();
+        }
+
         private void ScheduleRebuild()
         {
             _ = _ui.RunAsync(Rebuild);
@@ -272,11 +319,26 @@ namespace Unison.Core.ViewModels
 
         private void Rebuild()
         {
-            List<ChatItem> favorites = _chatState.Chats
-                .Where(c => c != null && c.IsFavorite)
-                .ToList();
+            string query = SearchQuery;
+            bool filtering = !string.IsNullOrWhiteSpace(query);
+            List<ChatItem> favorites = new List<ChatItem>();
+            foreach (ChatItem chat in _chatState.Chats)
+            {
+                if (chat == null || !chat.IsFavorite)
+                {
+                    continue;
+                }
 
-            HasFavorites = favorites.Count > 0;
+                if (filtering && !MatchesFavoriteQuery(chat, query))
+                {
+                    continue;
+                }
+
+                favorites.Add(chat);
+            }
+
+            HasFavorites = _chatState.Chats.Any(c => c != null && c.IsFavorite);
+
             GroupedFavorites = AlphabetChatGroups.Build(
                 favorites,
                 c => c.GetNameResolved(_strings) ?? c.Name ?? c.JID ?? string.Empty);
@@ -286,6 +348,25 @@ namespace Unison.Core.ViewModels
             {
                 RebuildPicker();
             }
+        }
+
+        private bool MatchesFavoriteQuery(ChatItem chat, string query)
+        {
+            if (chat == null || string.IsNullOrWhiteSpace(query))
+            {
+                return true;
+            }
+
+            string name = chat.GetNameResolved(_strings) ?? chat.Name;
+            return ContainsIgnoreCase(name, query) ||
+                   ContainsIgnoreCase(chat.JID, query) ||
+                   ContainsIgnoreCase(chat.LastMessage, query);
+        }
+
+        private static bool ContainsIgnoreCase(string haystack, string needle)
+        {
+            return !string.IsNullOrEmpty(haystack) &&
+                   haystack.IndexOf(needle, StringComparison.OrdinalIgnoreCase) >= 0;
         }
 
         private void RebuildPicker()

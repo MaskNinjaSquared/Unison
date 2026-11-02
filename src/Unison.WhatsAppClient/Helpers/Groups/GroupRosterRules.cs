@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using Unison.Core.Contracts;
 using Unison.Core.Models;
@@ -47,66 +47,26 @@ namespace Unison.WhatsAppClient.Helpers
             return copy.Count == 0 ? null : copy;
         }
 
-        /// <summary>
-        /// Rows read back from the store, with a name resolved for any member that was persisted
-        /// before one was known. Never null.
-        /// </summary>
-        public static List<GroupMember> HydrateFromStore(
-            IReadOnlyList<GroupMember> stored,
-            Func<string, string> resolveDisplayName)
+
+        private static GroupMember FindMember(
+            IList<GroupMember> roster,
+            string canonical,
+            IJidResolver jids)
         {
-            if (stored == null || stored.Count == 0)
+            if (roster == null || string.IsNullOrWhiteSpace(canonical))
             {
-                return new List<GroupMember>();
+                return null;
             }
 
-            var hydrated = new List<GroupMember>(stored.Count);
-            for (int i = 0; i < stored.Count; i++)
+            for (int i = 0; i < roster.Count; i++)
             {
-                GroupMember row = stored[i];
-                if (row == null || string.IsNullOrWhiteSpace(row.Jid))
+                if (MemberMatches(roster[i], canonical, jids))
                 {
-                    continue;
+                    return roster[i];
                 }
-
-                string display = row.DisplayName;
-                if (string.IsNullOrWhiteSpace(display))
-                {
-                    display = resolveDisplayName(row.Jid);
-                }
-
-                hydrated.Add(Copy(row, display));
             }
 
-            return hydrated;
-        }
-
-        /// <summary>
-        /// Puts a restored roster on the row. UI thread only.
-        /// </summary>
-        /// <returns>
-        /// False when the row already holds members: the store read runs off the UI thread, and a
-        /// live metadata reply that landed meanwhile is fresher than anything on disk.
-        /// </returns>
-        public static bool ApplyRestored(ChatItem chat, List<GroupMember> hydrated)
-        {
-            if (chat == null || hydrated == null || hydrated.Count == 0 || chat.HasGroupMembers)
-            {
-                return false;
-            }
-
-            chat.GroupMembers = hydrated;
-            if (chat.GroupMemberCount < hydrated.Count)
-            {
-                chat.GroupMemberCount = hydrated.Count;
-            }
-
-            if (!chat.IsGroup)
-            {
-                chat.IsGroup = true;
-            }
-
-            return true;
+            return null;
         }
 
         /// <summary>

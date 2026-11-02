@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using Unison.Core.Contracts;
@@ -50,82 +50,6 @@ namespace Unison.Core.Tests.Helpers
             Assert.Equal(fetched, row.AvatarFetchedAtUtc);
             Assert.Equal(failed, row.AvatarFetchFailedAtUtc);
             Assert.Equal("timeout", row.AvatarFetchFailureReason);
-        }
-
-        [Fact]
-        public void HydrateFromStore_skips_blank_jids_and_only_resolves_missing_names()
-        {
-            var asked = new List<string>();
-            var stored = new List<GroupMember>
-            {
-                null,
-                new GroupMember { Jid = " " },
-                new GroupMember { Jid = "111@s.whatsapp.net", DisplayName = "Ana" },
-                new GroupMember { Jid = "222@s.whatsapp.net", DisplayName = "  ", Role = GroupParticipantRole.SuperAdmin }
-            };
-
-            List<GroupMember> hydrated = GroupRosterRules.HydrateFromStore(stored, jid =>
-            {
-                asked.Add(jid);
-                return "Bia";
-            });
-
-            Assert.Equal(2, hydrated.Count);
-            Assert.Equal("Ana", hydrated[0].DisplayName);
-            Assert.Equal("Bia", hydrated[1].DisplayName);
-            Assert.Equal(GroupParticipantRole.SuperAdmin, hydrated[1].Role);
-            Assert.Equal(new[] { "222@s.whatsapp.net" }, asked);
-            Assert.NotSame(stored[2], hydrated[0]);
-        }
-
-        [Fact]
-        public void HydrateFromStore_returns_empty_for_null()
-        {
-            Assert.Empty(GroupRosterRules.HydrateFromStore(null, jid => jid));
-        }
-
-        [Fact]
-        public void ApplyRestored_fills_an_empty_row_and_raises_count_and_kind()
-        {
-            var chat = new ChatItem { JID = "1203@g.us", GroupMemberCount = 1 };
-            var hydrated = new List<GroupMember>
-            {
-                new GroupMember { Jid = "111@s.whatsapp.net" },
-                new GroupMember { Jid = "222@s.whatsapp.net" }
-            };
-
-            bool applied = GroupRosterRules.ApplyRestored(chat, hydrated);
-
-            Assert.True(applied);
-            Assert.Same(hydrated, chat.GroupMembers);
-            Assert.Equal(2, chat.GroupMemberCount);
-            Assert.True(chat.IsGroup);
-        }
-
-        [Fact]
-        public void ApplyRestored_never_lowers_a_known_member_count()
-        {
-            var chat = new ChatItem { JID = "1203@g.us", GroupMemberCount = 40 };
-
-            GroupRosterRules.ApplyRestored(chat, new List<GroupMember> { new GroupMember { Jid = "111@s.whatsapp.net" } });
-
-            Assert.Equal(40, chat.GroupMemberCount);
-        }
-
-        [Fact]
-        public void ApplyRestored_leaves_a_roster_that_arrived_first()
-        {
-            // The store read is off the UI thread; a live metadata reply can land in between,
-            // and it is fresher than anything on disk.
-            var live = new List<GroupMember> { new GroupMember { Jid = "333@s.whatsapp.net" } };
-            var chat = new ChatItem { JID = "1203@g.us", GroupMembers = live };
-
-            bool applied = GroupRosterRules.ApplyRestored(
-                chat,
-                new List<GroupMember> { new GroupMember { Jid = "111@s.whatsapp.net" } });
-
-            Assert.False(applied);
-            Assert.Same(live, chat.GroupMembers);
         }
 
         [Fact]

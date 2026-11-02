@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <root>
   <!-- 
     Microsoft ResX Schema 
@@ -181,7 +181,7 @@ Masukan kode ini:
     <value>Gagal menghubungkan nomor</value>
   </data>
   <data name="Login_LogEmpty" xml:space="preserve">
-    <value>(log kosong — pemasangan sudah menulis [Pairing] riwayat otomatis. Ketuk muat QR dan buka log kembali; nyalakan log sesi masuk penuh hanya jika kamu butuh trafik lengkap.)</value>
+    <value>(log kosong � pemasangan sudah menulis [Pairing] riwayat otomatis. Ketuk muat QR dan buka log kembali; nyalakan log sesi masuk penuh hanya jika kamu butuh trafik lengkap.)</value>
   </data>
   <data name="Login_LogReadFail" xml:space="preserve">
     <value>Gagal membaca log: {0}</value>
@@ -270,7 +270,7 @@ Matikan setelah diagnosa: menjaga aplikasi tetap lambat.</value>
     <value>Pesan ini telah dihapus</value>
   </data>
   <data name="ChatList_Loading.Text" xml:space="preserve">
-    <value>Menyiapkan percakapan…</value>
+    <value>Menyiapkan percakapan�</value>
   </data>
   <data name="ChatList_RefreshingNames" xml:space="preserve">
     <value>Menyegarkan nama kontak...</value>
@@ -285,31 +285,31 @@ Matikan setelah diagnosa: menjaga aplikasi tetap lambat.</value>
     <value>Perbarui...</value>
   </data>
   <data name="ChatList_SyncProgress" xml:space="preserve">
-    <value>Menyinkronkan percakapan… {0} of {1}</value>
+    <value>Menyinkronkan percakapan� {0} of {1}</value>
   </data>
   <data name="ChatList_SyncProgressCount" xml:space="preserve">
-    <value>Menyinkronkan percakapan… {0} memuat</value>
+    <value>Menyinkronkan percakapan� {0} memuat</value>
   </data>
   <data name="ChatList_SyncDone" xml:space="preserve">
     <value>Sinkronisasi komplit</value>
   </data>
   <data name="ChatList_Settling" xml:space="preserve">
-    <value>Menyelesaikan proses awal…</value>
+    <value>Menyelesaikan proses awal�</value>
   </data>
   <data name="ChatList_ResolvingNames" xml:space="preserve">
-    <value>Menentukan nama… {0} dari {1}</value>
+    <value>Menentukan nama� {0} dari {1}</value>
   </data>
   <data name="ChatList_FetchingAvatars" xml:space="preserve">
-    <value>Memuat foto… {0} dari {1}</value>
+    <value>Memuat foto� {0} dari {1}</value>
   </data>
   <data name="ChatList_FetchingGroups" xml:space="preserve">
-    <value>Memuat info grup… {0} dari {1}</value>
+    <value>Memuat info grup� {0} dari {1}</value>
   </data>
   <data name="ChatList_PausedLowMemory" xml:space="preserve">
-    <value>Dijeda — memori rendah</value>
+    <value>Dijeda � memori rendah</value>
   </data>
   <data name="ChatList_Organizing" xml:space="preserve">
-    <value>Mengatur obrolan…</value>
+    <value>Mengatur obrolan�</value>
   </data>
   <data name="ChatDetail_SelectChat.Text" xml:space="preserve">
     <value>Pilih obrolan</value>
@@ -328,6 +328,15 @@ Matikan setelah diagnosa: menjaga aplikasi tetap lambat.</value>
   </data>
   <data name="ChatDetail_GroupOnlyAdminsCanSend.Text" xml:space="preserve">
     <value>Hanya admin yang dapat mengirim pesan</value>
+  </data>
+  <data name="ChatDetail_GroupNoLongerParticipant.Text" xml:space="preserve">
+    <value>Anda tidak dapat mengirim pesan ke grup ini karena Anda bukan lagi peserta.</value>
+  </data>
+  <data name="ChatDetail_UnreadMessagesFormat" xml:space="preserve">
+    <value>{0} pesan belum dibaca</value>
+  </data>
+  <data name="ChatDetail_UnreadUpdatesFormat" xml:space="preserve">
+    <value>{0} pembaruan belum dibaca</value>
   </data>
   <data name="ChatDetail_AttachCamera.Text" xml:space="preserve">
     <value>Kamera</value>
@@ -355,6 +364,27 @@ Matikan setelah diagnosa: menjaga aplikasi tetap lambat.</value>
   </data>
   <data name="ChatDetail_AttachBarTooltip.Content" xml:space="preserve">
     <value>Lampirkan</value>
+  </data>
+  <data name="ChatDetail_StickerBoxTooltip.Content" xml:space="preserve">
+    <value>Emoji</value>
+  </data>
+  <data name="StickerBox_EmojiTab.Text" xml:space="preserve">
+    <value>Emoji</value>
+  </data>
+  <data name="StickerBox_GifTab.Text" xml:space="preserve">
+    <value>GIF</value>
+  </data>
+  <data name="StickerBox_StickerTab.Text" xml:space="preserve">
+    <value>Stickers</value>
+  </data>
+  <data name="StickerBox_GifSoon.Text" xml:space="preserve">
+    <value>GIFs coming soon</value>
+  </data>
+  <data name="StickerBox_StickerSoon.Text" xml:space="preserve">
+    <value>Stickers coming soon</value>
+  </data>
+  <data name="StickerBox_SearchBox.PlaceholderText" xml:space="preserve">
+    <value>Cari emoji</value>
   </data>
   <data name="ChatDetail_ScrollToBottomTooltip.Content" xml:space="preserve">
     <value>Ke pesan terbaru</value>
@@ -420,7 +450,7 @@ Matikan setelah diagnosa: menjaga aplikasi tetap lambat.</value>
     <value>Pengumuman</value>
   </data>
   <data name="Chat_CommunityHubSubtitle" xml:space="preserve">
-    <value>Komunitas · {0} grup</value>
+    <value>Komunitas � {0} grup</value>
   </data>
   <data name="Chat_CommunityFallbackName" xml:space="preserve">
     <value>Komunitas</value>
@@ -477,6 +507,12 @@ Matikan setelah diagnosa: menjaga aplikasi tetap lambat.</value>
   </data>
   <data name="ChatDetail_RecordingChatUnavailable" xml:space="preserve">
     <value>Percakapan untuk rekaman ini tidak lagi tersedia.</value>
+  </data>
+  <data name="ChatDetail_RecordingPause" xml:space="preserve">
+    <value>Jeda</value>
+  </data>
+  <data name="ChatDetail_RecordingPlay" xml:space="preserve">
+    <value>Putar</value>
   </data>
   <data name="ChatDetail_AudioSendFailed" xml:space="preserve">
     <value>Tidak dapat mengirim audio.</value>
@@ -658,6 +694,12 @@ Matikan setelah diagnosa: menjaga aplikasi tetap lambat.</value>
   <data name="StatusDetail_EmptySubtitle.Text" xml:space="preserve">
     <value>Bagikan foto, video, dan teks yang hilang setelah 24 jam.</value>
   </data>
+  <data name="StatusDetail_Download.AutomationProperties.Name" xml:space="preserve">
+    <value>Save status</value>
+  </data>
+  <data name="StatusDetail_Download.ToolTipService.ToolTip" xml:space="preserve">
+    <value>Save this status to your device</value>
+  </data>
   <data name="Shell_Starred.Text" xml:space="preserve">
     <value>Pesan berbintang</value>
   </data>
@@ -673,8 +715,50 @@ Matikan setelah diagnosa: menjaga aplikasi tetap lambat.</value>
   <data name="Calls_Header.Text" xml:space="preserve">
     <value>Panggilan</value>
   </data>
-  <data name="Calls_Empty.Text" xml:space="preserve">
-    <value>Untuk memulai panggilan, pilih kontak lalu ketuk Panggil.</value>
+  <data name="Calls_EmptyTitle.Text" xml:space="preserve">
+    <value>Panggilan suara dan video</value>
+  </data>
+  <data name="Calls_EmptyBody.Text" xml:space="preserve">
+    <value>Bagikan layar Anda, bereaksi dengan emoji, dan masih banyak lagi bersama hingga 32 orang…</value>
+  </data>
+  <data name="Calls_FavoritesSection.Text" xml:space="preserve">
+    <value>FAVORITES</value>
+  </data>
+  <data name="Calls_RecentsSection.Text" xml:space="preserve">
+    <value>RECENT</value>
+  </data>
+  <data name="Calls_SeeAllFavorites.Content" xml:space="preserve">
+    <value>See all</value>
+  </data>
+  <data name="Calls_Outgoing" xml:space="preserve">
+    <value>Outgoing</value>
+  </data>
+  <data name="Calls_Incoming" xml:space="preserve">
+    <value>Incoming</value>
+  </data>
+  <data name="Calls_Missed" xml:space="preserve">
+    <value>Missed</value>
+  </data>
+  <data name="Calls_DetailsTitle.Text" xml:space="preserve">
+    <value>Call info</value>
+  </data>
+  <data name="Calls_DetailsUnavailable.Text" xml:space="preserve">
+    <value>Not available right now</value>
+  </data>
+  <data name="Calls_NewCallUnavailable" xml:space="preserve">
+    <value>Calling is not available yet.</value>
+  </data>
+  <data name="Message_CallMissed" xml:space="preserve">
+    <value>Missed voice call</value>
+  </data>
+  <data name="Message_CallMissedVideo" xml:space="preserve">
+    <value>Missed video call</value>
+  </data>
+  <data name="Message_CallCompleted" xml:space="preserve">
+    <value>Voice call</value>
+  </data>
+  <data name="Message_CallCompletedVideo" xml:space="preserve">
+    <value>Video call</value>
   </data>
   <data name="Shell_Archived.Text" xml:space="preserve">
     <value>Obrolan diarsipkan</value>
@@ -707,7 +791,7 @@ Matikan setelah diagnosa: menjaga aplikasi tetap lambat.</value>
     <value>Aplikasi latar belakang</value>
   </data>
   <data name="Login_BackgroundAccessBody" xml:space="preserve">
-    <value>Unison memerlukan izin untuk berjalan di latar belakang agar dapat terhubung ke WhatsApp. Aktifkan Unison di Pengaturan → Privasi → Aplikasi latar belakang, lalu kembali ke sini.</value>
+    <value>Unison memerlukan izin untuk berjalan di latar belakang agar dapat terhubung ke WhatsApp. Aktifkan Unison di Pengaturan ? Privasi ? Aplikasi latar belakang, lalu kembali ke sini.</value>
   </data>
   <data name="Login_BackgroundAccessRetry" xml:space="preserve">
     <value>Akses latar belakang sudah aktif. Ketuk Muat ulang QR untuk terhubung.</value>
@@ -763,6 +847,55 @@ Matikan setelah diagnosa: menjaga aplikasi tetap lambat.</value>
   <data name="Settings_Notifications.Text" xml:space="preserve">
     <value>Tampilkan notifikasi dan lencana untuk pesan masuk.</value>
   </data>
+  <data name="Settings_CallNotifications.Header" xml:space="preserve">
+    <value>Call notifications</value>
+  </data>
+  <data name="Settings_CallNotifications.Text" xml:space="preserve">
+    <value>Toasts for incoming calls and missed-call Live Tile updates.</value>
+  </data>
+  <data name="Notification_IncomingCallBody" xml:space="preserve">
+    <value>Incoming Call (Answer on Primary Phone)</value>
+  </data>
+  <data name="Notification_MissedCall" xml:space="preserve">
+    <value>Missed call</value>
+  </data>
+  <data name="Notification_MissedVideoCall" xml:space="preserve">
+    <value>Missed video call</value>
+  </data>
+  <data name="Settings_LockScreenNotifications.Header" xml:space="preserve">
+    <value>Lock screen</value>
+  </data>
+  <data name="Settings_LockScreenNotifications.Text" xml:space="preserve">
+    <value>Which chats update the large Live Tile / lock screen preview.</value>
+  </data>
+  <data name="Settings_LockScreenScope_All.Content" xml:space="preserve">
+    <value>All</value>
+  </data>
+  <data name="Settings_LockScreenScope_Groups.Content" xml:space="preserve">
+    <value>Groups</value>
+  </data>
+  <data name="Settings_LockScreenScope_Direct.Content" xml:space="preserve">
+    <value>Contacts</value>
+  </data>
+  <data name="Settings_LockScreenScope_Favorites.Content" xml:space="preserve">
+    <value>Favorites</value>
+  </data>
+  <data name="Settings_NotificationFilter.Header" xml:space="preserve">
+    <value>Filter notifications</value>
+  </data>
+  <data name="Settings_NotificationFilter.Text" xml:space="preserve">
+    <value>Which chats may raise toasts and count toward the badge.</value>
+  </data>
+  <data name="Settings_NotificationFilterChoose.Content" xml:space="preserve"><value>Pilih</value></data>
+  <data name="Settings_NotifyGroups.Content" xml:space="preserve">
+    <value>Groups</value>
+  </data>
+  <data name="Settings_NotifyDirect.Content" xml:space="preserve">
+    <value>Contacts</value>
+  </data>
+  <data name="Settings_NotifyFavorites.Content" xml:space="preserve">
+    <value>Favorites</value>
+  </data>
   <data name="Settings_MessageNotificationSound.Header" xml:space="preserve">
     <value>Notifikasi pesan</value>
   </data>
@@ -796,6 +929,9 @@ Matikan setelah diagnosa: menjaga aplikasi tetap lambat.</value>
   <data name="StartTileDialog.Title" xml:space="preserve"><value>Tile Mulai</value></data>
   <data name="StartTileDialog.PrimaryButtonText" xml:space="preserve"><value>Sematkan</value></data>
   <data name="StartTileDialog.CloseButtonText" xml:space="preserve"><value>Batal</value></data>
+  <data name="NotificationFilterDialog.Title" xml:space="preserve"><value>Filter notifikasi</value></data>
+  <data name="NotificationFilterDialog.PrimaryButtonText" xml:space="preserve"><value>OK</value></data>
+  <data name="NotificationFilterDialog.CloseButtonText" xml:space="preserve"><value>Batal</value></data>
   <data name="StartTileDialog_Unison.Content" xml:space="preserve"><value>Unison</value></data>
   <data name="StartTileDialog_WhatsAppWeb.Content" xml:space="preserve"><value>WhatsApp Web</value></data>
   <data name="StartTileDialog_WhatsAppLegacy.Content" xml:space="preserve"><value>WhatsApp Legacy</value></data>
@@ -810,6 +946,18 @@ Matikan setelah diagnosa: menjaga aplikasi tetap lambat.</value>
   </data>
   <data name="Settings_KeepAlive.Text" xml:space="preserve">
     <value>Memakai lokasi hanya agar Windows 10 Mobile tidak membekukan aplikasi (trik Unogram). Posisi tidak dibaca atau dikirim. Lebih boros baterai.</value>
+  </data>
+  <data name="Settings_StartupLaunch.Header" xml:space="preserve">
+    <value>Start with Windows</value>
+  </data>
+  <data name="Settings_StartupLaunch.Text" xml:space="preserve">
+    <value>Opens Unison when you sign in to Windows.</value>
+  </data>
+  <data name="Settings_StartupLaunchDisabledByUser" xml:space="preserve">
+    <value>Turned off in Task Manager. To turn it back on, open Task Manager > Startup apps and enable Unison.</value>
+  </data>
+  <data name="Settings_StartupLaunchPolicy" xml:space="preserve">
+    <value>Your organization manages this setting.</value>
   </data>
   <data name="Settings_AutoUnlink.Header" xml:space="preserve">
     <value>Lepas tautan otomatis</value>
@@ -1038,6 +1186,27 @@ Matikan setelah diagnosa: menjaga aplikasi tetap lambat.</value>
   <data name="Message_GroupJoin" xml:space="preserve">
     <value>{0} bergabung ke grup</value>
   </data>
+  <data name="Message_GroupAddedBy" xml:space="preserve">
+    <value>{0} added {1}</value>
+  </data>
+  <data name="Message_GroupLeft" xml:space="preserve">
+    <value>{0} left</value>
+  </data>
+  <data name="Message_GroupRemovedBy" xml:space="preserve">
+    <value>{0} removed {1}</value>
+  </data>
+  <data name="Message_GroupSubjectChangedFromTo" xml:space="preserve">
+    <value>{0} changed the group name from "{1}" to "{2}"</value>
+  </data>
+  <data name="Message_GroupSubjectChangedTo" xml:space="preserve">
+    <value>{0} changed the group name to "{1}"</value>
+  </data>
+  <data name="Message_GroupSubjectChangedFromToAnon" xml:space="preserve">
+    <value>Group name changed from "{0}" to "{1}"</value>
+  </data>
+  <data name="Message_GroupSubjectChangedToAnon" xml:space="preserve">
+    <value>Group name changed to "{0}"</value>
+  </data>
   <data name="ChatDetail_AddContactLink.Content" xml:space="preserve">
     <value>Tambah kontak</value>
   </data>
@@ -1207,7 +1376,7 @@ Matikan setelah diagnosa: menjaga aplikasi tetap lambat.</value>
     <value>Tutup</value>
   </data>
   <data name="ChatList_SyncingHistory" xml:space="preserve">
-    <value>Menyinkronkan riwayat…</value>
+    <value>Menyinkronkan riwayat�</value>
   </data>
   <data name="Debug_RuntimeDialogHint.Text" xml:space="preserve">
     <value>Tahan / klik kanan Chats (atau QR) untuk membuka. Tanpa teks pesan.</value>
@@ -1225,7 +1394,7 @@ Matikan setelah diagnosa: menjaga aplikasi tetap lambat.</value>
     <value>Request Full History On-demand</value>
   </data>
   <data name="Debug_FullHistoryRequesting" xml:space="preserve">
-    <value>Requesting full history…</value>
+    <value>Requesting full history�</value>
   </data>
   <data name="Debug_FullHistoryRequested" xml:space="preserve">
     <value>Full history on-demand requested.</value>
@@ -1324,7 +1493,7 @@ Matikan setelah diagnosa: menjaga aplikasi tetap lambat.</value>
     <value>Putar audio</value>
   </data>
 <data name="ChatDetail_DocumentSaveAs.Label" xml:space="preserve">
-    <value>Simpan sebagai…</value>
+    <value>Simpan sebagai�</value>
   </data>
   <data name="ChatDetail_Back.ToolTip" xml:space="preserve">
     <value>Kembali</value>
@@ -1438,7 +1607,7 @@ Matikan setelah diagnosa: menjaga aplikasi tetap lambat.</value>
     <value>Add people or groups</value>
   </data>
   <data name="Share_PickChat.Text" xml:space="preserve">
-    <value>Send to…</value>
+    <value>Send to�</value>
   </data>
   <data name="Favorites_SortAlphabetical.Text" xml:space="preserve">
     <value>A-Z</value>

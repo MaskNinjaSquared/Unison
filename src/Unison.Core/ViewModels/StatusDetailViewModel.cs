@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Input;
@@ -21,6 +22,7 @@ namespace Unison.Core.ViewModels
 
         private readonly IStatusService _status;
         private readonly IDispatcher _dispatcher;
+        private readonly IFilePicker _files;
         private readonly IRuntimeDiagnostics _diagnostics;
 
         private IReadOnlyList<HistoryStatus> _items = Array.Empty<HistoryStatus>();
@@ -34,23 +36,33 @@ namespace Unison.Core.ViewModels
         private bool _isImage;
         private bool _isLoading;
         private bool _hasOpenAuthor;
+        private bool _canDownload;
+        private bool _isSaving;
         private bool _waitingForNaturalDuration;
         private CancellationTokenSource _timerCts;
         private int _openGeneration;
         private DateTime _itemShownUtc;
+        private TimeSpan _itemDuration;
         private string _openingAuthorJid;
+        private readonly RelayCommand _downloadCommand;
 
         public StatusDetailViewModel(
             IStatusService status,
             IDispatcher dispatcher,
+            IFilePicker files = null,
             IRuntimeDiagnostics diagnostics = null)
         {
             _status = status ?? throw new ArgumentNullException(nameof(status));
             _dispatcher = dispatcher ?? throw new ArgumentNullException(nameof(dispatcher));
+            _files = files;
             _diagnostics = diagnostics;
             CloseCommand = new RelayCommand(Close);
             NextCommand = new RelayCommand(GoNext);
             PreviousCommand = new RelayCommand(GoPrevious);
+            _downloadCommand = new RelayCommand(
+                () => _ = DownloadCurrentAsync(),
+                () => CanDownload && !_isSaving);
+            DownloadCommand = _downloadCommand;
         }
 
         public ObservableCollection<StatusProgressSegment> Segments { get; } =
@@ -112,11 +124,28 @@ namespace Unison.Core.ViewModels
             private set => Set(ref _hasOpenAuthor, value);
         }
 
+        /// <summary>
+        /// True when the open Status item has local image/video ready to save (Unison-only).
+        /// </summary>
+        public bool CanDownload
+        {
+            get => _canDownload;
+            private set
+            {
+                if (Set(ref _canDownload, value))
+                {
+                    _downloadCommand?.RaiseCanExecuteChanged();
+                }
+            }
+        }
+
         public ICommand CloseCommand { get; }
 
         public ICommand NextCommand { get; }
 
         public ICommand PreviousCommand { get; }
+
+        public ICommand DownloadCommand { get; }
 
         public event EventHandler Closed;
 
@@ -257,6 +286,91 @@ namespace Unison.Core.ViewModels
 
         public void Close() => Close("user");
 
+        /// <summary>
+        /// Unison-only: FileSavePicker copies the current Status media out of the app cache.
+        /// Pauses the auto-advance timer while the picker is open.
+        /// </summary>
+        public async Task DownloadCurrentAsync()
+        {
+            if (_files == null || _isSaving || !CanDownload)
+            {
+                return;
+            }
+
+            HistoryStatus item = CurrentItem();
+            string uri = MediaUri;
+            double fill = (_index >= 0 && _index < Segments.Count) ? Segments[_index].Fill : 0d;
+            TimeSpan remaining = TimeSpan.FromMilliseconds(
+                _itemDuration.TotalMilliseconds * Math.Max(0.05d, 1d - fill));
+
+            _isSaving = true;
+            _downloadCommand.RaiseCanExecuteChanged();
+            StopTimer();
+            LogStatus("download-start", "uri=" + (uri ?? "-") + "; id=" + (item?.MessageId ?? "-"));
+
+            try
+            {
+                if (item != null)
+                {
+                    try
+                    {
+                        string ensured = await _status.EnsureMediaAsync(item).ConfigureAwait(false);
+                        if (!string.IsNullOrWhiteSpace(ensured))
+                        {
+                            uri = ensured;
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        LogStatus("download-ensure-fail", "err=" + ex.Message);
+                    }
+                }
+
+                if (string.IsNullOrWhiteSpace(uri))
+                {
+                    LogStatus("download-skip", "no-uri");
+                    return;
+                }
+
+                string suggested = BuildSuggestedFileName(item, uri);
+                string saved;
+                if (IsVideo)
+                {
+                    saved = await _files
+                        .PickSaveLocalFileAsync(uri, suggested, item?.MediaMimeType)
+                        .ConfigureAwait(false);
+                }
+                else
+                {
+                    // Prefer generic save so webp/jpeg/png keep a matching extension.
+                    saved = await _files
+                        .PickSaveLocalFileAsync(uri, suggested, item?.MediaMimeType)
+                        .ConfigureAwait(false);
+                }
+
+                LogStatus(
+                    saved == null ? "download-cancel" : "download-ok",
+                    "path=" + (saved ?? "-"));
+            }
+            catch (Exception ex)
+            {
+                LogStatus("download-fail", "err=" + ex.Message);
+            }
+            finally
+            {
+                _isSaving = false;
+                await _dispatcher.RunAsync(() =>
+                {
+                    _downloadCommand.RaiseCanExecuteChanged();
+                    RefreshCanDownload();
+                    if (HasOpenAuthor && _items.Count > 0)
+                    {
+                        StartTimer(remaining);
+                    }
+                }).ConfigureAwait(false);
+            }
+        }
+
         private void Close(string reason)
         {
             LogStatus(
@@ -396,6 +510,7 @@ namespace Unison.Core.ViewModels
                 IsImage = false;
                 MediaUri = null;
                 IsLoading = isVideo || isImage;
+                RefreshCanDownload();
             }).ConfigureAwait(false);
 
             if (generation != _openGeneration)
@@ -444,9 +559,12 @@ namespace Unison.Core.ViewModels
                 }
 
                 IsLoading = false;
-                MediaUri = displayUri;
+                // Visibility (IsVideo/IsImage) before MediaUri so MediaElement is Visible
+                // when ApplyMedia assigns Source — MediaUri-first left it Collapsed on reopen.
                 IsVideo = showVideo;
                 IsImage = showImage;
+                MediaUri = displayUri;
+                RefreshCanDownload();
                 _itemShownUtc = DateTime.UtcNow;
 
                 if (showVideo)
@@ -532,6 +650,7 @@ namespace Unison.Core.ViewModels
                 duration = TimeSpan.FromSeconds(PhotoDisplaySeconds);
             }
 
+            _itemDuration = duration;
             var cts = new CancellationTokenSource();
             _timerCts = cts;
             int generation = _openGeneration;
@@ -617,6 +736,104 @@ namespace Unison.Core.ViewModels
             IsImage = false;
             IsLoading = false;
             _waitingForNaturalDuration = false;
+            RefreshCanDownload();
+        }
+
+        private HistoryStatus CurrentItem()
+        {
+            if (_items == null || _index < 0 || _index >= _items.Count)
+            {
+                return null;
+            }
+
+            return _items[_index];
+        }
+
+        private void RefreshCanDownload()
+        {
+            CanDownload = !IsLoading &&
+                          !_isSaving &&
+                          (IsImage || IsVideo) &&
+                          !string.IsNullOrWhiteSpace(MediaUri);
+        }
+
+        private static string BuildSuggestedFileName(HistoryStatus item, string uri)
+        {
+            string extension = ExtensionFrom(item, uri);
+            string id = item?.MessageId;
+            if (string.IsNullOrWhiteSpace(id))
+            {
+                id = DateTime.UtcNow.ToString("yyyyMMdd_HHmmss");
+            }
+            else if (id.Length > 12)
+            {
+                id = id.Substring(0, 12);
+            }
+
+            foreach (char c in Path.GetInvalidFileNameChars())
+            {
+                id = id.Replace(c, '_');
+            }
+
+            return "Unison_Status_" + id + extension;
+        }
+
+        private static string ExtensionFrom(HistoryStatus item, string uri)
+        {
+            if (!string.IsNullOrWhiteSpace(item?.MediaFileName))
+            {
+                string fromName = Path.GetExtension(item.MediaFileName);
+                if (!string.IsNullOrWhiteSpace(fromName))
+                {
+                    return fromName;
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(uri))
+            {
+                try
+                {
+                    string path = uri;
+                    int q = path.IndexOf('?');
+                    if (q >= 0)
+                    {
+                        path = path.Substring(0, q);
+                    }
+
+                    string fromUri = Path.GetExtension(path);
+                    if (!string.IsNullOrWhiteSpace(fromUri) && fromUri.Length <= 5)
+                    {
+                        return fromUri;
+                    }
+                }
+                catch
+                {
+                }
+            }
+
+            string mime = (item?.MediaMimeType ?? string.Empty).ToLowerInvariant();
+            if (mime.IndexOf("video", StringComparison.Ordinal) >= 0 ||
+                mime.IndexOf("mp4", StringComparison.Ordinal) >= 0)
+            {
+                return ".mp4";
+            }
+
+            if (mime.IndexOf("png", StringComparison.Ordinal) >= 0)
+            {
+                return ".png";
+            }
+
+            if (mime.IndexOf("webp", StringComparison.Ordinal) >= 0)
+            {
+                return ".webp";
+            }
+
+            if (item != null && item.Kind == ChatPreviewKind.Video)
+            {
+                return ".mp4";
+            }
+
+            return ".jpg";
         }
 
         private void LogStatus(string eventName, string details)

@@ -87,6 +87,11 @@ namespace Unison.Uwp.Data
             return _cache.TryGet(jid);
         }
 
+        public IReadOnlyList<string> ListFavoriteJids()
+        {
+            return _cache.ListFavoriteJids();
+        }
+
         public async Task<ChatLocalState> GetAsync(string jid)
         {
             ChatLocalState cached = _cache.TryGet(jid);

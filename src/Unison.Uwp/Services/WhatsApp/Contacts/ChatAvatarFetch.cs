@@ -65,6 +65,12 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
                 return;
             }
 
+            if (chat.IsChannel)
+            {
+                await FetchAndApplyChannelAsync(chat, token).ConfigureAwait(false);
+                return;
+            }
+
             string alias;
             _jids.TryGetAlias(chat.JID, out alias);
             var result = await _avatars.FetchPreviewAsync(
@@ -75,6 +81,74 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             {
                 _ = _groups.EnsureHighQualityGroupAvatarAsync(chat);
             }
+        }
+
+        /// <summary>
+        /// Channels use WMex newsletterMetadata (picture.direct_path), not w:profile:picture.
+        /// Also stamps Name / AvatarPictureId via <see cref="ChannelIdentityApply"/>.
+        /// </summary>
+        private async Task FetchAndApplyChannelAsync(ChatItem chat, CancellationToken token)
+        {
+            var socket = _sessions.Socket;
+            if (socket == null)
+            {
+                await _ui.RunAsync(() =>
+                    ChatAvatarOutcome.RecordFailure(chat, "not-connected", DateTime.UtcNow));
+                return;
+            }
+
+            token.ThrowIfCancellationRequested();
+
+            Unison.Socket.UseCases.Newsletter.NewsletterMetadataResult meta;
+            try
+            {
+                meta = await socket.GetNewsletterMetadataAsync(chat.JID).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                await _ui.RunAsync(() =>
+                    ChatAvatarOutcome.RecordFailure(
+                        chat,
+                        "newsletter:" + ex.GetBaseException().Message,
+                        DateTime.UtcNow));
+                Debug.WriteLine(
+                    "[ChatAvatarFetch] Channel metadata failed for " + chat.JID + ": " + ex.Message);
+                return;
+            }
+
+            if (meta == null)
+            {
+                await _ui.RunAsync(() =>
+                    ChatAvatarOutcome.RecordAbsent(chat, "newsletter-null", DateTime.UtcNow));
+                return;
+            }
+
+            await _ui.RunAsync(() =>
+            {
+                bool nameChanged = ChannelIdentityApply.TryApplyName(chat, meta.Name);
+                bool pictureHintChanged = ChannelIdentityApply.TryApplyPictureHint(
+                    chat,
+                    meta.PictureId,
+                    meta.ResolvedPictureUrl);
+                if (nameChanged || pictureHintChanged)
+                {
+                    _catalog.Schedule();
+                }
+            });
+
+            var pictureResult = new ProfilePictureResult
+            {
+                Url = meta.ResolvedPictureUrl,
+                Id = meta.PictureId,
+                TargetJid = chat.JID,
+                IsNotFound = !meta.HasPicture &&
+                             (meta.IsNotFound || string.IsNullOrEmpty(meta.FailureReason)),
+                FailureReason = meta.HasPicture
+                    ? null
+                    : (meta.FailureReason ?? "not-found")
+            };
+
+            await ApplyAsync(chat, pictureResult, token).ConfigureAwait(false);
         }
 
         public async Task HydrateCachedAsync(string reason)

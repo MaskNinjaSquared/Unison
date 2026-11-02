@@ -86,6 +86,14 @@ namespace Unison.Core.Contracts
             string chatJid,
             string messageId);
 
+        /// <summary>
+        /// Same as the single-key overload, but <paramref name="chatJids"/> covers PN/LID/canonical
+        /// twins so a reaction written under one spelling still appears in the dialog.
+        /// </summary>
+        Task<IReadOnlyList<HistoryMessageReaction>> GetReactionsForMessageAsync(
+            IReadOnlyList<string> chatJids,
+            string messageId);
+
         Task<int> CountAsync(string syncId = null);
 
         Task ClearAsync(string reason = null);
@@ -97,6 +105,12 @@ namespace Unison.Core.Contracts
         /// </summary>
         Task<int> DeleteForChatKeysAsync(IReadOnlyList<string> chatJids);
 
+        /// <summary>
+        /// Account-side delete-for-me: remove one message id under every conversation key
+        /// (PN / LID / canonical) plus its reaction rows.
+        /// </summary>
+        Task<int> DeleteMessageAsync(IReadOnlyList<string> chatJids, string messageId);
+
         /// <summary>Local media still on disk. Rows already marked deleted are omitted.</summary>
         Task<IReadOnlyList<CachedMediaEntry>> ListCachedMediaAsync();
 
@@ -105,6 +119,12 @@ namespace Unison.Core.Contracts
 
         /// <summary>True when cache cleanup already marked this message's file deleted.</summary>
         Task<bool> IsMediaDeletedAsync(string chatJid, string messageId);
+
+        /// <summary>
+        /// Marks inbound rows for these conversation keys as read (<c>IsRead = 1</c>).
+        /// Null / missing column is a no-op after ensure. Avoids a schema migration.
+        /// </summary>
+        Task MarkInboundReadAsync(IReadOnlyList<string> chatJids);
 
         event EventHandler<HistoryMessageChunkEventArgs> ChunkPersisted;
     }

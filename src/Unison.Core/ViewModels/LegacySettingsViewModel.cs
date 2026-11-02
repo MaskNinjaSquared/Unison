@@ -34,7 +34,8 @@ namespace Unison.Core.ViewModels
             IConnectionService connectionService,
             ShellViewModel shell,
             IContactService contacts = null,
-            SyncStatusChannel syncStatus = null)
+            SyncStatusChannel syncStatus = null,
+            IStartupLaunchService startupLaunch = null)
             : base(
                 localSettings,
                 liveTilesService,
@@ -49,7 +50,8 @@ namespace Unison.Core.ViewModels
                 connectionService,
                 shell,
                 contacts,
-                syncStatus)
+                syncStatus,
+                startupLaunch)
         {
             OpenCategoryCommand = new RelayCommand<string>(OpenCategory);
         }

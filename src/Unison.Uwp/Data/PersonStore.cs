@@ -298,6 +298,109 @@ namespace Unison.Uwp.Data
             }
         }
 
+        public async Task UpsertGroupMembershipsAsync(
+            string groupJid,
+            IReadOnlyList<PersonGroupMembership> members)
+        {
+            string groupKey = NormalizeJid(groupJid);
+            if (string.IsNullOrEmpty(groupKey) ||
+                !JidHelper.IsGroupJid(groupKey) ||
+                members == null ||
+                members.Count == 0)
+            {
+                return;
+            }
+
+            DateTime now = DateTime.UtcNow;
+            var rows = new List<PersonGroupRow>(members.Count);
+            for (int i = 0; i < members.Count; i++)
+            {
+                PersonGroupMembership member = members[i];
+                string personKey = member == null ? null : NormalizeJid(member.PersonJid);
+                if (string.IsNullOrEmpty(personKey) || JidHelper.IsGroupJid(personKey))
+                {
+                    continue;
+                }
+
+                rows.Add(new PersonGroupRow
+                {
+                    Id = PersonGroupRow.MakeId(personKey, groupKey),
+                    PersonJid = personKey,
+                    GroupJid = groupKey,
+                    Role = (int)member.Role,
+                    UpdatedAtUtc = now
+                });
+            }
+
+            if (rows.Count == 0)
+            {
+                return;
+            }
+
+            await EnsureInitializedAsync().ConfigureAwait(false);
+            await _writeLock.WaitAsync().ConfigureAwait(false);
+            try
+            {
+                await _connection.RunInTransactionAsync(conn =>
+                {
+                    for (int i = 0; i < rows.Count; i++)
+                    {
+                        conn.InsertOrReplace(rows[i]);
+                    }
+                }).ConfigureAwait(false);
+            }
+            finally
+            {
+                _writeLock.Release();
+            }
+        }
+
+        public async Task RemoveGroupMembershipsAsync(
+            string groupJid,
+            IReadOnlyList<string> personJids)
+        {
+            string groupKey = NormalizeJid(groupJid);
+            if (string.IsNullOrEmpty(groupKey) ||
+                !JidHelper.IsGroupJid(groupKey) ||
+                personJids == null ||
+                personJids.Count == 0)
+            {
+                return;
+            }
+
+            var ids = new List<string>(personJids.Count);
+            for (int i = 0; i < personJids.Count; i++)
+            {
+                string personKey = NormalizeJid(personJids[i]);
+                if (!string.IsNullOrEmpty(personKey) && !JidHelper.IsGroupJid(personKey))
+                {
+                    ids.Add(PersonGroupRow.MakeId(personKey, groupKey));
+                }
+            }
+
+            if (ids.Count == 0)
+            {
+                return;
+            }
+
+            await EnsureInitializedAsync().ConfigureAwait(false);
+            await _writeLock.WaitAsync().ConfigureAwait(false);
+            try
+            {
+                await _connection.RunInTransactionAsync(conn =>
+                {
+                    for (int i = 0; i < ids.Count; i++)
+                    {
+                        conn.Execute("DELETE FROM PersonGroup WHERE Id = ?", ids[i]);
+                    }
+                }).ConfigureAwait(false);
+            }
+            finally
+            {
+                _writeLock.Release();
+            }
+        }
+
         public async Task<IReadOnlyList<PersonGroupMembership>> ListGroupsForPersonAsync(string personJid)
         {
             string personKey = NormalizeJid(personJid);

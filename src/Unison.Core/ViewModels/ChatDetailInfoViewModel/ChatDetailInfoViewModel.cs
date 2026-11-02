@@ -58,6 +58,7 @@ namespace Unison.Core.ViewModels
         private bool _isMembersRosterLoading;
         private Task _membersRosterEnsureTask;
         private CancellationTokenSource _membersRosterCts;
+        private string _createdByYouText;
 
         /// <summary>Tiles materialized per page. Groups hold hundreds of media rows.</summary>
         private const int MediaPageSize = 30;
@@ -188,6 +189,14 @@ namespace Unison.Core.ViewModels
                 () => _ = CallPhoneAsync(),
                 () => CanCallPhone);
 
+            LeaveGroupCommand = new RelayCommand(
+                () => _ = LeaveGroupAsync(),
+                () => CanLeaveGroup);
+
+            BlockContactCommand = new RelayCommand(
+                () => _ = BlockContactAsync(),
+                () => CanBlockContact);
+
             RefreshDerived();
             if (_isGroupMember)
             {
@@ -198,6 +207,7 @@ namespace Unison.Core.ViewModels
                 if (_isGroup)
                 {
                     _ = _groups.RefreshGroupSendPermissionsAsync(_source.JID);
+                    _ = LoadCreatedByYouCaptionAsync();
                 }
 
                 _ = _groups.EnsureHighQualityGroupAvatarAsync(_source);
@@ -249,6 +259,48 @@ namespace Unison.Core.ViewModels
         public bool IsGroupMember => _isGroupMember;
 
         public bool IsUser => !_isGroup && !_isGroupMember;
+
+        /// <summary>Caption when this account created the group; empty otherwise.</summary>
+        public string CreatedByYouText
+        {
+            get => _createdByYouText ?? string.Empty;
+            private set
+            {
+                if (string.Equals(_createdByYouText, value, StringComparison.Ordinal))
+                {
+                    return;
+                }
+
+                _createdByYouText = value;
+                OnPropertyChanged(nameof(CreatedByYouText));
+                OnPropertyChanged(nameof(HasCreatedByYouText));
+            }
+        }
+
+        public bool HasCreatedByYouText => !string.IsNullOrWhiteSpace(CreatedByYouText);
+
+        public bool CanLeaveGroup =>
+            _isGroup &&
+            !_isGroupMember &&
+            _groups != null &&
+            _source != null &&
+            !_source.LeftGroup &&
+            !string.IsNullOrWhiteSpace(_source.JID);
+
+        public bool CanBlockContact =>
+            IsUser &&
+            _contacts != null &&
+            _source != null &&
+            !string.IsNullOrWhiteSpace(_source.JID) &&
+            !_contacts.IsSelf(_source.JID);
+
+        /// <summary>Label for the block row: Bloquear (Name) without a leading ~.</summary>
+        public string BlockContactLabel =>
+            BlockContactCaption.Format(
+                DisplayName,
+                PhoneValue,
+                Loc("ChatDetailInfo_BlockContactNamed", "Block ({0})"),
+                Loc("ChatDetailInfo_BlockContact", "Block"));
 
         public string AvatarUrl =>
             _isGroupMember
@@ -404,6 +456,12 @@ namespace Unison.Core.ViewModels
 
         /// <summary>Confirm + open dialer for this profile phone (1:1 or group member).</summary>
         public ICommand CallPhoneCommand { get; }
+
+        /// <summary>Leaves the group after confirmation (not delete / kick).</summary>
+        public ICommand LeaveGroupCommand { get; }
+
+        /// <summary>Blocks the 1:1 contact after confirmation.</summary>
+        public ICommand BlockContactCommand { get; }
 
         public void Detach()
         {

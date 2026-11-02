@@ -3,17 +3,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:helpers="using:Unison.Uwp.UI.Helpers">
 
-    <!-- Label/Value/Muted colors live in Themes/*/ ThemeDictionaries as ChatDetailInfo*Brush. -->
-
-    <SolidColorBrush x:Key="ToggleSwitchKnobFillOn" Color="White"/>
-    <SolidColorBrush x:Key="ToggleSwitchKnobFillOnPointerOver" Color="White"/>
-    <SolidColorBrush x:Key="ToggleSwitchKnobFillOnPressed" Color="#F2FFFFFF"/>
-    <SolidColorBrush x:Key="ToggleSwitchFillOn" Color="#66FFFFFF"/>
-    <SolidColorBrush x:Key="ToggleSwitchFillOnPointerOver" Color="#80FFFFFF"/>
-    <SolidColorBrush x:Key="ToggleSwitchFillOnPressed" Color="#59FFFFFF"/>
-    <SolidColorBrush x:Key="ToggleSwitchStrokeOn" Color="#66FFFFFF"/>
-    <SolidColorBrush x:Key="ToggleSwitchStrokeOnPointerOver" Color="#80FFFFFF"/>
-    <SolidColorBrush x:Key="ToggleSwitchStrokeOnPressed" Color="#59FFFFFF"/>
+    <!-- Label/Muted/Body + ToggleSwitch*/hyperlink fills: Themes/*/ ThemeDictionaries. -->
 
     <Style x:Key="ChatDetailInfoSectionLabelStyle" TargetType="TextBlock">
         <Setter Property="FontFamily" Value="{StaticResource MainFontSemibold}"/>
@@ -26,11 +16,11 @@
         <Setter Property="FontFamily" Value="{StaticResource MainFont}"/>
         <Setter Property="FontWeight" Value="Normal"/>
         <Setter Property="FontSize" Value="16"/>
-        <Setter Property="Foreground" Value="{ThemeResource ChatDetailInfoValueBrush}"/>
+        <Setter Property="Foreground" Value="{ThemeResource ChatDetailInfoPaneBodyBrush}"/>
         <Setter Property="TextWrapping" Value="Wrap"/>
     </Style>
     <Style x:Key="ChatDetailInfoHyperlinkButtonStyle" TargetType="HyperlinkButton">
-        <Setter Property="Foreground" Value="{ThemeResource ChatDetailInfoValueBrush}"/>
+        <Setter Property="Foreground" Value="{ThemeResource ChatDetailInfoPaneBodyBrush}"/>
         <Setter Property="Padding" Value="0"/>
         <Setter Property="HorizontalAlignment" Value="Left"/>
         <Setter Property="HorizontalContentAlignment" Value="Left"/>
@@ -100,7 +90,7 @@
         <Setter Property="FontFamily" Value="{StaticResource MainFontSemibold}"/>
         <Setter Property="FontWeight" Value="Bold"/>
         <Setter Property="Background" Value="Transparent"/>
-        <Setter Property="Foreground" Value="#99FFFFFF"/>
+        <Setter Property="Foreground" Value="{ThemeResource ChatDetailInfoMutedBrush}"/>
         <Setter Property="Padding" Value="14,0,14,0"/>
         <Setter Property="Height" Value="44"/>
         <Setter Property="VerticalContentAlignment" Value="Center"/>
@@ -115,8 +105,12 @@
                                     <Storyboard>
                                         <ObjectAnimationUsingKeyFrames Storyboard.TargetName="ContentPresenter"
                                                                        Storyboard.TargetProperty="Foreground">
-                                            <DiscreteObjectKeyFrame KeyTime="0" Value="#40FFFFFF"/>
+                                            <DiscreteObjectKeyFrame KeyTime="0" Value="{ThemeResource ChatDetailInfoMutedBrush}"/>
                                         </ObjectAnimationUsingKeyFrames>
+                                        <DoubleAnimation Storyboard.TargetName="ContentPresenter"
+                                                         Storyboard.TargetProperty="Opacity"
+                                                         To="0.4"
+                                                         Duration="0"/>
                                     </Storyboard>
                                 </VisualState>
                                 <VisualState x:Name="Unselected"/>
@@ -136,7 +130,7 @@
                                     <Storyboard>
                                         <ObjectAnimationUsingKeyFrames Storyboard.TargetName="ContentPresenter"
                                                                        Storyboard.TargetProperty="Foreground">
-                                            <DiscreteObjectKeyFrame KeyTime="0" Value="White"/>
+                                            <DiscreteObjectKeyFrame KeyTime="0" Value="{ThemeResource ChatDetailInfoLabelBrush}"/>
                                         </ObjectAnimationUsingKeyFrames>
                                     </Storyboard>
                                 </VisualState>
@@ -144,7 +138,7 @@
                                     <Storyboard>
                                         <ObjectAnimationUsingKeyFrames Storyboard.TargetName="ContentPresenter"
                                                                        Storyboard.TargetProperty="Foreground">
-                                            <DiscreteObjectKeyFrame KeyTime="0" Value="#CCFFFFFF"/>
+                                            <DiscreteObjectKeyFrame KeyTime="0" Value="{ThemeResource ChatDetailInfoPaneBodyBrush}"/>
                                         </ObjectAnimationUsingKeyFrames>
                                     </Storyboard>
                                 </VisualState>
@@ -152,7 +146,7 @@
                                     <Storyboard>
                                         <ObjectAnimationUsingKeyFrames Storyboard.TargetName="ContentPresenter"
                                                                        Storyboard.TargetProperty="Foreground">
-                                            <DiscreteObjectKeyFrame KeyTime="0" Value="White"/>
+                                            <DiscreteObjectKeyFrame KeyTime="0" Value="{ThemeResource ChatDetailInfoLabelBrush}"/>
                                         </ObjectAnimationUsingKeyFrames>
                                     </Storyboard>
                                 </VisualState>
@@ -160,7 +154,7 @@
                                     <Storyboard>
                                         <ObjectAnimationUsingKeyFrames Storyboard.TargetName="ContentPresenter"
                                                                        Storyboard.TargetProperty="Foreground">
-                                            <DiscreteObjectKeyFrame KeyTime="0" Value="#B3FFFFFF"/>
+                                            <DiscreteObjectKeyFrame KeyTime="0" Value="{ThemeResource ChatDetailInfoPaneBodyBrush}"/>
                                         </ObjectAnimationUsingKeyFrames>
                                     </Storyboard>
                                 </VisualState>
@@ -168,7 +162,7 @@
                                     <Storyboard>
                                         <ObjectAnimationUsingKeyFrames Storyboard.TargetName="ContentPresenter"
                                                                        Storyboard.TargetProperty="Foreground">
-                                            <DiscreteObjectKeyFrame KeyTime="0" Value="White"/>
+                                            <DiscreteObjectKeyFrame KeyTime="0" Value="{ThemeResource ChatDetailInfoLabelBrush}"/>
                                         </ObjectAnimationUsingKeyFrames>
                                     </Storyboard>
                                 </VisualState>

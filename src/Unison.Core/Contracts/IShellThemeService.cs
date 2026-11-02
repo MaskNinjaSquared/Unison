@@ -42,6 +42,14 @@ namespace Unison.Core.Contracts
         /// <summary>Applies the shell stored in LocalSettings (call early at launch).</summary>
         void ApplyFromSettings();
 
+        /// <summary>
+        /// Resume / LeavingBackground path: remount Theme.xaml only when
+        /// <c>SelectedShell</c> differs from the last applied shell, or a pending
+        /// “shell applied” toast is waiting. Otherwise only shows that toast if needed.
+        /// Avoids a full theme tear-down after FileOpenPicker on Mobile (white flash).
+        /// </summary>
+        void ApplyFromSettingsIfShellChanged();
+
         /// <summary>Applies title bar + mobile status bar chrome for the active strategy.</summary>
         void ApplyChrome();
 

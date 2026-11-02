@@ -68,6 +68,9 @@ namespace Unison.Core.Contracts.WhatsApp
 
         /// <summary>Recorded in the app (push-to-talk) rather than picked as a file.</summary>
         public bool IsVoiceMessage { get; set; }
+
+        /// <summary>Single-playback voice note (AudioMessage.ViewOnce + ViewOnceMessageV2).</summary>
+        public bool ViewOnce { get; set; }
     }
 
     /// <summary>A document file on its way out (PDF / office / archive / text).</summary>

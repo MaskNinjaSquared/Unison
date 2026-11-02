@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <root>
   <!-- 
     Microsoft ResX Schema 
@@ -181,7 +181,7 @@ Inserisci questo codice:
     <value>Associazione con numero fallita</value>
   </data>
   <data name="Login_LogEmpty" xml:space="preserve">
-    <value>(log ancora vuoto — l'associazione scrive già le milestones in automatico [Pairing]. Clicca Ricarica QR e riapri il log; attiva full session logging solo se hai bisogno del traffico completo.)</value>
+    <value>(log ancora vuoto � l'associazione scrive gi� le milestones in automatico [Pairing]. Clicca Ricarica QR e riapri il log; attiva full session logging solo se hai bisogno del traffico completo.)</value>
   </data>
   <data name="Login_LogReadFail" xml:space="preserve">
     <value>Impossibile leggere log: {0}</value>
@@ -255,7 +255,7 @@ Disabilita dopo la diagnosi: lasciarlo attivo rallenta l'app.</value>
     <value>Audio</value>
   </data>
   <data name="ChatList_Loading.Text" xml:space="preserve">
-    <value>Preparo conversazioni…</value>
+    <value>Preparo conversazioni�</value>
   </data>
   <data name="ChatList_RefreshingNames" xml:space="preserve">
     <value>Aggiorno nomi contatti...</value>
@@ -270,31 +270,31 @@ Disabilita dopo la diagnosi: lasciarlo attivo rallenta l'app.</value>
     <value>Aggiorno...</value>
   </data>
   <data name="ChatList_SyncProgress" xml:space="preserve">
-    <value>Sincronizzo conversazioni… {0} of {1}</value>
+    <value>Sincronizzo conversazioni� {0} of {1}</value>
   </data>
   <data name="ChatList_SyncProgressCount" xml:space="preserve">
-    <value>Sincronizzo conversazioni… {0} caricate</value>
+    <value>Sincronizzo conversazioni� {0} caricate</value>
   </data>
   <data name="ChatList_SyncDone" xml:space="preserve">
     <value>Sincronizzazione completata</value>
   </data>
   <data name="ChatList_Settling" xml:space="preserve">
-    <value>Completamento dell'avvio…</value>
+    <value>Completamento dell'avvio�</value>
   </data>
   <data name="ChatList_ResolvingNames" xml:space="preserve">
-    <value>Risoluzione dei nomi… {0} di {1}</value>
+    <value>Risoluzione dei nomi� {0} di {1}</value>
   </data>
   <data name="ChatList_FetchingAvatars" xml:space="preserve">
-    <value>Caricamento foto… {0} di {1}</value>
+    <value>Caricamento foto� {0} di {1}</value>
   </data>
   <data name="ChatList_FetchingGroups" xml:space="preserve">
-    <value>Caricamento info gruppi… {0} di {1}</value>
+    <value>Caricamento info gruppi� {0} di {1}</value>
   </data>
   <data name="ChatList_PausedLowMemory" xml:space="preserve">
     <value>In pausa: memoria insufficiente</value>
   </data>
   <data name="ChatList_Organizing" xml:space="preserve">
-    <value>Organizzo le chat…</value>
+    <value>Organizzo le chat�</value>
   </data>
   <data name="ChatDetail_SelectChat.Text" xml:space="preserve">
     <value>Seleziona una chat</value>
@@ -313,6 +313,15 @@ Disabilita dopo la diagnosi: lasciarlo attivo rallenta l'app.</value>
   </data>
   <data name="ChatDetail_GroupOnlyAdminsCanSend.Text" xml:space="preserve">
     <value>Solo gli admin possono inviare messaggi</value>
+  </data>
+  <data name="ChatDetail_GroupNoLongerParticipant.Text" xml:space="preserve">
+    <value>Non puoi inviare messaggi a questo gruppo perch� non sei pi� un partecipante.</value>
+  </data>
+  <data name="ChatDetail_UnreadMessagesFormat" xml:space="preserve">
+    <value>{0} messaggi non letti</value>
+  </data>
+  <data name="ChatDetail_UnreadUpdatesFormat" xml:space="preserve">
+    <value>{0} aggiornamenti non letti</value>
   </data>
   <data name="ChatDetail_AttachCamera.Text" xml:space="preserve">
     <value>Fotocamera</value>
@@ -341,6 +350,27 @@ Disabilita dopo la diagnosi: lasciarlo attivo rallenta l'app.</value>
   <data name="ChatDetail_AttachBarTooltip.Content" xml:space="preserve">
     <value>Allega</value>
   </data>
+  <data name="ChatDetail_StickerBoxTooltip.Content" xml:space="preserve">
+    <value>Emoji</value>
+  </data>
+  <data name="StickerBox_EmojiTab.Text" xml:space="preserve">
+    <value>Emoji</value>
+  </data>
+  <data name="StickerBox_GifTab.Text" xml:space="preserve">
+    <value>GIF</value>
+  </data>
+  <data name="StickerBox_StickerTab.Text" xml:space="preserve">
+    <value>Stickers</value>
+  </data>
+  <data name="StickerBox_GifSoon.Text" xml:space="preserve">
+    <value>GIFs coming soon</value>
+  </data>
+  <data name="StickerBox_StickerSoon.Text" xml:space="preserve">
+    <value>Stickers coming soon</value>
+  </data>
+  <data name="StickerBox_SearchBox.PlaceholderText" xml:space="preserve">
+    <value>Cerca emoji</value>
+  </data>
   <data name="ChatDetail_ScrollToBottomTooltip.Content" xml:space="preserve">
     <value>Vai alla fine</value>
   </data>
@@ -366,7 +396,7 @@ Disabilita dopo la diagnosi: lasciarlo attivo rallenta l'app.</value>
     <value>Messaggio fissato</value>
   </data>
   <data name="ChatDetail_ReadMore" xml:space="preserve">
-    <value>Leggi di più</value>
+    <value>Leggi di pi�</value>
   </data>
   <data name="ChatDetail_ReadLess" xml:space="preserve">
     <value>Leggi meno</value>
@@ -405,7 +435,7 @@ Disabilita dopo la diagnosi: lasciarlo attivo rallenta l'app.</value>
     <value>Annunci</value>
   </data>
   <data name="Chat_CommunityHubSubtitle" xml:space="preserve">
-    <value>Community · {0} gruppi</value>
+    <value>Community � {0} gruppi</value>
   </data>
   <data name="Chat_CommunityFallbackName" xml:space="preserve">
     <value>Community</value>
@@ -461,7 +491,13 @@ Disabilita dopo la diagnosi: lasciarlo attivo rallenta l'app.</value>
     <value>Impossibile registrare l'audio. Controlla l'autorizzazione del microfono.</value>
   </data>
   <data name="ChatDetail_RecordingChatUnavailable" xml:space="preserve">
-    <value>La conversazione di questa registrazione non è più disponibile.</value>
+    <value>La conversazione di questa registrazione non � pi� disponibile.</value>
+  </data>
+  <data name="ChatDetail_RecordingPause" xml:space="preserve">
+    <value>Pausa</value>
+  </data>
+  <data name="ChatDetail_RecordingPlay" xml:space="preserve">
+    <value>Riproduci</value>
   </data>
   <data name="ChatDetail_AudioSendFailed" xml:space="preserve">
     <value>Impossibile inviare l'audio.</value>
@@ -587,7 +623,7 @@ Disabilita dopo la diagnosi: lasciarlo attivo rallenta l'app.</value>
     <value>Cancellare sessione?</value>
   </data>
   <data name="Debug_WipeBody" xml:space="preserve">
-    <value>Questa operazione eliminerà tutti i dati di autenticazione locali e chiuderà l'app. Dovrai eseguire nuovamente l'associazione.</value>
+    <value>Questa operazione eliminer� tutti i dati di autenticazione locali e chiuder� l'app. Dovrai eseguire nuovamente l'associazione.</value>
   </data>
   <data name="Debug_WipeDelete" xml:space="preserve">
     <value>Elimina</value>
@@ -626,10 +662,10 @@ Disabilita dopo la diagnosi: lasciarlo attivo rallenta l'app.</value>
     <value>App in background</value>
   </data>
   <data name="Login_BackgroundAccessBody" xml:space="preserve">
-    <value>Unison ha bisogno del permesso di esecuzione in background per connettersi a WhatsApp. Attiva Unison in Impostazioni → Privacy → App in background, poi torna qui.</value>
+    <value>Unison ha bisogno del permesso di esecuzione in background per connettersi a WhatsApp. Attiva Unison in Impostazioni ? Privacy ? App in background, poi torna qui.</value>
   </data>
   <data name="Login_BackgroundAccessRetry" xml:space="preserve">
-    <value>L'accesso in background è attivo. Tocca Ricarica QR per connetterti.</value>
+    <value>L'accesso in background � attivo. Tocca Ricarica QR per connetterti.</value>
   </data>
   <data name="Common_Yesterday" xml:space="preserve">
     <value>Ieri</value>
@@ -659,7 +695,7 @@ Disabilita dopo la diagnosi: lasciarlo attivo rallenta l'app.</value>
     <value>Reset Sviluppatore</value>
   </data>
   <data name="Login_DevResetBody" xml:space="preserve">
-    <value>I dati di sessione e locali sono stati cancellati. L'app si chiuderà per un riavvio pulito.</value>
+    <value>I dati di sessione e locali sono stati cancellati. L'app si chiuder� per un riavvio pulito.</value>
   </data>
   <data name="Settings_Title.Text" xml:space="preserve">
     <value>Impostazioni</value>
@@ -681,6 +717,55 @@ Disabilita dopo la diagnosi: lasciarlo attivo rallenta l'app.</value>
   </data>
   <data name="Settings_Notifications.Text" xml:space="preserve">
     <value>Mostra notifiche a comparsa e badge per i messaggi in arrivo.</value>
+  </data>
+  <data name="Settings_CallNotifications.Header" xml:space="preserve">
+    <value>Call notifications</value>
+  </data>
+  <data name="Settings_CallNotifications.Text" xml:space="preserve">
+    <value>Toasts for incoming calls and missed-call Live Tile updates.</value>
+  </data>
+  <data name="Notification_IncomingCallBody" xml:space="preserve">
+    <value>Incoming Call (Answer on Primary Phone)</value>
+  </data>
+  <data name="Notification_MissedCall" xml:space="preserve">
+    <value>Missed call</value>
+  </data>
+  <data name="Notification_MissedVideoCall" xml:space="preserve">
+    <value>Missed video call</value>
+  </data>
+  <data name="Settings_LockScreenNotifications.Header" xml:space="preserve">
+    <value>Lock screen</value>
+  </data>
+  <data name="Settings_LockScreenNotifications.Text" xml:space="preserve">
+    <value>Which chats update the large Live Tile / lock screen preview.</value>
+  </data>
+  <data name="Settings_LockScreenScope_All.Content" xml:space="preserve">
+    <value>All</value>
+  </data>
+  <data name="Settings_LockScreenScope_Groups.Content" xml:space="preserve">
+    <value>Groups</value>
+  </data>
+  <data name="Settings_LockScreenScope_Direct.Content" xml:space="preserve">
+    <value>Contacts</value>
+  </data>
+  <data name="Settings_LockScreenScope_Favorites.Content" xml:space="preserve">
+    <value>Favorites</value>
+  </data>
+  <data name="Settings_NotificationFilter.Header" xml:space="preserve">
+    <value>Filter notifications</value>
+  </data>
+  <data name="Settings_NotificationFilter.Text" xml:space="preserve">
+    <value>Which chats may raise toasts and count toward the badge.</value>
+  </data>
+  <data name="Settings_NotificationFilterChoose.Content" xml:space="preserve"><value>Scegli</value></data>
+  <data name="Settings_NotifyGroups.Content" xml:space="preserve">
+    <value>Groups</value>
+  </data>
+  <data name="Settings_NotifyDirect.Content" xml:space="preserve">
+    <value>Contacts</value>
+  </data>
+  <data name="Settings_NotifyFavorites.Content" xml:space="preserve">
+    <value>Favorites</value>
   </data>
   <data name="Settings_MessageNotificationSound.Header" xml:space="preserve">
     <value>Notifiche messaggi</value>
@@ -704,7 +789,7 @@ Disabilita dopo la diagnosi: lasciarlo attivo rallenta l'app.</value>
     <value>Live Tiles</value>
   </data>
   <data name="Settings_LiveTiles.Text" xml:space="preserve">
-    <value>Aggiorna il riquadro principale con il messaggio più recente.</value>
+    <value>Aggiorna il riquadro principale con il messaggio pi� recente.</value>
   </data>
   <data name="Settings_About.Text" xml:space="preserve">
     <value>About</value>
@@ -731,10 +816,10 @@ Disabilita dopo la diagnosi: lasciarlo attivo rallenta l'app.</value>
     <value>Reazione</value>
   </data>
   <data name="ChatList_PreviewDeleted" xml:space="preserve">
-    <value>Questo messaggio è stato eliminato</value>
+    <value>Questo messaggio � stato eliminato</value>
   </data>
   <data name="ChatDetail_MessageDeleted.Text" xml:space="preserve">
-    <value>Questo messaggio è stato eliminato</value>
+    <value>Questo messaggio � stato eliminato</value>
   </data>
   <data name="Settings_AppBranch.Text" xml:space="preserve">
     <value>Release</value>
@@ -758,7 +843,7 @@ Disabilita dopo la diagnosi: lasciarlo attivo rallenta l'app.</value>
     <value>Lingua aggiornata</value>
   </data>
   <data name="Settings_LanguageRestartBody" xml:space="preserve">
-    <value>Unison si riavvierà per applicare la nuova lingua.</value>
+    <value>Unison si riavvier� per applicare la nuova lingua.</value>
   </data>
   <data name="Settings_LanguageRestartClose" xml:space="preserve">
     <value>OK</value>
@@ -790,6 +875,9 @@ Disabilita dopo la diagnosi: lasciarlo attivo rallenta l'app.</value>
   <data name="StartTileDialog.Title" xml:space="preserve"><value>Riquadro Start</value></data>
   <data name="StartTileDialog.PrimaryButtonText" xml:space="preserve"><value>Aggiungi</value></data>
   <data name="StartTileDialog.CloseButtonText" xml:space="preserve"><value>Annulla</value></data>
+  <data name="NotificationFilterDialog.Title" xml:space="preserve"><value>Filtra notifiche</value></data>
+  <data name="NotificationFilterDialog.PrimaryButtonText" xml:space="preserve"><value>OK</value></data>
+  <data name="NotificationFilterDialog.CloseButtonText" xml:space="preserve"><value>Annulla</value></data>
   <data name="StartTileDialog_Unison.Content" xml:space="preserve"><value>Unison</value></data>
   <data name="StartTileDialog_WhatsAppWeb.Content" xml:space="preserve"><value>WhatsApp Web</value></data>
   <data name="StartTileDialog_WhatsAppLegacy.Content" xml:space="preserve"><value>WhatsApp Legacy</value></data>
@@ -800,10 +888,22 @@ Disabilita dopo la diagnosi: lasciarlo attivo rallenta l'app.</value>
   <data name="MediaDeleted.Message" xml:space="preserve"><value>File eliminato dal dispositivo</value></data>
   <data name="MediaDeleted.Close" xml:space="preserve"><value>OK</value></data>
   <data name="Settings_KeepAlive.Header" xml:space="preserve">
-    <value>Modalità in background</value>
+    <value>Modalit� in background</value>
   </data>
   <data name="Settings_KeepAlive.Text" xml:space="preserve">
-    <value>Usa la posizione solo affinché Windows 10 Mobile non blocchi l'app (trucco Unogram). La posizione non viene letta né inviata. Consuma più batteria.</value>
+    <value>Usa la posizione solo affinch� Windows 10 Mobile non blocchi l'app (trucco Unogram). La posizione non viene letta n� inviata. Consuma pi� batteria.</value>
+  </data>
+  <data name="Settings_StartupLaunch.Header" xml:space="preserve">
+    <value>Start with Windows</value>
+  </data>
+  <data name="Settings_StartupLaunch.Text" xml:space="preserve">
+    <value>Opens Unison when you sign in to Windows.</value>
+  </data>
+  <data name="Settings_StartupLaunchDisabledByUser" xml:space="preserve">
+    <value>Turned off in Task Manager. To turn it back on, open Task Manager > Startup apps and enable Unison.</value>
+  </data>
+  <data name="Settings_StartupLaunchPolicy" xml:space="preserve">
+    <value>Your organization manages this setting.</value>
   </data>
   <data name="Settings_AutoUnlink.Header" xml:space="preserve">
     <value>Scollega automaticamente</value>
@@ -836,13 +936,13 @@ Disabilita dopo la diagnosi: lasciarlo attivo rallenta l'app.</value>
     <value>Scegli l'aspetto dell'app.</value>
   </data>
   <data name="Settings_ShellAppliedBody" xml:space="preserve">
-    <value>La shell selezionata è ora attiva.</value>
+    <value>La shell selezionata � ora attiva.</value>
   </data>
   <data name="Settings_ShellAppliedTitle" xml:space="preserve">
     <value>Shell applicata</value>
   </data>
   <data name="Settings_ShellRestartBody" xml:space="preserve">
-    <value>Unison si riavvierà per applicare la nuova shell.</value>
+    <value>Unison si riavvier� per applicare la nuova shell.</value>
   </data>
   <data name="Settings_ShellRestartClose" xml:space="preserve">
     <value>OK</value>
@@ -877,8 +977,50 @@ Disabilita dopo la diagnosi: lasciarlo attivo rallenta l'app.</value>
   <data name="Calls_Header.Text" xml:space="preserve">
     <value>Chiamate</value>
   </data>
-  <data name="Calls_Empty.Text" xml:space="preserve">
-    <value>Per avviare una chiamata, seleziona un contatto e tocca Chiama.</value>
+  <data name="Calls_EmptyTitle.Text" xml:space="preserve">
+    <value>Chiamate vocali e video</value>
+  </data>
+  <data name="Calls_EmptyBody.Text" xml:space="preserve">
+    <value>Condividi lo schermo, reagisci con emoji e molto altro con fino a 32 persone…</value>
+  </data>
+  <data name="Calls_FavoritesSection.Text" xml:space="preserve">
+    <value>FAVORITES</value>
+  </data>
+  <data name="Calls_RecentsSection.Text" xml:space="preserve">
+    <value>RECENT</value>
+  </data>
+  <data name="Calls_SeeAllFavorites.Content" xml:space="preserve">
+    <value>See all</value>
+  </data>
+  <data name="Calls_Outgoing" xml:space="preserve">
+    <value>Outgoing</value>
+  </data>
+  <data name="Calls_Incoming" xml:space="preserve">
+    <value>Incoming</value>
+  </data>
+  <data name="Calls_Missed" xml:space="preserve">
+    <value>Missed</value>
+  </data>
+  <data name="Calls_DetailsTitle.Text" xml:space="preserve">
+    <value>Call info</value>
+  </data>
+  <data name="Calls_DetailsUnavailable.Text" xml:space="preserve">
+    <value>Not available right now</value>
+  </data>
+  <data name="Calls_NewCallUnavailable" xml:space="preserve">
+    <value>Calling is not available yet.</value>
+  </data>
+  <data name="Message_CallMissed" xml:space="preserve">
+    <value>Missed voice call</value>
+  </data>
+  <data name="Message_CallMissedVideo" xml:space="preserve">
+    <value>Missed video call</value>
+  </data>
+  <data name="Message_CallCompleted" xml:space="preserve">
+    <value>Voice call</value>
+  </data>
+  <data name="Message_CallCompletedVideo" xml:space="preserve">
+    <value>Video call</value>
   </data>
   <data name="Shell_Status.Text" xml:space="preserve">
     <value>Stato</value>
@@ -916,6 +1058,12 @@ Disabilita dopo la diagnosi: lasciarlo attivo rallenta l'app.</value>
   <data name="StatusDetail_EmptySubtitle.Text" xml:space="preserve">
     <value>Condividi foto, video e testi che scompaiono dopo 24 ore.</value>
   </data>
+  <data name="StatusDetail_Download.AutomationProperties.Name" xml:space="preserve">
+    <value>Save status</value>
+  </data>
+  <data name="StatusDetail_Download.ToolTipService.ToolTip" xml:space="preserve">
+    <value>Save this status to your device</value>
+  </data>
   <data name="Start_Description.Text" xml:space="preserve">
     <value>Un modo semplice, affidabile e privato per usare WhatsApp sul computer.</value>
   </data>
@@ -946,7 +1094,7 @@ Disabilita dopo la diagnosi: lasciarlo attivo rallenta l'app.</value>
     <value>Sessione scollegata</value>
   </data>
   <data name="Toast_LoggedOutBody" xml:space="preserve">
-    <value>La sessione è stata disconnessa sul telefono. Scansiona il QR per ricollegare.</value>
+    <value>La sessione � stata disconnessa sul telefono. Scansiona il QR per ricollegare.</value>
   </data>
   <data name="Toast_SessionReplacedBody" xml:space="preserve">
     <value>Un'altra sessione WhatsApp Web ha preso la connessione. Scansiona di nuovo il QR.</value>
@@ -955,7 +1103,7 @@ Disabilita dopo la diagnosi: lasciarlo attivo rallenta l'app.</value>
     <value>Apri Unison per caricare il messaggio.</value>
   </data>
   <data name="Toast_GenericFallbackTitle" xml:space="preserve">
-    <value>Nuova attività WhatsApp</value>
+    <value>Nuova attivit� WhatsApp</value>
   </data>
   <data name="Toast_MediaPlaceholder" xml:space="preserve">
     <value>[Media]</value>
@@ -1036,7 +1184,28 @@ Disabilita dopo la diagnosi: lasciarlo attivo rallenta l'app.</value>
     <value>Aggiungi contatto</value>
   </data>
   <data name="Message_GroupJoin" xml:space="preserve">
-    <value>{0} è entrato nel gruppo</value>
+    <value>{0} � entrato nel gruppo</value>
+  </data>
+  <data name="Message_GroupAddedBy" xml:space="preserve">
+    <value>{0} added {1}</value>
+  </data>
+  <data name="Message_GroupLeft" xml:space="preserve">
+    <value>{0} left</value>
+  </data>
+  <data name="Message_GroupRemovedBy" xml:space="preserve">
+    <value>{0} removed {1}</value>
+  </data>
+  <data name="Message_GroupSubjectChangedFromTo" xml:space="preserve">
+    <value>{0} changed the group name from "{1}" to "{2}"</value>
+  </data>
+  <data name="Message_GroupSubjectChangedTo" xml:space="preserve">
+    <value>{0} changed the group name to "{1}"</value>
+  </data>
+  <data name="Message_GroupSubjectChangedFromToAnon" xml:space="preserve">
+    <value>Group name changed from "{0}" to "{1}"</value>
+  </data>
+  <data name="Message_GroupSubjectChangedToAnon" xml:space="preserve">
+    <value>Group name changed to "{0}"</value>
   </data>
   <data name="ChatDetail_AddContactLink.Content" xml:space="preserve">
     <value>Aggiungi contatto</value>
@@ -1096,7 +1265,7 @@ Disabilita dopo la diagnosi: lasciarlo attivo rallenta l'app.</value>
     <value>Eliminare la chat?</value>
   </data>
   <data name="Chat_DeleteChatBody" xml:space="preserve">
-    <value>"{0}" e i suoi messaggi verranno eliminati da questo telefono e dagli altri tuoi dispositivi. L'operazione non può essere annullata.</value>
+    <value>"{0}" e i suoi messaggi verranno eliminati da questo telefono e dagli altri tuoi dispositivi. L'operazione non pu� essere annullata.</value>
   </data>
   <data name="Chat_DeleteChatConfirm" xml:space="preserve">
     <value>Elimina</value>
@@ -1105,7 +1274,7 @@ Disabilita dopo la diagnosi: lasciarlo attivo rallenta l'app.</value>
     <value>Chat non eliminata</value>
   </data>
   <data name="Chat_DeleteChatFailedBody" xml:space="preserve">
-    <value>WhatsApp non ha accettato la modifica, quindi la conversazione è stata mantenuta. Riprova quando sei connesso.</value>
+    <value>WhatsApp non ha accettato la modifica, quindi la conversazione � stata mantenuta. Riprova quando sei connesso.</value>
   </data>
   <data name="ChatDetailInfo_NameLabel.Text" xml:space="preserve">
     <value>NOME</value>
@@ -1207,7 +1376,7 @@ Disabilita dopo la diagnosi: lasciarlo attivo rallenta l'app.</value>
     <value>Chiudi</value>
   </data>
   <data name="ChatList_SyncingHistory" xml:space="preserve">
-    <value>Sincronizzazione cronologia…</value>
+    <value>Sincronizzazione cronologia�</value>
   </data>
   <data name="Debug_RuntimeDialogHint.Text" xml:space="preserve">
     <value>Tieni premuto / clic destro su Chat (o QR) per aprire. Nessun testo dei messaggi.</value>
@@ -1225,7 +1394,7 @@ Disabilita dopo la diagnosi: lasciarlo attivo rallenta l'app.</value>
     <value>Request Full History On-demand</value>
   </data>
   <data name="Debug_FullHistoryRequesting" xml:space="preserve">
-    <value>Requesting full history…</value>
+    <value>Requesting full history�</value>
   </data>
   <data name="Debug_FullHistoryRequested" xml:space="preserve">
     <value>Full history on-demand requested.</value>
@@ -1324,7 +1493,7 @@ Disabilita dopo la diagnosi: lasciarlo attivo rallenta l'app.</value>
     <value>Riproduci audio</value>
   </data>
 <data name="ChatDetail_DocumentSaveAs.Label" xml:space="preserve">
-    <value>Salva come…</value>
+    <value>Salva come�</value>
   </data>
   <data name="ChatDetail_Back.ToolTip" xml:space="preserve">
     <value>Indietro</value>
@@ -1438,7 +1607,7 @@ Disabilita dopo la diagnosi: lasciarlo attivo rallenta l'app.</value>
     <value>Add people or groups</value>
   </data>
   <data name="Share_PickChat.Text" xml:space="preserve">
-    <value>Send to…</value>
+    <value>Send to�</value>
   </data>
   <data name="Favorites_SortAlphabetical.Text" xml:space="preserve">
     <value>A-Z</value>

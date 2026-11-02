@@ -19,18 +19,11 @@ using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Unison.Baileys.Protocol;
+using Unison.Socket.Models;
 using Unison.Socket.Session;
 
 namespace Unison.Socket.UseCases.Groups
 {
-    public enum GroupParticipantAction
-    {
-        Add,
-        Remove,
-        Promote,
-        Demote
-    }
-
     /// <summary>What the server did about one person.</summary>
     public sealed class GroupParticipantResult
     {

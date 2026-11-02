@@ -88,6 +88,14 @@ namespace Unison.Core.Helpers
                    normalized.EndsWith("@broadcast", StringComparison.OrdinalIgnoreCase);
         }
 
+        /// <summary>WhatsApp Channel / newsletter address (<c>@newsletter</c>).</summary>
+        public static bool IsNewsletterJid(string jid)
+        {
+            string normalized = Normalize(jid);
+            return !string.IsNullOrEmpty(normalized) &&
+                   normalized.EndsWith("@newsletter", StringComparison.OrdinalIgnoreCase);
+        }
+
         /// <summary>
         /// Phone digits from a PN JID (@s.whatsapp.net); otherwise null.
         /// </summary>
@@ -142,10 +150,37 @@ namespace Unison.Core.Helpers
         }
 
         /// <summary>
-        /// Resolves list category: Group → Personal (self) → Direct.
+        /// Call-relay addresses (<c>@call</c> / <c>@call.*</c>) — not a person or group chat.
+        /// </summary>
+        public static bool IsCallRelayJid(string jid)
+        {
+            string normalized = Normalize(jid);
+            if (string.IsNullOrEmpty(normalized))
+            {
+                return false;
+            }
+
+            int at = normalized.IndexOf('@');
+            if (at < 0 || at >= normalized.Length - 1)
+            {
+                return false;
+            }
+
+            string server = normalized.Substring(at + 1);
+            return server.Equals("call", StringComparison.OrdinalIgnoreCase) ||
+                   server.StartsWith("call.", StringComparison.OrdinalIgnoreCase);
+        }
+
+        /// <summary>
+        /// Resolves list category: Channel → Group → Personal (self) → Direct.
         /// </summary>
         public static ChatKind ResolveKind(string jid, bool isSelfChat)
         {
+            if (IsNewsletterJid(jid))
+            {
+                return ChatKind.Channel;
+            }
+
             if (IsGroupJid(jid))
             {
                 return ChatKind.Group;

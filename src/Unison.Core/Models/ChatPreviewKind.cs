@@ -18,6 +18,8 @@ namespace Unison.Core.Models
         /// <summary>Shared contact card (vCard / <c>ContactMessage</c>).</summary>
         Contact = 9,
         /// <summary>Group join system line — strip shows plain text, no chip icon.</summary>
-        GroupJoin = 10
+        GroupJoin = 10,
+        /// <summary>Call missed/completed system line — plain text strip.</summary>
+        CallEvent = 11
     }
 }

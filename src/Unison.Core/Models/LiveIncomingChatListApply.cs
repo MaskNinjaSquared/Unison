@@ -40,6 +40,9 @@ namespace Unison.Core.Models
         /// <summary>Legacy live flag; prefer <see cref="UnreadDelta"/>. Mapped as 1 when delta is 0.</summary>
         public bool CountsAsUnread { get; set; }
 
+        /// <summary>True when this unread message @mentioned self or @all.</summary>
+        public bool HasCitation { get; set; }
+
         public bool IsGroup { get; set; }
 
         /// <summary>Optional LID side of a known PN/LID pair for merge scan after creating a row.</summary>

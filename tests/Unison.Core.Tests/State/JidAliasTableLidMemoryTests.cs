@@ -37,6 +37,34 @@ namespace Unison.Core.Tests.State
         }
 
         [Fact]
+        public void PeekCanonicalJid_reads_memory_without_promoting_or_bumping_generation()
+        {
+            var table = new JidAliasTable();
+            table.AttachLidMappingMemory(new FakeMemory
+            {
+                Paired = "5511999990000@s.whatsapp.net"
+            });
+            long before = table.ChangeGeneration;
+
+            Assert.Equal(
+                "5511999990000@s.whatsapp.net",
+                table.PeekCanonicalJid("199999999999@lid"));
+            Assert.False(table.ContainsKey("199999999999@lid"));
+            Assert.Equal(before, table.ChangeGeneration);
+        }
+
+        [Fact]
+        public void Indexer_set_bumps_ChangeGeneration()
+        {
+            var table = new JidAliasTable();
+            long before = table.ChangeGeneration;
+
+            table["199999999999@lid"] = "5511999990000@s.whatsapp.net";
+
+            Assert.True(table.ChangeGeneration > before);
+        }
+
+        [Fact]
         public void Indexer_set_remembers_pair_into_memory()
         {
             var memory = new FakeMemory();

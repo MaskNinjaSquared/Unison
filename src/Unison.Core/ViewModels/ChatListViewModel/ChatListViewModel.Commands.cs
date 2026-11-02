@@ -57,6 +57,11 @@ namespace Unison.Core.ViewModels
                 ClearSelection();
             }
 
+            if (_groups != null)
+            {
+                _ = _groups.RefreshCommunityJoinableGroupsAsync(chat);
+            }
+
             return true;
         }
 
@@ -77,6 +82,7 @@ namespace Unison.Core.ViewModels
 
         /// <summary>
         /// Opens a linked group from the hub. Hub stays open with that group as the selection.
+        /// Can-join rows open the preview dialog instead of chat detail.
         /// </summary>
         public void SelectCommunityGroup(ChatItem group)
         {
@@ -85,8 +91,85 @@ namespace Unison.Core.ViewModels
                 return;
             }
 
+            if (group.CanJoin)
+            {
+                _ = PreviewJoinableCommunityGroupAsync(group);
+                return;
+            }
+
             EnsureCommunityContext(group);
             OnChatSelected(group);
+        }
+
+        private async Task PreviewJoinableCommunityGroupAsync(ChatItem group)
+        {
+            if (group == null ||
+                _dialogService == null ||
+                _groupPreviewFactory == null ||
+                _groups == null)
+            {
+                return;
+            }
+
+            string creatorLabel = null;
+            if (!string.IsNullOrWhiteSpace(group.GroupCreatorJid))
+            {
+                creatorLabel = _contactService?.ResolveDisplayName(group.GroupCreatorJid, "profile");
+                if (string.IsNullOrWhiteSpace(creatorLabel))
+                {
+                    creatorLabel = DisplayNameResolution.StripContactIndicator(
+                        group.GroupCreatorJid.Split('@')[0]);
+                }
+            }
+
+            var args = new GroupPreviewDialogArgs
+            {
+                Jid = group.JID,
+                Title = group.GetNameResolved(_strings) ?? group.Name,
+                AvatarUrl = group.AvatarUrl ?? group.AvatarHighUrl,
+                CreatorLabel = creatorLabel,
+                CreationUnixSeconds = group.GroupCreationUnixSeconds,
+                MemberCount = group.GroupMemberCount > 0 ? group.GroupMemberCount : (int?)null,
+                SubtitleTemplate = _strings?.Get(
+                    "Community_GroupCreatedBy",
+                    "Group created by {0} on {1}")
+                    ?? "Group created by {0} on {1}",
+                MemberCountTemplate = _strings?.Get(
+                    "ChatDetailInfo_MemberCount",
+                    "{0} members")
+                    ?? "{0} members",
+                PrimaryButtonText = _strings?.Get("Community_JoinGroup", "Join") ?? "Join",
+                CancelButtonText = _strings?.Get("Common_Cancel", "Cancel") ?? "Cancel",
+                PrimaryAction = async () =>
+                {
+                    bool ok = await _groups.JoinGroupAsync(group.JID).ConfigureAwait(false);
+                    if (!ok || ActiveCommunity == null)
+                    {
+                        return ok;
+                    }
+
+                    ChatItem hub = ActiveCommunity;
+                    string joinedKey = GetCanonical(group.JID);
+                    if (_dispatcher != null)
+                    {
+                        await _dispatcher.RunAsync(() =>
+                        {
+                            PromoteJoinedCommunityGroup(hub, group, joinedKey);
+                        }).ConfigureAwait(false);
+                    }
+                    else
+                    {
+                        PromoteJoinedCommunityGroup(hub, group, joinedKey);
+                    }
+
+                    await _groups.RefreshCommunityJoinableGroupsAsync(hub)
+                        .ConfigureAwait(false);
+                    return true;
+                }
+            };
+
+            GroupPreviewDialogViewModel preview = _groupPreviewFactory.Create(args);
+            await _dialogService.ShowGroupPreviewAsync(preview).ConfigureAwait(false);
         }
 
         /// <summary>
@@ -139,10 +222,75 @@ namespace Unison.Core.ViewModels
                 }
             }
 
+            foreach (ChatItem joinable in _activeCommunity.CommunityJoinableMembers)
+            {
+                if (joinable != null &&
+                    string.Equals(GetCanonical(joinable.JID), key, StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+            }
+
             return string.Equals(
                 GetCanonical(chat.LinkedParentJid),
                 GetCanonical(_activeCommunity.JID),
                 StringComparison.OrdinalIgnoreCase);
+        }
+
+        /// <summary>
+        /// After a successful can-join, move the row into Seus Grupos so refresh does not
+        /// keep showing it under Pode entrar until participating-groups catches up.
+        /// </summary>
+        private void PromoteJoinedCommunityGroup(ChatItem hub, ChatItem group, string joinedKey)
+        {
+            if (hub == null || group == null || string.IsNullOrWhiteSpace(joinedKey))
+            {
+                return;
+            }
+
+            group.CanJoin = false;
+            group.LeftGroup = false;
+
+            var members = new List<ChatItem>(hub.GetCommunityGroups());
+            bool already = false;
+            for (int i = 0; i < members.Count; i++)
+            {
+                ChatItem m = members[i];
+                if (m != null &&
+                    string.Equals(GetCanonical(m.JID), joinedKey, StringComparison.OrdinalIgnoreCase))
+                {
+                    already = true;
+                    break;
+                }
+            }
+
+            if (!already)
+            {
+                members.Add(group);
+            }
+
+            hub.SetCommunityGroups(CommunityHubPresentation.OrderMembers(members));
+
+            var remaining = new List<ChatItem>();
+            foreach (ChatItem joinable in hub.CommunityJoinableMembers)
+            {
+                if (joinable == null)
+                {
+                    continue;
+                }
+
+                if (string.Equals(
+                        GetCanonical(joinable.JID),
+                        joinedKey,
+                        StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                remaining.Add(joinable);
+            }
+
+            hub.ReplaceCommunityJoinableGroups(remaining);
         }
 
         private ChatItem FindCommunityHub(string parentKey)
@@ -404,7 +552,19 @@ namespace Unison.Core.ViewModels
         // Menu actions
         // ---------------------------------------------------------------------
 
-        private async Task StartNewChatAsync()
+        private void OpenNewConversation()
+        {
+            if (_newConversation != null)
+            {
+                _newConversation.Open();
+                return;
+            }
+
+            // Overlay not registered (tests / early boot) — fall back to the phone dialog.
+            _ = StartNewChatViaPhoneDialogAsync();
+        }
+
+        private async Task StartNewChatViaPhoneDialogAsync()
         {
             string jid = await _dialogService.ShowNewChatDialogAsync(_newChatFactory.Create());
             if (string.IsNullOrEmpty(jid))

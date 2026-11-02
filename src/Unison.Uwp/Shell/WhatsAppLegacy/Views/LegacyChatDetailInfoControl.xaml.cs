@@ -213,6 +213,26 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                 PinButton.IsEnabled = liveTiles && vm.PinToStartCommand?.CanExecute(null) == true;
             }
 
+            if (LeaveGroupButton != null)
+            {
+                LeaveGroupButton.Visibility = vm.CanLeaveGroup
+                    ? Visibility.Visible
+                    : Visibility.Collapsed;
+                LeaveGroupButton.IsEnabled = vm.LeaveGroupCommand?.CanExecute(null) == true;
+            }
+
+            if (BlockContactButton != null)
+            {
+                BlockContactButton.Visibility = vm.CanBlockContact
+                    ? Visibility.Visible
+                    : Visibility.Collapsed;
+                BlockContactButton.IsEnabled = vm.BlockContactCommand?.CanExecute(null) == true;
+                string blockTip = string.IsNullOrWhiteSpace(vm.BlockContactLabel)
+                    ? "Block contact"
+                    : vm.BlockContactLabel;
+                ToolTipService.SetToolTip(BlockContactButton, blockTip);
+            }
+
             if (DeleteChatButton != null)
             {
                 DeleteChatButton.Visibility = vm.DeleteChatCommand?.CanExecute(null) == true
@@ -244,6 +264,16 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             if (AddContactCaption != null && AddContactButton != null)
             {
                 AddContactCaption.Visibility = AddContactButton.Visibility;
+            }
+
+            if (LeaveGroupCaption != null && LeaveGroupButton != null)
+            {
+                LeaveGroupCaption.Visibility = LeaveGroupButton.Visibility;
+            }
+
+            if (BlockContactCaption != null && BlockContactButton != null)
+            {
+                BlockContactCaption.Visibility = BlockContactButton.Visibility;
             }
 
             if (DeleteCaption != null && DeleteChatButton != null)
@@ -281,6 +311,24 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
         private void ChatPinButton_Click(object sender, RoutedEventArgs e)
         {
             var cmd = InfoViewModel?.PinChatCommand;
+            if (cmd?.CanExecute(null) == true)
+            {
+                cmd.Execute(null);
+            }
+        }
+
+        private void LeaveGroupButton_Click(object sender, RoutedEventArgs e)
+        {
+            var cmd = InfoViewModel?.LeaveGroupCommand;
+            if (cmd?.CanExecute(null) == true)
+            {
+                cmd.Execute(null);
+            }
+        }
+
+        private void BlockContactButton_Click(object sender, RoutedEventArgs e)
+        {
+            var cmd = InfoViewModel?.BlockContactCommand;
             if (cmd?.CanExecute(null) == true)
             {
                 cmd.Execute(null);

@@ -124,14 +124,40 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
 
         private void ApplyScopeChrome(ChatListScope scope)
         {
-            if (FilterButton == null)
+            bool archivedOrChannels =
+                scope == ChatListScope.Archived || scope == ChatListScope.Channels;
+            bool channelsOnly = scope == ChatListScope.Channels;
+
+            if (FilterButton != null)
             {
-                return;
+                FilterButton.Visibility = archivedOrChannels
+                    ? Visibility.Collapsed
+                    : Visibility.Visible;
             }
 
-            FilterButton.Visibility = scope == ChatListScope.Archived
+            // Channels: bottom bar is search only (no new chat / add contact / overflow).
+            Visibility composeVisibility = channelsOnly
                 ? Visibility.Collapsed
                 : Visibility.Visible;
+            if (NewChatAppBarButton != null)
+            {
+                NewChatAppBarButton.Visibility = composeVisibility;
+            }
+
+            if (AddContactAppBarButton != null)
+            {
+                AddContactAppBarButton.Visibility = composeVisibility;
+            }
+
+            if (ListCommandBar != null)
+            {
+                if (channelsOnly)
+                {
+                    ListCommandBar.SecondaryCommands.Clear();
+                }
+
+                CenterPrimaryCommands(ListCommandBar);
+            }
         }
 
         private void ChatListView_Loaded(object sender, RoutedEventArgs e)
@@ -432,6 +458,32 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             ViewModel.SelectCommunityGroup(group);
             // Keep hub open and this row selected (do not clear SelectedItem).
             ChatSelected?.Invoke(this, new ChatSelectedEventArgs(group));
+        }
+
+        private void CommunityJoinableList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (_suppressSelectionChanged || ViewModel == null)
+            {
+                return;
+            }
+
+            var list = sender as ListView;
+            var group = list?.SelectedItem as ChatItem;
+            if (group == null)
+            {
+                return;
+            }
+
+            ViewModel.SelectCommunityGroup(group);
+            try
+            {
+                _suppressSelectionChanged = true;
+                list.SelectedItem = null;
+            }
+            finally
+            {
+                _suppressSelectionChanged = false;
+            }
         }
 
         private void ViewModel_SelectionRestored(object sender, ChatItem chat)

@@ -212,6 +212,70 @@ namespace Unison.Core.Tests.Helpers
         }
 
         [Fact]
+        public async Task ApplyMetadata_marks_left_when_self_is_absent_from_the_roster()
+        {
+            var f = new Fixture();
+            var chat = f.AddChat(Group, "Família");
+            chat.IsGroup = true;
+
+            await f.Apply.ApplyMetadataAsync(Group, new GroupMetadataSnapshot
+            {
+                SelfIsParticipant = false
+            });
+
+            Assert.True(chat.LeftGroup);
+            Assert.True(chat.IsNoLongerGroupParticipant);
+            Assert.True(chat.IsComposerLocked);
+            Assert.Equal(1, f.Catalog.Schedules);
+        }
+
+        [Fact]
+        public async Task ApplyMetadata_clears_left_when_self_is_back_on_the_roster()
+        {
+            var f = new Fixture();
+            var chat = f.AddChat(Group, "Família");
+            chat.IsGroup = true;
+            chat.LeftGroup = true;
+
+            await f.Apply.ApplyMetadataAsync(Group, new GroupMetadataSnapshot
+            {
+                SelfIsParticipant = true
+            });
+
+            Assert.False(chat.LeftGroup);
+            Assert.False(chat.IsNoLongerGroupParticipant);
+        }
+
+        [Fact]
+        public async Task ApplyMetadata_leaves_left_alone_when_the_roster_was_not_listed()
+        {
+            var f = new Fixture();
+            var chat = f.AddChat(Group, "Família");
+            chat.LeftGroup = true;
+
+            await f.Apply.ApplyMetadataAsync(Group, new GroupMetadataSnapshot
+            {
+                AnnounceOnly = true
+            });
+
+            Assert.True(chat.LeftGroup);
+        }
+
+        [Fact]
+        public async Task SetNoLongerParticipant_writes_the_row_and_saves_once()
+        {
+            var f = new Fixture();
+            var chat = f.AddChat(Group, "Família");
+            chat.IsGroup = true;
+
+            await f.Apply.SetNoLongerParticipantAsync(Group, left: true);
+            await f.Apply.SetNoLongerParticipantAsync(Group, left: true);
+
+            Assert.True(chat.IsNoLongerGroupParticipant);
+            Assert.Equal(1, f.Catalog.Schedules);
+        }
+
+        [Fact]
         public async Task ApplyMetadata_without_a_row_saves_nothing()
         {
             var f = new Fixture();
@@ -345,6 +409,72 @@ namespace Unison.Core.Tests.Helpers
             Assert.Empty(f.Announced);
         }
 
+        [Fact]
+        public void ApplyMembers_is_full_only_when_the_reply_lists_everyone()
+        {
+            var f = new Fixture();
+            var chat = f.AddChat(Group, "Família");
+            chat.GroupMemberCount = 600;
+
+            f.Apply.ApplyMembers(chat, Drafts("111@s.whatsapp.net", "222@s.whatsapp.net"));
+
+            Assert.Equal(GroupRosterCompleteness.Partial, chat.RosterCompleteness);
+            Assert.False(chat.HasFullGroupRoster);
+
+            chat.GroupMemberCount = 2;
+            f.Apply.ApplyMembers(chat, Drafts("111@s.whatsapp.net", "222@s.whatsapp.net"));
+
+            Assert.True(chat.HasFullGroupRoster);
+        }
+
+        [Fact]
+        public void ApplyMembers_does_not_undo_a_leave_newer_than_the_reply()
+        {
+            var f = new Fixture();
+            var chat = f.AddChat(Group, "Família");
+            f.Index.Remove(Group, "222@s.whatsapp.net", Now.AddSeconds(5));
+
+            f.Apply.ApplyMembers(chat, Drafts("111@s.whatsapp.net", "222@s.whatsapp.net"));
+
+            Assert.Equal("111@s.whatsapp.net", Assert.Single(chat.GroupMembers).Jid);
+        }
+
+        [Fact]
+        public void ApplyMembers_keeps_a_join_newer_than_the_reply()
+        {
+            var f = new Fixture();
+            var chat = f.AddChat(Group, "Família");
+            f.Index.Note(Group, new GroupMemberHint
+            {
+                Jid = "333@s.whatsapp.net",
+                DisplayName = "Caio",
+                Source = GroupMemberHintSource.Join,
+                ObservedAtUtc = Now.AddSeconds(5)
+            });
+
+            f.Apply.ApplyMembers(chat, Drafts("111@s.whatsapp.net"));
+
+            Assert.Contains(chat.GroupMembers, m => m.Jid == "333@s.whatsapp.net" && m.DisplayName == "Caio");
+        }
+
+        [Fact]
+        public void ApplyMembers_keeps_a_promote_newer_than_the_reply()
+        {
+            var f = new Fixture();
+            var chat = f.AddChat(Group, "Família");
+            f.Index.Note(Group, new GroupMemberHint
+            {
+                Jid = "111@s.whatsapp.net",
+                Role = GroupParticipantRole.Admin,
+                Source = GroupMemberHintSource.RoleChange,
+                ObservedAtUtc = Now.AddSeconds(5)
+            });
+
+            f.Apply.ApplyMembers(chat, Drafts("111@s.whatsapp.net"));
+
+            Assert.Equal(GroupParticipantRole.Admin, Assert.Single(chat.GroupMembers).Role);
+        }
+
         private static IReadOnlyDictionary<string, GroupMetadataSnapshot> Listing(params GroupMetadataSnapshot[] entries)
         {
             return entries.ToDictionary(e => e.Jid, StringComparer.OrdinalIgnoreCase);
@@ -360,11 +490,15 @@ namespace Unison.Core.Tests.Helpers
             public Fixture()
             {
                 Chats = new ChatStateStore(new InlineDispatcher());
-                Chats.GroupRosterChanged += (s, jid) => Announced.Add(jid);
+                Chats.GroupRosterChanged += (s, e) => Announced.Add(e.GroupJid);
                 Rows = new ChatRowIndex(() => Chats.Chats, Jids.GetCanonicalJid);
+                Index = new GroupRosterIndex(Jids.GetCanonicalJid);
                 Apply = new GroupMetadataApply(
-                    Naming, Ui, Catalog, new GroupRosterWriter(Rosters, People), Jids, Chats, Rows, Naming.CachedNames, () => Now);
+                    Naming, Ui, Catalog, new GroupRosterWriter(Rosters, People), Jids, Chats, Rows, Naming.CachedNames, () => Now,
+                    rosterIndex: Index);
             }
+
+            public GroupRosterIndex Index { get; }
 
             public FakeGroupNaming Naming { get; } = new FakeGroupNaming();
 

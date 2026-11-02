@@ -20,6 +20,12 @@ namespace Unison.Core.Contracts.WhatsApp
     public interface IChatService
     {
         /// <summary>
+        /// Raised after local Favourites membership changes (add/remove or remote list apply),
+        /// so Favourites / Calls preview can rebuild without leaving the page.
+        /// </summary>
+        event EventHandler FavoritesMembershipChanged;
+
+        /// <summary>
         /// Pins the conversation to the top of the list, for this account everywhere. Distinct
         /// from <see cref="ChatItem.IsWidgetPinned"/>, which is a tile on this device's Start
         /// screen and means nothing to WhatsApp.
@@ -39,6 +45,12 @@ namespace Unison.Core.Contracts.WhatsApp
         /// so it is safe to call every time a chat is opened.
         /// </summary>
         Task MarkReadAsync(ChatItem chat);
+
+        /// <summary>
+        /// After the open-session unread chip is placed, mark inbound history rows as read
+        /// (<c>IsRead = 1</c>). Null / missing column is ignored — no schema migration.
+        /// </summary>
+        Task CommitInboundHistoryReadAsync(ChatItem chat);
 
         /// <summary>
         /// Deletes the conversation for this account everywhere: it leaves the list here, on the
@@ -296,5 +308,11 @@ namespace Unison.Core.Contracts.WhatsApp
         /// True while sync status is still enriching the list (names / avatars / groups / settling / low-memory).
         /// </summary>
         bool MatchesListEnrichmentPhase(string syncStatus);
+
+        /// <summary>
+        /// Drops every in-memory conversation timeline. Used by session wipe / resync hosts so
+        /// they do not reach into <c>ChatStateStore.MessagesByChat</c> themselves.
+        /// </summary>
+        void ClearInMemoryTimelines();
     }
 }

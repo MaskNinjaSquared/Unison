@@ -348,18 +348,9 @@ namespace Unison.Core.ViewModels
         /// </summary>
         private void ReorderVisibleChatsInPlace()
         {
-            // Community hubs need CommunityListProjector â€” a pin-style Move cannot invent
-            // synthetic parents or hide linked children. When any row carries community shape,
-            // fall through to a full refresh (unless the list is still held / batching).
-            if (VisibleHasCommunityShape() &&
-                !_batchRendering &&
-                !IsInSafeMode &&
-                !IsListHeldForSync)
-            {
-                RefreshVisibleChats();
-                return;
-            }
-
+            // VisibleChats is already community-projected. Pin/recency reshuffle must not call
+            // BuildVisibleRefreshSource just because a hub exists in the catalogue — that was the
+            // Mobile Low ~10s buildMs hitch after enrichment (hubs present → full rebuild).
             _visibleOrderDirty = false;
 
             if (VisibleChats.Count < 2)
@@ -396,27 +387,6 @@ namespace Unison.Core.ViewModels
             {
                 IsRefreshing = false;
             }
-        }
-
-        private bool VisibleHasCommunityShape()
-        {
-            for (int i = 0; i < _chatState.Chats.Count; i++)
-            {
-                ChatItem chat = _chatState.Chats[i];
-                if (chat == null)
-                {
-                    continue;
-                }
-
-                if (chat.IsCommunityParent ||
-                    chat.IsCommunity ||
-                    !string.IsNullOrWhiteSpace(chat.LinkedParentJid))
-                {
-                    return true;
-                }
-            }
-
-            return false;
         }
 
         private void UpdateBatchProgressText()

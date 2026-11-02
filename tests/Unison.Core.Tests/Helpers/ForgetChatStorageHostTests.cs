@@ -137,6 +137,9 @@ namespace Unison.Core.Tests.Helpers
                 return Task.FromResult(0);
             }
 
+            public Task<int> DeleteMessageAsync(IReadOnlyList<string> chatJids, string messageId) =>
+                Task.FromResult(0);
+
             public Task UpsertManyAsync(IReadOnlyList<HistoryMessage> rows) =>
                 Task.CompletedTask;
 
@@ -195,6 +198,12 @@ namespace Unison.Core.Tests.Helpers
                 Task.FromResult<IReadOnlyList<HistoryMessageReaction>>(
                     Array.Empty<HistoryMessageReaction>());
 
+            public Task<IReadOnlyList<HistoryMessageReaction>> GetReactionsForMessageAsync(
+                IReadOnlyList<string> chatJids,
+                string messageId) =>
+                Task.FromResult<IReadOnlyList<HistoryMessageReaction>>(
+                    Array.Empty<HistoryMessageReaction>());
+
             public Task<int> CountAsync(string syncId = null) => Task.FromResult(0);
 
             public Task ClearAsync(string reason = null) => Task.CompletedTask;
@@ -207,6 +216,9 @@ namespace Unison.Core.Tests.Helpers
 
             public Task<bool> IsMediaDeletedAsync(string chatJid, string messageId) =>
                 Task.FromResult(false);
+
+            public Task MarkInboundReadAsync(IReadOnlyList<string> chatJids) =>
+                Task.CompletedTask;
         }
 
         private sealed class SpyMessageStore : IMessageStore

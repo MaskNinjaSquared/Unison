@@ -1,0 +1,41 @@
+<ContentDialog
+    x:Class="Unison.Uwp.UI.Dialogs.GroupPreviewDialog"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:Unison.Uwp.UI.Controls"
+    Title=""
+    PrimaryButtonText="{Binding PrimaryButtonText}"
+    SecondaryButtonText="{Binding CancelButtonText}"
+    PrimaryButtonClick="ContentDialog_PrimaryButtonClick"
+    DefaultButton="Primary">
+
+    <StackPanel HorizontalAlignment="Stretch" MaxWidth="320">
+        <controls:ChatAvatarControl Width="96" Height="96"
+                                    Size="96"
+                                    HorizontalAlignment="Center"
+                                    Margin="0,8,0,16"
+                                    IsGroup="True"
+                                    AvatarUrl="{Binding AvatarUrl}"/>
+        <TextBlock Text="{Binding Title}"
+                   FontSize="20"
+                   FontFamily="{StaticResource MainFontSemibold}"
+                   FontWeight="SemiBold"
+                   TextAlignment="Center"
+                   TextWrapping="Wrap"
+                   Foreground="{ThemeResource WhatsAppTextHighBrush}"
+                   Margin="0,0,0,8"/>
+        <TextBlock Text="{Binding Subtitle}"
+                   FontSize="14"
+                   FontFamily="{StaticResource MainFont}"
+                   TextAlignment="Center"
+                   TextWrapping="Wrap"
+                   Foreground="{ThemeResource WhatsAppTextMediumBrush}"
+                   Margin="0,0,0,8"/>
+        <TextBlock Text="{Binding MemberCountText}"
+                   FontSize="13"
+                   FontFamily="{StaticResource MainFont}"
+                   TextAlignment="Center"
+                   Foreground="{ThemeResource WhatsAppTextMediumBrush}"
+                   Visibility="{Binding HasMemberCount, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+    </StackPanel>
+</ContentDialog>

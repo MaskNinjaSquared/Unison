@@ -14,6 +14,9 @@ namespace Unison.Core.Models
         /// <summary>False for a duplicate: it refreshes the tip without adding to the badge.</summary>
         public bool CountUnread { get; set; }
 
+        /// <summary>True when this message @mentioned self or @all (only meaningful with unread).</summary>
+        public bool HasCitation { get; set; }
+
         public ChatPreviewKind Kind { get; set; } = ChatPreviewKind.Text;
         public string Status { get; set; }
         public string AuthorPrefix { get; set; }

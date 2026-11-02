@@ -25,12 +25,6 @@ namespace Unison.Core.State
         private readonly IChatService _chats;
 
         /// <summary>
-        /// Mobile: never walk the whole catalogue on Start / DisplayNames / Refresh — only the
-        /// chat or tip participant that actually changed (plus <see cref="RefreshChat"/>).
-        /// </summary>
-        private readonly bool _onDemand;
-
-        /// <summary>
         /// Open-chat Hold: strip BeginSweep must not steal the first-paint dispatcher turn.
         /// First group open used to run BuildDirectChatNames + PersistRows while LoadMessages waited.
         /// </summary>
@@ -65,7 +59,8 @@ namespace Unison.Core.State
         private bool _sweepScheduled;
         private bool _sweepRunning;
         private bool _sweepAgain;
-        private bool _fullPassRequested;
+        private bool _unnamedPassRequested;
+        private bool _retryWarmForUnnamed;
 
         /// <summary>
         /// Groups per UI hop. A full pass used to hold the dispatcher for tens of seconds on
@@ -96,7 +91,6 @@ namespace Unison.Core.State
             IDispatcher dispatcher,
             IContactService contacts = null,
             IChatService chats = null,
-            bool onDemand = false,
             ChatTimelineLoadPriorityGate timelinePriority = null)
         {
             _chatState = chatState ?? throw new ArgumentNullException(nameof(chatState));
@@ -105,7 +99,6 @@ namespace Unison.Core.State
             _strings = strings;
             _dispatcher = dispatcher ?? throw new ArgumentNullException(nameof(dispatcher));
             _chats = chats;
-            _onDemand = onDemand;
             _timelinePriority = timelinePriority;
             _participants = new ParticipantResolutionContext(jids, contacts, chatState, personStore);
         }
@@ -127,21 +120,14 @@ namespace Unison.Core.State
             _chatState.GroupRosterChanged += OnGroupRosterChanged;
             _chatState.Chats.CollectionChanged += OnChatsChanged;
 
-            // Mobile keeps persisted strips; a full catalogue walk at Start was the 30–100s stall.
-            if (!_onDemand)
-            {
-                ScheduleFullSweep();
-            }
+            // Persisted strips that already carry a name are left alone; a full catalogue walk at
+            // Start was the 30–100s Mobile stall.
+            ScheduleUnnamedSweep();
         }
 
         public void Refresh()
         {
-            if (_onDemand)
-            {
-                return;
-            }
-
-            ScheduleFullSweep();
+            ScheduleUnnamedSweep();
         }
 
         public void RefreshChat(string chatJid) => ScheduleChatStrip(chatJid);
@@ -154,80 +140,103 @@ namespace Unison.Core.State
             ScheduleParticipantStrip(jid);
         }
 
+        /// <summary>
+        /// Broad signal with no JID: only rows still without a name are revisited (named rows get
+        /// PersonChanged / GroupRosterChanged by key). Alias pairs often land after the first warm
+        /// missed under the LID, so those rows' senders may hit SQLite again — never the whole set,
+        /// which re-read the store for every group during a metadata burst.
+        /// </summary>
         private void OnDisplayNamesChanged(object sender, EventArgs e)
         {
-            if (_onDemand)
-            {
-                // Broad signal with no JID. PersonChanged / roster / RefreshChat carry the work on
-                // Mobile; clearing warm + full sweep here was the metadata-burst freeze.
-                return;
-            }
-
-            // Alias pairs often arrive after the first strip warm already missed under the LID.
-            // Without clearing, GetAsync is never retried for the phone JID that holds the name.
             lock (_gate)
             {
-                _warmAttempted.Clear();
+                _retryWarmForUnnamed = true;
             }
 
-            ScheduleFullSweep();
+            ScheduleUnnamedSweep();
         }
 
         /// <summary>
-        /// One signal per roster apply, not one per member: a group metadata reply merges names onto
-        /// every <see cref="GroupMember"/>, and subscribing to those would be N handlers and N
-        /// sweeps for one answer.
+        /// One signal per roster apply or flush, carrying the members that changed. Only the row
+        /// whose tip sender is among them is recomputed.
         /// </summary>
-        private void OnGroupRosterChanged(object sender, string groupJid)
+        private void OnGroupRosterChanged(object sender, GroupRosterChangedEventArgs e)
         {
+            string groupJid = e?.GroupJid;
+            ChatItem chat = _chatState.FindChat(groupJid);
+            string participant = chat?.LastMessageParticipantJid;
+            if (string.IsNullOrWhiteSpace(participant) || chat.LastMessageIsFromMe)
+            {
+                return;
+            }
+
+            if (!e.IsWholeRoster && !TipIsAmong(participant, e.ChangedJids))
+            {
+                return;
+            }
+
             // The roster brings LID↔PN pairs with it, so a store lookup that missed before this
             // group was known can now hit under the phone JID. Only this row's sender is retried;
             // clearing the whole set would re-read SQLite for every group during a sync burst.
-            string participant = _chatState.FindChat(groupJid)?.LastMessageParticipantJid;
-            if (!string.IsNullOrWhiteSpace(participant))
+            lock (_gate)
             {
-                lock (_gate)
-                {
-                    _warmAttempted.Remove(participant);
-                }
+                _warmAttempted.Remove(participant);
             }
 
             ScheduleChatStrip(groupJid);
         }
 
-        private void OnChatsChanged(object sender, NotifyCollectionChangedEventArgs e)
+        private bool TipIsAmong(string participantJid, IReadOnlyList<string> changedJids)
         {
-            if (_onDemand)
+            var keys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            for (int i = 0; i < changedJids.Count; i++)
             {
-                if (e.Action == NotifyCollectionChangedAction.Add && e.NewItems != null)
+                string normalized = JidHelper.Normalize(changedJids[i]);
+                if (string.IsNullOrWhiteSpace(normalized))
                 {
-                    for (int i = 0; i < e.NewItems.Count; i++)
-                    {
-                        var chat = e.NewItems[i] as ChatItem;
-                        if (chat != null && chat.IsGroup)
-                        {
-                            ScheduleChatStrip(chat.JID);
-                        }
-                    }
+                    continue;
                 }
 
+                keys.Add(normalized);
+                string canonical = _jids.GetCanonicalJid(normalized);
+                if (!string.IsNullOrWhiteSpace(canonical))
+                {
+                    keys.Add(canonical);
+                }
+            }
+
+            return IsPendingParticipant(participantJid, keys);
+        }
+
+        private void OnChatsChanged(object sender, NotifyCollectionChangedEventArgs e)
+        {
+            if (e.Action == NotifyCollectionChangedAction.Reset)
+            {
+                ScheduleUnnamedSweep();
                 return;
             }
 
-            if (e.Action == NotifyCollectionChangedAction.Add ||
-                e.Action == NotifyCollectionChangedAction.Replace ||
-                e.Action == NotifyCollectionChangedAction.Reset)
+            if ((e.Action == NotifyCollectionChangedAction.Add ||
+                 e.Action == NotifyCollectionChangedAction.Replace) &&
+                e.NewItems != null)
             {
-                ScheduleFullSweep();
+                for (int i = 0; i < e.NewItems.Count; i++)
+                {
+                    var chat = e.NewItems[i] as ChatItem;
+                    if (chat != null && chat.IsGroup)
+                    {
+                        ScheduleChatStrip(chat.JID);
+                    }
+                }
             }
         }
 
-        /// <summary>Desktop / explicit full recompute — every group tip.</summary>
-        private void ScheduleFullSweep()
+        /// <summary>Every group tip whose strip has no usable name yet.</summary>
+        private void ScheduleUnnamedSweep()
         {
             lock (_gate)
             {
-                _fullPassRequested = true;
+                _unnamedPassRequested = true;
             }
 
             SchedulePass();
@@ -319,6 +328,11 @@ namespace Unison.Core.State
                     await _timelinePriority.WaitWhileHeldAsync().ConfigureAwait(false);
                 }
 
+                // IDispatcher runs inline when already on the UI thread. FinishSweep → SchedulePass
+                // during a PersonChanged / avatar storm would nest another BeginSweep inside the
+                // same watchdog hop (seen as RunPassWhenOpenAllowsAsync for 30–86s on ARM). Always
+                // leave the current frame before the next pass.
+                await Task.Yield();
                 await _dispatcher.RunAsync(BeginSweep).ConfigureAwait(false);
             }
             catch (Exception ex)
@@ -333,7 +347,8 @@ namespace Unison.Core.State
 
         private void BeginSweep()
         {
-            bool fullPass;
+            bool unnamedPass;
+            bool retryWarm;
             HashSet<string> pendingChats;
             HashSet<string> pendingParticipants;
             lock (_gate)
@@ -341,8 +356,10 @@ namespace Unison.Core.State
                 _sweepScheduled = false;
                 _sweepRunning = true;
                 _sweepAgain = false;
-                fullPass = _fullPassRequested;
-                _fullPassRequested = false;
+                unnamedPass = _unnamedPassRequested;
+                _unnamedPassRequested = false;
+                retryWarm = _retryWarmForUnnamed;
+                _retryWarmForUnnamed = false;
                 pendingChats = new HashSet<string>(_pendingChatJids, StringComparer.OrdinalIgnoreCase);
                 pendingParticipants = new HashSet<string>(
                     _pendingParticipantJids,
@@ -367,16 +384,40 @@ namespace Unison.Core.State
                     continue;
                 }
 
+                // Join/leave/rename already name the actor in the body; a leftover "X: " chip
+                // must be cleared even when the tip has no participant (subject change).
+                bool clearSystemAuthor = unnamedPass &&
+                    (chat.LastMessageKind == ChatPreviewKind.GroupJoin ||
+                     chat.LastMessageKind == ChatPreviewKind.CallEvent) &&
+                    !string.IsNullOrEmpty(chat.LastMessageAuthor);
+
                 if (string.IsNullOrWhiteSpace(chat.LastMessageParticipantJid))
                 {
+                    if (clearSystemAuthor)
+                    {
+                        _sweepWork.Add(chat);
+                    }
+
                     continue;
                 }
 
-                if (!fullPass &&
+                bool unnamed = unnamedPass && !IsUsableParticipantLabel(
+                    chat.LastMessageSenderName,
+                    chat.LastMessageParticipantJid);
+                if (!unnamed &&
+                    !clearSystemAuthor &&
                     !IsPendingChat(chat, pendingChats) &&
                     !IsPendingParticipant(chat.LastMessageParticipantJid, pendingParticipants))
                 {
                     continue;
+                }
+
+                if (unnamed && retryWarm)
+                {
+                    lock (_gate)
+                    {
+                        _warmAttempted.Remove(chat.LastMessageParticipantJid);
+                    }
                 }
 
                 _sweepWork.Add(chat);
@@ -532,6 +573,20 @@ namespace Unison.Core.State
             string beforeSender = chat.LastMessageSenderName;
             string selfLabel = _sweepSelfLabel;
             IReadOnlyDictionary<string, string> directChatNames = _sweepDirectNames;
+
+            // Join / leave / rename / call chrome already name the event in the body.
+            // Re-applying "X: " doubles the author on the strip.
+            if (chat.LastMessageKind == ChatPreviewKind.GroupJoin ||
+                chat.LastMessageKind == ChatPreviewKind.CallEvent)
+            {
+                if (!string.IsNullOrEmpty(chat.LastMessageAuthor))
+                {
+                    chat.LastMessageAuthor = string.Empty;
+                    (_sweepDirty ?? (_sweepDirty = new List<ChatItem>())).Add(chat);
+                }
+
+                return;
+            }
 
             // A strip poisoned with the group subject must not count as a real name —
             // otherwise Decide keeps it forever.

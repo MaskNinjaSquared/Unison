@@ -115,6 +115,8 @@ namespace Unison.Uwp.Services.Themes
                     return typeof(UI.Views.CallsView);
                 case NavigationDestination.Favorites:
                     return typeof(UI.Views.FavoritesView);
+                case NavigationDestination.Channels:
+                    return typeof(UI.Views.ChannelsView);
                 case NavigationDestination.Profile:
                     return typeof(UI.Views.ProfileView);
                 case NavigationDestination.Debug:
@@ -175,6 +177,12 @@ namespace Unison.Uwp.Services.Themes
             if (content is UI.Views.FavoritesView)
             {
                 destination = NavigationDestination.Favorites;
+                return true;
+            }
+
+            if (content is UI.Views.ChannelsView)
+            {
+                destination = NavigationDestination.Channels;
                 return true;
             }
 

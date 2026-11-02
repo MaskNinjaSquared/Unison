@@ -64,6 +64,7 @@ namespace Unison.WhatsAppClient.History
         private readonly IConnectionSoftReconnect _softReconnect;
         private readonly HistoryCatchUpContinuation _catchUp;
         private readonly IJidAliasPersistence _aliasPersist;
+        private readonly IJidResolver _jids;
         private readonly IMessageStore _store;
         private readonly ILocalSettings _settings;
         private readonly IHistoryChatPreviewStore _chatPreviewStore;
@@ -112,6 +113,7 @@ namespace Unison.WhatsAppClient.History
             IConnectionSoftReconnect softReconnect,
             HistoryCatchUpContinuation catchUp,
             IJidAliasPersistence aliasPersist,
+            IJidResolver jids,
             IMessageStore store,
             ILocalSettings settings,
             HistoryOnDemandRegistry onDemandRequests,
@@ -169,6 +171,7 @@ namespace Unison.WhatsAppClient.History
             _softReconnect = softReconnect ?? throw new ArgumentNullException(nameof(softReconnect));
             _catchUp = catchUp ?? throw new ArgumentNullException(nameof(catchUp));
             _aliasPersist = aliasPersist ?? throw new ArgumentNullException(nameof(aliasPersist));
+            _jids = jids ?? throw new ArgumentNullException(nameof(jids));
             _store = store;
             _settings = settings;
             _onDemandRequests = onDemandRequests ?? throw new ArgumentNullException(nameof(onDemandRequests));
@@ -244,6 +247,12 @@ namespace Unison.WhatsAppClient.History
         public bool IsLoadingPersistedChats => _chatState.IsLoadingPersistedChats;
 
         public bool IsInitialSyncSafeMode => _initialSync.IsActive;
+
+        /// <inheritdoc />
+        public bool IsHistoryCatchUpQuiet =>
+            _catchUp != null &&
+            _catchUpHost != null &&
+            _catchUp.IsActive(_catchUpHost.IsCatchUpBannerActive);
 
         public bool IsAwaitingFirstHistorySync => _awaitingFirstHistorySync;
 
@@ -690,6 +699,10 @@ namespace Unison.WhatsAppClient.History
             {
                 return empty;
             }
+
+            // Alias mappings registered before build; fold ChatJid onto canonical so
+            // reactions/pins share the same key as bodies across PN/LID twins.
+            HistoryWriteBatchJidCanonicalizer.Apply(batch, _jids.GetCanonicalJid);
 
             if (_workload.MaterializeHistoryThumbsDuringSync)
             {
@@ -1227,6 +1240,9 @@ namespace Unison.WhatsAppClient.History
             int stagnantStop = _workload.PacingFor(frugal)
                 .CatchUpStagnantCyclesBeforeStop;
             int maxRounds = Math.Max(0, _workload.MaxFullHistoryCatchUpRounds);
+            // Empty-ack finish on every tier: WA often acks FULL_HISTORY then sends
+            // nothing; Desktop High used to burn idle-continue while live tips moved.
+            const bool emptyAckFinish = true;
 
             HistoryCatchUpContinueResult decision = _catchUp.DecideAfterQuietLot(
                 newestUtc,
@@ -1236,7 +1252,7 @@ namespace Unison.WhatsAppClient.History
                 maxRounds,
                 out HistoryCatchUpProgress before,
                 ackAccepted,
-                finishOnEmptyAckLot: frugal);
+                finishOnEmptyAckLot: emptyAckFinish);
 
             _catchUpHost.WriteHistoryJournal(
                 "catch-up-idle-decide",
@@ -1253,7 +1269,7 @@ namespace Unison.WhatsAppClient.History
                 "; stagnant=" + before.StagnantCycles +
                 "; stagnantStop=" + stagnantStop +
                 "; frugal=" + frugal +
-                "; emptyAckFinish=" + frugal +
+                "; emptyAckFinish=" + emptyAckFinish +
                 "; action=" + decision.Action +
                 "; trigger=" + (triggerReason ?? string.Empty));
 
@@ -1270,6 +1286,17 @@ namespace Unison.WhatsAppClient.History
                 "/" + stagnantStop +
                 ", action=" + decision.Action);
 
+            // Silent lots never escalate to loud adjacent FULL (banner + freshnessRepair).
+            // Finish catch-up, drop the claim, and let the silent chain own the next probe.
+            if (SilentFullHistoryPolicy.IsSilentReason(triggerReason))
+            {
+                int applied = decision.MadeProgress ? Math.Max(1, progressSignals) : 0;
+                _catchUpHost.FinishContinue("silent-lot-idle", releaseEnrichment: true);
+                _catchUpHost.ClearFullHistoryOnDemandRequest("silent-lot-idle");
+                _catchUpHost.NotifySilentFullLotQuiet(triggerReason, applied);
+                return;
+            }
+
             switch (decision.Action)
             {
                 case HistoryCatchUpContinueAction.FinishFreshAndStagnant:
@@ -1277,31 +1304,19 @@ namespace Unison.WhatsAppClient.History
                     return;
 
                 case HistoryCatchUpContinueAction.FinishStagnantProgress:
-                    if (stillStale && _workload.AllowStagnantHistoryRepairCascade)
-                    {
-                        _catchUpHost.MarkForceHistoryRepairPending("stagnant-progress-still-stale");
-                    }
-
-                    _catchUpHost.FinishContinue("stagnant-progress", releaseEnrichment: true);
-                    if (stillStale && _workload.AllowStagnantHistoryRepairCascade)
-                    {
-                        _catchUpHost.StartHydrationFallback("stagnant-progress");
-                    }
-
+                    FinishCatchUpMaybeCascade(
+                        "stagnant-progress",
+                        stillStale,
+                        ackAccepted,
+                        progressSignals);
                     return;
 
                 case HistoryCatchUpContinueAction.FinishMaxContinues:
-                    if (stillStale && _workload.AllowStagnantHistoryRepairCascade)
-                    {
-                        _catchUpHost.MarkForceHistoryRepairPending("max-continues-still-stale");
-                    }
-
-                    _catchUpHost.FinishContinue("max-continues", releaseEnrichment: true);
-                    if (stillStale && _workload.AllowStagnantHistoryRepairCascade)
-                    {
-                        _catchUpHost.StartHydrationFallback("max-continues");
-                    }
-
+                    FinishCatchUpMaybeCascade(
+                        "max-continues",
+                        stillStale,
+                        ackAccepted,
+                        progressSignals);
                     return;
             }
 
@@ -1312,6 +1327,42 @@ namespace Unison.WhatsAppClient.History
                 ":stagnant=" + decision.NextStagnantCycles +
                 ":signals=" + progressSignals +
                 ":newest=" + FreshnessTimestampFormat.ForLog(newestUtc));
+        }
+
+        /// <summary>
+        /// Ends catch-up; only High's repair cascade may re-solicit, and never after an
+        /// empty-ack ghost lot (would immediately reopen hydration-then-full).
+        /// </summary>
+        private void FinishCatchUpMaybeCascade(
+            string reason,
+            bool stillStale,
+            bool ackAccepted,
+            int progressSignals)
+        {
+            bool cascade = HistoryCatchUpRepairCascade.ShouldStartAfterFinish(
+                stillStale,
+                _workload.AllowStagnantHistoryRepairCascade,
+                ackAccepted,
+                progressSignals);
+
+            if (cascade)
+            {
+                _catchUpHost.MarkForceHistoryRepairPending(reason + "-still-stale");
+            }
+
+            _catchUpHost.FinishContinue(reason, releaseEnrichment: true);
+
+            if (cascade)
+            {
+                _catchUpHost.StartHydrationFallback(reason);
+            }
+            else if (stillStale && ackAccepted && progressSignals <= 0)
+            {
+                _catchUpHost.WriteHistoryJournal(
+                    "catch-up-cascade-skipped",
+                    "reason=" + reason +
+                    "; emptyAckGhost=True; stillStale=True");
+            }
         }
 
         /// <summary>

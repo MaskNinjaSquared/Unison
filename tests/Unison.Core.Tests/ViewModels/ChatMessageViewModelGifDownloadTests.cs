@@ -208,7 +208,13 @@ namespace Unison.Core.Tests.ViewModels
                 string jid,
                 IReadOnlyList<byte[]> imageBytes,
                 string caption) => throw new NotImplementedException();
-            public Task<ChatMessage> SendAudioMessageAsync(string jid, byte[] audioBytes, string mimeType, uint durationSeconds, bool isVoiceMessage = false) => throw new NotImplementedException();
+            public Task<ChatMessage> SendAudioMessageAsync(
+                string jid,
+                byte[] audioBytes,
+                string mimeType,
+                uint durationSeconds,
+                bool isVoiceMessage = false,
+                bool viewOnce = false) => throw new NotImplementedException();
             public Task<ChatMessage> SendDocumentAsync(string jid, byte[] documentBytes, string mimeType, string fileName, string caption = null) => throw new NotImplementedException();
             public Task<string> EnsureAudioAvailableAsync(ChatMessage message) => throw new NotImplementedException();
             public Task<string> EnsureImageAvailableAsync(ChatMessage message) => throw new NotImplementedException();
@@ -255,6 +261,14 @@ namespace Unison.Core.Tests.ViewModels
                 uint durationSeconds = 0) => Task.CompletedTask;
             public Task<bool> ApplyAppStateDeleteMessageAsync(string chatJid, string messageId) =>
                 Task.FromResult(false);
+            public Task DeleteMessageForMeAsync(string chatJid, ChatMessage message) =>
+                Task.CompletedTask;
+            public Task DeleteMessageForEveryoneAsync(
+                string chatJid,
+                ChatMessage message,
+                bool isGroupChat,
+                bool viewerIsGroupAdmin) =>
+                Task.CompletedTask;
             public Task<bool> ApplyPinnedMessageStateAsync(
                 string chatJid,
                 string messageId,
@@ -364,6 +378,16 @@ namespace Unison.Core.Tests.ViewModels
                 Message.Types.PeerDataOperationRequestResponseMessage response) => Task.CompletedTask;
             public Task NotifyGroupJoinsAsync(System.Collections.Generic.IReadOnlyList<GroupJoinNotifyRequest> joins) =>
                 Task.CompletedTask;
+            public Task NotifyCallEventsAsync(System.Collections.Generic.IReadOnlyList<CallEventNotifyRequest> events) =>
+                Task.CompletedTask;
+            public Task NotifyGroupLeavesAsync(System.Collections.Generic.IReadOnlyList<GroupLeaveNotifyRequest> leaves) =>
+                Task.CompletedTask;
+            public Task NotifyGroupSubjectChangedAsync(
+                GroupSubjectChangeNotifyRequest change,
+                string previousSubject) =>
+                Task.CompletedTask;
+            public Task<bool> TryReactAsync(string chatJid, ChatMessage message, string emoji) =>
+                Task.FromResult(false);
         }
     }
 }

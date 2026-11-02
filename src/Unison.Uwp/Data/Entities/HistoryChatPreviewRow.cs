@@ -35,6 +35,9 @@ namespace Unison.Uwp.Data.Entities
 
         public int UnreadCount { get; set; }
 
+        /// <summary>Unread @ of self / @all (list HasCitation).</summary>
+        public bool HasCitation { get; set; }
+
         public string LastMessage { get; set; }
 
         public string LastMessageAuthor { get; set; }

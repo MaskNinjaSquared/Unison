@@ -8,11 +8,11 @@
     mc:Ignorable="d"
     d:DesignHeight="800"
     d:DesignWidth="400"
-    Background="#FF000000"
-    RequestedTheme="Dark">
+    Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
 
-    <!-- Metro profile: same expansive CommandBar as the chat list (rings + centered primaries). -->
-    <Grid Background="#FF000000">
+    <!-- Metro profile: same expansive CommandBar as the chat list (rings + centered primaries).
+         No RequestedTheme — follow app Light/Dark like ShellView / Unison. -->
+    <Grid Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
@@ -33,7 +33,7 @@
                        VerticalAlignment="Center"
                        FontSize="22"
                        FontFamily="{StaticResource MainFontLight}"
-                       Foreground="White"
+                       Foreground="{ThemeResource WhatsAppTextHighBrush}"
                        Text="{Binding DisplayTitle}"/>
         </Grid>
 
@@ -54,7 +54,7 @@
                        Margin="24"
                        TextWrapping="Wrap"
                        TextAlignment="Center"
-                       Foreground="White"
+                       Foreground="{ThemeResource WhatsAppTextHighBrush}"
                        Visibility="Collapsed"/>
         </Grid>
 

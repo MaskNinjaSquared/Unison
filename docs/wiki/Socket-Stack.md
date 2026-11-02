@@ -149,6 +149,7 @@ Outgoing **audio is converted to OGG** before upload (UWP media processor).
 | Class | Purpose |
 |---|---|
 | `FetchProfilePictureUrlUseCase` | Contact or group picture URL; direct-contact requests include a persisted trusted-contact token when required |
+| `FetchNewsletterMetadataUseCase` | Channel (`@newsletter`) WMex `newsletterMetadata` — name + picture id/`direct_path` (not `w:profile:picture`) |
 | `UpdateProfileUseCase` | Status + own/group photo (JPEG already square). Display name is app-state, not this IQ. |
 | `SendPresenceUseCase` | Online, typing, `presenceSubscribe` |
 | `PrivacySettingsUseCase` | Privacy + disappearing default |

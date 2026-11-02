@@ -61,7 +61,22 @@
             <!-- Chat detail info pane: name/phone (not SystemAccent). -->
             <SolidColorBrush x:Key="ChatDetailInfoLabelBrush" Color="#FFFFFFFF"/>
             <SolidColorBrush x:Key="ChatDetailInfoValueBrush" Color="#FFFFFFFF"/>
+            <!-- Body on brand-green pane (name / phone / groups-in-common titles). Never SystemAccent. -->
+            <SolidColorBrush x:Key="ChatDetailInfoPaneBodyBrush" Color="#FFFFFFFF"/>
             <SolidColorBrush x:Key="ChatDetailInfoMutedBrush" Color="#E8FFFFFF"/>
+            <!-- Info pane on green: white hyperlinks + translucent toggles. -->
+            <SolidColorBrush x:Key="SystemControlHyperlinkTextBrush" Color="#FFFFFFFF"/>
+            <SolidColorBrush x:Key="AccentTextFillColorPrimaryBrush" Color="#FFFFFFFF"/>
+            <SolidColorBrush x:Key="AccentTextFillColorSecondaryBrush" Color="#E6FFFFFF"/>
+            <SolidColorBrush x:Key="ToggleSwitchKnobFillOn" Color="#FFFFFFFF"/>
+            <SolidColorBrush x:Key="ToggleSwitchKnobFillOnPointerOver" Color="#FFFFFFFF"/>
+            <SolidColorBrush x:Key="ToggleSwitchKnobFillOnPressed" Color="#F2FFFFFF"/>
+            <SolidColorBrush x:Key="ToggleSwitchFillOn" Color="#66FFFFFF"/>
+            <SolidColorBrush x:Key="ToggleSwitchFillOnPointerOver" Color="#80FFFFFF"/>
+            <SolidColorBrush x:Key="ToggleSwitchFillOnPressed" Color="#59FFFFFF"/>
+            <SolidColorBrush x:Key="ToggleSwitchStrokeOn" Color="#66FFFFFF"/>
+            <SolidColorBrush x:Key="ToggleSwitchStrokeOnPointerOver" Color="#80FFFFFF"/>
+            <SolidColorBrush x:Key="ToggleSwitchStrokeOnPressed" Color="#59FFFFFF"/>
             <SolidColorBrush x:Key="ChatDetailPaneSeparatorBrush" Color="#FF3B3B3B"/>
             <SolidColorBrush x:Key="ChatDetailPinnedBarBackgroundBrush" Color="#FF32373B"/>
             <SolidColorBrush x:Key="ChatDetailPinnedPreviewBrush" Color="#FFFFFFFF"/>
@@ -79,6 +94,7 @@
             <SolidColorBrush x:Key="ChatDetailReceivedMentionBrush" Color="#FF25D366"/>
             <SolidColorBrush x:Key="ChatDetailSentMediaDownloadOverlayBrush" Color="#FF2A2A2A"/>
             <SolidColorBrush x:Key="ChatDetailReceivedMediaDownloadOverlayBrush" Color="#FF2A2A2A"/>
+            <SolidColorBrush x:Key="ChatDetailMediaThumbScrimBrush" Color="#802A2A2A"/>
             <SolidColorBrush x:Key="ChatDetailSentMediaDownloadIconBrush" Color="#FF25D366"/>
             <SolidColorBrush x:Key="ChatDetailReceivedMediaDownloadIconBrush" Color="#FF25D366"/>
             <SolidColorBrush x:Key="ChatDetailSentTextBrush" Color="#FFFFFFFF"/>
@@ -195,7 +211,22 @@
             <!-- Chat detail info pane: name/phone (not SystemAccent). -->
             <SolidColorBrush x:Key="ChatDetailInfoLabelBrush" Color="#FFFFFFFF"/>
             <SolidColorBrush x:Key="ChatDetailInfoValueBrush" Color="#FFFFFFFF"/>
+            <!-- Body on brand-green pane (name / phone / groups-in-common titles). Never SystemAccent. -->
+            <SolidColorBrush x:Key="ChatDetailInfoPaneBodyBrush" Color="#FFFFFFFF"/>
             <SolidColorBrush x:Key="ChatDetailInfoMutedBrush" Color="#E8FFFFFF"/>
+            <!-- Info pane on green: white hyperlinks + translucent toggles. -->
+            <SolidColorBrush x:Key="SystemControlHyperlinkTextBrush" Color="#FFFFFFFF"/>
+            <SolidColorBrush x:Key="AccentTextFillColorPrimaryBrush" Color="#FFFFFFFF"/>
+            <SolidColorBrush x:Key="AccentTextFillColorSecondaryBrush" Color="#E6FFFFFF"/>
+            <SolidColorBrush x:Key="ToggleSwitchKnobFillOn" Color="#FFFFFFFF"/>
+            <SolidColorBrush x:Key="ToggleSwitchKnobFillOnPointerOver" Color="#FFFFFFFF"/>
+            <SolidColorBrush x:Key="ToggleSwitchKnobFillOnPressed" Color="#F2FFFFFF"/>
+            <SolidColorBrush x:Key="ToggleSwitchFillOn" Color="#66FFFFFF"/>
+            <SolidColorBrush x:Key="ToggleSwitchFillOnPointerOver" Color="#80FFFFFF"/>
+            <SolidColorBrush x:Key="ToggleSwitchFillOnPressed" Color="#59FFFFFF"/>
+            <SolidColorBrush x:Key="ToggleSwitchStrokeOn" Color="#66FFFFFF"/>
+            <SolidColorBrush x:Key="ToggleSwitchStrokeOnPointerOver" Color="#80FFFFFF"/>
+            <SolidColorBrush x:Key="ToggleSwitchStrokeOnPressed" Color="#59FFFFFF"/>
             <SolidColorBrush x:Key="ChatDetailPaneSeparatorBrush" Color="#FF3B3B3B"/>
             <SolidColorBrush x:Key="ChatDetailPinnedBarBackgroundBrush" Color="#FF32373B"/>
             <SolidColorBrush x:Key="ChatDetailPinnedPreviewBrush" Color="#FFFFFFFF"/>
@@ -213,6 +244,7 @@
             <SolidColorBrush x:Key="ChatDetailReceivedMentionBrush" Color="#FF25D366"/>
             <SolidColorBrush x:Key="ChatDetailSentMediaDownloadOverlayBrush" Color="#FF2A2A2A"/>
             <SolidColorBrush x:Key="ChatDetailReceivedMediaDownloadOverlayBrush" Color="#FF2A2A2A"/>
+            <SolidColorBrush x:Key="ChatDetailMediaThumbScrimBrush" Color="#802A2A2A"/>
             <SolidColorBrush x:Key="ChatDetailSentMediaDownloadIconBrush" Color="#FF25D366"/>
             <SolidColorBrush x:Key="ChatDetailReceivedMediaDownloadIconBrush" Color="#FF25D366"/>
             <SolidColorBrush x:Key="ChatDetailSentTextBrush" Color="#FFFFFFFF"/>
@@ -327,12 +359,28 @@
             <!-- Chat detail info pane: name/phone (not SystemAccent). -->
             <SolidColorBrush x:Key="ChatDetailInfoLabelBrush" Color="#FFFFFFFF"/>
             <SolidColorBrush x:Key="ChatDetailInfoValueBrush" Color="#FFFFFFFF"/>
+            <!-- Body on brand-green pane (name / phone / groups-in-common titles). Never SystemAccent. -->
+            <SolidColorBrush x:Key="ChatDetailInfoPaneBodyBrush" Color="#FFFFFFFF"/>
             <SolidColorBrush x:Key="ChatDetailInfoMutedBrush" Color="#E8FFFFFF"/>
+            <!-- Info pane on green: white hyperlinks + translucent toggles. -->
+            <SolidColorBrush x:Key="SystemControlHyperlinkTextBrush" Color="#FFFFFFFF"/>
+            <SolidColorBrush x:Key="AccentTextFillColorPrimaryBrush" Color="#FFFFFFFF"/>
+            <SolidColorBrush x:Key="AccentTextFillColorSecondaryBrush" Color="#E6FFFFFF"/>
+            <SolidColorBrush x:Key="ToggleSwitchKnobFillOn" Color="#FFFFFFFF"/>
+            <SolidColorBrush x:Key="ToggleSwitchKnobFillOnPointerOver" Color="#FFFFFFFF"/>
+            <SolidColorBrush x:Key="ToggleSwitchKnobFillOnPressed" Color="#F2FFFFFF"/>
+            <SolidColorBrush x:Key="ToggleSwitchFillOn" Color="#66FFFFFF"/>
+            <SolidColorBrush x:Key="ToggleSwitchFillOnPointerOver" Color="#80FFFFFF"/>
+            <SolidColorBrush x:Key="ToggleSwitchFillOnPressed" Color="#59FFFFFF"/>
+            <SolidColorBrush x:Key="ToggleSwitchStrokeOn" Color="#66FFFFFF"/>
+            <SolidColorBrush x:Key="ToggleSwitchStrokeOnPointerOver" Color="#80FFFFFF"/>
+            <SolidColorBrush x:Key="ToggleSwitchStrokeOnPressed" Color="#59FFFFFF"/>
             <SolidColorBrush x:Key="ChatDetailPaneSeparatorBrush" Color="#FFE9EDEF"/>
             <SolidColorBrush x:Key="ChatDetailPinnedBarBackgroundBrush" Color="#FFFFFFFF"/>
             <SolidColorBrush x:Key="ChatDetailPinnedPreviewBrush" Color="#FF111B21"/>
-            <SolidColorBrush x:Key="ChatDetailInputBarBackgroundBrush" Color="#FFF5FEFF"/>
-            <SolidColorBrush x:Key="ChatDetailInputBarTopBorderBrush" Color="#FF3B4A54"/>
+            <!-- Match WhatsApp Light composer / attach tray (was cyan #F5FEFF + dark top rule). -->
+            <SolidColorBrush x:Key="ChatDetailInputBarBackgroundBrush" Color="#FFF0F2F5"/>
+            <SolidColorBrush x:Key="ChatDetailInputBarTopBorderBrush" Color="Transparent"/>
             <SolidColorBrush x:Key="ChatDetailComposerBackgroundBrush" Color="Transparent"/>
             <SolidColorBrush x:Key="ChatDetailComposerForegroundBrush" Color="#FF3B4A54"/>
             <SolidColorBrush x:Key="ChatDetailSentBubbleBrush" Color="#27B867"/>
@@ -345,6 +393,7 @@
             <SolidColorBrush x:Key="ChatDetailReceivedMentionBrush" Color="#FF25D366"/>
             <SolidColorBrush x:Key="ChatDetailSentMediaDownloadOverlayBrush" Color="#FF5BC46A"/>
             <SolidColorBrush x:Key="ChatDetailReceivedMediaDownloadOverlayBrush" Color="#FFF9F9F9"/>
+            <SolidColorBrush x:Key="ChatDetailMediaThumbScrimBrush" Color="#80FFFFFF"/>
             <SolidColorBrush x:Key="ChatDetailSentMediaDownloadIconBrush" Color="#FFFFFFFF"/>
             <SolidColorBrush x:Key="ChatDetailReceivedMediaDownloadIconBrush" Color="#FF20C064"/>
             <SolidColorBrush x:Key="ChatDetailSentTextBrush" Color="#FFFFFFFF"/>
@@ -368,7 +417,8 @@
             <SolidColorBrush x:Key="ChatDetailMediaButtonHoverGlyphBrush" Color="#FFFFFFFF"/>
             <SolidColorBrush x:Key="ChatDetailSentAudioSliderFillBrush" Color="#FFFFFFFF"/>
             <SolidColorBrush x:Key="ChatDetailReceivedAudioSliderFillBrush" Color="#FF20C064"/>
-            <SolidColorBrush x:Key="ChatDetailMutedTextBrush" Color="#FF8696A0"/>
+            <!-- Darker than WhatsApp light muted: Unison chat canvas is #8A9191 — #8696A0 vanished. -->
+            <SolidColorBrush x:Key="ChatDetailMutedTextBrush" Color="#FF3B4A54"/>
             <SolidColorBrush x:Key="ChatDetailMediaDownloadOverlayBrush" Color="#FFAEB0B3"/>
             <SolidColorBrush x:Key="ChatDetailMediaDownloadIconBrush" Color="#FF000000"/>
             <SolidColorBrush x:Key="ChatPaneSplitterBackgroundBrush" Color="#FF20C064"/>

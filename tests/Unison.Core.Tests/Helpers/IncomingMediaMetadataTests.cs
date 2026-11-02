@@ -42,6 +42,20 @@ namespace Unison.Core.Tests.Helpers
             Assert.False(string.IsNullOrEmpty(target.ImageMediaKeyBase64));
             Assert.False(string.IsNullOrEmpty(target.ImageFileEncSha256Base64));
             Assert.Equal("beach", target.Caption);
+            Assert.Equal(0L, target.MediaFileLengthBytes);
+        }
+
+        [Fact]
+        public void An_image_keeps_file_length_before_download()
+        {
+            var target = new ChatMessage();
+            IncomingMediaMetadata.ApplyImage(target, new Message.Types.ImageMessage
+            {
+                FileLength = 1_572_864
+            });
+
+            Assert.Equal(1572864L, target.MediaFileLengthBytes);
+            Assert.True(target.HasMediaFileSize);
         }
 
         [Fact]
@@ -65,6 +79,18 @@ namespace Unison.Core.Tests.Helpers
             Assert.True(target.IsVoiceMessage);
             Assert.Equal(12u, target.AudioDurationSeconds);
             Assert.Equal("audio/ogg; codecs=opus", target.AudioMimeType);
+        }
+
+        [Fact]
+        public void A_video_keeps_file_length_before_download()
+        {
+            var target = new ChatMessage();
+            IncomingMediaMetadata.ApplyVideo(target, new Message.Types.VideoMessage
+            {
+                FileLength = 524288
+            });
+
+            Assert.Equal(524288L, target.MediaFileLengthBytes);
         }
 
         [Fact]
@@ -110,6 +136,7 @@ namespace Unison.Core.Tests.Helpers
             Assert.Equal(ChatMessageKind.Document, target.Kind);
             Assert.Equal("scan.pdf", target.DocumentFileName);
             Assert.Equal(4096L, target.DocumentFileLengthBytes);
+            Assert.Equal(4096L, target.MediaFileLengthBytes);
         }
 
         [Fact]

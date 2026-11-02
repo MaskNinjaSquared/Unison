@@ -18,6 +18,12 @@ namespace Unison.WhatsAppClient.Abstractions
 
         bool IsFirstSyncListHoldInProgress { get; }
 
+        /// <summary>
+        /// The chat list is still held for the first history sync of this session
+        /// (<c>IHistoryService.IsAwaitingFirstHistorySync</c>), chunk or not.
+        /// </summary>
+        bool IsListAwaitingFirstHistorySync { get; }
+
         int SqliteHistoryConversationsAccumulated { get; }
 
         int InitialSyncProcessedConversations { get; }
@@ -33,5 +39,11 @@ namespace Unison.WhatsAppClient.Abstractions
         void ClearEnrichmentAwaitingHeavyHistory();
 
         void TrySchedulePostMessageEnrichment(string reason);
+
+        /// <summary>
+        /// After a loud catch-up finish: kick the Mobile silent chain when tips are
+        /// still stale, or disarm when already fresh.
+        /// </summary>
+        void NotifySilentChainAfterLoudCatchUpFinish(string finishReason);
     }
 }

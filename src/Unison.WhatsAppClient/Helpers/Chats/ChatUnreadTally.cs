@@ -83,8 +83,8 @@ namespace Unison.WhatsAppClient.Helpers
         }
 
         /// <summary>
-        /// Zeroes every row of a conversation. Returns the rows that had a count, so only those
-        /// are written back to disk. Never null.
+        /// Zeroes every row of a conversation (unread + citation). Returns the rows that
+        /// changed, so only those are written back to disk. Never null.
         /// </summary>
         public static List<ChatItem> Clear(IEnumerable<ChatItem> rows)
         {
@@ -96,12 +96,20 @@ namespace Unison.WhatsAppClient.Helpers
 
             foreach (ChatItem row in rows)
             {
-                if (row == null || row.UnreadCount <= 0)
+                if (row == null)
+                {
+                    continue;
+                }
+
+                bool hadUnread = row.UnreadCount > 0;
+                bool hadCitation = row.HasCitation;
+                if (!hadUnread && !hadCitation)
                 {
                     continue;
                 }
 
                 row.UnreadCount = 0;
+                row.HasCitation = false;
                 changed.Add(row);
             }
 
@@ -117,7 +125,15 @@ namespace Unison.WhatsAppClient.Helpers
         /// rows were found; otherwise the siblings decide and this row is merely written
         /// to, which keeps a stale row from dragging the count down.
         /// </param>
-        public static int Bump(ChatItem preferred, IReadOnlyList<ChatItem> rows, int delta)
+        /// <param name="hasCitation">
+        /// When true and the resulting count is positive, lights <see cref="ChatItem.HasCitation"/>
+        /// on every sibling (OR — never clears an earlier unread mention).
+        /// </param>
+        public static int Bump(
+            ChatItem preferred,
+            IReadOnlyList<ChatItem> rows,
+            int delta,
+            bool hasCitation = false)
         {
             bool hasRows = rows != null && rows.Count > 0;
 
@@ -134,6 +150,10 @@ namespace Unison.WhatsAppClient.Helpers
                     if (rows[i] != null)
                     {
                         rows[i].UnreadCount = next;
+                        if (hasCitation && next > 0)
+                        {
+                            rows[i].HasCitation = true;
+                        }
                     }
                 }
             }
@@ -141,6 +161,10 @@ namespace Unison.WhatsAppClient.Helpers
             if (preferred != null)
             {
                 preferred.UnreadCount = next;
+                if (hasCitation && next > 0)
+                {
+                    preferred.HasCitation = true;
+                }
             }
 
             return next;

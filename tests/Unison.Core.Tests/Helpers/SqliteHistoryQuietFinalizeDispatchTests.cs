@@ -128,6 +128,10 @@ namespace Unison.Core.Tests.Helpers
                 int delayMs) =>
                 NotifiedIdleBatch = true;
 
+            public void NotifySilentFullLotQuiet(string triggerReason, int appliedCount)
+            {
+            }
+
             public void FinishHistoryCatchUpContinue(string reason, bool releaseEnrichment)
             {
             }

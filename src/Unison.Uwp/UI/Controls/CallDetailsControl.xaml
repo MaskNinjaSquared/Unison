@@ -1,0 +1,230 @@
+<UserControl
+    x:Class="Unison.Uwp.UI.Controls.CallDetailsControl"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:Unison.Uwp.UI.Controls"
+    xmlns:models="using:Unison.Core.Models"
+    Background="{ThemeResource WhatsAppBackgroundBrush}">
+
+    <UserControl.Resources>
+        <DataTemplate x:Key="CallHistoryRowTemplate" x:DataType="models:CallHistoryEntry">
+            <Grid Padding="16,10" Background="Transparent" HorizontalAlignment="Stretch">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <FontIcon Glyph="{x:Bind DirectionGlyph}"
+                          FontFamily="{StaticResource IconFont}"
+                          FontSize="16"
+                          VerticalAlignment="Center"
+                          Margin="0,0,12,0"
+                          Foreground="{x:Bind Direction, Converter={StaticResource CallDirectionToBrushConverter}}"/>
+
+                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                    <TextBlock Text="{x:Bind CategoryLabel}"
+                               FontSize="15"
+                               FontFamily="{StaticResource MainFontSemibold}"
+                               FontWeight="SemiBold"
+                               Foreground="{x:Bind Direction, Converter={StaticResource CallDirectionToBrushConverter}}"
+                               TextWrapping="NoWrap"
+                               TextTrimming="CharacterEllipsis"/>
+                    <TextBlock Text="{x:Bind TimestampLabel}"
+                               FontSize="12"
+                               Margin="0,2,0,0"
+                               Foreground="{ThemeResource WhatsAppTextMediumBrush}"
+                               TextWrapping="NoWrap"
+                               TextTrimming="CharacterEllipsis"/>
+                </StackPanel>
+
+                <TextBlock Grid.Column="2"
+                           VerticalAlignment="Center"
+                           FontSize="12"
+                           Foreground="{ThemeResource WhatsAppTextMediumBrush}"
+                           Text="Video"
+                           Visibility="{x:Bind IsVideo, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+            </Grid>
+        </DataTemplate>
+
+        <DataTemplate x:Key="CallHistoryDateHeaderTemplate">
+            <TextBlock Text="{Binding Key}"
+                       Margin="16,12,16,4"
+                       FontSize="13"
+                       FontWeight="SemiBold"
+                       Foreground="{ThemeResource WhatsAppTextMediumBrush}"/>
+        </DataTemplate>
+
+        <DataTemplate x:Key="CallHistoryJumpTemplate" x:DataType="models:CallHistoryDateGroup">
+            <Border Width="88" Height="56"
+                    Margin="6"
+                    BorderBrush="{ThemeResource SystemControlHighlightAccentBrush}"
+                    BorderThickness="2"
+                    Background="Transparent">
+                <TextBlock Text="{x:Bind Key}"
+                           FontSize="13"
+                           FontWeight="SemiBold"
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Center"
+                           TextAlignment="Center"
+                           TextWrapping="Wrap"
+                           MaxLines="2"
+                           Foreground="{ThemeResource SystemControlHighlightAccentBrush}"/>
+            </Border>
+        </DataTemplate>
+
+        <Style x:Key="CallHistoryHeaderContainerStyle" TargetType="ListViewHeaderItem">
+            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="Margin" Value="0"/>
+            <Setter Property="MinHeight" Value="0"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListViewHeaderItem">
+                        <ContentPresenter Content="{TemplateBinding Content}"
+                                          ContentTemplate="{TemplateBinding ContentTemplate}"
+                                          HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"/>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </UserControl.Resources>
+
+    <Grid Background="{ThemeResource ChatListBackgroundBrush}">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="64"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <Grid Grid.Row="0"
+              Background="{ThemeResource ChatDetailHeaderBrush}"
+              Padding="8,0,8,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+
+            <Button x:Name="BackButton"
+                    Click="BackButton_Click"
+                    Style="{StaticResource ModernIconButtonStyle}"
+                    VerticalAlignment="Center"
+                    Margin="0,0,4,0"
+                    AutomationProperties.Name="Back">
+                <FontIcon Glyph="&#xE72B;" FontFamily="{StaticResource IconFont}" FontSize="18"/>
+            </Button>
+
+            <controls:ChatAvatarControl x:Name="SubjectAvatar"
+                                        Grid.Column="1"
+                                        Width="40" Height="40"
+                                        Size="40"
+                                        ShowBorder="True"
+                                        VerticalAlignment="Center"
+                                        Margin="0,0,12,0"/>
+
+            <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="0,0,8,0">
+                <TextBlock x:Name="SubjectNameText"
+                           FontSize="16"
+                           FontFamily="{StaticResource MainFontSemibold}"
+                           FontWeight="SemiBold"
+                           Foreground="{ThemeResource WhatsAppTextHighBrush}"
+                           TextWrapping="NoWrap"
+                           TextTrimming="CharacterEllipsis"/>
+                <TextBlock x:Uid="Calls_DetailsTitle"
+                           Text="Call info"
+                           FontSize="13"
+                           Foreground="{ThemeResource WhatsAppTextMediumBrush}"
+                           TextWrapping="NoWrap"
+                           TextTrimming="CharacterEllipsis"/>
+            </StackPanel>
+
+            <StackPanel Grid.Column="3"
+                        Orientation="Horizontal"
+                        VerticalAlignment="Center">
+                <Button x:Name="OpenChatButton"
+                        Click="OpenChatButton_Click"
+                        Style="{StaticResource ModernIconButtonStyle}"
+                        Margin="0,0,4,0"
+                        AutomationProperties.Name="Open chat">
+                    <FontIcon Glyph="&#xE8BD;" FontFamily="{StaticResource IconFont}" FontSize="18"
+                              Foreground="{ThemeResource WhatsAppTextHighBrush}"/>
+                </Button>
+                <Button IsEnabled="False"
+                        Style="{StaticResource ModernIconButtonStyle}"
+                        Margin="0,0,4,0"
+                        AutomationProperties.Name="Video call">
+                    <FontIcon Glyph="&#xE714;" FontFamily="{StaticResource IconFont}" FontSize="18"
+                              Foreground="{ThemeResource WhatsAppTextMediumBrush}"/>
+                </Button>
+                <Button IsEnabled="False"
+                        Style="{StaticResource ModernIconButtonStyle}"
+                        AutomationProperties.Name="Voice call">
+                    <FontIcon Glyph="&#xE717;" FontFamily="{StaticResource IconFont}" FontSize="18"
+                              Foreground="{ThemeResource WhatsAppTextMediumBrush}"/>
+                </Button>
+            </StackPanel>
+        </Grid>
+
+        <Grid Grid.Row="1">
+            <SemanticZoom x:Name="HistoryZoom" Visibility="Collapsed">
+                <SemanticZoom.ZoomedInView>
+                    <ListView x:Name="HistoryList"
+                              ItemTemplate="{StaticResource CallHistoryRowTemplate}"
+                              SelectionMode="None"
+                              IsItemClickEnabled="False"
+                              Background="Transparent"
+                              ScrollViewer.IsVerticalScrollChainingEnabled="False">
+                        <ListView.GroupStyle>
+                            <GroupStyle HeaderTemplate="{StaticResource CallHistoryDateHeaderTemplate}"
+                                        HeaderContainerStyle="{StaticResource CallHistoryHeaderContainerStyle}"/>
+                        </ListView.GroupStyle>
+                        <ListView.ItemContainerStyle>
+                            <Style TargetType="ListViewItem">
+                                <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                                <Setter Property="Padding" Value="0"/>
+                                <Setter Property="MinHeight" Value="0"/>
+                            </Style>
+                        </ListView.ItemContainerStyle>
+                    </ListView>
+                </SemanticZoom.ZoomedInView>
+                <SemanticZoom.ZoomedOutView>
+                    <GridView x:Name="HistoryJumpList"
+                              ItemTemplate="{StaticResource CallHistoryJumpTemplate}"
+                              SelectionMode="None"
+                              IsItemClickEnabled="True"
+                              ItemClick="HistoryJumpList_ItemClick"
+                              HorizontalAlignment="Center"
+                              VerticalAlignment="Center"
+                              Background="Transparent"
+                              ScrollViewer.IsHorizontalScrollChainingEnabled="False"
+                              ScrollViewer.IsVerticalScrollChainingEnabled="False">
+                        <GridView.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <ItemsWrapGrid Orientation="Horizontal"
+                                               HorizontalAlignment="Center"
+                                               MaximumRowsOrColumns="3"/>
+                            </ItemsPanelTemplate>
+                        </GridView.ItemsPanel>
+                    </GridView>
+                </SemanticZoom.ZoomedOutView>
+            </SemanticZoom>
+
+            <TextBlock x:Name="EmptyHistoryText"
+                       x:Uid="Calls_DetailsUnavailable"
+                       Text="Not available right now"
+                       HorizontalAlignment="Center"
+                       VerticalAlignment="Center"
+                       TextAlignment="Center"
+                       TextWrapping="WrapWholeWords"
+                       Margin="24"
+                       MaxWidth="420"
+                       FontSize="15"
+                       Foreground="{ThemeResource WhatsAppTextMediumBrush}"
+                       FontFamily="{StaticResource MainFont}"
+                       Visibility="Collapsed"/>
+        </Grid>
+    </Grid>
+</UserControl>

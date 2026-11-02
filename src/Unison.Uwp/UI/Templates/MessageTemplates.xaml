@@ -12,12 +12,37 @@
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
             <controls:ChatDateSeparator
                 Grid.Row="0"
                 Text="{x:Bind DateSeparatorText, Mode=OneWay}"
                 Visibility="{x:Bind IsFirstOfDay, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
-            <Grid Grid.Row="1" HorizontalAlignment="Right" Margin="48,0,12,0" RightTapped="MessageBubble_RightTapped" Holding="MessageBubble_Holding">
+            <controls:ChatDateSeparator
+                Grid.Row="1"
+                Text="{x:Bind UnreadDividerText, Mode=OneWay}"
+                Visibility="{x:Bind IsUnreadDivider, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+            <!-- Stretch slot constrains measure; Auto bubble columns alone ignore Wrap. -->
+            <Grid x:Name="SentBubbleSlot"
+                  Grid.Row="2"
+                  HorizontalAlignment="Stretch"
+                  Margin="48,0,12,0"
+                  Loaded="MessageBubbleSlot_Loaded"
+                  SizeChanged="MessageBubbleSlot_SizeChanged"
+                  ManipulationMode="TranslateX"
+                  ManipulationDelta="MessageBubble_ManipulationDelta"
+                  ManipulationCompleted="MessageBubble_ManipulationCompleted"
+                  Tapped="MessageBubble_Tapped"
+                  RightTapped="MessageBubble_RightTapped"
+                  Holding="MessageBubble_Holding">
+            <!--
+              Unigram pattern: MaxWidth on the bubble + star column for the body.
+              Auto|Auto measured the RichTextBlock with infinite width → single-line overflow.
+              Ceiling 432 (MessageMaxWidth); SizeChanged further caps to the slot width.
+            -->
+            <Grid x:Name="SentBubbleContent"
+                  HorizontalAlignment="Right"
+                  MaxWidth="432">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="Auto"/>
@@ -31,6 +56,36 @@
                     Visibility="{x:Bind IsRunStart, Mode=OneWay, Converter={StaticResource InvertedBooleanToVisibilityConverter}}"/>
 
             <Grid Grid.Row="1" HorizontalAlignment="Right">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <!-- Reply sling handle: invisible at rest, fades in while dragging left. -->
+                <Grid Grid.Column="0"
+                      Tag="ReplySwipeHandle"
+                      Width="32"
+                      Height="32"
+                      Margin="0,0,8,0"
+                      VerticalAlignment="Center"
+                      Opacity="0"
+                      IsHitTestVisible="False">
+                    <Ellipse Fill="{ThemeResource ChatDetailAccentBrush}" Opacity="0.2"/>
+                    <FontIcon Glyph="&#xE97A;"
+                              FontFamily="{StaticResource IconFont}"
+                              FontSize="16"
+                              Foreground="{ThemeResource ChatDetailAccentBrush}"
+                              HorizontalAlignment="Center"
+                              VerticalAlignment="Center"/>
+                </Grid>
+                <!--
+                  MaxWidth on this panel (not only the slot): Auto columns measure children
+                  with infinity; without a ceiling the RichTextBlock never wraps (Unigram
+                  puts MessageMaxWidth on the bubble root for the same reason).
+                -->
+                <Grid x:Name="SentBubblePanel"
+                      Grid.Column="1"
+                      HorizontalAlignment="Right"
+                      MaxWidth="432">
                 <controls:MessageBubbleChromeHost
                     IsFromMe="True"
                     IsRunStart="{x:Bind IsRunStart, Mode=OneWay}"
@@ -145,6 +200,10 @@
                                    VerticalAlignment="Stretch"
                                    IsHitTestVisible="False"
                                    Visibility="{x:Bind HasMediaThumbnail, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                            <Border Background="{ThemeResource ChatDetailMediaThumbScrimBrush}"
+                                    CornerRadius="4"
+                                    IsHitTestVisible="False"
+                                    Visibility="{x:Bind HasMediaThumbnail, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
                             <Image Source="{ThemeResource ChatDetailImageDownloadPlaceholder}"
                                    Stretch="Uniform"
                                    MaxWidth="160"
@@ -178,6 +237,10 @@
                                    VerticalAlignment="Stretch"
                                    IsHitTestVisible="False"
                                    Visibility="{x:Bind HasVideoPoster, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                            <Border Background="{ThemeResource ChatDetailMediaThumbScrimBrush}"
+                                    CornerRadius="4"
+                                    IsHitTestVisible="False"
+                                    Visibility="{x:Bind HasVideoPoster, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
                             <ProgressRing Width="36" Height="36"
                                           Foreground="{ThemeResource ChatDetailSentMediaDownloadIconBrush}"
                                           IsActive="{x:Bind IsVideoDownloading, Mode=OneWay}"
@@ -265,7 +328,7 @@
                                        x:Load="{x:Bind HasCaption, Mode=OneWay}"
                                        Foreground="{ThemeResource ChatDetailSentTextBrush}"
                                        IsTextSelectionEnabled="True"
-                                       TextWrapping="Wrap"
+                                       TextWrapping="WrapWholeWords"
                                        FontSize="15"
                                        LineHeight="20"
                                        Margin="0,0,0,2"/>
@@ -466,7 +529,7 @@
                                        x:Load="{x:Bind ShowTextContent, Mode=OneWay}"
                                        Foreground="{ThemeResource ChatDetailSentTextBrush}"
                                        IsTextSelectionEnabled="True"
-                                       TextWrapping="Wrap"
+                                       TextWrapping="WrapWholeWords"
                                        TextTrimming="CharacterEllipsis"
                                        MaxLines="{x:Bind ContentMaxLines, Mode=OneWay}"
                                        FontSize="15"
@@ -547,12 +610,13 @@
                                            VerticalAlignment="Center"
                                            Margin="4,0,0,0"
                                            Visibility="{x:Bind ShowVideoFooterDuration, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
-                                <TextBlock Text="{x:Bind DocumentFileLengthBytes, Mode=OneWay, Converter={StaticResource ByteSizeConverter}}"
+                                <TextBlock Text="{x:Bind MediaFileLengthBytes, Mode=OneWay, Converter={StaticResource FileSizeConverter}}"
                                            FontSize="11"
                                            FontFamily="{StaticResource MainFont}"
                                            Foreground="{ThemeResource ChatDetailSentMetaBrush}"
                                            VerticalAlignment="Center"
-                                           Visibility="{x:Bind ShowDocumentFileSize, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                                           Margin="4,0,0,0"
+                                           Visibility="{x:Bind HasMediaFileSize, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
                             </StackPanel>
                             <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
                                 <TextBlock Text="&#xE718;" FontFamily="{StaticResource IconFont}" Foreground="{ThemeResource ChatDetailSentMetaBrush}" FontSize="10" Margin="0,0,4,0"
@@ -597,6 +661,7 @@
                         Background="#55FFFFFF"
                         CornerRadius="8"
                         Visibility="{x:Bind IsHighlighted, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                </Grid>
             </Grid>
 
             <Button Grid.Row="2"
@@ -607,6 +672,7 @@
                     Command="{x:Bind ShowReactionsCommand, Mode=OneWay}"
                     Content="{x:Bind ReactionsDisplayText, Mode=OneWay}"/>
             </Grid>
+            </Grid>
         </Grid>
     </DataTemplate>
 
@@ -615,12 +681,33 @@
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
             <controls:ChatDateSeparator
                 Grid.Row="0"
                 Text="{x:Bind DateSeparatorText, Mode=OneWay}"
                 Visibility="{x:Bind IsFirstOfDay, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
-            <Grid Grid.Row="1" HorizontalAlignment="Left" Margin="12,0,48,0" RightTapped="MessageBubble_RightTapped" Holding="MessageBubble_Holding">
+            <controls:ChatDateSeparator
+                Grid.Row="1"
+                Text="{x:Bind UnreadDividerText, Mode=OneWay}"
+                Visibility="{x:Bind IsUnreadDivider, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+            <!-- Stretch slot constrains measure; Auto bubble columns alone ignore Wrap. -->
+            <Grid x:Name="ReceivedBubbleSlot"
+                  Grid.Row="2"
+                  HorizontalAlignment="Stretch"
+                  Margin="12,0,48,0"
+                  Loaded="MessageBubbleSlot_Loaded"
+                  SizeChanged="MessageBubbleSlot_SizeChanged"
+                  ManipulationMode="TranslateX"
+                  ManipulationDelta="MessageBubble_ManipulationDelta"
+                  ManipulationCompleted="MessageBubble_ManipulationCompleted"
+                  Tapped="MessageBubble_Tapped"
+                  RightTapped="MessageBubble_RightTapped"
+                  Holding="MessageBubble_Holding">
+            <!-- Same Unigram ceiling as SentBubbleContent — see comment there. -->
+            <Grid x:Name="ReceivedBubbleContent"
+                  HorizontalAlignment="Left"
+                  MaxWidth="432">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="Auto"/>
@@ -636,11 +723,41 @@
             <Grid Grid.Row="1" HorizontalAlignment="Left">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
 
-                <!-- Author avatar gutter (group incoming). Photo + contact fallback like the chat list. -->
+                <!-- Reply sling handle: invisible at rest, fades in while dragging left. -->
                 <Grid Grid.Column="0"
+                      Tag="ReplySwipeHandle"
+                      Width="32"
+                      Height="32"
+                      Margin="0,0,8,0"
+                      VerticalAlignment="Center"
+                      Opacity="0"
+                      IsHitTestVisible="False">
+                    <Ellipse Fill="{ThemeResource ChatDetailAccentBrush}" Opacity="0.2"/>
+                    <FontIcon Glyph="&#xE97A;"
+                              FontFamily="{StaticResource IconFont}"
+                              FontSize="16"
+                              Foreground="{ThemeResource ChatDetailAccentBrush}"
+                              HorizontalAlignment="Center"
+                              VerticalAlignment="Center"/>
+                </Grid>
+
+                <!-- Local unread accent (IsRead == false). Hidden after open commits read. -->
+                <Border Grid.Column="1"
+                        Width="3"
+                        MinHeight="18"
+                        Margin="0,2,6,2"
+                        CornerRadius="1.5"
+                        VerticalAlignment="Stretch"
+                        Background="{ThemeResource ChatDetailAccentBrush}"
+                        Visibility="{x:Bind ShowUnreadMarker, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+
+                <!-- Author avatar gutter (group incoming). Photo + contact fallback like the chat list. -->
+                <Grid Grid.Column="2"
                       Width="32"
                       Margin="0,0,8,0"
                       VerticalAlignment="Top"
@@ -655,7 +772,10 @@
                                                 Visibility="{x:Bind ShowContact, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
                 </Grid>
 
-                <Grid Grid.Column="1" HorizontalAlignment="Left">
+                <Grid x:Name="ReceivedBubblePanel"
+                      Grid.Column="3"
+                      HorizontalAlignment="Left"
+                      MaxWidth="432">
                 <controls:MessageBubbleChromeHost
                     IsFromMe="False"
                     IsRunStart="{x:Bind IsRunStart, Mode=OneWay}"
@@ -781,6 +901,10 @@
                                    VerticalAlignment="Stretch"
                                    IsHitTestVisible="False"
                                    Visibility="{x:Bind HasMediaThumbnail, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                            <Border Background="{ThemeResource ChatDetailMediaThumbScrimBrush}"
+                                    CornerRadius="4"
+                                    IsHitTestVisible="False"
+                                    Visibility="{x:Bind HasMediaThumbnail, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
                             <Image Source="{ThemeResource ChatDetailImageDownloadPlaceholder}"
                                    Stretch="Uniform"
                                    MaxWidth="160"
@@ -812,6 +936,10 @@
                                    VerticalAlignment="Stretch"
                                    IsHitTestVisible="False"
                                    Visibility="{x:Bind HasVideoPoster, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                            <Border Background="{ThemeResource ChatDetailMediaThumbScrimBrush}"
+                                    CornerRadius="4"
+                                    IsHitTestVisible="False"
+                                    Visibility="{x:Bind HasVideoPoster, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
                             <ProgressRing Width="36" Height="36"
                                           IsActive="{x:Bind IsVideoDownloading, Mode=OneWay}"
                                           Visibility="{x:Bind IsVideoDownloading, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
@@ -897,7 +1025,7 @@
                                        x:Load="{x:Bind HasCaption, Mode=OneWay}"
                                        Foreground="{ThemeResource ChatDetailReceivedTextBrush}"
                                        IsTextSelectionEnabled="True"
-                                       TextWrapping="Wrap"
+                                       TextWrapping="WrapWholeWords"
                                        FontSize="15"
                                        LineHeight="20"
                                        FontFamily="{StaticResource MainFont}"
@@ -1093,7 +1221,7 @@
                                        x:Load="{x:Bind ShowTextContent, Mode=OneWay}"
                                        Foreground="{ThemeResource ChatDetailReceivedTextBrush}"
                                        IsTextSelectionEnabled="True"
-                                       TextWrapping="Wrap"
+                                       TextWrapping="WrapWholeWords"
                                        TextTrimming="CharacterEllipsis"
                                        MaxLines="{x:Bind ContentMaxLines, Mode=OneWay}"
                                        FontSize="15"
@@ -1175,12 +1303,13 @@
                                            VerticalAlignment="Center"
                                            Margin="4,0,0,0"
                                            Visibility="{x:Bind ShowVideoFooterDuration, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
-                                <TextBlock Text="{x:Bind DocumentFileLengthBytes, Mode=OneWay, Converter={StaticResource ByteSizeConverter}}"
+                                <TextBlock Text="{x:Bind MediaFileLengthBytes, Mode=OneWay, Converter={StaticResource FileSizeConverter}}"
                                            FontSize="11"
                                            FontFamily="{StaticResource MainFont}"
                                            Foreground="{ThemeResource ChatDetailReceivedMetaBrush}"
                                            VerticalAlignment="Center"
-                                           Visibility="{x:Bind ShowDocumentFileSize, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                                           Margin="4,0,0,0"
+                                           Visibility="{x:Bind HasMediaFileSize, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
                             </StackPanel>
                             <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
                                 <TextBlock Text="&#xE718;" FontFamily="{StaticResource IconFont}" Foreground="{ThemeResource ChatDetailReceivedMetaBrush}" FontSize="10" Margin="0,0,4,0"
@@ -1226,6 +1355,7 @@
                         Content="{x:Bind ReactionsDisplayText, Mode=OneWay}"/>
             </Grid>
             </Grid>
+            </Grid>
         </Grid>
     </DataTemplate>
 
@@ -1235,6 +1365,7 @@
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
             <controls:ChatDateSeparator
                 Grid.Row="0"
@@ -1242,6 +1373,10 @@
                 Visibility="{x:Bind IsFirstOfDay, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
             <controls:ChatDateSeparator
                 Grid.Row="1"
+                Text="{x:Bind UnreadDividerText, Mode=OneWay}"
+                Visibility="{x:Bind IsUnreadDivider, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+            <controls:ChatDateSeparator
+                Grid.Row="2"
                 Text="{x:Bind Content, Mode=OneWay}"/>
         </Grid>
     </DataTemplate>

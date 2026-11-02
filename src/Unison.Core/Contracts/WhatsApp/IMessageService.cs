@@ -170,7 +170,13 @@ namespace Unison.Core.Contracts.WhatsApp
             string caption);
 
         /// <summary>Sends a recorded/picked audio clip (voice note when isVoiceMessage=true).</summary>
-        Task<ChatMessage> SendAudioMessageAsync(string jid, byte[] audioBytes, string mimeType, uint durationSeconds, bool isVoiceMessage = false);
+        Task<ChatMessage> SendAudioMessageAsync(
+            string jid,
+            byte[] audioBytes,
+            string mimeType,
+            uint durationSeconds,
+            bool isVoiceMessage = false,
+            bool viewOnce = false);
 
         /// <summary>Sends a picked document (PDF / office / archive / text). MIME must be document-only.</summary>
         Task<ChatMessage> SendDocumentAsync(string jid, byte[] documentBytes, string mimeType, string fileName, string caption = null);
@@ -303,6 +309,23 @@ namespace Unison.Core.Contracts.WhatsApp
         /// delete the SQLite row, and notify the open chat.
         /// </summary>
         Task<bool> ApplyAppStateDeleteMessageAsync(string chatJid, string messageId);
+
+        /// <summary>
+        /// Delete for this account only (Baileys deleteForMe). Sent or received bubbles.
+        /// Sends the app-state patch when a socket is available, then applies
+        /// <see cref="ApplyAppStateDeleteMessageAsync"/>. No-ops when ineligible.
+        /// </summary>
+        Task DeleteMessageForMeAsync(string chatJid, ChatMessage message);
+
+        /// <summary>
+        /// Revoke for everyone (protocol DeleteContent). Own messages inside the window, or
+        /// someone else's in a group when the viewer is admin. Applies a local tombstone after send.
+        /// </summary>
+        Task DeleteMessageForEveryoneAsync(
+            string chatJid,
+            ChatMessage message,
+            bool isGroupChat,
+            bool viewerIsGroupAdmin);
 
         /// <summary>
         /// Local message pin / unpin onto the timeline and SQLite (pending hold when the
@@ -568,9 +591,36 @@ namespace Unison.Core.Contracts.WhatsApp
             Message.Types.PeerDataOperationRequestResponseMessage response);
 
         /// <summary>
+        /// Send (or confirm) a from-me reaction. Empty <paramref name="emoji"/> removes the
+        /// current from-me reaction. Returns false to roll back an optimistic local chip.
+        /// <paramref name="message"/> supplies the Baileys target key (fromMe / participant).
+        /// </summary>
+        Task<bool> TryReactAsync(string chatJid, ChatMessage message, string emoji);
+
+        /// <summary>
         /// <c>w:gp2</c> participant <c>add</c>: insert GroupJoin system lines (Baileys
         /// <c>GROUP_PARTICIPANT_ADD</c>). No toast; list strip is plain text.
         /// </summary>
         Task NotifyGroupJoinsAsync(System.Collections.Generic.IReadOnlyList<GroupJoinNotifyRequest> joins);
+
+        /// <summary>
+        /// Live call lifecycle chrome (missed / completed) from <c>CallHandler</c> /
+        /// <c>WaEventKind.Call</c>. Same system-line visual as group join.
+        /// </summary>
+        Task NotifyCallEventsAsync(System.Collections.Generic.IReadOnlyList<CallEventNotifyRequest> events);
+
+        /// <summary>
+        /// <c>w:gp2</c> participant <c>remove</c>: leave / removed-by system lines
+        /// (Baileys <c>GROUP_PARTICIPANT_LEAVE</c> / <c>REMOVE</c>).
+        /// </summary>
+        Task NotifyGroupLeavesAsync(System.Collections.Generic.IReadOnlyList<GroupLeaveNotifyRequest> leaves);
+
+        /// <summary>
+        /// Group rename system line after the subject was applied to the catalog
+        /// (Baileys <c>GROUP_CHANGE_SUBJECT</c>).
+        /// </summary>
+        Task NotifyGroupSubjectChangedAsync(
+            GroupSubjectChangeNotifyRequest change,
+            string previousSubject);
     }
 }

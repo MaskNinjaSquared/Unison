@@ -128,6 +128,8 @@ namespace Unison.WhatsAppClient.Helpers
                     host.EndHistoryCatchUpBanner("sqlite-finalized");
                 }
 
+                host.NotifySilentFullLotQuiet(lotTrigger, processed);
+
                 if (host.IsListPaintPending)
                 {
                     host.WritePreviewReconcileDeferredListPaint();

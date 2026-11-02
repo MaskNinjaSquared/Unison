@@ -98,18 +98,10 @@ namespace Unison.Uwp.Services.WhatsApp
         void IChatCatalogPersistHost.LogDeferredDuringWarmup() =>
             Debug.WriteLine("[WhatsAppService] SchedulePersist skipped during startup warm-up");
 
-        void IChatCatalogPersistHost.ArmDebounceTimer()
-        {
-            lock (_persistLock)
-            {
-                _persistTimer?.Dispose();
-                _persistTimer = new System.Threading.Timer(
-                    _ => _ = ChatCatalogPersistDispatch.OnDebounceElapsedAsync(this),
-                    null,
-                    ChatCatalogPersistDispatch.DebounceMilliseconds,
-                    Timeout.Infinite);
-            }
-        }
+        void IChatCatalogPersistHost.ArmDebounceTimer() =>
+            _catalogDebounce.Arm(
+                ChatCatalogPersistDispatch.DebounceMilliseconds,
+                () => _ = ChatCatalogPersistDispatch.OnDebounceElapsedAsync(this));
 
         bool IChatCatalogPersistHost.TryBeginPersist() =>
             _persistScheduler.TryBeginPersist();

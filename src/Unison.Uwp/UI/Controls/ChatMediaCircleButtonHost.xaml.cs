@@ -198,7 +198,7 @@ namespace Unison.Uwp.UI.Controls
             _whatsAppGlyph = new TextBlock
             {
                 FontFamily = iconFont,
-                FontSize = UseOverlayChrome ? 22 : 16,
+                FontSize = UseOverlayChrome ? 28 : 20,
                 TextLineBounds = TextLineBounds.Tight,
                 Foreground = ink,
                 HorizontalAlignment = HorizontalAlignment.Center,
@@ -207,7 +207,7 @@ namespace Unison.Uwp.UI.Controls
             _legacyRingEllipse = new Ellipse
             {
                 Stroke = ink,
-                StrokeThickness = 2,
+                StrokeThickness = 3,
                 Fill = new SolidColorBrush(Colors.Transparent)
             };
             var content = new Grid { Width = diameter, Height = diameter };
@@ -238,10 +238,13 @@ namespace Unison.Uwp.UI.Controls
             return Application.Current.Resources.TryGetValue(key, out brush) ? brush as Brush : null;
         }
 
-        /// <summary>White on the dark Legacy page, black on the light one. Same brush as the app-bar ring.</summary>
+        /// <summary>
+        /// Page ink for Legacy media rings: white on black chrome, black on WP8 light.
+        /// Do not use <c>LegacyAppBarRingBrush</c> — the AppBar stays charcoal in light theme.
+        /// </summary>
         private static Brush LegacyInkBrush()
         {
-            return TryBrush("LegacyAppBarRingBrush") ?? new SolidColorBrush(Colors.White);
+            return TryBrush("WhatsAppTextHighBrush") ?? new SolidColorBrush(Colors.White);
         }
 
         private void SyncChildren()

@@ -299,5 +299,10 @@ namespace Unison.Core.Contracts.WhatsApp
         /// Persists <c>PublishContactsToWindowsEnabled</c> (default off).
         /// </summary>
         Task SetPublishContactsToWindowsAsync(bool enabled);
+
+        /// <summary>
+        /// Blocks <paramref name="jid"/> on the account (Baileys blocklist set). Confirm in the UI first.
+        /// </summary>
+        Task BlockContactAsync(string jid);
     }
 }

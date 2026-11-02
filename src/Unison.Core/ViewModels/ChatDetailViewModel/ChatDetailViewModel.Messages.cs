@@ -386,12 +386,18 @@ namespace Unison.Core.ViewModels
                 byId[row.Id] = row;
             }
 
+            var presentIds = new HashSet<string>(StringComparer.Ordinal);
             for (int i = 0; i < serviceMessages.Count; i++)
             {
                 ChatMessage msg = serviceMessages[i];
                 if (msg == null)
                 {
                     continue;
+                }
+
+                if (!string.IsNullOrWhiteSpace(msg.Id))
+                {
+                    presentIds.Add(msg.Id);
                 }
 
                 ChatMessageViewModel existing = FindTimelineRow(msg, byId);
@@ -417,6 +423,26 @@ namespace Unison.Core.ViewModels
                 }
 
                 changed = true;
+            }
+
+            // Sync used to only insert/update — delete-for-me left the bubble on screen.
+            // Drop recent-zone rows that disappeared from the service page.
+            if (presentIds.Count > 0 &&
+                (mode == ChatTimelineMergeMode.FollowEnd || mode == ChatTimelineMergeMode.HoldPosition))
+            {
+                int recentZoneStart = Math.Max(0, Messages.Count - Math.Max(serviceMessages.Count, 1));
+                for (int i = Messages.Count - 1; i >= recentZoneStart; i--)
+                {
+                    ChatMessageViewModel row = Messages[i];
+                    string id = row?.Id;
+                    if (string.IsNullOrWhiteSpace(id) || presentIds.Contains(id))
+                    {
+                        continue;
+                    }
+
+                    RemoveTimelineAt(i);
+                    changed = true;
+                }
             }
 
             if (mode == ChatTimelineMergeMode.FollowEnd)
@@ -522,6 +548,11 @@ namespace Unison.Core.ViewModels
                 target.AudioUri = source.AudioUri;
             }
 
+            if (source.MediaFileLengthBytes > 0)
+            {
+                target.MediaFileLengthBytes = source.MediaFileLengthBytes;
+            }
+
             // Document (and kind in general): a sync reload used to leave Kind/Text while the
             // live row already carried Document — the bubble stayed as plain text.
             if (source.Kind != ChatMessageKind.Text || source.IsDocument)
@@ -557,6 +588,11 @@ namespace Unison.Core.ViewModels
                 if (source.DocumentFileLengthBytes > 0)
                 {
                     target.DocumentFileLengthBytes = source.DocumentFileLengthBytes;
+                }
+
+                if (source.MediaFileLengthBytes > 0)
+                {
+                    target.MediaFileLengthBytes = source.MediaFileLengthBytes;
                 }
 
                 if (target.Kind == ChatMessageKind.Text)
@@ -595,6 +631,28 @@ namespace Unison.Core.ViewModels
                 yesterdayLabel,
                 QuotedMessageIdIsFromMe);
 
+            ChatItem chat = groupChat ?? ActiveChat;
+            bool isChannel = _sessionUnreadIsChannel || (chat != null && chat.IsChannel);
+            string unreadMessagesFormat = _strings != null
+                ? _strings.Get("ChatDetail_UnreadMessagesFormat", "{0} unread messages")
+                : "{0} unread messages";
+            string unreadUpdatesFormat = _strings != null
+                ? _strings.Get("ChatDetail_UnreadUpdatesFormat", "{0} unread updates")
+                : "{0} unread updates";
+
+            MessageRunLayout.ApplyUnreadDivider(
+                messages,
+                _sessionUnreadDividerCount,
+                unreadMessagesFormat,
+                unreadUpdatesFormat,
+                isChannel);
+
+            if (!_inboundHistoryReadCommitted && _chatService != null && chat != null)
+            {
+                _inboundHistoryReadCommitted = true;
+                _ = CommitOpenedInboundReadAsync(chat);
+            }
+
             System.Collections.Generic.IReadOnlyDictionary<string, string> lookup =
                 isGroup ? (groupChat ?? ActiveChat)?.MentionLookup : null;
             for (int i = 0; i < Messages.Count; i++)
@@ -606,6 +664,21 @@ namespace Unison.Core.ViewModels
                 }
 
                 row.RefreshMentions(lookup);
+            }
+        }
+
+        private async Task CommitOpenedInboundReadAsync(ChatItem chat)
+        {
+            try
+            {
+                // Persist only — keep in-memory IsRead/IsUnreadDivider for this open session
+                // so the chip and per-bubble markers stay until the next open.
+                await _chatService.CommitInboundHistoryReadAsync(chat).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine(
+                    "[ChatDetailViewModel] CommitInboundHistoryRead failed: " + ex.Message);
             }
         }
 

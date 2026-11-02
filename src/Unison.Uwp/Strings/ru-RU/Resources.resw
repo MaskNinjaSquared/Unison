@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <root>
   <xsd:schema id="root" xmlns="" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">
     <xsd:import namespace="http://www.w3.org/XML/1998/namespace" />
@@ -270,6 +270,15 @@
   <data name="ChatDetail_GroupOnlyAdminsCanSend.Text" xml:space="preserve">
     <value>Только администраторы могут отправлять сообщения</value>
   </data>
+  <data name="ChatDetail_GroupNoLongerParticipant.Text" xml:space="preserve">
+    <value>Вы не можете отправлять сообщения в эту группу, потому что вы больше не участник.</value>
+  </data>
+  <data name="ChatDetail_UnreadMessagesFormat" xml:space="preserve">
+    <value>{0} непрочитанных сообщений</value>
+  </data>
+  <data name="ChatDetail_UnreadUpdatesFormat" xml:space="preserve">
+    <value>{0} непрочитанных обновлений</value>
+  </data>
   <data name="ChatDetail_AttachCamera.Text" xml:space="preserve">
     <value>Камера</value>
   </data>
@@ -296,6 +305,27 @@
   </data>
   <data name="ChatDetail_AttachBarTooltip.Content" xml:space="preserve">
     <value>Добавить вложение</value>
+  </data>
+  <data name="ChatDetail_StickerBoxTooltip.Content" xml:space="preserve">
+    <value>Emoji</value>
+  </data>
+  <data name="StickerBox_EmojiTab.Text" xml:space="preserve">
+    <value>Emoji</value>
+  </data>
+  <data name="StickerBox_GifTab.Text" xml:space="preserve">
+    <value>GIF</value>
+  </data>
+  <data name="StickerBox_StickerTab.Text" xml:space="preserve">
+    <value>Stickers</value>
+  </data>
+  <data name="StickerBox_GifSoon.Text" xml:space="preserve">
+    <value>GIFs coming soon</value>
+  </data>
+  <data name="StickerBox_StickerSoon.Text" xml:space="preserve">
+    <value>Stickers coming soon</value>
+  </data>
+  <data name="StickerBox_SearchBox.PlaceholderText" xml:space="preserve">
+    <value>Поиск эмодзи</value>
   </data>
   <data name="ChatDetail_ScrollToBottomTooltip.Content" xml:space="preserve">
     <value>Перейти в конец</value>
@@ -418,6 +448,12 @@
   </data>
   <data name="ChatDetail_RecordingChatUnavailable" xml:space="preserve">
     <value>Чат, в котором выполнялась запись, больше недоступен.</value>
+  </data>
+  <data name="ChatDetail_RecordingPause" xml:space="preserve">
+    <value>Пауза</value>
+  </data>
+  <data name="ChatDetail_RecordingPlay" xml:space="preserve">
+    <value>Воспроизвести</value>
   </data>
   <data name="ChatDetail_AudioSendFailed" xml:space="preserve">
     <value>Не удалось отправить аудио.</value>
@@ -599,6 +635,12 @@
   <data name="StatusDetail_EmptySubtitle.Text" xml:space="preserve">
     <value>Делитесь фото, видео и текстом, которые исчезают через 24 часа.</value>
   </data>
+  <data name="StatusDetail_Download.AutomationProperties.Name" xml:space="preserve">
+    <value>Save status</value>
+  </data>
+  <data name="StatusDetail_Download.ToolTipService.ToolTip" xml:space="preserve">
+    <value>Save this status to your device</value>
+  </data>
   <data name="Shell_Starred.Text" xml:space="preserve">
     <value>Избранное</value>
   </data>
@@ -614,8 +656,50 @@
   <data name="Calls_Header.Text" xml:space="preserve">
     <value>Звонки</value>
   </data>
-  <data name="Calls_Empty.Text" xml:space="preserve">
-    <value>Чтобы начать звонок, выберите контакт и нажмите Позвонить.</value>
+  <data name="Calls_EmptyTitle.Text" xml:space="preserve">
+    <value>Голосовые и видеозвонки</value>
+  </data>
+  <data name="Calls_EmptyBody.Text" xml:space="preserve">
+    <value>Демонстрируйте экран, реагируйте эмодзи и многое другое — до 32 участников…</value>
+  </data>
+  <data name="Calls_FavoritesSection.Text" xml:space="preserve">
+    <value>FAVORITES</value>
+  </data>
+  <data name="Calls_RecentsSection.Text" xml:space="preserve">
+    <value>RECENT</value>
+  </data>
+  <data name="Calls_SeeAllFavorites.Content" xml:space="preserve">
+    <value>See all</value>
+  </data>
+  <data name="Calls_Outgoing" xml:space="preserve">
+    <value>Outgoing</value>
+  </data>
+  <data name="Calls_Incoming" xml:space="preserve">
+    <value>Incoming</value>
+  </data>
+  <data name="Calls_Missed" xml:space="preserve">
+    <value>Missed</value>
+  </data>
+  <data name="Calls_DetailsTitle.Text" xml:space="preserve">
+    <value>Call info</value>
+  </data>
+  <data name="Calls_DetailsUnavailable.Text" xml:space="preserve">
+    <value>Not available right now</value>
+  </data>
+  <data name="Calls_NewCallUnavailable" xml:space="preserve">
+    <value>Calling is not available yet.</value>
+  </data>
+  <data name="Message_CallMissed" xml:space="preserve">
+    <value>Missed voice call</value>
+  </data>
+  <data name="Message_CallMissedVideo" xml:space="preserve">
+    <value>Missed video call</value>
+  </data>
+  <data name="Message_CallCompleted" xml:space="preserve">
+    <value>Voice call</value>
+  </data>
+  <data name="Message_CallCompletedVideo" xml:space="preserve">
+    <value>Video call</value>
   </data>
   <data name="Shell_Archived.Text" xml:space="preserve">
     <value>Архив</value>
@@ -704,6 +788,55 @@
   <data name="Settings_Notifications.Text" xml:space="preserve">
     <value>Показывать уведомления и количество новых сообщений на значке.</value>
   </data>
+  <data name="Settings_CallNotifications.Header" xml:space="preserve">
+    <value>Call notifications</value>
+  </data>
+  <data name="Settings_CallNotifications.Text" xml:space="preserve">
+    <value>Toasts for incoming calls and missed-call Live Tile updates.</value>
+  </data>
+  <data name="Notification_IncomingCallBody" xml:space="preserve">
+    <value>Incoming Call (Answer on Primary Phone)</value>
+  </data>
+  <data name="Notification_MissedCall" xml:space="preserve">
+    <value>Missed call</value>
+  </data>
+  <data name="Notification_MissedVideoCall" xml:space="preserve">
+    <value>Missed video call</value>
+  </data>
+  <data name="Settings_LockScreenNotifications.Header" xml:space="preserve">
+    <value>Lock screen</value>
+  </data>
+  <data name="Settings_LockScreenNotifications.Text" xml:space="preserve">
+    <value>Which chats update the large Live Tile / lock screen preview.</value>
+  </data>
+  <data name="Settings_LockScreenScope_All.Content" xml:space="preserve">
+    <value>All</value>
+  </data>
+  <data name="Settings_LockScreenScope_Groups.Content" xml:space="preserve">
+    <value>Groups</value>
+  </data>
+  <data name="Settings_LockScreenScope_Direct.Content" xml:space="preserve">
+    <value>Contacts</value>
+  </data>
+  <data name="Settings_LockScreenScope_Favorites.Content" xml:space="preserve">
+    <value>Favorites</value>
+  </data>
+  <data name="Settings_NotificationFilter.Header" xml:space="preserve">
+    <value>Filter notifications</value>
+  </data>
+  <data name="Settings_NotificationFilter.Text" xml:space="preserve">
+    <value>Which chats may raise toasts and count toward the badge.</value>
+  </data>
+  <data name="Settings_NotificationFilterChoose.Content" xml:space="preserve"><value>Выбрать</value></data>
+  <data name="Settings_NotifyGroups.Content" xml:space="preserve">
+    <value>Groups</value>
+  </data>
+  <data name="Settings_NotifyDirect.Content" xml:space="preserve">
+    <value>Contacts</value>
+  </data>
+  <data name="Settings_NotifyFavorites.Content" xml:space="preserve">
+    <value>Favorites</value>
+  </data>
   <data name="Settings_MessageNotificationSound.Header" xml:space="preserve">
     <value>Уведомления сообщений</value>
   </data>
@@ -737,6 +870,9 @@
   <data name="StartTileDialog.Title" xml:space="preserve"><value>Плитка Пуска</value></data>
   <data name="StartTileDialog.PrimaryButtonText" xml:space="preserve"><value>Закрепить</value></data>
   <data name="StartTileDialog.CloseButtonText" xml:space="preserve"><value>Отмена</value></data>
+  <data name="NotificationFilterDialog.Title" xml:space="preserve"><value>Фильтр уведомлений</value></data>
+  <data name="NotificationFilterDialog.PrimaryButtonText" xml:space="preserve"><value>OK</value></data>
+  <data name="NotificationFilterDialog.CloseButtonText" xml:space="preserve"><value>Отмена</value></data>
   <data name="StartTileDialog_Unison.Content" xml:space="preserve"><value>Unison</value></data>
   <data name="StartTileDialog_WhatsAppWeb.Content" xml:space="preserve"><value>WhatsApp Web</value></data>
   <data name="StartTileDialog_WhatsAppLegacy.Content" xml:space="preserve"><value>WhatsApp Legacy</value></data>
@@ -751,6 +887,18 @@
   </data>
   <data name="Settings_KeepAlive.Text" xml:space="preserve">
     <value>Использует геолокацию, чтобы Windows 10 Mobile не приостанавливала работу приложения (метод Unogram). Геолокация не считывается и не передаётся. Увеличивает расход батареи.</value>
+  </data>
+  <data name="Settings_StartupLaunch.Header" xml:space="preserve">
+    <value>Start with Windows</value>
+  </data>
+  <data name="Settings_StartupLaunch.Text" xml:space="preserve">
+    <value>Opens Unison when you sign in to Windows.</value>
+  </data>
+  <data name="Settings_StartupLaunchDisabledByUser" xml:space="preserve">
+    <value>Turned off in Task Manager. To turn it back on, open Task Manager > Startup apps and enable Unison.</value>
+  </data>
+  <data name="Settings_StartupLaunchPolicy" xml:space="preserve">
+    <value>Your organization manages this setting.</value>
   </data>
   <data name="Settings_AutoUnlink.Header" xml:space="preserve">
     <value>Автоматически отвязывать при выходе</value>
@@ -981,6 +1129,27 @@
   </data>
   <data name="Message_GroupJoin" xml:space="preserve">
     <value>{0} вступил(а) в группу</value>
+  </data>
+  <data name="Message_GroupAddedBy" xml:space="preserve">
+    <value>{0} added {1}</value>
+  </data>
+  <data name="Message_GroupLeft" xml:space="preserve">
+    <value>{0} left</value>
+  </data>
+  <data name="Message_GroupRemovedBy" xml:space="preserve">
+    <value>{0} removed {1}</value>
+  </data>
+  <data name="Message_GroupSubjectChangedFromTo" xml:space="preserve">
+    <value>{0} changed the group name from "{1}" to "{2}"</value>
+  </data>
+  <data name="Message_GroupSubjectChangedTo" xml:space="preserve">
+    <value>{0} changed the group name to "{1}"</value>
+  </data>
+  <data name="Message_GroupSubjectChangedFromToAnon" xml:space="preserve">
+    <value>Group name changed from "{0}" to "{1}"</value>
+  </data>
+  <data name="Message_GroupSubjectChangedToAnon" xml:space="preserve">
+    <value>Group name changed to "{0}"</value>
   </data>
   <data name="ChatDetail_AddContactLink.Content" xml:space="preserve">
     <value>Добавить контакт</value>

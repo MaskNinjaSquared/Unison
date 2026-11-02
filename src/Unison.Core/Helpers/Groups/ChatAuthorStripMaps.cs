@@ -101,27 +101,30 @@ namespace Unison.Core.Helpers
             }
 
             string tip = JidHelper.Normalize(participantJid) ?? participantJid;
-            string tipCanonical = jids != null
-                ? jids.GetCanonicalJid(participantJid)
-                : tip;
-
-            for (int i = 0; i < group.GroupMembers.Count; i++)
+            GroupMember hit = group.FindGroupMember(tip);
+            if (hit != null || jids == null)
             {
-                GroupMember member = group.GroupMembers[i];
-                if (member == null)
-                {
-                    continue;
-                }
+                return hit;
+            }
 
-                if (KeyMatches(member.Jid, tip, tipCanonical, jids) ||
-                    KeyMatches(member.Lid, tip, tipCanonical, jids) ||
-                    KeyMatches(member.PhoneNumber, tip, tipCanonical, jids))
+            string tipCanonical = jids.GetCanonicalJid(participantJid);
+            if (!string.IsNullOrWhiteSpace(tipCanonical) &&
+                !string.Equals(tipCanonical, tip, StringComparison.OrdinalIgnoreCase))
+            {
+                hit = group.FindGroupMember(tipCanonical);
+                if (hit != null)
                 {
-                    return member;
+                    return hit;
                 }
             }
 
-            return null;
+            string alias;
+            if (jids.TryGetAlias(tip, out alias) && !string.IsNullOrWhiteSpace(alias))
+            {
+                hit = group.FindGroupMember(alias);
+            }
+
+            return hit;
         }
 
         /// <summary>O(1) 1:1 name lookup under tip or canonical key.</summary>
@@ -155,36 +158,6 @@ namespace Unison.Core.Helpers
 
             name = null;
             return false;
-        }
-
-        private static bool KeyMatches(
-            string key,
-            string tip,
-            string tipCanonical,
-            IJidResolver jids)
-        {
-            if (string.IsNullOrWhiteSpace(key))
-            {
-                return false;
-            }
-
-            string normalized = JidHelper.Normalize(key) ?? key;
-            if (string.Equals(normalized, tip, StringComparison.OrdinalIgnoreCase) ||
-                (!string.IsNullOrWhiteSpace(tipCanonical) &&
-                 string.Equals(normalized, tipCanonical, StringComparison.OrdinalIgnoreCase)))
-            {
-                return true;
-            }
-
-            if (jids == null)
-            {
-                return false;
-            }
-
-            string canonical = jids.GetCanonicalJid(key);
-            return !string.IsNullOrWhiteSpace(canonical) &&
-                   (string.Equals(canonical, tip, StringComparison.OrdinalIgnoreCase) ||
-                    string.Equals(canonical, tipCanonical, StringComparison.OrdinalIgnoreCase));
         }
 
         private static void IndexName(Dictionary<string, string> map, string key, string value)

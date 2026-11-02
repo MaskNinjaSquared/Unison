@@ -76,12 +76,24 @@ namespace Unison.WhatsAppClient.Helpers
             for (int i = 0; i < rows.Count; i++)
             {
                 ChatItem row = rows[i];
-                if (row == null || row.UnreadCount == resolved)
+                if (row == null)
+                {
+                    continue;
+                }
+
+                bool unreadChanged = row.UnreadCount != resolved;
+                bool citationCleared = read && row.HasCitation;
+                if (!unreadChanged && !citationCleared)
                 {
                     continue;
                 }
 
                 row.UnreadCount = resolved;
+                if (read)
+                {
+                    row.HasCitation = false;
+                }
+
                 if (dirty == null)
                 {
                     dirty = new List<ChatItem>();

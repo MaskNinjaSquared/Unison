@@ -53,6 +53,7 @@ namespace Unison.Core.ViewModels
 
         /// <summary>Unitary microphone capture (returns session handles).</summary>
         private readonly IAudioRecordingService _audioRecording;
+
         private readonly IUiSoundService _uiSounds;
 
         /// <summary>File pickers — chat attach uses PickChatAttachmentAsync.</summary>
@@ -81,6 +82,9 @@ namespace Unison.Core.ViewModels
 
         /// <summary>Device People card for contacts not yet in the address book.</summary>
         private readonly IContactService _contactService;
+        private readonly IChatExportService _chatExport;
+        private readonly IProfileService _profile;
+        private readonly IShareService _share;
 
         /// <summary>Device info (kept for other Mobile/desktop branching in this VM).</summary>
         private readonly ISystemInfoProvider _systemInfo;
@@ -105,7 +109,8 @@ namespace Unison.Core.ViewModels
         private ChatItem _activeChat;
         private string _messageText;
         private bool _isSending;
-        private bool _isRecording;
+        private VoiceRecordingState _voiceRecordingState = VoiceRecordingState.Pristine;
+        private bool _isViewOnceVoice;
         private string _recordingElapsedText = "0:00";
         private bool _hasActiveChat;
         private bool _isLoadingMessages;
@@ -113,6 +118,9 @@ namespace Unison.Core.ViewModels
 
         /// <summary>JID already given one open-path subject IQ (see TryRefreshGroupSubjectOnce).</summary>
         private string _groupSubjectRefreshJid;
+
+        /// <summary>Group JID for which @ already kicked a store/wire roster ensure this open.</summary>
+        private string _mentionRosterEnsureJid;
         private string _recordingChatJid;
         private bool _isChatDetailInfoOpen;
         private ChatDetailInfoViewModel _chatDetailInfo;
@@ -120,6 +128,8 @@ namespace Unison.Core.ViewModels
         private IAudioRecordingSession _recordingSession;
         private CancellationTokenSource _elapsedCts;
         private CancellationTokenSource _presenceCts;
+        private readonly PresenceWatchGate _presenceWatch = new PresenceWatchGate();
+        private string _composerWarmedGroupJid;
         private bool _attached;
         private bool _presenceHandlerAttached;
         private bool _presenceReceived;
@@ -127,6 +137,14 @@ namespace Unison.Core.ViewModels
         private DateTime _presenceOpenedUtc;
         private bool _hasReachedStart;
         private int _emptyLoadAttempts;
+
+        /// <summary>Unread badge captured when the chat was opened (chip survives MarkRead clearing it).</summary>
+        private int _sessionUnreadDividerCount;
+
+        private bool _sessionUnreadIsChannel;
+
+        /// <summary>True after <see cref="CommitInboundHistoryReadAsync"/> ran for this open.</summary>
+        private bool _inboundHistoryReadCommitted;
 
         /// <summary>
         /// Per open-chat lookup of group participant labels/avatars (plus 1:1 indexes).
@@ -168,7 +186,12 @@ namespace Unison.Core.ViewModels
             IChatAuthorProjection authorProjection = null,
             IUiSoundService uiSounds = null,
             IForwardMessagePicker forwardPicker = null,
-            ICopyService copy = null)
+            ICopyService copy = null,
+            IChatAudioPlaybackService audioPlayback = null,
+            IEmojiRecentStore emojiRecents = null,
+            IChatExportService chatExport = null,
+            IProfileService profile = null,
+            IShareService share = null)
         {
             _chatService = chatService;
             _connectionService = connectionService;
@@ -178,6 +201,7 @@ namespace Unison.Core.ViewModels
             _shortcutService = shortcutService;
             _chatStore = chatStore;
             _audioRecording = audioRecording;
+            _audioPlayback = audioPlayback;
             _uiSounds = uiSounds;
             _filePicker = filePicker;
             _dialogs = dialogs;
@@ -193,6 +217,9 @@ namespace Unison.Core.ViewModels
             _sessionLogger = sessionLogger;
             _diagnostics = diagnostics;
             _authorProjection = authorProjection;
+            _chatExport = chatExport;
+            _profile = profile;
+            _share = share;
             _forwardPicker = forwardPicker;
             _copy = copy;
             System.Diagnostics.Debug.WriteLine(
@@ -240,13 +267,31 @@ namespace Unison.Core.ViewModels
 
             CancelRecordingCommand = new RelayCommand(
                 () => _ = RunSafeAsync(CancelRecordingCoreAsync, "record-cancel"),
-                () => _isRecording);
+                () => IsRecording);
 
             SendRecordingCommand = new RelayCommand(
                 () => _ = RunSafeAsync(StopAndSendRecordingAsync, "send-voice"),
-                () => _isRecording && !_isSending);
+                () => IsRecording && !_isSending);
 
-            BackCommand = new RelayCommand(() => BackRequested?.Invoke(this, EventArgs.Empty));
+            ToggleRecordingPauseCommand = new RelayCommand(
+                () => _ = RunSafeAsync(ToggleRecordingPauseAsync, "record-pause"),
+                () => IsRecording);
+
+            ToggleViewOnceVoiceCommand = new RelayCommand(
+                () => IsViewOnceVoice = !IsViewOnceVoice,
+                () => IsRecording);
+
+            BackCommand = new RelayCommand(() =>
+            {
+                if (TryCloseStickerBoxOnBack())
+                {
+                    return;
+                }
+
+                BackRequested?.Invoke(this, EventArgs.Empty);
+            });
+
+            InitializeStickerBox(emojiRecents);
             PinToStartCommand = new RelayCommand(
                 () => _ = ToggleWidgetPinAsync(),
                 () => AreLiveTilesAvailable &&
@@ -257,6 +302,9 @@ namespace Unison.Core.ViewModels
             DeleteChatCommand = new RelayCommand(
                 () => _ = DeleteActiveChatAsync(),
                 () => CanDeleteActiveChat());
+            ExportChatCommand = new RelayCommand(
+                () => _ = ExportChatAsync(),
+                () => CanExportChat());
             ArchiveChatCommand = new RelayCommand(
                 () => { },
                 () => ActiveChat != null &&
@@ -298,6 +346,9 @@ namespace Unison.Core.ViewModels
             UnpinSelectedMessageCommand = new RelayCommand(
                 () => _ = PinSelectedAsync(false, 0),
                 () => _messageActions.CanUnpin);
+            DeleteSelectedMessageCommand = new RelayCommand(
+                () => _ = PromptDeleteSelectedAsync(),
+                () => _messageActions.CanDeleteForMe);
             MuteFor8HoursCommand = new RelayCommand(
                 () => _ = SetLocalMuteAsync(_chatService.MuteUntilEightHoursFromNow()),
                 () => CanMuteActiveChat());
@@ -406,6 +457,10 @@ namespace Unison.Core.ViewModels
 
                 RaiseComposerCommandsChanged();
                 OnPropertyChanged(nameof(IsGroupLockedForMessages));
+                OnPropertyChanged(nameof(IsNoLongerGroupParticipant));
+                OnPropertyChanged(nameof(ShowsAnnounceOnlyComposerLock));
+                OnPropertyChanged(nameof(IsComposerLocked));
+                OnPropertyChanged(nameof(IsChannelReadOnly));
                 OnPropertyChanged(nameof(CanLoadMore));
                 CloseMentionMenu();
                 DismissMessageActions();
@@ -415,9 +470,27 @@ namespace Unison.Core.ViewModels
 
         /// <summary>
         /// True when the active chat is a group in announce-only mode and the current user is not an admin.
-        /// Bind the composer lock UI to this; values refresh when group metadata is applied.
+        /// Prefer <see cref="IsComposerLocked"/> for hiding the send surface (includes Channels).
         /// </summary>
         public bool IsGroupLockedForMessages => ActiveChat != null && ActiveChat.IsGroupLockedForMessages;
+
+        /// <summary>
+        /// Baileys <c>chat.readOnly</c>: this account is no longer in the group.
+        /// </summary>
+        public bool IsNoLongerGroupParticipant =>
+            ActiveChat != null && ActiveChat.IsNoLongerGroupParticipant;
+
+        /// <summary>
+        /// Announce-only strip. Hidden when the account already left — that strip wins.
+        /// </summary>
+        public bool ShowsAnnounceOnlyComposerLock =>
+            IsGroupLockedForMessages && !IsNoLongerGroupParticipant;
+
+        /// <summary>Channel subscriber or announce-only group — hide the composer.</summary>
+        public bool IsComposerLocked => ActiveChat != null && ActiveChat.IsComposerLocked;
+
+        /// <summary>WhatsApp Channel open — banner copy differs from group announce-only.</summary>
+        public bool IsChannelReadOnly => ActiveChat != null && ActiveChat.IsChannel;
 
         public string MessageText
         {
@@ -468,11 +541,15 @@ namespace Unison.Core.ViewModels
 
         public bool CanUnpinSelectedMessage => _messageActions.CanUnpin;
 
+        public bool CanDeleteSelectedMessage => _messageActions.CanDeleteForMe;
+
         public ICommand CopySelectedMessageCommand { get; }
 
         public ICommand ReplySelectedMessageCommand { get; }
 
         public ICommand ForwardSelectedMessageCommand { get; }
+
+        public ICommand DeleteSelectedMessageCommand { get; }
 
         public ICommand PinSelectedFor24HoursCommand { get; }
 
@@ -487,7 +564,10 @@ namespace Unison.Core.ViewModels
         /// </summary>
         public void SelectMessage(ChatMessageViewModel message)
         {
-            _messageActions.Select(message);
+            bool isGroup = ActiveChat != null && ActiveChat.IsGroup;
+            bool isAdmin = ActiveChat != null && ActiveChat.IsGroupAdmin;
+            message?.SetDeleteChatContext(isAdmin);
+            _messageActions.Select(message, isGroup, isAdmin);
         }
 
         public void DismissMessageActions()
@@ -501,6 +581,7 @@ namespace Unison.Core.ViewModels
             OnPropertyChanged(nameof(IsMessageActionsOpen));
             OnPropertyChanged(nameof(CanPinSelectedMessage));
             OnPropertyChanged(nameof(CanUnpinSelectedMessage));
+            OnPropertyChanged(nameof(CanDeleteSelectedMessage));
             (CopySelectedMessageCommand as RelayCommand)?.RaiseCanExecuteChanged();
             (ReplySelectedMessageCommand as RelayCommand)?.RaiseCanExecuteChanged();
             (ForwardSelectedMessageCommand as RelayCommand)?.RaiseCanExecuteChanged();
@@ -508,6 +589,7 @@ namespace Unison.Core.ViewModels
             (PinSelectedFor7DaysCommand as RelayCommand)?.RaiseCanExecuteChanged();
             (PinSelectedFor30DaysCommand as RelayCommand)?.RaiseCanExecuteChanged();
             (UnpinSelectedMessageCommand as RelayCommand)?.RaiseCanExecuteChanged();
+            (DeleteSelectedMessageCommand as RelayCommand)?.RaiseCanExecuteChanged();
         }
 
         private async Task PinSelectedAsync(bool pin, uint durationSeconds)
@@ -524,6 +606,32 @@ namespace Unison.Core.ViewModels
             }
 
             await message.SetPinnedAsync(pin, durationSeconds);
+        }
+
+        private async Task PromptDeleteSelectedAsync()
+        {
+            ChatMessageViewModel message = SelectedMessage;
+            if (message?.Model == null || !MessageDeleteEligibility.CanDeleteForMe(message.Model))
+            {
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(message.Model.RemoteJid) && ActiveChat != null)
+            {
+                message.Model.RemoteJid = ActiveChat.JID;
+            }
+
+            bool isAdmin = ActiveChat != null && ActiveChat.IsGroupAdmin;
+            message.SetDeleteChatContext(isAdmin);
+            MessageDeleteChoice choice = await message.PromptDeleteAsync();
+            if (choice == MessageDeleteChoice.ForMe)
+            {
+                // DeletedForMe also removes the row; call again in case the bubble was selected
+                // before CreateMessageVm wired the handler on an older instance.
+                TryRemoveTimelineMessage(message);
+            }
+
+            DismissMessageActions();
         }
 
         private bool _mentionMenuOpen;
@@ -546,7 +654,8 @@ namespace Unison.Core.ViewModels
         public void UpdateMentionQuery(string text, int caret)
         {
             MentionInsertCaret = -1;
-            if (ActiveChat == null || !ActiveChat.IsGroup || ActiveChat.IsGroupLockedForMessages)
+            NoteComposerCaret(caret);
+            if (ActiveChat == null || !ActiveChat.IsGroup || ActiveChat.IsComposerLocked)
             {
                 CloseMentionMenu();
                 return;
@@ -565,6 +674,17 @@ namespace Unison.Core.ViewModels
             _mentionTokenStart = at;
             _mentionTokenLength = length;
             _mentionTokenCaret = caret;
+
+            // Known members show now; the first @ asks for everyone (store first, then one IQ).
+            string ensureKey = _jids.GetCanonicalJid(ActiveChat.JID) ?? ActiveChat.JID;
+            if (ActiveChat.RosterCompleteness != GroupRosterCompleteness.Full &&
+                _groupService != null &&
+                !string.Equals(_mentionRosterEnsureJid, ensureKey, StringComparison.OrdinalIgnoreCase))
+            {
+                _mentionRosterEnsureJid = ensureKey;
+                _ = EnsureMentionRosterAsync(ActiveChat.JID);
+            }
+
             string everyone = _strings != null
                 ? _strings.Get("ChatDetail_MentionEveryone", "Everyone")
                 : "Everyone";
@@ -588,6 +708,89 @@ namespace Unison.Core.ViewModels
             MentionSelectedIndex = -1;
             MentionSelectedIndex = 0;
             IsMentionMenuOpen = MentionChoices.Count > 0;
+        }
+
+        private async Task EnsureMentionRosterAsync(string groupJid)
+        {
+            if (string.IsNullOrWhiteSpace(groupJid) || _groupService == null)
+            {
+                return;
+            }
+
+            try
+            {
+                await _groupService.EnsureFullRosterAsync(groupJid, "mention")
+                    .ConfigureAwait(false);
+
+                ChatItem chat = ActiveChat;
+                if (chat == null || !chat.IsGroup)
+                {
+                    return;
+                }
+
+                string activeKey = _jids.GetCanonicalJid(chat.JID) ?? chat.JID;
+                string wantKey = _jids.GetCanonicalJid(groupJid) ?? groupJid;
+                if (!string.Equals(activeKey, wantKey, StringComparison.OrdinalIgnoreCase))
+                {
+                    return;
+                }
+
+                if (_dispatcher == null || !IsMentionMenuOpen)
+                {
+                    return;
+                }
+
+                await _dispatcher.RunAsync(() =>
+                {
+                    if (!IsMentionMenuOpen || ActiveChat == null)
+                    {
+                        return;
+                    }
+
+                    UpdateMentionQuery(_messageText, _mentionTokenCaret);
+                }).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine(
+                    "[ChatDetailViewModel] Mention roster ensure failed: " + ex.Message);
+            }
+        }
+
+        /// <summary>
+        /// Composer got focus: warm the group roster from the local store so the first @ has
+        /// names without a network round-trip. The full fetch still waits for the @ itself.
+        /// </summary>
+        public void OnComposerFocused()
+        {
+            ChatItem chat = ActiveChat;
+            if (chat == null || !chat.IsGroup || chat.HasFullGroupRoster || _groupService == null)
+            {
+                return;
+            }
+
+            string groupJid = chat.JID;
+            if (string.IsNullOrWhiteSpace(groupJid) ||
+                string.Equals(_composerWarmedGroupJid, groupJid, StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
+            _composerWarmedGroupJid = groupJid;
+            _ = WarmRosterFromStoreAsync(groupJid);
+        }
+
+        private async Task WarmRosterFromStoreAsync(string groupJid)
+        {
+            try
+            {
+                await _groupService.EnsureGroupRosterLoadedFromStoreAsync(groupJid)
+                    .ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                _diagnostics?.RecordException("roster", "warm-store-failed", ex);
+            }
         }
 
         private bool IsCurrentMember(GroupMember member)
@@ -690,15 +893,50 @@ namespace Unison.Core.ViewModels
             }
         }
 
-        public bool IsRecording
+        /// <summary>Mic capture state: pristine, capturing, or paused.</summary>
+        public VoiceRecordingState VoiceRecordingState
         {
-            get => _isRecording;
+            get => _voiceRecordingState;
             private set
             {
-                Set(ref _isRecording, value);
+                if (!Set(ref _voiceRecordingState, value))
+                {
+                    return;
+                }
+
+                if (value == VoiceRecordingState.Pristine)
+                {
+                    IsViewOnceVoice = false;
+                }
+
+                OnPropertyChanged(nameof(IsRecording));
+                OnPropertyChanged(nameof(RecordingPauseGlyph));
+                OnPropertyChanged(nameof(RecordingPauseLabel));
                 RaiseComposerCommandsChanged();
+                (ToggleRecordingPauseCommand as RelayCommand)?.RaiseCanExecuteChanged();
+                (ToggleViewOnceVoiceCommand as RelayCommand)?.RaiseCanExecuteChanged();
             }
         }
+
+        /// <summary>True while a voice capture is open (playing or paused).</summary>
+        public bool IsRecording => VoiceRecordingState != VoiceRecordingState.Pristine;
+
+        /// <summary>View-once (single playback) voice note when sending the current recording.</summary>
+        public bool IsViewOnceVoice
+        {
+            get => _isViewOnceVoice;
+            private set => Set(ref _isViewOnceVoice, value);
+        }
+
+        /// <summary>Segoe MDL2 pause (E769) or play (E768) for the recording pause button.</summary>
+        public string RecordingPauseGlyph =>
+            VoiceRecordingState == VoiceRecordingState.Paused ? "\uE768" : "\uE769";
+
+        /// <summary>Tooltip / a11y caption for pause while capturing, play while paused.</summary>
+        public string RecordingPauseLabel =>
+            VoiceRecordingState == VoiceRecordingState.Paused
+                ? _strings.Get("ChatDetail_RecordingPlay", "Play")
+                : _strings.Get("ChatDetail_RecordingPause", "Pause");
 
         public string RecordingElapsedText
         {
@@ -768,13 +1006,14 @@ namespace Unison.Core.ViewModels
             !IsLoadingMessages &&
             !_hasReachedStart;
 
-        /// <summary>Marks the initial timeline fetch for the open chat (progress + scroll lock).</summary>
+        /// <summary>
+        /// Marks the initial timeline fetch for the open chat (progress + scroll lock).
+        /// Group subject IQ stays in <see cref="EnrichActiveChatAfterPaint"/> so Mobile can
+        /// paint NarrowDetail + ProgressBar before any open-side network work.
+        /// </summary>
         public void BeginLoadingMessages()
         {
             IsLoadingMessages = true;
-            // New groups often have only a JID placeholder until w:g2 — fetch subject once here
-            // (not on Prepare) so Mobile open still gets a name while messages load.
-            TryRefreshGroupSubjectOnce();
         }
 
         /// <summary>Clears the initial timeline fetch flag.</summary>
@@ -791,8 +1030,8 @@ namespace Unison.Core.ViewModels
         public bool CanCompose =>
             ActiveChat != null &&
             !_isSending &&
-            !_isRecording &&
-            !IsGroupLockedForMessages;
+            !IsRecording &&
+            !IsComposerLocked;
 
         // ── Commands ──────────────────────────────────────────────────────────
 
@@ -832,6 +1071,12 @@ namespace Unison.Core.ViewModels
         /// <summary>Stops recording and sends the captured voice note.</summary>
         public ICommand SendRecordingCommand { get; }
 
+        /// <summary>Pauses or resumes the in-progress voice capture.</summary>
+        public ICommand ToggleRecordingPauseCommand { get; }
+
+        /// <summary>Toggles view-once for the voice note about to be sent.</summary>
+        public ICommand ToggleViewOnceVoiceCommand { get; }
+
         /// <summary>Leaves the chat detail surface (raises <see cref="BackRequested"/>).</summary>
         public ICommand BackCommand { get; }
 
@@ -843,6 +1088,9 @@ namespace Unison.Core.ViewModels
         /// there is nothing behind it once the messages are gone.
         /// </summary>
         public ICommand DeleteChatCommand { get; }
+
+        /// <summary>Exports the open chat to a WhatsApp-style zip (TXT + VCFs).</summary>
+        public ICommand ExportChatCommand { get; }
 
         /// <summary>Placeholder until archive outbound is wired.</summary>
         public ICommand ArchiveChatCommand { get; }

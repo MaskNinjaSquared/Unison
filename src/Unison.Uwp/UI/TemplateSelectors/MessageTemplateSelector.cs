@@ -14,13 +14,13 @@ namespace Unison.Uwp.UI.TemplateSelectors
         protected override DataTemplate SelectTemplateCore(object item, DependencyObject container)
         {
             bool? fromMe = null;
-            bool isGroupJoin = false;
+            bool isSystemChrome = false;
 
             var vm = item as ChatMessageViewModel;
             if (vm != null)
             {
                 fromMe = vm.IsFromMe;
-                isGroupJoin = vm.IsGroupJoin;
+                isSystemChrome = vm.IsGroupJoin || vm.IsCallEvent;
             }
             else
             {
@@ -28,11 +28,11 @@ namespace Unison.Uwp.UI.TemplateSelectors
                 if (message != null)
                 {
                     fromMe = message.IsFromMe;
-                    isGroupJoin = message.IsGroupJoin;
+                    isSystemChrome = message.IsGroupJoin || message.IsCallEvent;
                 }
             }
 
-            if (isGroupJoin && GroupJoinTemplate != null)
+            if (isSystemChrome && GroupJoinTemplate != null)
             {
                 return GroupJoinTemplate;
             }

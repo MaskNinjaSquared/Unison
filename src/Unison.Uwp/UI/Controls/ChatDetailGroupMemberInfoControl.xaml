@@ -53,7 +53,9 @@
                                                 HorizontalAlignment="Center"
                                                 Margin="0,16,0,24"/>
                     <TextBlock x:Name="NameLabel" x:Uid="ChatDetailInfo_NameLabel" Style="{StaticResource ChatDetailInfoSectionLabelStyle}" Text="NAME"/>
-                    <TextBlock x:Name="NameValue" Style="{StaticResource ChatDetailInfoSectionValueStyle}"/>
+                    <TextBlock x:Name="NameValue"
+                               Style="{StaticResource ChatDetailInfoSectionValueStyle}"
+                               Foreground="{ThemeResource ChatDetailInfoPaneBodyBrush}"/>
                     <TextBlock x:Name="AdminValue"
                                x:Uid="ChatDetailInfo_Admin"
                                Text="Admin"
@@ -71,16 +73,18 @@
                                 <FontIcon Glyph="&#xE717;"
                                           FontFamily="{StaticResource IconFont}"
                                           FontSize="16"
-                                          Foreground="{ThemeResource ChatDetailInfoValueBrush}"
+                                          Foreground="{ThemeResource ChatDetailInfoPaneBodyBrush}"
                                           Margin="0,0,10,0"
                                           VerticalAlignment="Center"/>
                                 <TextBlock x:Name="PhoneValue"
                                            Style="{StaticResource ChatDetailInfoSectionValueStyle}"
+                                           Foreground="{ThemeResource ChatDetailInfoPaneBodyBrush}"
                                            VerticalAlignment="Center"/>
                             </StackPanel>
                         </HyperlinkButton>
                         <TextBlock x:Name="PhoneValueFallback"
                                    Style="{StaticResource ChatDetailInfoSectionValueStyle}"
+                                   Foreground="{ThemeResource ChatDetailInfoPaneBodyBrush}"
                                    Visibility="Collapsed"/>
                         <HyperlinkButton x:Name="AddContactButton"
                                          x:Uid="ChatDetail_AddContactLink"
@@ -115,7 +119,7 @@
                                                Text="{Binding Name}"
                                                FontFamily="{StaticResource MainFont}"
                                                FontSize="16"
-                                               Foreground="{ThemeResource ChatDetailInfoValueBrush}"
+                                               Foreground="{ThemeResource ChatDetailInfoPaneBodyBrush}"
                                                VerticalAlignment="Center"
                                                Margin="12,0,0,0"
                                                TextTrimming="CharacterEllipsis"/>

@@ -111,7 +111,7 @@ namespace Unison.Core.Tests.Helpers
         public void Strip_context_marks_a_push_name_as_unsaved()
         {
             Assert.Equal(
-                "~aninha",
+                "~ aninha",
                 DisplayNameResolution.Resolve(Sources(whatsApp: "aninha", withContactIndicator: true)));
         }
 
@@ -119,8 +119,11 @@ namespace Unison.Core.Tests.Helpers
         public void A_name_that_already_carries_the_mark_is_not_marked_twice_on_strip()
         {
             Assert.Equal(
-                "~aninha",
+                "~ aninha",
                 DisplayNameResolution.Resolve(Sources(whatsApp: "~aninha", withContactIndicator: true)));
+            Assert.Equal(
+                "~ aninha",
+                DisplayNameResolution.Resolve(Sources(whatsApp: "~ aninha", withContactIndicator: true)));
         }
 
         [Fact]
@@ -153,7 +156,7 @@ namespace Unison.Core.Tests.Helpers
         public void Surrounding_whitespace_is_dropped_before_marking_on_strip()
         {
             Assert.Equal(
-                "~aninha",
+                "~ aninha",
                 DisplayNameResolution.Resolve(Sources(whatsApp: "  aninha  ", withContactIndicator: true)));
         }
 
@@ -161,8 +164,17 @@ namespace Unison.Core.Tests.Helpers
         public void StripContactIndicator_removes_leading_marks()
         {
             Assert.Equal("aninha", DisplayNameResolution.StripContactIndicator("~aninha"));
+            Assert.Equal("aninha", DisplayNameResolution.StripContactIndicator("~ aninha"));
             Assert.Equal("aninha", DisplayNameResolution.StripContactIndicator("~~aninha"));
             Assert.Equal("Ana", DisplayNameResolution.StripContactIndicator("Ana"));
+        }
+
+        [Fact]
+        public void FormatUnsavedContactLabel_uses_tilde_space()
+        {
+            Assert.Equal("~ Gabriel", DisplayNameResolution.FormatUnsavedContactLabel("Gabriel"));
+            Assert.Equal("~ Gabriel", DisplayNameResolution.FormatUnsavedContactLabel("~Gabriel"));
+            Assert.Equal("~ Gabriel", DisplayNameResolution.FormatUnsavedContactLabel("~ Gabriel"));
         }
 
         // --- The fallback ------------------------------------------------------

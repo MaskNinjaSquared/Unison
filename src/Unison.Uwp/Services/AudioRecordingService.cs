@@ -8,6 +8,7 @@ using Unison.Core.Models;
 using Unison.Uwp.Client;
 using Windows.Devices.Enumeration;
 using Windows.Media.Capture;
+using Windows.Media.Devices;
 using Windows.Media.MediaProperties;
 using Windows.Storage;
 using Windows.Storage.Streams;
@@ -116,6 +117,44 @@ namespace Unison.Uwp.Services
             return CompleteSessionAsync(session, cancel: true);
         }
 
+        internal async Task PauseSessionAsync(AudioRecordingSession session)
+        {
+            await _gate.WaitAsync().ConfigureAwait(true);
+            try
+            {
+                if (!IsSessionCurrent(session) || session.IsPaused || _capture == null)
+                {
+                    return;
+                }
+
+                await _capture.PauseRecordAsync(MediaCapturePauseBehavior.RetainHardwareResources);
+                session.MarkPaused();
+            }
+            finally
+            {
+                _gate.Release();
+            }
+        }
+
+        internal async Task ResumeSessionAsync(AudioRecordingSession session)
+        {
+            await _gate.WaitAsync().ConfigureAwait(true);
+            try
+            {
+                if (!IsSessionCurrent(session) || !session.IsPaused || _capture == null)
+                {
+                    return;
+                }
+
+                await _capture.ResumeRecordAsync();
+                session.MarkResumed();
+            }
+            finally
+            {
+                _gate.Release();
+            }
+        }
+
         private async Task<AudioRecordingResult> CompleteSessionAsync(AudioRecordingSession session, bool cancel)
         {
             await _gate.WaitAsync().ConfigureAwait(true);
@@ -140,6 +179,7 @@ namespace Unison.Uwp.Services
                 var capture = _capture;
                 var file = _file;
                 DateTime startedAtUtc = _startedAtUtc;
+                TimeSpan captured = session.Elapsed;
 
                 session.MarkCompleted();
                 _current = null;
@@ -147,9 +187,14 @@ namespace Unison.Uwp.Services
                 _file = null;
                 _startedAtUtc = DateTime.MinValue;
 
+                if (session.WasPausedAtStop)
+                {
+                    try { await capture.ResumeRecordAsync(); } catch { }
+                }
+
                 await capture.StopRecordAsync();
                 DateTime endedAtUtc = DateTime.UtcNow;
-                uint durationSeconds = (uint)Math.Max(1, Math.Round((endedAtUtc - startedAtUtc).TotalSeconds));
+                uint durationSeconds = (uint)Math.Max(1, Math.Round(captured.TotalSeconds));
 
                 try { capture.Dispose(); } catch { }
 
@@ -301,17 +346,37 @@ namespace Unison.Uwp.Services
         internal sealed class AudioRecordingSession : IAudioRecordingSession
         {
             private readonly AudioRecordingService _owner;
+            private readonly object _elapsedGate = new object();
             private int _completed;
+            private bool _paused;
+            private TimeSpan _accumulated;
+            private DateTime _segmentStartedUtc;
+            private DateTime _pauseStartedUtc;
 
             public AudioRecordingSession(AudioRecordingService owner, DateTime startedAtUtc)
             {
                 _owner = owner;
                 StartedAtUtc = startedAtUtc;
+                _segmentStartedUtc = startedAtUtc;
             }
 
             public bool IsCompleted => Volatile.Read(ref _completed) != 0;
 
             public bool IsActive => !IsCompleted && _owner.IsSessionCurrent(this);
+
+            public bool IsPaused
+            {
+                get
+                {
+                    lock (_elapsedGate)
+                    {
+                        return _paused;
+                    }
+                }
+            }
+
+            /// <summary>True if Stop was called while still paused (needs Resume before StopRecord).</summary>
+            public bool WasPausedAtStop { get; private set; }
 
             public DateTime StartedAtUtc { get; }
 
@@ -319,19 +384,91 @@ namespace Unison.Uwp.Services
             {
                 get
                 {
-                    if (!IsActive)
+                    lock (_elapsedGate)
                     {
-                        return TimeSpan.Zero;
+                        if (IsCompleted)
+                        {
+                            return _accumulated < TimeSpan.Zero ? TimeSpan.Zero : _accumulated;
+                        }
+
+                        if (!IsActive)
+                        {
+                            return TimeSpan.Zero;
+                        }
+
+                        TimeSpan value = _accumulated;
+                        if (!_paused)
+                        {
+                            value += DateTime.UtcNow - _segmentStartedUtc;
+                        }
+
+                        return value < TimeSpan.Zero ? TimeSpan.Zero : value;
+                    }
+                }
+            }
+
+            public void MarkPaused()
+            {
+                lock (_elapsedGate)
+                {
+                    if (_paused || IsCompleted)
+                    {
+                        return;
                     }
 
-                    TimeSpan value = DateTime.UtcNow - StartedAtUtc;
-                    return value < TimeSpan.Zero ? TimeSpan.Zero : value;
+                    _accumulated += DateTime.UtcNow - _segmentStartedUtc;
+                    if (_accumulated < TimeSpan.Zero)
+                    {
+                        _accumulated = TimeSpan.Zero;
+                    }
+
+                    _pauseStartedUtc = DateTime.UtcNow;
+                    _paused = true;
+                }
+            }
+
+            public void MarkResumed()
+            {
+                lock (_elapsedGate)
+                {
+                    if (!_paused || IsCompleted)
+                    {
+                        return;
+                    }
+
+                    _segmentStartedUtc = DateTime.UtcNow;
+                    _paused = false;
                 }
             }
 
             public void MarkCompleted()
             {
+                lock (_elapsedGate)
+                {
+                    if (!IsCompleted && !_paused)
+                    {
+                        _accumulated += DateTime.UtcNow - _segmentStartedUtc;
+                        if (_accumulated < TimeSpan.Zero)
+                        {
+                            _accumulated = TimeSpan.Zero;
+                        }
+                    }
+
+                    WasPausedAtStop = _paused;
+                    _paused = false;
+                }
+
                 Interlocked.Exchange(ref _completed, 1);
+            }
+
+            public Task PauseAsync()
+            {
+                return _owner.PauseSessionAsync(this);
+            }
+
+            public Task ResumeAsync()
+            {
+                return _owner.ResumeSessionAsync(this);
             }
 
             public Task<AudioRecordingResult> StopAsync()

@@ -16,6 +16,7 @@ namespace Unison.Core.Tests.Helpers
 
             Assert.True(host.Finished);
             Assert.True(host.BannerEnded);
+            Assert.Equal("x", host.SilentNotifyReason);
             Assert.False(host.ListReleaseRequested);
             Assert.False(host.EnrichmentScheduled);
         }
@@ -49,9 +50,24 @@ namespace Unison.Core.Tests.Helpers
             Assert.True(host.AvatarsScheduled);
         }
 
+        [Fact]
+        public void No_history_ever_landed_releases_list_and_schedules_enrichment()
+        {
+            var host = new FakeHost { FirstSyncHold = false, AwaitingFirstHistory = true };
+            HistoryCatchUpFinishDispatch.Run(host, "stagnant-progress", releaseEnrichment: true);
+
+            Assert.True(host.ListReleaseRequested);
+            Assert.Equal(0, host.ListReleaseProcessed);
+            Assert.Equal(1, host.ListReleaseTotal);
+            Assert.True(host.EnrichmentScheduled);
+            Assert.True(host.EnrichmentCleared);
+            Assert.True(host.AvatarsScheduled);
+        }
+
         private sealed class FakeHost : IHistoryCatchUpFinishHost
         {
             public bool FirstSyncHold;
+            public bool AwaitingFirstHistory;
             public int Accumulated;
             public int InitialProcessed;
             public bool Finished;
@@ -62,8 +78,10 @@ namespace Unison.Core.Tests.Helpers
             public bool EnrichmentScheduled;
             public bool EnrichmentCleared;
             public bool AvatarsScheduled;
+            public string SilentNotifyReason;
 
             public bool IsFirstSyncListHoldInProgress => FirstSyncHold;
+            public bool IsListAwaitingFirstHistorySync => AwaitingFirstHistory;
             public int SqliteHistoryConversationsAccumulated => Accumulated;
             public int InitialSyncProcessedConversations => InitialProcessed;
 
@@ -93,6 +111,9 @@ namespace Unison.Core.Tests.Helpers
 
             public void TrySchedulePostMessageEnrichment(string reason) =>
                 EnrichmentScheduled = true;
+
+            public void NotifySilentChainAfterLoudCatchUpFinish(string finishReason) =>
+                SilentNotifyReason = finishReason;
         }
     }
 }

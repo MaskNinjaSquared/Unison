@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <root>
   <!-- 
     Microsoft ResX Schema 
@@ -329,6 +329,15 @@ Desative depois de diagnosticar: manter ligado deixa o app lento.</value>
   <data name="ChatDetail_GroupOnlyAdminsCanSend.Text" xml:space="preserve">
     <value>Somente admins podem enviar mensagens</value>
   </data>
+  <data name="ChatDetail_GroupNoLongerParticipant.Text" xml:space="preserve">
+    <value>Você não pode enviar mensagens para este grupo porque não é mais participante.</value>
+  </data>
+  <data name="ChatDetail_UnreadMessagesFormat" xml:space="preserve">
+    <value>{0} mensagens não lidas</value>
+  </data>
+  <data name="ChatDetail_UnreadUpdatesFormat" xml:space="preserve">
+    <value>{0} atualizações não lidas</value>
+  </data>
   <data name="ChatDetail_AttachCamera.Text" xml:space="preserve">
     <value>Câmera</value>
   </data>
@@ -355,6 +364,27 @@ Desative depois de diagnosticar: manter ligado deixa o app lento.</value>
   </data>
   <data name="ChatDetail_AttachBarTooltip.Content" xml:space="preserve">
     <value>Anexar</value>
+  </data>
+  <data name="ChatDetail_StickerBoxTooltip.Content" xml:space="preserve">
+    <value>Emoji</value>
+  </data>
+  <data name="StickerBox_EmojiTab.Text" xml:space="preserve">
+    <value>Emoji</value>
+  </data>
+  <data name="StickerBox_GifTab.Text" xml:space="preserve">
+    <value>GIF</value>
+  </data>
+  <data name="StickerBox_StickerTab.Text" xml:space="preserve">
+    <value>Figurinhas</value>
+  </data>
+  <data name="StickerBox_GifSoon.Text" xml:space="preserve">
+    <value>GIFs em breve</value>
+  </data>
+  <data name="StickerBox_StickerSoon.Text" xml:space="preserve">
+    <value>Figurinhas em breve</value>
+  </data>
+  <data name="StickerBox_SearchBox.PlaceholderText" xml:space="preserve">
+    <value>Buscar emoji</value>
   </data>
   <data name="ChatDetail_ScrollToBottomTooltip.Content" xml:space="preserve">
     <value>Ir para o final</value>
@@ -481,6 +511,12 @@ Desative depois de diagnosticar: manter ligado deixa o app lento.</value>
   <data name="ChatDetail_RecordingChatUnavailable" xml:space="preserve">
     <value>A conversa da gravação não está mais disponível.</value>
   </data>
+  <data name="ChatDetail_RecordingPause" xml:space="preserve">
+    <value>Pausar</value>
+  </data>
+  <data name="ChatDetail_RecordingPlay" xml:space="preserve">
+    <value>Reproduzir</value>
+  </data>
   <data name="ChatDetail_AudioSendFailed" xml:space="preserve">
     <value>Não foi possível enviar o áudio.</value>
   </data>
@@ -519,6 +555,48 @@ Desative depois de diagnosticar: manter ligado deixa o app lento.</value>
   </data>
   <data name="NewChat_Error" xml:space="preserve">
     <value>Erro: {0}</value>
+  </data>
+  <data name="NewConversation_Title.Text" xml:space="preserve">
+    <value>Nova conversa</value>
+  </data>
+  <data name="NewConversation_Search.PlaceholderText" xml:space="preserve">
+    <value>Buscar nome ou número</value>
+  </data>
+  <data name="NewConversation_NewGroup.Text" xml:space="preserve">
+    <value>Novo grupo</value>
+  </data>
+  <data name="NewConversation_NewGroupDesc.Text" xml:space="preserve">
+    <value>Crie um grupo com seus contatos</value>
+  </data>
+  <data name="NewConversation_NewContact.Text" xml:space="preserve">
+    <value>Novo contato</value>
+  </data>
+  <data name="NewConversation_NewContactDesc.Text" xml:space="preserve">
+    <value>Salve alguém neste dispositivo</value>
+  </data>
+  <data name="NewConversation_NewCommunity.Text" xml:space="preserve">
+    <value>Nova comunidade</value>
+  </data>
+  <data name="NewConversation_NewCommunityDesc.Text" xml:space="preserve">
+    <value>Reúna grupos relacionados</value>
+  </data>
+  <data name="NewConversation_PhoneNumber.Text" xml:space="preserve">
+    <value>Número de telefone</value>
+  </data>
+  <data name="NewConversation_PhoneNumberDesc.Text" xml:space="preserve">
+    <value>Inicie uma conversa com um número</value>
+  </data>
+  <data name="NewConversation_You" xml:space="preserve">
+    <value>Você</value>
+  </data>
+  <data name="NewConversation_MessageYourself" xml:space="preserve">
+    <value>Mensagens para mim</value>
+  </data>
+  <data name="NewConversation_ComingSoon" xml:space="preserve">
+    <value>Esta opção ainda não está disponível.</value>
+  </data>
+  <data name="NewConversation_SelfUnavailable" xml:space="preserve">
+    <value>Sua conta ainda não está pronta.</value>
   </data>
   <data name="Profile_Title" xml:space="preserve">
     <value>Perfil</value>
@@ -646,6 +724,18 @@ Desative depois de diagnosticar: manter ligado deixa o app lento.</value>
   <data name="StatusList_Empty.Text" xml:space="preserve">
     <value>Nenhuma atualização de status recente</value>
   </data>
+  <data name="StatusList_MyStatus.Text" xml:space="preserve">
+    <value>Meu Status</value>
+  </data>
+  <data name="StatusList_MyStatusHint.Text" xml:space="preserve">
+    <value>Clique para atualizar seu Status…</value>
+  </data>
+  <data name="StatusList_RecentHeader.Text" xml:space="preserve">
+    <value>RECENTES</value>
+  </data>
+  <data name="StatusList_NewStatusUnavailable" xml:space="preserve">
+    <value>Esta opção ainda não está disponível.</value>
+  </data>
   <data name="StatusList_Recent" xml:space="preserve">
     <value>Recente</value>
   </data>
@@ -673,11 +763,26 @@ Desative depois de diagnosticar: manter ligado deixa o app lento.</value>
   <data name="StatusDetail_EmptySubtitle.Text" xml:space="preserve">
     <value>Compartilhe fotos, vídeos e textos que desaparecem após 24 horas.</value>
   </data>
+  <data name="StatusDetail_Download.AutomationProperties.Name" xml:space="preserve">
+    <value>Salvar status</value>
+  </data>
+  <data name="StatusDetail_Download.ToolTipService.ToolTip" xml:space="preserve">
+    <value>Salvar este status no dispositivo</value>
+  </data>
   <data name="Shell_Starred.Text" xml:space="preserve">
     <value>Mensagens favoritas</value>
   </data>
   <data name="Shell_Favorites.Text" xml:space="preserve">
     <value>Favoritos</value>
+  </data>
+  <data name="Shell_Channels.Text" xml:space="preserve">
+    <value>Canais</value>
+  </data>
+  <data name="Shell_LegacyPivot_Channels.Header" xml:space="preserve">
+    <value>canais</value>
+  </data>
+  <data name="ChatDetail_ChannelReadOnly.Text" xml:space="preserve">
+    <value>Este canal é somente leitura</value>
   </data>
   <data name="Favorites_Header.Text" xml:space="preserve">
     <value>Favoritos</value>
@@ -709,11 +814,65 @@ Desative depois de diagnosticar: manter ligado deixa o app lento.</value>
   <data name="Favorites_Empty.Text" xml:space="preserve">
     <value>Os favoritos são exibidos nas abas Conversas e Ligações. Adicione quantas pessoas e quantos grupos você quiser.</value>
   </data>
+  <data name="Community_YourGroupsHeader.Text" xml:space="preserve">
+    <value>SEUS GRUPOS</value>
+  </data>
+  <data name="Community_CanJoinHeader.Text" xml:space="preserve">
+    <value>GRUPOS EM QUE VOCÊ PODE ENTRAR</value>
+  </data>
+  <data name="Community_GroupCreatedBy" xml:space="preserve">
+    <value>Grupo criado por {0} em {1}</value>
+  </data>
+  <data name="Community_JoinGroup" xml:space="preserve">
+    <value>Entrar</value>
+  </data>
   <data name="Calls_Header.Text" xml:space="preserve">
     <value>Chamadas</value>
   </data>
-  <data name="Calls_Empty.Text" xml:space="preserve">
-    <value>Para iniciar uma chamada, selecione um contato e clique em Ligar.</value>
+  <data name="Calls_EmptyTitle.Text" xml:space="preserve">
+    <value>Ligações de Voz e Video</value>
+  </data>
+  <data name="Calls_EmptyBody.Text" xml:space="preserve">
+    <value>Compartilhe sua tela, reaja com emojis e muito mais com até 32 pessoas…</value>
+  </data>
+  <data name="Calls_FavoritesSection.Text" xml:space="preserve">
+    <value>FAVORITOS</value>
+  </data>
+  <data name="Calls_RecentsSection.Text" xml:space="preserve">
+    <value>RECENTES</value>
+  </data>
+  <data name="Calls_SeeAllFavorites.Content" xml:space="preserve">
+    <value>Ver tudo</value>
+  </data>
+  <data name="Calls_Outgoing" xml:space="preserve">
+    <value>Efetuada</value>
+  </data>
+  <data name="Calls_Incoming" xml:space="preserve">
+    <value>Recebida</value>
+  </data>
+  <data name="Calls_Missed" xml:space="preserve">
+    <value>Perdida</value>
+  </data>
+  <data name="Calls_DetailsTitle.Text" xml:space="preserve">
+    <value>Dados da ligação</value>
+  </data>
+  <data name="Calls_DetailsUnavailable.Text" xml:space="preserve">
+    <value>Não disponível no momento</value>
+  </data>
+  <data name="Calls_NewCallUnavailable" xml:space="preserve">
+    <value>Chamadas ainda não estão disponíveis.</value>
+  </data>
+  <data name="Message_CallMissed" xml:space="preserve">
+    <value>Chamada de voz perdida</value>
+  </data>
+  <data name="Message_CallMissedVideo" xml:space="preserve">
+    <value>Chamada de vídeo perdida</value>
+  </data>
+  <data name="Message_CallCompleted" xml:space="preserve">
+    <value>Chamada de voz</value>
+  </data>
+  <data name="Message_CallCompletedVideo" xml:space="preserve">
+    <value>Chamada de vídeo</value>
   </data>
   <data name="Shell_Archived.Text" xml:space="preserve">
     <value>Conversas arquivadas</value>
@@ -802,6 +961,55 @@ Desative depois de diagnosticar: manter ligado deixa o app lento.</value>
   <data name="Settings_Notifications.Text" xml:space="preserve">
     <value>Exibir toasts e badge ao receber mensagens.</value>
   </data>
+  <data name="Settings_CallNotifications.Header" xml:space="preserve">
+    <value>Notificações de chamada</value>
+  </data>
+  <data name="Settings_CallNotifications.Text" xml:space="preserve">
+    <value>Toasts de chamadas recebidas e Live Tile de chamadas perdidas.</value>
+  </data>
+  <data name="Notification_IncomingCallBody" xml:space="preserve">
+    <value>Chamada recebida (Atenda no telefone principal)</value>
+  </data>
+  <data name="Notification_MissedCall" xml:space="preserve">
+    <value>Chamada perdida</value>
+  </data>
+  <data name="Notification_MissedVideoCall" xml:space="preserve">
+    <value>Chamada de vídeo perdida</value>
+  </data>
+  <data name="Settings_LockScreenNotifications.Header" xml:space="preserve">
+    <value>Tela de bloqueio</value>
+  </data>
+  <data name="Settings_LockScreenNotifications.Text" xml:space="preserve">
+    <value>Quais chats atualizam o Live Tile grande / prévia na tela de bloqueio.</value>
+  </data>
+  <data name="Settings_LockScreenScope_All.Content" xml:space="preserve">
+    <value>Todos</value>
+  </data>
+  <data name="Settings_LockScreenScope_Groups.Content" xml:space="preserve">
+    <value>Grupos</value>
+  </data>
+  <data name="Settings_LockScreenScope_Direct.Content" xml:space="preserve">
+    <value>Contatos</value>
+  </data>
+  <data name="Settings_LockScreenScope_Favorites.Content" xml:space="preserve">
+    <value>Favoritos</value>
+  </data>
+  <data name="Settings_NotificationFilter.Header" xml:space="preserve">
+    <value>Filtrar notificações</value>
+  </data>
+  <data name="Settings_NotificationFilter.Text" xml:space="preserve">
+    <value>Quais chats podem gerar toasts e contar no badge.</value>
+  </data>
+  <data name="Settings_NotificationFilterChoose.Content" xml:space="preserve"><value>Escolher</value></data>
+  <data name="Settings_NotifyGroups.Content" xml:space="preserve">
+    <value>Grupos</value>
+  </data>
+  <data name="Settings_NotifyDirect.Content" xml:space="preserve">
+    <value>Contatos</value>
+  </data>
+  <data name="Settings_NotifyFavorites.Content" xml:space="preserve">
+    <value>Favoritos</value>
+  </data>
   <data name="Settings_MessageNotificationSound.Header" xml:space="preserve">
     <value>Notificações de mensagens</value>
   </data>
@@ -835,6 +1043,9 @@ Desative depois de diagnosticar: manter ligado deixa o app lento.</value>
   <data name="StartTileDialog.Title" xml:space="preserve"><value>Tile do Início</value></data>
   <data name="StartTileDialog.PrimaryButtonText" xml:space="preserve"><value>Fixar</value></data>
   <data name="StartTileDialog.CloseButtonText" xml:space="preserve"><value>Cancelar</value></data>
+  <data name="NotificationFilterDialog.Title" xml:space="preserve"><value>Filtrar notificações</value></data>
+  <data name="NotificationFilterDialog.PrimaryButtonText" xml:space="preserve"><value>OK</value></data>
+  <data name="NotificationFilterDialog.CloseButtonText" xml:space="preserve"><value>Cancelar</value></data>
   <data name="StartTileDialog_Unison.Content" xml:space="preserve"><value>Unison</value></data>
   <data name="StartTileDialog_WhatsAppWeb.Content" xml:space="preserve"><value>WhatsApp Web</value></data>
   <data name="StartTileDialog_WhatsAppLegacy.Content" xml:space="preserve"><value>WhatsApp Legacy</value></data>
@@ -849,6 +1060,18 @@ Desative depois de diagnosticar: manter ligado deixa o app lento.</value>
   </data>
   <data name="Settings_KeepAlive.Text" xml:space="preserve">
     <value>Usa localização só para o Windows 10 Mobile não congelar o app (truque Unogram). A posição não é lida nem enviada. Consome mais bateria.</value>
+  </data>
+  <data name="Settings_StartupLaunch.Header" xml:space="preserve">
+    <value>Iniciar com o Windows</value>
+  </data>
+  <data name="Settings_StartupLaunch.Text" xml:space="preserve">
+    <value>Abre o Unison quando você entra no Windows.</value>
+  </data>
+  <data name="Settings_StartupLaunchDisabledByUser" xml:space="preserve">
+    <value>Desativado no Gerenciador de Tarefas. Para reativar, abra Gerenciador de Tarefas > Aplicativos de inicialização e habilite o Unison.</value>
+  </data>
+  <data name="Settings_StartupLaunchPolicy" xml:space="preserve">
+    <value>Esta configuração é gerenciada pela sua organização.</value>
   </data>
   <data name="Settings_AutoUnlink.Header" xml:space="preserve">
     <value>Desvincular automaticamente</value>
@@ -1080,6 +1303,27 @@ Desative depois de diagnosticar: manter ligado deixa o app lento.</value>
   <data name="Message_GroupJoin" xml:space="preserve">
     <value>{0} entrou no grupo</value>
   </data>
+  <data name="Message_GroupAddedBy" xml:space="preserve">
+    <value>{0} adicionou {1}</value>
+  </data>
+  <data name="Message_GroupLeft" xml:space="preserve">
+    <value>{0} saiu</value>
+  </data>
+  <data name="Message_GroupRemovedBy" xml:space="preserve">
+    <value>{0} removeu {1}</value>
+  </data>
+  <data name="Message_GroupSubjectChangedFromTo" xml:space="preserve">
+    <value>{0} alterou o nome do grupo de "{1}" para "{2}"</value>
+  </data>
+  <data name="Message_GroupSubjectChangedTo" xml:space="preserve">
+    <value>{0} alterou o nome do grupo para "{1}"</value>
+  </data>
+  <data name="Message_GroupSubjectChangedFromToAnon" xml:space="preserve">
+    <value>O nome do grupo foi alterado de "{0}" para "{1}"</value>
+  </data>
+  <data name="Message_GroupSubjectChangedToAnon" xml:space="preserve">
+    <value>O nome do grupo foi alterado para "{0}"</value>
+  </data>
   <data name="ChatDetail_AddContactLink.Content" xml:space="preserve">
     <value>Adicionar contato</value>
   </data>
@@ -1260,6 +1504,69 @@ Desative depois de diagnosticar: manter ligado deixa o app lento.</value>
   <data name="ChatDetailInfo_DeleteChatBar.Text" xml:space="preserve">
     <value>Apagar&#x0a;conversa</value>
   </data>
+  <data name="ChatDetailInfo_GroupCreatedByYou" xml:space="preserve">
+    <value>Grupo criado por você em {0}</value>
+  </data>
+  <data name="ChatDetailInfo_LeaveGroup.Text" xml:space="preserve">
+    <value>Sair do grupo</value>
+  </data>
+  <data name="ChatDetailInfo_LeaveGroupBar.Text" xml:space="preserve">
+    <value>Sair do&#x0a;grupo</value>
+  </data>
+  <data name="ChatDetailInfo_LeaveGroupTitle" xml:space="preserve">
+    <value>Sair do grupo?</value>
+  </data>
+  <data name="ChatDetailInfo_LeaveGroupBody" xml:space="preserve">
+    <value>Você não receberá mais mensagens deste grupo.</value>
+  </data>
+  <data name="ChatDetailInfo_LeaveGroupConfirm" xml:space="preserve">
+    <value>Sair</value>
+  </data>
+  <data name="ChatDetailInfo_BlockContact" xml:space="preserve">
+    <value>Bloquear</value>
+  </data>
+  <data name="ChatDetailInfo_BlockContactBar.Text" xml:space="preserve">
+    <value>Bloquear&#x0a;contato</value>
+  </data>
+  <data name="ChatExport_OptionsTitle" xml:space="preserve">
+    <value>Exportar conversa</value>
+  </data>
+  <data name="ChatExport_OptionsBody" xml:space="preserve">
+    <value>Exportar esta conversa sem mídia. Mensagens que tinham fotos, vídeos ou documentos aparecerão como &lt;Mídia oculta&gt;.</value>
+  </data>
+  <data name="ChatExport_WithoutMedia" xml:space="preserve">
+    <value>Exportar sem mídia</value>
+  </data>
+  <data name="ChatExport_ReadyTitle" xml:space="preserve">
+    <value>Exportação pronta</value>
+  </data>
+  <data name="ChatExport_Share" xml:space="preserve">
+    <value>Compartilhar</value>
+  </data>
+  <data name="ChatExport_Save" xml:space="preserve">
+    <value>Salvar</value>
+  </data>
+  <data name="ChatExport_FailedTitle" xml:space="preserve">
+    <value>Falha na exportação</value>
+  </data>
+  <data name="ChatExport_EncryptionHeader" xml:space="preserve">
+    <value>As mensagens e ligações são protegidas com a criptografia de ponta a ponta. Somente as pessoas que fazem parte da conversa podem ler, ouvir e compartilhar esse conteúdo. *Saiba mais*</value>
+  </data>
+  <data name="ChatExport_You" xml:space="preserve">
+    <value>Você</value>
+  </data>
+  <data name="ChatDetailInfo_BlockContactNamed" xml:space="preserve">
+    <value>Bloquear ({0})</value>
+  </data>
+  <data name="ChatDetailInfo_BlockContactTitle" xml:space="preserve">
+    <value>Bloquear contato?</value>
+  </data>
+  <data name="ChatDetailInfo_BlockContactBody" xml:space="preserve">
+    <value>Contatos bloqueados não poderão mais ligar nem enviar mensagens para você.</value>
+  </data>
+  <data name="ChatDetailInfo_BlockContactConfirm" xml:space="preserve">
+    <value>Bloquear</value>
+  </data>
   <data name="Debug_RuntimeDialog.PrimaryButtonText" xml:space="preserve">
     <value>Salvar no disco</value>
   </data>
@@ -1349,6 +1656,9 @@ Desative depois de diagnosticar: manter ligado deixa o app lento.</value>
   <data name="Shell_LegacyAppBar_NewChat.Label" xml:space="preserve">
     <value>Nova conversa</value>
   </data>
+  <data name="Shell_LegacyAppBar_NewCall.Label" xml:space="preserve">
+    <value>Nova chamada</value>
+  </data>
   <data name="Shell_LegacyAppBar_AddContact.Label" xml:space="preserve">
     <value>Adicionar contato</value>
   </data>
@@ -1391,6 +1701,39 @@ Desative depois de diagnosticar: manter ligado deixa o app lento.</value>
   </data>
   <data name="ChatDetail_ForwardMessage" xml:space="preserve">
     <value>Encaminhar</value>
+  </data>
+  <data name="ChatDetail_DeleteMessage" xml:space="preserve">
+    <value>Excluir</value>
+  </data>
+  <data name="ChatDetail_Delete" xml:space="preserve">
+    <value>Apagar</value>
+  </data>
+  <data name="ChatDetail_DeleteForMe" xml:space="preserve">
+    <value>Apagar para mim</value>
+  </data>
+  <data name="ChatDetail_DeleteForEveryone" xml:space="preserve">
+    <value>Apagar para todos</value>
+  </data>
+  <data name="ChatDetail_DeleteCancel" xml:space="preserve">
+    <value>Cancelar</value>
+  </data>
+  <data name="ChatDetail_DeleteMessagePrompt" xml:space="preserve">
+    <value>Deseja apagar mensagem?</value>
+  </data>
+  <data name="ChatDetail_DeleteMessagePromptFrom" xml:space="preserve">
+    <value>Deseja apagar a mensagem do {0}?</value>
+  </data>
+  <data name="ChatDetail_DeleteAuthorFallback" xml:space="preserve">
+    <value>contato</value>
+  </data>
+  <data name="ChatDetail_PlayAudioAt1" xml:space="preserve">
+    <value>Reproduzir em 1</value>
+  </data>
+  <data name="ChatDetail_PlayAudioAt15" xml:space="preserve">
+    <value>Reproduzir em 1,5</value>
+  </data>
+  <data name="ChatDetail_PlayAudioAt2" xml:space="preserve">
+    <value>Reproduzir em 2</value>
   </data>
   <data name="Shell_LegacyPivot_Chats.Header" xml:space="preserve">
     <value>conversas</value>
