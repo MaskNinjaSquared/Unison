@@ -221,6 +221,10 @@ namespace Unison.WhatsAppClient.Helpers
                     message.GroupJoinJid = row.MediaUrl;
                     message.GroupJoinPhone = row.MediaDirectPath;
                     break;
+
+                case ChatPreviewKind.CallEvent:
+                    // Body holds the system line; no media columns.
+                    break;
             }
         }
 

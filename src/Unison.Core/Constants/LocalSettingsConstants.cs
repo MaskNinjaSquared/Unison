@@ -26,6 +26,9 @@ namespace Unison.Core.Constants
         /// <summary>Toast notifications for incoming messages (foreground).</summary>
         public const string NotificationsEnabled = "NotificationsEnabled";
 
+        /// <summary>Toast (and missed Live Tile) for WhatsApp call alerts on the companion.</summary>
+        public const string CallNotificationsEnabled = "CallNotificationsEnabled";
+
         /// <summary>
         /// Live Tile / lock-screen audience (<see cref="LockScreenNotificationScope"/> as int).
         /// Default <see cref="LockScreenNotificationScope.All"/>.
@@ -149,6 +152,7 @@ namespace Unison.Core.Constants
                 { ReconnectToastActive, false },
                 { SuppressReconnectToast, false },
                 { NotificationsEnabled, true },
+                { CallNotificationsEnabled, true },
                 { LockScreenNotificationScope, (int)Models.LockScreenNotificationScope.All },
                 { NotificationFilter, "groups;direct;favorites" },
                 { ShowSyncStatus, true },

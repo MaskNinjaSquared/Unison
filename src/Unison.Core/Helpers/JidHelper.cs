@@ -150,6 +150,28 @@ namespace Unison.Core.Helpers
         }
 
         /// <summary>
+        /// Call-relay addresses (<c>@call</c> / <c>@call.*</c>) — not a person or group chat.
+        /// </summary>
+        public static bool IsCallRelayJid(string jid)
+        {
+            string normalized = Normalize(jid);
+            if (string.IsNullOrEmpty(normalized))
+            {
+                return false;
+            }
+
+            int at = normalized.IndexOf('@');
+            if (at < 0 || at >= normalized.Length - 1)
+            {
+                return false;
+            }
+
+            string server = normalized.Substring(at + 1);
+            return server.Equals("call", StringComparison.OrdinalIgnoreCase) ||
+                   server.StartsWith("call.", StringComparison.OrdinalIgnoreCase);
+        }
+
+        /// <summary>
         /// Resolves list category: Channel → Group → Personal (self) → Direct.
         /// </summary>
         public static ChatKind ResolveKind(string jid, bool isSelfChat)

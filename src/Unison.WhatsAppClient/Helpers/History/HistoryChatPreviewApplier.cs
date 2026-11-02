@@ -251,8 +251,9 @@ namespace Unison.WhatsAppClient.Helpers
                 return string.Empty;
             }
 
-            // Body already carries the actor for join/leave/rename tips.
-            if (preview.LastMessageKind == ChatPreviewKind.GroupJoin)
+            // Body already carries the actor for join/leave/rename/call tips.
+            if (preview.LastMessageKind == ChatPreviewKind.GroupJoin ||
+                preview.LastMessageKind == ChatPreviewKind.CallEvent)
             {
                 return string.Empty;
             }

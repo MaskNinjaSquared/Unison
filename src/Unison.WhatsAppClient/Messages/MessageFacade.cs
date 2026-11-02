@@ -78,6 +78,7 @@ namespace Unison.WhatsAppClient.Messages
         private readonly ReceiptReader _receipts;
         private readonly GroupReceiptTally _groupReceipts = new GroupReceiptTally();
         private readonly IRuntimeDiagnostics _diagnostics;
+        private readonly ICallLogService _callLog;
         private readonly int _sqlOpenPageSize;
         private readonly int _sqlLoadMorePageSize;
         private readonly int _thinTimelineThreshold;
@@ -127,9 +128,11 @@ namespace Unison.WhatsAppClient.Messages
             IStringResources strings = null,
             ISystemInfoProvider systemInfo = null,
             IRuntimeDiagnostics diagnostics = null,
-            IGroupNaming groupNaming = null)
+            IGroupNaming groupNaming = null,
+            ICallLogService callLog = null)
         {
             _diagnostics = diagnostics;
+            _callLog = callLog;
             _ui = ui ?? throw new ArgumentNullException(nameof(ui));
             _syncWork = syncWork ?? throw new ArgumentNullException(nameof(syncWork));
             _initialSync = initialSync ?? throw new ArgumentNullException(nameof(initialSync));
@@ -4031,6 +4034,272 @@ namespace Unison.WhatsAppClient.Messages
                     ex,
                     "messageId=" + message.Id + "; chatJid=" + canonical);
                 return false;
+            }
+        }
+
+        public Task NotifyCallEventsAsync(IReadOnlyList<CallEventNotifyRequest> events)
+        {
+            if (events == null || events.Count == 0)
+            {
+                return Task.CompletedTask;
+            }
+
+            foreach (CallEventNotifyRequest callEvent in events)
+            {
+                if (callEvent == null || string.IsNullOrWhiteSpace(callEvent.ChatJid))
+                {
+                    continue;
+                }
+
+                string chatJid = _jids != null
+                    ? _jids.GetCanonicalJid(callEvent.ChatJid)
+                    : callEvent.ChatJid;
+                if (string.IsNullOrWhiteSpace(chatJid))
+                {
+                    continue;
+                }
+
+                DateTime stamp = callEvent.TimestampUtc == default
+                    ? DateTime.UtcNow
+                    : DateTime.SpecifyKind(callEvent.TimestampUtc, DateTimeKind.Utc);
+
+                bool callerIsSelf = !string.IsNullOrWhiteSpace(callEvent.CallerJid) &&
+                    _jids != null &&
+                    _jids.IsSelfLinked(callEvent.CallerJid);
+
+                ChatItem existingChat = FindExistingDirectChat(chatJid);
+                RaiseCallAlertIfNeeded(callEvent, chatJid, callerIsSelf, existingChat);
+
+                if (!Unison.Core.Helpers.Calls.CallAlertPolicy.ShouldPersistCallLog(callEvent.Kind))
+                {
+                    continue;
+                }
+
+                CallDirection direction = Unison.Core.Helpers.Calls.CallDirectionMap.FromChrome(
+                    callEvent.Kind,
+                    callerIsSelf);
+
+                string category = ResolveCallDirectionLabel(direction);
+                string timeLabel = FormatCallTimestampLabel(stamp);
+
+                if (_callLog != null)
+                {
+                    _callLog.Upsert(new CallHistoryEntry
+                    {
+                        CallId = callEvent.CallId,
+                        CanonicalJid = chatJid,
+                        Direction = direction,
+                        DirectionGlyph = Unison.Core.Helpers.Calls.CallDirectionGlyphs.For(direction),
+                        ChromeKind = callEvent.Kind,
+                        IsVideo = callEvent.IsVideo,
+                        TimestampUtc = stamp,
+                        CategoryLabel = category,
+                        TimestampLabel = timeLabel
+                    });
+                }
+
+                if (!Unison.Core.Helpers.Calls.CallAlertPolicy.ShouldWriteChatChrome(callEvent.Kind))
+                {
+                    continue;
+                }
+
+                // Chrome only when a DM already exists — never create/bump the chat list.
+                if (existingChat == null)
+                {
+                    continue;
+                }
+
+                string timelineJid = existingChat.JID ?? chatJid;
+                string content = Unison.Core.Helpers.Calls.CallEventChromeMap.ResolveContent(
+                    callEvent.Kind,
+                    callEvent.IsVideo,
+                    _strings);
+                string id = "call-" +
+                    (string.IsNullOrWhiteSpace(callEvent.CallId)
+                        ? Guid.NewGuid().ToString("N")
+                        : callEvent.CallId.Trim()) +
+                    "-" + callEvent.Kind;
+
+                var chatMessage = new ChatMessage
+                {
+                    Id = id,
+                    Kind = ChatMessageKind.CallEvent,
+                    Content = content,
+                    Timestamp = stamp,
+                    IsFromMe = callerIsSelf
+                };
+
+                IncomingTimelineAcceptResult timeline =
+                    AcceptIncomingTimeline(timelineJid, chatMessage, isGroup: false);
+                if (timeline.Kind == IncomingTimelineAcceptKind.DuplicateSameChat ||
+                    timeline.Kind == IncomingTimelineAcceptKind.AliasLinkedDuplicate ||
+                    timeline.Kind == IncomingTimelineAcceptKind.AliasConsolidated)
+                {
+                    continue;
+                }
+
+                QueueIncomingPersist(timelineJid, chatMessage);
+                if (_activeChat.IsOpen(timelineJid))
+                {
+                    NotifyChatMessagesChanged(timelineJid);
+                }
+            }
+
+            return Task.CompletedTask;
+        }
+
+        private void RaiseCallAlertIfNeeded(
+            CallEventNotifyRequest callEvent,
+            string chatJid,
+            bool callerIsSelf,
+            ChatItem existingChat)
+        {
+            if (callEvent == null || _notifications == null)
+            {
+                return;
+            }
+
+            // Same quiet window as inbound message toasts: initial + silent FULL catch-up.
+            // Incoming Offer toasts are noise in that storm; Missed still surfaces.
+            bool historySyncQuiet = IncomingToastSuppression.ShouldQuiet(
+                initialSyncActive: _initialSync.IsActive ||
+                    (_history != null && _history.IsInitialSyncSafeMode),
+                awaitingInitialSync: _isAwaitingInitialSync(),
+                historyCatchUpQuiet: _history != null && _history.IsHistoryCatchUpQuiet,
+                isOfflineEnvelope: false,
+                messageTimestamp: default(DateTime),
+                nowUtc: DateTime.UtcNow);
+
+            bool toast = Unison.Core.Helpers.Calls.CallAlertPolicy.ShouldShowToast(
+                callEvent.Kind,
+                callerIsSelf,
+                historySyncQuiet);
+            bool tile = Unison.Core.Helpers.Calls.CallAlertPolicy.ShouldUpdateLiveTile(
+                callEvent.Kind,
+                callerIsSelf);
+            if (!toast && !tile)
+            {
+                return;
+            }
+
+            string title = ResolveCallAlertTitle(chatJid, existingChat);
+            string body = ResolveCallAlertBody(callEvent.Kind, callEvent.IsVideo);
+            bool isFavorite = existingChat != null && existingChat.IsFavorite;
+
+            _notifications.NotifyCallAlert(
+                title,
+                body,
+                chatJid,
+                updateLiveTile: tile,
+                isFavorite: isFavorite);
+        }
+
+        private string ResolveCallAlertTitle(string chatJid, ChatItem existingChat)
+        {
+            if (existingChat != null)
+            {
+                string fromChat = existingChat.GetNameResolved(_strings);
+                if (!string.IsNullOrWhiteSpace(fromChat))
+                {
+                    return fromChat.Trim();
+                }
+            }
+
+            if (_personStore != null && !string.IsNullOrWhiteSpace(chatJid))
+            {
+                Person person = _personStore.TryGetCached(chatJid);
+                if (person == null && _jids != null)
+                {
+                    string alias;
+                    if (_jids.TryGetAlias(chatJid, out alias) && !string.IsNullOrWhiteSpace(alias))
+                    {
+                        person = _personStore.TryGetCached(alias);
+                    }
+                }
+
+                if (person != null && !string.IsNullOrWhiteSpace(person.Name))
+                {
+                    return person.Name.Trim();
+                }
+            }
+
+            string phone = Unison.Core.Helpers.JidHelper.TryPhoneFromJid(chatJid);
+            if (!string.IsNullOrWhiteSpace(phone))
+            {
+                return phone;
+            }
+
+            return chatJid ?? string.Empty;
+        }
+
+        private string ResolveCallAlertBody(CallEventChromeKind kind, bool isVideo)
+        {
+            if (kind == CallEventChromeKind.Incoming)
+            {
+                return _strings?.Get(
+                           "Notification_IncomingCallBody",
+                           "Incoming Call (Answer on Primary Phone)")
+                       ?? "Incoming Call (Answer on Primary Phone)";
+            }
+
+            if (kind == CallEventChromeKind.Missed)
+            {
+                return isVideo
+                    ? (_strings?.Get("Notification_MissedVideoCall", "Missed video call")
+                       ?? "Missed video call")
+                    : (_strings?.Get("Notification_MissedCall", "Missed call")
+                       ?? "Missed call");
+            }
+
+            return string.Empty;
+        }
+
+        private ChatItem FindExistingDirectChat(string jid)
+        {
+            if (_chatState == null || string.IsNullOrWhiteSpace(jid))
+            {
+                return null;
+            }
+
+            ChatItem chat = _chatState.FindChat(jid);
+            if (chat != null)
+            {
+                return chat;
+            }
+
+            string alias;
+            if (_jids != null && _jids.TryGetAlias(jid, out alias) && !string.IsNullOrWhiteSpace(alias))
+            {
+                return _chatState.FindChat(alias);
+            }
+
+            return null;
+        }
+
+        private string ResolveCallDirectionLabel(CallDirection direction)
+        {
+            switch (direction)
+            {
+                case CallDirection.Outgoing:
+                    return _strings?.Get("Calls_Outgoing", "Outgoing") ?? "Outgoing";
+                case CallDirection.Incoming:
+                    return _strings?.Get("Calls_Incoming", "Incoming") ?? "Incoming";
+                case CallDirection.Missed:
+                    return _strings?.Get("Calls_Missed", "Missed") ?? "Missed";
+                default:
+                    return string.Empty;
+            }
+        }
+
+        private static string FormatCallTimestampLabel(DateTime utc)
+        {
+            try
+            {
+                return utc.ToLocalTime().ToString("t");
+            }
+            catch
+            {
+                return string.Empty;
             }
         }
 

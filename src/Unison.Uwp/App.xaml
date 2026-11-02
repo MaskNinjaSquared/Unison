@@ -42,6 +42,7 @@
             <converters:ByteSizeConverter x:Key="ByteSizeConverter"/>
             <converters:FileSizeConverter x:Key="FileSizeConverter"/>
             <converters:BoolToDesktopCursorKindConverter x:Key="BoolToDesktopCursorKindConverter"/>
+            <converters:CallDirectionToBrushConverter x:Key="CallDirectionToBrushConverter"/>
             
             <!-- Custom Fonts -->
             <FontFamily x:Key="MainFont">ms-appx:///Assets/Fonts/SegUIVar-Regular.ttf#Segoe UI Variable</FontFamily>

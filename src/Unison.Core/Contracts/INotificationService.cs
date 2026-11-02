@@ -29,6 +29,17 @@ namespace Unison.Core.Contracts
         /// <summary>Generic toast (e.g. session logged out). Respects notifications setting.</summary>
         void ShowToast(string title, string body);
 
+        /// <summary>
+        /// Call alert toast (Offer / Missed). Respects NotificationsEnabled + CallNotificationsEnabled.
+        /// When <paramref name="updateLiveTile"/> is true (Missed), also pushes the primary Live Tile preview.
+        /// </summary>
+        void NotifyCallAlert(
+            string title,
+            string body,
+            string chatJid = null,
+            bool updateLiveTile = false,
+            bool isFavorite = false);
+
         void RefreshUnreadState(IEnumerable<ChatItem> chats);
         void UpdateBadge(int totalUnread);
         void ClearAll();

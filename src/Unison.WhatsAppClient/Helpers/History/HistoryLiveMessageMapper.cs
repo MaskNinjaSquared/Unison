@@ -259,6 +259,10 @@ namespace Unison.WhatsAppClient.Helpers
                     row.MediaUrl = NullIfEmpty(message.GroupJoinJid);
                     row.MediaDirectPath = NullIfEmpty(message.GroupJoinPhone);
                     break;
+
+                case ChatPreviewKind.CallEvent:
+                    // Body holds the system line; no media columns.
+                    break;
             }
         }
 

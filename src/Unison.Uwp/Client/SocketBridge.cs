@@ -303,6 +303,11 @@ namespace Unison.Uwp.Client
         public Func<IReadOnlyList<GroupJoinNotifyRequest>, Task> GroupParticipantsJoined { get; set; }
 
         /// <summary>
+        /// Live <c>CallHandler</c> / <c>WaEventKind.Call</c> terminal statuses → chat chrome.
+        /// </summary>
+        public Func<IReadOnlyList<CallEventNotifyRequest>, Task> CallEvents { get; set; }
+
+        /// <summary>
         /// <c>w:gp2</c> participant <c>remove</c> (leave / kick). Host inserts leave system lines.
         /// </summary>
         public Func<IReadOnlyList<GroupLeaveNotifyRequest>, Task> GroupParticipantsLeft { get; set; }
@@ -2382,6 +2387,7 @@ namespace Unison.Uwp.Client
             await ApplyGroupParticipantsJoinedAsync(batch).ConfigureAwait(false);
             await ApplyGroupParticipantsLeftAsync(batch).ConfigureAwait(false);
             await ApplyGroupSelfMembershipAsync(batch).ConfigureAwait(false);
+            await ApplyCallEventsAsync(batch).ConfigureAwait(false);
 
             IList<string> deletedChats;
             var chatDeleted = ChatDeleted;
@@ -2518,6 +2524,72 @@ namespace Unison.Uwp.Client
                 (Unison.Core.Models.GroupRosterEventKind)(int)update.Action,
                 participants,
                 DateTime.UtcNow));
+        }
+
+        /// <summary>
+        /// Live <c>CallHandler</c> statuses → Offer (toast), Missed/Completed (CallLog + chrome).
+        /// </summary>
+        private async Task ApplyCallEventsAsync(WaEventBatch batch)
+        {
+            var sink = CallEvents;
+            if (sink == null)
+            {
+                return;
+            }
+
+            List<Unison.Socket.Models.CallOffer> calls;
+            if (!batch.TryGet(WaEventKind.Call, out calls) || calls == null || calls.Count == 0)
+            {
+                return;
+            }
+
+            var requests = new List<CallEventNotifyRequest>();
+            foreach (Unison.Socket.Models.CallOffer call in calls)
+            {
+                if (call == null)
+                {
+                    continue;
+                }
+
+                CallEventChromeKind? chrome =
+                    Unison.Core.Helpers.Calls.CallEventChromeMap.FromStatusName(call.Status.ToString());
+                if (chrome == null)
+                {
+                    continue;
+                }
+
+                // Outer stanza "from" is often a @call relay — use call-creator / peer instead.
+                string chatJid = Unison.Core.Helpers.Calls.CallPeerJid.Resolve(
+                    call.ChatId,
+                    call.From,
+                    call.GroupJid,
+                    call.IsGroup);
+                if (string.IsNullOrWhiteSpace(chatJid))
+                {
+                    continue;
+                }
+
+                DateTime stamp = call.Date > 0
+                    ? DateTimeOffset.FromUnixTimeSeconds(call.Date).UtcDateTime
+                    : DateTime.UtcNow;
+
+                requests.Add(new CallEventNotifyRequest
+                {
+                    ChatJid = chatJid,
+                    CallId = call.Id,
+                    Kind = chrome.Value,
+                    IsVideo = call.IsVideo,
+                    TimestampUtc = stamp,
+                    CallerJid = call.From
+                });
+            }
+
+            if (requests.Count == 0)
+            {
+                return;
+            }
+
+            await sink(requests).ConfigureAwait(false);
         }
 
         /// <summary>

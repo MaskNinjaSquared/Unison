@@ -102,7 +102,7 @@
                         <ListViewItem Tag="chats" IsSelected="True">
                             <Grid Padding="12,0" HorizontalAlignment="Stretch">
                                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                    <TextBlock Text="&#xE8BD;" FontFamily="{StaticResource IconFont}" FontSize="20" VerticalAlignment="Center" Width="24"/>
+                                    <TextBlock Text="&#xE8BD;" FontFamily="{StaticResource IconFont}" FontSize="18" VerticalAlignment="Center" Width="24"/>
                                     <TextBlock x:Uid="Shell_Chats" Text="Chats" Margin="16,0,0,0" FontSize="14" VerticalAlignment="Center"/>
                                 </StackPanel>
                             </Grid>
@@ -129,7 +129,8 @@
                                 <!-- EB17 channels.png in WhatsAppLegacyIcons.ttf -->
                                 <FontIcon Glyph="&#xEB17;"
                                           FontFamily="{StaticResource LegacyIconFont}"
-                                          FontSize="20"
+                                          FontSize="24"
+                                          FontWeight="Light"
                                           Width="24"
                                           VerticalAlignment="Center"/>
                                 <TextBlock x:Uid="Shell_Channels" Text="Channels" Margin="16,0,0,0" FontSize="14" VerticalAlignment="Center"/>

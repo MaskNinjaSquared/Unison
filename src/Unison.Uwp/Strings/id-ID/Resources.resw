@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+ï»¿<?xml version="1.0" encoding="utf-8"?>
 <root>
   <!-- 
     Microsoft ResX Schema 
@@ -181,7 +181,7 @@ Masukan kode ini:
     <value>Gagal menghubungkan nomor</value>
   </data>
   <data name="Login_LogEmpty" xml:space="preserve">
-    <value>(log kosong — pemasangan sudah menulis [Pairing] riwayat otomatis. Ketuk muat QR dan buka log kembali; nyalakan log sesi masuk penuh hanya jika kamu butuh trafik lengkap.)</value>
+    <value>(log kosong ï¿½ pemasangan sudah menulis [Pairing] riwayat otomatis. Ketuk muat QR dan buka log kembali; nyalakan log sesi masuk penuh hanya jika kamu butuh trafik lengkap.)</value>
   </data>
   <data name="Login_LogReadFail" xml:space="preserve">
     <value>Gagal membaca log: {0}</value>
@@ -270,7 +270,7 @@ Matikan setelah diagnosa: menjaga aplikasi tetap lambat.</value>
     <value>Pesan ini telah dihapus</value>
   </data>
   <data name="ChatList_Loading.Text" xml:space="preserve">
-    <value>Menyiapkan percakapan…</value>
+    <value>Menyiapkan percakapanï¿½</value>
   </data>
   <data name="ChatList_RefreshingNames" xml:space="preserve">
     <value>Menyegarkan nama kontak...</value>
@@ -285,31 +285,31 @@ Matikan setelah diagnosa: menjaga aplikasi tetap lambat.</value>
     <value>Perbarui...</value>
   </data>
   <data name="ChatList_SyncProgress" xml:space="preserve">
-    <value>Menyinkronkan percakapan… {0} of {1}</value>
+    <value>Menyinkronkan percakapanï¿½ {0} of {1}</value>
   </data>
   <data name="ChatList_SyncProgressCount" xml:space="preserve">
-    <value>Menyinkronkan percakapan… {0} memuat</value>
+    <value>Menyinkronkan percakapanï¿½ {0} memuat</value>
   </data>
   <data name="ChatList_SyncDone" xml:space="preserve">
     <value>Sinkronisasi komplit</value>
   </data>
   <data name="ChatList_Settling" xml:space="preserve">
-    <value>Menyelesaikan proses awal…</value>
+    <value>Menyelesaikan proses awalï¿½</value>
   </data>
   <data name="ChatList_ResolvingNames" xml:space="preserve">
-    <value>Menentukan nama… {0} dari {1}</value>
+    <value>Menentukan namaï¿½ {0} dari {1}</value>
   </data>
   <data name="ChatList_FetchingAvatars" xml:space="preserve">
-    <value>Memuat foto… {0} dari {1}</value>
+    <value>Memuat fotoï¿½ {0} dari {1}</value>
   </data>
   <data name="ChatList_FetchingGroups" xml:space="preserve">
-    <value>Memuat info grup… {0} dari {1}</value>
+    <value>Memuat info grupï¿½ {0} dari {1}</value>
   </data>
   <data name="ChatList_PausedLowMemory" xml:space="preserve">
-    <value>Dijeda — memori rendah</value>
+    <value>Dijeda ï¿½ memori rendah</value>
   </data>
   <data name="ChatList_Organizing" xml:space="preserve">
-    <value>Mengatur obrolan…</value>
+    <value>Mengatur obrolanï¿½</value>
   </data>
   <data name="ChatDetail_SelectChat.Text" xml:space="preserve">
     <value>Pilih obrolan</value>
@@ -450,7 +450,7 @@ Matikan setelah diagnosa: menjaga aplikasi tetap lambat.</value>
     <value>Pengumuman</value>
   </data>
   <data name="Chat_CommunityHubSubtitle" xml:space="preserve">
-    <value>Komunitas · {0} grup</value>
+    <value>Komunitas ï¿½ {0} grup</value>
   </data>
   <data name="Chat_CommunityFallbackName" xml:space="preserve">
     <value>Komunitas</value>
@@ -712,6 +712,45 @@ Matikan setelah diagnosa: menjaga aplikasi tetap lambat.</value>
   <data name="Calls_Empty.Text" xml:space="preserve">
     <value>Untuk memulai panggilan, pilih kontak lalu ketuk Panggil.</value>
   </data>
+  <data name="Calls_FavoritesSection.Text" xml:space="preserve">
+    <value>FAVORITES</value>
+  </data>
+  <data name="Calls_RecentsSection.Text" xml:space="preserve">
+    <value>RECENT</value>
+  </data>
+  <data name="Calls_SeeAllFavorites.Content" xml:space="preserve">
+    <value>See all</value>
+  </data>
+  <data name="Calls_Outgoing" xml:space="preserve">
+    <value>Outgoing</value>
+  </data>
+  <data name="Calls_Incoming" xml:space="preserve">
+    <value>Incoming</value>
+  </data>
+  <data name="Calls_Missed" xml:space="preserve">
+    <value>Missed</value>
+  </data>
+  <data name="Calls_DetailsTitle.Text" xml:space="preserve">
+    <value>Call info</value>
+  </data>
+  <data name="Calls_DetailsUnavailable.Text" xml:space="preserve">
+    <value>Not available right now</value>
+  </data>
+  <data name="Calls_NewCallUnavailable" xml:space="preserve">
+    <value>Calling is not available yet.</value>
+  </data>
+  <data name="Message_CallMissed" xml:space="preserve">
+    <value>Missed voice call</value>
+  </data>
+  <data name="Message_CallMissedVideo" xml:space="preserve">
+    <value>Missed video call</value>
+  </data>
+  <data name="Message_CallCompleted" xml:space="preserve">
+    <value>Voice call</value>
+  </data>
+  <data name="Message_CallCompletedVideo" xml:space="preserve">
+    <value>Video call</value>
+  </data>
   <data name="Shell_Archived.Text" xml:space="preserve">
     <value>Obrolan diarsipkan</value>
   </data>
@@ -798,6 +837,21 @@ Matikan setelah diagnosa: menjaga aplikasi tetap lambat.</value>
   </data>
   <data name="Settings_Notifications.Text" xml:space="preserve">
     <value>Tampilkan notifikasi dan lencana untuk pesan masuk.</value>
+  </data>
+  <data name="Settings_CallNotifications.Header" xml:space="preserve">
+    <value>Call notifications</value>
+  </data>
+  <data name="Settings_CallNotifications.Text" xml:space="preserve">
+    <value>Toasts for incoming calls and missed-call Live Tile updates.</value>
+  </data>
+  <data name="Notification_IncomingCallBody" xml:space="preserve">
+    <value>Incoming Call (Answer on Primary Phone)</value>
+  </data>
+  <data name="Notification_MissedCall" xml:space="preserve">
+    <value>Missed call</value>
+  </data>
+  <data name="Notification_MissedVideoCall" xml:space="preserve">
+    <value>Missed video call</value>
   </data>
   <data name="Settings_LockScreenNotifications.Header" xml:space="preserve">
     <value>Lock screen</value>
@@ -1313,7 +1367,7 @@ Matikan setelah diagnosa: menjaga aplikasi tetap lambat.</value>
     <value>Tutup</value>
   </data>
   <data name="ChatList_SyncingHistory" xml:space="preserve">
-    <value>Menyinkronkan riwayat…</value>
+    <value>Menyinkronkan riwayatï¿½</value>
   </data>
   <data name="Debug_RuntimeDialogHint.Text" xml:space="preserve">
     <value>Tahan / klik kanan Chats (atau QR) untuk membuka. Tanpa teks pesan.</value>
@@ -1331,7 +1385,7 @@ Matikan setelah diagnosa: menjaga aplikasi tetap lambat.</value>
     <value>Request Full History On-demand</value>
   </data>
   <data name="Debug_FullHistoryRequesting" xml:space="preserve">
-    <value>Requesting full history…</value>
+    <value>Requesting full historyï¿½</value>
   </data>
   <data name="Debug_FullHistoryRequested" xml:space="preserve">
     <value>Full history on-demand requested.</value>
@@ -1430,7 +1484,7 @@ Matikan setelah diagnosa: menjaga aplikasi tetap lambat.</value>
     <value>Putar audio</value>
   </data>
 <data name="ChatDetail_DocumentSaveAs.Label" xml:space="preserve">
-    <value>Simpan sebagai…</value>
+    <value>Simpan sebagaiï¿½</value>
   </data>
   <data name="ChatDetail_Back.ToolTip" xml:space="preserve">
     <value>Kembali</value>
@@ -1544,7 +1598,7 @@ Matikan setelah diagnosa: menjaga aplikasi tetap lambat.</value>
     <value>Add people or groups</value>
   </data>
   <data name="Share_PickChat.Text" xml:space="preserve">
-    <value>Send to…</value>
+    <value>Send toï¿½</value>
   </data>
   <data name="Favorites_SortAlphabetical.Text" xml:space="preserve">
     <value>A-Z</value>

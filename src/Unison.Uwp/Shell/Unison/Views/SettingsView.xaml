@@ -321,6 +321,16 @@
                             </controls:SettingBox.Control>
                         </controls:SettingBox>
 
+                        <controls:SettingBox LocalizationUid="Settings_CallNotifications"
+                                             Margin="5"
+                                             Header="Call notifications"
+                                             Text="Toasts for incoming calls and missed-call Live Tile updates.">
+                            <controls:SettingBox.Control>
+                                <ToggleSwitch OnContent="" OffContent="" MinWidth="0" Margin="0"
+                                              IsOn="{Binding CallNotificationsEnabled, Mode=TwoWay}"/>
+                            </controls:SettingBox.Control>
+                        </controls:SettingBox>
+
                         <controls:SettingBox LocalizationUid="Settings_LockScreenNotifications"
                                              Margin="5"
                                              Header="Lock screen"

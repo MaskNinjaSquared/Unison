@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+ï»¿<?xml version="1.0" encoding="utf-8"?>
 <root>
   <!-- 
     Microsoft ResX Schema 
@@ -270,7 +270,7 @@ Schakel uit na diagnostiseren: het ingeschakeld laten vertraagd de app.</value>
     <value>Dit bericht is verwijderd</value>
   </data>
   <data name="ChatList_Loading.Text" xml:space="preserve">
-    <value>Chats voorbereieden…</value>
+    <value>Chats voorbereiedenï¿½</value>
   </data>
   <data name="ChatList_RefreshingNames" xml:space="preserve">
     <value>Contacten verversen...</value>
@@ -285,31 +285,31 @@ Schakel uit na diagnostiseren: het ingeschakeld laten vertraagd de app.</value>
     <value>Bijwerken...</value>
   </data>
   <data name="ChatList_SyncProgress" xml:space="preserve">
-    <value>Chats synchroniseren… {0} van {1}</value>
+    <value>Chats synchroniserenï¿½ {0} van {1}</value>
   </data>
   <data name="ChatList_SyncProgressCount" xml:space="preserve">
-    <value>Chats synchroniseren… {0} geladen</value>
+    <value>Chats synchroniserenï¿½ {0} geladen</value>
   </data>
   <data name="ChatList_SyncDone" xml:space="preserve">
     <value>Synchronisatie voltooid</value>
   </data>
   <data name="ChatList_Settling" xml:space="preserve">
-    <value>Opstarten afronden…</value>
+    <value>Opstarten afrondenï¿½</value>
   </data>
   <data name="ChatList_ResolvingNames" xml:space="preserve">
-    <value>Namen ophalen… {0} van {1}</value>
+    <value>Namen ophalenï¿½ {0} van {1}</value>
   </data>
   <data name="ChatList_FetchingAvatars" xml:space="preserve">
-    <value>Foto's laden… {0} van {1}</value>
+    <value>Foto's ladenï¿½ {0} van {1}</value>
   </data>
   <data name="ChatList_FetchingGroups" xml:space="preserve">
-    <value>Groepsinfo laden… {0} van {1}</value>
+    <value>Groepsinfo ladenï¿½ {0} van {1}</value>
   </data>
   <data name="ChatList_PausedLowMemory" xml:space="preserve">
-    <value>Gepauzeerd — weinig geheugen</value>
+    <value>Gepauzeerd ï¿½ weinig geheugen</value>
   </data>
   <data name="ChatList_Organizing" xml:space="preserve">
-    <value>Chats organiseren…</value>
+    <value>Chats organiserenï¿½</value>
   </data>
   <data name="ChatDetail_SelectChat.Text" xml:space="preserve">
     <value>Selecteer een chat</value>
@@ -426,7 +426,7 @@ Schakel uit na diagnostiseren: het ingeschakeld laten vertraagd de app.</value>
     <value>Bericht losmaken</value>
   </data>
   <data name="ChatDetail_CopyMessage" xml:space="preserve">
-    <value>Kopiëren</value>
+    <value>Kopiï¿½ren</value>
   </data>
   <data name="ChatDetail_ReplyMessage" xml:space="preserve">
     <value>Beantwoorden</value>
@@ -450,7 +450,7 @@ Schakel uit na diagnostiseren: het ingeschakeld laten vertraagd de app.</value>
     <value>Aankondigingen</value>
   </data>
   <data name="Chat_CommunityHubSubtitle" xml:space="preserve">
-    <value>Community · {0} groepen</value>
+    <value>Community ï¿½ {0} groepen</value>
   </data>
   <data name="Chat_CommunityFallbackName" xml:space="preserve">
     <value>Community</value>
@@ -712,6 +712,45 @@ Schakel uit na diagnostiseren: het ingeschakeld laten vertraagd de app.</value>
   <data name="Calls_Empty.Text" xml:space="preserve">
     <value>Om een oproep te starten, selecteer je een contact en tik je op Bellen.</value>
   </data>
+  <data name="Calls_FavoritesSection.Text" xml:space="preserve">
+    <value>FAVORITES</value>
+  </data>
+  <data name="Calls_RecentsSection.Text" xml:space="preserve">
+    <value>RECENT</value>
+  </data>
+  <data name="Calls_SeeAllFavorites.Content" xml:space="preserve">
+    <value>See all</value>
+  </data>
+  <data name="Calls_Outgoing" xml:space="preserve">
+    <value>Outgoing</value>
+  </data>
+  <data name="Calls_Incoming" xml:space="preserve">
+    <value>Incoming</value>
+  </data>
+  <data name="Calls_Missed" xml:space="preserve">
+    <value>Missed</value>
+  </data>
+  <data name="Calls_DetailsTitle.Text" xml:space="preserve">
+    <value>Call info</value>
+  </data>
+  <data name="Calls_DetailsUnavailable.Text" xml:space="preserve">
+    <value>Not available right now</value>
+  </data>
+  <data name="Calls_NewCallUnavailable" xml:space="preserve">
+    <value>Calling is not available yet.</value>
+  </data>
+  <data name="Message_CallMissed" xml:space="preserve">
+    <value>Missed voice call</value>
+  </data>
+  <data name="Message_CallMissedVideo" xml:space="preserve">
+    <value>Missed video call</value>
+  </data>
+  <data name="Message_CallCompleted" xml:space="preserve">
+    <value>Voice call</value>
+  </data>
+  <data name="Message_CallCompletedVideo" xml:space="preserve">
+    <value>Video call</value>
+  </data>
   <data name="Shell_Archived.Text" xml:space="preserve">
     <value>Gearchiveerde chats</value>
   </data>
@@ -798,6 +837,21 @@ Schakel uit na diagnostiseren: het ingeschakeld laten vertraagd de app.</value>
   </data>
   <data name="Settings_Notifications.Text" xml:space="preserve">
     <value>Banners en meldingen in actiecentrum weergeven voor inkomende berichten</value>
+  </data>
+  <data name="Settings_CallNotifications.Header" xml:space="preserve">
+    <value>Call notifications</value>
+  </data>
+  <data name="Settings_CallNotifications.Text" xml:space="preserve">
+    <value>Toasts for incoming calls and missed-call Live Tile updates.</value>
+  </data>
+  <data name="Notification_IncomingCallBody" xml:space="preserve">
+    <value>Incoming Call (Answer on Primary Phone)</value>
+  </data>
+  <data name="Notification_MissedCall" xml:space="preserve">
+    <value>Missed call</value>
+  </data>
+  <data name="Notification_MissedVideoCall" xml:space="preserve">
+    <value>Missed video call</value>
   </data>
   <data name="Settings_LockScreenNotifications.Header" xml:space="preserve">
     <value>Lock screen</value>
@@ -987,7 +1041,7 @@ Schakel uit na diagnostiseren: het ingeschakeld laten vertraagd de app.</value>
     <value>Welkom bij Unison</value>
   </data>
   <data name="Start_Description.Text" xml:space="preserve">
-    <value>Een simpele, betrouwbare en privé manier om WhatsApp te gebruiken op je computer</value>
+    <value>Een simpele, betrouwbare en privï¿½ manier om WhatsApp te gebruiken op je computer</value>
   </data>
   <data name="Start_GetStarted.Content" xml:space="preserve">
     <value>Beginnen</value>
@@ -1313,7 +1367,7 @@ Schakel uit na diagnostiseren: het ingeschakeld laten vertraagd de app.</value>
     <value>Sluiten</value>
   </data>
   <data name="ChatList_SyncingHistory" xml:space="preserve">
-    <value>Geschiedenis synchroniseren…</value>
+    <value>Geschiedenis synchroniserenï¿½</value>
   </data>
   <data name="Debug_RuntimeDialogHint.Text" xml:space="preserve">
     <value>Houd vast / rechtsklik op Chats (of QR) om te openen. Geen berichttekst.</value>
@@ -1331,7 +1385,7 @@ Schakel uit na diagnostiseren: het ingeschakeld laten vertraagd de app.</value>
     <value>Request Full History On-demand</value>
   </data>
   <data name="Debug_FullHistoryRequesting" xml:space="preserve">
-    <value>Requesting full history…</value>
+    <value>Requesting full historyï¿½</value>
   </data>
   <data name="Debug_FullHistoryRequested" xml:space="preserve">
     <value>Full history on-demand requested.</value>
@@ -1430,7 +1484,7 @@ Schakel uit na diagnostiseren: het ingeschakeld laten vertraagd de app.</value>
     <value>Audio afspelen</value>
   </data>
 <data name="ChatDetail_DocumentSaveAs.Label" xml:space="preserve">
-    <value>Opslaan als…</value>
+    <value>Opslaan alsï¿½</value>
   </data>
   <data name="ChatDetail_Back.ToolTip" xml:space="preserve">
     <value>Terug</value>
@@ -1544,7 +1598,7 @@ Schakel uit na diagnostiseren: het ingeschakeld laten vertraagd de app.</value>
     <value>Add people or groups</value>
   </data>
   <data name="Share_PickChat.Text" xml:space="preserve">
-    <value>Send to…</value>
+    <value>Send toï¿½</value>
   </data>
   <data name="Favorites_SortAlphabetical.Text" xml:space="preserve">
     <value>A-Z</value>

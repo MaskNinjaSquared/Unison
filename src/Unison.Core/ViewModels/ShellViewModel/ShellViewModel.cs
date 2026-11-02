@@ -63,6 +63,7 @@ namespace Unison.Core.ViewModels
         private bool _isNarrowWindow;
         private bool _hasActiveChat;
         private bool _statusDetailOpen;
+        private bool _callDetailOpen;
         private ChatItem _pendingChat;
         private string _pendingOpenChatJid;
         private string _pendingOpenProfileJid;
@@ -444,6 +445,65 @@ namespace Unison.Core.ViewModels
         }
 
         public bool HasOpenStatusDetail => _statusDetailOpen;
+
+        /// <summary>
+        /// Call details open/close — same ChatPane NarrowDetail/NarrowList flip as status.
+        /// </summary>
+        public void SelectCallDetail(bool open)
+        {
+            bool wasOpen = _callDetailOpen;
+            _callDetailOpen = open;
+            if (IsNarrowWindow)
+            {
+                ChatPane = open ? PaneNarrowDetail : PaneNarrowList;
+            }
+
+            if (wasOpen != open)
+            {
+                OnPropertyChanged(nameof(HasOpenCallDetail));
+                OnPropertyChanged(nameof(HidesLegacyShellChrome));
+            }
+
+            RaiseSystemBackButtonChanged();
+        }
+
+        /// <summary>Entering Calls shell page: default to list (or WideBoth).</summary>
+        public void EnterCallsSurface()
+        {
+            if (_callDetailOpen)
+            {
+                _callDetailOpen = false;
+                OnPropertyChanged(nameof(HasOpenCallDetail));
+                OnPropertyChanged(nameof(HidesLegacyShellChrome));
+            }
+
+            SyncCallsPane();
+        }
+
+        /// <summary>Leaving Calls: restore chat list/detail pane rules.</summary>
+        public void LeaveCallsSurface()
+        {
+            if (_callDetailOpen)
+            {
+                _callDetailOpen = false;
+                OnPropertyChanged(nameof(HasOpenCallDetail));
+                OnPropertyChanged(nameof(HidesLegacyShellChrome));
+            }
+
+            if (IsNarrowWindow)
+            {
+                bool showDetail = HasActiveChat && PendingChat != null;
+                ChatPane = showDetail ? PaneNarrowDetail : PaneNarrowList;
+            }
+            else
+            {
+                ChatPane = PaneWideBoth;
+            }
+
+            RaiseSystemBackButtonChanged();
+        }
+
+        public bool HasOpenCallDetail => _callDetailOpen;
 
         /// <summary>
         /// Chat the page should open in ChatDetail (set by SelectChat / cleared by ClearChat).

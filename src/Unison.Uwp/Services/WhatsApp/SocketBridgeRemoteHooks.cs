@@ -58,6 +58,10 @@ namespace Unison.Uwp.Services.WhatsApp
                 messages != null
                     ? messages.NotifyGroupJoinsAsync(joins)
                     : Task.CompletedTask;
+            bridge.CallEvents = events =>
+                messages != null
+                    ? messages.NotifyCallEventsAsync(events)
+                    : Task.CompletedTask;
             bridge.GroupParticipantsLeft = leaves =>
                 messages != null
                     ? messages.NotifyGroupLeavesAsync(leaves)

@@ -454,6 +454,9 @@ namespace Unison.Core.Models
         [JsonIgnore]
         public bool IsGroupJoin => _kind == ChatMessageKind.GroupJoin;
 
+        /// <summary>Call chrome line (missed / completed) — same system-line visual as GroupJoin.</summary>
+        public bool IsCallEvent => _kind == ChatMessageKind.CallEvent;
+
         private string _groupJoinJid;
         /// <summary>JID of the member who joined (protocol participant jid).</summary>
         public string GroupJoinJid

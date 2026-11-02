@@ -20,6 +20,11 @@ namespace Unison.Core.Models
         /// Group system line: someone joined (<c>w:gp2</c> <c>add</c> / Baileys
         /// <c>GROUP_PARTICIPANT_ADD</c>). Not a protobuf body — notification stub.
         /// </summary>
-        GroupJoin = 9
+        GroupJoin = 9,
+        /// <summary>
+        /// Call system line (missed / completed) from live <c>CallHandler</c> events.
+        /// Same chrome visual as <see cref="GroupJoin"/>.
+        /// </summary>
+        CallEvent = 10
     }
 }

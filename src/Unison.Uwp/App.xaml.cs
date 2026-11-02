@@ -22,6 +22,7 @@ using Unison.Baileys.Client;
 using Unison.Core.Constants;
 using Unison.Core.Contracts;
 using Unison.Core.Contracts.WhatsApp;
+using Unison.Core.Services;
 using Unison.Core.Diagnostics;
 using Unison.Core.Factories;
 using Unison.Core.Helpers;
@@ -219,6 +220,10 @@ namespace Unison.Uwp
             //
             // The concrete type is registered too because WhatsAppService still reaches the
             // transitional dictionaries on it. That registration goes away with those.
+            services.AddSingleton<ICallLogStore, Unison.Uwp.Data.CallLogStore>();
+            services.AddSingleton<ICallLogService>(sp => new CallLogService(
+                sp.GetRequiredService<IJidResolver>(),
+                sp.GetRequiredService<ICallLogStore>()));
             services.AddSingleton<ChatStateStore>(sp => new ChatStateStore(
                 new UiThreadDispatcherService(sp.GetRequiredService<UiStallWatchdog>())));
             services.AddSingleton<IChatStateStore>(sp => sp.GetRequiredService<ChatStateStore>());
@@ -688,7 +693,8 @@ namespace Unison.Uwp
                 sp.GetService<IStringResources>(),
                 sp.GetRequiredService<ISystemInfoProvider>(),
                 sp.GetRequiredService<IRuntimeDiagnostics>(),
-                sp.GetRequiredService<IGroupNaming>()));
+                sp.GetRequiredService<IGroupNaming>(),
+                sp.GetRequiredService<ICallLogService>()));
             // AttachedUiDispatcher (not IDispatcher/DispatcherService): PropertyChanged from the
             // incoming pump must marshal onto the live frame dispatcher, or IsRevoked/HasReactions
             // bindings throw RPC_E_WRONG_THREAD on Mobile.
@@ -979,6 +985,7 @@ namespace Unison.Uwp
                 sp.GetRequiredService<IRuntimeDiagnostics>()));
             services.AddTransient<ChatListViewModel>();
             services.AddTransient<FavoritesViewModel>();
+            services.AddTransient<CallsViewModel>();
             services.AddTransient<ChatDetailViewModel>();
             services.AddTransient<StatusListViewModel>();
             services.AddTransient<StatusDetailViewModel>();
@@ -1009,6 +1016,8 @@ namespace Unison.Uwp
             // Display keep-awake is owned by HistoryFacade Hold/Release (constructed above).
             // Rewrites group author strips as names resolve, list open or not.
             Services.GetRequiredService<IChatAuthorProjection>().Start();
+            // Call Recents survive process restarts (unison.db call_log).
+            _ = Services.GetRequiredService<ICallLogService>().InitializeAsync();
 #if DEBUG
             Services.GetRequiredService<IDebugSendService>().Start();
 #endif

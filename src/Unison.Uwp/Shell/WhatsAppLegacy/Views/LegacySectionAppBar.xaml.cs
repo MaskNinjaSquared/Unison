@@ -16,11 +16,22 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
 
         public event EventHandler SearchRequested;
 
+        public event EventHandler NewCallRequested;
+
         public event EventHandler ProfileRequested;
 
         public event EventHandler DebugRequested;
 
         public event EventHandler SettingsRequested;
+
+        /// <summary>Shows the primary “+” new-call action (Calls pivot).</summary>
+        public void SetNewCallVisible(bool visible)
+        {
+            if (NewCallAppBarButton != null)
+            {
+                NewCallAppBarButton.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
+            }
+        }
 
         public LegacySectionAppBar()
         {
@@ -64,6 +75,11 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
         private void Search_Click(object sender, RoutedEventArgs e)
         {
             SearchRequested?.Invoke(this, EventArgs.Empty);
+        }
+
+        private void NewCall_Click(object sender, RoutedEventArgs e)
+        {
+            NewCallRequested?.Invoke(this, EventArgs.Empty);
         }
 
         private void Profile_Click(object sender, RoutedEventArgs e)

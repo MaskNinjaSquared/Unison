@@ -218,6 +218,12 @@ namespace Unison.Core.ViewModels
                 return;
             }
 
+            if (string.Equals(ActiveSection, NavigationRoutes.Calls, StringComparison.OrdinalIgnoreCase))
+            {
+                SyncCallsPane();
+                return;
+            }
+
             if (IsNarrowWindow)
             {
                 // Minimal: chat space only with an open intent (PendingChat) and active flag.
@@ -239,6 +245,20 @@ namespace Unison.Core.ViewModels
             if (IsNarrowWindow)
             {
                 ChatPane = _statusDetailOpen ? PaneNarrowDetail : PaneNarrowList;
+            }
+            else
+            {
+                ChatPane = PaneWideBoth;
+            }
+
+            RaiseSystemBackButtonChanged();
+        }
+
+        private void SyncCallsPane()
+        {
+            if (IsNarrowWindow)
+            {
+                ChatPane = _callDetailOpen ? PaneNarrowDetail : PaneNarrowList;
             }
             else
             {

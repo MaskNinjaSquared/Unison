@@ -67,6 +67,18 @@ namespace Unison.Uwp.Services
             }
         }
 
+        private static bool IsCallNotificationsSettingEnabled()
+        {
+            try
+            {
+                return LocalSettingsAccess.Current.Get<bool>(LocalSettingsConstants.CallNotificationsEnabled);
+            }
+            catch
+            {
+                return true;
+            }
+        }
+
         private static HashSet<string> ReadToastFilter()
         {
             try
@@ -194,6 +206,48 @@ namespace Unison.Uwp.Services
                 return;
             }
 
+            ShowToastCore(title, body);
+        }
+
+        public void NotifyCallAlert(
+            string title,
+            string body,
+            string chatJid = null,
+            bool updateLiveTile = false,
+            bool isFavorite = false)
+        {
+            Initialize();
+
+            bool master = IsNotificationsSettingEnabled();
+            bool calls = IsCallNotificationsSettingEnabled();
+            if (master && calls)
+            {
+                ShowToastCore(title, body);
+            }
+
+            if (updateLiveTile && calls && !string.IsNullOrWhiteSpace(chatJid))
+            {
+                LiveTiles.UpdateFromMessage(
+                    title ?? string.Empty,
+                    body ?? string.Empty,
+                    chatJid,
+                    totalUnread: 0,
+                    isGroup: false,
+                    isFavorite: isFavorite,
+                    isChannel: false);
+            }
+
+            RuntimeDiagnosticsService.Instance.Write(
+                "notifications",
+                "call-alert",
+                "master=" + master +
+                "; calls=" + calls +
+                "; tile=" + updateLiveTile +
+                "; jid=" + (chatJid ?? string.Empty));
+        }
+
+        private static void ShowToastCore(string title, string body)
+        {
             try
             {
                 string safeTitle = EscapeXml(title ?? string.Empty);

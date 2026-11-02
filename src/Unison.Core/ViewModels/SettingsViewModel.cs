@@ -193,6 +193,18 @@ namespace Unison.Core.ViewModels
             }
         }
 
+        /// <summary>Toast + missed Live Tile for WhatsApp call alerts on the companion.</summary>
+        public bool CallNotificationsEnabled
+        {
+            get => _localSettings.Get<bool>(LocalSettingsConstants.CallNotificationsEnabled);
+            set
+            {
+                _localSettings.Set(LocalSettingsConstants.CallNotificationsEnabled, value);
+                _notificationService.OnNotificationsConfigChanged();
+                OnPropertyChanged();
+            }
+        }
+
         /// <summary>Chat-list synchronization line. Off drops the text before it reaches the list.</summary>
         public bool ShowSyncStatus
         {
@@ -684,6 +696,7 @@ namespace Unison.Core.ViewModels
         {
             RaiseProperties(
                 nameof(NotificationsEnabled),
+                nameof(CallNotificationsEnabled),
                 nameof(ShowSyncStatus),
                 nameof(LiveTilesEnabled),
                 nameof(LocationKeepAliveEnabled),

@@ -604,6 +604,12 @@ namespace Unison.Core.Contracts.WhatsApp
         Task NotifyGroupJoinsAsync(System.Collections.Generic.IReadOnlyList<GroupJoinNotifyRequest> joins);
 
         /// <summary>
+        /// Live call lifecycle chrome (missed / completed) from <c>CallHandler</c> /
+        /// <c>WaEventKind.Call</c>. Same system-line visual as group join.
+        /// </summary>
+        Task NotifyCallEventsAsync(System.Collections.Generic.IReadOnlyList<CallEventNotifyRequest> events);
+
+        /// <summary>
         /// <c>w:gp2</c> participant <c>remove</c>: leave / removed-by system lines
         /// (Baileys <c>GROUP_PARTICIPANT_LEAVE</c> / <c>REMOVE</c>).
         /// </summary>

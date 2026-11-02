@@ -5,37 +5,145 @@
     xmlns:controls="using:Unison.Uwp.UI.Controls"
     Background="{ThemeResource WhatsAppBackgroundBrush}">
 
-    <Grid Background="{ThemeResource ChatListBackgroundBrush}">
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="*"/>
-        </Grid.RowDefinitions>
+    <Grid x:Name="RootContentGrid"
+          Background="{ThemeResource WhatsAppBackgroundBrush}"
+          SizeChanged="RootContentGrid_SizeChanged">
+        <!-- ChatPaneStates: same as StatusView / ChatsView (WideBoth | NarrowList | NarrowDetail). -->
+        <VisualStateManager.VisualStateGroups>
+            <VisualStateGroup x:Name="ChatPaneStates">
+                <VisualState x:Name="WideBoth">
+                    <VisualState.Setters>
+                        <Setter Target="Column0.MinWidth" Value="280"/>
+                        <Setter Target="Column0.MaxWidth" Value="720"/>
+                        <Setter Target="Column1.Width" Value="*"/>
+                        <Setter Target="Column1.MinWidth" Value="280"/>
+                        <Setter Target="CallsListHost.Visibility" Value="Visible"/>
+                        <Setter Target="CallsDetailHost.Visibility" Value="Visible"/>
+                        <Setter Target="CallsDetailHost.BorderThickness" Value="1,0,0,0"/>
+                        <Setter Target="PaneSplitter.Visibility" Value="Visible"/>
+                    </VisualState.Setters>
+                </VisualState>
+                <VisualState x:Name="NarrowList">
+                    <VisualState.Setters>
+                        <Setter Target="Column0.Width" Value="*"/>
+                        <Setter Target="Column0.MinWidth" Value="0"/>
+                        <Setter Target="Column0.MaxWidth" Value="10000"/>
+                        <Setter Target="Column1.Width" Value="0"/>
+                        <Setter Target="Column1.MinWidth" Value="0"/>
+                        <Setter Target="CallsListHost.Visibility" Value="Visible"/>
+                        <Setter Target="CallsDetailHost.Visibility" Value="Collapsed"/>
+                        <Setter Target="PaneSplitter.Visibility" Value="Collapsed"/>
+                    </VisualState.Setters>
+                </VisualState>
+                <VisualState x:Name="NarrowDetail">
+                    <VisualState.Setters>
+                        <Setter Target="Column0.Width" Value="0"/>
+                        <Setter Target="Column0.MinWidth" Value="0"/>
+                        <Setter Target="Column0.MaxWidth" Value="10000"/>
+                        <Setter Target="Column1.Width" Value="*"/>
+                        <Setter Target="Column1.MinWidth" Value="0"/>
+                        <Setter Target="CallsListHost.Visibility" Value="Collapsed"/>
+                        <Setter Target="CallsDetailHost.Visibility" Value="Visible"/>
+                        <Setter Target="CallsDetailHost.BorderThickness" Value="0"/>
+                        <Setter Target="PaneSplitter.Visibility" Value="Collapsed"/>
+                    </VisualState.Setters>
+                </VisualState>
+            </VisualStateGroup>
+        </VisualStateManager.VisualStateGroups>
 
-        <Grid Grid.Row="0" Padding="16,12,16,12">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="Auto"/>
-            </Grid.ColumnDefinitions>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition x:Name="Column0" Width="380" MinWidth="280" MaxWidth="720"/>
+            <ColumnDefinition x:Name="Column1" Width="*" MinWidth="280"/>
+        </Grid.ColumnDefinitions>
 
-            <TextBlock x:Uid="Calls_Header"
-                       Text="Calls"
-                       FontSize="24"
-                       Foreground="{ThemeResource WhatsAppTextHighBrush}"
-                       FontFamily="{StaticResource MainFontSemibold}"
-                       FontWeight="SemiBold"
-                       VerticalAlignment="Center"
-                       TextWrapping="NoWrap"
-                       TextTrimming="CharacterEllipsis"
-                       MaxLines="1"/>
+        <!-- Left: Unison/WhatsApp header + shared list. Legacy uses Shell.WhatsAppLegacy.Views.CallsView. -->
+        <Grid x:Name="CallsListHost"
+              Background="{ThemeResource ChatListBackgroundBrush}">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
 
-            <Button x:Name="MenuButton"
-                    Grid.Column="1"
-                    Click="MenuButton_Click"
-                    Style="{StaticResource ModernIconButtonStyle}">
-                <FontIcon Glyph="&#xE712;" FontFamily="{StaticResource IconFont}" FontSize="18"/>
-            </Button>
+            <Grid x:Name="CallsHeaderChrome"
+                  Grid.Row="0"
+                  Padding="16,12,16,12">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <TextBlock x:Uid="Calls_Header"
+                           Text="Calls"
+                           FontSize="24"
+                           Foreground="{ThemeResource WhatsAppTextHighBrush}"
+                           FontFamily="{StaticResource MainFontSemibold}"
+                           FontWeight="SemiBold"
+                           VerticalAlignment="Center"
+                           TextWrapping="NoWrap"
+                           TextTrimming="CharacterEllipsis"
+                           MaxLines="1"/>
+
+                <Button x:Name="NewCallHeaderButton"
+                        Grid.Column="1"
+                        Click="NewCallHeaderButton_Click"
+                        Style="{StaticResource ModernIconButtonStyle}"
+                        Margin="0,0,4,0"
+                        AutomationProperties.Name="New call">
+                    <FontIcon Glyph="&#xE80B;" FontFamily="{StaticResource IconFont}" FontSize="18"/>
+                </Button>
+
+                <Button x:Name="MenuButton"
+                        Grid.Column="2"
+                        Click="MenuButton_Click"
+                        Style="{StaticResource ModernIconButtonStyle}">
+                    <FontIcon Glyph="&#xE712;" FontFamily="{StaticResource IconFont}" FontSize="18"/>
+                </Button>
+            </Grid>
+
+            <controls:CallsListControl x:Name="CallsList"
+                                       Grid.Row="1"/>
         </Grid>
 
-        <controls:CallsEmptyControl Grid.Row="1"/>
+        <!-- Right: empty prompt or call details (same left edge line as ChatDetailView). -->
+        <Grid x:Name="CallsDetailHost"
+              Grid.Column="1"
+              Background="{ThemeResource WhatsAppBackgroundBrush}"
+              BorderBrush="{ThemeResource ChatDetailPaneSeparatorBrush}"
+              BorderThickness="1,0,0,0">
+            <controls:CallsEmptyControl x:Name="RightEmpty"/>
+            <controls:CallDetailsControl x:Name="DetailsPane"
+                                         Visibility="Collapsed"/>
+        </Grid>
+
+        <Border x:Name="PaneSplitter"
+                Grid.ColumnSpan="2"
+                Width="10"
+                HorizontalAlignment="Left"
+                VerticalAlignment="Stretch"
+                Background="Transparent"
+                Visibility="Collapsed"
+                ManipulationMode="None"
+                PointerEntered="PaneSplitter_PointerEntered"
+                PointerExited="PaneSplitter_PointerExited"
+                PointerPressed="PaneSplitter_PointerPressed"
+                PointerMoved="PaneSplitter_PointerMoved"
+                PointerReleased="PaneSplitter_PointerReleased"
+                PointerCaptureLost="PaneSplitter_PointerCaptureLost">
+            <Border x:Name="SplitterChrome"
+                    Background="{ThemeResource ChatPaneSplitterBackgroundBrush}"
+                    Opacity="0"
+                    IsHitTestVisible="False">
+                <StackPanel VerticalAlignment="Center"
+                            HorizontalAlignment="Center">
+                    <Ellipse Width="3" Height="3" Margin="0,2"
+                             Fill="{ThemeResource ChatPaneSplitterGripBrush}"/>
+                    <Ellipse Width="3" Height="3" Margin="0,2"
+                             Fill="{ThemeResource ChatPaneSplitterGripBrush}"/>
+                    <Ellipse Width="3" Height="3" Margin="0,2"
+                             Fill="{ThemeResource ChatPaneSplitterGripBrush}"/>
+                </StackPanel>
+            </Border>
+        </Border>
     </Grid>
 </Page>

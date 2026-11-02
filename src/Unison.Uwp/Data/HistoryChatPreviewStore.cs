@@ -930,7 +930,7 @@ namespace Unison.Uwp.Data
 
             ChatPreviewKind kind = ChatPreviewKind.Text;
             if (row.LastMessageKind >= (int)ChatPreviewKind.Text &&
-                row.LastMessageKind <= (int)ChatPreviewKind.GroupJoin)
+                row.LastMessageKind <= (int)ChatPreviewKind.CallEvent)
             {
                 kind = (ChatPreviewKind)row.LastMessageKind;
             }

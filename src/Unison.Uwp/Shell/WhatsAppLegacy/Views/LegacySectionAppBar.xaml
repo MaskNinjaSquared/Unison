@@ -9,6 +9,19 @@
           Background="{ThemeResource LegacyCommandBarBackgroundBrush}">
     <CommandBar Style="{StaticResource LegacyCommandBarStyle}"
                 Loaded="Bar_Loaded">
+        <AppBarButton x:Name="NewCallAppBarButton"
+                      x:Uid="Shell_LegacyAppBar_NewCall"
+                      Style="{StaticResource LegacyAppBarButtonStyle}"
+                      Label="New call"
+                      Click="NewCall_Click"
+                      Visibility="Collapsed">
+            <TextBlock Text="&#xEB06;"
+                       FontFamily="{StaticResource LegacyIconFont}"
+                       FontSize="{StaticResource LegacyAppBarGlyphSize}"
+                       TextLineBounds="Tight"
+                       HorizontalAlignment="Center"
+                       VerticalAlignment="Center"/>
+        </AppBarButton>
         <AppBarButton x:Uid="Shell_LegacyAppBar_Search"
                       Style="{StaticResource LegacyAppBarButtonStyle}"
                       Label="Search"

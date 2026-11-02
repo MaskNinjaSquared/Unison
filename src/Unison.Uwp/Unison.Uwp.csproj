@@ -264,6 +264,9 @@
     <Compile Include="Shell\WhatsAppLegacy\Views\StatusView.xaml.cs">
       <DependentUpon>StatusView.xaml</DependentUpon>
     </Compile>
+    <Compile Include="Shell\WhatsAppLegacy\Views\CallsView.xaml.cs">
+      <DependentUpon>CallsView.xaml</DependentUpon>
+    </Compile>
     <Compile Include="Shell\WhatsAppLegacy\Views\DebugView.xaml.cs">
       <DependentUpon>DebugView.xaml</DependentUpon>
     </Compile>
@@ -340,6 +343,7 @@
     <Compile Include="Data\StaleOutgoingSweep.cs" />
     <Compile Include="Data\HistoryMessageStore.cs" />
     <Compile Include="Data\HistoryStatusStore.cs" />
+    <Compile Include="Data\CallLogStore.cs" />
     <Compile Include="Data\SqliteLidMappingStorage.cs" />
     <Compile Include="Data\Entities\PersonRow.cs" />
     <Compile Include="Data\Entities\PersonGroupRow.cs" />
@@ -350,6 +354,7 @@
     <Compile Include="Data\Entities\HistoryMessageRow.cs" />
     <Compile Include="Data\Entities\HistoryMessageReactionRow.cs" />
     <Compile Include="Data\Entities\HistoryStatusRow.cs" />
+    <Compile Include="Data\Entities\CallLogRow.cs" />
     <Compile Include="Data\Entities\LidMappingRow.cs" />
     <Compile Include="UI\Controls\LoginInstructionHeader.xaml.cs">
       <DependentUpon>LoginInstructionHeader.xaml</DependentUpon>
@@ -482,6 +487,12 @@
     <Compile Include="UI\Controls\CallsEmptyControl.xaml.cs">
       <DependentUpon>CallsEmptyControl.xaml</DependentUpon>
     </Compile>
+    <Compile Include="UI\Controls\CallDetailsControl.xaml.cs">
+      <DependentUpon>CallDetailsControl.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="UI\Controls\CallsListControl.xaml.cs">
+      <DependentUpon>CallsListControl.xaml</DependentUpon>
+    </Compile>
     <Compile Include="UI\Controls\ContactsVisualizerControl.xaml.cs">
       <DependentUpon>ContactsVisualizerControl.xaml</DependentUpon>
     </Compile>
@@ -526,6 +537,7 @@
     <Compile Include="UI\Helpers\ChatDetailClipboardPaste.cs" />
     <Compile Include="UI\Helpers\ViewerEscapeKey.cs" />
     <Compile Include="UI\Helpers\MessageBubbleContextActions.cs" />
+    <Compile Include="UI\Helpers\RecordingMicFlyAnimator.cs" />
     <Compile Include="UI\Helpers\DesktopCursor.cs" />
     <Compile Include="UI\Helpers\CommunityChatDetailHeader.cs" />
     <Compile Include="UI\Helpers\DesktopCursorKind.cs" />
@@ -542,6 +554,7 @@
     <Compile Include="UI\Converters\ByteSizeConverter.cs" />
     <Compile Include="UI\Converters\FileSizeConverter.cs" />
     <Compile Include="UI\Converters\BoolToDesktopCursorKindConverter.cs" />
+    <Compile Include="UI\Converters\CallDirectionToBrushConverter.cs" />
     <Compile Include="UI\Controls\ChatListPreviewStrip.xaml.cs">
       <DependentUpon>ChatListPreviewStrip.xaml</DependentUpon>
     </Compile>
@@ -1124,6 +1137,10 @@
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </Page>
+    <Page Include="Shell\WhatsAppLegacy\Views\CallsView.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
     <Page Include="Shell\WhatsAppLegacy\Views\DebugView.xaml">
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
@@ -1193,6 +1210,14 @@
       <SubType>Designer</SubType>
     </Page>
     <Page Include="UI\Views\ProfileView.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Include="UI\Controls\CallDetailsControl.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Include="UI\Controls\CallsListControl.xaml">
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </Page>

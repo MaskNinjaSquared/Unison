@@ -74,6 +74,7 @@ namespace Unison.Core.Helpers
                     ConsumeTag(ref s, "[Contact]");
                     break;
                 case ChatPreviewKind.GroupJoin:
+                case ChatPreviewKind.CallEvent:
                     // Plain system line — no media tag to strip.
                     break;
                 case ChatPreviewKind.Reaction:
@@ -228,6 +229,8 @@ namespace Unison.Core.Helpers
                     return ChatPreviewKind.Contact;
                 case ChatMessageKind.GroupJoin:
                     return ChatPreviewKind.GroupJoin;
+                case ChatMessageKind.CallEvent:
+                    return ChatPreviewKind.CallEvent;
                 default:
                     return ChatPreviewKind.Text;
             }
@@ -253,6 +256,8 @@ namespace Unison.Core.Helpers
                     return ChatMessageKind.Contact;
                 case ChatPreviewKind.GroupJoin:
                     return ChatMessageKind.GroupJoin;
+                case ChatPreviewKind.CallEvent:
+                    return ChatMessageKind.CallEvent;
                 default:
                     return ChatMessageKind.Text;
             }

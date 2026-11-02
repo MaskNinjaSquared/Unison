@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <root>
   <!-- 
     Microsoft ResX Schema 
@@ -826,6 +826,45 @@ Desative depois de diagnosticar: manter ligado deixa o app lento.</value>
   <data name="Calls_Empty.Text" xml:space="preserve">
     <value>Para iniciar uma chamada, selecione um contato e clique em Ligar.</value>
   </data>
+  <data name="Calls_FavoritesSection.Text" xml:space="preserve">
+    <value>FAVORITOS</value>
+  </data>
+  <data name="Calls_RecentsSection.Text" xml:space="preserve">
+    <value>RECENTES</value>
+  </data>
+  <data name="Calls_SeeAllFavorites.Content" xml:space="preserve">
+    <value>Ver tudo</value>
+  </data>
+  <data name="Calls_Outgoing" xml:space="preserve">
+    <value>Efetuada</value>
+  </data>
+  <data name="Calls_Incoming" xml:space="preserve">
+    <value>Recebida</value>
+  </data>
+  <data name="Calls_Missed" xml:space="preserve">
+    <value>Perdida</value>
+  </data>
+  <data name="Calls_DetailsTitle.Text" xml:space="preserve">
+    <value>Dados da ligação</value>
+  </data>
+  <data name="Calls_DetailsUnavailable.Text" xml:space="preserve">
+    <value>Não disponível no momento</value>
+  </data>
+  <data name="Calls_NewCallUnavailable" xml:space="preserve">
+    <value>Chamadas ainda não estão disponíveis.</value>
+  </data>
+  <data name="Message_CallMissed" xml:space="preserve">
+    <value>Chamada de voz perdida</value>
+  </data>
+  <data name="Message_CallMissedVideo" xml:space="preserve">
+    <value>Chamada de vídeo perdida</value>
+  </data>
+  <data name="Message_CallCompleted" xml:space="preserve">
+    <value>Chamada de voz</value>
+  </data>
+  <data name="Message_CallCompletedVideo" xml:space="preserve">
+    <value>Chamada de vídeo</value>
+  </data>
   <data name="Shell_Archived.Text" xml:space="preserve">
     <value>Conversas arquivadas</value>
   </data>
@@ -912,6 +951,21 @@ Desative depois de diagnosticar: manter ligado deixa o app lento.</value>
   </data>
   <data name="Settings_Notifications.Text" xml:space="preserve">
     <value>Exibir toasts e badge ao receber mensagens.</value>
+  </data>
+  <data name="Settings_CallNotifications.Header" xml:space="preserve">
+    <value>Notificações de chamada</value>
+  </data>
+  <data name="Settings_CallNotifications.Text" xml:space="preserve">
+    <value>Toasts de chamadas recebidas e Live Tile de chamadas perdidas.</value>
+  </data>
+  <data name="Notification_IncomingCallBody" xml:space="preserve">
+    <value>Chamada recebida (Atenda no telefone principal)</value>
+  </data>
+  <data name="Notification_MissedCall" xml:space="preserve">
+    <value>Chamada perdida</value>
+  </data>
+  <data name="Notification_MissedVideoCall" xml:space="preserve">
+    <value>Chamada de vídeo perdida</value>
   </data>
   <data name="Settings_LockScreenNotifications.Header" xml:space="preserve">
     <value>Tela de bloqueio</value>
@@ -1592,6 +1646,9 @@ Desative depois de diagnosticar: manter ligado deixa o app lento.</value>
   </data>
   <data name="Shell_LegacyAppBar_NewChat.Label" xml:space="preserve">
     <value>Nova conversa</value>
+  </data>
+  <data name="Shell_LegacyAppBar_NewCall.Label" xml:space="preserve">
+    <value>Nova chamada</value>
   </data>
   <data name="Shell_LegacyAppBar_AddContact.Label" xml:space="preserve">
     <value>Adicionar contato</value>
