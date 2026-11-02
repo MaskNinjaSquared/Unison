@@ -181,5 +181,32 @@ namespace Unison.Core.Contracts.WhatsApp
         /// Host path: background resolution reached the group listing step.
         /// </summary>
         void NotifyGroupListingDue();
+
+        /// <summary>
+        /// Leaves the group on the server (Baileys <c>groupLeave</c>). Does not delete the chat.
+        /// </summary>
+        Task LeaveGroupAsync(string groupJid);
+
+        /// <summary>
+        /// Captions for Info when this account created the group; null otherwise.
+        /// <paramref name="dateTemplate"/> must include <c>{0}</c> for the short local date.
+        /// </summary>
+        Task<string> TryGetCreatedByYouCaptionAsync(
+            string groupJid,
+            string dateTemplate,
+            CancellationToken cancellationToken = default);
+
+        /// <summary>
+        /// Fetches community linked subgroups and fills <see cref="ChatItem.CommunityJoinableMembers"/>.
+        /// </summary>
+        Task RefreshCommunityJoinableGroupsAsync(
+            ChatItem communityHub,
+            CancellationToken cancellationToken = default);
+
+        /// <summary>Joins a can-join community subgroup (or invite code when provided).</summary>
+        Task<bool> JoinGroupAsync(
+            string groupJid,
+            string inviteCode = null,
+            CancellationToken cancellationToken = default);
     }
 }

@@ -24,6 +24,9 @@ namespace Unison.Uwp.UI.Views
 
         public event EventHandler MenuClicked;
 
+        /// <summary>Legacy shell search header (same as chat list SearchRequested).</summary>
+        public event EventHandler SearchRequested;
+
         /// <summary>Same shape as <see cref="ChatListView.ChatSelected"/> for shell wiring.</summary>
         public event EventHandler<ChatSelectedEventArgs> ChatSelected;
 
@@ -109,6 +112,11 @@ namespace Unison.Uwp.UI.Views
         private void MenuButton_Click(object sender, RoutedEventArgs e)
         {
             MenuClicked?.Invoke(this, EventArgs.Empty);
+        }
+
+        private void SearchHeaderButton_Click(object sender, RoutedEventArgs e)
+        {
+            SearchRequested?.Invoke(this, EventArgs.Empty);
         }
 
         private void FavoritesList_ItemClick(object sender, ItemClickEventArgs e)

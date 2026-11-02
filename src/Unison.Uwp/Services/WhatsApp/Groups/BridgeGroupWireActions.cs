@@ -4,9 +4,11 @@
 // Forwards IGroupWireActions to the live IWhatsAppSocket from the bridge.
 // =============================================================================
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Unison.Baileys.Protocol;
+using Unison.Core.Models;
 using Unison.Uwp.Client;
 using Unison.WhatsAppClient.Abstractions;
 using UwpSessionProvider = Unison.Uwp.Services.Socket.IWhatsAppSessionProvider;
@@ -88,6 +90,46 @@ namespace Unison.Uwp.Services.WhatsApp.Groups
                 IsTimeout = result.IsTimeout,
                 FailureReason = result.FailureReason
             };
+        }
+
+        public Task LeaveGroupAsync(string groupJid)
+        {
+            IWhatsAppSocket socket = _sessions.Socket;
+            if (socket == null || !socket.IsHandshakeComplete)
+            {
+                return Task.FromException(
+                    new InvalidOperationException("Not connected: leave group was not sent."));
+            }
+
+            return socket.LeaveGroupAsync(groupJid);
+        }
+
+        public Task<IReadOnlyList<CommunityLinkedGroupSnapshot>> FetchCommunityLinkedGroupsAsync(
+            string communityOrGroupJid,
+            CancellationToken cancellationToken = default(CancellationToken))
+        {
+            IWhatsAppSocket socket = _sessions.Socket;
+            if (socket == null || !socket.IsHandshakeComplete)
+            {
+                return Task.FromResult<IReadOnlyList<CommunityLinkedGroupSnapshot>>(
+                    Array.Empty<CommunityLinkedGroupSnapshot>());
+            }
+
+            return socket.FetchCommunityLinkedGroupsAsync(communityOrGroupJid, cancellationToken);
+        }
+
+        public Task<bool> JoinGroupAsync(
+            string groupJid,
+            string inviteCode = null,
+            CancellationToken cancellationToken = default(CancellationToken))
+        {
+            IWhatsAppSocket socket = _sessions.Socket;
+            if (socket == null || !socket.IsHandshakeComplete)
+            {
+                return Task.FromResult(false);
+            }
+
+            return socket.JoinGroupAsync(groupJid, inviteCode, cancellationToken);
         }
     }
 }

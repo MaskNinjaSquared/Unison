@@ -72,6 +72,7 @@ namespace Unison.Core.ViewModels
         private readonly IStringResources _strings;
         private readonly IStatusBarService _statusBar;
         private readonly IDialogService _dialogService;
+        private readonly IGroupPreviewDialogViewModelFactory _groupPreviewFactory;
         private readonly ISessionLogger _sessionLogger;
         private readonly IRuntimeDiagnostics _diagnostics;
         private readonly ILocalSettings _localSettings;
@@ -237,6 +238,7 @@ namespace Unison.Core.ViewModels
             IChatService chatService = null,
             IGroupService groupService = null,
             IGroupNaming groupNaming = null,
+            IGroupPreviewDialogViewModelFactory groupPreviewFactory = null,
             ISessionLogger sessionLogger = null,
             IRuntimeDiagnostics diagnostics = null,
             ILocalSettings localSettings = null,
@@ -274,6 +276,7 @@ namespace Unison.Core.ViewModels
             _strings = strings;
             _statusBar = statusBar;
             _dialogService = dialogService;
+            _groupPreviewFactory = groupPreviewFactory;
             _newChatFactory = newChatFactory ?? throw new ArgumentNullException(nameof(newChatFactory));
             _newConversation = newConversation;
 

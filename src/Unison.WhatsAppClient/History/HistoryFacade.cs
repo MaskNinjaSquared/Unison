@@ -64,6 +64,7 @@ namespace Unison.WhatsAppClient.History
         private readonly IConnectionSoftReconnect _softReconnect;
         private readonly HistoryCatchUpContinuation _catchUp;
         private readonly IJidAliasPersistence _aliasPersist;
+        private readonly IJidResolver _jids;
         private readonly IMessageStore _store;
         private readonly ILocalSettings _settings;
         private readonly IHistoryChatPreviewStore _chatPreviewStore;
@@ -112,6 +113,7 @@ namespace Unison.WhatsAppClient.History
             IConnectionSoftReconnect softReconnect,
             HistoryCatchUpContinuation catchUp,
             IJidAliasPersistence aliasPersist,
+            IJidResolver jids,
             IMessageStore store,
             ILocalSettings settings,
             HistoryOnDemandRegistry onDemandRequests,
@@ -169,6 +171,7 @@ namespace Unison.WhatsAppClient.History
             _softReconnect = softReconnect ?? throw new ArgumentNullException(nameof(softReconnect));
             _catchUp = catchUp ?? throw new ArgumentNullException(nameof(catchUp));
             _aliasPersist = aliasPersist ?? throw new ArgumentNullException(nameof(aliasPersist));
+            _jids = jids ?? throw new ArgumentNullException(nameof(jids));
             _store = store;
             _settings = settings;
             _onDemandRequests = onDemandRequests ?? throw new ArgumentNullException(nameof(onDemandRequests));
@@ -244,6 +247,12 @@ namespace Unison.WhatsAppClient.History
         public bool IsLoadingPersistedChats => _chatState.IsLoadingPersistedChats;
 
         public bool IsInitialSyncSafeMode => _initialSync.IsActive;
+
+        /// <inheritdoc />
+        public bool IsHistoryCatchUpQuiet =>
+            _catchUp != null &&
+            _catchUpHost != null &&
+            _catchUp.IsActive(_catchUpHost.IsCatchUpBannerActive);
 
         public bool IsAwaitingFirstHistorySync => _awaitingFirstHistorySync;
 
@@ -690,6 +699,10 @@ namespace Unison.WhatsAppClient.History
             {
                 return empty;
             }
+
+            // Alias mappings registered before build; fold ChatJid onto canonical so
+            // reactions/pins share the same key as bodies across PN/LID twins.
+            HistoryWriteBatchJidCanonicalizer.Apply(batch, _jids.GetCanonicalJid);
 
             if (_workload.MaterializeHistoryThumbsDuringSync)
             {
@@ -1272,6 +1285,17 @@ namespace Unison.WhatsAppClient.History
                 ", stagnant=" + before.StagnantCycles +
                 "/" + stagnantStop +
                 ", action=" + decision.Action);
+
+            // Silent lots never escalate to loud adjacent FULL (banner + freshnessRepair).
+            // Finish catch-up, drop the claim, and let the silent chain own the next probe.
+            if (SilentFullHistoryPolicy.IsSilentReason(triggerReason))
+            {
+                int applied = decision.MadeProgress ? Math.Max(1, progressSignals) : 0;
+                _catchUpHost.FinishContinue("silent-lot-idle", releaseEnrichment: true);
+                _catchUpHost.ClearFullHistoryOnDemandRequest("silent-lot-idle");
+                _catchUpHost.NotifySilentFullLotQuiet(triggerReason, applied);
+                return;
+            }
 
             switch (decision.Action)
             {

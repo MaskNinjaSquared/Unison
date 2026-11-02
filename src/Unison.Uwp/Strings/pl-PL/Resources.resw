@@ -493,6 +493,12 @@ Wyłącz po zakończeniu diagnozy: pozostawienie włączonego spowalnia aplikacj
   <data name="ChatDetail_RecordingChatUnavailable" xml:space="preserve">
     <value>Rozmowa tego nagrania nie jest już dostępna.</value>
   </data>
+  <data name="ChatDetail_RecordingPause" xml:space="preserve">
+    <value>Wstrzymaj</value>
+  </data>
+  <data name="ChatDetail_RecordingPlay" xml:space="preserve">
+    <value>Odtwórz</value>
+  </data>
   <data name="ChatDetail_AudioSendFailed" xml:space="preserve">
     <value>Nie można wysłać nagrania.</value>
   </data>

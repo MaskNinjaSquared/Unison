@@ -79,13 +79,15 @@ namespace Unison.Core.Tests.Helpers
         }
 
         [Fact]
-        public void CanFire_requires_socket_idle_claim_and_previous_quiet()
+        public void CanFire_requires_tip_stale_socket_idle_claim_and_previous_quiet()
         {
-            Assert.True(SilentFullHistoryPolicy.CanFire(true, false, false, true, out _));
-            Assert.False(SilentFullHistoryPolicy.CanFire(false, false, false, true, out _));
-            Assert.False(SilentFullHistoryPolicy.CanFire(true, false, false, false, out _));
-            Assert.False(SilentFullHistoryPolicy.CanFire(true, true, false, true, out _));
-            Assert.False(SilentFullHistoryPolicy.CanFire(true, false, true, true, out _));
+            Assert.True(SilentFullHistoryPolicy.CanFire(true, false, false, true, true, out _));
+            Assert.False(SilentFullHistoryPolicy.CanFire(true, false, false, true, false, out string fresh));
+            Assert.Equal("tip-fresh", fresh);
+            Assert.False(SilentFullHistoryPolicy.CanFire(false, false, false, true, true, out _));
+            Assert.False(SilentFullHistoryPolicy.CanFire(true, false, false, false, true, out _));
+            Assert.False(SilentFullHistoryPolicy.CanFire(true, true, false, true, true, out _));
+            Assert.False(SilentFullHistoryPolicy.CanFire(true, false, true, true, true, out _));
         }
 
         [Fact]
@@ -94,6 +96,38 @@ namespace Unison.Core.Tests.Helpers
             Assert.True(SilentFullHistoryPolicy.IsSilentReason("silent-full:post-init"));
             Assert.False(SilentFullHistoryPolicy.IsSilentReason("periodic-safety:tip-stale"));
             Assert.False(SilentFullHistoryPolicy.IsSilentReason(null));
+        }
+
+        [Fact]
+        public void Arm_on_health_start_only_when_stagnant_cascade_disabled()
+        {
+            Assert.True(SilentFullHistoryPolicy.ShouldArmOnHealthStart(
+                allowStagnantRepairCascade: false));
+            Assert.False(SilentFullHistoryPolicy.ShouldArmOnHealthStart(
+                allowStagnantRepairCascade: true));
+        }
+
+        [Fact]
+        public void Kick_after_loud_finish_needs_armed_and_tip_stale()
+        {
+            Assert.True(SilentFullHistoryPolicy.ShouldKickAfterLoudCatchUpFinish(
+                armed: true, tipStale: true, finishReason: "offline-fresh"));
+            Assert.False(SilentFullHistoryPolicy.ShouldKickAfterLoudCatchUpFinish(
+                armed: true, tipStale: false, finishReason: "offline-fresh"));
+            Assert.False(SilentFullHistoryPolicy.ShouldKickAfterLoudCatchUpFinish(
+                armed: false, tipStale: true, finishReason: "offline-fresh"));
+            Assert.False(SilentFullHistoryPolicy.ShouldKickAfterLoudCatchUpFinish(
+                armed: true, tipStale: true, finishReason: "silent-lot-idle"));
+            Assert.False(SilentFullHistoryPolicy.ShouldKickAfterLoudCatchUpFinish(
+                armed: true, tipStale: true, finishReason: "silent-full:post-init"));
+        }
+
+        [Fact]
+        public void Tip_fresh_while_armed_should_stop()
+        {
+            Assert.True(SilentFullHistoryPolicy.ShouldStopBecauseTipFresh(true, tipStale: false));
+            Assert.False(SilentFullHistoryPolicy.ShouldStopBecauseTipFresh(true, tipStale: true));
+            Assert.False(SilentFullHistoryPolicy.ShouldStopBecauseTipFresh(false, tipStale: false));
         }
     }
 }

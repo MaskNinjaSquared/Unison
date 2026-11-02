@@ -39,6 +39,8 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
 
         public bool CanSendDeleteForEveryone => _sessions.Socket != null;
 
+        public bool CanSendReaction => _sessions.Socket != null;
+
         public Task PresenceSubscribeAsync(string jid)
         {
             IWhatsAppSocket socket = _sessions.Socket;
@@ -95,6 +97,17 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
             }
 
             return socket.SendDeleteMessageAsync(chatJid, targetKey);
+        }
+
+        public Task SendReactionMessageAsync(string chatJid, MessageKey targetKey, string emoji)
+        {
+            IWhatsAppSocket socket = _sessions.Socket;
+            if (socket == null)
+            {
+                throw new InvalidOperationException("Not connected: the reaction was not sent.");
+            }
+
+            return socket.SendReactionMessageAsync(chatJid, targetKey, emoji);
         }
     }
 }

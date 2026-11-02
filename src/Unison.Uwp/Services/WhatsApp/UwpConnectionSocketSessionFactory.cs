@@ -55,7 +55,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 owner.ChatsFacade,
                 owner.ContactsFacade,
                 owner.MessagesFacade,
-                owner.Groups,
+                owner.GroupFacade,
                 owner.ResolveSentMessageForRetryAsync);
 
             SocketEventHandlerWiring.Attach(bridge, owner);

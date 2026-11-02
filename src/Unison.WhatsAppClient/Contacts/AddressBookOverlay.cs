@@ -207,88 +207,79 @@ namespace Unison.WhatsAppClient.Contacts
             return overlay;
         }
 
+        private static readonly TimeSpan CollectSliceGap = TimeSpan.FromMilliseconds(24);
+
         /// <summary>
         /// Rebuilds the in-memory overlay. When <paramref name="force"/> is false and an overlay
         /// already exists, skipped (reading the address book is not cheap). After bootstrap, pass
         /// true so live agenda names replace stale JSON / push names.
         /// </summary>
-        public async Task RefreshAsync(bool force)
+        /// <returns>JIDs written into the overlay table (empty when skipped or none mapped).</returns>
+        public async Task<IReadOnlyList<string>> RefreshAsync(bool force)
         {
             if (!force && _addressBookNames.Count > 0)
             {
-                return;
+                return Array.Empty<string>();
             }
 
             var extraPhones = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            List<string> jids = null;
+            var jids = new List<string>();
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            List<ChatItem> snapshot = null;
             await _ui.RunAsync(() =>
             {
-                jids = new List<string>();
-                var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                foreach (var chat in _chatState.Chats)
+                // Shallow row refs only — member walks stay in budgeted hops below.
+                snapshot = new List<ChatItem>(_chatState.Chats);
+            }).ConfigureAwait(false);
+
+            int index = 0;
+            int total = snapshot == null ? 0 : snapshot.Count;
+            while (index < total)
+            {
+                int from = index;
+                int before = jids.Count;
+                await _ui.RunAsync(() =>
                 {
-                    if (chat == null || string.IsNullOrWhiteSpace(chat.JID))
-                    {
-                        continue;
-                    }
+                    index = AddressBookRefreshTargets.Append(
+                        snapshot,
+                        from,
+                        jids,
+                        extraPhones,
+                        seen,
+                        _jids.GetCanonicalJid);
+                }).ConfigureAwait(false);
 
-                    string canonical = _jids.GetCanonicalJid(chat.JID) ?? chat.JID;
-                    if (chat.IsGroup)
-                    {
-                        if (chat.GroupMembers == null)
-                        {
-                            continue;
-                        }
-
-                        foreach (var member in chat.GroupMembers)
-                        {
-                            if (member == null || string.IsNullOrWhiteSpace(member.Jid))
-                            {
-                                continue;
-                            }
-
-                            string memberJid = JidHelper.Normalize(member.Jid);
-                            if (string.IsNullOrEmpty(memberJid) || !seen.Add(memberJid))
-                            {
-                                continue;
-                            }
-
-                            jids.Add(memberJid);
-                            string memberPhone = PhoneNumberHelper.NormalizePhoneDigits(member.PhoneNumber)
-                                ?? JidHelper.TryPhoneFromJid(memberJid);
-                            if (!string.IsNullOrEmpty(memberPhone))
-                            {
-                                extraPhones[memberJid] = memberPhone;
-                            }
-                        }
-
-                        continue;
-                    }
-
-                    if (seen.Add(canonical))
-                    {
-                        jids.Add(canonical);
-                    }
+                if (index == from && jids.Count == before)
+                {
+                    // Empty/null row, or a group already fully in `seen` — advance.
+                    index = from + 1;
                 }
-            });
 
-            var overlay = await SyncAsync(jids ?? new List<string>(), extraPhones).ConfigureAwait(false);
+                if (index < total)
+                {
+                    await Task.Delay(CollectSliceGap).ConfigureAwait(false);
+                }
+            }
+
+            var overlay = await SyncAsync(jids, extraPhones).ConfigureAwait(false);
             if (overlay == null || overlay.Count == 0)
             {
                 Debug.WriteLine("[AddressBookOverlay] Overlay unavailable or empty; falling back to WhatsApp names");
-                return;
+                return Array.Empty<string>();
             }
 
-            int updates = ApplyToTable(overlay);
-            Debug.WriteLine($"[AddressBookOverlay] Overlay refreshed: {updates} mapped JIDs");
+            IReadOnlyList<string> updates = ApplyToTable(overlay);
+            Debug.WriteLine($"[AddressBookOverlay] Overlay refreshed: {updates.Count} mapped JIDs");
+            return updates;
         }
 
         /// <summary>
         /// Names the 1:1 rows already in the chat list from the address book. Needs no session:
         /// the agenda and the person store are local. Group members wait for <see cref="RefreshAsync"/>.
         /// </summary>
-        /// <returns>How many JIDs received an address-book name.</returns>
-        public async Task<int> RefreshChatListAsync(CancellationToken cancellationToken = default(CancellationToken))
+        /// <returns>JIDs that received an address-book name (empty when none).</returns>
+        public async Task<IReadOnlyList<string>> RefreshChatListAsync(
+            CancellationToken cancellationToken = default(CancellationToken))
         {
             List<string> jids = null;
             await _ui.RunAsync(() =>
@@ -299,19 +290,22 @@ namespace Unison.WhatsAppClient.Contacts
             if (jids == null || jids.Count == 0)
             {
                 Debug.WriteLine("[AddressBookOverlay] Chat-list pass skipped: no direct chats");
-                return 0;
+                return Array.Empty<string>();
             }
 
             var overlay = await SyncAsync(jids, extraPhones: null, onlyGivenJids: true, cancellationToken)
                 .ConfigureAwait(false);
-            int updates = overlay == null ? 0 : ApplyToTable(overlay);
-            Debug.WriteLine($"[AddressBookOverlay] Chat-list pass: directChats={jids.Count}, mapped={updates}");
-            return updates;
+            IReadOnlyList<string> mapped = overlay == null
+                ? Array.Empty<string>()
+                : ApplyToTable(overlay);
+            Debug.WriteLine(
+                $"[AddressBookOverlay] Chat-list pass: directChats={jids.Count}, mapped={mapped.Count}");
+            return mapped;
         }
 
-        private int ApplyToTable(Dictionary<string, string> overlay)
+        private IReadOnlyList<string> ApplyToTable(Dictionary<string, string> overlay)
         {
-            int updates = 0;
+            var updates = new List<string>();
             foreach (var pair in overlay)
             {
                 if (string.IsNullOrWhiteSpace(pair.Key) || string.IsNullOrWhiteSpace(pair.Value))
@@ -320,7 +314,7 @@ namespace Unison.WhatsAppClient.Contacts
                 }
 
                 _addressBookNames.Set(pair.Key, pair.Value.Trim());
-                updates++;
+                updates.Add(pair.Key);
             }
 
             return updates;

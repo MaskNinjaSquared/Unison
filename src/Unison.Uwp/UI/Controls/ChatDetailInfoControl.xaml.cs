@@ -201,6 +201,28 @@ namespace Unison.Uwp.UI.Controls
                 ChatPinButton.IsEnabled = vm.PinChatCommand?.CanExecute(null) == true;
             }
 
+            Button leaveGroupButton = LeaveGroupButton ?? FindCommandBarButton("LeaveGroupButton");
+            if (leaveGroupButton != null)
+            {
+                leaveGroupButton.Visibility = vm.CanLeaveGroup
+                    ? Visibility.Visible
+                    : Visibility.Collapsed;
+                leaveGroupButton.IsEnabled = vm.LeaveGroupCommand?.CanExecute(null) == true;
+            }
+
+            Button blockContactButton = BlockContactButton ?? FindCommandBarButton("BlockContactButton");
+            if (blockContactButton != null)
+            {
+                blockContactButton.Visibility = vm.CanBlockContact
+                    ? Visibility.Visible
+                    : Visibility.Collapsed;
+                blockContactButton.IsEnabled = vm.BlockContactCommand?.CanExecute(null) == true;
+                string blockTip = string.IsNullOrWhiteSpace(vm.BlockContactLabel)
+                    ? "Block contact"
+                    : vm.BlockContactLabel;
+                ToolTipService.SetToolTip(blockContactButton, blockTip);
+            }
+
             Button deleteChatButton = DeleteChatButton ?? FindCommandBarButton("DeleteChatButton");
             if (deleteChatButton != null)
             {
@@ -239,6 +261,24 @@ namespace Unison.Uwp.UI.Controls
         private void ChatPinButton_Click(object sender, RoutedEventArgs e)
         {
             var cmd = InfoViewModel?.PinChatCommand;
+            if (cmd?.CanExecute(null) == true)
+            {
+                cmd.Execute(null);
+            }
+        }
+
+        private void LeaveGroupButton_Click(object sender, RoutedEventArgs e)
+        {
+            var cmd = InfoViewModel?.LeaveGroupCommand;
+            if (cmd?.CanExecute(null) == true)
+            {
+                cmd.Execute(null);
+            }
+        }
+
+        private void BlockContactButton_Click(object sender, RoutedEventArgs e)
+        {
+            var cmd = InfoViewModel?.BlockContactCommand;
             if (cmd?.CanExecute(null) == true)
             {
                 cmd.Execute(null);

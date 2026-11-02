@@ -8,8 +8,9 @@ using Windows.UI.Xaml.Input;
 namespace Unison.Uwp.UI.Controls
 {
     /// <summary>
-    /// Quick reaction strip: <see cref="ReactionQuickEmojis.Count"/> glyphs scroll;
-    /// plus stays fixed outside the scroller. Width never exceeds the window.
+    /// Quick reaction strip: glyphs from <see cref="ReactionQuickEmojis.ForStrip"/> scroll
+    /// (12 default, or 13 with a custom mine at the front); plus stays fixed outside the
+    /// scroller. Width never exceeds the window.
     /// </summary>
     public sealed partial class ReactionQuickBar : UserControl
     {
@@ -53,13 +54,13 @@ namespace Unison.Uwp.UI.Controls
 
         private static IReadOnlyList<ReactionQuickBarEntry> BuildEntries(string selected)
         {
-            IReadOnlyList<string> all = ReactionQuickEmojis.All;
-            var list = new List<ReactionQuickBarEntry>(all.Count);
-            for (int i = 0; i < all.Count; i++)
+            IReadOnlyList<string> glyphs = ReactionQuickEmojis.ForStrip(selected);
+            var list = new List<ReactionQuickBarEntry>(glyphs.Count);
+            for (int i = 0; i < glyphs.Count; i++)
             {
-                string glyph = all[i];
+                string glyph = glyphs[i];
                 bool selectedMark = !string.IsNullOrEmpty(selected) &&
-                    string.Equals(glyph, selected, StringComparison.Ordinal);
+                    string.Equals(glyph, selected.Trim(), StringComparison.Ordinal);
                 list.Add(new ReactionQuickBarEntry(glyph, selectedMark));
             }
 

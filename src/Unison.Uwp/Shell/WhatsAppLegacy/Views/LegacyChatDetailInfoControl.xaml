@@ -236,6 +236,20 @@
                                        HorizontalAlignment="Center"
                                        VerticalAlignment="Center"/>
                         </Button>
+                        <Button x:Name="LeaveGroupButton"
+                                Style="{StaticResource LegacyInfoBarButtonStyle}"
+                                Visibility="Collapsed"
+                                Click="LeaveGroupButton_Click"
+                                ToolTipService.ToolTip="Leave group">
+                            <FontIcon Glyph="&#xE89B;" FontFamily="{StaticResource IconFont}" FontSize="18" Foreground="White"/>
+                        </Button>
+                        <Button x:Name="BlockContactButton"
+                                Style="{StaticResource LegacyInfoBarButtonStyle}"
+                                Visibility="Collapsed"
+                                Click="BlockContactButton_Click"
+                                ToolTipService.ToolTip="Block contact">
+                            <FontIcon Glyph="&#xE8F8;" FontFamily="{StaticResource IconFont}" FontSize="18" Foreground="White"/>
+                        </Button>
                         <Button x:Name="DeleteChatButton"
                                 Style="{StaticResource LegacyInfoBarButtonStyle}"
                                 Visibility="Collapsed"
@@ -262,6 +276,10 @@
                                TextAlignment="Center" TextWrapping="Wrap" Foreground="White"/>
                     <TextBlock x:Name="PinCaption" Text="pin to start" Width="50" Margin="9,0" FontSize="11"
                                TextAlignment="Center" TextWrapping="Wrap" Foreground="White"/>
+                    <TextBlock x:Name="LeaveGroupCaption" Text="leave group" Width="50" Margin="9,0" FontSize="11"
+                               TextAlignment="Center" TextWrapping="Wrap" Foreground="White" Visibility="Collapsed"/>
+                    <TextBlock x:Name="BlockContactCaption" Text="block contact" Width="50" Margin="9,0" FontSize="11"
+                               TextAlignment="Center" TextWrapping="Wrap" Foreground="White" Visibility="Collapsed"/>
                     <TextBlock x:Name="DeleteCaption" Text="delete chat" Width="50" Margin="9,0" FontSize="11"
                                TextAlignment="Center" TextWrapping="Wrap" Foreground="White" Visibility="Collapsed"/>
                 </StackPanel>

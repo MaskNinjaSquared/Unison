@@ -45,7 +45,7 @@ namespace Unison.Core.ViewModels
         /// <summary>
         /// Applies <paramref name="emoji"/> locally, then asks the message façade.
         /// Clicking the emoji already marked as mine removes it immediately.
-        /// On failure (including the current fake 3s false), undoes the local change.
+        /// On failure, undoes the local change.
         /// </summary>
         public async Task ReactToMessageAsync(ChatMessage message, string emoji)
         {
@@ -87,7 +87,7 @@ namespace Unison.Core.ViewModels
             bool kept = false;
             try
             {
-                kept = await _messageService.TryReactAsync(chatJid, message.Id, trimmed)
+                kept = await _messageService.TryReactAsync(chatJid, message, trimmed)
                     .ConfigureAwait(false);
             }
             catch (Exception ex)
@@ -134,7 +134,7 @@ namespace Unison.Core.ViewModels
             try
             {
                 // Empty text = WhatsApp reaction removal.
-                kept = await _messageService.TryReactAsync(chatJid, message.Id, string.Empty)
+                kept = await _messageService.TryReactAsync(chatJid, message, string.Empty)
                     .ConfigureAwait(false);
             }
             catch (Exception ex)

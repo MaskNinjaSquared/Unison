@@ -14,6 +14,7 @@ namespace Unison.Uwp.UI.Views
     public sealed partial class StatusDetailView : UserControl
     {
         private bool _hooked;
+        private bool _pendingVideoPlay;
 
         public StatusDetailViewModel ViewModel { get; private set; }
 
@@ -32,6 +33,10 @@ namespace Unison.Uwp.UI.Views
             InitializeComponent();
             Loaded += StatusDetailView_Loaded;
             Unloaded += StatusDetailView_Unloaded;
+            if (ViewerRoot != null)
+            {
+                ViewerRoot.SizeChanged += ViewerRoot_SizeChanged;
+            }
         }
 
         public async System.Threading.Tasks.Task OpenAuthorAsync(StatusAuthorItem author)
@@ -132,6 +137,7 @@ namespace Unison.Uwp.UI.Views
 
         private void ApplyMedia()
         {
+            _pendingVideoPlay = false;
             StopVideo();
             ViewerImage.Source = null;
 
@@ -155,7 +161,16 @@ namespace Unison.Uwp.UI.Views
             if (ViewModel.IsVideo)
             {
                 ViewerVideo.Source = parsed;
-                ViewerVideo.Play();
+                if (HasMeasuredVideoViewport())
+                {
+                    RemeasureVideo();
+                    ViewerVideo.Play();
+                }
+                else
+                {
+                    // NarrowDetail / reopen: pane may still be width 0 — play on next SizeChanged.
+                    _pendingVideoPlay = true;
+                }
             }
             else if (ViewModel.IsImage)
             {
@@ -165,10 +180,59 @@ namespace Unison.Uwp.UI.Views
 
         private void StopVideo()
         {
+            _pendingVideoPlay = false;
             try
             {
                 ViewerVideo.Stop();
                 ViewerVideo.Source = null;
+            }
+            catch
+            {
+            }
+        }
+
+        private void ViewerRoot_SizeChanged(object sender, SizeChangedEventArgs e)
+        {
+            if (!HasMeasuredVideoViewport())
+            {
+                return;
+            }
+
+            if (_pendingVideoPlay && ViewModel != null && ViewModel.IsVideo && ViewerVideo.Source != null)
+            {
+                _pendingVideoPlay = false;
+                RemeasureVideo();
+                try
+                {
+                    ViewerVideo.Play();
+                }
+                catch
+                {
+                }
+
+                return;
+            }
+
+            if (ViewModel != null && ViewModel.IsVideo && ViewerVideo.Source != null)
+            {
+                RemeasureVideo();
+            }
+        }
+
+        private bool HasMeasuredVideoViewport()
+        {
+            return ViewerRoot != null &&
+                   ViewerRoot.ActualWidth > 1 &&
+                   ViewerRoot.ActualHeight > 1;
+        }
+
+        private void RemeasureVideo()
+        {
+            try
+            {
+                ViewerVideo.InvalidateMeasure();
+                ViewerVideo.InvalidateArrange();
+                ViewerRoot?.UpdateLayout();
             }
             catch
             {
@@ -180,6 +244,15 @@ namespace Unison.Uwp.UI.Views
             if (ViewModel == null)
             {
                 return;
+            }
+
+            if (HasMeasuredVideoViewport())
+            {
+                RemeasureVideo();
+            }
+            else
+            {
+                _pendingVideoPlay = true;
             }
 
             double seconds = ViewerVideo.NaturalDuration.HasTimeSpan

@@ -38,6 +38,58 @@ namespace Unison.Core.Helpers
                    reason.StartsWith(ReasonPrefix, StringComparison.Ordinal);
         }
 
+        /// <summary>
+        /// Arm the silent chain when health starts only if stagnant cascade (and the
+        /// periodic safety tick that mirrors it) are disabled — Low / Mobile. High
+        /// already recovers via cascade + periodic FULL safety; arming both would
+        /// double-solicit.
+        /// </summary>
+        public static bool ShouldArmOnHealthStart(bool allowStagnantRepairCascade)
+        {
+            return !allowStagnantRepairCascade;
+        }
+
+        /// <summary>
+        /// After a loud catch-up finish (offline-fresh / stagnant / etc.), kick the
+        /// first silent probe only when the chain is armed and tips still look owed.
+        /// Silent-lot finishes go through <see cref="AfterQuietLot"/> instead.
+        /// </summary>
+        public static bool ShouldKickAfterLoudCatchUpFinish(
+            bool armed,
+            bool tipStale,
+            string finishReason)
+        {
+            if (!armed || !tipStale)
+            {
+                return false;
+            }
+
+            if (string.IsNullOrEmpty(finishReason))
+            {
+                return true;
+            }
+
+            if (IsSilentReason(finishReason))
+            {
+                return false;
+            }
+
+            if (string.Equals(finishReason, "silent-lot-idle", StringComparison.Ordinal))
+            {
+                return false;
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// Tip already fresh while armed — disarm rather than spin skip-fire forever.
+        /// </summary>
+        public static bool ShouldStopBecauseTipFresh(bool armed, bool tipStale)
+        {
+            return armed && !tipStale;
+        }
+
         public static TimeSpan DelayFor(DeviceCategory category)
         {
             switch (category)
@@ -108,16 +160,23 @@ namespace Unison.Core.Helpers
         }
 
         /// <summary>
-        /// Gate for firing a silent FULL: socket up, no catch-up banner claim, no FULL
-        /// in flight, and the previous lot is quiet.
+        /// Gate for firing a silent FULL: tip still stale, socket up, no catch-up
+        /// claim, no FULL in flight, and the previous lot is quiet.
         /// </summary>
         public static bool CanFire(
             bool socketReady,
             bool catchUpActive,
             bool fullClaimed,
             bool previousLotQuiet,
+            bool tipStale,
             out string reason)
         {
+            if (!tipStale)
+            {
+                reason = "tip-fresh";
+                return false;
+            }
+
             if (!socketReady)
             {
                 reason = "socket-not-ready";

@@ -193,11 +193,16 @@
     <Compile Include="Services\LidMappingPersistHost.cs" />
     <Compile Include="Services\SyncWorkloadLidMappingPersistPolicy.cs" />
     <Compile Include="Services\WhatsApp\Contacts\ChatAvatarFetch.cs" />
+    <Compile Include="Services\WhatsApp\Contacts\BridgeContactBlockActions.cs" />
     <Compile Include="Services\WhatsApp\Chats\BridgeChatAccountActions.cs" />
     <Compile Include="Services\WhatsApp\Groups\BridgeGroupWireActions.cs" />
     <Compile Include="Services\WhatsApp\Groups\BridgeGroupAvatarActions.cs" />
     <Compile Include="Services\WhatsApp\History\HistoryThumbnailMaterializer.cs" />
     <Compile Include="Services\WhatsApp\History\WinRtHistoryMessageThumbnailMaterializer.cs" />
+    <Compile Include="Services\WhatsApp\History\BridgeHistoryOnDemandSocket.cs" />
+    <Compile Include="Services\WhatsApp\History\SocketOwnedHistoryOnDemand.cs" />
+    <Compile Include="Services\WhatsApp\Identity\BridgeSocketAliasRegistrar.cs" />
+    <Compile Include="Services\WhatsApp\Chats\ChatCatalogDebounceTimer.cs" />
     <Compile Include="Services\WhatsApp\Status\WinRtStatusThumbnailMaterializer.cs" />
     <Compile Include="Services\Network\WinRtNetworkAccess.cs" />
     <Compile Include="Services\WinRtAppMemoryInfo.cs" />
@@ -643,6 +648,12 @@
     <Compile Include="UI\Controls\ChatInfoMediaTemplateSelector.cs" />
     <Compile Include="UI\Dialogs\NewChatDialog.xaml.cs">
       <DependentUpon>NewChatDialog.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="UI\Dialogs\GroupPreviewDialog.xaml.cs">
+      <DependentUpon>GroupPreviewDialog.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="UI\Dialogs\ChatExportReadyDialog.xaml.cs">
+      <DependentUpon>ChatExportReadyDialog.xaml</DependentUpon>
     </Compile>
     <Compile Include="UI\Dialogs\QrCodeFullscreenDialog.xaml.cs">
       <DependentUpon>QrCodeFullscreenDialog.xaml</DependentUpon>
@@ -1214,6 +1225,14 @@
       <SubType>Designer</SubType>
     </Page>
     <Page Include="UI\Dialogs\NewChatDialog.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Include="UI\Dialogs\GroupPreviewDialog.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Include="UI\Dialogs\ChatExportReadyDialog.xaml">
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </Page>

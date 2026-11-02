@@ -383,7 +383,7 @@
                                             <FontIcon FontFamily="{StaticResource IconFont}" Glyph="&#xE74F;"/>
                                         </MenuFlyoutItem.Icon>
                                     </MenuFlyoutItem>
-                                    <MenuFlyoutItem x:Uid="ChatDetail_ExportChat" Text="Export chat" IsEnabled="False"
+                                    <MenuFlyoutItem x:Uid="ChatDetail_ExportChat" Text="Export chat" Command="{Binding ExportChatCommand}"
                                                     Style="{StaticResource ModernMenuFlyoutItemStyle}"/>
                                     <MenuFlyoutItem Tag="widgetPin"
                                                     x:Uid="ChatDetail_PinToStart"
@@ -496,7 +496,7 @@
                                             <FontIcon FontFamily="{StaticResource IconFont}" Glyph="&#xE74F;"/>
                                         </MenuFlyoutItem.Icon>
                                     </MenuFlyoutItem>
-                                    <MenuFlyoutItem x:Uid="ChatDetail_ExportChat" Text="Export chat" IsEnabled="False"
+                                    <MenuFlyoutItem x:Uid="ChatDetail_ExportChat" Text="Export chat" Command="{Binding ExportChatCommand}"
                                                     Style="{StaticResource ModernMenuFlyoutItemStyle}"/>
                                     <MenuFlyoutItem Tag="widgetPin"
                                                     x:Uid="ChatDetail_PinToStart"
@@ -632,6 +632,37 @@
                 </ToolTipService.ToolTip>
                 <TextBlock Text="&#xE74B;" FontFamily="{StaticResource IconFont}" FontSize="16"
                            Foreground="{ThemeResource ChatDetailAccentBrush}"/>
+            </Button>
+
+            <!-- View-once voice toggle: same dock as scroll-to-bottom, above it while recording. -->
+            <Button x:Name="ViewOnceVoiceButton"
+                    Grid.Row="2"
+                    Canvas.ZIndex="3"
+                    Width="40" Height="40"
+                    Margin="0,0,12,12"
+                    HorizontalAlignment="Right"
+                    VerticalAlignment="Bottom"
+                    Style="{StaticResource ScrollToBottomButtonStyle}"
+                    Background="#CC1A1A1A"
+                    Command="{Binding ToggleViewOnceVoiceCommand}"
+                    ToolTipService.ToolTip="View once"
+                    Visibility="{Binding IsRecording, Converter={StaticResource BooleanToVisibilityConverter}}">
+                <Grid Width="36" Height="36">
+                    <Ellipse Stroke="{ThemeResource ChatDetailMutedTextBrush}"
+                             StrokeThickness="2"
+                             Fill="Transparent"
+                             Visibility="{Binding IsViewOnceVoice, Converter={StaticResource InvertedBooleanToVisibilityConverter}}"/>
+                    <Ellipse Stroke="{ThemeResource ChatDetailAccentBrush}"
+                             StrokeThickness="2"
+                             Fill="#33FFFFFF"
+                             Visibility="{Binding IsViewOnceVoice, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                    <TextBlock Text="&#xEA0A;"
+                               FontFamily="{StaticResource UnisonIconFont}"
+                               FontSize="16"
+                               HorizontalAlignment="Center"
+                               VerticalAlignment="Center"
+                               Foreground="{ThemeResource ChatDetailHeaderTitleBrush}"/>
+                </Grid>
             </Button>
 
             <!-- Hidden player for voice bubbles; SMTC driven via MediaPlayer (Imgur-style). -->
@@ -850,53 +881,81 @@
                     </Button>
                 </Grid>
 
-                <!-- Recording overlay: red mic + elapsed | trash + send -->
-                <Grid x:Name="RecordingOverlay" Padding="12,7"
+                <!-- Recording: mic + elapsed | pause | trash + send (view-once docks above the bar) -->
+                <Grid x:Name="RecordingOverlay"
+                      Padding="12,4,12,7"
                       Visibility="{Binding IsRecording, Converter={StaticResource BooleanToVisibilityConverter}}">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto"/>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="Auto"/>
-                        <ColumnDefinition Width="Auto"/>
-                    </Grid.ColumnDefinitions>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
 
-                    <TextBlock x:Name="RecordingMicIcon"
-                               Text="&#xE720;" FontFamily="{StaticResource IconFont}" FontSize="22"
-                               Foreground="Red" VerticalAlignment="Center" Margin="4,0,0,0"
-                               RenderTransformOrigin="0.5,0.5">
-                        <TextBlock.RenderTransform>
-                            <TranslateTransform x:Name="RecordingMicTranslate"/>
-                        </TextBlock.RenderTransform>
-                    </TextBlock>
+                        <TextBlock x:Name="RecordingMicIcon"
+                                   Text="&#xE720;" FontFamily="{StaticResource IconFont}" FontSize="22"
+                                   Foreground="Red" VerticalAlignment="Center" Margin="4,0,0,0"
+                                   RenderTransformOrigin="0.5,0.5">
+                            <TextBlock.RenderTransform>
+                                <TranslateTransform x:Name="RecordingMicTranslate"/>
+                            </TextBlock.RenderTransform>
+                        </TextBlock>
 
-                    <TextBlock x:Name="RecordingElapsedText"
-                               Grid.Column="1"
-                               Text="{Binding RecordingElapsedText}"
-                               FontSize="16"
-                               FontFamily="{StaticResource MainFont}"
-                               Foreground="{ThemeResource ChatDetailHeaderTitleBrush}"
-                               VerticalAlignment="Center"
-                               Margin="12,0,8,0"/>
+                        <TextBlock x:Name="RecordingElapsedText"
+                                   Grid.Column="1"
+                                   Text="{Binding RecordingElapsedText}"
+                                   FontSize="16"
+                                   FontFamily="{StaticResource MainFont}"
+                                   Foreground="{ThemeResource ChatDetailHeaderTitleBrush}"
+                                   VerticalAlignment="Center"
+                                   Margin="12,0,8,0"/>
 
-                    <Button x:Name="CancelRecordingButton"
-                            Grid.Column="2"
-                            Style="{StaticResource WhatsAppIconButtonStyle}"
-                            Width="40" Height="40"
-                            Click="CancelRecordingButton_Click"
-                            ToolTipService.ToolTip="Cancel">
-                        <TextBlock x:Name="RecordingTrashIcon"
-                                   Text="&#xE74D;" FontFamily="{StaticResource IconFont}" FontSize="20"
-                                   Foreground="{ThemeResource ChatDetailMutedTextBrush}"/>
-                    </Button>
+                        <Button Grid.Column="2"
+                                Style="{StaticResource ScrollToBottomButtonStyle}"
+                                Background="#CC1A1A1A"
+                                Height="40"
+                                MinWidth="40"
+                                Padding="12,0"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center"
+                                Command="{Binding ToggleRecordingPauseCommand}"
+                                ToolTipService.ToolTip="{Binding RecordingPauseLabel}"
+                                AutomationProperties.Name="{Binding RecordingPauseLabel}">
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                <TextBlock Text="{Binding RecordingPauseGlyph}"
+                                           FontFamily="{StaticResource IconFont}"
+                                           FontSize="20"
+                                           VerticalAlignment="Center"
+                                           Foreground="{ThemeResource ChatDetailHeaderTitleBrush}"/>
+                                <TextBlock Text="{Binding RecordingPauseLabel}"
+                                           FontFamily="{StaticResource MainFont}"
+                                           FontSize="14"
+                                           Margin="8,0,0,0"
+                                           VerticalAlignment="Center"
+                                           Foreground="{ThemeResource ChatDetailHeaderTitleBrush}"/>
+                            </StackPanel>
+                        </Button>
 
-                    <Button Grid.Column="3"
-                            Style="{StaticResource WhatsAppIconButtonStyle}"
-                            Width="40" Height="40"
-                            Command="{Binding SendRecordingCommand}"
-                            ToolTipService.ToolTip="Send">
-                        <TextBlock Text="&#xE724;" FontFamily="{StaticResource IconFont}" FontSize="20"
-                                   Foreground="{ThemeResource ChatDetailAccentBrush}"/>
-                    </Button>
+                        <Button x:Name="CancelRecordingButton"
+                                Grid.Column="3"
+                                Style="{StaticResource WhatsAppIconButtonStyle}"
+                                Width="40" Height="40"
+                                Click="CancelRecordingButton_Click"
+                                ToolTipService.ToolTip="Cancel">
+                            <TextBlock x:Name="RecordingTrashIcon"
+                                       Text="&#xE74D;" FontFamily="{StaticResource IconFont}" FontSize="20"
+                                       Foreground="{ThemeResource ChatDetailMutedTextBrush}"/>
+                        </Button>
+
+                        <Button Grid.Column="4"
+                                Style="{StaticResource WhatsAppIconButtonStyle}"
+                                Width="40" Height="40"
+                                Command="{Binding SendRecordingCommand}"
+                                ToolTipService.ToolTip="Send">
+                            <TextBlock Text="&#xE724;" FontFamily="{StaticResource IconFont}" FontSize="20"
+                                       Foreground="{ThemeResource ChatDetailAccentBrush}"/>
+                        </Button>
                 </Grid>
 
                 </Grid>

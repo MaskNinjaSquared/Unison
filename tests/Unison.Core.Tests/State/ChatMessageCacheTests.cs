@@ -212,6 +212,32 @@ public class ChatMessageCacheTests
     }
 
     [Fact]
+    public void TryFindMessage_returns_the_resident_bubble()
+    {
+        var cache = new ChatMessageCache();
+        cache.GetOrAdd(Ana).Add(Message("A"));
+
+        Assert.True(cache.TryFindMessage(Ana, "A", out ChatMessage found));
+        Assert.Equal("A", found.Id);
+        Assert.False(cache.TryFindMessage(Ana, "missing", out _));
+    }
+
+    [Fact]
+    public void TryApplyPinFields_writes_pin_state_on_the_resident_bubble()
+    {
+        var cache = new ChatMessageCache();
+        cache.GetOrAdd(Ana).Add(Message("A"));
+        var pinnedAt = T0.AddMinutes(1);
+        var expires = T0.AddHours(1);
+
+        Assert.True(cache.TryApplyPinFields(Ana, "A", true, pinnedAt, expires, out ChatMessage target));
+        Assert.True(target.IsPinned);
+        Assert.Equal(pinnedAt, target.PinnedAtUtc);
+        Assert.Equal(expires, target.PinExpiresAtUtc);
+        Assert.False(cache.TryApplyPinFields(Ana, "missing", true, pinnedAt, expires, out _));
+    }
+
+    [Fact]
     public void Inserting_keeps_time_order_and_registers_the_id()
     {
         var cache = new ChatMessageCache();

@@ -32,6 +32,12 @@ namespace Unison.Core.Contracts.WhatsApp
         bool IsInitialSyncSafeMode { get; }
 
         /// <summary>
+        /// True while FULL_HISTORY catch-up / silent lots are in flight (banner or continue
+        /// rounds). Live envelopes during that wave must not toast.
+        /// </summary>
+        bool IsHistoryCatchUpQuiet { get; }
+
+        /// <summary>
         /// True until the first sync for this account has landed and gone quiet. Already true
         /// right after login, before the first chunk arrives; false again only after a reset.
         /// </summary>

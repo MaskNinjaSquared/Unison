@@ -78,6 +78,7 @@
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
 
             <TextBlock x:Uid="Favorites_Header"
@@ -106,8 +107,17 @@
                            VerticalAlignment="Center"/>
             </Border>
 
-            <Button x:Name="AddFavoriteHeaderButton"
+            <Button x:Name="SearchHeaderButton"
                     Grid.Column="2"
+                    Click="SearchHeaderButton_Click"
+                    Style="{StaticResource ModernIconButtonStyle}"
+                    Margin="0,0,4,0"
+                    AutomationProperties.Name="Search favorites">
+                <FontIcon Glyph="&#xE721;" FontFamily="{StaticResource IconFont}" FontSize="18"/>
+            </Button>
+
+            <Button x:Name="AddFavoriteHeaderButton"
+                    Grid.Column="3"
                     Command="{x:Bind ViewModel.OpenPickerCommand}"
                     Style="{StaticResource ModernIconButtonStyle}"
                     Visibility="Collapsed"
@@ -116,7 +126,7 @@
             </Button>
 
             <Button x:Name="MenuButton"
-                    Grid.Column="3"
+                    Grid.Column="4"
                     Click="MenuButton_Click"
                     Style="{StaticResource ModernIconButtonStyle}">
                 <FontIcon Glyph="&#xE712;" FontFamily="{StaticResource IconFont}" FontSize="18"/>

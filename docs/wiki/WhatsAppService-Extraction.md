@@ -164,6 +164,16 @@ What is left on `_contactService` is awaited and ordered by the client, so it is
 
 ## Current coupling (start here next session)
 
+### Recent slice (reactions plan +10)
+
+- `IncomingMessagePump` is a DI singleton (`IIncomingMessageEnqueueHost` + `IIncomingPumpControl`); the client no longer implements enqueue.
+- `IHistoryOnDemandSocket` → `BridgeHistoryOnDemandSocket` (HistoryFacade); client dispatch uses `SocketOwnedHistoryOnDemand`.
+- `ISocketAliasRegistrar` → `BridgeSocketAliasRegistrar`; auth heal is `ISelfIdentityHealHost` on the client.
+- Catalogue debounce Timer lives in `ChatCatalogDebounceTimer` (not Persistence fields).
+- Pin/reaction durable writes use `ILiveMessagePersist` / shared `LiveMessagePersist`; `ChatMessageCache.TryApplyPinFields` owns pin field writes.
+- MessageFacade initial-sync probe reads `UwpSessionProvider.Socket`, not `WhatsAppService` directly (cuts one Create/DI cycle through the god client).
+- Client group façade accessor renamed `GroupFacade` (avoids clashing with the UWP `Groups` namespace).
+
 ### Phase B (inbound ownership) — in progress on `docs/netstandard-whatsapp-client`
 
 Post-session chat envelopes route on `MessageFacade` (`RouteIncomingChatEnvelopeAsync`

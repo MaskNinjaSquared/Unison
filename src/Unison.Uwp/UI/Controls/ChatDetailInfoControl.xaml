@@ -295,6 +295,66 @@
                                    MaxLines="2"/>
                     </StackPanel>
                 </Button>
+                <Button x:Name="LeaveGroupButton"
+                        Style="{StaticResource ChatDetailInfoAppBarButtonStyle}"
+                        HorizontalAlignment="Right"
+                        VerticalAlignment="Stretch"
+                        Visibility="Collapsed"
+                        Click="LeaveGroupButton_Click"
+                        ToolTipService.ToolTip="Leave group">
+                    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <Grid Height="28" Width="40" HorizontalAlignment="Center">
+                            <FontIcon Glyph="&#xE89B;"
+                                      FontFamily="{StaticResource IconFont}"
+                                      FontSize="18"
+                                      Foreground="White"
+                                      HorizontalAlignment="Center"
+                                      VerticalAlignment="Center"/>
+                        </Grid>
+                        <TextBlock x:Name="LeaveGroupButtonLabel"
+                                   x:Uid="ChatDetailInfo_LeaveGroupBar"
+                                   Text="Leave&#x0a;group"
+                                   FontSize="10"
+                                   FontFamily="{StaticResource MainFont}"
+                                   Foreground="White"
+                                   Margin="0,2,0,0"
+                                   TextAlignment="Center"
+                                   TextWrapping="Wrap"
+                                   TextLineBounds="Tight"
+                                   MaxWidth="68"
+                                   MaxLines="2"/>
+                    </StackPanel>
+                </Button>
+                <Button x:Name="BlockContactButton"
+                        Style="{StaticResource ChatDetailInfoAppBarButtonStyle}"
+                        HorizontalAlignment="Right"
+                        VerticalAlignment="Stretch"
+                        Visibility="Collapsed"
+                        Click="BlockContactButton_Click"
+                        ToolTipService.ToolTip="Block contact">
+                    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <Grid Height="28" Width="40" HorizontalAlignment="Center">
+                            <FontIcon Glyph="&#xE8F8;"
+                                      FontFamily="{StaticResource IconFont}"
+                                      FontSize="18"
+                                      Foreground="White"
+                                      HorizontalAlignment="Center"
+                                      VerticalAlignment="Center"/>
+                        </Grid>
+                        <TextBlock x:Name="BlockContactButtonLabel"
+                                   x:Uid="ChatDetailInfo_BlockContactBar"
+                                   Text="Block&#x0a;contact"
+                                   FontSize="10"
+                                   FontFamily="{StaticResource MainFont}"
+                                   Foreground="White"
+                                   Margin="0,2,0,0"
+                                   TextAlignment="Center"
+                                   TextWrapping="Wrap"
+                                   TextLineBounds="Tight"
+                                   MaxWidth="68"
+                                   MaxLines="2"/>
+                    </StackPanel>
+                </Button>
                 <Button x:Name="DeleteChatButton"
                         Style="{StaticResource ChatDetailInfoAppBarButtonStyle}"
                         HorizontalAlignment="Right"

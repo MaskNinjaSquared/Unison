@@ -508,6 +508,12 @@
   <data name="ChatDetail_RecordingChatUnavailable" xml:space="preserve">
     <value>Розмова для цього запису більше недоступна.</value>
   </data>
+  <data name="ChatDetail_RecordingPause" xml:space="preserve">
+    <value>Пауза</value>
+  </data>
+  <data name="ChatDetail_RecordingPlay" xml:space="preserve">
+    <value>Відтворити</value>
+  </data>
   <data name="ChatDetail_AudioSendFailed" xml:space="preserve">
     <value>Не вдалося надіслати аудіо.</value>
   </data>

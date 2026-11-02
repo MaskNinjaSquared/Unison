@@ -302,5 +302,11 @@ namespace Unison.Core.Contracts.WhatsApp
         /// True while sync status is still enriching the list (names / avatars / groups / settling / low-memory).
         /// </summary>
         bool MatchesListEnrichmentPhase(string syncStatus);
+
+        /// <summary>
+        /// Drops every in-memory conversation timeline. Used by session wipe / resync hosts so
+        /// they do not reach into <c>ChatStateStore.MessagesByChat</c> themselves.
+        /// </summary>
+        void ClearInMemoryTimelines();
     }
 }

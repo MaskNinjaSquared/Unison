@@ -9,6 +9,7 @@ using Unison.Core.Contracts;
 using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Helpers;
 using Unison.Core.Helpers.Groups;
+using Unison.Core.Helpers.Messages;
 using Unison.Core.Helpers.Notifications;
 using Unison.Core.Models;
 using Unison.Core.State;
@@ -46,6 +47,7 @@ namespace Unison.WhatsAppClient.Messages
         private readonly IChatCatalogPersistence _catalog;
         private readonly IMessageWireActions _wire;
         private readonly IOutgoingMessageHost _outgoingHost;
+        private readonly ILiveMessagePersist _livePersist;
         private readonly IOutgoingReceiptHost _receiptHost;
         private readonly IBoundMutationGate _boundMutations;
         private readonly IStringResources _strings;
@@ -92,6 +94,7 @@ namespace Unison.WhatsAppClient.Messages
             IJidResolver jids,
             INotificationService notifications,
             IOutgoingMessageHost outgoingHost,
+            ILiveMessagePersist livePersist,
             IMediaCache mediaCache,
             IMediaAvailability availability,
             IChatCatalogPersistence catalog,
@@ -147,6 +150,7 @@ namespace Unison.WhatsAppClient.Messages
             _chatStore = chatStore;
             _chatState = chatState ?? throw new ArgumentNullException(nameof(chatState));
             _outgoingHost = outgoingHost ?? throw new ArgumentNullException(nameof(outgoingHost));
+            _livePersist = livePersist ?? throw new ArgumentNullException(nameof(livePersist));
             _receiptHost = receiptHost ?? throw new ArgumentNullException(nameof(receiptHost));
             _boundMutations = boundMutations ?? throw new ArgumentNullException(nameof(boundMutations));
             _pendingFlush = pendingFlush ?? throw new ArgumentNullException(nameof(pendingFlush));
@@ -297,9 +301,13 @@ namespace Unison.WhatsAppClient.Messages
                 return Task.CompletedTask;
             }
 
-            bool quietForSync =
-                _initialSync.IsActive ||
-                _isAwaitingInitialSync();
+            bool quietForSync = IncomingToastSuppression.ShouldQuiet(
+                initialSyncActive: _initialSync.IsActive,
+                awaitingInitialSync: _isAwaitingInitialSync(),
+                historyCatchUpQuiet: _history != null && _history.IsHistoryCatchUpQuiet,
+                isOfflineEnvelope: request.IsOffline,
+                messageTimestamp: request.Timestamp,
+                nowUtc: DateTime.UtcNow);
 
             if (string.IsNullOrWhiteSpace(request.SelfDisplayName))
             {
@@ -1350,14 +1358,21 @@ namespace Unison.WhatsAppClient.Messages
             return _mediaSend.SendImagesAsync(jid, imageBytes, caption);
         }
 
-        public async Task<ChatMessage> SendAudioMessageAsync(string jid, byte[] audioBytes, string mimeType, uint durationSeconds, bool isVoiceMessage = false)
+        public async Task<ChatMessage> SendAudioMessageAsync(
+            string jid,
+            byte[] audioBytes,
+            string mimeType,
+            uint durationSeconds,
+            bool isVoiceMessage = false,
+            bool viewOnce = false)
         {
             ChatMessage message = await _mediaSend.SendAudioAsync(jid, new OutgoingAudio
             {
                 Bytes = audioBytes,
                 MimeType = mimeType,
                 DurationSeconds = durationSeconds,
-                IsVoiceMessage = isVoiceMessage
+                IsVoiceMessage = isVoiceMessage,
+                ViewOnce = viewOnce
             });
             _availability.PrepareLocalPlaybackInBackground(message);
             return message;
@@ -1524,8 +1539,14 @@ namespace Unison.WhatsAppClient.Messages
 
             // A chip-summary bubble holds no reactor rows, so the parent upsert that follows cannot
             // store this reaction. Write the single row on its own — it also lands ahead of a parent
-            // we have not received yet.
-            _ = PersistLiveReactionAsync(context?.ChatJid, pending);
+            // we have not received yet. Persist under the canonical chat key (PN/LID fold).
+            string persistJid = context?.ChatJid;
+            if (!string.IsNullOrWhiteSpace(persistJid))
+            {
+                persistJid = _jids.GetCanonicalJid(persistJid) ?? persistJid;
+            }
+
+            _ = PersistLiveReactionAsync(persistJid, pending);
             return true;
         }
 
@@ -1536,8 +1557,8 @@ namespace Unison.WhatsAppClient.Messages
                 return;
             }
 
-            string jid = JidHelper.Normalize(
-                string.IsNullOrWhiteSpace(chatJid) ? pending.TargetChatJid : chatJid);
+            string raw = string.IsNullOrWhiteSpace(chatJid) ? pending.TargetChatJid : chatJid;
+            string jid = _jids.GetCanonicalJid(raw) ?? JidHelper.Normalize(raw);
             string reactor = JidHelper.Normalize(pending.ReactorJid);
             if (string.IsNullOrWhiteSpace(reactor) && pending.FromMe)
             {
@@ -1783,8 +1804,14 @@ namespace Unison.WhatsAppClient.Messages
             }
 
             bool mutedFallback = _chatStore?.TryGetCached(chatJid)?.IsMutedLocally ?? false;
-            // Belt with the pump: safe-mode history catch-up must not toast either.
-            bool quietForSync = _history != null && _history.IsInitialSyncSafeMode;
+            // Belt with the pump: initial sync + catch-up / silent FULL waves must not toast.
+            bool quietForSync = IncomingToastSuppression.ShouldQuiet(
+                initialSyncActive: _history != null && _history.IsInitialSyncSafeMode,
+                awaitingInitialSync: _isAwaitingInitialSync(),
+                historyCatchUpQuiet: _history != null && _history.IsHistoryCatchUpQuiet,
+                isOfflineEnvelope: false,
+                messageTimestamp: default(DateTime),
+                nowUtc: DateTime.UtcNow);
 
             IncomingLiveAnnouncePayload payload = IncomingLiveAnnouncePayload.TryCreateFromChat(
                 chatJid,
@@ -1903,7 +1930,7 @@ namespace Unison.WhatsAppClient.Messages
 
             try
             {
-                await _outgoingHost.PersistLiveAsync(canonical, target).ConfigureAwait(false);
+                await _livePersist.PersistLiveAsync(canonical, target).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
@@ -2283,18 +2310,18 @@ namespace Unison.WhatsAppClient.Messages
             ChatMessage target = null;
             await _boundMutations.RunAsync(() =>
             {
-                if (_chatState.MessagesByChat.TryGet(canonical, out var messages))
+                if (_chatState.MessagesByChat.TryApplyPinFields(
+                        canonical,
+                        messageId,
+                        state.IsPinned,
+                        state.PinnedAtUtc,
+                        state.ExpiresAtUtc,
+                        out target))
                 {
-                    target = messages?.FirstOrDefault(
-                        m => string.Equals(m?.Id, messageId, StringComparison.Ordinal));
+                    return;
                 }
 
-                if (target != null)
-                {
-                    target.IsPinned = state.IsPinned;
-                    target.PinnedAtUtc = state.PinnedAtUtc;
-                    target.PinExpiresAtUtc = state.ExpiresAtUtc;
-                }
+                target = null;
             }).ConfigureAwait(false);
 
             if (target == null)
@@ -2307,7 +2334,7 @@ namespace Unison.WhatsAppClient.Messages
                     target.PinExpiresAtUtc = state.ExpiresAtUtc;
                     try
                     {
-                        await _outgoingHost.PersistLiveAsync(canonical, target).ConfigureAwait(false);
+                        await _livePersist.PersistLiveAsync(canonical, target).ConfigureAwait(false);
                     }
                     catch (Exception ex)
                     {
@@ -3946,14 +3973,65 @@ namespace Unison.WhatsAppClient.Messages
 
         /// <inheritdoc />
         /// <inheritdoc />
-        public async Task<bool> TryReactAsync(string chatJid, string messageId, string emoji)
+        public async Task<bool> TryReactAsync(string chatJid, ChatMessage message, string emoji)
         {
-            // Wire send not hooked yet — always fail after a short delay so the UI can prove undo.
-            _ = chatJid;
-            _ = messageId;
-            _ = emoji;
-            await Task.Delay(3000).ConfigureAwait(false);
-            return false;
+            if (message == null || string.IsNullOrWhiteSpace(message.Id))
+            {
+                return false;
+            }
+
+            try
+            {
+                await _resolveConnection().EnsureConnectedAsync().ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[MessageFacade] TryReactAsync connect failed: " + ex.Message);
+                return false;
+            }
+
+            if (_wire == null || !_wire.CanSendReaction)
+            {
+                return false;
+            }
+
+            string canonical = _jids.GetCanonicalJid(
+                string.IsNullOrWhiteSpace(chatJid) ? message.RemoteJid : chatJid);
+            if (string.IsNullOrWhiteSpace(canonical))
+            {
+                return false;
+            }
+
+            var key = new MessageKey
+            {
+                RemoteJid = string.IsNullOrWhiteSpace(message.RemoteJid)
+                    ? canonical
+                    : JidHelper.Normalize(message.RemoteJid),
+                FromMe = message.IsFromMe,
+                Id = message.Id
+            };
+            if (!string.IsNullOrWhiteSpace(message.ParticipantJid))
+            {
+                key.Participant = message.ParticipantJid;
+            }
+
+            try
+            {
+                await _wire.SendReactionMessageAsync(canonical, key, emoji ?? string.Empty)
+                    .ConfigureAwait(false);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine(
+                    "[MessageFacade] TryReactAsync failed for " + message.Id + ": " + ex.Message);
+                _diagnostics?.RecordException(
+                    "messages",
+                    "react-send-failed",
+                    ex,
+                    "messageId=" + message.Id + "; chatJid=" + canonical);
+                return false;
+            }
         }
 
         public async Task NotifyGroupJoinsAsync(IReadOnlyList<GroupJoinNotifyRequest> joins)
@@ -4555,7 +4633,7 @@ namespace Unison.WhatsAppClient.Messages
 
                 if (target != null)
                 {
-                    await _outgoingHost.PersistLiveAsync(canonical, target).ConfigureAwait(false);
+                    await _livePersist.PersistLiveAsync(canonical, target).ConfigureAwait(false);
                 }
             }
             catch (Exception ex)
@@ -4690,14 +4768,53 @@ namespace Unison.WhatsAppClient.Messages
                 return false;
             }
 
-            string jid = JidHelper.Normalize(context.ChatJid) ?? context.ChatJid;
-            IList<ChatMessage> timeline = _chatState.MessagesByChat.GetOrAdd(jid);
+            string canonical = _jids.GetCanonicalJid(context.ChatJid)
+                ?? JidHelper.Normalize(context.ChatJid)
+                ?? context.ChatJid;
+            IReadOnlyList<string> aliasKeys = GetAliasCacheKeys(canonical);
+            if (aliasKeys.Count == 0)
+            {
+                aliasKeys = new[] { canonical };
+            }
+
             ChatMessage reactionParent = null;
+            string parentTimelineJid = canonical;
             bool handled = false;
 
             await _boundMutations.RunAsync(() =>
             {
-                handled = TryHandleReaction(message, context, timeline, out reactionParent);
+                PendingReaction pending;
+                if (!_chatMessageMapper.TryMapReaction(message, context, out pending) || pending == null)
+                {
+                    handled = false;
+                    return;
+                }
+
+                ChatMessageCache cache = _chatState.MessagesByChat;
+                string foundKey;
+                ChatMessage foundParent;
+                IList<ChatMessage> timeline = null;
+                if (AliasLinkedMessageFind.TryFind(
+                        cache,
+                        aliasKeys,
+                        pending.TargetMessageId,
+                        out foundKey,
+                        out foundParent) &&
+                    !string.IsNullOrWhiteSpace(foundKey))
+                {
+                    parentTimelineJid = foundKey;
+                    timeline = cache.GetOrAdd(foundKey);
+                }
+                else
+                {
+                    // Parent not resident under any alias — still persist the reaction row.
+                    timeline = cache.GetOrAdd(canonical);
+                    parentTimelineJid = canonical;
+                }
+
+                _reactionMapper.TryApply(timeline, pending, out reactionParent);
+                _ = PersistLiveReactionAsync(canonical, pending);
+                handled = true;
             }).ConfigureAwait(false);
 
             if (!handled)
@@ -4709,22 +4826,23 @@ namespace Unison.WhatsAppClient.Messages
             {
                 try
                 {
-                    await _outgoingHost.PersistLiveAsync(jid, reactionParent).ConfigureAwait(false);
+                    await _livePersist.PersistLiveAsync(parentTimelineJid, reactionParent)
+                        .ConfigureAwait(false);
                 }
                 catch (Exception ex)
                 {
                     Debug.WriteLine("[MessageFacade] Failed to persist reaction parent: " + ex.Message);
                 }
 
-                if (_activeChat.IsOpen(jid))
+                if (_activeChat.IsOpen(canonical) || _activeChat.IsOpen(parentTimelineJid))
                 {
-                    NotifyChatMessagesChanged(jid);
+                    NotifyChatMessagesChanged(parentTimelineJid);
                 }
             }
             else
             {
                 Debug.WriteLine(
-                    "[MessageFacade] Reaction target not found yet: chat=" + jid +
+                    "[MessageFacade] Reaction target not found yet: chat=" + canonical +
                     ", id=" + (context.MessageId ?? "<none>"));
             }
 
@@ -4785,7 +4903,7 @@ namespace Unison.WhatsAppClient.Messages
             {
                 try
                 {
-                    await _outgoingHost.PersistLiveAsync(canonicalChatJid, consolidatedMessage)
+                    await _livePersist.PersistLiveAsync(canonicalChatJid, consolidatedMessage)
                         .ConfigureAwait(false);
                 }
                 catch (Exception ex)

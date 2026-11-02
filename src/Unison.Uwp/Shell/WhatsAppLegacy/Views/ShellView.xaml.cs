@@ -15,6 +15,7 @@ using Unison.Core.Constants;
 using Unison.Core.Contracts;
 using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Factories;
+using Unison.Core.Helpers;
 using Unison.Core.Models;
 using Unison.Core.State;
 using Unison.Core.ViewModels;
@@ -987,6 +988,7 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             {
                 _hookedFavorites = favorites;
                 favorites.ChatSelected += LegacyFavorites_ChatSelected;
+                favorites.SearchRequested += List_SearchRequested;
             }
             else if (content is StatusView status)
             {
@@ -1039,6 +1041,7 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             if (_hookedFavorites != null)
             {
                 _hookedFavorites.ChatSelected -= LegacyFavorites_ChatSelected;
+                _hookedFavorites.SearchRequested -= List_SearchRequested;
                 _hookedFavorites = null;
             }
 
@@ -1664,7 +1667,7 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
 
         private void ExitSearchState()
         {
-            _shell?.InvokeFromPivotCommand(ReadSelectedTag(), string.Empty, TryGetActiveChatListViewModel());
+            DispatchPivotSearch(string.Empty);
             ShellSearchBox.Text = string.Empty;
             ApplySearchState(false);
             ApplyShellChrome();
@@ -1683,10 +1686,20 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             }
 
             e.Handled = true;
-            _shell?.InvokeFromPivotCommand(
-                ReadSelectedTag(),
-                ShellSearchBox.Text,
-                TryGetActiveChatListViewModel());
+            DispatchPivotSearch(ShellSearchBox.Text);
+        }
+
+        private void DispatchPivotSearch(string query)
+        {
+            string tag = ReadSelectedTag();
+            if (LegacyPivotSearch.AppliesToFavorites(tag))
+            {
+                FavoritesViewModel favoritesVm = TryGetActiveFavoritesViewModel();
+                _shell?.InvokeFavoritesSearch(tag, query, favoritesVm);
+                return;
+            }
+
+            _shell?.InvokeFromPivotCommand(tag, query, TryGetActiveChatListViewModel());
         }
 
         private ChatListViewModel TryGetActiveChatListViewModel()
@@ -1707,6 +1720,12 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             }
 
             return null;
+        }
+
+        private FavoritesViewModel TryGetActiveFavoritesViewModel()
+        {
+            var favorites = ActivePivotContent() as FavoritesView;
+            return favorites?.ViewModel;
         }
 
         private Task StartNewChatAsync()

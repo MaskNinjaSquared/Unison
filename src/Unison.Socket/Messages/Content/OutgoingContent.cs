@@ -112,7 +112,7 @@ namespace Unison.Socket.Messages.Content
 
         public bool IsAnimatedSticker { get; set; }
 
-        /// <summary>Shows once and then becomes unreadable. Only images and videos support it.</summary>
+        /// <summary>Shows once and then becomes unreadable (image, video, or voice note).</summary>
         public bool ViewOnce { get; set; }
     }
 

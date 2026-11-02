@@ -73,6 +73,7 @@ namespace Unison.WhatsAppClient.Contacts
         private readonly IDeferredAvatarResolution _deferredAvatars;
         private readonly BackgroundResolutionPass _backgroundResolution;
         private readonly IRuntimeDiagnostics _diagnostics;
+        private readonly IContactBlockActions _blockActions;
         private DateTime _lastWindowsPublishUtc = DateTime.MinValue;
         private int _lastWindowsPublishCount;
         private int _windowsPublishBusy;
@@ -114,8 +115,10 @@ namespace Unison.WhatsAppClient.Contacts
             IJidAliasPersistence aliasPersist,
             IChatIdentityPersistence identity,
             IResolvedNameApplyHost resolvedNames,
-            IRuntimeDiagnostics diagnostics = null)
+            IRuntimeDiagnostics diagnostics = null,
+            IContactBlockActions blockActions = null)
         {
+            _blockActions = blockActions;
             _displayNames = displayNames ?? throw new ArgumentNullException(nameof(displayNames));
             _nameRefresh = nameRefresh ?? throw new ArgumentNullException(nameof(nameRefresh));
             _deduper = deduper ?? throw new ArgumentNullException(nameof(deduper));
@@ -1043,6 +1046,22 @@ namespace Unison.WhatsAppClient.Contacts
             await PublishWindowsContactsCoreAsync().ConfigureAwait(false);
         }
 
+        public async Task BlockContactAsync(string jid)
+        {
+            if (_blockActions == null || !_blockActions.CanBlock || string.IsNullOrWhiteSpace(jid))
+            {
+                return;
+            }
+
+            string canonical = _jids.GetCanonicalJid(jid);
+            if (string.IsNullOrWhiteSpace(canonical) || _jids.IsSelfLinked(canonical))
+            {
+                return;
+            }
+
+            await _blockActions.BlockAsync(canonical).ConfigureAwait(false);
+        }
+
         public async Task RefreshContactNamesAsync(bool includeGroups = false, bool force = false)
         {
             await _names.RefreshAsync(includeGroups, force).ConfigureAwait(false);
@@ -1220,17 +1239,17 @@ namespace Unison.WhatsAppClient.Contacts
             return _addressBook.SyncAsync(directChatJids, cancellationToken);
         }
 
-        public Task RefreshPhoneContactOverlayAsync(bool force)
+        public async Task RefreshPhoneContactOverlayAsync(bool force)
         {
-            return _addressBook.RefreshAsync(force);
+            await _addressBook.RefreshAsync(force).ConfigureAwait(false);
         }
 
         public async Task RefreshChatListAddressBookNamesAsync()
         {
-            int mapped = await _addressBook.RefreshChatListAsync().ConfigureAwait(false);
-            if (mapped > 0)
+            IReadOnlyList<string> mapped = await _addressBook.RefreshChatListAsync().ConfigureAwait(false);
+            if (mapped != null && mapped.Count > 0)
             {
-                await _nameRefresh.ApplyAsync().ConfigureAwait(false);
+                await _nameRefresh.ApplyAsync(mapped).ConfigureAwait(false);
             }
         }
 
@@ -1347,8 +1366,13 @@ namespace Unison.WhatsAppClient.Contacts
 
             try
             {
-                await RefreshPhoneContactOverlayAsync(force: true).ConfigureAwait(false);
-                await _nameRefresh.ApplyAsync().ConfigureAwait(false);
+                IReadOnlyList<string> mapped =
+                    await _addressBook.RefreshAsync(force: true).ConfigureAwait(false);
+                if (mapped != null && mapped.Count > 0)
+                {
+                    await _nameRefresh.ApplyAsync(mapped).ConfigureAwait(false);
+                }
+
                 _catalog.Schedule();
             }
             catch (Exception ex)

@@ -559,22 +559,63 @@ namespace Unison.Uwp.Data
             }
         }
 
-        public async Task<IReadOnlyList<HistoryMessageReaction>> GetReactionsForMessageAsync(
+        public Task<IReadOnlyList<HistoryMessageReaction>> GetReactionsForMessageAsync(
             string chatJid,
             string messageId)
         {
             string key = JidHelper.Normalize(chatJid);
-            if (string.IsNullOrWhiteSpace(key) || string.IsNullOrWhiteSpace(messageId))
+            if (string.IsNullOrWhiteSpace(key))
+            {
+                return Task.FromResult(
+                    (IReadOnlyList<HistoryMessageReaction>)Array.Empty<HistoryMessageReaction>());
+            }
+
+            return GetReactionsForMessageAsync(new[] { key }, messageId);
+        }
+
+        public async Task<IReadOnlyList<HistoryMessageReaction>> GetReactionsForMessageAsync(
+            IReadOnlyList<string> chatJids,
+            string messageId)
+        {
+            if (chatJids == null || chatJids.Count == 0 || string.IsNullOrWhiteSpace(messageId))
+            {
+                return Array.Empty<HistoryMessageReaction>();
+            }
+
+            var keys = new List<string>(chatJids.Count);
+            for (int i = 0; i < chatJids.Count; i++)
+            {
+                string key = JidHelper.Normalize(chatJids[i]);
+                if (string.IsNullOrWhiteSpace(key))
+                {
+                    continue;
+                }
+
+                bool dup = false;
+                for (int j = 0; j < keys.Count; j++)
+                {
+                    if (string.Equals(keys[j], key, StringComparison.OrdinalIgnoreCase))
+                    {
+                        dup = true;
+                        break;
+                    }
+                }
+
+                if (!dup)
+                {
+                    keys.Add(key);
+                }
+            }
+
+            if (keys.Count == 0)
             {
                 return Array.Empty<HistoryMessageReaction>();
             }
 
             await EnsureInitializedAsync().ConfigureAwait(false);
-            List<HistoryMessageReactionRow> rows = await _connection.QueryAsync<HistoryMessageReactionRow>(
-                    ReactionDetailSelectSql +
-                    "WHERE ChatJid = ? AND MessageId = ? ORDER BY TimestampUtc ASC",
-                    key,
-                    messageId.Trim())
+            List<HistoryMessageReactionRow> rows = await QueryReactionRowsAsync(
+                    keys,
+                    new List<string> { messageId.Trim() })
                 .ConfigureAwait(false);
 
             if (rows == null || rows.Count == 0)

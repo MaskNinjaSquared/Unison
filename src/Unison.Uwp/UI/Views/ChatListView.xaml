@@ -293,15 +293,50 @@
                 </StackPanel>
             </Grid>
 
-            <ListView x:Name="CommunityHubList"
-                      Grid.Row="1"
-                      ItemsSource="{Binding ActiveCommunity.CommunityMembers}"
-                      ItemTemplate="{StaticResource ChatItemTemplate}"
-                      ItemContainerStyle="{StaticResource WhatsAppChatListItemStyle}"
-                      SelectionMode="Single"
-                      SelectionChanged="CommunityHubList_SelectionChanged"
-                      ContainerContentChanging="CommunityHubList_ContainerContentChanging"
-                      ShowsScrollingPlaceholders="False"/>
+            <ScrollViewer Grid.Row="1"
+                          VerticalScrollBarVisibility="Auto"
+                          HorizontalScrollBarVisibility="Disabled">
+                <StackPanel>
+                    <TextBlock x:Uid="Community_YourGroupsHeader"
+                               Text="YOUR GROUPS"
+                               Margin="16,12,16,4"
+                               FontSize="13"
+                               FontFamily="{StaticResource MainFontSemibold}"
+                               FontWeight="SemiBold"
+                               Foreground="{ThemeResource WhatsAppTextMediumBrush}"
+                               CharacterSpacing="40"/>
+                    <ListView x:Name="CommunityHubList"
+                              ItemsSource="{Binding ActiveCommunity.CommunityMembers}"
+                              ItemTemplate="{StaticResource ChatItemTemplate}"
+                              ItemContainerStyle="{StaticResource WhatsAppChatListItemStyle}"
+                              SelectionMode="Single"
+                              SelectionChanged="CommunityHubList_SelectionChanged"
+                              ContainerContentChanging="CommunityHubList_ContainerContentChanging"
+                              ShowsScrollingPlaceholders="False"
+                              ScrollViewer.VerticalScrollMode="Disabled"
+                              ScrollViewer.VerticalScrollBarVisibility="Disabled"/>
+
+                    <TextBlock x:Uid="Community_CanJoinHeader"
+                               Text="GROUPS YOU CAN JOIN"
+                               Margin="16,16,16,4"
+                               FontSize="13"
+                               FontFamily="{StaticResource MainFontSemibold}"
+                               FontWeight="SemiBold"
+                               Foreground="{ThemeResource WhatsAppTextMediumBrush}"
+                               CharacterSpacing="40"
+                               Visibility="{Binding ActiveCommunity.HasCommunityJoinableMembers, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                    <ListView x:Name="CommunityJoinableList"
+                              ItemsSource="{Binding ActiveCommunity.CommunityJoinableMembers}"
+                              ItemTemplate="{StaticResource ChatItemTemplate}"
+                              ItemContainerStyle="{StaticResource WhatsAppChatListItemStyle}"
+                              SelectionMode="Single"
+                              SelectionChanged="CommunityJoinableList_SelectionChanged"
+                              ShowsScrollingPlaceholders="False"
+                              ScrollViewer.VerticalScrollMode="Disabled"
+                              ScrollViewer.VerticalScrollBarVisibility="Disabled"
+                              Visibility="{Binding ActiveCommunity.HasCommunityJoinableMembers, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                </StackPanel>
+            </ScrollViewer>
         </Grid>
     </Grid>
 </UserControl>

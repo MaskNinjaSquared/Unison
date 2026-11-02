@@ -227,6 +227,32 @@ namespace Unison.Uwp.UI.Views
             ChatSelected?.Invoke(this, new ChatSelectedEventArgs(group));
         }
 
+        private void CommunityJoinableList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (_suppressSelectionChanged || ViewModel == null)
+            {
+                return;
+            }
+
+            var list = sender as ListView;
+            var group = list?.SelectedItem as ChatItem;
+            if (group == null)
+            {
+                return;
+            }
+
+            ViewModel.SelectCommunityGroup(group);
+            try
+            {
+                _suppressSelectionChanged = true;
+                list.SelectedItem = null;
+            }
+            finally
+            {
+                _suppressSelectionChanged = false;
+            }
+        }
+
         private void ViewModel_SelectionRestored(object sender, ChatItem chat)
         {
             if (chat != null &&

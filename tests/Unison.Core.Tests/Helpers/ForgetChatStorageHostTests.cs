@@ -198,6 +198,12 @@ namespace Unison.Core.Tests.Helpers
                 Task.FromResult<IReadOnlyList<HistoryMessageReaction>>(
                     Array.Empty<HistoryMessageReaction>());
 
+            public Task<IReadOnlyList<HistoryMessageReaction>> GetReactionsForMessageAsync(
+                IReadOnlyList<string> chatJids,
+                string messageId) =>
+                Task.FromResult<IReadOnlyList<HistoryMessageReaction>>(
+                    Array.Empty<HistoryMessageReaction>());
+
             public Task<int> CountAsync(string syncId = null) => Task.FromResult(0);
 
             public Task ClearAsync(string reason = null) => Task.CompletedTask;

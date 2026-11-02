@@ -11,6 +11,7 @@ Codepoints (Private Use Area):
   EA07  emoji-food     (scripts/icons/unison-emoji/emoji-food.png)
   EA08  emoji-symbols  (scripts/icons/unison-emoji/emoji-symbols.png)
   EA09  emoji-recent   (scripts/icons/unison-emoji/emoji-recent.png)
+  EA0A  view-once      (scripts/icons/view-once.png)
 
 Ink is read from alpha only. Regen: scripts/icons/generate-unison-icons.ps1
 
@@ -38,11 +39,12 @@ SIMPLIFY_TOLERANCE = 0.35
 
 # PNG-traced jump icons for the sticker-box SemanticZoom (Segoe Fluent lacks these).
 PNG_GLYPHS = [
-    ("emoji-sports", 0xEA05, "emoji-sports.png", 0.92),
-    ("emoji-nature", 0xEA06, "emoji-nature.png", 0.92),
-    ("emoji-food", 0xEA07, "emoji-food.png", 0.92),
-    ("emoji-symbols", 0xEA08, "emoji-symbols.png", 0.92),
-    ("emoji-recent", 0xEA09, "emoji-recent.png", 0.92),
+    ("emoji-sports", 0xEA05, "emoji-sports.png", 0.92, EMOJI_ICONS),
+    ("emoji-nature", 0xEA06, "emoji-nature.png", 0.92, EMOJI_ICONS),
+    ("emoji-food", 0xEA07, "emoji-food.png", 0.92, EMOJI_ICONS),
+    ("emoji-symbols", 0xEA08, "emoji-symbols.png", 0.92, EMOJI_ICONS),
+    ("emoji-recent", 0xEA09, "emoji-recent.png", 0.92, EMOJI_ICONS),
+    ("view-once", 0xEA0A, "view-once.png", 0.92, Path(__file__).resolve().parent),
 ]
 
 
@@ -193,8 +195,8 @@ def main() -> int:
         "double-check": (1100, 0),
     }
 
-    for name, code, filename, scale_factor in PNG_GLYPHS:
-        png = EMOJI_ICONS / filename
+    for name, code, filename, scale_factor, folder in PNG_GLYPHS:
+        png = folder / filename
         if not png.is_file():
             print(f"Missing icon: {png}", file=sys.stderr)
             return 1
@@ -230,9 +232,9 @@ def main() -> int:
             "styleName": "Regular",
             "uniqueFontIdentifier": "UnisonIcons",
             "fullName": "UnisonIcons",
-            "version": "Version 1.3",
+            "version": "Version 1.4",
             "psName": "UnisonIcons",
-            "description": "Unison custom icons (filter, new-chat, checks, emoji categories). Regenerate via scripts/icons/generate-unison-icons.ps1",
+            "description": "Unison custom icons (filter, new-chat, checks, emoji categories, view-once). Regenerate via scripts/icons/generate-unison-icons.ps1",
         }
     )
     fb.setupHead(unitsPerEm=UPM)
@@ -242,7 +244,8 @@ def main() -> int:
     print(f"Wrote {FONT_PATH}")
     print(
         "  EA01 filter | EA02 new-chat | EA03 check | EA04 double-check | "
-        "EA05 sports | EA06 nature | EA07 food | EA08 symbols | EA09 recent"
+        "EA05 sports | EA06 nature | EA07 food | EA08 symbols | EA09 recent | "
+        "EA0A view-once"
     )
     return 0
 

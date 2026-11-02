@@ -71,7 +71,6 @@ namespace Unison.Core.ViewModels
         private readonly ChatListDeepLinkHoldGate _deepLinkHold;
         private bool _initialized;
         private bool _eventsHooked;
-        private bool _startInProgress;
 
         /// <summary>
         /// In-flight cold start. Concurrent Boot remounts (Mobile double/triple OnLaunched)
@@ -281,12 +280,22 @@ namespace Unison.Core.ViewModels
         }
 
         /// <summary>
-        /// Legacy search box, Enter. The open pivot decides the target: chats and archived
-        /// write that list's query; the other pivots have nothing to search yet.
+        /// Legacy search box, Enter. Chats/archived write the list query; Favourites write theirs.
         /// </summary>
         public void InvokeFromPivotCommand(string pivotTag, string query, ChatListViewModel target)
         {
             if (!LegacyPivotSearch.AppliesToChatList(pivotTag) || target == null)
+            {
+                return;
+            }
+
+            target.SearchQuery = query?.Trim() ?? string.Empty;
+        }
+
+        /// <summary>Favourites pivot search box.</summary>
+        public void InvokeFavoritesSearch(string pivotTag, string query, FavoritesViewModel target)
+        {
+            if (!LegacyPivotSearch.AppliesToFavorites(pivotTag) || target == null)
             {
                 return;
             }

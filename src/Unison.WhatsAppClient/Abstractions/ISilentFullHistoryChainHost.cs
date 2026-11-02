@@ -25,6 +25,9 @@ namespace Unison.WhatsAppClient.Abstractions
 
         bool IsFullHistoryClaimed { get; }
 
+        /// <summary>True when tip freshness still looks behind the watermark.</summary>
+        bool IsHistoryTipStale { get; }
+
         DeviceCategory DeviceCategory { get; }
 
         void MarkSilentChainArmed(bool armed);

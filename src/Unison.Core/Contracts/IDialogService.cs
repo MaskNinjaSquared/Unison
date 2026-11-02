@@ -71,6 +71,11 @@ namespace Unison.Core.Contracts
         Task<string> ShowNewChatDialogAsync(NewChatDialogViewModel newChatVm);
 
         /// <summary>
+        /// Group preview (avatar / title / creator / join). Returns true when the user joined.
+        /// </summary>
+        Task<bool> ShowGroupPreviewAsync(GroupPreviewDialogViewModel previewVm);
+
+        /// <summary>
         /// Image send confirmation with preview and an optional caption box.
         /// <see cref="ImageSendPreviewResult.Confirmed"/> is false when cancelled.
         /// </summary>
@@ -125,5 +130,23 @@ namespace Unison.Core.Contracts
         /// Returns null when the user cancels.
         /// </summary>
         Task<LockScreenNotificationScope?> ShowNotificationFilterAsync(LockScreenNotificationScope current);
+
+        /// <summary>
+        /// Pre-export: without media (primary). With-media is absent in this slice.
+        /// Returns false when cancelled.
+        /// </summary>
+        Task<bool> ShowChatExportOptionsAsync();
+
+        /// <summary>
+        /// After export: file row (ChatInfo layout) with Share / Save. Returns the choice.
+        /// </summary>
+        Task<ChatExportReadyChoice> ShowChatExportReadyAsync(string fileName, string infoText);
+    }
+
+    public enum ChatExportReadyChoice
+    {
+        Dismissed,
+        Share,
+        Save
     }
 }

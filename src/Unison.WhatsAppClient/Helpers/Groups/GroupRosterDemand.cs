@@ -498,33 +498,67 @@ namespace Unison.WhatsAppClient.Helpers
         /// The row may hold members from the catalog that the index never saw (cold start). Seed
         /// them first so a flush adds to them instead of replacing them.
         /// </summary>
-        private Task SeedFromRowAsync(string group)
+        /// <remarks>
+        /// UI hop only snapshots the row list. Building hints + <see cref="GroupRosterIndex.Seed"/>
+        /// for 500+ members on the dispatcher froze Lumia (~37s <c>RunLowAsync</c>).
+        /// </remarks>
+        private async Task SeedFromRowAsync(string group)
         {
             if (_index.GetCompleteness(group) != GroupRosterCompleteness.None)
             {
-                return Task.CompletedTask;
+                return;
             }
 
-            return RunLowAsync(() =>
+            List<GroupMember> snapshot = null;
+            GroupRosterCompleteness completeness = GroupRosterCompleteness.None;
+            await RunLowAsync(() =>
             {
                 ChatItem chat = FindRow(group);
-                if (chat?.GroupMembers == null || _index.GetCompleteness(group) != GroupRosterCompleteness.None)
+                if (chat?.GroupMembers == null ||
+                    chat.GroupMembers.Count == 0 ||
+                    _index.GetCompleteness(group) != GroupRosterCompleteness.None)
                 {
                     return;
                 }
 
-                var hints = new List<GroupMemberHint>(chat.GroupMembers.Count);
-                foreach (GroupMember member in chat.GroupMembers)
+                snapshot = new List<GroupMember>(chat.GroupMembers);
+                completeness = chat.RosterCompleteness;
+            }).ConfigureAwait(false);
+
+            if (snapshot == null || snapshot.Count == 0)
+            {
+                return;
+            }
+
+            if (_index.GetCompleteness(group) != GroupRosterCompleteness.None)
+            {
+                return;
+            }
+
+            List<GroupMemberHint> hints = await Task.Run(() =>
+            {
+                var built = new List<GroupMemberHint>(snapshot.Count);
+                for (int i = 0; i < snapshot.Count; i++)
                 {
-                    GroupMemberHint hint = GroupMemberHint.FromMember(member, GroupMemberHintSource.Store, DateTime.MinValue);
+                    GroupMemberHint hint = GroupMemberHint.FromMember(
+                        snapshot[i],
+                        GroupMemberHintSource.Store,
+                        DateTime.MinValue);
                     if (hint != null)
                     {
-                        hints.Add(hint);
+                        built.Add(hint);
                     }
                 }
 
-                _index.Seed(group, hints, chat.RosterCompleteness);
-            });
+                return built;
+            }).ConfigureAwait(false);
+
+            if (hints.Count == 0 || _index.GetCompleteness(group) != GroupRosterCompleteness.None)
+            {
+                return;
+            }
+
+            _index.Seed(group, hints, completeness);
         }
 
         private async Task FlushAsync(string group, bool persist)

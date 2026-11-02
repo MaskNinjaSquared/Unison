@@ -171,12 +171,14 @@ namespace Unison.Socket.Messages.Content
             var context = BuildContextInfo(content);
             var message = Compose(content, upload, context);
 
-            // A view-once photo is an ordinary photo inside a wrapper the phone knows to burn
-            // after reading. The flag on the message itself is set as well: older clients read
-            // one and newer ones the other.
+            // View-once media is an ordinary payload inside a wrapper the phone burns after
+            // reading. The flag on the inner message is set as well: older clients read one
+            // and newer ones the other. Voice notes use the same V2 wrapper.
             return content.ViewOnce && (content.MediaType == MediaType.Image ||
                                         content.MediaType == MediaType.Video ||
-                                        content.MediaType == MediaType.Ptv)
+                                        content.MediaType == MediaType.Ptv ||
+                                        content.MediaType == MediaType.Ptt ||
+                                        content.MediaType == MediaType.Audio)
                 ? new global::Proto.Message
                 {
                     ViewOnceMessageV2 = new global::Proto.Message.Types.FutureProofMessage { Message = message }
@@ -258,6 +260,7 @@ namespace Unison.Socket.Messages.Content
                             Ptt = content.MediaType == MediaType.Ptt,
                             Waveform = ToByteString(content.Waveform),
                             StreamingSidecar = ToByteString(upload.StreamingSidecar),
+                            ViewOnce = content.ViewOnce,
                             ContextInfo = context
                         }
                     };

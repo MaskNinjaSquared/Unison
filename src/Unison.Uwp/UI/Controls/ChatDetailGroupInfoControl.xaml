@@ -73,6 +73,12 @@
                                   Toggled="NotificationsToggle_Toggled"/>
                     <TextBlock x:Name="MembersLabel" x:Uid="ChatDetailInfo_MembersLabel" Margin="0,20,0,0" Style="{StaticResource ChatDetailInfoSectionLabelStyle}" Text="MEMBERS"/>
                     <TextBlock x:Name="MembersValue" Style="{StaticResource ChatDetailInfoSectionValueStyle}"/>
+                    <TextBlock x:Name="CreatedByYouText"
+                               Margin="0,16,0,0"
+                               Style="{StaticResource ChatDetailInfoSectionValueStyle}"
+                               Foreground="{ThemeResource ChatDetailInfoMutedBrush}"
+                               TextWrapping="Wrap"
+                               Visibility="Collapsed"/>
                 </StackPanel>
             </ScrollViewer>
         </PivotItem>

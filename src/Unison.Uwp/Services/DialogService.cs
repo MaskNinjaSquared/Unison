@@ -234,6 +234,38 @@ namespace Unison.Uwp.Services
             return null;
         }
 
+        public async Task<bool> ShowGroupPreviewAsync(GroupPreviewDialogViewModel previewVm)
+        {
+            if (previewVm == null)
+            {
+                throw new ArgumentNullException(nameof(previewVm));
+            }
+
+            try
+            {
+                var dialog = new GroupPreviewDialog
+                {
+                    DataContext = previewVm,
+                    PrimaryButtonText = previewVm.PrimaryButtonText,
+                    SecondaryButtonText = previewVm.CancelButtonText
+                };
+                ContentDialogResult result = await dialog.ShowAsync();
+                return result == ContentDialogResult.Primary && previewVm.Joined;
+            }
+            catch (System.Runtime.InteropServices.COMException ex)
+                when (ex.Message.Contains("single ContentDialog") ||
+                      ex.HResult == unchecked((int)0x80070057))
+            {
+                System.Diagnostics.Debug.WriteLine("[DialogService] Another dialog is already open (group preview).");
+                return false;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine("[DialogService] ShowGroupPreviewAsync: " + ex.Message);
+                return false;
+            }
+        }
+
         public async Task<ImageSendPreviewResult> ShowImageSendPreviewAsync(
             byte[] imageBytes,
             string infoText,
@@ -488,6 +520,78 @@ namespace Unison.Uwp.Services
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine("[DialogService] ShowQrFullscreenAsync: " + ex.Message);
+            }
+        }
+
+        public async Task<bool> ShowChatExportOptionsAsync()
+        {
+            try
+            {
+                var dialog = new ContentDialog
+                {
+                    Title = LocalizedStrings.Get("ChatExport_OptionsTitle", "Export chat"),
+                    Content = LocalizedStrings.Get(
+                        "ChatExport_OptionsBody",
+                        "Export this chat without media. Messages that had photos, videos, or documents will show as <Mídia oculta>."),
+                    PrimaryButtonText = LocalizedStrings.Get(
+                        "ChatExport_WithoutMedia",
+                        "Export without media"),
+                    CloseButtonText = LocalizedStrings.Get("Common_Cancel", "Cancel"),
+                    DefaultButton = ContentDialogButton.Primary
+                };
+                ContentDialogResult result = await dialog.ShowAsync();
+                return result == ContentDialogResult.Primary;
+            }
+            catch (System.Runtime.InteropServices.COMException ex)
+                when (ex.Message.Contains("single ContentDialog") ||
+                      ex.HResult == unchecked((int)0x80070057))
+            {
+                System.Diagnostics.Debug.WriteLine("[DialogService] Another dialog is already open (export options).");
+                return false;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine("[DialogService] ShowChatExportOptionsAsync: " + ex.Message);
+                return false;
+            }
+        }
+
+        public async Task<ChatExportReadyChoice> ShowChatExportReadyAsync(string fileName, string infoText)
+        {
+            try
+            {
+                var dialog = new ChatExportReadyDialog
+                {
+                    Title = LocalizedStrings.Get("ChatExport_ReadyTitle", "Export ready"),
+                    PrimaryButtonText = LocalizedStrings.Get("ChatExport_Share", "Share"),
+                    SecondaryButtonText = LocalizedStrings.Get("ChatExport_Save", "Save"),
+                    CloseButtonText = LocalizedStrings.Get("Common_Close", "Close")
+                };
+                dialog.SetFile(fileName, infoText);
+                ContentDialogResult result = await dialog.ShowAsync();
+                if (result == ContentDialogResult.Primary)
+                {
+                    return ChatExportReadyChoice.Share;
+                }
+
+                if (result == ContentDialogResult.Secondary)
+                {
+                    return ChatExportReadyChoice.Save;
+                }
+
+                return ChatExportReadyChoice.Dismissed;
+            }
+            catch (System.Runtime.InteropServices.COMException ex)
+                when (ex.Message.Contains("single ContentDialog") ||
+                      ex.HResult == unchecked((int)0x80070057))
+            {
+                System.Diagnostics.Debug.WriteLine("[DialogService] Another dialog is already open (export ready).");
+                return ChatExportReadyChoice.Dismissed;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine("[DialogService] ShowChatExportReadyAsync: " + ex.Message);
+                return ChatExportReadyChoice.Dismissed;
             }
         }
     }

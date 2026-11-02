@@ -223,6 +223,49 @@ namespace Unison.Core.State
             return true;
         }
 
+        /// <summary>Looks up one bubble by id in this conversation's timeline.</summary>
+        public bool TryFindMessage(string chatJid, string messageId, out ChatMessage message)
+        {
+            message = null;
+            if (string.IsNullOrEmpty(messageId) ||
+                !TryGet(chatJid, out List<ChatMessage> list) ||
+                list == null)
+            {
+                return false;
+            }
+
+            int index = IndexOfMessage(list, messageId);
+            if (index < 0)
+            {
+                return false;
+            }
+
+            message = list[index];
+            return true;
+        }
+
+        /// <summary>
+        /// Writes pin fields onto the resident bubble. False when the conversation does not hold it.
+        /// </summary>
+        public bool TryApplyPinFields(
+            string chatJid,
+            string messageId,
+            bool isPinned,
+            DateTime? pinnedAtUtc,
+            DateTime? expiresAtUtc,
+            out ChatMessage target)
+        {
+            if (!TryFindMessage(chatJid, messageId, out target))
+            {
+                return false;
+            }
+
+            target.IsPinned = isPinned;
+            target.PinnedAtUtc = pinnedAtUtc;
+            target.PinExpiresAtUtc = expiresAtUtc;
+            return true;
+        }
+
         /// <summary>
         /// Moves our message with this id forward to <paramref name="status"/> in every
         /// conversation holding it (an alias timeline can hold the same send). Each chat's

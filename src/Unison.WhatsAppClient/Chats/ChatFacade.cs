@@ -96,10 +96,15 @@ namespace Unison.WhatsAppClient.Chats
         private static readonly TimeSpan OfflineReplayTipSteadyThrottle = TimeSpan.FromMilliseconds(1000);
 
         /// <summary>
-        /// Offline tip rows per UI hop. A single foreach over the full replay used to hold the
-        /// dispatcher for seconds on Mobile (each row also did an O(n) chat scan before the index).
+        /// Offline tip rows per UI hop. Each row can cascade into preview reconcile / list moves;
+        /// 12 still held Lumia for ~17s on a 2-chat flush. Keep the hop tiny on every device.
         /// </summary>
-        private const int OfflineReplayUiSliceSize = 12;
+        private const int OfflineReplayUiSliceSize = 4;
+
+        private static readonly TimeSpan OfflineReplayUiSliceGap = TimeSpan.FromMilliseconds(24);
+
+        /// <summary>Reposition hops — SortInPlace-style moves must not batch the whole flush.</summary>
+        private const int OfflineReplayReorderSliceSize = 8;
 
         private readonly object _fullPreviewReconcileGate = new object();
         private Task _inflightFullPreviewReconcile;
@@ -520,20 +525,41 @@ namespace Unison.WhatsAppClient.Chats
         {
             var ids = new List<string>();
             var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (ChatItem chat in _chatState.Chats)
+
+            void Offer(string raw)
             {
-                if (chat == null || !chat.IsFavorite || string.IsNullOrWhiteSpace(chat.JID))
+                if (string.IsNullOrWhiteSpace(raw))
                 {
-                    continue;
+                    return;
                 }
 
-                string canonical = _jids.GetCanonicalJid(chat.JID);
+                string canonical = _jids.GetCanonicalJid(raw);
                 if (string.IsNullOrWhiteSpace(canonical) || !seen.Add(canonical))
                 {
-                    continue;
+                    return;
                 }
 
                 ids.Add(canonical);
+            }
+
+            foreach (ChatItem chat in _chatState.Chats)
+            {
+                if (chat == null || !chat.IsFavorite)
+                {
+                    continue;
+                }
+
+                Offer(chat.JID);
+            }
+
+            // Cold favourites live only in the store until their chat row appears.
+            IReadOnlyList<string> remembered = _chatStore.ListFavoriteJids();
+            if (remembered != null)
+            {
+                for (int i = 0; i < remembered.Count; i++)
+                {
+                    Offer(remembered[i]);
+                }
             }
 
             return ids;
@@ -1848,20 +1874,33 @@ namespace Unison.WhatsAppClient.Chats
 
                 if (sliceEnd < summaries.Count)
                 {
-                    await Task.Yield();
+                    await Task.Delay(OfflineReplayUiSliceGap).ConfigureAwait(false);
+                }
+            }
+
+            for (int start = 0; start < reorderRows.Count; start += OfflineReplayReorderSliceSize)
+            {
+                int from = start;
+                int end = Math.Min(reorderRows.Count, start + OfflineReplayReorderSliceSize);
+                await _ui.RunAsync(() =>
+                {
+                    // Reposition only tip-updated rows (and bumped community hubs). Full SortInPlace
+                    // Moved projected-away children too → incremental-move-miss → BuildVisibleRefreshSource
+                    // storms on Mobile Low during replay-progressive.
+                    for (int i = from; i < end; i++)
+                    {
+                        ChatDisplayOrder.Reposition(_chatState.Chats, reorderRows[i]);
+                    }
+                }).ConfigureAwait(false);
+
+                if (end < reorderRows.Count)
+                {
+                    await Task.Delay(OfflineReplayUiSliceGap).ConfigureAwait(false);
                 }
             }
 
             await _ui.RunAsync(() =>
             {
-                // Reposition only tip-updated rows (and bumped community hubs). Full SortInPlace
-                // Moved projected-away children too → incremental-move-miss → BuildVisibleRefreshSource
-                // storms on Mobile Low during replay-progressive.
-                for (int i = 0; i < reorderRows.Count; i++)
-                {
-                    ChatDisplayOrder.Reposition(_chatState.Chats, reorderRows[i]);
-                }
-
                 int totalUnread = GetTotalUnreadCount();
                 if (_notifications != null)
                 {
@@ -2636,5 +2675,9 @@ namespace Unison.WhatsAppClient.Chats
         /// <inheritdoc />
         public bool MatchesListEnrichmentPhase(string syncStatus) =>
             ListEnrichmentPhase.Matches(syncStatus);
+
+        /// <inheritdoc />
+        public void ClearInMemoryTimelines() =>
+            _chatState.MessagesByChat.Clear();
     }
 }

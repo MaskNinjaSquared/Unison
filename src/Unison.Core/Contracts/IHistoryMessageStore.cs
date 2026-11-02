@@ -86,6 +86,14 @@ namespace Unison.Core.Contracts
             string chatJid,
             string messageId);
 
+        /// <summary>
+        /// Same as the single-key overload, but <paramref name="chatJids"/> covers PN/LID/canonical
+        /// twins so a reaction written under one spelling still appears in the dialog.
+        /// </summary>
+        Task<IReadOnlyList<HistoryMessageReaction>> GetReactionsForMessageAsync(
+            IReadOnlyList<string> chatJids,
+            string messageId);
+
         Task<int> CountAsync(string syncId = null);
 
         Task ClearAsync(string reason = null);

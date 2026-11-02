@@ -493,6 +493,12 @@ Disabilita dopo la diagnosi: lasciarlo attivo rallenta l'app.</value>
   <data name="ChatDetail_RecordingChatUnavailable" xml:space="preserve">
     <value>La conversazione di questa registrazione non è più disponibile.</value>
   </data>
+  <data name="ChatDetail_RecordingPause" xml:space="preserve">
+    <value>Pausa</value>
+  </data>
+  <data name="ChatDetail_RecordingPlay" xml:space="preserve">
+    <value>Riproduci</value>
+  </data>
   <data name="ChatDetail_AudioSendFailed" xml:space="preserve">
     <value>Impossibile inviare l'audio.</value>
   </data>

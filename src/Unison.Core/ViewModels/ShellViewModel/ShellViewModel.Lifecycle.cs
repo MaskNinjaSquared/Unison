@@ -88,7 +88,6 @@ namespace Unison.Core.ViewModels
 
         private async Task RunColdStartAsync()
         {
-            _startInProgress = true;
             AppSurface = SurfaceStartup;
 
             try
@@ -135,7 +134,6 @@ namespace Unison.Core.ViewModels
             }
             finally
             {
-                _startInProgress = false;
                 if (!_initialized)
                 {
                     // Background-access abort: allow a later Boot remount to retry.

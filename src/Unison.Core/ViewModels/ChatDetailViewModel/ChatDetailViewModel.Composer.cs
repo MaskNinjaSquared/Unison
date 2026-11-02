@@ -31,6 +31,8 @@ namespace Unison.Core.ViewModels
             (StartRecordingCommand as RelayCommand)?.RaiseCanExecuteChanged();
             (CancelRecordingCommand as RelayCommand)?.RaiseCanExecuteChanged();
             (SendRecordingCommand as RelayCommand)?.RaiseCanExecuteChanged();
+            (ToggleRecordingPauseCommand as RelayCommand)?.RaiseCanExecuteChanged();
+            (ToggleViewOnceVoiceCommand as RelayCommand)?.RaiseCanExecuteChanged();
             (ToggleStickerBoxCommand as RelayCommand)?.RaiseCanExecuteChanged();
             (InsertEmojiCommand as RelayCommand<string>)?.RaiseCanExecuteChanged();
         }
@@ -42,6 +44,7 @@ namespace Unison.Core.ViewModels
         {
             (PinToStartCommand as RelayCommand)?.RaiseCanExecuteChanged();
             (DeleteChatCommand as RelayCommand)?.RaiseCanExecuteChanged();
+            (ExportChatCommand as RelayCommand)?.RaiseCanExecuteChanged();
             (ArchiveChatCommand as RelayCommand)?.RaiseCanExecuteChanged();
             (UnarchiveChatCommand as RelayCommand)?.RaiseCanExecuteChanged();
             RaiseMuteCommandsCanExecuteChanged();
@@ -151,7 +154,7 @@ namespace Unison.Core.ViewModels
             Func<string, PickedChatMedia, Task> send,
             string kind)
         {
-            if (_activeChat == null || _isSending || _isRecording) return;
+            if (_activeChat == null || _isSending || IsRecording) return;
 
             string targetJid = _activeChat.JID;
             try
@@ -181,7 +184,7 @@ namespace Unison.Core.ViewModels
 
         private async Task AttachImagesAsync()
         {
-            if (_activeChat == null || _isSending || _isRecording)
+            if (_activeChat == null || _isSending || IsRecording)
             {
                 return;
             }
@@ -449,7 +452,7 @@ namespace Unison.Core.ViewModels
         /// </summary>
         private async Task PasteClipboardAsync()
         {
-            if (_copy == null || _activeChat == null || _isSending || _isRecording)
+            if (_copy == null || _activeChat == null || _isSending || IsRecording)
             {
                 return;
             }
@@ -540,7 +543,7 @@ namespace Unison.Core.ViewModels
 
         private async Task StartRecordingAsync()
         {
-            if (_activeChat == null || _isSending || _isRecording) return;
+            if (_activeChat == null || _isSending || IsRecording) return;
 
             // Collapse the growing composer back to one line before the recording overlay
             // takes over (audio flow may change later; for now clear is enough).
@@ -577,7 +580,7 @@ namespace Unison.Core.ViewModels
             await Task.Delay(VoiceNoteCueTiming.StartRecordingDelayMs);
             if (generation != _recordingCueGeneration ||
                 _isSending ||
-                _isRecording ||
+                IsRecording ||
                 _activeChat == null ||
                 !string.Equals(_activeChat.JID, chatJid, StringComparison.Ordinal))
             {
@@ -590,7 +593,8 @@ namespace Unison.Core.ViewModels
                 _recordingSession = await _audioRecording.StartAsync();
                 _recordingChatJid = chatJid;
                 RecordingElapsedText = "0:00";
-                IsRecording = true;
+                IsViewOnceVoice = false;
+                VoiceRecordingState = VoiceRecordingState.Playing;
                 StartElapsedLoop();
             }
             catch (Exception ex)
@@ -635,9 +639,10 @@ namespace Unison.Core.ViewModels
                 return;
             }
 
+            bool viewOnce = IsViewOnceVoice;
             _recordingSession = null;
             _recordingChatJid = null;
-            IsRecording = false;
+            VoiceRecordingState = VoiceRecordingState.Pristine;
             RecordingElapsedText = "0:00";
 
             if (string.IsNullOrWhiteSpace(targetJid))
@@ -658,7 +663,8 @@ namespace Unison.Core.ViewModels
                     recording.Bytes,
                     recording.MimeType ?? "audio/ogg; codecs=opus",
                     recording.DurationSeconds,
-                    recording.IsVoiceNote);
+                    recording.IsVoiceNote,
+                    viewOnce);
                 MessageSent?.Invoke(this, EventArgs.Empty);
                 _uiSounds?.PlayMessageSent();
                 LogSend("voice-send-ok");
@@ -793,6 +799,34 @@ namespace Unison.Core.ViewModels
             _uiSounds?.PlayVoiceNoteStop();
         }
 
+        private async Task ToggleRecordingPauseAsync()
+        {
+            var session = _recordingSession ?? _audioRecording?.Current;
+            if (session == null || !session.IsActive)
+            {
+                return;
+            }
+
+            try
+            {
+                if (session.IsPaused)
+                {
+                    await session.ResumeAsync().ConfigureAwait(true);
+                    VoiceRecordingState = VoiceRecordingState.Playing;
+                }
+                else
+                {
+                    await session.PauseAsync().ConfigureAwait(true);
+                    VoiceRecordingState = VoiceRecordingState.Paused;
+                }
+            }
+            catch (Exception ex)
+            {
+                LogSendError("record-pause-fail", ex);
+                _uiSounds?.PlayVoiceNoteError();
+            }
+        }
+
         private async Task CancelRecordingCoreAsync()
         {
             _recordingCueGeneration++;
@@ -825,11 +859,7 @@ namespace Unison.Core.ViewModels
         {
             return _dispatcher.RunAsync(() =>
             {
-                if (_isRecording)
-                {
-                    IsRecording = false;
-                }
-
+                VoiceRecordingState = VoiceRecordingState.Pristine;
                 RecordingElapsedText = "0:00";
             });
         }
@@ -850,7 +880,7 @@ namespace Unison.Core.ViewModels
                         string text = FormatElapsed(session.Elapsed);
                         await _dispatcher.RunAsync(() =>
                         {
-                            if (_recordingSession == session && _isRecording)
+                            if (_recordingSession == session && IsRecording)
                             {
                                 RecordingElapsedText = text;
                             }

@@ -102,18 +102,28 @@ namespace Unison.WhatsAppClient.Contacts
                     TimeSpan timeout = numbers.Count > 1 ? BatchTimeout : SingleTimeout;
                     var contacts = await useCase.ExecuteAsync(numbers, "interactive", timeout).ConfigureAwait(false);
 
-                    bool cachesChanged = false;
+                    var changedJids = new List<string>();
                     foreach (var contact in contacts)
                     {
-                        if (Apply(contact))
+                        if (!Apply(contact))
                         {
-                            cachesChanged = true;
+                            continue;
+                        }
+
+                        if (!string.IsNullOrEmpty(contact.Jid))
+                        {
+                            changedJids.Add(contact.Jid);
+                        }
+
+                        if (!string.IsNullOrEmpty(contact.Lid))
+                        {
+                            changedJids.Add(contact.Lid);
                         }
                     }
 
-                    if (cachesChanged)
+                    if (changedJids.Count > 0)
                     {
-                        await _nameRefresh.ApplyAsync().ConfigureAwait(false);
+                        await _nameRefresh.ApplyAsync(changedJids).ConfigureAwait(false);
                     }
 
                     return true;

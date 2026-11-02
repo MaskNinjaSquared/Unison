@@ -118,6 +118,36 @@ namespace Unison.Core.Tests.Helpers
         }
 
         [Fact]
+        public async Task Seeding_a_large_catalog_roster_keeps_the_UI_hop_to_a_snapshot()
+        {
+            var f = new Fixture();
+            ChatItem chat = f.AddGroup();
+            var existing = new List<GroupMember>(80);
+            for (int i = 0; i < 80; i++)
+            {
+                existing.Add(new GroupMember
+                {
+                    Jid = "55119000002" + i.ToString("00") + "@s.whatsapp.net",
+                    DisplayName = "S" + i
+                });
+            }
+
+            chat.GroupMembers = existing;
+            chat.RosterCompleteness = GroupRosterCompleteness.Partial;
+
+            int before = f.Ui.Passes;
+            f.Demand.NoteMember(Group, Hint(Ana, "Ana"));
+            await f.Demand.FlushNowAsync(Group);
+
+            // Seed snapshots once; FromMember + Index.Seed run off the dispatcher.
+            // Upsert Ana is one batch hop; commit is one more. ≤3 UI/low hops total.
+            Assert.True(f.Ui.Passes - before <= 3, "hops=" + (f.Ui.Passes - before));
+            Assert.Contains(chat.GroupMembers, m => m.Jid == Ana);
+            Assert.Equal(81, chat.GroupMembers.Count);
+            Assert.Equal(GroupRosterCompleteness.Partial, f.Index.GetCompleteness(Group));
+        }
+
+        [Fact]
         public async Task Viewport_authors_come_from_the_store_by_key_with_their_avatar()
         {
             var f = new Fixture();

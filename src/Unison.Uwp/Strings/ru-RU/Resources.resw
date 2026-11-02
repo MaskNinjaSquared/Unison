@@ -449,6 +449,12 @@
   <data name="ChatDetail_RecordingChatUnavailable" xml:space="preserve">
     <value>Чат, в котором выполнялась запись, больше недоступен.</value>
   </data>
+  <data name="ChatDetail_RecordingPause" xml:space="preserve">
+    <value>Пауза</value>
+  </data>
+  <data name="ChatDetail_RecordingPlay" xml:space="preserve">
+    <value>Воспроизвести</value>
+  </data>
   <data name="ChatDetail_AudioSendFailed" xml:space="preserve">
     <value>Не удалось отправить аудио.</value>
   </data>

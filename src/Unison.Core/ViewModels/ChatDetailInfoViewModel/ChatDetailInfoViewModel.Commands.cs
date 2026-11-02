@@ -238,6 +238,123 @@ namespace Unison.Core.ViewModels
             }
         }
 
+        private async Task LoadCreatedByYouCaptionAsync()
+        {
+            if (_groups == null || _source == null || !_isGroup)
+            {
+                return;
+            }
+
+            string template = Loc(
+                "ChatDetailInfo_GroupCreatedByYou",
+                "Group created by you on {0}");
+            try
+            {
+                string caption = await _groups.TryGetCreatedByYouCaptionAsync(
+                    _source.JID,
+                    template).ConfigureAwait(false);
+                if (_detached)
+                {
+                    return;
+                }
+
+                if (_dispatcher != null)
+                {
+                    await _dispatcher.RunAsync(() => CreatedByYouText = caption ?? string.Empty);
+                }
+                else
+                {
+                    CreatedByYouText = caption ?? string.Empty;
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine(
+                    "[ChatDetailInfoViewModel] Created-by caption failed: " + ex.Message);
+            }
+        }
+
+        private async Task LeaveGroupAsync()
+        {
+            if (!CanLeaveGroup || _dialogs == null)
+            {
+                return;
+            }
+
+            bool confirmed = await _dialogs.ShowConfirmAsync(
+                Loc("ChatDetailInfo_LeaveGroupTitle", "Leave group?"),
+                Loc(
+                    "ChatDetailInfo_LeaveGroupBody",
+                    "You will no longer receive messages from this group."),
+                Loc("ChatDetailInfo_LeaveGroupConfirm", "Leave"),
+                Loc("Common_Cancel", "Cancel")).ConfigureAwait(false);
+
+            if (!confirmed || _detached || !CanLeaveGroup)
+            {
+                return;
+            }
+
+            try
+            {
+                await _groups.LeaveGroupAsync(_source.JID).ConfigureAwait(false);
+                if (_detached)
+                {
+                    return;
+                }
+
+                void AfterLeave()
+                {
+                    OnPropertyChanged(nameof(CanLeaveGroup));
+                    (LeaveGroupCommand as RelayCommand)?.RaiseCanExecuteChanged();
+                }
+
+                if (_dispatcher != null)
+                {
+                    await _dispatcher.RunAsync(AfterLeave);
+                }
+                else
+                {
+                    AfterLeave();
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine(
+                    "[ChatDetailInfoViewModel] Leave group failed: " + ex.Message);
+            }
+        }
+
+        private async Task BlockContactAsync()
+        {
+            if (!CanBlockContact || _dialogs == null)
+            {
+                return;
+            }
+
+            bool confirmed = await _dialogs.ShowConfirmAsync(
+                Loc("ChatDetailInfo_BlockContactTitle", "Block contact?"),
+                Loc(
+                    "ChatDetailInfo_BlockContactBody",
+                    "Blocked contacts will no longer be able to call you or send you messages."),
+                Loc("ChatDetailInfo_BlockContactConfirm", "Block"),
+                Loc("Common_Cancel", "Cancel")).ConfigureAwait(false);
+
+            if (!confirmed || _detached || !CanBlockContact)
+            {
+                return;
+            }
+
+            try
+            {
+                await _contacts.BlockContactAsync(_source.JID).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine(
+                    "[ChatDetailInfoViewModel] Block contact failed: " + ex.Message);
+            }
+        }
+
         private string Loc(string key, string fallback) =>
             _strings != null ? _strings.Get(key, fallback) : fallback;
     }

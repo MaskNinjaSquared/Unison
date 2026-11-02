@@ -40,18 +40,19 @@
               Background="Black"
               Visibility="{x:Bind ViewModel.HasOpenAuthor, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}">
 
+            <!-- Fill the viewport; Uniform keeps original aspect (same idea as VideoViewerView). -->
             <Image x:Name="ViewerImage"
                    Stretch="Uniform"
-                   HorizontalAlignment="Center"
-                   VerticalAlignment="Center"
+                   HorizontalAlignment="Stretch"
+                   VerticalAlignment="Stretch"
                    Visibility="{x:Bind ViewModel.IsImage, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
 
             <MediaElement x:Name="ViewerVideo"
                           Stretch="Uniform"
                           AutoPlay="True"
                           AreTransportControlsEnabled="False"
-                          HorizontalAlignment="Center"
-                          VerticalAlignment="Center"
+                          HorizontalAlignment="Stretch"
+                          VerticalAlignment="Stretch"
                           MediaOpened="ViewerVideo_MediaOpened"
                           MediaEnded="ViewerVideo_MediaEnded"
                           Visibility="{x:Bind ViewModel.IsVideo, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>

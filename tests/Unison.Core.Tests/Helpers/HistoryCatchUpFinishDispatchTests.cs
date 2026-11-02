@@ -16,6 +16,7 @@ namespace Unison.Core.Tests.Helpers
 
             Assert.True(host.Finished);
             Assert.True(host.BannerEnded);
+            Assert.Equal("x", host.SilentNotifyReason);
             Assert.False(host.ListReleaseRequested);
             Assert.False(host.EnrichmentScheduled);
         }
@@ -77,6 +78,7 @@ namespace Unison.Core.Tests.Helpers
             public bool EnrichmentScheduled;
             public bool EnrichmentCleared;
             public bool AvatarsScheduled;
+            public string SilentNotifyReason;
 
             public bool IsFirstSyncListHoldInProgress => FirstSyncHold;
             public bool IsListAwaitingFirstHistorySync => AwaitingFirstHistory;
@@ -109,6 +111,9 @@ namespace Unison.Core.Tests.Helpers
 
             public void TrySchedulePostMessageEnrichment(string reason) =>
                 EnrichmentScheduled = true;
+
+            public void NotifySilentChainAfterLoudCatchUpFinish(string finishReason) =>
+                SilentNotifyReason = finishReason;
         }
     }
 }

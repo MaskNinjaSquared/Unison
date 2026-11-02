@@ -24,6 +24,9 @@ namespace Unison.WhatsAppClient.Abstractions
         /// <summary>Null socket — delete-for-everyone revoke cannot be sent.</summary>
         bool CanSendDeleteForEveryone { get; }
 
+        /// <summary>Null socket — reaction cannot be sent.</summary>
+        bool CanSendReaction { get; }
+
         Task PresenceSubscribeAsync(string jid);
 
         Task SendPinInChatMessageAsync(
@@ -45,5 +48,11 @@ namespace Unison.WhatsAppClient.Abstractions
 
         /// <summary>Protocol revoke (delete for everyone) naming the target message key.</summary>
         Task SendDeleteForEveryoneAsync(string chatJid, MessageKey targetKey);
+
+        /// <summary>
+        /// Baileys reactionMessage: <paramref name="targetKey"/> is the reacted message;
+        /// empty <paramref name="emoji"/> removes the sender's earlier reaction.
+        /// </summary>
+        Task SendReactionMessageAsync(string chatJid, MessageKey targetKey, string emoji);
     }
 }

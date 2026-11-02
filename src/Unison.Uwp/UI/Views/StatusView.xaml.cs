@@ -366,6 +366,16 @@ namespace Unison.Uwp.UI.Views
             {
                 _shell?.SelectStatusDetail(true);
                 ApplyChatPaneState();
+                // NarrowDetail may still report ActualWidth 0 until layout runs — force a pass
+                // so StatusDetailView MediaElement measures before ApplyMedia/Play.
+                try
+                {
+                    StatusDetailPart?.UpdateLayout();
+                    UpdateLayout();
+                }
+                catch
+                {
+                }
 
                 await StatusDetailPart.OpenAuthorAsync(e.Author);
                 if (!StatusDetailPart.HasOpenAuthor)

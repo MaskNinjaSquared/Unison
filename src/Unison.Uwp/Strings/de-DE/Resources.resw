@@ -508,6 +508,12 @@ Nach der Diagnose deaktivieren: Wenn es aktiviert bleibt, wird die App langsamer
   <data name="ChatDetail_RecordingChatUnavailable" xml:space="preserve">
     <value>Die Unterhaltung für diese Aufnahme ist nicht mehr verfügbar.</value>
   </data>
+  <data name="ChatDetail_RecordingPause" xml:space="preserve">
+    <value>Pause</value>
+  </data>
+  <data name="ChatDetail_RecordingPlay" xml:space="preserve">
+    <value>Wiedergeben</value>
+  </data>
   <data name="ChatDetail_AudioSendFailed" xml:space="preserve">
     <value>Audio konnte nicht gesendet werden.</value>
   </data>

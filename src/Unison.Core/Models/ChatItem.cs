@@ -845,6 +845,48 @@ namespace Unison.Core.Models
             }
         }
 
+        private bool _canJoin;
+        /// <summary>
+        /// Community linked subgroup this account has not joined — hub “can join” section only.
+        /// </summary>
+        public bool CanJoin
+        {
+            get => _canJoin;
+            set
+            {
+                if (_canJoin == value) return;
+                _canJoin = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(IsComposerLocked));
+            }
+        }
+
+        private string _groupCreatorJid;
+        /// <summary>Creator JID from community <c>sub_groups</c> / metadata (preview dialog).</summary>
+        public string GroupCreatorJid
+        {
+            get => _groupCreatorJid;
+            set
+            {
+                if (string.Equals(_groupCreatorJid, value, StringComparison.Ordinal)) return;
+                _groupCreatorJid = value;
+                OnPropertyChanged();
+            }
+        }
+
+        private long _groupCreationUnixSeconds;
+        /// <summary>Unix creation from community <c>sub_groups</c> (preview dialog).</summary>
+        public long GroupCreationUnixSeconds
+        {
+            get => _groupCreationUnixSeconds;
+            set
+            {
+                if (_groupCreationUnixSeconds == value) return;
+                _groupCreationUnixSeconds = value;
+                OnPropertyChanged();
+            }
+        }
+
         private bool _isCommunityAnnounce;
         /// <summary>
         /// Community default announce channel (<c>default_sub_group</c> in w:g2).
@@ -929,11 +971,23 @@ namespace Unison.Core.Models
         private readonly ObservableCollection<ChatItem> _communityMembers =
             new ObservableCollection<ChatItem>();
 
+        private readonly ObservableCollection<ChatItem> _communityJoinableMembers =
+            new ObservableCollection<ChatItem>();
+
         /// <summary>
         /// Runtime-only linked groups under this community hub. Not persisted.
         /// </summary>
         [Newtonsoft.Json.JsonIgnore]
         public ObservableCollection<ChatItem> CommunityMembers => _communityMembers;
+
+        /// <summary>
+        /// Runtime-only linked subgroups this account can still join. Not persisted.
+        /// </summary>
+        [Newtonsoft.Json.JsonIgnore]
+        public ObservableCollection<ChatItem> CommunityJoinableMembers => _communityJoinableMembers;
+
+        [Newtonsoft.Json.JsonIgnore]
+        public bool HasCommunityJoinableMembers => _communityJoinableMembers.Count > 0;
 
         /// <summary>Number of linked groups currently attached to this hub.</summary>
         [Newtonsoft.Json.JsonIgnore]
@@ -998,17 +1052,40 @@ namespace Unison.Core.Models
             OnPropertyChanged(nameof(CommunityGroupCount));
         }
 
+        /// <summary>Replaces hub can-join rows from a community linked-groups fetch.</summary>
+        public void ReplaceCommunityJoinableGroups(IReadOnlyList<ChatItem> groups)
+        {
+            _communityJoinableMembers.Clear();
+            if (groups != null)
+            {
+                for (int i = 0; i < groups.Count; i++)
+                {
+                    ChatItem group = groups[i];
+                    if (group != null)
+                    {
+                        _communityJoinableMembers.Add(group);
+                    }
+                }
+            }
+
+            OnPropertyChanged(nameof(CommunityJoinableMembers));
+            OnPropertyChanged(nameof(HasCommunityJoinableMembers));
+        }
+
         /// <summary>Clears runtime members when this row is no longer a hub in the list.</summary>
         public void ClearCommunityGroups()
         {
-            if (_communityMembers.Count == 0)
+            if (_communityMembers.Count == 0 && _communityJoinableMembers.Count == 0)
             {
                 return;
             }
 
             _communityMembers.Clear();
+            _communityJoinableMembers.Clear();
             OnPropertyChanged(nameof(CommunityMembers));
             OnPropertyChanged(nameof(CommunityGroupCount));
+            OnPropertyChanged(nameof(CommunityJoinableMembers));
+            OnPropertyChanged(nameof(HasCommunityJoinableMembers));
         }
 
         private GroupParticipantRole _myGroupRole = GroupParticipantRole.Member;
@@ -1055,7 +1132,7 @@ namespace Unison.Core.Models
         /// </summary>
         [Newtonsoft.Json.JsonIgnore]
         public bool IsComposerLocked =>
-            IsChannel || IsGroupLockedForMessages || IsNoLongerGroupParticipant;
+            IsChannel || IsGroupLockedForMessages || IsNoLongerGroupParticipant || CanJoin;
 
         public string Initial => !string.IsNullOrEmpty(Name) ? Name.Substring(0, 1).ToUpper() : "?";
 

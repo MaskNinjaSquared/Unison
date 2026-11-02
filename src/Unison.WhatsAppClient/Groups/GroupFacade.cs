@@ -836,6 +836,7 @@ namespace Unison.WhatsAppClient.Groups
 
             int attempts = 0;
             int resolved = 0;
+            var resolvedJids = new List<string>();
             bool abortedForVisibility = false;
             var pending = unresolved.Take(Math.Max(1, limit)).ToList();
             foreach (var chat in pending)
@@ -879,6 +880,7 @@ namespace Unison.WhatsAppClient.Groups
                     if (_apply.TryCacheSyncedSubject(chat.JID, subject, chat.Name))
                     {
                         resolved++;
+                        resolvedJids.Add(chat.JID);
                     }
 
                     // Flags-only — same as open-path. Default ApplyMetadata includeRoster=true
@@ -906,14 +908,187 @@ namespace Unison.WhatsAppClient.Groups
 
             _syncStatus.Raise(null);
 
-            if (resolved > 0)
+            if (resolvedJids.Count > 0)
             {
-                await _nameRefresh.ApplyAsync();
+                await _nameRefresh.ApplyAsync(resolvedJids);
                 _catalog.Schedule();
             }
 
             Debug.WriteLine("[GroupFacade] Group metadata fallback: resolved " + resolved + "/" + attempts + " unresolved group names");
             return abortedForVisibility;
+        }
+
+        public async Task LeaveGroupAsync(string groupJid)
+        {
+            if (string.IsNullOrWhiteSpace(groupJid) || !_wire.IsHandshakeComplete)
+            {
+                return;
+            }
+
+            string canonical = _jids.GetCanonicalJid(groupJid);
+            await _wire.LeaveGroupAsync(canonical).ConfigureAwait(false);
+            await _apply.SetNoLongerParticipantAsync(canonical, left: true).ConfigureAwait(false);
+        }
+
+        public async Task<string> TryGetCreatedByYouCaptionAsync(
+            string groupJid,
+            string dateTemplate,
+            CancellationToken cancellationToken = default)
+        {
+            if (string.IsNullOrWhiteSpace(groupJid) ||
+                string.IsNullOrWhiteSpace(dateTemplate) ||
+                !_wire.IsHandshakeComplete)
+            {
+                return null;
+            }
+
+            string canonical = _jids.GetCanonicalJid(groupJid);
+            try
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                BinaryNode response = await _wire.QueryGroupMetadataAsync(canonical, cancellationToken)
+                    .ConfigureAwait(false);
+                cancellationToken.ThrowIfCancellationRequested();
+                GroupMetadataSnapshot metadata = _reader.ReadMetadata(response, canonical, includeRoster: false);
+                if (metadata == null)
+                {
+                    return null;
+                }
+
+                return GroupCreatedBySelf.TryFormat(
+                    metadata.Owner,
+                    metadata.OwnerPn,
+                    metadata.CreationUnixSeconds,
+                    jid => _jids.IsSelfLinked(jid),
+                    dateTemplate);
+            }
+            catch (OperationCanceledException)
+            {
+                return null;
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[GroupFacade] TryGetCreatedByYouCaptionAsync: " + ex.Message);
+                return null;
+            }
+        }
+
+        public async Task RefreshCommunityJoinableGroupsAsync(
+            ChatItem communityHub,
+            CancellationToken cancellationToken = default)
+        {
+            if (communityHub == null ||
+                string.IsNullOrWhiteSpace(communityHub.JID) ||
+                !_wire.IsHandshakeComplete)
+            {
+                return;
+            }
+
+            string hubJid = _jids.GetCanonicalJid(communityHub.JID);
+            IReadOnlyList<CommunityLinkedGroupSnapshot> linked;
+            try
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                linked = await _wire.FetchCommunityLinkedGroupsAsync(hubJid, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                return;
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[GroupFacade] RefreshCommunityJoinableGroupsAsync: " + ex.Message);
+                return;
+            }
+
+            if (linked == null)
+            {
+                linked = Array.Empty<CommunityLinkedGroupSnapshot>();
+            }
+
+            var joinedKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            IReadOnlyList<ChatItem> members = communityHub.GetCommunityGroups();
+            if (members != null)
+            {
+                for (int i = 0; i < members.Count; i++)
+                {
+                    ChatItem m = members[i];
+                    if (m == null || string.IsNullOrWhiteSpace(m.JID))
+                    {
+                        continue;
+                    }
+
+                    joinedKeys.Add(_jids.GetCanonicalJid(m.JID));
+                }
+            }
+
+            joinedKeys.Add(hubJid);
+
+            var joinable = new List<ChatItem>();
+            for (int i = 0; i < linked.Count; i++)
+            {
+                CommunityLinkedGroupSnapshot snap = linked[i];
+                if (snap == null || string.IsNullOrWhiteSpace(snap.Jid))
+                {
+                    continue;
+                }
+
+                string canonical = _jids.GetCanonicalJid(snap.Jid);
+                if (string.IsNullOrWhiteSpace(canonical) || joinedKeys.Contains(canonical))
+                {
+                    continue;
+                }
+
+                joinable.Add(new ChatItem
+                {
+                    JID = canonical,
+                    Name = string.IsNullOrWhiteSpace(snap.Subject) ? canonical : snap.Subject,
+                    Kind = ChatKind.Group,
+                    LinkedParentJid = hubJid,
+                    CanJoin = true,
+                    GroupCreatorJid = snap.Owner,
+                    GroupCreationUnixSeconds = snap.CreationUnixSeconds,
+                    GroupMemberCount = snap.Size > 0 ? snap.Size : 0
+                });
+            }
+
+            await _ui.RunAsync(() =>
+            {
+                communityHub.ReplaceCommunityJoinableGroups(
+                    CommunityHubPresentation.OrderMembers(joinable));
+            }).ConfigureAwait(false);
+        }
+
+        public async Task<bool> JoinGroupAsync(
+            string groupJid,
+            string inviteCode = null,
+            CancellationToken cancellationToken = default)
+        {
+            if (string.IsNullOrWhiteSpace(groupJid) || !_wire.IsHandshakeComplete)
+            {
+                return false;
+            }
+
+            string canonical = _jids.GetCanonicalJid(groupJid);
+            try
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                bool ok = await _wire.JoinGroupAsync(canonical, inviteCode, cancellationToken)
+                    .ConfigureAwait(false);
+                if (ok)
+                {
+                    await _apply.SetNoLongerParticipantAsync(canonical, left: false)
+                        .ConfigureAwait(false);
+                }
+
+                return ok;
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[GroupFacade] JoinGroupAsync: " + ex.Message);
+                return false;
+            }
         }
     }
 }

@@ -408,9 +408,131 @@ namespace Unison.Core.ViewModels
             (MuteFor1WeekCommand as RelayCommand)?.RaiseCanExecuteChanged();
             (MuteForeverCommand as RelayCommand)?.RaiseCanExecuteChanged();
             (UnmuteLocalCommand as RelayCommand)?.RaiseCanExecuteChanged();
+            (ExportChatCommand as RelayCommand)?.RaiseCanExecuteChanged();
         }
 
-        /// <summary>
-        /// Finds a loaded bubble VM by protocol message id.
+        private bool CanExportChat()
+        {
+            return ActiveChat != null &&
+                   !string.IsNullOrWhiteSpace(ActiveChat.JID) &&
+                   _chatExport != null &&
+                   _dialogs != null;
+        }
+
+        private async Task ExportChatAsync()
+        {
+            ChatItem chat = ActiveChat;
+            if (chat == null || _chatExport == null || _dialogs == null)
+            {
+                return;
+            }
+
+            bool proceed = await _dialogs.ShowChatExportOptionsAsync().ConfigureAwait(true);
+            if (!proceed || ActiveChat == null ||
+                !string.Equals(ActiveChat.JID, chat.JID, StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
+            string selfName = null;
+            try
+            {
+                Profile profile = _profile?.GetCurrentProfile();
+                selfName = profile?.Name;
+                if (string.IsNullOrWhiteSpace(selfName))
+                {
+                    selfName = profile?.Phone;
+                }
+            }
+            catch
+            {
+            }
+
+            string displayName = chat.GetNameResolved(_strings) ?? chat.Name ?? chat.JID;
+            string outputDir = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "UnisonChatExport");
+            ChatExportResult result;
+            try
+            {
+                ChatExportRequest request = new ChatExportRequest
+                {
+                    ChatJid = chat.JID,
+                    ChatDisplayName = displayName,
+                    SelfDisplayName = selfName,
+                    IncludeMedia = false,
+                    OutputDirectory = outputDir
+                };
+                result = await Task.Run(
+                    () => _chatExport.HandleAsync(request)).ConfigureAwait(true);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine("[ChatDetailViewModel] ExportChat failed: " + ex.Message);
+                await _dialogs.ShowMessageAsync(
+                    _strings?.Get("ChatExport_FailedTitle", "Export failed") ?? "Export failed",
+                    ex.Message,
+                    _strings?.Get("Common_OK", "OK") ?? "OK").ConfigureAwait(true);
+                return;
+            }
+
+            if (result == null || string.IsNullOrWhiteSpace(result.ZipPath))
+            {
+                return;
+            }
+
+            string info = FormatExportInfo(result);
+            ChatExportReadyChoice choice = await _dialogs
+                .ShowChatExportReadyAsync(result.FileName, info)
+                .ConfigureAwait(true);
+
+            if (choice == ChatExportReadyChoice.Share && _share != null)
+            {
+                try
+                {
+                    await _share.ShareLocalFileAsync(result.FileName, result.ZipPath).ConfigureAwait(true);
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine("[ChatDetailViewModel] Export share failed: " + ex.Message);
+                }
+            }
+            else if (choice == ChatExportReadyChoice.Save && _filePicker != null)
+            {
+                try
+                {
+                    await _filePicker.PickSaveLocalFileAsync(
+                        result.ZipPath,
+                        result.FileName,
+                        "application/zip").ConfigureAwait(true);
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine("[ChatDetailViewModel] Export save failed: " + ex.Message);
+                }
+            }
+        }
+
+        private static string FormatExportInfo(ChatExportResult result)
+        {
+            if (result == null)
+            {
+                return string.Empty;
+            }
+
+            string size;
+            if (result.ByteLength >= 1024 * 1024)
+            {
+                size = (result.ByteLength / (1024.0 * 1024.0)).ToString("0.0") + " MB";
+            }
+            else if (result.ByteLength >= 1024)
+            {
+                size = (result.ByteLength / 1024.0).ToString("0") + " KB";
+            }
+            else
+            {
+                size = result.ByteLength + " B";
+            }
+
+            return result.MessageCount + " messages · " + size;
+        }
     }
 }

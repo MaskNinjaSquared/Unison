@@ -1,0 +1,43 @@
+<ContentDialog
+    x:Class="Unison.Uwp.UI.Dialogs.ChatExportReadyDialog"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Title="Export ready"
+    PrimaryButtonText="Share"
+    SecondaryButtonText="Save"
+    CloseButtonText="Close"
+    DefaultButton="Primary">
+
+    <StackPanel>
+        <Border Background="{ThemeResource ChatDetailInputBarBackgroundBrush}"
+                CornerRadius="8"
+                Padding="12,10"
+                Margin="0,0,0,4">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="&#xE7C3;"
+                           FontFamily="{StaticResource IconFont}"
+                           FontSize="28"
+                           Foreground="{ThemeResource ChatDetailHeaderTitleBrush}"
+                           VerticalAlignment="Center"
+                           Margin="0,0,12,0"/>
+                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                    <TextBlock x:Name="FileNameText"
+                               Foreground="{ThemeResource ChatDetailHeaderTitleBrush}"
+                               FontSize="14"
+                               FontFamily="{StaticResource MainFont}"
+                               TextWrapping="NoWrap"
+                               TextTrimming="CharacterEllipsis"/>
+                    <TextBlock x:Name="InfoText"
+                               Foreground="{ThemeResource ChatDetailMutedTextBrush}"
+                               FontSize="12"
+                               FontFamily="{StaticResource MainFont}"
+                               Margin="0,2,0,0"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+    </StackPanel>
+</ContentDialog>

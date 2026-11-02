@@ -110,6 +110,27 @@ namespace Unison.Core.State
         /// cache already learned. Warm runs while app-state / history are still remembering pins;
         /// overwriting those with a disk row that has not caught up yet was clearing the list.
         /// </summary>
+        /// <summary>JIDs currently remembered as Favourites (warm cache + RememberFavorite).</summary>
+        public IReadOnlyList<string> ListFavoriteJids()
+        {
+            var ids = new List<string>();
+            foreach (KeyValuePair<string, ChatLocalState> pair in _rows)
+            {
+                ChatLocalState state = pair.Value;
+                if (state == null || !state.Knows(ChatLocalStateFields.Favorite) || !state.IsFavorite)
+                {
+                    continue;
+                }
+
+                if (!string.IsNullOrWhiteSpace(pair.Key))
+                {
+                    ids.Add(pair.Key);
+                }
+            }
+
+            return ids;
+        }
+
         public void LoadWarm(IEnumerable<ChatLocalState> rows)
         {
             if (rows == null)

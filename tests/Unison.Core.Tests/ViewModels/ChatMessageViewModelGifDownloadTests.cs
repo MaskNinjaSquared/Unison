@@ -208,7 +208,13 @@ namespace Unison.Core.Tests.ViewModels
                 string jid,
                 IReadOnlyList<byte[]> imageBytes,
                 string caption) => throw new NotImplementedException();
-            public Task<ChatMessage> SendAudioMessageAsync(string jid, byte[] audioBytes, string mimeType, uint durationSeconds, bool isVoiceMessage = false) => throw new NotImplementedException();
+            public Task<ChatMessage> SendAudioMessageAsync(
+                string jid,
+                byte[] audioBytes,
+                string mimeType,
+                uint durationSeconds,
+                bool isVoiceMessage = false,
+                bool viewOnce = false) => throw new NotImplementedException();
             public Task<ChatMessage> SendDocumentAsync(string jid, byte[] documentBytes, string mimeType, string fileName, string caption = null) => throw new NotImplementedException();
             public Task<string> EnsureAudioAvailableAsync(ChatMessage message) => throw new NotImplementedException();
             public Task<string> EnsureImageAvailableAsync(ChatMessage message) => throw new NotImplementedException();
@@ -378,7 +384,7 @@ namespace Unison.Core.Tests.ViewModels
                 GroupSubjectChangeNotifyRequest change,
                 string previousSubject) =>
                 Task.CompletedTask;
-            public Task<bool> TryReactAsync(string chatJid, string messageId, string emoji) =>
+            public Task<bool> TryReactAsync(string chatJid, ChatMessage message, string emoji) =>
                 Task.FromResult(false);
         }
     }

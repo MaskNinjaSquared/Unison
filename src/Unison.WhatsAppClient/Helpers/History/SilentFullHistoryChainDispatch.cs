@@ -4,6 +4,8 @@
 // Sequential silent FULL_HISTORY: fire only when the previous lot is quiet, wait
 // the tier delay, then request with isFreshnessRepair false. Banner when a lot
 // applied messages (including residual chunks after the empty-cap stops probing).
+// Health start arms without firing; the first probe kicks after loud catch-up
+// finish when tips are still stale — so silent never races offline replay.
 // =============================================================================
 using System;
 using System.Threading;
@@ -16,7 +18,14 @@ namespace Unison.WhatsAppClient.Helpers
 {
     public static class SilentFullHistoryChainDispatch
     {
-        public static void Arm(ISilentFullHistoryChainHost host, string reason)
+        /// <summary>
+        /// Latch the chain for this session. Pass <paramref name="fireSoon"/> false on
+        /// health start so the first probe waits for loud catch-up finish.
+        /// </summary>
+        public static void Arm(
+            ISilentFullHistoryChainHost host,
+            string reason,
+            bool fireSoon = true)
         {
             if (host == null)
             {
@@ -26,7 +35,49 @@ namespace Unison.WhatsAppClient.Helpers
             host.MarkConsecutiveEmptySilentLots(0);
             host.MarkSilentChainArmed(true);
             host.WriteSilentJournal("arm", reason ?? string.Empty);
-            Schedule(host, SilentFullHistoryPolicy.ReasonPrefix + (reason ?? "post-init"), immediate: true);
+            if (fireSoon)
+            {
+                Schedule(host, SilentFullHistoryPolicy.ReasonPrefix + (reason ?? "post-init"), immediate: true);
+            }
+        }
+
+        /// <summary>
+        /// After offline-fresh / stagnant / other loud catch-up finish: start the first
+        /// silent probe when tips still look owed, or disarm when already fresh.
+        /// </summary>
+        public static void OnLoudCatchUpFinished(
+            ISilentFullHistoryChainHost host,
+            string finishReason)
+        {
+            if (host == null)
+            {
+                return;
+            }
+
+            bool tipStale = host.IsHistoryTipStale;
+            if (SilentFullHistoryPolicy.ShouldStopBecauseTipFresh(
+                    host.IsSilentChainArmed,
+                    tipStale))
+            {
+                Stop(host, "tip-fresh");
+                return;
+            }
+
+            if (!SilentFullHistoryPolicy.ShouldKickAfterLoudCatchUpFinish(
+                    host.IsSilentChainArmed,
+                    tipStale,
+                    finishReason))
+            {
+                return;
+            }
+
+            host.WriteSilentJournal(
+                "kick-after-catch-up",
+                finishReason ?? string.Empty);
+            Schedule(
+                host,
+                SilentFullHistoryPolicy.ReasonPrefix + "after-catch-up",
+                immediate: true);
         }
 
         public static void OnLotQuiet(ISilentFullHistoryChainHost host, string triggerReason, int appliedCount)
@@ -42,12 +93,21 @@ namespace Unison.WhatsAppClient.Helpers
                 return;
             }
 
-            host.MarkPreviousSilentLotQuiet(true);
+            // Watchdog silent-lot-idle and sqlite finalize can both report the same
+            // quiet — only the first advances empty-streak / schedule. Residual
+            // applies after empty-cap still raise the banner below.
+            bool alreadyQuiet = host.IsPreviousSilentLotQuiet;
+            if (!alreadyQuiet)
+            {
+                host.MarkPreviousSilentLotQuiet(true);
+            }
+
             host.WriteSilentJournal(
                 "lot-quiet",
                 "applied=" + appliedCount +
                 "; armed=" + host.IsSilentChainArmed +
                 "; emptyStreak=" + host.ConsecutiveEmptySilentLots +
+                "; dup=" + alreadyQuiet +
                 "; trigger=" + (triggerReason ?? string.Empty));
 
             // Surface background catch-up whenever this silent lot applied data —
@@ -57,7 +117,7 @@ namespace Unison.WhatsAppClient.Helpers
                 host.BeginHistoryCatchUpBanner(
                     triggerReason ?? SilentFullHistoryPolicy.ReasonPrefix + "applied");
             }
-            else
+            else if (!alreadyQuiet)
             {
                 host.EndHistoryCatchUpBanner(SilentFullHistoryPolicy.ReasonPrefix + "empty");
             }
@@ -65,6 +125,18 @@ namespace Unison.WhatsAppClient.Helpers
             if (!host.IsSilentChainArmed)
             {
                 host.WriteSilentJournal("lot-quiet-disarmed", "no-reschedule");
+                return;
+            }
+
+            if (alreadyQuiet)
+            {
+                host.WriteSilentJournal("lot-quiet-dup", "no-reschedule");
+                return;
+            }
+
+            if (!host.IsHistoryTipStale)
+            {
+                Stop(host, "tip-fresh");
                 return;
             }
 
@@ -157,9 +229,16 @@ namespace Unison.WhatsAppClient.Helpers
                     host.IsHistoryCatchUpActive,
                     host.IsFullHistoryClaimed,
                     host.IsPreviousSilentLotQuiet,
+                    host.IsHistoryTipStale,
                     out string gate))
             {
                 host.WriteSilentJournal("skip-fire", gate);
+                if (string.Equals(gate, "tip-fresh", StringComparison.Ordinal))
+                {
+                    Stop(host, "tip-fresh");
+                    return;
+                }
+
                 // Retry after the tier delay — meta may still be busy.
                 Schedule(host, reason, immediate: false);
                 return;

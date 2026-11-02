@@ -31,6 +31,17 @@ namespace Unison.Core.Contracts.WhatsApp
         /// <summary>Ends catch-up continue state, banner, and optionally releases enrichment.</summary>
         void FinishContinue(string reason, bool releaseEnrichment);
 
+        /// <summary>
+        /// Drops the in-flight FULL_HISTORY claim so the next silent / loud solicit can send.
+        /// </summary>
+        void ClearFullHistoryOnDemandRequest(string reason);
+
+        /// <summary>
+        /// Hands a quiet silent FULL lot to the sequential silent chain (empty streak /
+        /// next probe). No-op when the trigger is not a silent reason.
+        /// </summary>
+        void NotifySilentFullLotQuiet(string triggerReason, int appliedCount);
+
         /// <summary>Persists that the next session should force a history repair.</summary>
         void MarkForceHistoryRepairPending(string reason);
 

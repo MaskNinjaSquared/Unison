@@ -713,7 +713,13 @@ namespace Unison.Core.ViewModels
                 OnPropertyChanged(nameof(DisplayName));
                 OnPropertyChanged(nameof(PhoneValue));
                 OnPropertyChanged(nameof(HasPhone));
+                OnPropertyChanged(nameof(BlockContactLabel));
                 RaiseCanAddToAddressBook();
+            }
+            else if (e.PropertyName == nameof(ChatItem.LeftGroup))
+            {
+                OnPropertyChanged(nameof(CanLeaveGroup));
+                (LeaveGroupCommand as RelayCommand)?.RaiseCanExecuteChanged();
             }
             else if (e.PropertyName == nameof(ChatItem.AvatarUrl) ||
                      e.PropertyName == nameof(ChatItem.AvatarHighUrl))

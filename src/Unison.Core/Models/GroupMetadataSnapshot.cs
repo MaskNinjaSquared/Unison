@@ -41,6 +41,15 @@ namespace Unison.Core.Models
         /// <summary>0 when the reply said nothing usable.</summary>
         public int MemberCount { get; set; }
 
+        /// <summary>Wire <c>creator</c> (often LID). Null when the reply omitted it.</summary>
+        public string Owner { get; set; }
+
+        /// <summary>Wire <c>creator_pn</c>. Null when the reply omitted it.</summary>
+        public string OwnerPn { get; set; }
+
+        /// <summary>Wire <c>creation</c> unix seconds. 0 when missing.</summary>
+        public long CreationUnixSeconds { get; set; }
+
         public List<GroupMemberDraft> Members { get; set; } = new List<GroupMemberDraft>();
     }
 

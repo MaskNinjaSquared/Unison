@@ -1,4 +1,5 @@
-﻿using System.Threading.Tasks;
+﻿using System.Collections.Generic;
+using System.Threading.Tasks;
 using Unison.Core.Models;
 
 namespace Unison.Core.Contracts
@@ -16,6 +17,11 @@ namespace Unison.Core.Contracts
         ChatLocalState TryGetCached(string jid);
 
         Task<ChatLocalState> GetAsync(string jid);
+
+        /// <summary>
+        /// Favourites JIDs from the warm cache (includes cold ids not yet on the chat list).
+        /// </summary>
+        IReadOnlyList<string> ListFavoriteJids();
 
         // Each write names one field. Writing the whole row instead means every caller has to be
         // holding a current copy of the other three, and the ones that were not silently reverted

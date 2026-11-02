@@ -170,7 +170,13 @@ namespace Unison.Core.Contracts.WhatsApp
             string caption);
 
         /// <summary>Sends a recorded/picked audio clip (voice note when isVoiceMessage=true).</summary>
-        Task<ChatMessage> SendAudioMessageAsync(string jid, byte[] audioBytes, string mimeType, uint durationSeconds, bool isVoiceMessage = false);
+        Task<ChatMessage> SendAudioMessageAsync(
+            string jid,
+            byte[] audioBytes,
+            string mimeType,
+            uint durationSeconds,
+            bool isVoiceMessage = false,
+            bool viewOnce = false);
 
         /// <summary>Sends a picked document (PDF / office / archive / text). MIME must be document-only.</summary>
         Task<ChatMessage> SendDocumentAsync(string jid, byte[] documentBytes, string mimeType, string fileName, string caption = null);
@@ -587,9 +593,9 @@ namespace Unison.Core.Contracts.WhatsApp
         /// <summary>
         /// Send (or confirm) a from-me reaction. Empty <paramref name="emoji"/> removes the
         /// current from-me reaction. Returns false to roll back an optimistic local chip.
-        /// Current host may fake failure for UI testing.
+        /// <paramref name="message"/> supplies the Baileys target key (fromMe / participant).
         /// </summary>
-        Task<bool> TryReactAsync(string chatJid, string messageId, string emoji);
+        Task<bool> TryReactAsync(string chatJid, ChatMessage message, string emoji);
 
         /// <summary>
         /// <c>w:gp2</c> participant <c>add</c>: insert GroupJoin system lines (Baileys

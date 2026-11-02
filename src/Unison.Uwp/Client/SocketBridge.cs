@@ -48,6 +48,7 @@ using Unison.Socket.Models;
 using Unison.Socket.Session;
 using Unison.Socket.Signal;
 using Unison.Socket.Sync;
+using Unison.Socket.UseCases.Groups;
 using Unison.Socket.UseCases.Auth;
 using Unison.Socket.UseCases.Chats;
 using Unison.Socket.UseCases.Messages;
@@ -970,6 +971,111 @@ namespace Unison.Uwp.Client
             return response;
         }
 
+        public Task LeaveGroupAsync(string groupJid)
+        {
+            GroupsModule groups;
+            lock (_gate)
+            {
+                groups = _groups;
+            }
+
+            if (groups == null)
+            {
+                throw new InvalidOperationException("Not connected: leave group was not sent.");
+            }
+
+            return groups.Settings.LeaveAsync(groupJid);
+        }
+
+        public async Task<IReadOnlyList<CommunityLinkedGroupSnapshot>> FetchCommunityLinkedGroupsAsync(
+            string communityOrGroupJid,
+            CancellationToken cancellationToken = default(CancellationToken))
+        {
+            GroupsModule groups;
+            lock (_gate)
+            {
+                groups = _groups;
+            }
+
+            if (groups == null)
+            {
+                throw new InvalidOperationException("Not connected: linked groups were not fetched.");
+            }
+
+            cancellationToken.ThrowIfCancellationRequested();
+            CommunityLinkedGroupsResult result = await groups.LinkedGroups
+                .ExecuteAsync(communityOrGroupJid)
+                .ConfigureAwait(false);
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var list = new List<CommunityLinkedGroupSnapshot>();
+            if (result?.LinkedGroups == null)
+            {
+                return list;
+            }
+
+            for (int i = 0; i < result.LinkedGroups.Count; i++)
+            {
+                CommunityLinkedGroupInfo info = result.LinkedGroups[i];
+                if (info == null || string.IsNullOrWhiteSpace(info.Jid))
+                {
+                    continue;
+                }
+
+                list.Add(new CommunityLinkedGroupSnapshot
+                {
+                    Jid = info.Jid,
+                    Subject = info.Subject,
+                    CreationUnixSeconds = info.CreationUnixSeconds,
+                    Owner = info.Owner,
+                    Size = info.Size
+                });
+            }
+
+            return list;
+        }
+
+        public async Task<bool> JoinGroupAsync(
+            string groupJid,
+            string inviteCode = null,
+            CancellationToken cancellationToken = default(CancellationToken))
+        {
+            GroupsModule groups;
+            lock (_gate)
+            {
+                groups = _groups;
+            }
+
+            if (groups == null)
+            {
+                throw new InvalidOperationException("Not connected: join group was not sent.");
+            }
+
+            cancellationToken.ThrowIfCancellationRequested();
+            if (!string.IsNullOrWhiteSpace(inviteCode))
+            {
+                JoinGroupResult accepted = await groups.Join
+                    .AcceptInviteAsync(inviteCode)
+                    .ConfigureAwait(false);
+                return accepted != null && accepted.Succeeded;
+            }
+
+            string selfJid = _authState != null && _authState.Me != null
+                ? _authState.Me.Id
+                : null;
+
+            JoinGroupResult joined = await groups.Join
+                .JoinByJidAsync(groupJid, selfJid)
+                .ConfigureAwait(false);
+            return joined != null && joined.Succeeded;
+        }
+
+        public Task UpdateBlockStatusAsync(string jid, bool block)
+        {
+            var session = Require();
+            return new BlocklistUseCase(session.Connection).UpdateAsync(jid, block);
+        }
+
         /// <summary>
         /// Reads the LID/phone pairs out of the participant lists the reply already carries.
         /// </summary>
@@ -1489,14 +1595,16 @@ namespace Unison.Uwp.Client
             string mimeType,
             uint durationSeconds,
             bool isVoiceMessage = false,
-            string explicitMessageId = null)
+            string explicitMessageId = null,
+            bool viewOnce = false)
         {
             var content = new MediaContent(
                 audioBytes,
                 isVoiceMessage ? Unison.Socket.Media.MediaType.Ptt : Unison.Socket.Media.MediaType.Audio)
             {
                 Mimetype = string.IsNullOrWhiteSpace(mimeType) ? "audio/mp4" : mimeType,
-                Seconds = (int)durationSeconds
+                Seconds = (int)durationSeconds,
+                ViewOnce = viewOnce
             };
 
             return SendAsync(jid, content, explicitMessageId);
@@ -1560,6 +1668,27 @@ namespace Unison.Uwp.Client
             };
 
             return SendAsync(jid, new DeleteContent(key), null);
+        }
+
+        public Task<string> SendReactionMessageAsync(
+            string jid,
+            global::Proto.MessageKey targetKey,
+            string emoji)
+        {
+            if (targetKey == null || string.IsNullOrWhiteSpace(targetKey.Id))
+            {
+                throw new ArgumentException("A valid target message key is required", nameof(targetKey));
+            }
+
+            var key = new MessageEnvelopeKey
+            {
+                Id = targetKey.Id,
+                RemoteJid = string.IsNullOrEmpty(targetKey.RemoteJid) ? jid : targetKey.RemoteJid,
+                FromMe = targetKey.FromMe,
+                Participant = targetKey.Participant
+            };
+
+            return SendAsync(jid, new ReactionContent(key, emoji ?? string.Empty), null);
         }
 
         public Task<string> RequestHistorySyncOnDemandAsync(

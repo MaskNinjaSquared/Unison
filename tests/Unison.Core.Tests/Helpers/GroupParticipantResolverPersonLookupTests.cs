@@ -238,6 +238,8 @@ namespace Unison.Core.Tests.Helpers
                 Task.FromResult(false);
 
             public Task SetPublishContactsToWindowsAsync(bool enabled) => Task.CompletedTask;
+
+            public Task BlockContactAsync(string jid) => Task.CompletedTask;
         }
 
         private sealed class AliasJids : IJidResolver

@@ -113,6 +113,9 @@ namespace Unison.WhatsAppClient.Groups
                 LinkedParentJid = ReadLinkedParentJid(groupNode),
                 MyRole = ResolveMyRole(groupNode),
                 MemberCount = CountMembers(groupNode),
+                Owner = NormalizeParticipantJid(groupNode.GetAttribute("creator")),
+                OwnerPn = NormalizeParticipantJid(groupNode.GetAttribute("creator_pn")),
+                CreationUnixSeconds = ReadUnixSeconds(groupNode.GetAttribute("creation")),
                 Members = includeRoster
                     ? ReadMemberDrafts(groupNode)
                     : new List<GroupMemberDraft>()
@@ -464,6 +467,28 @@ namespace Unison.WhatsAppClient.Groups
             return attrs != null && attrs.TryGetValue(key, out value) && value != null
                 ? value
                 : string.Empty;
+        }
+
+        private static string NormalizeParticipantJid(string raw)
+        {
+            if (string.IsNullOrWhiteSpace(raw))
+            {
+                return null;
+            }
+
+            string normalized = JidHelper.Normalize(raw);
+            return string.IsNullOrWhiteSpace(normalized) ? null : normalized;
+        }
+
+        private static long ReadUnixSeconds(string raw)
+        {
+            if (string.IsNullOrWhiteSpace(raw))
+            {
+                return 0;
+            }
+
+            long seconds;
+            return long.TryParse(raw, out seconds) && seconds > 0 ? seconds : 0;
         }
     }
 }

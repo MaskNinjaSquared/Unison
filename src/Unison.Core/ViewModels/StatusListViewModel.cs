@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using System.Threading.Tasks;
 using System.Windows.Input;
 using Unison.Core.Contracts;
@@ -16,24 +17,32 @@ namespace Unison.Core.ViewModels
         private readonly IStatusService _status;
         private readonly IDispatcher _dispatcher;
         private readonly IStringResources _strings;
+        private readonly IDialogService _dialogs;
+        private readonly IProfileService _profile;
         private readonly List<StatusAuthorItem> _allAuthors = new List<StatusAuthorItem>();
         private bool _attached;
         private bool _isEmpty = true;
         private bool _isLoading = true;
         private StatusAuthorItem _selectedAuthor;
         private StatusListFilter _activeFilter = StatusListFilter.All;
+        private string _selfAvatarUrl;
 
         public StatusListViewModel(
             IStatusService status,
             IDispatcher dispatcher,
-            IStringResources strings = null)
+            IStringResources strings = null,
+            IDialogService dialogs = null,
+            IProfileService profile = null)
         {
             _status = status ?? throw new ArgumentNullException(nameof(status));
             _dispatcher = dispatcher ?? throw new ArgumentNullException(nameof(dispatcher));
             _strings = strings;
+            _dialogs = dialogs;
+            _profile = profile;
             MenuCommand = new RelayCommand(() => MenuRequested?.Invoke(this, EventArgs.Empty));
-            NewStatusCommand = new RelayCommand(BeginNewStatus);
+            NewStatusCommand = new RelayCommand(() => _ = ShowNewStatusUnavailableAsync());
             FilterStatusCommand = new RelayCommand<int>(ApplyStatusListFilter);
+            RefreshSelfAvatar();
         }
 
         public ObservableCollection<StatusAuthorItem> Authors { get; } =
@@ -72,17 +81,20 @@ namespace Unison.Core.ViewModels
 
         public bool IsFilterActive => _activeFilter != StatusListFilter.All;
 
+        /// <summary>Logged-in user's avatar for the "My status" row.</summary>
+        public string SelfAvatarUrl
+        {
+            get => _selfAvatarUrl;
+            private set => Set(ref _selfAvatarUrl, value);
+        }
+
         public ICommand MenuCommand { get; }
 
-        /// <summary>App-bar "new status". Compose is not wired yet.</summary>
+        /// <summary>My status / app-bar new status — compose not wired; shows unavailable dialog.</summary>
         public ICommand NewStatusCommand { get; }
 
         /// <summary>Flyout filter: All / Recent / Viewed.</summary>
         public ICommand FilterStatusCommand { get; }
-
-        private static void BeginNewStatus()
-        {
-        }
 
         public event EventHandler MenuRequested;
 
@@ -97,7 +109,13 @@ namespace Unison.Core.ViewModels
             }
 
             _status.StatusUpdated += Status_Updated;
+            if (_profile != null)
+            {
+                _profile.ProfileChanged += Profile_Changed;
+            }
+
             _attached = true;
+            RefreshSelfAvatar();
             _ = ReloadAsync();
         }
 
@@ -109,7 +127,46 @@ namespace Unison.Core.ViewModels
             }
 
             _status.StatusUpdated -= Status_Updated;
+            if (_profile != null)
+            {
+                _profile.ProfileChanged -= Profile_Changed;
+            }
+
             _attached = false;
+        }
+
+        private void Profile_Changed(object sender, EventArgs e)
+        {
+            _ = _dispatcher.RunAsync(RefreshSelfAvatar);
+        }
+
+        private void RefreshSelfAvatar()
+        {
+            Profile profile = _profile?.GetCurrentProfile();
+            SelfAvatarUrl = profile?.AvatarUrl;
+        }
+
+        private async Task ShowNewStatusUnavailableAsync()
+        {
+            if (_dialogs == null)
+            {
+                return;
+            }
+
+            string title = _strings?.Get("StatusList_MyStatus.Text", "My status") ?? "My status";
+            string body = _strings?.Get(
+                "StatusList_NewStatusUnavailable",
+                "This option is not available yet.")
+                ?? "This option is not available yet.";
+            string close = _strings?.Get("Common_Close", "Close") ?? "Close";
+            try
+            {
+                await _dialogs.ShowMessageAsync(title, body, close).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[StatusList] New status unavailable dialog: " + ex.Message);
+            }
         }
 
         public async Task ReloadAsync()

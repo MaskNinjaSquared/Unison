@@ -129,6 +129,29 @@ namespace Unison.Core.Tests.Helpers
         }
 
         [Fact]
+        public async Task Frugal_normalize_persisted_titles_slices_across_ui_passes()
+        {
+            int total = ChatNameRefresh.FrugalUiSliceSize + 5;
+            for (int i = 0; i < total; i++)
+            {
+                string jid = "551191000" + i.ToString("D4") + "@s.whatsapp.net";
+                _chats.Chats.Add(new ChatItem { JID = jid, Name = "551191000" + i.ToString("D4") });
+                _addressBook.Set(jid, "Titulo " + i);
+            }
+
+            var refresh = Build(preferFrugal: true);
+            var applied = new List<int>();
+            refresh.Applied += (s, count) => applied.Add(count);
+
+            int updated = await refresh.NormalizePersistedTitlesAsync();
+
+            Assert.Equal(total, updated);
+            Assert.Equal(2, _ui.Passes);
+            Assert.Equal(new[] { total }, applied);
+            Assert.Equal("Titulo 0", _chats.Chats[0].Name);
+        }
+
+        [Fact]
         public async Task Concurrent_applies_coalesce_into_one_ui_walk()
         {
             _chats.Chats.Add(new ChatItem { JID = Ana, Name = "5511988887777" });
@@ -152,6 +175,101 @@ namespace Unison.Core.Tests.Helpers
             // never one catalogue walk per caller (would be 3 here).
             Assert.InRange(ui.Passes, 1, 2);
             Assert.Equal("Ana Trabalho", _chats.Chats[0].Name);
+        }
+
+        [Fact]
+        public async Task Scoped_apply_only_touches_the_named_rows()
+        {
+            const string Beto = "5511977776666@s.whatsapp.net";
+            var ana = new ChatItem { JID = Ana, Name = "5511988887777" };
+            var beto = new ChatItem { JID = Beto, Name = "5511977776666" };
+            _chats.Chats.Add(ana);
+            _chats.Chats.Add(beto);
+            _addressBook.Set(Ana, "Ana Trabalho");
+            _addressBook.Set(Beto, "Beto Casa");
+            var refresh = Build();
+
+            await refresh.ApplyAsync(new[] { Ana });
+
+            Assert.Equal("Ana Trabalho", ana.Name);
+            Assert.Equal("5511977776666", beto.Name);
+            Assert.Equal(1, _ui.Passes);
+        }
+
+        [Fact]
+        public async Task Scoped_apply_still_relabels_matching_group_members()
+        {
+            const string Beto = "5511977776666@s.whatsapp.net";
+            const string group = "120363000000000099@g.us";
+            var member = new GroupMember { Jid = Beto, DisplayName = "5511977776666" };
+            var chat = new ChatItem
+            {
+                JID = group,
+                Name = "Grupo",
+                IsGroup = true,
+                GroupMembers = new List<GroupMember> { member }
+            };
+            _chats.Chats.Add(chat);
+            _addressBook.Set(Beto, "Beto Casa");
+            var refresh = Build();
+
+            await refresh.ApplyAsync(new[] { Beto });
+
+            Assert.Equal("Beto Casa", member.DisplayName);
+        }
+
+        [Fact]
+        public async Task Scoped_group_jid_apply_updates_subject_without_member_relabel()
+        {
+            // Mirrors GroupFacade after background-groups: ApplyAsync(resolved @g.us JIDs).
+            const string group = "120363000000000001@g.us";
+            const string other = "120363000000000002@g.us";
+            const string Beto = "5511977776666@s.whatsapp.net";
+            var member = new GroupMember { Jid = Beto, DisplayName = "5511977776666" };
+            var target = new ChatItem
+            {
+                JID = group,
+                Name = "120363000000000001",
+                IsGroup = true,
+                GroupMembers = new List<GroupMember> { member }
+            };
+            var decoyMembers = new List<GroupMember>(400);
+            for (int i = 0; i < 400; i++)
+            {
+                decoyMembers.Add(new GroupMember
+                {
+                    Jid = "5511900" + i.ToString("D06") + "@s.whatsapp.net",
+                    DisplayName = "5511900" + i.ToString("D06")
+                });
+            }
+
+            _chats.Chats.Add(target);
+            _chats.Chats.Add(new ChatItem
+            {
+                JID = other,
+                Name = "Outro",
+                IsGroup = true,
+                GroupMembers = decoyMembers
+            });
+            _addressBook.Set(Beto, "Beto Casa");
+
+            var markers = new FakeMarkers();
+            var names = new ContactDisplayNames(
+                _aliases,
+                new DisplayNameTable(),
+                _addressBook,
+                new RecordingPersonStore(),
+                markers);
+            names.Bind(() => new SelfNameInputs { Id = Me }, null);
+            var groupNaming = new FakeGroupNaming();
+            groupNaming.ChatNames[group] = "Família Nova";
+            var refresh = new ChatNameRefresh(_ui, _chats, names, markers, groupNaming);
+
+            await refresh.ApplyAsync(new[] { group });
+
+            Assert.Equal("Família Nova", target.Name);
+            Assert.Equal("5511977776666", member.DisplayName);
+            Assert.Equal(1, _ui.Passes);
         }
 
         private sealed class FlagDispatcher : IDispatcher

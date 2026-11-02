@@ -270,13 +270,17 @@ namespace Unison.WhatsAppClient.Helpers
             }
 
             DateTime snapshotUtc = _utcNow();
-            Dictionary<string, GroupMember> previous = null;
-            List<GroupMember> previousList = null;
+            List<GroupMember> rawPrevious = null;
             int expectedCount = 0;
             string rowJid = null;
             await _ui.RunAsync(() =>
             {
-                CapturePrevious(chat, out previous, out previousList);
+                // Shallow copy of refs only — dictionary build stays off the UI hop.
+                if (chat.GroupMembers != null && chat.GroupMembers.Count > 0)
+                {
+                    rawPrevious = new List<GroupMember>(chat.GroupMembers);
+                }
+
                 expectedCount = chat.GroupMemberCount;
                 rowJid = chat.JID;
             }).ConfigureAwait(false);
@@ -287,13 +291,14 @@ namespace Unison.WhatsAppClient.Helpers
             // from a UI hop, BuildMembers would otherwise run on tid=0 (Lumia 950 XL:
             // 10–35s GroupMetadataApply stalls with active=ApplyMetadataAsync).
             IList<GroupMemberDraft> draftList = drafts;
-            Dictionary<string, GroupMember> priorMap = previous;
-            List<GroupMember> priorList = previousList;
             string group = _jids.GetCanonicalJid(rowJid);
             GroupRosterCompleteness completeness = GroupRosterCompleteness.None;
+            Dictionary<string, GroupMember> priorMap = null;
+            List<GroupMember> priorList = null;
             List<GroupMember> next = await Task.Run(
                     () =>
                     {
+                        CapturePreviousFromList(rawPrevious, out priorMap, out priorList);
                         completeness = FoldIntoIndex(group, draftList, priorList, expectedCount, snapshotUtc);
                         return BuildMembers(group, draftList, priorMap, priorList);
                     },
@@ -308,9 +313,11 @@ namespace Unison.WhatsAppClient.Helpers
 
             List<GroupMember> applied = null;
             string groupJid = null;
+            Dictionary<string, GroupMember> commitPrevious = priorMap;
+            List<GroupMember> commitPreviousList = priorList;
             await _ui.RunAsync(() =>
             {
-                applied = CommitBuiltRoster(chat, previous, previousList, next, completeness);
+                applied = CommitBuiltRoster(chat, commitPrevious, commitPreviousList, next, completeness);
                 groupJid = chat.JID;
             }).ConfigureAwait(false);
 
@@ -329,17 +336,26 @@ namespace Unison.WhatsAppClient.Helpers
             out Dictionary<string, GroupMember> previous,
             out List<GroupMember> previousList)
         {
+            CapturePreviousFromList(chat?.GroupMembers, out previous, out previousList);
+        }
+
+        private static void CapturePreviousFromList(
+            IList<GroupMember> members,
+            out Dictionary<string, GroupMember> previous,
+            out List<GroupMember> previousList)
+        {
             previous = null;
             previousList = null;
-            if (chat.GroupMembers == null || chat.GroupMembers.Count == 0)
+            if (members == null || members.Count == 0)
             {
                 return;
             }
 
             previous = new Dictionary<string, GroupMember>(StringComparer.OrdinalIgnoreCase);
-            previousList = new List<GroupMember>(chat.GroupMembers.Count);
-            foreach (var existing in chat.GroupMembers)
+            previousList = new List<GroupMember>(members.Count);
+            for (int i = 0; i < members.Count; i++)
             {
+                GroupMember existing = members[i];
                 if (existing == null || string.IsNullOrWhiteSpace(existing.Jid))
                 {
                     continue;

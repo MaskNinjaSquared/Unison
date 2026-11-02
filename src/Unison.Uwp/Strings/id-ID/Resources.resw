@@ -508,6 +508,12 @@ Matikan setelah diagnosa: menjaga aplikasi tetap lambat.</value>
   <data name="ChatDetail_RecordingChatUnavailable" xml:space="preserve">
     <value>Percakapan untuk rekaman ini tidak lagi tersedia.</value>
   </data>
+  <data name="ChatDetail_RecordingPause" xml:space="preserve">
+    <value>Jeda</value>
+  </data>
+  <data name="ChatDetail_RecordingPlay" xml:space="preserve">
+    <value>Putar</value>
+  </data>
   <data name="ChatDetail_AudioSendFailed" xml:space="preserve">
     <value>Tidak dapat mengirim audio.</value>
   </data>

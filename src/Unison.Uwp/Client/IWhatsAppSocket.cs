@@ -141,6 +141,26 @@ namespace Unison.Uwp.Client
         Task<BinaryNode> QueryParticipatingGroupsAsync(
             System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken));
 
+        /// <summary>Baileys <c>groupLeave</c> — this account leaves; not a kick.</summary>
+        Task LeaveGroupAsync(string groupJid);
+
+        /// <summary>Baileys <c>communityFetchLinkedGroups</c>.</summary>
+        Task<System.Collections.Generic.IReadOnlyList<Unison.Core.Models.CommunityLinkedGroupSnapshot>>
+            FetchCommunityLinkedGroupsAsync(
+                string communityOrGroupJid,
+                System.Threading.CancellationToken cancellationToken =
+                    default(System.Threading.CancellationToken));
+
+        /// <summary>Join a group by JID and/or invite code.</summary>
+        Task<bool> JoinGroupAsync(
+            string groupJid,
+            string inviteCode = null,
+            System.Threading.CancellationToken cancellationToken =
+                default(System.Threading.CancellationToken));
+
+        /// <summary>Baileys <c>updateBlockStatus</c> — block or unblock a direct JID.</summary>
+        Task UpdateBlockStatusAsync(string jid, bool block);
+
         Task<ProfilePictureResult> GetProfilePictureUrlResultAsync(string jid, string type = "preview");
 
         /// <summary>
@@ -209,7 +229,8 @@ namespace Unison.Uwp.Client
             string mimeType,
             uint durationSeconds,
             bool isVoiceMessage = false,
-            string explicitMessageId = null);
+            string explicitMessageId = null,
+            bool viewOnce = false);
 
         Task<string> SendDocumentMessageAsync(
             string jid,
@@ -229,6 +250,14 @@ namespace Unison.Uwp.Client
         Task<string> SendDeleteMessageAsync(
             string jid,
             global::Proto.MessageKey targetKey);
+
+        /// <summary>
+        /// Baileys reactionMessage on <paramref name="targetKey"/>. Empty emoji removes.
+        /// </summary>
+        Task<string> SendReactionMessageAsync(
+            string jid,
+            global::Proto.MessageKey targetKey,
+            string emoji);
 
         Task<string> RequestHistorySyncOnDemandAsync(
             string jid,

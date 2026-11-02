@@ -52,7 +52,9 @@ namespace Unison.Uwp.Services
         }
 
         public string PreferredAudioCategory =>
-            IsSupported ? "Communications" : "Media";
+            !IsSupported || HasExternalHeadset()
+                ? "Media"
+                : "Communications";
 
         public event EventHandler<VoicePlaybackRoute> RouteChanged;
 
@@ -82,10 +84,26 @@ namespace Unison.Uwp.Services
             }
 
             CaptureDispatcher();
+            bool alreadyActive;
             lock (_gate)
             {
+                alreadyActive = _sessionActive;
                 _sessionActive = true;
                 _nearEar = false;
+            }
+
+            if (alreadyActive)
+            {
+                return;
+            }
+
+            if (HasExternalHeadset())
+            {
+                // Wired / Bluetooth headset: leave the OS on the headset. Do not
+                // force Speakerphone (or reassert it) — that is what sent voice notes
+                // to the loudspeaker while earphones were plugged in.
+                ApplyHeadsetPassthrough("session-begin-headset");
+                return;
             }
 
             // Communications defaults to earpiece on Mobile — force speaker now and
@@ -120,7 +138,7 @@ namespace Unison.Uwp.Services
             {
                 // First assert after a tick (Play may not have opened yet).
                 await Task.Delay(120).ConfigureAwait(true);
-                if (!IsSessionActive() || IsNearEar())
+                if (!IsSessionActive() || IsNearEar() || HasExternalHeadset())
                 {
                     return;
                 }
@@ -129,7 +147,7 @@ namespace Unison.Uwp.Services
 
                 // Second assert once the decoder usually has a live render path.
                 await Task.Delay(350).ConfigureAwait(true);
-                if (!IsSessionActive() || IsNearEar())
+                if (!IsSessionActive() || IsNearEar() || HasExternalHeadset())
                 {
                     return;
                 }
@@ -251,7 +269,7 @@ namespace Unison.Uwp.Services
 
         private void ApplyProximity(bool near)
         {
-            if (!IsSessionActive())
+            if (!IsSessionActive() || HasExternalHeadset())
             {
                 return;
             }
@@ -280,8 +298,46 @@ namespace Unison.Uwp.Services
             }
         }
 
+        private void ApplyHeadsetPassthrough(string reason)
+        {
+            MediaPlayer player;
+            lock (_gate)
+            {
+                player = _player;
+                _currentRoute = VoicePlaybackRoute.Speaker;
+            }
+
+            try
+            {
+                if (player != null)
+                {
+                    player.AudioCategory = MediaPlayerAudioCategory.Media;
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[VoicePlaybackRouting] Headset Media: " + ex.Message);
+            }
+
+            try
+            {
+                RouteChanged?.Invoke(this, VoicePlaybackRoute.Speaker);
+            }
+            catch
+            {
+            }
+
+            Debug.WriteLine("[VoicePlaybackRouting] headset-passthrough reason=" + (reason ?? string.Empty));
+        }
+
         private void ApplyRoute(VoicePlaybackRoute route, string reason)
         {
+            if (HasExternalHeadset())
+            {
+                ApplyHeadsetPassthrough(reason ?? "headset");
+                return;
+            }
+
             MediaPlayer player;
             lock (_gate)
             {
@@ -308,6 +364,7 @@ namespace Unison.Uwp.Services
             routed = TrySetAudioEndpoint(speaker, reason);
 
             // Fallback when routing APIs/capability are missing: Media = loudspeaker on Mobile.
+            // Never use this when a headset is connected — that path is handled above.
             if (speaker && !routed && player != null)
             {
                 try
@@ -337,7 +394,12 @@ namespace Unison.Uwp.Services
                 " reason=" + (reason ?? string.Empty));
         }
 
-        private bool TrySetAudioEndpoint(bool speakerphone, string reason)
+        /// <summary>
+        /// <see cref="Windows.Phone.Media.Devices.AvailableAudioRoutingEndpoints"/> only
+        /// flags Earpiece / Speakerphone / Bluetooth — wired headset is not listed there.
+        /// Detect wired (and active BT) via <c>GetAudioEndpoint()</c>.
+        /// </summary>
+        private static bool HasExternalHeadset()
         {
             try
             {
@@ -353,11 +415,54 @@ namespace Unison.Uwp.Services
                 }
 
                 var available = manager.AvailableAudioEndpoints;
+                if ((available & Windows.Phone.Media.Devices.AvailableAudioRoutingEndpoints.Bluetooth) != 0)
+                {
+                    return true;
+                }
+
+                var current = manager.GetAudioEndpoint();
+                return current == Windows.Phone.Media.Devices.AudioRoutingEndpoint.WiredHeadset
+                    || current == Windows.Phone.Media.Devices.AudioRoutingEndpoint.WiredHeadsetSpeakerOnly
+                    || current == Windows.Phone.Media.Devices.AudioRoutingEndpoint.Bluetooth
+                    || current == Windows.Phone.Media.Devices.AudioRoutingEndpoint.BluetoothWithNoiseAndEchoCancellation
+                    || current == Windows.Phone.Media.Devices.AudioRoutingEndpoint.BluetoothPreferred;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private bool TrySetAudioEndpoint(bool speakerphone, string reason)
+        {
+            try
+            {
+                if (!ApiInformation.IsTypePresent("Windows.Phone.Media.Devices.AudioRoutingManager"))
+                {
+                    return false;
+                }
+
+                var manager = Windows.Phone.Media.Devices.AudioRoutingManager.GetDefault();
+                if (manager == null)
+                {
+                    return false;
+                }
+
+                if (HasExternalHeadset())
+                {
+                    Debug.WriteLine(
+                        "[VoicePlaybackRouting] Skip SetAudioEndpoint (headset) current=" +
+                        manager.GetAudioEndpoint() +
+                        " available=" + manager.AvailableAudioEndpoints +
+                        " reason=" + (reason ?? string.Empty));
+                    return true;
+                }
+
+                var available = manager.AvailableAudioEndpoints;
                 var endpoint = speakerphone
                     ? Windows.Phone.Media.Devices.AudioRoutingEndpoint.Speakerphone
                     : Windows.Phone.Media.Devices.AudioRoutingEndpoint.Earpiece;
 
-                // Bail if the endpoint is not currently available (wired headset, etc.).
                 if (speakerphone &&
                     (available & Windows.Phone.Media.Devices.AvailableAudioRoutingEndpoints.Speakerphone) == 0)
                 {

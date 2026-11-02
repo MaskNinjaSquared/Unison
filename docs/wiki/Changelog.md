@@ -2,6 +2,12 @@
 
 Newest first.
 
+## Incoming toasts quiet during history waves
+
+Live/offline envelopes no longer toast while initial sync, history catch-up /
+silent FULL lots, or offline buffers are in flight. Messages older than five
+minutes are also quiet (history bleed labeled as live). Unread still updates.
+
 ## New conversation overlay
 
 The chat-list New Chat action opens a full-bleed overlay (not a Frame

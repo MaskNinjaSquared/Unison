@@ -508,6 +508,12 @@ Schakel uit na diagnostiseren: het ingeschakeld laten vertraagd de app.</value>
   <data name="ChatDetail_RecordingChatUnavailable" xml:space="preserve">
     <value>Het gesprek van deze opname is niet meer beschikbaar.</value>
   </data>
+  <data name="ChatDetail_RecordingPause" xml:space="preserve">
+    <value>Pauzeren</value>
+  </data>
+  <data name="ChatDetail_RecordingPlay" xml:space="preserve">
+    <value>Afspelen</value>
+  </data>
   <data name="ChatDetail_AudioSendFailed" xml:space="preserve">
     <value>De audio kon niet worden verzonden.</value>
   </data>

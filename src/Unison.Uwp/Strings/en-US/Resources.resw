@@ -547,6 +547,12 @@ Disable after diagnosing: keeping it on slows the app.</value>
   <data name="ChatDetail_RecordingChatUnavailable" xml:space="preserve">
     <value>The conversation for this recording is no longer available.</value>
   </data>
+  <data name="ChatDetail_RecordingPause" xml:space="preserve">
+    <value>Pause</value>
+  </data>
+  <data name="ChatDetail_RecordingPlay" xml:space="preserve">
+    <value>Play</value>
+  </data>
   <data name="ChatDetail_AudioSendFailed" xml:space="preserve">
     <value>Could not send the audio.</value>
   </data>
@@ -754,6 +760,18 @@ Disable after diagnosing: keeping it on slows the app.</value>
   <data name="StatusList_Empty.Text" xml:space="preserve">
     <value>No recent status updates</value>
   </data>
+  <data name="StatusList_MyStatus.Text" xml:space="preserve">
+    <value>My status</value>
+  </data>
+  <data name="StatusList_MyStatusHint.Text" xml:space="preserve">
+    <value>Tap to update your status…</value>
+  </data>
+  <data name="StatusList_RecentHeader.Text" xml:space="preserve">
+    <value>RECENT</value>
+  </data>
+  <data name="StatusList_NewStatusUnavailable" xml:space="preserve">
+    <value>This option is not available yet.</value>
+  </data>
   <data name="StatusList_Recent" xml:space="preserve">
     <value>Recent</value>
   </data>
@@ -825,6 +843,18 @@ Disable after diagnosing: keeping it on slows the app.</value>
   </data>
   <data name="Favorites_Empty.Text" xml:space="preserve">
     <value>Favorites are shown in the Chats and Calls tabs. Add as many people and groups as you want.</value>
+  </data>
+  <data name="Community_YourGroupsHeader.Text" xml:space="preserve">
+    <value>YOUR GROUPS</value>
+  </data>
+  <data name="Community_CanJoinHeader.Text" xml:space="preserve">
+    <value>GROUPS YOU CAN JOIN</value>
+  </data>
+  <data name="Community_GroupCreatedBy" xml:space="preserve">
+    <value>Group created by {0} on {1}</value>
+  </data>
+  <data name="Community_JoinGroup" xml:space="preserve">
+    <value>Join</value>
   </data>
   <data name="Calls_Header.Text" xml:space="preserve">
     <value>Calls</value>
@@ -1446,6 +1476,69 @@ Disable after diagnosing: keeping it on slows the app.</value>
   </data>
   <data name="ChatDetailInfo_DeleteChatBar.Text" xml:space="preserve">
     <value>Delete&#x0a;chat</value>
+  </data>
+  <data name="ChatDetailInfo_GroupCreatedByYou" xml:space="preserve">
+    <value>Group created by you on {0}</value>
+  </data>
+  <data name="ChatDetailInfo_LeaveGroup.Text" xml:space="preserve">
+    <value>Leave group</value>
+  </data>
+  <data name="ChatDetailInfo_LeaveGroupBar.Text" xml:space="preserve">
+    <value>Leave&#x0a;group</value>
+  </data>
+  <data name="ChatDetailInfo_LeaveGroupTitle" xml:space="preserve">
+    <value>Leave group?</value>
+  </data>
+  <data name="ChatDetailInfo_LeaveGroupBody" xml:space="preserve">
+    <value>You will no longer receive messages from this group.</value>
+  </data>
+  <data name="ChatDetailInfo_LeaveGroupConfirm" xml:space="preserve">
+    <value>Leave</value>
+  </data>
+  <data name="ChatDetailInfo_BlockContact" xml:space="preserve">
+    <value>Block</value>
+  </data>
+  <data name="ChatDetailInfo_BlockContactBar.Text" xml:space="preserve">
+    <value>Block&#x0a;contact</value>
+  </data>
+  <data name="ChatExport_OptionsTitle" xml:space="preserve">
+    <value>Export chat</value>
+  </data>
+  <data name="ChatExport_OptionsBody" xml:space="preserve">
+    <value>Export this chat without media. Messages that had photos, videos, or documents will show as &lt;Mídia oculta&gt;.</value>
+  </data>
+  <data name="ChatExport_WithoutMedia" xml:space="preserve">
+    <value>Export without media</value>
+  </data>
+  <data name="ChatExport_ReadyTitle" xml:space="preserve">
+    <value>Export ready</value>
+  </data>
+  <data name="ChatExport_Share" xml:space="preserve">
+    <value>Share</value>
+  </data>
+  <data name="ChatExport_Save" xml:space="preserve">
+    <value>Save</value>
+  </data>
+  <data name="ChatExport_FailedTitle" xml:space="preserve">
+    <value>Export failed</value>
+  </data>
+  <data name="ChatExport_EncryptionHeader" xml:space="preserve">
+    <value>Messages and calls are end-to-end encrypted. Only people in this chat can read, listen to, and share them. *Learn more*</value>
+  </data>
+  <data name="ChatExport_You" xml:space="preserve">
+    <value>You</value>
+  </data>
+  <data name="ChatDetailInfo_BlockContactNamed" xml:space="preserve">
+    <value>Block ({0})</value>
+  </data>
+  <data name="ChatDetailInfo_BlockContactTitle" xml:space="preserve">
+    <value>Block contact?</value>
+  </data>
+  <data name="ChatDetailInfo_BlockContactBody" xml:space="preserve">
+    <value>Blocked contacts will no longer be able to call you or send you messages.</value>
+  </data>
+  <data name="ChatDetailInfo_BlockContactConfirm" xml:space="preserve">
+    <value>Block</value>
   </data>
   <data name="Debug_RuntimeDialog.PrimaryButtonText" xml:space="preserve">
     <value>Save to disk</value>

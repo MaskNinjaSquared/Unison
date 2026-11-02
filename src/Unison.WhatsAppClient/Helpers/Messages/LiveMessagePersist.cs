@@ -8,13 +8,14 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Threading.Tasks;
 using Unison.Core.Contracts;
+using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Helpers;
 using Unison.Core.Models;
 using Unison.WhatsAppClient.Abstractions;
 
 namespace Unison.WhatsAppClient.Helpers
 {
-    public sealed class LiveMessagePersist : IPersistLiveMessagesHost
+    public sealed class LiveMessagePersist : IPersistLiveMessagesHost, ILiveMessagePersist
     {
         private readonly IHistoryMessageStore _history;
 
@@ -25,6 +26,9 @@ namespace Unison.WhatsAppClient.Helpers
 
         public Task PersistAsync(string chatJid, IList<ChatMessage> messages) =>
             PersistLiveMessagesDispatch.RunAsync(this, chatJid, messages);
+
+        public Task PersistLiveAsync(string chatJid, ChatMessage message) =>
+            PersistAsync(chatJid, new[] { message });
 
         bool IPersistLiveMessagesHost.HasHistoryMessageStore => true;
 

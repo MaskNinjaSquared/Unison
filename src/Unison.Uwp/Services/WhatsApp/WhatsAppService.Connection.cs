@@ -160,11 +160,26 @@ namespace Unison.Uwp.Services.WhatsApp
             return sender != null && ReferenceEquals(_socket, sender);
         }
 
-        private void StopConnectionHealthMonitor(string reason) =>
+        private void StopConnectionHealthMonitor(string reason)
+        {
+            // Always disarm — Arm is Low/Mobile-only, but Stop is cheap and keeps
+            // a leftover schedule from firing after socket teardown.
+            SilentFullHistoryChainDispatch.Stop(this, reason ?? string.Empty);
             _healthMonitors.Stop(reason);
+        }
 
-        private void StartConnectionHealthMonitor(IWhatsAppSocket socket) =>
+        private void StartConnectionHealthMonitor(IWhatsAppSocket socket)
+        {
             _healthMonitors.Start(socket);
+            // Mobile (cascade off): silent probes are the progressive path after
+            // empty-ack ghost. High keeps cascade + periodic safety instead.
+            if (SilentFullHistoryPolicy.ShouldArmOnHealthStart(
+                    _workload.AllowStagnantHistoryRepairCascade))
+            {
+                // Arm only — first fire waits for loud catch-up finish + tip stale.
+                SilentFullHistoryChainDispatch.Arm(this, "post-init", fireSoon: false);
+            }
+        }
 
         // --- IConnectionHealthMonitorIoHost ----------------------------------
 
@@ -1534,12 +1549,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
         void IConnectionLifecycleHost.ResetPersistScheduler()
         {
-            lock (_persistLock)
-            {
-                _persistTimer?.Dispose();
-                _persistTimer = null;
-            }
-
+            _catalogDebounce.Dispose();
             _persistScheduler.Reset();
         }
 

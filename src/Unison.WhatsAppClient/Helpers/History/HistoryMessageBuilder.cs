@@ -268,10 +268,12 @@ namespace Unison.WhatsAppClient.Helpers
                           HistorySyncContentFilter.ToUtc(info.MessageTimestamp) ??
                           DateTime.UtcNow;
 
-            string targetChat = JidHelper.Normalize(reactionMessage.Key.RemoteJid);
+            // Prefer the conversation id: Key.RemoteJid may be the PN/LID twin of the
+            // same chat and would split reactions from bodies in SQLite.
+            string targetChat = chatJid;
             if (string.IsNullOrWhiteSpace(targetChat))
             {
-                targetChat = chatJid;
+                targetChat = JidHelper.Normalize(reactionMessage.Key.RemoteJid);
             }
 
             return new HistoryMessageReaction

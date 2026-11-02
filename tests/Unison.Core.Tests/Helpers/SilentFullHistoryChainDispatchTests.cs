@@ -17,7 +17,8 @@ namespace Unison.Core.Tests.Helpers
             var host = new FakeHost
             {
                 Armed = true,
-                EmptyStreak = 3
+                EmptyStreak = 3,
+                PreviousQuiet = false
             };
 
             SilentFullHistoryChainDispatch.OnLotQuiet(
@@ -37,7 +38,8 @@ namespace Unison.Core.Tests.Helpers
             var host = new FakeHost
             {
                 Armed = true,
-                EmptyStreak = 3
+                EmptyStreak = 3,
+                PreviousQuiet = false
             };
 
             SilentFullHistoryChainDispatch.OnLotQuiet(
@@ -58,7 +60,8 @@ namespace Unison.Core.Tests.Helpers
             var host = new FakeHost
             {
                 Armed = false,
-                EmptyStreak = 4
+                EmptyStreak = 4,
+                PreviousQuiet = true
             };
 
             SilentFullHistoryChainDispatch.OnLotQuiet(
@@ -70,6 +73,30 @@ namespace Unison.Core.Tests.Helpers
             Assert.False(host.ScheduleStarted);
             Assert.False(host.Armed);
             Assert.Null(host.LastStopReason);
+        }
+
+        [Fact]
+        public void Duplicate_quiet_does_not_double_schedule()
+        {
+            var host = new FakeHost
+            {
+                Armed = true,
+                PreviousQuiet = false
+            };
+
+            SilentFullHistoryChainDispatch.OnLotQuiet(
+                host,
+                SilentFullHistoryPolicy.ReasonPrefix + "next",
+                appliedCount: 0);
+            host.ScheduleStarted = false;
+
+            SilentFullHistoryChainDispatch.OnLotQuiet(
+                host,
+                SilentFullHistoryPolicy.ReasonPrefix + "next",
+                appliedCount: 0);
+
+            Assert.Equal(1, host.EmptyStreak);
+            Assert.False(host.ScheduleStarted);
         }
 
         [Fact]
@@ -87,6 +114,48 @@ namespace Unison.Core.Tests.Helpers
             Assert.True(host.ScheduleStarted);
         }
 
+        [Fact]
+        public void Arm_without_fire_soon_does_not_schedule()
+        {
+            var host = new FakeHost();
+
+            SilentFullHistoryChainDispatch.Arm(host, "post-init", fireSoon: false);
+
+            Assert.True(host.Armed);
+            Assert.False(host.ScheduleStarted);
+        }
+
+        [Fact]
+        public void Loud_catch_up_finish_kicks_when_armed_and_tip_stale()
+        {
+            var host = new FakeHost
+            {
+                Armed = true,
+                TipStale = true
+            };
+
+            SilentFullHistoryChainDispatch.OnLoudCatchUpFinished(host, "offline-fresh");
+
+            Assert.True(host.ScheduleStarted);
+            Assert.True(host.Armed);
+        }
+
+        [Fact]
+        public void Loud_catch_up_finish_stops_when_tip_fresh()
+        {
+            var host = new FakeHost
+            {
+                Armed = true,
+                TipStale = false
+            };
+
+            SilentFullHistoryChainDispatch.OnLoudCatchUpFinished(host, "offline-fresh");
+
+            Assert.False(host.Armed);
+            Assert.Equal("tip-fresh", host.LastStopReason);
+            Assert.False(host.ScheduleStarted);
+        }
+
         private sealed class FakeHost : ISilentFullHistoryChainHost
         {
             public bool Armed { get; set; }
@@ -94,7 +163,7 @@ namespace Unison.Core.Tests.Helpers
             public int EmptyStreak { get; set; }
             public bool BannerBegun { get; private set; }
             public bool BannerEnded { get; private set; }
-            public bool ScheduleStarted { get; private set; }
+            public bool ScheduleStarted { get; set; }
             public string LastStopReason { get; private set; }
 
             public bool IsSilentChainArmed => Armed;
@@ -108,6 +177,10 @@ namespace Unison.Core.Tests.Helpers
             public bool IsHistoryCatchUpActive => false;
 
             public bool IsFullHistoryClaimed => false;
+
+            public bool TipStale { get; set; } = true;
+
+            public bool IsHistoryTipStale => TipStale;
 
             public DeviceCategory DeviceCategory => DeviceCategory.High;
 

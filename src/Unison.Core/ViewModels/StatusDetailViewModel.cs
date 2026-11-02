@@ -444,9 +444,11 @@ namespace Unison.Core.ViewModels
                 }
 
                 IsLoading = false;
-                MediaUri = displayUri;
+                // Visibility (IsVideo/IsImage) before MediaUri so MediaElement is Visible
+                // when ApplyMedia assigns Source — MediaUri-first left it Collapsed on reopen.
                 IsVideo = showVideo;
                 IsImage = showImage;
+                MediaUri = displayUri;
                 _itemShownUtc = DateTime.UtcNow;
 
                 if (showVideo)

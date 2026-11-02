@@ -82,6 +82,9 @@ namespace Unison.Core.ViewModels
 
         /// <summary>Device People card for contacts not yet in the address book.</summary>
         private readonly IContactService _contactService;
+        private readonly IChatExportService _chatExport;
+        private readonly IProfileService _profile;
+        private readonly IShareService _share;
 
         /// <summary>Device info (kept for other Mobile/desktop branching in this VM).</summary>
         private readonly ISystemInfoProvider _systemInfo;
@@ -106,7 +109,8 @@ namespace Unison.Core.ViewModels
         private ChatItem _activeChat;
         private string _messageText;
         private bool _isSending;
-        private bool _isRecording;
+        private VoiceRecordingState _voiceRecordingState = VoiceRecordingState.Pristine;
+        private bool _isViewOnceVoice;
         private string _recordingElapsedText = "0:00";
         private bool _hasActiveChat;
         private bool _isLoadingMessages;
@@ -184,7 +188,10 @@ namespace Unison.Core.ViewModels
             IForwardMessagePicker forwardPicker = null,
             ICopyService copy = null,
             IChatAudioPlaybackService audioPlayback = null,
-            IEmojiRecentStore emojiRecents = null)
+            IEmojiRecentStore emojiRecents = null,
+            IChatExportService chatExport = null,
+            IProfileService profile = null,
+            IShareService share = null)
         {
             _chatService = chatService;
             _connectionService = connectionService;
@@ -210,6 +217,9 @@ namespace Unison.Core.ViewModels
             _sessionLogger = sessionLogger;
             _diagnostics = diagnostics;
             _authorProjection = authorProjection;
+            _chatExport = chatExport;
+            _profile = profile;
+            _share = share;
             _forwardPicker = forwardPicker;
             _copy = copy;
             System.Diagnostics.Debug.WriteLine(
@@ -257,11 +267,19 @@ namespace Unison.Core.ViewModels
 
             CancelRecordingCommand = new RelayCommand(
                 () => _ = RunSafeAsync(CancelRecordingCoreAsync, "record-cancel"),
-                () => _isRecording);
+                () => IsRecording);
 
             SendRecordingCommand = new RelayCommand(
                 () => _ = RunSafeAsync(StopAndSendRecordingAsync, "send-voice"),
-                () => _isRecording && !_isSending);
+                () => IsRecording && !_isSending);
+
+            ToggleRecordingPauseCommand = new RelayCommand(
+                () => _ = RunSafeAsync(ToggleRecordingPauseAsync, "record-pause"),
+                () => IsRecording);
+
+            ToggleViewOnceVoiceCommand = new RelayCommand(
+                () => IsViewOnceVoice = !IsViewOnceVoice,
+                () => IsRecording);
 
             BackCommand = new RelayCommand(() =>
             {
@@ -284,6 +302,9 @@ namespace Unison.Core.ViewModels
             DeleteChatCommand = new RelayCommand(
                 () => _ = DeleteActiveChatAsync(),
                 () => CanDeleteActiveChat());
+            ExportChatCommand = new RelayCommand(
+                () => _ = ExportChatAsync(),
+                () => CanExportChat());
             ArchiveChatCommand = new RelayCommand(
                 () => { },
                 () => ActiveChat != null &&
@@ -872,15 +893,50 @@ namespace Unison.Core.ViewModels
             }
         }
 
-        public bool IsRecording
+        /// <summary>Mic capture state: pristine, capturing, or paused.</summary>
+        public VoiceRecordingState VoiceRecordingState
         {
-            get => _isRecording;
+            get => _voiceRecordingState;
             private set
             {
-                Set(ref _isRecording, value);
+                if (!Set(ref _voiceRecordingState, value))
+                {
+                    return;
+                }
+
+                if (value == VoiceRecordingState.Pristine)
+                {
+                    IsViewOnceVoice = false;
+                }
+
+                OnPropertyChanged(nameof(IsRecording));
+                OnPropertyChanged(nameof(RecordingPauseGlyph));
+                OnPropertyChanged(nameof(RecordingPauseLabel));
                 RaiseComposerCommandsChanged();
+                (ToggleRecordingPauseCommand as RelayCommand)?.RaiseCanExecuteChanged();
+                (ToggleViewOnceVoiceCommand as RelayCommand)?.RaiseCanExecuteChanged();
             }
         }
+
+        /// <summary>True while a voice capture is open (playing or paused).</summary>
+        public bool IsRecording => VoiceRecordingState != VoiceRecordingState.Pristine;
+
+        /// <summary>View-once (single playback) voice note when sending the current recording.</summary>
+        public bool IsViewOnceVoice
+        {
+            get => _isViewOnceVoice;
+            private set => Set(ref _isViewOnceVoice, value);
+        }
+
+        /// <summary>Segoe MDL2 pause (E769) or play (E768) for the recording pause button.</summary>
+        public string RecordingPauseGlyph =>
+            VoiceRecordingState == VoiceRecordingState.Paused ? "\uE768" : "\uE769";
+
+        /// <summary>Tooltip / a11y caption for pause while capturing, play while paused.</summary>
+        public string RecordingPauseLabel =>
+            VoiceRecordingState == VoiceRecordingState.Paused
+                ? _strings.Get("ChatDetail_RecordingPlay", "Play")
+                : _strings.Get("ChatDetail_RecordingPause", "Pause");
 
         public string RecordingElapsedText
         {
@@ -974,7 +1030,7 @@ namespace Unison.Core.ViewModels
         public bool CanCompose =>
             ActiveChat != null &&
             !_isSending &&
-            !_isRecording &&
+            !IsRecording &&
             !IsComposerLocked;
 
         // ── Commands ──────────────────────────────────────────────────────────
@@ -1015,6 +1071,12 @@ namespace Unison.Core.ViewModels
         /// <summary>Stops recording and sends the captured voice note.</summary>
         public ICommand SendRecordingCommand { get; }
 
+        /// <summary>Pauses or resumes the in-progress voice capture.</summary>
+        public ICommand ToggleRecordingPauseCommand { get; }
+
+        /// <summary>Toggles view-once for the voice note about to be sent.</summary>
+        public ICommand ToggleViewOnceVoiceCommand { get; }
+
         /// <summary>Leaves the chat detail surface (raises <see cref="BackRequested"/>).</summary>
         public ICommand BackCommand { get; }
 
@@ -1026,6 +1088,9 @@ namespace Unison.Core.ViewModels
         /// there is nothing behind it once the messages are gone.
         /// </summary>
         public ICommand DeleteChatCommand { get; }
+
+        /// <summary>Exports the open chat to a WhatsApp-style zip (TXT + VCFs).</summary>
+        public ICommand ExportChatCommand { get; }
 
         /// <summary>Placeholder until archive outbound is wired.</summary>
         public ICommand ArchiveChatCommand { get; }
