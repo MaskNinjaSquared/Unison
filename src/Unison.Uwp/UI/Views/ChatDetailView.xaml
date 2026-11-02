@@ -658,7 +658,6 @@
                     HorizontalAlignment="Right"
                     VerticalAlignment="Bottom"
                     Style="{StaticResource ScrollToBottomButtonStyle}"
-                    Background="#CC1A1A1A"
                     Command="{Binding ToggleViewOnceVoiceCommand}"
                     ToolTipService.ToolTip="View once"
                     Visibility="{Binding IsRecording, Converter={StaticResource BooleanToVisibilityConverter}}">
@@ -669,11 +668,11 @@
                              Visibility="{Binding IsViewOnceVoice, Converter={StaticResource InvertedBooleanToVisibilityConverter}}"/>
                     <Ellipse Stroke="{ThemeResource ChatDetailAccentBrush}"
                              StrokeThickness="2"
-                             Fill="#33FFFFFF"
+                             Fill="{ThemeResource WhatsAppItemSelectedBrush}"
                              Visibility="{Binding IsViewOnceVoice, Converter={StaticResource BooleanToVisibilityConverter}}"/>
                     <TextBlock Text="&#xEA0A;"
                                FontFamily="{StaticResource UnisonIconFont}"
-                               FontSize="16"
+                               FontSize="24"
                                HorizontalAlignment="Center"
                                VerticalAlignment="Center"
                                Foreground="{ThemeResource ChatDetailHeaderTitleBrush}"/>
@@ -893,7 +892,8 @@
 
                 <!-- Recording: mic + elapsed | pause | trash + send (view-once docks above the bar) -->
                 <Grid x:Name="RecordingOverlay"
-                      Padding="12,4,12,12"
+                      MinHeight="64"
+                      Padding="12"
                       Visibility="{Binding IsRecording, Converter={StaticResource BooleanToVisibilityConverter}}">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto"/>
@@ -923,19 +923,20 @@
 
                         <Button Grid.Column="2"
                                 Style="{StaticResource ScrollToBottomButtonStyle}"
-                                Background="#CC1A1A1A"
                                 Height="40"
                                 MinWidth="40"
                                 Padding="12,0"
+                                Width="140"
                                 HorizontalAlignment="Center"
                                 VerticalAlignment="Center"
+                                VerticalContentAlignment="Center"
                                 Command="{Binding ToggleRecordingPauseCommand}"
                                 ToolTipService.ToolTip="{Binding RecordingPauseLabel}"
                                 AutomationProperties.Name="{Binding RecordingPauseLabel}">
                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                                 <TextBlock Text="{Binding RecordingPauseGlyph}"
                                            FontFamily="{StaticResource IconFont}"
-                                           FontSize="20"
+                                           FontSize="15"
                                            VerticalAlignment="Center"
                                            Foreground="{ThemeResource ChatDetailHeaderTitleBrush}"/>
                                 <TextBlock Text="{Binding RecordingPauseLabel}"
@@ -951,6 +952,7 @@
                                 Grid.Column="3"
                                 Style="{StaticResource WhatsAppIconButtonStyle}"
                                 Width="40" Height="40"
+                                VerticalAlignment="Center"
                                 Click="CancelRecordingButton_Click"
                                 ToolTipService.ToolTip="Cancel">
                             <TextBlock x:Name="RecordingTrashIcon"
@@ -961,6 +963,7 @@
                         <Button Grid.Column="4"
                                 Style="{StaticResource WhatsAppIconButtonStyle}"
                                 Width="40" Height="40"
+                                VerticalAlignment="Center"
                                 Command="{Binding SendRecordingCommand}"
                                 ToolTipService.ToolTip="Send">
                             <TextBlock Text="&#xE724;" FontFamily="{StaticResource IconFont}" FontSize="20"

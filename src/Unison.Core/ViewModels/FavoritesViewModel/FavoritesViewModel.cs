@@ -9,7 +9,9 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.ComponentModel;
+using System.Diagnostics;
 using System.Linq;
+using System.Threading.Tasks;
 using System.Windows.Input;
 using Unison.Core.Contracts;
 using Unison.Core.Contracts.WhatsApp;
@@ -54,6 +56,7 @@ namespace Unison.Core.ViewModels
             OpenMenuCommand = new RelayCommand(() => MenuRequested?.Invoke(this, EventArgs.Empty));
 
             _chatState.Chats.CollectionChanged += OnChatsCollectionChanged;
+            _chats.FavoritesMembershipChanged += OnFavoritesMembershipChanged;
             foreach (ChatItem chat in _chatState.Chats)
             {
                 AttachChat(chat);
@@ -196,8 +199,7 @@ namespace Unison.Core.ViewModels
                 return;
             }
 
-            _ = _chats.SetFavoriteAsync(chat, favorite: true);
-            IsPickerOpen = false;
+            _ = RunFavoriteChangeAsync(chat, favorite: true, closePickerOnSuccess: true);
         }
 
         private void RemoveFavorite(ChatItem chat)
@@ -207,7 +209,27 @@ namespace Unison.Core.ViewModels
                 return;
             }
 
-            _ = _chats.SetFavoriteAsync(chat, favorite: false);
+            _ = RunFavoriteChangeAsync(chat, favorite: false, closePickerOnSuccess: false);
+        }
+
+        private async Task RunFavoriteChangeAsync(ChatItem chat, bool favorite, bool closePickerOnSuccess)
+        {
+            try
+            {
+                await _chats.SetFavoriteAsync(chat, favorite).ConfigureAwait(true);
+                if (closePickerOnSuccess)
+                {
+                    IsPickerOpen = false;
+                }
+
+                ScheduleRebuild();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine(
+                    "[FavoritesViewModel] SetFavorite failed favorite=" + favorite + ": " + ex.Message);
+                ScheduleRebuild();
+            }
         }
 
         private void OpenChat(ChatItem chat)
@@ -283,6 +305,11 @@ namespace Unison.Core.ViewModels
             {
                 ScheduleRebuild();
             }
+        }
+
+        private void OnFavoritesMembershipChanged(object sender, EventArgs e)
+        {
+            ScheduleRebuild();
         }
 
         private void ScheduleRebuild()

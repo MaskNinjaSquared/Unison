@@ -1012,6 +1012,21 @@ namespace Unison.Core.ViewModels
 
         private void ChatItem_PropertyChanged(object sender, PropertyChangedEventArgs e)
         {
+            // Favourites membership (not order): refresh only while the Favorites filter is active.
+            if (string.Equals(e.PropertyName, nameof(ChatItem.IsFavorite), StringComparison.Ordinal))
+            {
+                if (ActiveFilter == ChatListFilter.Favorites &&
+                    !IsListHeldForSync &&
+                    !IsRefreshing &&
+                    !_batchRendering)
+                {
+                    _visibleOrderDirty = true;
+                    _ = _dispatcher.RunAsync(() => ScheduleRefreshVisibleChats());
+                }
+
+                return;
+            }
+
             // Row bindings repaint themselves. Rebuilding or reordering the whole list for every
             // preview and timestamp change is what created the dispatcher backlog during history
             // sync, so only the two things that can change the *order* or the *membership* of the

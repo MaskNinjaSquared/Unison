@@ -142,7 +142,8 @@ def glyph_from_png(path: Path, scale_factor: float):
     polygons = []
     for contour in raw:
         pts = [(ox + x * scale, UPM - (oy + y * scale)) for y, x in contour[:-1]]
-        if abs(_signed_area(pts)) < (scale * scale) * 2.0:
+        # Tiny islands (e.g. view-once dots) fall under *2.0 after simplify; *1.0 keeps them.
+        if abs(_signed_area(pts)) < (scale * scale) * 1.0:
             continue
         polygons.append(pts)
 

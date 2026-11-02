@@ -403,8 +403,10 @@ namespace Unison.Uwp.UI.Controls
             bool hasAuthorDetail = AuthorDetailBlock != null &&
                                    AuthorDetailBlock.Visibility == Visibility.Visible &&
                                    !string.IsNullOrEmpty(AuthorDetail);
-            // GroupJoin is plain system text — no media chip (same budget as Text).
-            bool hasChip = Kind != ChatPreviewKind.Text && Kind != ChatPreviewKind.GroupJoin;
+            // GroupJoin / CallEvent are plain system text — no media chip (same budget as Text).
+            bool hasChip = Kind != ChatPreviewKind.Text &&
+                           Kind != ChatPreviewKind.GroupJoin &&
+                           Kind != ChatPreviewKind.CallEvent;
             bool hasText = !string.IsNullOrEmpty(Text);
 
             double authorDesired = hasAuthor ? AuthorBlock.DesiredSize.Width : 0;

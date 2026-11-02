@@ -78,14 +78,12 @@ namespace Unison.Uwp.UI.Views
                 return;
             }
 
-            if (string.Equals(e.PropertyName, nameof(FavoritesViewModel.GroupedFavorites), StringComparison.Ordinal))
+            if (string.Equals(e.PropertyName, nameof(FavoritesViewModel.GroupedFavorites), StringComparison.Ordinal) ||
+                string.Equals(e.PropertyName, nameof(FavoritesViewModel.JumpTiles), StringComparison.Ordinal))
             {
-                _favoritesCvs.Source = ViewModel.GroupedFavorites;
-            }
-
-            if (string.Equals(e.PropertyName, nameof(FavoritesViewModel.JumpTiles), StringComparison.Ordinal))
-            {
-                FavoritesJumpList.ItemsSource = ViewModel.JumpTiles;
+                // CollectionViewSource needs Source + ListView.ItemsSource rebound together;
+                // updating Source alone leaves the zoomed-in list stale until re-enter.
+                BindFavoritesSource();
             }
 
             if (string.Equals(e.PropertyName, nameof(FavoritesViewModel.HasFavorites), StringComparison.Ordinal) ||

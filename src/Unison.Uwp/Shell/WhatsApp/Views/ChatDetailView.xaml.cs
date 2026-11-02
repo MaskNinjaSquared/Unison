@@ -54,6 +54,8 @@ namespace Unison.Uwp.Shell.WhatsApp.Views
         public event EventHandler BackRequested;
         private Storyboard _chatDetailInfoSlideStoryboard;
         private bool _chatDetailInfoPaneShown;
+        private Point? _pendingMicFlyOrigin;
+        private bool _micFlyRunning;
 
         /// <summary>
         /// DI ViewModel owns composer, pin, audio prepare, presence watch, and timeline VMs.
@@ -153,6 +155,10 @@ namespace Unison.Uwp.Shell.WhatsApp.Views
             this.Loaded += ChatDetailView_Loaded;
             this.Unloaded += ChatDetailView_Unloaded;
             this.SizeChanged += ChatDetailView_SizeChanged;
+            if (MicButton != null)
+            {
+                MicButton.Click += MicButton_ClickCaptureFlyOrigin;
+            }
         }
 
         private void ChatDetailView_Loaded(object sender, RoutedEventArgs e)
@@ -352,6 +358,61 @@ namespace Unison.Uwp.Shell.WhatsApp.Views
                 UpdateScrollToBottomButton();
             }
 
+            if (e.PropertyName == nameof(ChatDetailViewModel.IsRecording) &&
+                ViewModel != null &&
+                ViewModel.IsRecording)
+            {
+                _ = PlayStartRecordingMicFlyAsync();
+            }
+        }
+
+        private void MicButton_ClickCaptureFlyOrigin(object sender, RoutedEventArgs e)
+        {
+            _pendingMicFlyOrigin = RecordingMicFlyAnimator.CaptureOriginCenter(MicButton, ChatDetailGrid);
+        }
+
+        private async Task PlayStartRecordingMicFlyAsync()
+        {
+            if (_micFlyRunning || !_pendingMicFlyOrigin.HasValue)
+            {
+                return;
+            }
+
+            _micFlyRunning = true;
+            Point origin = _pendingMicFlyOrigin.Value;
+            _pendingMicFlyOrigin = null;
+            try
+            {
+                await Task.Delay(16).ConfigureAwait(true);
+                RecordingOverlay?.UpdateLayout();
+                FontFamily iconFont = null;
+                try
+                {
+                    iconFont = Application.Current.Resources["IconFont"] as FontFamily;
+                }
+                catch
+                {
+                }
+
+                await RecordingMicFlyAnimator.PlayAsync(
+                    ChatDetailGrid,
+                    origin,
+                    RecordingMicIcon,
+                    iconFont,
+                    new SolidColorBrush(Colors.Red)).ConfigureAwait(true);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[ChatDetailView] Mic fly: " + ex.Message);
+                if (RecordingMicIcon != null)
+                {
+                    RecordingMicIcon.Opacity = 1;
+                }
+            }
+            finally
+            {
+                _micFlyRunning = false;
+            }
         }
 
         /// <summary>

@@ -155,7 +155,7 @@ namespace Unison.Core.Helpers
             for (int i = 0; i < messages.Count; i++)
             {
                 ChatMessage row = messages[i];
-                if (row == null || row.IsFromMe || row.IsGroupJoin)
+                if (row == null || row.IsFromMe || row.IsGroupJoin || row.IsCallEvent)
                 {
                     continue;
                 }
@@ -181,7 +181,7 @@ namespace Unison.Core.Helpers
                 for (int i = messages.Count - 1; i >= 0 && need > 0; i--)
                 {
                     ChatMessage row = messages[i];
-                    if (row == null || row.IsFromMe || row.IsGroupJoin)
+                    if (row == null || row.IsFromMe || row.IsGroupJoin || row.IsCallEvent)
                     {
                         continue;
                     }
@@ -265,8 +265,8 @@ namespace Unison.Core.Helpers
                 return false;
             }
 
-            // GroupJoin uses date-separator chrome — never share a bubble run.
-            if (left.IsGroupJoin || right.IsGroupJoin)
+            // GroupJoin / CallEvent use date-separator chrome — never share a bubble run.
+            if (left.IsGroupJoin || right.IsGroupJoin || left.IsCallEvent || right.IsCallEvent)
             {
                 return false;
             }

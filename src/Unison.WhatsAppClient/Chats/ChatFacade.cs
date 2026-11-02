@@ -40,6 +40,8 @@ namespace Unison.WhatsAppClient.Chats
 {
     public sealed class ChatFacade : IChatService
     {
+        public event EventHandler FavoritesMembershipChanged;
+
         /// <summary>
         /// How far back a mark-read reaches. The server only needs enough of the tail to place
         /// the mark, and a chat opened after a long absence should not turn into a receipt for
@@ -404,6 +406,7 @@ namespace Unison.WhatsAppClient.Chats
             }
 
             await ApplyLocalFavoriteAsync(canonicalJid, favorite).ConfigureAwait(false);
+            RaiseFavoritesMembershipChanged();
 
             if (!_account.IsAvailable)
             {
@@ -418,22 +421,12 @@ namespace Unison.WhatsAppClient.Chats
             }
             catch (Exception ex)
             {
-                // Common when regular_low LT-hash is corrupt (MAC mismatch → resync give-up):
-                // local membership rolls back; wire stays unchanged until app-state recovers.
+                // Keep local membership (same as offline). Rolling back made the Favourites
+                // picker look dead: overlay closed, then the star vanished after a failed
+                // regular_low patch (MAC / LT-hash). Wire catches up on the next good sync.
                 Debug.WriteLine(
-                    "[ChatFacade] Favorite patch failed; rolling back local membership: " +
+                    "[ChatFacade] Favorite patch failed; keeping local membership: " +
                     ex.Message + Environment.NewLine + ex);
-                try
-                {
-                    await ApplyLocalFavoriteAsync(canonicalJid, wasFavorite).ConfigureAwait(false);
-                }
-                catch (Exception rollbackEx)
-                {
-                    Debug.WriteLine(
-                        "[ChatFacade] Favorite rollback failed" + Environment.NewLine + rollbackEx);
-                }
-
-                throw;
             }
         }
 
@@ -488,6 +481,30 @@ namespace Unison.WhatsAppClient.Chats
             {
                 _chatStore.RememberFavorite(jid, true);
                 await _chatStore.SetFavoriteAsync(jid, true).ConfigureAwait(false);
+            }
+
+            // Drop cold favourites the server no longer lists (store-only JIDs).
+            foreach (string canonical in FavoriteListReconcile.ColdFavoritesToClear(
+                         _chatStore.ListFavoriteJids(),
+                         wanted,
+                         raw => _jids.GetCanonicalJid(raw)))
+            {
+                _chatStore.RememberFavorite(canonical, false);
+                await _chatStore.SetFavoriteAsync(canonical, false).ConfigureAwait(false);
+            }
+
+            RaiseFavoritesMembershipChanged();
+        }
+
+        private void RaiseFavoritesMembershipChanged()
+        {
+            try
+            {
+                FavoritesMembershipChanged?.Invoke(this, EventArgs.Empty);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[ChatFacade] FavoritesMembershipChanged handler failed: " + ex.Message);
             }
         }
 

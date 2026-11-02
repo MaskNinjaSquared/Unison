@@ -321,6 +321,7 @@ namespace Unison.Core.ViewModels
             if (IsGroupJoinProperty(name))
             {
                 Raise(nameof(IsGroupJoin));
+                Raise(nameof(IsCallEvent));
             }
 
             if (IsAudioProperty(name))
@@ -1424,6 +1425,8 @@ namespace Unison.Core.ViewModels
         public bool IsContact => Model.IsContact;
 
         public bool IsGroupJoin => Model.IsGroupJoin;
+
+        public bool IsCallEvent => Model.IsCallEvent;
 
         public string ContactCardDisplayName
         {

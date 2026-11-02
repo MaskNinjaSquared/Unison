@@ -155,10 +155,12 @@
                                         HeaderContainerStyle="{StaticResource FavoriteGroupHeaderContainerStyle}"/>
                         </ListView.GroupStyle>
                         <ListView.ItemContainerStyle>
-                            <Style TargetType="ListViewItem">
+                            <Style TargetType="ListViewItem" BasedOn="{StaticResource WhatsAppChatListItemStyle}">
                                 <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                                <Setter Property="VerticalContentAlignment" Value="Stretch"/>
                                 <Setter Property="Padding" Value="0"/>
                                 <Setter Property="MinHeight" Value="0"/>
+                                <Setter Property="Margin" Value="0"/>
                             </Style>
                         </ListView.ItemContainerStyle>
                     </ListView>

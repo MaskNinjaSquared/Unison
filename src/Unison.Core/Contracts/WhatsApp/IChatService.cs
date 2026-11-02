@@ -20,6 +20,12 @@ namespace Unison.Core.Contracts.WhatsApp
     public interface IChatService
     {
         /// <summary>
+        /// Raised after local Favourites membership changes (add/remove or remote list apply),
+        /// so Favourites / Calls preview can rebuild without leaving the page.
+        /// </summary>
+        event EventHandler FavoritesMembershipChanged;
+
+        /// <summary>
         /// Pins the conversation to the top of the list, for this account everywhere. Distinct
         /// from <see cref="ChatItem.IsWidgetPinned"/>, which is a tile on this device's Start
         /// screen and means nothing to WhatsApp.

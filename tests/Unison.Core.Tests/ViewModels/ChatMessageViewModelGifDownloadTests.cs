@@ -378,6 +378,8 @@ namespace Unison.Core.Tests.ViewModels
                 Message.Types.PeerDataOperationRequestResponseMessage response) => Task.CompletedTask;
             public Task NotifyGroupJoinsAsync(System.Collections.Generic.IReadOnlyList<GroupJoinNotifyRequest> joins) =>
                 Task.CompletedTask;
+            public Task NotifyCallEventsAsync(System.Collections.Generic.IReadOnlyList<CallEventNotifyRequest> events) =>
+                Task.CompletedTask;
             public Task NotifyGroupLeavesAsync(System.Collections.Generic.IReadOnlyList<GroupLeaveNotifyRequest> leaves) =>
                 Task.CompletedTask;
             public Task NotifyGroupSubjectChangedAsync(

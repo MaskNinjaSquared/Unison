@@ -387,7 +387,8 @@ namespace Unison.Core.State
                 // Join/leave/rename already name the actor in the body; a leftover "X: " chip
                 // must be cleared even when the tip has no participant (subject change).
                 bool clearSystemAuthor = unnamedPass &&
-                    chat.LastMessageKind == ChatPreviewKind.GroupJoin &&
+                    (chat.LastMessageKind == ChatPreviewKind.GroupJoin ||
+                     chat.LastMessageKind == ChatPreviewKind.CallEvent) &&
                     !string.IsNullOrEmpty(chat.LastMessageAuthor);
 
                 if (string.IsNullOrWhiteSpace(chat.LastMessageParticipantJid))
@@ -573,9 +574,10 @@ namespace Unison.Core.State
             string selfLabel = _sweepSelfLabel;
             IReadOnlyDictionary<string, string> directChatNames = _sweepDirectNames;
 
-            // Join / leave / rename lines already name the actor in the body
-            // ("X removed Y"). Re-applying "X: " doubles the author on the strip.
-            if (chat.LastMessageKind == ChatPreviewKind.GroupJoin)
+            // Join / leave / rename / call chrome already name the event in the body.
+            // Re-applying "X: " doubles the author on the strip.
+            if (chat.LastMessageKind == ChatPreviewKind.GroupJoin ||
+                chat.LastMessageKind == ChatPreviewKind.CallEvent)
             {
                 if (!string.IsNullOrEmpty(chat.LastMessageAuthor))
                 {

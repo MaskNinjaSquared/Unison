@@ -1,3 +1,4 @@
+using System;
 using Unison.Uwp.UI.Controls;
 using Unison.Uwp.UI.Views;
 using Unison.Core.Helpers;
@@ -12,10 +13,103 @@ namespace Unison.Uwp.UI.Templates
     public sealed partial class MessageTemplates : ResourceDictionary
     {
         private const string ReplySwipeHandleTag = "ReplySwipeHandle";
+        private const double BubbleMinMaxWidth = 120;
 
         public MessageTemplates()
         {
             InitializeComponent();
+        }
+
+        /// <summary>
+        /// Stretch slot width comes from the ListViewItem; push that onto the Auto-sized
+        /// bubble content so WrapWholeWords can break. Never bind MaxWidth to the content's
+        /// own ActualWidth (circular → 0 → invisible bubbles).
+        /// </summary>
+        private void MessageBubbleSlot_Loaded(object sender, RoutedEventArgs e)
+        {
+            ApplyBubbleContentMaxWidth(sender as FrameworkElement);
+        }
+
+        private void MessageBubbleSlot_SizeChanged(object sender, SizeChangedEventArgs e)
+        {
+            if (e.PreviousSize.Width == e.NewSize.Width)
+            {
+                return;
+            }
+
+            ApplyBubbleContentMaxWidth(sender as FrameworkElement);
+        }
+
+        private static void ApplyBubbleContentMaxWidth(FrameworkElement slot)
+        {
+            if (slot == null)
+            {
+                return;
+            }
+
+            double width = slot.ActualWidth;
+            if (width <= 0)
+            {
+                width = ResolveAncestorContentWidth(slot);
+            }
+
+            if (width < BubbleMinMaxWidth)
+            {
+                return;
+            }
+
+            FrameworkElement content = null;
+            if (VisualTreeHelper.GetChildrenCount(slot) > 0)
+            {
+                content = VisualTreeHelper.GetChild(slot, 0) as FrameworkElement;
+            }
+
+            if (content == null)
+            {
+                return;
+            }
+
+            if (Math.Abs(content.MaxWidth - width) < 0.5)
+            {
+                return;
+            }
+
+            content.MaxWidth = width;
+        }
+
+        private static double ResolveAncestorContentWidth(DependencyObject start)
+        {
+            DependencyObject current = start;
+            while (current != null)
+            {
+                var item = current as ListViewItem;
+                if (item != null && item.ActualWidth > 0)
+                {
+                    return item.ActualWidth;
+                }
+
+                var list = current as ListView;
+                if (list != null && list.ActualWidth > 0)
+                {
+                    return list.ActualWidth;
+                }
+
+                current = VisualTreeHelper.GetParent(current);
+            }
+
+            try
+            {
+                double screen = Window.Current?.Bounds.Width ?? 0;
+                if (screen > BubbleMinMaxWidth)
+                {
+                    return Math.Max(BubbleMinMaxWidth, screen - 60);
+                }
+            }
+            catch
+            {
+            }
+
+            return 0;
         }
 
         /// <summary>Legacy shell: swap Segoe play for the Legacy icon font on video overlays.</summary>
