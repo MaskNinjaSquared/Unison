@@ -72,6 +72,48 @@ namespace Unison.Core.Models
         public const string StatusRead = "read";
         public const string StatusFailed = "failed";
 
+        /// <summary>
+        /// Local-only identity for an outgoing multi-image picker batch. It is never sent over
+        /// WhatsApp and lets the timeline render a compact gallery without losing each message.
+        /// </summary>
+        private string _localMediaBatchId;
+        public string LocalMediaBatchId
+        {
+            get => _localMediaBatchId;
+            set
+            {
+                if (_localMediaBatchId == value) return;
+                _localMediaBatchId = value;
+                OnPropertyChanged();
+            }
+        }
+
+        /// <summary>Zero-based position inside <see cref="LocalMediaBatchId"/>.</summary>
+        private int _localMediaBatchIndex;
+        public int LocalMediaBatchIndex
+        {
+            get => _localMediaBatchIndex;
+            set
+            {
+                if (_localMediaBatchIndex == value) return;
+                _localMediaBatchIndex = value;
+                OnPropertyChanged();
+            }
+        }
+
+        /// <summary>Number of images selected in <see cref="LocalMediaBatchId"/>.</summary>
+        private int _localMediaBatchCount;
+        public int LocalMediaBatchCount
+        {
+            get => _localMediaBatchCount;
+            set
+            {
+                if (_localMediaBatchCount == value) return;
+                _localMediaBatchCount = value;
+                OnPropertyChanged();
+            }
+        }
+
         private string _status;
         public string Status
         {
