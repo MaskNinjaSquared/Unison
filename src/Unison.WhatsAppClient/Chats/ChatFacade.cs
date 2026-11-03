@@ -711,7 +711,10 @@ namespace Unison.WhatsAppClient.Chats
                                 ChatPinStoreKeys.For(jid, _jids));
                             for (int i = 0; i < pinKeys.Count; i++)
                             {
-                                await _chatStore.SetChatPinnedAsync(pinKeys[i], change.Pinned.Value)
+                                await _chatStore.SetChatPinnedAsync(
+                                    pinKeys[i],
+                                    change.Pinned.Value,
+                                    change.Pinned.Value ? chat.PinnedTimestamp : 0)
                                     .ConfigureAwait(false);
                             }
                         }
@@ -2450,26 +2453,44 @@ namespace Unison.WhatsAppClient.Chats
 
             if (preview.IsChatPinned.HasValue)
             {
-                RememberPinnedUnderAliases(chat.JID, preview.IsChatPinned.Value);
+                RememberPinnedUnderAliases(
+                    chat.JID,
+                    preview.IsChatPinned.Value,
+                    preview.PinnedTimestamp);
                 if (!string.IsNullOrWhiteSpace(preview.LidJid))
                 {
-                    _chatStore.RememberChatPinned(preview.LidJid, preview.IsChatPinned.Value);
+                    _chatStore.RememberChatPinned(
+                        preview.LidJid,
+                        preview.IsChatPinned.Value,
+                        preview.PinnedTimestamp);
                 }
 
                 if (!string.IsNullOrWhiteSpace(preview.PnJid))
                 {
-                    _chatStore.RememberChatPinned(preview.PnJid, preview.IsChatPinned.Value);
+                    _chatStore.RememberChatPinned(
+                        preview.PnJid,
+                        preview.IsChatPinned.Value,
+                        preview.PinnedTimestamp);
                 }
 
-                _ = PersistHistoryPinnedAsync(chat.JID, preview.IsChatPinned.Value);
+                _ = PersistHistoryPinnedAsync(
+                    chat.JID,
+                    preview.IsChatPinned.Value,
+                    preview.PinnedTimestamp);
                 if (!string.IsNullOrWhiteSpace(preview.LidJid))
                 {
-                    _ = PersistHistoryPinnedAsync(preview.LidJid, preview.IsChatPinned.Value);
+                    _ = PersistHistoryPinnedAsync(
+                        preview.LidJid,
+                        preview.IsChatPinned.Value,
+                        preview.PinnedTimestamp);
                 }
 
                 if (!string.IsNullOrWhiteSpace(preview.PnJid))
                 {
-                    _ = PersistHistoryPinnedAsync(preview.PnJid, preview.IsChatPinned.Value);
+                    _ = PersistHistoryPinnedAsync(
+                        preview.PnJid,
+                        preview.IsChatPinned.Value,
+                        preview.PinnedTimestamp);
                 }
             }
 
@@ -2481,7 +2502,7 @@ namespace Unison.WhatsAppClient.Chats
         }
 
         /// <inheritdoc />
-        public void RememberPinnedUnderAliases(string jid, bool pinned)
+        public void RememberPinnedUnderAliases(string jid, bool pinned, long? pinnedTimestamp = null)
         {
             if (string.IsNullOrWhiteSpace(jid))
             {
@@ -2491,7 +2512,7 @@ namespace Unison.WhatsAppClient.Chats
             IReadOnlyList<string> keys = ChatPinStoreKeys.For(jid, _jids);
             for (int i = 0; i < keys.Count; i++)
             {
-                _chatStore.RememberChatPinned(keys[i], pinned);
+                _chatStore.RememberChatPinned(keys[i], pinned, pinnedTimestamp);
             }
         }
 
@@ -2536,7 +2557,7 @@ namespace Unison.WhatsAppClient.Chats
                         chat.PinnedTimestamp = 1;
                     }
 
-                    RememberPinnedUnderAliases(chat.JID, true);
+                    RememberPinnedUnderAliases(chat.JID, true, chat.PinnedTimestamp);
                 }
 
                 break;
@@ -2577,14 +2598,15 @@ namespace Unison.WhatsAppClient.Chats
             }
         }
 
-        private async Task PersistHistoryPinnedAsync(string jid, bool pinned)
+        private async Task PersistHistoryPinnedAsync(string jid, bool pinned, long? pinnedTimestamp)
         {
             try
             {
                 IReadOnlyList<string> keys = ChatPinStoreKeys.For(jid, _jids);
                 for (int i = 0; i < keys.Count; i++)
                 {
-                    await _chatStore.SetChatPinnedAsync(keys[i], pinned).ConfigureAwait(false);
+                    await _chatStore.SetChatPinnedAsync(keys[i], pinned, pinnedTimestamp)
+                        .ConfigureAwait(false);
                 }
             }
             catch (Exception ex)

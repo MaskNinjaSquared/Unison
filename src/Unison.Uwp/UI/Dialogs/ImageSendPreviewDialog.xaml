@@ -12,7 +12,32 @@
     DefaultButton="Primary">
 
     <StackPanel>
-        <Image x:Name="PreviewImage" MaxHeight="300" Stretch="Uniform"/>
+        <Grid x:Name="PreviewHost"
+              MaxHeight="300"
+              ManipulationMode="TranslateX"
+              ManipulationCompleted="PreviewHost_ManipulationCompleted">
+            <Image x:Name="PreviewImage" Stretch="Uniform"/>
+            <Button x:Name="PreviousButton"
+                    Content="&#xE76B;"
+                    FontFamily="Segoe MDL2 Assets"
+                    Style="{StaticResource TransparentMediaButtonStyle}"
+                    HorizontalAlignment="Left"
+                    VerticalAlignment="Center"
+                    Click="PreviousButton_Click"/>
+            <Button x:Name="NextButton"
+                    Content="&#xE76C;"
+                    FontFamily="Segoe MDL2 Assets"
+                    Style="{StaticResource TransparentMediaButtonStyle}"
+                    HorizontalAlignment="Right"
+                    VerticalAlignment="Center"
+                    Click="NextButton_Click"/>
+        </Grid>
+        <TextBlock x:Name="ImageIndexText"
+                   Margin="0,6,0,0"
+                   HorizontalAlignment="Center"
+                   Foreground="{ThemeResource ChatDetailMutedTextBrush}"
+                   FontSize="12"
+                   FontFamily="{StaticResource MainFont}"/>
         <TextBlock x:Name="InfoText"
                    Margin="0,8,0,0"
                    Foreground="{ThemeResource ChatDetailMutedTextBrush}"

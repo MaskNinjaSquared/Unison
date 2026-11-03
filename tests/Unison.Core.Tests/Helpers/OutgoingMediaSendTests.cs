@@ -174,6 +174,31 @@ namespace Unison.Core.Tests.Helpers
         }
 
         [Fact]
+        public async Task Image_batch_marks_each_message_with_one_local_gallery_identity()
+        {
+            int sequence = 0;
+            var sender = new OutgoingMediaSend(
+                _host,
+                _jids,
+                _cache,
+                _ => { },
+                (chatJid, message) => _host.RememberAccepted(message),
+                (chatJid, message, kind) => Task.CompletedTask,
+                () => At,
+                () => "IMG" + ++sequence);
+
+            IReadOnlyList<ChatMessage> messages = await sender.SendImagesAsync(
+                "555@s.whatsapp.net",
+                new[] { Bytes, new byte[] { 4, 5, 6 }, new byte[] { 7, 8, 9 } },
+                null);
+
+            Assert.All(messages, message => Assert.False(string.IsNullOrWhiteSpace(message.LocalMediaBatchId)));
+            Assert.Single(messages.Select(message => message.LocalMediaBatchId).Distinct());
+            Assert.Equal(new[] { 0, 1, 2 }, messages.Select(message => message.LocalMediaBatchIndex));
+            Assert.All(messages, message => Assert.Equal(3, message.LocalMediaBatchCount));
+        }
+
+        [Fact]
         public async Task Image_batch_rejects_an_empty_item_before_sending_any_image()
         {
             await Assert.ThrowsAsync<ArgumentException>(

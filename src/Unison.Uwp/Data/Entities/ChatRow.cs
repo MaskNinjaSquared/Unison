@@ -17,6 +17,9 @@ namespace Unison.Uwp.Data.Entities
 
         public bool IsChatPinned { get; set; }
 
+        /// <summary>Unix seconds used to order pinned chats; zero is an explicit unpin.</summary>
+        public long? PinnedTimestamp { get; set; }
+
         public bool IsWidgetPinned { get; set; }
 
         /// <summary>WhatsApp Favourites list (favoritesAction).</summary>

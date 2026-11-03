@@ -36,6 +36,12 @@ namespace Unison.Uwp.Data.Entities
         /// <summary><see cref="MessageSendState"/> as INTEGER.</summary>
         public int SendState { get; set; }
 
+        public string LocalMediaBatchId { get; set; }
+
+        public int LocalMediaBatchIndex { get; set; }
+
+        public int LocalMediaBatchCount { get; set; }
+
         public string MediaUrl { get; set; }
 
         public string MediaDirectPath { get; set; }

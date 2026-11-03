@@ -228,7 +228,7 @@ namespace Unison.Core.Contracts.WhatsApp
         void ApplyLocalStateAliasFallback(ChatItem chat);
 
         /// <summary>Caches the account pin under every PN/LID spelling of <paramref name="jid"/>.</summary>
-        void RememberPinnedUnderAliases(string jid, bool pinned);
+        void RememberPinnedUnderAliases(string jid, bool pinned, long? pinnedTimestamp = null);
 
         /// <summary>Unix-seconds mute deadline eight hours from now (UTC).</summary>
         long MuteUntilEightHoursFromNow();

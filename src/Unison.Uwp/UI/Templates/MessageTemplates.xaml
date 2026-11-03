@@ -8,7 +8,8 @@
     xmlns:selectors="using:Unison.Uwp.UI.TemplateSelectors">
 
     <DataTemplate x:Key="MessageSentTemplate" x:DataType="vm:ChatMessageViewModel">
-        <Grid HorizontalAlignment="Stretch">
+        <Grid HorizontalAlignment="Stretch"
+              Visibility="{x:Bind ShowInTimeline, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="Auto"/>
@@ -158,10 +159,24 @@
                                 HorizontalAlignment="Left"
                                 Margin="0,0,0,6"
                                 Padding="0">
-                            <Image Source="{x:Bind ImageUri, Mode=OneWay, Converter={StaticResource StringToImageSourceConverter}, ConverterParameter=320}"
-                                   MaxWidth="220"
-                                   Stretch="Uniform"
-                                   HorizontalAlignment="Left"/>
+                            <Grid>
+                                <Image Source="{x:Bind ImageUri, Mode=OneWay, Converter={StaticResource StringToImageSourceConverter}, ConverterParameter=320}"
+                                       MaxWidth="220"
+                                       Stretch="Uniform"
+                                       HorizontalAlignment="Left"/>
+                                <Border x:Name="SentGalleryCountBadge"
+                                        Background="#99000000"
+                                        CornerRadius="14"
+                                        Padding="8,4"
+                                        HorizontalAlignment="Right"
+                                        VerticalAlignment="Bottom"
+                                        Margin="8"
+                                        x:Load="{x:Bind IsGalleryLead, Mode=OneWay}">
+                                    <TextBlock Text="{x:Bind GalleryCountLabel, Mode=OneWay}"
+                                               Foreground="White"
+                                               FontWeight="SemiBold"/>
+                                </Border>
+                            </Grid>
                         </Button>
                         <Image x:Name="SentStickerImage"
                                Source="{x:Bind ImageUri, Mode=OneWay, Converter={StaticResource StringToImageSourceConverter}, ConverterParameter=320}"

@@ -41,6 +41,30 @@ namespace Unison.Core.Tests.Helpers
         }
 
         [Fact]
+        public void TargetIndex_keeps_pinned_chats_stable_when_one_receives_a_new_message()
+        {
+            var oldestPin = new ChatItem
+            {
+                Name = "oldest pin",
+                IsChatPinned = true,
+                PinnedTimestamp = 100,
+                LastMessageTimestampUtc = Utc(1)
+            };
+            var newestPin = new ChatItem
+            {
+                Name = "newest pin",
+                IsChatPinned = true,
+                PinnedTimestamp = 100,
+                LastMessageTimestampUtc = Utc(2)
+            };
+            var visible = new List<ChatItem> { oldestPin, newestPin };
+
+            oldestPin.LastMessageTimestampUtc = Utc(20);
+
+            Assert.Equal(0, ChatListRowOrder.TargetIndex(visible, oldestPin));
+        }
+
+        [Fact]
         public void TargetIndex_orders_by_catalogue_probe_when_visible_alias_is_stale()
         {
             var older = new ChatItem { Name = "older", LastMessageTimestampUtc = Utc(10) };

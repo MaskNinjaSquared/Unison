@@ -326,7 +326,10 @@ namespace Unison.Core.ViewModels
                     // (another batch tick) cannot treat a mute-only stub as "not pinned".
                     if (chat.IsChatPinned)
                     {
-                        _chatService?.RememberPinnedUnderAliases(chat.JID, true);
+                        _chatService?.RememberPinnedUnderAliases(
+                            chat.JID,
+                            true,
+                            chat.PinnedTimestamp);
                     }
 
                     if (chat.MutedUntil != null)

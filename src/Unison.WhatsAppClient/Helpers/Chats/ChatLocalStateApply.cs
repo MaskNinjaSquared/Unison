@@ -73,6 +73,10 @@ namespace Unison.WhatsAppClient.Helpers
             {
                 chat.PinnedTimestamp = UnpinnedTimestamp;
             }
+            else if (state.PinnedTimestamp.HasValue && state.PinnedTimestamp.Value > 0)
+            {
+                chat.PinnedTimestamp = state.PinnedTimestamp;
+            }
             else if (chat.PinnedTimestamp == null || chat.PinnedTimestamp == 0)
             {
                 chat.PinnedTimestamp = PendingPinTimestamp;

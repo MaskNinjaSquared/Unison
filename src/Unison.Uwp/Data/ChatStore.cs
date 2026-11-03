@@ -50,6 +50,7 @@ namespace Unison.Uwp.Data
                 string dbPath = Path.Combine(ApplicationData.Current.LocalFolder.Path, DatabaseFileName);
                 _connection = new SQLiteAsyncConnection(dbPath);
                 await _connection.CreateTableAsync<ChatRow>().ConfigureAwait(false);
+                await EnsurePinnedTimestampColumnAsync().ConfigureAwait(false);
                 _initialized = true;
                 Debug.WriteLine("[ChatStore] Initialized at " + dbPath);
             }
@@ -117,10 +118,10 @@ namespace Unison.Uwp.Data
             return _cache.TryGet(key);
         }
 
-        public Task SetChatPinnedAsync(string jid, bool pinned)
+        public Task SetChatPinnedAsync(string jid, bool pinned, long? pinnedTimestamp = null)
         {
-            RememberChatPinned(jid, pinned);
-            return WriteAsync(jid, existing => existing.IsChatPinned = pinned);
+            RememberChatPinned(jid, pinned, pinnedTimestamp);
+            return WriteAsync(jid, existing => ApplyPinnedState(existing, pinned, pinnedTimestamp));
         }
 
         public Task SetWidgetPinnedAsync(string jid, bool pinned)
@@ -145,9 +146,9 @@ namespace Unison.Uwp.Data
             return WriteAsync(jid, existing => existing.Status = status);
         }
 
-        public void RememberChatPinned(string jid, bool pinned)
+        public void RememberChatPinned(string jid, bool pinned, long? pinnedTimestamp = null)
         {
-            _cache.Mutate(jid, state => state.IsChatPinned = pinned);
+            _cache.Mutate(jid, state => ApplyPinnedState(state, pinned, pinnedTimestamp));
         }
 
         public void RememberFavorite(string jid, bool favorite)
@@ -188,6 +189,14 @@ namespace Unison.Uwp.Data
         private static void ApplyLocalFields(ChatItem chat, ChatLocalState state)
         {
             ChatLocalStateApply.Apply(chat, state);
+        }
+
+        private static void ApplyPinnedState(ChatLocalState state, bool pinned, long? pinnedTimestamp)
+        {
+            state.IsChatPinned = pinned;
+            state.PinnedTimestamp = pinned
+                ? (pinnedTimestamp ?? state.PinnedTimestamp ?? 1)
+                : 0;
         }
 
         /// <summary>
@@ -242,6 +251,43 @@ namespace Unison.Uwp.Data
             }
         }
 
+        private async Task EnsurePinnedTimestampColumnAsync()
+        {
+            try
+            {
+                List<SqliteTableInfoRow> columns = await _connection
+                    .QueryAsync<SqliteTableInfoRow>("PRAGMA table_info(Chat)")
+                    .ConfigureAwait(false);
+                bool exists = false;
+                if (columns != null)
+                {
+                    for (int i = 0; i < columns.Count; i++)
+                    {
+                        if (string.Equals(
+                                columns[i]?.name,
+                                nameof(ChatRow.PinnedTimestamp),
+                                StringComparison.OrdinalIgnoreCase))
+                        {
+                            exists = true;
+                            break;
+                        }
+                    }
+                }
+
+                if (!exists)
+                {
+                    await _connection.ExecuteAsync(
+                            "ALTER TABLE Chat ADD COLUMN PinnedTimestamp INTEGER NULL")
+                        .ConfigureAwait(false);
+                    Debug.WriteLine("[ChatStore] Added PinnedTimestamp column");
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[ChatStore] Ensure PinnedTimestamp column failed: " + ex.Message);
+            }
+        }
+
         private static string NormalizeJid(string jid)
         {
             return JidHelper.Normalize(jid);
@@ -265,6 +311,7 @@ namespace Unison.Uwp.Data
                 Jid = row.Jid,
                 Status = status,
                 IsChatPinned = row.IsChatPinned,
+                PinnedTimestamp = row.PinnedTimestamp,
                 IsWidgetPinned = row.IsWidgetPinned,
                 IsFavorite = row.IsFavorite,
                 MutedUntil = row.MutedUntil,
@@ -279,11 +326,17 @@ namespace Unison.Uwp.Data
                 Jid = state.Jid,
                 Status = (int)state.Status,
                 IsChatPinned = state.IsChatPinned,
+                PinnedTimestamp = state.PinnedTimestamp,
                 IsWidgetPinned = state.IsWidgetPinned,
                 IsFavorite = state.IsFavorite,
                 MutedUntil = state.MutedUntil,
                 UpdatedAtUtc = DateTime.UtcNow
             };
+        }
+
+        private sealed class SqliteTableInfoRow
+        {
+            public string name { get; set; }
         }
 
     }

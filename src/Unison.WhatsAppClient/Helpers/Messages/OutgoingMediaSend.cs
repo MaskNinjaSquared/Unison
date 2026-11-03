@@ -56,7 +56,18 @@ namespace Unison.WhatsAppClient.Helpers
 
         // No ConfigureAwait(false) anywhere below: the host mutates the in-memory timeline,
         // which is only safe from the thread the caller (the UI) started on.
-        public async Task<ChatMessage> SendImageAsync(string jid, byte[] imageBytes, string caption)
+        public Task<ChatMessage> SendImageAsync(string jid, byte[] imageBytes, string caption)
+        {
+            return SendImageAsync(jid, imageBytes, caption, null, 0, 0);
+        }
+
+        private async Task<ChatMessage> SendImageAsync(
+            string jid,
+            byte[] imageBytes,
+            string caption,
+            string localMediaBatchId,
+            int localMediaBatchIndex,
+            int localMediaBatchCount)
         {
             if (imageBytes == null || imageBytes.Length == 0)
             {
@@ -73,6 +84,9 @@ namespace Unison.WhatsAppClient.Helpers
                 imageBytes);
 
             ChatMessage message = OutgoingChatMessage.Image(PendingStamp(messageId, chatJid), caption, localUri);
+            message.LocalMediaBatchId = localMediaBatchId;
+            message.LocalMediaBatchIndex = localMediaBatchIndex;
+            message.LocalMediaBatchCount = localMediaBatchCount;
             await SendAsync(
                 chatJid,
                 message,
@@ -104,9 +118,16 @@ namespace Unison.WhatsAppClient.Helpers
             }
 
             var messages = new List<ChatMessage>(imageBytes.Count);
+            string localMediaBatchId = imageBytes.Count > 1 ? Guid.NewGuid().ToString("N") : null;
             for (int i = 0; i < imageBytes.Count; i++)
             {
-                messages.Add(await SendImageAsync(jid, imageBytes[i], i == 0 ? caption : null));
+                messages.Add(await SendImageAsync(
+                    jid,
+                    imageBytes[i],
+                    i == 0 ? caption : null,
+                    localMediaBatchId,
+                    i,
+                    imageBytes.Count));
             }
 
             return messages;

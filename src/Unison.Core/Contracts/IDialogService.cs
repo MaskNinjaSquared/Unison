@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Threading.Tasks;
 using Unison.Core.Models;
 using Unison.Core.ViewModels;
@@ -80,7 +81,7 @@ namespace Unison.Core.Contracts
         /// <see cref="ImageSendPreviewResult.Confirmed"/> is false when cancelled.
         /// </summary>
         Task<ImageSendPreviewResult> ShowImageSendPreviewAsync(
-            byte[] imageBytes,
+            IReadOnlyList<byte[]> imageBytes,
             string infoText,
             string initialCaption = null);
 

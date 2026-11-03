@@ -65,5 +65,27 @@ namespace Unison.Core.Tests.Models
 
             Assert.Equal(0, count);
         }
+
+        [Fact]
+        public void Local_media_batch_properties_notify_when_changed()
+        {
+            var message = new ChatMessage();
+            int count = 0;
+            message.PropertyChanged += (_, e) =>
+            {
+                if (e.PropertyName == nameof(ChatMessage.LocalMediaBatchId) ||
+                    e.PropertyName == nameof(ChatMessage.LocalMediaBatchIndex) ||
+                    e.PropertyName == nameof(ChatMessage.LocalMediaBatchCount))
+                {
+                    count++;
+                }
+            };
+
+            message.LocalMediaBatchId = "batch";
+            message.LocalMediaBatchIndex = 1;
+            message.LocalMediaBatchCount = 3;
+
+            Assert.Equal(3, count);
+        }
     }
 }
