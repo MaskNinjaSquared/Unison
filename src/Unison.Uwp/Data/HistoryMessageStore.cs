@@ -22,13 +22,13 @@ namespace Unison.Uwp.Data
     {
         private static readonly string DatabaseFileName = "unison.db";
 
-        public const int CurrentSchemaVersion = 10;
+        public const int CurrentSchemaVersion = 11;
 
         /// <summary>
         /// Timeline open / load-more: protocol thumbs live on disk (<c>MediaLocalUri</c> / poster).
         /// </summary>
         private const string TimelineSelectSql =
-            "SELECT Id, ChatJid, MessageId, IsFromMe, IsRead, ParticipantJid, SenderName, Body, Kind, SendState, " +
+            "SELECT Id, ChatJid, MessageId, IsFromMe, IsRead, ParticipantJid, SenderName, Body, Kind, SendState, LocalMediaBatchId, LocalMediaBatchIndex, LocalMediaBatchCount, " +
             "MediaUrl, MediaDirectPath, MediaKeyBase64, MediaFileEncSha256Base64, MediaMimeType, " +
             "MediaDurationSeconds, MediaFileName, MediaFileLengthBytes, IsVoiceNote, IsAnimated, IsRevoked, IsForwarded, IsPinned, " +
             "PinnedAtUtc, PinExpiresAtUtc, QuotedMessageId, QuotedChatJid, QuotedParticipantJid, " +
@@ -69,6 +69,7 @@ namespace Unison.Uwp.Data
                 _connection = new SQLiteAsyncConnection(dbPath);
                 await _connection.CreateTableAsync<HistoryMessageRow>().ConfigureAwait(false);
                 await _connection.CreateTableAsync<HistoryMessageReactionRow>().ConfigureAwait(false);
+                await EnsureMediaBatchColumnsAsync().ConfigureAwait(false);
                 await EnsureFlagDeletedColumnAsync().ConfigureAwait(false);
                 await EnsureIsAnimatedColumnAsync().ConfigureAwait(false);
                 await EnsureIsReadColumnAsync().ConfigureAwait(false);
@@ -914,6 +915,7 @@ namespace Unison.Uwp.Data
                             hasColumn = true;
                             break;
                         }
+
                     }
                 }
 
@@ -932,6 +934,35 @@ namespace Unison.Uwp.Data
                 // Older SQLite without DROP COLUMN: property is gone from the entity; column may linger.
                 Debug.WriteLine("[HistoryMessageStore] Drop MediaThumbnailBase64 skipped: " + ex.Message);
             }
+        }
+
+        private async Task EnsureMediaBatchColumnsAsync()
+        {
+            List<SqliteTableInfoRow> cols = await _connection
+                .QueryAsync<SqliteTableInfoRow>("PRAGMA table_info(history_message)")
+                .ConfigureAwait(false);
+            await AddColumnIfMissingAsync(cols, "LocalMediaBatchId", "TEXT").ConfigureAwait(false);
+            await AddColumnIfMissingAsync(cols, "LocalMediaBatchIndex", "INTEGER NOT NULL DEFAULT 0").ConfigureAwait(false);
+            await AddColumnIfMissingAsync(cols, "LocalMediaBatchCount", "INTEGER NOT NULL DEFAULT 0").ConfigureAwait(false);
+        }
+
+        private async Task AddColumnIfMissingAsync(
+            IReadOnlyList<SqliteTableInfoRow> columns,
+            string name,
+            string definition)
+        {
+            for (int i = 0; i < columns.Count; i++)
+            {
+                if (columns[i] != null &&
+                    string.Equals(columns[i].name, name, StringComparison.OrdinalIgnoreCase))
+                {
+                    return;
+                }
+            }
+
+            await _connection
+                .ExecuteAsync("ALTER TABLE history_message ADD COLUMN " + name + " " + definition)
+                .ConfigureAwait(false);
         }
 
         private sealed class SqliteTableInfoRow
@@ -1099,6 +1130,14 @@ namespace Unison.Uwp.Data
                     : conn.Find<HistoryMessageRow>(row.Id);
                 if (existing != null)
                 {
+                    if (string.IsNullOrWhiteSpace(row.LocalMediaBatchId) &&
+                        !string.IsNullOrWhiteSpace(existing.LocalMediaBatchId))
+                    {
+                        row.LocalMediaBatchId = existing.LocalMediaBatchId;
+                        row.LocalMediaBatchIndex = existing.LocalMediaBatchIndex;
+                        row.LocalMediaBatchCount = existing.LocalMediaBatchCount;
+                    }
+
                     if (string.IsNullOrWhiteSpace(row.MediaLocalUri))
                     {
                         row.MediaLocalUri = existing.MediaLocalUri;
@@ -1508,6 +1547,9 @@ namespace Unison.Uwp.Data
                 Body = model.Body,
                 Kind = (int)model.Kind,
                 SendState = (int)model.SendState,
+                LocalMediaBatchId = model.LocalMediaBatchId,
+                LocalMediaBatchIndex = model.LocalMediaBatchIndex,
+                LocalMediaBatchCount = model.LocalMediaBatchCount,
                 MediaUrl = model.MediaUrl,
                 MediaDirectPath = model.MediaDirectPath,
                 MediaKeyBase64 = model.MediaKeyBase64,
@@ -1577,6 +1619,9 @@ namespace Unison.Uwp.Data
                 Body = row.Body,
                 Kind = kind,
                 SendState = sendState,
+                LocalMediaBatchId = row.LocalMediaBatchId,
+                LocalMediaBatchIndex = row.LocalMediaBatchIndex,
+                LocalMediaBatchCount = row.LocalMediaBatchCount,
                 MediaUrl = row.MediaUrl,
                 MediaDirectPath = row.MediaDirectPath,
                 MediaKeyBase64 = row.MediaKeyBase64,

@@ -30,6 +30,12 @@ namespace Unison.Core.Models
 
         public MessageSendState SendState { get; set; }
 
+        public string LocalMediaBatchId { get; set; }
+
+        public int LocalMediaBatchIndex { get; set; }
+
+        public int LocalMediaBatchCount { get; set; }
+
         /// <summary>CDN / MMG URL (image, video, audio, document, sticker).</summary>
         public string MediaUrl { get; set; }
 
