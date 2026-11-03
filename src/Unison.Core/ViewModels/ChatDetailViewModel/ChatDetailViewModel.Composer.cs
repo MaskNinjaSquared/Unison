@@ -352,7 +352,7 @@ namespace Unison.Core.ViewModels
                     totalBytes / 1024);
             string seedCaption = string.IsNullOrWhiteSpace(MessageText) ? null : MessageText.Trim();
             ImageSendPreviewResult preview = await _dialogs.ShowImageSendPreviewAsync(
-                picked[0].Bytes,
+                picked.Select(image => image.Bytes).ToList(),
                 info,
                 seedCaption);
             if (preview == null || !preview.Confirmed || _activeChat == null)
