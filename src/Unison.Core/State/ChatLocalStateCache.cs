@@ -233,6 +233,7 @@ namespace Unison.Core.State
             if (source.Knows(ChatLocalStateFields.Pin))
             {
                 copy.IsChatPinned = source.IsChatPinned;
+                copy.PinnedTimestamp = source.PinnedTimestamp;
             }
 
             if (source.Knows(ChatLocalStateFields.WidgetPin))

@@ -28,7 +28,7 @@ namespace Unison.Core.Contracts
         // them: muting a chat from the info panel used to store IsChatPinned=false over a pin.
 
         /// <summary>The chat-list pin, mirrored from pin_v1 / app-state.</summary>
-        Task SetChatPinnedAsync(string jid, bool pinned);
+        Task SetChatPinnedAsync(string jid, bool pinned, long? pinnedTimestamp = null);
 
         /// <summary>The Start-screen tile.</summary>
         Task SetWidgetPinnedAsync(string jid, bool pinned);
@@ -46,7 +46,7 @@ namespace Unison.Core.Contracts
         /// the row and then persists asynchronously — without this, the next
         /// <see cref="ApplyTo"/> (batch release / tip refresh) reads a stale cache and clears the pin.
         /// </summary>
-        void RememberChatPinned(string jid, bool pinned);
+        void RememberChatPinned(string jid, bool pinned, long? pinnedTimestamp = null);
 
         /// <summary>Same as <see cref="RememberChatPinned"/> for Favourites.</summary>
         void RememberFavorite(string jid, bool favorite);

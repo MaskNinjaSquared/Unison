@@ -47,6 +47,28 @@ public class ChatLocalStateApplyTests
     }
 
     [Fact]
+    public void A_stored_pin_timestamp_restores_the_pinned_chat_order()
+    {
+        var chat = new ChatItem
+        {
+            JID = "a@s.whatsapp.net",
+            IsChatPinned = true,
+            PinnedTimestamp = 1
+        };
+
+        ChatLocalStateApply.Apply(
+            chat,
+            new ChatLocalState
+            {
+                Jid = "a@s.whatsapp.net",
+                IsChatPinned = true,
+                PinnedTimestamp = 1_700_000_000
+            });
+
+        Assert.Equal(1_700_000_000, chat.PinnedTimestamp);
+    }
+
+    [Fact]
     public void A_stored_mute_comes_back_onto_the_row()
     {
         long stillMuted = DateTimeOffset.UtcNow.AddHours(8).ToUnixTimeSeconds();
