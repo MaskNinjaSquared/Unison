@@ -4,19 +4,11 @@ using System.Collections.Generic;
 using Unison.Core.Models;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
-using Windows.UI.Xaml.Data;
 
 namespace Unison.Uwp.UI.Controls
 {
     public sealed partial class CallDetailsControl : UserControl
     {
-        private readonly CollectionViewSource _historyCvs = new CollectionViewSource
-        {
-            IsSourceGrouped = true
-        };
-
-        private CallHistoryDateGroup _pendingJumpGroup;
-
         public event EventHandler BackRequested;
 
         public event EventHandler OpenChatRequested;
@@ -24,25 +16,28 @@ namespace Unison.Uwp.UI.Controls
         public CallDetailsControl()
         {
             InitializeComponent();
-            HistoryZoom.ViewChangeStarted += HistoryZoom_ViewChangeStarted;
-            HistoryZoom.ViewChangeCompleted += HistoryZoom_ViewChangeCompleted;
         }
 
+        /// <summary>
+        /// Binds the contact header, optional latest row above HISTORY, and flat older rows.
+        /// </summary>
         public void BindSubject(
             CallDetailsSubject subject,
-            IEnumerable history = null,
-            IEnumerable groupedHistory = null)
+            CallHistoryEntry latest = null,
+            IEnumerable historyRest = null,
+            string historySectionTitle = null)
         {
             if (subject == null)
             {
                 SubjectNameText.Text = string.Empty;
                 SubjectAvatar.AvatarUrl = null;
                 SubjectAvatar.IsGroup = false;
-                _historyCvs.Source = null;
+                LatestHost.Content = null;
+                LatestHost.Visibility = Visibility.Collapsed;
+                HistoryHeaderText.Visibility = Visibility.Collapsed;
                 HistoryList.ItemsSource = null;
-                HistoryJumpList.ItemsSource = null;
                 EmptyHistoryText.Visibility = Visibility.Visible;
-                HistoryZoom.Visibility = Visibility.Collapsed;
+                HistoryScroll.Visibility = Visibility.Collapsed;
                 OpenChatButton.IsEnabled = false;
                 return;
             }
@@ -52,31 +47,61 @@ namespace Unison.Uwp.UI.Controls
             SubjectAvatar.IsGroup = subject.IsGroup;
             OpenChatButton.IsEnabled = !string.IsNullOrWhiteSpace(subject.Jid);
 
-            bool empty = IsEmpty(groupedHistory) && IsEmpty(history);
+            bool hasLatest = latest != null;
+            bool hasRest = !IsEmpty(historyRest);
+            bool empty = !hasLatest && !hasRest;
             EmptyHistoryText.Visibility = empty ? Visibility.Visible : Visibility.Collapsed;
-            HistoryZoom.Visibility = empty ? Visibility.Collapsed : Visibility.Visible;
+            HistoryScroll.Visibility = empty ? Visibility.Collapsed : Visibility.Visible;
 
             if (empty)
             {
-                _historyCvs.Source = null;
+                LatestHost.Content = null;
+                LatestHost.Visibility = Visibility.Collapsed;
+                HistoryHeaderText.Visibility = Visibility.Collapsed;
                 HistoryList.ItemsSource = null;
-                HistoryJumpList.ItemsSource = null;
                 return;
             }
 
-            if (groupedHistory != null)
+            LatestHost.Content = latest;
+            LatestHost.Visibility = hasLatest ? Visibility.Visible : Visibility.Collapsed;
+
+            HistoryHeaderText.Text = string.IsNullOrWhiteSpace(historySectionTitle)
+                ? "HISTORY"
+                : historySectionTitle;
+            HistoryHeaderText.Visibility = hasRest ? Visibility.Visible : Visibility.Collapsed;
+            HistoryList.ItemsSource = hasRest ? historyRest : null;
+        }
+
+        /// <summary>Legacy overload used while shells migrate — treats first history row as latest.</summary>
+        public void BindSubject(
+            CallDetailsSubject subject,
+            IEnumerable history,
+            IEnumerable groupedHistory)
+        {
+            CallHistoryEntry latest = null;
+            var rest = new List<CallHistoryEntry>();
+            if (history != null)
             {
-                // Rebind Source + ItemsSource together (Favorites SemanticZoom pattern).
-                _historyCvs.Source = groupedHistory;
-                HistoryList.ItemsSource = _historyCvs.View;
-                HistoryJumpList.ItemsSource = groupedHistory;
+                foreach (object row in history)
+                {
+                    var entry = row as CallHistoryEntry;
+                    if (entry == null)
+                    {
+                        continue;
+                    }
+
+                    if (latest == null)
+                    {
+                        latest = entry;
+                    }
+                    else
+                    {
+                        rest.Add(entry);
+                    }
+                }
             }
-            else
-            {
-                _historyCvs.Source = null;
-                HistoryList.ItemsSource = history;
-                HistoryJumpList.ItemsSource = null;
-            }
+
+            BindSubject(subject, latest, rest);
         }
 
         private static bool IsEmpty(IEnumerable source)
@@ -115,73 +140,6 @@ namespace Unison.Uwp.UI.Controls
         private void OpenChatButton_Click(object sender, RoutedEventArgs e)
         {
             OpenChatRequested?.Invoke(this, EventArgs.Empty);
-        }
-
-        private void HistoryJumpList_ItemClick(object sender, ItemClickEventArgs e)
-        {
-            var group = e.ClickedItem as CallHistoryDateGroup;
-            if (group == null || group.Count == 0)
-            {
-                return;
-            }
-
-            // ScrollIntoView(group) fails inside SemanticZoom — MakeVisible first item
-            // after zoom-in (same fix as Favorites / ContactsVisualizer).
-            _pendingJumpGroup = group;
-            if (!HistoryZoom.IsZoomedInViewActive)
-            {
-                HistoryZoom.IsZoomedInViewActive = true;
-                return;
-            }
-
-            ScheduleScrollToPendingGroup();
-        }
-
-        private void HistoryZoom_ViewChangeStarted(object sender, SemanticZoomViewChangedEventArgs e)
-        {
-            if (e == null || e.IsSourceZoomedInView)
-            {
-                return;
-            }
-
-            CallHistoryDateGroup pending = _pendingJumpGroup;
-            if (pending != null && pending.Count > 0)
-            {
-                e.DestinationItem.Item = pending[0];
-            }
-        }
-
-        private void HistoryZoom_ViewChangeCompleted(object sender, SemanticZoomViewChangedEventArgs e)
-        {
-            if (e == null || e.IsSourceZoomedInView)
-            {
-                return;
-            }
-
-            ScheduleScrollToPendingGroup();
-        }
-
-        private void ScheduleScrollToPendingGroup()
-        {
-            CallHistoryDateGroup pending = _pendingJumpGroup;
-            _pendingJumpGroup = null;
-            if (pending == null || pending.Count == 0 || HistoryList == null)
-            {
-                return;
-            }
-
-            CallHistoryEntry first = pending[0];
-            _ = Dispatcher.RunAsync(Windows.UI.Core.CoreDispatcherPriority.Normal, () =>
-            {
-                try
-                {
-                    HistoryList.MakeVisible(new SemanticZoomLocation { Item = first });
-                }
-                catch
-                {
-                    // Best-effort jump; list may not be realized yet.
-                }
-            });
         }
     }
 }

@@ -402,8 +402,9 @@ namespace Unison.Uwp.UI.Views
 
             if (string.Equals(e.PropertyName, nameof(CallsViewModel.IsCallDetailsOpen), StringComparison.Ordinal) ||
                 string.Equals(e.PropertyName, nameof(CallsViewModel.SelectedSubject), StringComparison.Ordinal) ||
-                string.Equals(e.PropertyName, nameof(CallsViewModel.SelectedHistory), StringComparison.Ordinal) ||
-                string.Equals(e.PropertyName, nameof(CallsViewModel.GroupedHistory), StringComparison.Ordinal))
+                string.Equals(e.PropertyName, nameof(CallsViewModel.SelectedLatest), StringComparison.Ordinal) ||
+                string.Equals(e.PropertyName, nameof(CallsViewModel.SelectedHistoryRest), StringComparison.Ordinal) ||
+                string.Equals(e.PropertyName, nameof(CallsViewModel.SelectedHistory), StringComparison.Ordinal))
             {
                 UpdateDetails();
             }
@@ -423,8 +424,9 @@ namespace Unison.Uwp.UI.Views
             {
                 DetailsPane.BindSubject(
                     ViewModel.SelectedSubject,
-                    ViewModel.SelectedHistory,
-                    ViewModel.GroupedHistory);
+                    ViewModel.SelectedLatest,
+                    ViewModel.SelectedHistoryRest,
+                    ViewModel.HistorySectionTitle);
             }
 
             _shell?.SelectCallDetail(open);

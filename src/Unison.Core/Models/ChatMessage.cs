@@ -454,8 +454,103 @@ namespace Unison.Core.Models
         [JsonIgnore]
         public bool IsGroupJoin => _kind == ChatMessageKind.GroupJoin;
 
-        /// <summary>Call chrome line (missed / completed) — same system-line visual as GroupJoin.</summary>
+        /// <summary>Call chrome bubble (missed / completed / answered elsewhere).</summary>
         public bool IsCallEvent => _kind == ChatMessageKind.CallEvent;
+
+        private CallEventChromeKind _callChromeKind;
+
+        /// <summary>Host chrome kind for call event bubbles and list preview coloring.</summary>
+        public CallEventChromeKind CallChromeKind
+        {
+            get => _callChromeKind;
+            set
+            {
+                if (_callChromeKind == value)
+                {
+                    return;
+                }
+
+                _callChromeKind = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(IsMissedCall));
+            }
+        }
+
+        [JsonIgnore]
+        public bool IsMissedCall =>
+            _kind == ChatMessageKind.CallEvent && _callChromeKind == CallEventChromeKind.Missed;
+
+        private int _callDurationSeconds;
+
+        /// <summary>Call length in seconds when known; 0 otherwise.</summary>
+        public int CallDurationSeconds
+        {
+            get => _callDurationSeconds;
+            set
+            {
+                if (_callDurationSeconds == value)
+                {
+                    return;
+                }
+
+                _callDurationSeconds = value;
+                OnPropertyChanged();
+            }
+        }
+
+        private string _callTitle;
+
+        /// <summary>Localized bubble title (e.g. Ligação de Voz).</summary>
+        public string CallTitle
+        {
+            get => _callTitle;
+            set
+            {
+                if (string.Equals(_callTitle, value, StringComparison.Ordinal))
+                {
+                    return;
+                }
+
+                _callTitle = value;
+                OnPropertyChanged();
+            }
+        }
+
+        private string _callSubtitle;
+
+        /// <summary>Localized bubble subtitle (duration / missed CTA / answered elsewhere).</summary>
+        public string CallSubtitle
+        {
+            get => _callSubtitle;
+            set
+            {
+                if (string.Equals(_callSubtitle, value, StringComparison.Ordinal))
+                {
+                    return;
+                }
+
+                _callSubtitle = value;
+                OnPropertyChanged();
+            }
+        }
+
+        private string _callGlyph;
+
+        /// <summary>Segoe glyph for the bubble icon (outgoing / incoming / missed).</summary>
+        public string CallGlyph
+        {
+            get => _callGlyph;
+            set
+            {
+                if (string.Equals(_callGlyph, value, StringComparison.Ordinal))
+                {
+                    return;
+                }
+
+                _callGlyph = value;
+                OnPropertyChanged();
+            }
+        }
 
         private string _groupJoinJid;
         /// <summary>JID of the member who joined (protocol participant jid).</summary>

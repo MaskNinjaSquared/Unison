@@ -105,28 +105,15 @@ namespace Unison.Core.Services
             PersistFireAndForget(entry);
         }
 
+        /// <summary>
+        /// Flat Recents feed — one row per call entry (no collapse by contact).
+        /// </summary>
         public IReadOnlyList<CallRecentItem> GetRecents()
         {
             lock (_gate)
             {
-                var newestByContact = new Dictionary<string, CallHistoryEntry>(StringComparer.OrdinalIgnoreCase);
-                foreach (CallHistoryEntry entry in _entries)
-                {
-                    if (entry == null || string.IsNullOrWhiteSpace(entry.CanonicalJid))
-                    {
-                        continue;
-                    }
-
-                    string key = GroupKey(entry.CanonicalJid);
-                    CallHistoryEntry current;
-                    if (!newestByContact.TryGetValue(key, out current) ||
-                        entry.TimestampUtc > current.TimestampUtc)
-                    {
-                        newestByContact[key] = entry;
-                    }
-                }
-
-                return newestByContact.Values
+                return _entries
+                    .Where(e => e != null && !string.IsNullOrWhiteSpace(e.CanonicalJid))
                     .OrderByDescending(e => e.TimestampUtc)
                     .Select(ToRecent)
                     .ToList();
@@ -159,10 +146,11 @@ namespace Unison.Core.Services
 
             string callId = entry.CallId ?? string.Empty;
 
-            // Missed/Completed replaces a prior Incoming ring for the same call-id.
+            // Terminal outcomes replace a prior Incoming ring for the same call-id.
             if (!string.IsNullOrEmpty(callId) &&
                 (entry.ChromeKind == CallEventChromeKind.Missed ||
-                 entry.ChromeKind == CallEventChromeKind.Completed))
+                 entry.ChromeKind == CallEventChromeKind.Completed ||
+                 entry.ChromeKind == CallEventChromeKind.AnsweredElsewhere))
             {
                 for (int i = 0; i < _entries.Count; i++)
                 {

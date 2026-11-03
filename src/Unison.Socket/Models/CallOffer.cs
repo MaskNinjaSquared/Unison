@@ -45,5 +45,8 @@ namespace Unison.Socket.Models
 
         /// <summary>True when this arrived in the offline backlog, so it is history, not a ringing phone.</summary>
         public bool Offline { get; set; }
+
+        /// <summary>Call length in seconds when the stanza carries it; otherwise 0.</summary>
+        public int DurationSeconds { get; set; }
     }
 }

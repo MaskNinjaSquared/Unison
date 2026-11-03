@@ -13,6 +13,8 @@ namespace Unison.Core.Helpers.Calls
     {
         /// <summary>
         /// Maps CallHandler status names → host notify kind; null for Ringing/unknown.
+        /// Accept/Terminate stay Completed here; <see cref="RefineForCaller"/> splits
+        /// answered-elsewhere for companions.
         /// </summary>
         public static CallEventChromeKind? FromStatusName(string statusName)
         {
@@ -36,6 +38,55 @@ namespace Unison.Core.Helpers.Calls
             }
         }
 
+        /// <summary>
+        /// Incoming Accept/Terminate on Unison (no local answer) → AnsweredElsewhere.
+        /// </summary>
+        public static CallEventChromeKind RefineForCaller(
+            CallEventChromeKind kind,
+            bool callerIsSelf)
+        {
+            if (kind == CallEventChromeKind.Completed && !callerIsSelf)
+            {
+                return CallEventChromeKind.AnsweredElsewhere;
+            }
+
+            return kind;
+        }
+
+        public static string ResolveTitle(bool isVideo, IStringResources strings)
+        {
+            return isVideo
+                ? strings?.Get("Message_CallTitleVideo", "Video call") ?? "Video call"
+                : strings?.Get("Message_CallTitleVoice", "Voice call") ?? "Voice call";
+        }
+
+        public static string ResolveSubtitle(
+            CallEventChromeKind kind,
+            int durationSeconds,
+            IStringResources strings)
+        {
+            if (kind == CallEventChromeKind.Missed)
+            {
+                return strings?.Get("Message_CallMissedTapToReturn", "Tap to call back")
+                    ?? "Tap to call back";
+            }
+
+            if (kind == CallEventChromeKind.AnsweredElsewhere)
+            {
+                return strings?.Get(
+                    "Message_CallAnsweredElsewhere",
+                    "Answered on another device") ?? "Answered on another device";
+            }
+
+            if (kind == CallEventChromeKind.Completed && durationSeconds > 0)
+            {
+                return CallDurationFormatter.Format(durationSeconds, strings);
+            }
+
+            return string.Empty;
+        }
+
+        /// <summary>List-preview / legacy single-line content.</summary>
         public static string ResolveContent(
             CallEventChromeKind kind,
             bool isVideo,
@@ -48,9 +99,7 @@ namespace Unison.Core.Helpers.Calls
                     : strings?.Get("Message_CallMissed", "Missed voice call") ?? "Missed voice call";
             }
 
-            return isVideo
-                ? strings?.Get("Message_CallCompletedVideo", "Video call") ?? "Video call"
-                : strings?.Get("Message_CallCompleted", "Voice call") ?? "Voice call";
+            return ResolveTitle(isVideo, strings);
         }
     }
 }

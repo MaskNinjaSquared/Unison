@@ -561,6 +561,7 @@
     <Compile Include="UI\Converters\FileSizeConverter.cs" />
     <Compile Include="UI\Converters\BoolToDesktopCursorKindConverter.cs" />
     <Compile Include="UI\Converters\CallDirectionToBrushConverter.cs" />
+    <Compile Include="UI\Converters\CallMissedToBrushConverter.cs" />
     <Compile Include="UI\Controls\ChatListPreviewStrip.xaml.cs">
       <DependentUpon>ChatListPreviewStrip.xaml</DependentUpon>
     </Compile>
@@ -619,7 +620,7 @@
     <Compile Include="UI\Controls\ReactionQuickBar.xaml.cs">
       <DependentUpon>ReactionQuickBar.xaml</DependentUpon>
     </Compile>
-    <Compile Include="UI\Controls\ReactionQuickBarEntry.cs"/>
+    <Compile Include="UI\Controls\ReactionQuickBarEntry.cs" />
     <Compile Include="UI\Helpers\MessageReactionContextChrome.cs" />
     <Compile Include="UI\Controls\ChatMediaCircleButtonHost.xaml.cs">
       <DependentUpon>ChatMediaCircleButtonHost.xaml</DependentUpon>

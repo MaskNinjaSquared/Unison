@@ -4067,16 +4067,21 @@ namespace Unison.WhatsAppClient.Messages
                     _jids != null &&
                     _jids.IsSelfLinked(callEvent.CallerJid);
 
+                CallEventChromeKind kind = Unison.Core.Helpers.Calls.CallEventChromeMap.RefineForCaller(
+                    callEvent.Kind,
+                    callerIsSelf);
+                callEvent.Kind = kind;
+
                 ChatItem existingChat = FindExistingDirectChat(chatJid);
                 RaiseCallAlertIfNeeded(callEvent, chatJid, callerIsSelf, existingChat);
 
-                if (!Unison.Core.Helpers.Calls.CallAlertPolicy.ShouldPersistCallLog(callEvent.Kind))
+                if (!Unison.Core.Helpers.Calls.CallAlertPolicy.ShouldPersistCallLog(kind))
                 {
                     continue;
                 }
 
                 CallDirection direction = Unison.Core.Helpers.Calls.CallDirectionMap.FromChrome(
-                    callEvent.Kind,
+                    kind,
                     callerIsSelf);
 
                 string category = ResolveCallDirectionLabel(direction);
@@ -4090,15 +4095,16 @@ namespace Unison.WhatsAppClient.Messages
                         CanonicalJid = chatJid,
                         Direction = direction,
                         DirectionGlyph = Unison.Core.Helpers.Calls.CallDirectionGlyphs.For(direction),
-                        ChromeKind = callEvent.Kind,
+                        ChromeKind = kind,
                         IsVideo = callEvent.IsVideo,
+                        DurationSeconds = callEvent.DurationSeconds,
                         TimestampUtc = stamp,
                         CategoryLabel = category,
                         TimestampLabel = timeLabel
                     });
                 }
 
-                if (!Unison.Core.Helpers.Calls.CallAlertPolicy.ShouldWriteChatChrome(callEvent.Kind))
+                if (!Unison.Core.Helpers.Calls.CallAlertPolicy.ShouldWriteChatChrome(kind))
                 {
                     continue;
                 }
@@ -4111,14 +4117,21 @@ namespace Unison.WhatsAppClient.Messages
 
                 string timelineJid = existingChat.JID ?? chatJid;
                 string content = Unison.Core.Helpers.Calls.CallEventChromeMap.ResolveContent(
-                    callEvent.Kind,
+                    kind,
                     callEvent.IsVideo,
+                    _strings);
+                string title = Unison.Core.Helpers.Calls.CallEventChromeMap.ResolveTitle(
+                    callEvent.IsVideo,
+                    _strings);
+                string subtitle = Unison.Core.Helpers.Calls.CallEventChromeMap.ResolveSubtitle(
+                    kind,
+                    callEvent.DurationSeconds,
                     _strings);
                 string id = "call-" +
                     (string.IsNullOrWhiteSpace(callEvent.CallId)
                         ? Guid.NewGuid().ToString("N")
                         : callEvent.CallId.Trim()) +
-                    "-" + callEvent.Kind;
+                    "-" + kind;
 
                 var chatMessage = new ChatMessage
                 {
@@ -4126,7 +4139,12 @@ namespace Unison.WhatsAppClient.Messages
                     Kind = ChatMessageKind.CallEvent,
                     Content = content,
                     Timestamp = stamp,
-                    IsFromMe = callerIsSelf
+                    IsFromMe = callerIsSelf,
+                    CallChromeKind = kind,
+                    CallDurationSeconds = callEvent.DurationSeconds,
+                    CallTitle = title,
+                    CallSubtitle = subtitle,
+                    CallGlyph = Unison.Core.Helpers.Calls.CallDirectionGlyphs.For(direction)
                 };
 
                 IncomingTimelineAcceptResult timeline =
@@ -4137,6 +4155,14 @@ namespace Unison.WhatsAppClient.Messages
                 {
                     continue;
                 }
+
+                existingChat.LastMessage = content;
+                existingChat.LastMessageKind = ChatPreviewKind.CallEvent;
+                existingChat.LastMessageIsFromMe = callerIsSelf;
+                existingChat.LastMessageId = id;
+                existingChat.LastMessageTimestampUtc = stamp;
+                existingChat.LastPreview.IsMissedCall = kind == CallEventChromeKind.Missed;
+                existingChat.RaiseLastPreviewChanged();
 
                 QueueIncomingPersist(timelineJid, chatMessage);
                 if (_activeChat.IsOpen(timelineJid))

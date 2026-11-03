@@ -324,6 +324,16 @@ namespace Unison.Core.ViewModels
                 Raise(nameof(IsCallEvent));
             }
 
+            if (IsCallEventProperty(name))
+            {
+                Raise(nameof(IsCallEvent));
+                Raise(nameof(IsMissedCall));
+                Raise(nameof(CallTitle));
+                Raise(nameof(CallSubtitle));
+                Raise(nameof(HasCallSubtitle));
+                Raise(nameof(CallGlyph));
+            }
+
             if (IsAudioProperty(name))
             {
                 RaiseAudioModelUiChanged();
@@ -423,6 +433,16 @@ namespace Unison.Core.ViewModels
             name == nameof(ChatMessage.IsGroupJoin) ||
             name == nameof(ChatMessage.GroupJoinJid) ||
             name == nameof(ChatMessage.GroupJoinPhone) ||
+            name == nameof(ChatMessage.Kind);
+
+        private static bool IsCallEventProperty(string name) =>
+            name == nameof(ChatMessage.IsCallEvent) ||
+            name == nameof(ChatMessage.IsMissedCall) ||
+            name == nameof(ChatMessage.CallChromeKind) ||
+            name == nameof(ChatMessage.CallDurationSeconds) ||
+            name == nameof(ChatMessage.CallTitle) ||
+            name == nameof(ChatMessage.CallSubtitle) ||
+            name == nameof(ChatMessage.CallGlyph) ||
             name == nameof(ChatMessage.Kind);
 
         private static bool IsAudioProperty(string name) =>
@@ -1427,6 +1447,24 @@ namespace Unison.Core.ViewModels
         public bool IsGroupJoin => Model.IsGroupJoin;
 
         public bool IsCallEvent => Model.IsCallEvent;
+
+        public bool IsMissedCall => Model.IsMissedCall;
+
+        public string CallTitle =>
+            !string.IsNullOrWhiteSpace(Model.CallTitle)
+                ? Model.CallTitle
+                : (Model.Content ?? string.Empty);
+
+        public string CallSubtitle => Model.CallSubtitle ?? string.Empty;
+
+        public bool HasCallSubtitle => !string.IsNullOrWhiteSpace(Model.CallSubtitle);
+
+        public string CallGlyph =>
+            !string.IsNullOrEmpty(Model.CallGlyph)
+                ? Model.CallGlyph
+                : (Model.IsFromMe
+                    ? Unison.Core.Helpers.Calls.CallDirectionGlyphs.Outgoing
+                    : Unison.Core.Helpers.Calls.CallDirectionGlyphs.Incoming);
 
         public string ContactCardDisplayName
         {

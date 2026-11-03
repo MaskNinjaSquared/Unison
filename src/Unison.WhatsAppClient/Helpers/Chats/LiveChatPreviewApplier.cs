@@ -112,6 +112,11 @@ namespace Unison.WhatsAppClient.Helpers
 
             chat.LastMessage = cleanPreview;
             chat.LastMessageKind = kind;
+            if (kind != ChatPreviewKind.CallEvent)
+            {
+                chat.LastPreview.IsMissedCall = false;
+            }
+
             chat.LastMessageMentionedJids = mentionedJids != null && mentionedJids.Count > 0
                 ? new List<string>(mentionedJids)
                 : null;

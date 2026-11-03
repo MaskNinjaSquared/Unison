@@ -26,6 +26,7 @@ using Unison.Core.Services;
 using Unison.Core.Diagnostics;
 using Unison.Core.Factories;
 using Unison.Core.Helpers;
+using Unison.Core.Helpers.Messages;
 using Unison.Core.Mappers;
 using Unison.Core.Models;
 using Unison.Core.State;
@@ -104,6 +105,7 @@ namespace Unison.Uwp
                 System.Diagnostics.Debug.WriteLine("[App] SQLitePCL Batteries.Init failed: " + ex.Message);
             }
             RuntimeDiagnosticsService.Instance.Start();
+            MessageBubbleContentProbe.Attach(RuntimeDiagnosticsService.Instance);
             RuntimeDiagnosticsService.Instance.Write("lifecycle", "app-constructor");
             try
             {

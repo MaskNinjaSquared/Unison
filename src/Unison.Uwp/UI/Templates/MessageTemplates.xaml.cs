@@ -22,6 +22,15 @@ namespace Unison.Uwp.UI.Templates
         /// <summary>Unigram <c>MessageMaxWidth</c> — ceiling so HA Left/Right measure still wraps.</summary>
         private const double MessageMaxWidth = 432;
 
+        /// <summary>Reply sling column: Width 32 + Margin right 8 (always reserved in both templates).</summary>
+        private const double ReplyHandleGutter = 40;
+
+        /// <summary>Group avatar column: Width 32 + Margin right 8.</summary>
+        private const double ContactAvatarGutter = 40;
+
+        /// <summary>Unread accent: Width 3 + Margin right 6.</summary>
+        private const double UnreadMarkerGutter = 9;
+
         public MessageTemplates()
         {
             InitializeComponent();
@@ -84,12 +93,93 @@ namespace Unison.Uwp.UI.Templates
 
             // Auto-column hosts still measure children with infinity — same ceiling as Unigram's
             // MessageBubble.MaxWidth must live on the panel that wraps the RichTextBlock.
+            // Received rows also reserve reply / unread / avatar gutters beside the bubble —
+            // panel MaxWidth must subtract those or the body measures wider than the slot.
             FrameworkElement panel = FindNamedDescendant(content, "SentBubblePanel")
                 ?? FindNamedDescendant(content, "ReceivedBubblePanel");
             if (panel != null)
             {
-                SetMaxWidthIfChanged(panel, capped);
+                double gutter = ResolveBubbleSideGutter(panel, slot);
+                double panelCap = Math.Max(BubbleMinMaxWidth, capped - gutter);
+                SetMaxWidthIfChanged(panel, panelCap);
             }
+        }
+
+        /// <summary>
+        /// Width taken by columns left of the bubble panel (reply sling, unread pip, avatar).
+        /// Prefers live sibling ActualWidth; falls back to template constants + VM flags
+        /// before the first measure pass fills ActualWidth.
+        /// </summary>
+        private static double ResolveBubbleSideGutter(FrameworkElement panel, FrameworkElement slot)
+        {
+            double measured = MeasureSiblingColumnsWidth(panel);
+            if (measured >= 1)
+            {
+                return measured;
+            }
+
+            double fallback = ReplyHandleGutter;
+            var vm = slot?.DataContext as ChatMessageViewModel;
+            if (vm != null && !vm.IsFromMe)
+            {
+                if (vm.ShowContactSlot)
+                {
+                    fallback += ContactAvatarGutter;
+                }
+
+                if (vm.ShowUnreadMarker)
+                {
+                    fallback += UnreadMarkerGutter;
+                }
+            }
+
+            return fallback;
+        }
+
+        private static double MeasureSiblingColumnsWidth(FrameworkElement panel)
+        {
+            if (panel == null)
+            {
+                return 0;
+            }
+
+            DependencyObject parent = VisualTreeHelper.GetParent(panel);
+            if (parent == null)
+            {
+                return 0;
+            }
+
+            double reserved = 0;
+            int count = VisualTreeHelper.GetChildrenCount(parent);
+            for (int i = 0; i < count; i++)
+            {
+                var sibling = VisualTreeHelper.GetChild(parent, i) as FrameworkElement;
+                if (sibling == null || ReferenceEquals(sibling, panel))
+                {
+                    continue;
+                }
+
+                if (sibling.Visibility == Visibility.Collapsed)
+                {
+                    continue;
+                }
+
+                double w = sibling.ActualWidth;
+                if (w <= 0 && !double.IsNaN(sibling.Width) && !double.IsInfinity(sibling.Width))
+                {
+                    w = sibling.Width;
+                }
+
+                if (w <= 0)
+                {
+                    continue;
+                }
+
+                Thickness m = sibling.Margin;
+                reserved += w + m.Left + m.Right;
+            }
+
+            return reserved;
         }
 
         private static void SetMaxWidthIfChanged(FrameworkElement element, double width)
@@ -237,6 +327,27 @@ namespace Unison.Uwp.UI.Templates
             else
             {
                 sb.Append(" content=(missing)");
+            }
+
+            FrameworkElement panel = content != null
+                ? (FindNamedDescendant(content, "SentBubblePanel")
+                   ?? FindNamedDescendant(content, "ReceivedBubblePanel"))
+                : null;
+            if (panel != null)
+            {
+                double gutter = ResolveBubbleSideGutter(panel, slot);
+                sb.Append(" panel=").Append(panel.Name ?? "(anon)");
+                sb.Append(" panelMaxW=").Append(F(panel.MaxWidth));
+                sb.Append(" panelW=").Append(F(panel.ActualWidth));
+                sb.Append(" gutterW=").Append(F(gutter));
+            }
+
+            if (vm != null)
+            {
+                sb.Append(" fromMe=").Append(vm.IsFromMe);
+                sb.Append(" showContactSlot=").Append(vm.ShowContactSlot);
+                sb.Append(" showContact=").Append(vm.ShowContact);
+                sb.Append(" showUnreadMarker=").Append(vm.ShowUnreadMarker);
             }
 
             RichTextBlock body = FindNamedRichText(slot, "SentBodyText")

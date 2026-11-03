@@ -42,9 +42,20 @@ namespace Unison.Core.Tests.Helpers
         [InlineData(CallEventChromeKind.Missed, true)]
         [InlineData(CallEventChromeKind.Completed, true)]
         [InlineData(CallEventChromeKind.Incoming, true)]
+        [InlineData(CallEventChromeKind.AnsweredElsewhere, true)]
         public void ShouldPersistCallLog_includes_incoming(CallEventChromeKind kind, bool expected)
         {
             Assert.Equal(expected, CallAlertPolicy.ShouldPersistCallLog(kind));
+        }
+
+        [Theory]
+        [InlineData(CallEventChromeKind.Missed, true)]
+        [InlineData(CallEventChromeKind.Completed, true)]
+        [InlineData(CallEventChromeKind.AnsweredElsewhere, true)]
+        [InlineData(CallEventChromeKind.Incoming, false)]
+        public void ShouldWriteChatChrome_terminal_kinds(CallEventChromeKind kind, bool expected)
+        {
+            Assert.Equal(expected, CallAlertPolicy.ShouldWriteChatChrome(kind));
         }
     }
 }

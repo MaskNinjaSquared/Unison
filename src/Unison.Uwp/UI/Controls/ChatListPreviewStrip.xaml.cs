@@ -233,6 +233,31 @@ namespace Unison.Uwp.UI.Controls
             }
 
             ApplyStatusChrome(preview);
+            ApplyMissedCallForeground(preview);
+        }
+
+        private void ApplyMissedCallForeground(ChatListPreview preview)
+        {
+            if (PreviewTextBlock == null)
+            {
+                return;
+            }
+
+            bool missed = preview != null &&
+                          preview.Kind == ChatPreviewKind.CallEvent &&
+                          preview.IsMissedCall;
+            if (missed)
+            {
+                object brush;
+                if (Application.Current.Resources.TryGetValue("ChatDetailSendFailedBrush", out brush) &&
+                    brush is Brush failed)
+                {
+                    PreviewTextBlock.Foreground = failed;
+                    return;
+                }
+            }
+
+            PreviewTextBlock.Foreground = Foreground;
         }
 
         private void ApplyStatusChrome(ChatListPreview preview)
@@ -268,7 +293,14 @@ namespace Unison.Uwp.UI.Controls
 
         private static void OnForegroundPropertyChanged(DependencyObject sender, DependencyProperty dp)
         {
-            (sender as ChatListPreviewStrip)?.SyncKindHostForeground();
+            var strip = sender as ChatListPreviewStrip;
+            if (strip == null)
+            {
+                return;
+            }
+
+            strip.SyncKindHostForeground();
+            strip.ApplyMissedCallForeground(strip.Preview);
         }
 
         private void RootLayout_SizeChanged(object sender, SizeChangedEventArgs e)

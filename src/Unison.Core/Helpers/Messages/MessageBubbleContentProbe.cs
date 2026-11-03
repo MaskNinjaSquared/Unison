@@ -1,31 +1,44 @@
 // =============================================================================
 // MessageBubbleContentProbe
 //
-// DEBUG: dump text bodies / one bubble on tap so we can compare Unison-sent vs
-// WA wrapping (single-line overflow).
+// Dump text bodies / one bubble on tap so we can compare Unison-sent vs
+// WA wrapping (single-line overflow). Dual-writes Debug + IRuntimeDiagnostics
+// so export/save report captures layout metrics on device.
 // =============================================================================
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
 using System.Text;
+using Unison.Core.Contracts;
 using Unison.Core.Models;
 
 namespace Unison.Core.Helpers.Messages
 {
     public static class MessageBubbleContentProbe
     {
+        private static IRuntimeDiagnostics _journal;
+
+        /// <summary>
+        /// Optional host journal (App wires <see cref="IRuntimeDiagnostics"/> once at startup).
+        /// </summary>
+        public static void Attach(IRuntimeDiagnostics journal)
+        {
+            _journal = journal;
+        }
+
         public static void DumpRecentTextBodies(IList<ChatMessage> messages, int take = 30, string chatJid = null)
         {
             if (messages == null || messages.Count == 0)
             {
-                Debug.WriteLine("[BubbleProbe] empty chat=" + (chatJid ?? string.Empty));
+                Emit("dump", "empty chat=" + (chatJid ?? string.Empty));
                 return;
             }
 
             int start = Math.Max(0, messages.Count - Math.Max(1, take));
-            Debug.WriteLine(
-                "[BubbleProbe] chat=" + (chatJid ?? string.Empty) +
+            Emit(
+                "dump",
+                "chat=" + (chatJid ?? string.Empty) +
                 " total=" + messages.Count +
                 " dump=" + (messages.Count - start));
 
@@ -37,7 +50,7 @@ namespace Unison.Core.Helpers.Messages
                     continue;
                 }
 
-                Debug.WriteLine(FormatBodyLine(i, msg));
+                Emit("body", FormatBodyLine(i, msg));
             }
         }
 
@@ -48,7 +61,7 @@ namespace Unison.Core.Helpers.Messages
         {
             if (msg == null)
             {
-                Debug.WriteLine("[BubbleProbe][tap] msg=null");
+                Emit("tap", "msg=null");
                 return;
             }
 
@@ -56,8 +69,7 @@ namespace Unison.Core.Helpers.Messages
             CharStats stats = Analyze(content);
 
             var sb = new StringBuilder(512);
-            sb.Append("[BubbleProbe][tap]");
-            sb.Append(" id=").Append(msg.Id ?? "(null)");
+            sb.Append("id=").Append(msg.Id ?? "(null)");
             sb.Append(" fromMe=").Append(msg.IsFromMe);
             sb.Append(" kind=").Append(msg.Kind);
             sb.Append(" showText=").Append(msg.ShowTextContent);
@@ -80,27 +92,32 @@ namespace Unison.Core.Helpers.Messages
             sb.Append(" maxRun=").Append(stats.LongestRun.ToString(CultureInfo.InvariantCulture));
             sb.Append(" words=").Append(stats.WordCount.ToString(CultureInfo.InvariantCulture));
             sb.Append(" hasWsBreak=").Append(stats.Spaces + stats.Newlines + stats.Tabs > 0);
-            Debug.WriteLine(sb.ToString());
+            Emit("tap", sb.ToString());
 
             if (!string.IsNullOrEmpty(layoutNote))
             {
-                Debug.WriteLine("[BubbleProbe][tap] layout " + layoutNote);
+                Emit("tap-layout", layoutNote);
             }
 
-            Debug.WriteLine(
-                "[BubbleProbe][tap] preview=\"" + EscapePreview(content, 200) + "\"");
+            Emit("tap-preview", "\"" + EscapePreview(content, 200) + "\"");
 
-            // Full content escaped (cap so Output window stays usable).
+            // Full content escaped (cap so Output window / journal stay usable).
             const int fullCap = 2000;
             string full = content.Length <= fullCap
                 ? content
                 : content.Substring(0, fullCap) + "…[+ " +
                   (content.Length - fullCap).ToString(CultureInfo.InvariantCulture) + "]";
-            Debug.WriteLine(
-                "[BubbleProbe][tap] full=\"" + EscapePreview(full, full.Length + 32) + "\"");
+            Emit("tap-full", "\"" + EscapePreview(full, full.Length + 32) + "\"");
 
-            Debug.WriteLine("[BubbleProbe][tap] hex=" + HexSample(content, 96));
-            Debug.WriteLine("[BubbleProbe][tap] cps=" + CodePointsSample(content, 48));
+            Emit("tap-hex", HexSample(content, 96));
+            Emit("tap-cps", CodePointsSample(content, 48));
+        }
+
+        private static void Emit(string eventName, string details)
+        {
+            string line = "[BubbleProbe][" + eventName + "] " + (details ?? string.Empty);
+            Debug.WriteLine(line);
+            _journal?.Write("bubble-probe", eventName, details);
         }
 
         private static string FormatBodyLine(int index, ChatMessage msg)
@@ -108,7 +125,7 @@ namespace Unison.Core.Helpers.Messages
             string content = msg.Content ?? string.Empty;
             CharStats stats = Analyze(content);
             return
-                "[BubbleProbe] #" + index.ToString(CultureInfo.InvariantCulture) +
+                "#" + index.ToString(CultureInfo.InvariantCulture) +
                 " fromMe=" + msg.IsFromMe +
                 " id=" + (msg.Id ?? string.Empty) +
                 " len=" + content.Length.ToString(CultureInfo.InvariantCulture) +

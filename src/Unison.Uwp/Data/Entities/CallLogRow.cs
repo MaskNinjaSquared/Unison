@@ -21,6 +21,8 @@ namespace Unison.Uwp.Data.Entities
 
         public bool IsVideo { get; set; }
 
+        public int DurationSeconds { get; set; }
+
         [Indexed]
         public DateTime TimestampUtc { get; set; }
 

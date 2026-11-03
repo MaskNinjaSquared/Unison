@@ -2580,7 +2580,8 @@ namespace Unison.Uwp.Client
                     Kind = chrome.Value,
                     IsVideo = call.IsVideo,
                     TimestampUtc = stamp,
-                    CallerJid = call.From
+                    CallerJid = call.From,
+                    DurationSeconds = call.DurationSeconds
                 });
             }
 

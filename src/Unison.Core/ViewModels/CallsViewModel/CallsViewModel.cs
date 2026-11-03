@@ -37,8 +37,9 @@ namespace Unison.Core.ViewModels
             new ObservableCollection<CallRecentItem>();
         private ObservableCollection<CallHistoryEntry> _selectedHistory =
             new ObservableCollection<CallHistoryEntry>();
-        private ObservableCollection<CallHistoryDateGroup> _groupedHistory =
-            new ObservableCollection<CallHistoryDateGroup>();
+        private ObservableCollection<CallHistoryEntry> _selectedHistoryRest =
+            new ObservableCollection<CallHistoryEntry>();
+        private CallHistoryEntry _selectedLatest;
         private bool _hasMoreFavorites;
         private bool _isShowingAllFavorites;
         private bool _hasFavorites;
@@ -247,21 +248,47 @@ namespace Unison.Core.ViewModels
             }
         }
 
-        /// <summary>Call info history bucketed by local day for SemanticZoom.</summary>
-        public ObservableCollection<CallHistoryDateGroup> GroupedHistory
+        /// <summary>Newest entry for the open contact — shown above HISTORY.</summary>
+        public CallHistoryEntry SelectedLatest
         {
-            get => _groupedHistory;
+            get => _selectedLatest;
             private set
             {
-                if (ReferenceEquals(_groupedHistory, value))
+                if (ReferenceEquals(_selectedLatest, value))
                 {
                     return;
                 }
 
-                _groupedHistory = value;
-                OnPropertyChanged(nameof(GroupedHistory));
+                _selectedLatest = value;
+                OnPropertyChanged(nameof(SelectedLatest));
+                OnPropertyChanged(nameof(HasSelectedLatest));
             }
         }
+
+        public bool HasSelectedLatest => _selectedLatest != null;
+
+        /// <summary>Older entries under the HISTORY subheader (flat, newest-first).</summary>
+        public ObservableCollection<CallHistoryEntry> SelectedHistoryRest
+        {
+            get => _selectedHistoryRest;
+            private set
+            {
+                if (ReferenceEquals(_selectedHistoryRest, value))
+                {
+                    return;
+                }
+
+                _selectedHistoryRest = value;
+                OnPropertyChanged(nameof(SelectedHistoryRest));
+                OnPropertyChanged(nameof(HasSelectedHistoryRest));
+            }
+        }
+
+        public bool HasSelectedHistoryRest =>
+            _selectedHistoryRest != null && _selectedHistoryRest.Count > 0;
+
+        public string HistorySectionTitle =>
+            _strings?.Get("Calls_HistorySection", "HISTORY") ?? "HISTORY";
 
         public ICommand OpenNewCallCommand { get; }
 
@@ -345,7 +372,8 @@ namespace Unison.Core.ViewModels
             IsCallDetailsOpen = false;
             SelectedSubject = null;
             SelectedHistory = new ObservableCollection<CallHistoryEntry>();
-            GroupedHistory = new ObservableCollection<CallHistoryDateGroup>();
+            SelectedHistoryRest = new ObservableCollection<CallHistoryEntry>();
+            SelectedLatest = null;
         }
 
         private bool CanOpenSelectedChat()
@@ -489,7 +517,8 @@ namespace Unison.Core.ViewModels
             if (_callLog == null || string.IsNullOrWhiteSpace(jid))
             {
                 SelectedHistory = new ObservableCollection<CallHistoryEntry>();
-                GroupedHistory = new ObservableCollection<CallHistoryDateGroup>();
+                SelectedHistoryRest = new ObservableCollection<CallHistoryEntry>();
+                SelectedLatest = null;
                 return;
             }
 
@@ -513,10 +542,24 @@ namespace Unison.Core.ViewModels
             }
 
             SelectedHistory = new ObservableCollection<CallHistoryEntry>(history);
-            string today = _strings?.Get("Common_Today", "Today") ?? "Today";
-            string yesterday = _strings?.Get("Common_Yesterday", "Yesterday") ?? "Yesterday";
-            GroupedHistory = new ObservableCollection<CallHistoryDateGroup>(
-                CallHistoryDateGrouping.Build(history, today, yesterday));
+            if (history.Count == 0)
+            {
+                SelectedLatest = null;
+                SelectedHistoryRest = new ObservableCollection<CallHistoryEntry>();
+                return;
+            }
+
+            SelectedLatest = history[0];
+            var rest = new List<CallHistoryEntry>();
+            for (int i = 1; i < history.Count; i++)
+            {
+                if (history[i] != null)
+                {
+                    rest.Add(history[i]);
+                }
+            }
+
+            SelectedHistoryRest = new ObservableCollection<CallHistoryEntry>(rest);
         }
 
         private void OnChatsCollectionChanged(object sender, NotifyCollectionChangedEventArgs e)

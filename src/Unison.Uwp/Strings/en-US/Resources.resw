@@ -910,6 +910,30 @@ Disable after diagnosing: keeping it on slows the app.</value>
   <data name="Message_CallCompletedVideo" xml:space="preserve">
     <value>Video call</value>
   </data>
+  <data name="Message_CallTitleVoice" xml:space="preserve">
+    <value>Voice call</value>
+  </data>
+  <data name="Message_CallTitleVideo" xml:space="preserve">
+    <value>Video call</value>
+  </data>
+  <data name="Message_CallMissedTapToReturn" xml:space="preserve">
+    <value>Tap to call back</value>
+  </data>
+  <data name="Message_CallAnsweredElsewhere" xml:space="preserve">
+    <value>Answered on another device</value>
+  </data>
+  <data name="Call_DurationSeconds" xml:space="preserve">
+    <value>{0} seconds</value>
+  </data>
+  <data name="Call_DurationMinutesSeconds" xml:space="preserve">
+    <value>{0} min {1} s</value>
+  </data>
+  <data name="Call_DurationHoursMinutes" xml:space="preserve">
+    <value>{0} h {1} min</value>
+  </data>
+  <data name="Calls_HistorySection" xml:space="preserve">
+    <value>HISTORY</value>
+  </data>
   <data name="Shell_Archived.Text" xml:space="preserve">
     <value>Archived chats</value>
   </data>

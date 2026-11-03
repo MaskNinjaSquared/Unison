@@ -43,6 +43,8 @@ namespace Unison.Uwp.Data
                 string dbPath = Path.Combine(ApplicationData.Current.LocalFolder.Path, DatabaseFileName);
                 _connection = new SQLiteAsyncConnection(dbPath);
                 await _connection.CreateTableAsync<CallLogRow>().ConfigureAwait(false);
+                await EnsureColumnAsync("DurationSeconds", "INTEGER NOT NULL DEFAULT 0")
+                    .ConfigureAwait(false);
                 _initialized = true;
                 Debug.WriteLine("[CallLogStore] Initialized at " + dbPath);
             }
@@ -112,6 +114,7 @@ namespace Unison.Uwp.Data
                 Direction = (int)entry.Direction,
                 ChromeKind = kind,
                 IsVideo = entry.IsVideo,
+                DurationSeconds = entry.DurationSeconds,
                 TimestampUtc = entry.TimestampUtc.Kind == DateTimeKind.Utc
                     ? entry.TimestampUtc
                     : DateTime.SpecifyKind(entry.TimestampUtc, DateTimeKind.Utc),
@@ -141,10 +144,26 @@ namespace Unison.Uwp.Data
                     : row.DirectionGlyph,
                 ChromeKind = (CallEventChromeKind)row.ChromeKind,
                 IsVideo = row.IsVideo,
+                DurationSeconds = row.DurationSeconds,
                 TimestampUtc = DateTime.SpecifyKind(row.TimestampUtc, DateTimeKind.Utc),
                 CategoryLabel = row.CategoryLabel,
                 TimestampLabel = row.TimestampLabel
             };
+        }
+
+        private async Task EnsureColumnAsync(string column, string sqlType)
+        {
+            try
+            {
+                await _connection.ExecuteAsync(
+                        "ALTER TABLE call_log ADD COLUMN " + column + " " + sqlType)
+                    .ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                // Column already exists on upgraded installs.
+                Debug.WriteLine("[CallLogStore] EnsureColumn " + column + ": " + ex.Message);
+            }
         }
     }
 }

@@ -125,7 +125,8 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             if (ViewModel.IsCallDetailsOpen &&
                 (string.Equals(e.PropertyName, nameof(CallsViewModel.SelectedSubject), StringComparison.Ordinal) ||
                  string.Equals(e.PropertyName, nameof(CallsViewModel.SelectedHistory), StringComparison.Ordinal) ||
-                 string.Equals(e.PropertyName, nameof(CallsViewModel.GroupedHistory), StringComparison.Ordinal)))
+                 string.Equals(e.PropertyName, nameof(CallsViewModel.SelectedLatest), StringComparison.Ordinal) ||
+                 string.Equals(e.PropertyName, nameof(CallsViewModel.SelectedHistoryRest), StringComparison.Ordinal)))
             {
                 CallDetailRequested?.Invoke(this, EventArgs.Empty);
             }

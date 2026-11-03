@@ -46,50 +46,6 @@
                            Visibility="{x:Bind IsVideo, Converter={StaticResource BooleanToVisibilityConverter}}"/>
             </Grid>
         </DataTemplate>
-
-        <DataTemplate x:Key="CallHistoryDateHeaderTemplate">
-            <TextBlock Text="{Binding Key}"
-                       Margin="16,12,16,4"
-                       FontSize="13"
-                       FontWeight="SemiBold"
-                       Foreground="{ThemeResource WhatsAppTextMediumBrush}"/>
-        </DataTemplate>
-
-        <DataTemplate x:Key="CallHistoryJumpTemplate" x:DataType="models:CallHistoryDateGroup">
-            <Border Width="88" Height="56"
-                    Margin="6"
-                    BorderBrush="{ThemeResource SystemControlHighlightAccentBrush}"
-                    BorderThickness="2"
-                    Background="Transparent">
-                <TextBlock Text="{x:Bind Key}"
-                           FontSize="13"
-                           FontWeight="SemiBold"
-                           HorizontalAlignment="Center"
-                           VerticalAlignment="Center"
-                           TextAlignment="Center"
-                           TextWrapping="Wrap"
-                           MaxLines="2"
-                           Foreground="{ThemeResource SystemControlHighlightAccentBrush}"/>
-            </Border>
-        </DataTemplate>
-
-        <Style x:Key="CallHistoryHeaderContainerStyle" TargetType="ListViewHeaderItem">
-            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
-            <Setter Property="Padding" Value="0"/>
-            <Setter Property="Margin" Value="0"/>
-            <Setter Property="MinHeight" Value="0"/>
-            <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="ListViewHeaderItem">
-                        <ContentPresenter Content="{TemplateBinding Content}"
-                                          ContentTemplate="{TemplateBinding ContentTemplate}"
-                                          HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"/>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
     </UserControl.Resources>
 
     <Grid Background="{ThemeResource ChatListBackgroundBrush}">
@@ -169,48 +125,30 @@
         </Grid>
 
         <Grid Grid.Row="1">
-            <SemanticZoom x:Name="HistoryZoom" Visibility="Collapsed">
-                <SemanticZoom.ZoomedInView>
-                    <ListView x:Name="HistoryList"
-                              ItemTemplate="{StaticResource CallHistoryRowTemplate}"
-                              SelectionMode="None"
-                              IsItemClickEnabled="False"
-                              Background="Transparent"
-                              ScrollViewer.IsVerticalScrollChainingEnabled="False">
-                        <ListView.GroupStyle>
-                            <GroupStyle HeaderTemplate="{StaticResource CallHistoryDateHeaderTemplate}"
-                                        HeaderContainerStyle="{StaticResource CallHistoryHeaderContainerStyle}"/>
-                        </ListView.GroupStyle>
-                        <ListView.ItemContainerStyle>
-                            <Style TargetType="ListViewItem">
-                                <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
-                                <Setter Property="Padding" Value="0"/>
-                                <Setter Property="MinHeight" Value="0"/>
-                            </Style>
-                        </ListView.ItemContainerStyle>
-                    </ListView>
-                </SemanticZoom.ZoomedInView>
-                <SemanticZoom.ZoomedOutView>
-                    <GridView x:Name="HistoryJumpList"
-                              ItemTemplate="{StaticResource CallHistoryJumpTemplate}"
-                              SelectionMode="None"
-                              IsItemClickEnabled="True"
-                              ItemClick="HistoryJumpList_ItemClick"
-                              HorizontalAlignment="Center"
-                              VerticalAlignment="Center"
-                              Background="Transparent"
-                              ScrollViewer.IsHorizontalScrollChainingEnabled="False"
-                              ScrollViewer.IsVerticalScrollChainingEnabled="False">
-                        <GridView.ItemsPanel>
-                            <ItemsPanelTemplate>
-                                <ItemsWrapGrid Orientation="Horizontal"
-                                               HorizontalAlignment="Center"
-                                               MaximumRowsOrColumns="3"/>
-                            </ItemsPanelTemplate>
-                        </GridView.ItemsPanel>
-                    </GridView>
-                </SemanticZoom.ZoomedOutView>
-            </SemanticZoom>
+            <ScrollViewer x:Name="HistoryScroll"
+                          Visibility="Collapsed"
+                          VerticalScrollBarVisibility="Auto"
+                          HorizontalScrollBarVisibility="Disabled">
+                <StackPanel>
+                    <ContentControl x:Name="LatestHost"
+                                    HorizontalContentAlignment="Stretch"
+                                    ContentTemplate="{StaticResource CallHistoryRowTemplate}"
+                                    Margin="0,8,0,0"
+                                    Visibility="Collapsed"/>
+
+                    <TextBlock x:Name="HistoryHeaderText"
+                               Text="HISTORY"
+                               Margin="16,16,16,4"
+                               FontSize="13"
+                               FontWeight="SemiBold"
+                               Foreground="{ThemeResource WhatsAppTextMediumBrush}"
+                               Visibility="Collapsed"/>
+
+                    <ItemsControl x:Name="HistoryList"
+                                  ItemTemplate="{StaticResource CallHistoryRowTemplate}"
+                                  IsTabStop="False"/>
+                </StackPanel>
+            </ScrollViewer>
 
             <TextBlock x:Name="EmptyHistoryText"
                        x:Uid="Calls_DetailsUnavailable"

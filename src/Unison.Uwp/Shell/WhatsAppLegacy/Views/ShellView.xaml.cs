@@ -1116,8 +1116,9 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                 ShowCallsDetailSurface(detailsOpen: true);
                 ShellCallDetails.BindSubject(
                     vm.SelectedSubject,
-                    vm.SelectedHistory,
-                    vm.GroupedHistory);
+                    vm.SelectedLatest,
+                    vm.SelectedHistoryRest,
+                    vm.HistorySectionTitle);
                 _shell?.SelectCallDetail(true);
                 _callDetailHostOpen = true;
                 ApplyDetailLayout();

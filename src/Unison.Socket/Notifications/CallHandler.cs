@@ -99,7 +99,8 @@ namespace Unison.Socket.Notifications
                 ChatId = node.GetAttribute("from"),
                 Status = status,
                 Date = ParseLong(node.GetAttribute("t")),
-                Offline = !string.IsNullOrEmpty(node.GetAttribute("offline"))
+                Offline = !string.IsNullOrEmpty(node.GetAttribute("offline")),
+                DurationSeconds = ReadDurationSeconds(info)
             };
 
             if (status == CallStatus.Offer)
@@ -173,6 +174,31 @@ namespace Unison.Socket.Notifications
         {
             long parsed;
             return long.TryParse(value, out parsed) ? parsed : 0;
+        }
+
+        /// <summary>
+        /// Best-effort duration from terminate/accept attrs (Baileys call log uses seconds).
+        /// </summary>
+        private static int ReadDurationSeconds(BinaryNode info)
+        {
+            if (info == null)
+            {
+                return 0;
+            }
+
+            string raw = info.GetAttribute("duration");
+            if (string.IsNullOrEmpty(raw))
+            {
+                raw = info.GetAttribute("secs");
+            }
+
+            long parsed;
+            if (!long.TryParse(raw, out parsed) || parsed <= 0 || parsed > int.MaxValue)
+            {
+                return 0;
+            }
+
+            return (int)parsed;
         }
     }
 }

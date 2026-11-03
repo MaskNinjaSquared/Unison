@@ -12,7 +12,9 @@ namespace Unison.Core.Models
         Missed = 0,
         Completed = 1,
         /// <summary>Live offer / offer_notice — toast only, no CallLog / chrome.</summary>
-        Incoming = 2
+        Incoming = 2,
+        /// <summary>Incoming Accept/Terminate on a companion that cannot answer locally.</summary>
+        AnsweredElsewhere = 3
     }
 
     public sealed class CallEventNotifyRequest
@@ -29,5 +31,8 @@ namespace Unison.Core.Models
 
         /// <summary>CallOffer.From — who initiated; used for Outgoing vs Incoming.</summary>
         public string CallerJid { get; set; }
+
+        /// <summary>Wire duration when present; 0 if unknown.</summary>
+        public int DurationSeconds { get; set; }
     }
 }

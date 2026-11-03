@@ -1381,8 +1381,63 @@
         </Grid>
     </DataTemplate>
 
+    <!-- CallEvent: quote-style bubble (not GroupJoin system line). -->
+    <DataTemplate x:Key="MessageCallEventTemplate" x:DataType="vm:ChatMessageViewModel">
+        <Grid HorizontalAlignment="Stretch" Margin="12,2,12,2">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+            <controls:ChatDateSeparator
+                Grid.Row="0"
+                Text="{x:Bind DateSeparatorText, Mode=OneWay}"
+                Visibility="{x:Bind IsFirstOfDay, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+            <controls:ChatDateSeparator
+                Grid.Row="1"
+                Text="{x:Bind UnreadDividerText, Mode=OneWay}"
+                Visibility="{x:Bind IsUnreadDivider, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+            <Border Grid.Row="2"
+                    HorizontalAlignment="Left"
+                    Background="{ThemeResource ChatDetailReceivedQuoteBackgroundBrush}"
+                    CornerRadius="8"
+                    Padding="12,10"
+                    MaxWidth="432">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <FontIcon Glyph="{x:Bind CallGlyph, Mode=OneWay}"
+                              FontFamily="{StaticResource IconFont}"
+                              FontSize="20"
+                              VerticalAlignment="Center"
+                              Margin="0,0,12,0"
+                              Foreground="{x:Bind IsMissedCall, Mode=OneWay, Converter={StaticResource CallMissedToBrushConverter}}"/>
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                        <TextBlock Text="{x:Bind CallTitle, Mode=OneWay}"
+                                   FontSize="15"
+                                   FontWeight="SemiBold"
+                                   FontFamily="{StaticResource MainFontSemibold}"
+                                   Foreground="{ThemeResource WhatsAppTextHighBrush}"
+                                   TextWrapping="NoWrap"
+                                   TextTrimming="CharacterEllipsis"/>
+                        <TextBlock Text="{x:Bind CallSubtitle, Mode=OneWay}"
+                                   FontSize="13"
+                                   Margin="0,2,0,0"
+                                   FontFamily="{StaticResource MainFont}"
+                                   Foreground="{x:Bind IsMissedCall, Mode=OneWay, Converter={StaticResource CallMissedToBrushConverter}}"
+                                   TextWrapping="WrapWholeWords"
+                                   Visibility="{x:Bind HasCallSubtitle, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                    </StackPanel>
+                </Grid>
+            </Border>
+        </Grid>
+    </DataTemplate>
+
     <selectors:MessageTemplateSelector x:Key="MessageTemplateSelector"
                                        SentTemplate="{StaticResource MessageSentTemplate}"
                                        ReceivedTemplate="{StaticResource MessageReceivedTemplate}"
-                                       GroupJoinTemplate="{StaticResource MessageGroupJoinTemplate}"/>
+                                       GroupJoinTemplate="{StaticResource MessageGroupJoinTemplate}"
+                                       CallEventTemplate="{StaticResource MessageCallEventTemplate}"/>
 </ResourceDictionary>

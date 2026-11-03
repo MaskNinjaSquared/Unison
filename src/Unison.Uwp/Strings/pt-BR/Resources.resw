@@ -863,16 +863,40 @@ Desative depois de diagnosticar: manter ligado deixa o app lento.</value>
     <value>Chamadas ainda não estão disponíveis.</value>
   </data>
   <data name="Message_CallMissed" xml:space="preserve">
-    <value>Chamada de voz perdida</value>
+    <value>Ligação de voz perdida</value>
   </data>
   <data name="Message_CallMissedVideo" xml:space="preserve">
-    <value>Chamada de vídeo perdida</value>
+    <value>Ligação de vídeo perdida</value>
   </data>
   <data name="Message_CallCompleted" xml:space="preserve">
-    <value>Chamada de voz</value>
+    <value>Ligação de voz</value>
   </data>
   <data name="Message_CallCompletedVideo" xml:space="preserve">
-    <value>Chamada de vídeo</value>
+    <value>Ligação de vídeo</value>
+  </data>
+  <data name="Message_CallTitleVoice" xml:space="preserve">
+    <value>Ligação de Voz</value>
+  </data>
+  <data name="Message_CallTitleVideo" xml:space="preserve">
+    <value>Ligação de Vídeo</value>
+  </data>
+  <data name="Message_CallMissedTapToReturn" xml:space="preserve">
+    <value>Clique para retornar</value>
+  </data>
+  <data name="Message_CallAnsweredElsewhere" xml:space="preserve">
+    <value>Atendida em outro dispositivo</value>
+  </data>
+  <data name="Call_DurationSeconds" xml:space="preserve">
+    <value>{0} segundos</value>
+  </data>
+  <data name="Call_DurationMinutesSeconds" xml:space="preserve">
+    <value>{0} min {1} s</value>
+  </data>
+  <data name="Call_DurationHoursMinutes" xml:space="preserve">
+    <value>{0} h {1} min</value>
+  </data>
+  <data name="Calls_HistorySection" xml:space="preserve">
+    <value>HISTÓRICO</value>
   </data>
   <data name="Shell_Archived.Text" xml:space="preserve">
     <value>Conversas arquivadas</value>
