@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
 using Unison.Core.Contracts;
@@ -267,7 +268,7 @@ namespace Unison.Uwp.Services
         }
 
         public async Task<ImageSendPreviewResult> ShowImageSendPreviewAsync(
-            byte[] imageBytes,
+            IReadOnlyList<byte[]> imageBytes,
             string infoText,
             string initialCaption = null)
         {
@@ -275,7 +276,7 @@ namespace Unison.Uwp.Services
             try
             {
                 var dialog = new ImageSendPreviewDialog();
-                await dialog.SetPreviewAsync(imageBytes, infoText, initialCaption);
+                await dialog.SetPreviewsAsync(imageBytes, infoText, initialCaption);
                 var result = await dialog.ShowAsync();
                 if (result != ContentDialogResult.Primary)
                 {
