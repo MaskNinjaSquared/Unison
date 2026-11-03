@@ -15,6 +15,7 @@ using Unison.Core.Models;
 using Unison.Core.State;
 using Unison.WhatsAppClient.Abstractions;
 using Unison.WhatsAppClient.Helpers;
+using Unison.WhatsAppClient.Status;
 
 namespace Unison.WhatsAppClient.Messages
 {
@@ -387,6 +388,19 @@ namespace Unison.WhatsAppClient.Messages
             ReceiptFacts receipt = _receipts.Read(node);
             if (receipt == null)
             {
+                return;
+            }
+
+            if (StatusViewReceipt.IsStatusBroadcast(receipt))
+            {
+                if (StatusViewReceipt.IsViewerReceipt(receipt, _receiptHost.IsSelfLinked))
+                {
+                    await _resolveStatus().RecordViewersAsync(
+                        receipt.MessageIds,
+                        receipt.Participant,
+                        receipt.TimestampUtc ?? DateTime.UtcNow).ConfigureAwait(false);
+                }
+
                 return;
             }
 

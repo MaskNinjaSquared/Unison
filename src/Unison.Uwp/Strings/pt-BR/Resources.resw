@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <root>
   <!-- 
     Microsoft ResX Schema 
@@ -595,6 +595,48 @@ Desative depois de diagnosticar: manter ligado deixa o app lento.</value>
   <data name="NewConversation_ComingSoon" xml:space="preserve">
     <value>Esta opção ainda não está disponível.</value>
   </data>
+  <data name="CreateFlow_Next" xml:space="preserve">
+    <value>Próximo</value>
+  </data>
+  <data name="CreateFlow_Confirm" xml:space="preserve">
+    <value>Confirmar</value>
+  </data>
+  <data name="CreateFlow_Start" xml:space="preserve">
+    <value>Começar</value>
+  </data>
+  <data name="CreateGroup_MembersHeader.Header" xml:space="preserve">
+    <value>Selecionar membros</value>
+  </data>
+  <data name="CreateGroup_InfoHeader.Header" xml:space="preserve">
+    <value>Informações gerais</value>
+  </data>
+  <data name="CreateGroup_ExplainMembersTitle" xml:space="preserve">
+    <value>Selecionar membros</value>
+  </data>
+  <data name="CreateGroup_ExplainMembersBody" xml:space="preserve">
+    <value>Escolha os contatos que farão parte deste grupo.</value>
+  </data>
+  <data name="CreateGroup_ExplainInfoTitle" xml:space="preserve">
+    <value>Informações do grupo</value>
+  </data>
+  <data name="CreateGroup_ExplainInfoBody" xml:space="preserve">
+    <value>Dê um nome ao grupo e revise os detalhes antes de criar.</value>
+  </data>
+  <data name="CreateGroup_Name.PlaceholderText" xml:space="preserve">
+    <value>Nome do grupo</value>
+  </data>
+  <data name="CreateCommunity_ExplainTitle" xml:space="preserve">
+    <value>Criar comunidade</value>
+  </data>
+  <data name="CreateCommunity_ExplainBody" xml:space="preserve">
+    <value>Reúna pessoas do seu bairro, da sua escola e muito mais em um só lugar. Crie grupos para assuntos específicos e envie avisos a todos com facilidade.</value>
+  </data>
+  <data name="CreateCommunity_Name.PlaceholderText" xml:space="preserve">
+    <value>Nome da comunidade</value>
+  </data>
+  <data name="CreateCommunity_Description.PlaceholderText" xml:space="preserve">
+    <value>Olá! Esta comunidade foi criada para que os participantes possam conversar em grupos de assuntos específicos e receber avisos importantes.</value>
+  </data>
   <data name="NewConversation_SelfUnavailable" xml:space="preserve">
     <value>Sua conta ainda não está pronta.</value>
   </data>
@@ -729,6 +771,48 @@ Desative depois de diagnosticar: manter ligado deixa o app lento.</value>
   </data>
   <data name="StatusList_MyStatusHint.Text" xml:space="preserve">
     <value>Clique para atualizar seu Status…</value>
+  </data>
+  <data name="StatusList_MyStatusCount" xml:space="preserve">
+    <value>{0} atualizações</value>
+  </data>
+  <data name="StatusList_MyStatusNone" xml:space="preserve">
+    <value>Nenhuma atualização</value>
+  </data>
+  <data name="StatusList_OneView" xml:space="preserve">
+    <value>1 visualização</value>
+  </data>
+  <data name="StatusList_ViewCount" xml:space="preserve">
+    <value>{0} visualizações</value>
+  </data>
+  <data name="StatusList_MyStatusPageTitle.Text" xml:space="preserve">
+    <value>Meu Status</value>
+  </data>
+  <data name="StatusList_OwnForward.Text" xml:space="preserve">
+    <value>Encaminhar</value>
+  </data>
+  <data name="StatusList_OwnSave.Text" xml:space="preserve">
+    <value>Salvar</value>
+  </data>
+  <data name="StatusList_OwnShare.Text" xml:space="preserve">
+    <value>Compartilhar</value>
+  </data>
+  <data name="StatusList_OwnDelete.Text" xml:space="preserve">
+    <value>Apagar</value>
+  </data>
+  <data name="Time_JustNow" xml:space="preserve">
+    <value>Agora mesmo</value>
+  </data>
+  <data name="Time_OneMinuteAgo" xml:space="preserve">
+    <value>há 1 minuto</value>
+  </data>
+  <data name="Time_MinutesAgo" xml:space="preserve">
+    <value>há {0} minutos</value>
+  </data>
+  <data name="Time_OneHourAgo" xml:space="preserve">
+    <value>há 1 hora</value>
+  </data>
+  <data name="Time_HoursAgo" xml:space="preserve">
+    <value>há {0} horas</value>
   </data>
   <data name="StatusList_RecentHeader.Text" xml:space="preserve">
     <value>RECENTES</value>
@@ -1842,5 +1926,44 @@ Desative depois de diagnosticar: manter ligado deixa o app lento.</value>
   </data>
   <data name="Debug_SocketSliceStop.Content" xml:space="preserve">
     <value>Parar</value>
+  </data>
+  <data name="StatusList_NewMediaStatus.Text" xml:space="preserve">
+    <value>Foto e vídeo</value>
+  </data>
+  <data name="StatusList_NewTextStatus.Text" xml:space="preserve">
+    <value>Texto</value>
+  </data>
+  <data name="StatusList_NewMediaStatusTile.Text" xml:space="preserve">
+    <value>Foto e vídeo</value>
+  </data>
+  <data name="StatusList_NewTextStatusTile.Text" xml:space="preserve">
+    <value>Texto</value>
+  </data>
+  <data name="Shell_LegacyAppBar_TextStatus.Label" xml:space="preserve">
+    <value>Status de texto</value>
+  </data>
+  <data name="StatusComposer_Input.PlaceholderText" xml:space="preserve">
+    <value>Digite um status</value>
+  </data>
+  <data name="StatusComposer_SendAppBar.Label" xml:space="preserve">
+    <value>Enviar</value>
+  </data>
+  <data name="StatusComposer_PrivacyAppBar.Label" xml:space="preserve">
+    <value>Privacidade</value>
+  </data>
+  <data name="StatusComposer_PrivacyContacts" xml:space="preserve">
+    <value>Status: Contatos</value>
+  </data>
+  <data name="StatusComposer_PrivacyTitle" xml:space="preserve">
+    <value>Privacidade do status</value>
+  </data>
+  <data name="StatusComposer_Title" xml:space="preserve">
+    <value>Status de texto</value>
+  </data>
+  <data name="StatusList_NewStatusDockTitle.Text" xml:space="preserve">
+    <value>NOVO STATUS</value>
+  </data>
+  <data name="Shell_LegacyMenu_StatusMoreProbe.Label" xml:space="preserve">
+    <value>Sonda do more</value>
   </data>
 </root>

@@ -55,43 +55,53 @@
                   SelectionChanged="AuthorList_SelectionChanged">
             <ListView.Header>
                 <StackPanel>
-                    <Button Command="{x:Bind ViewModel.NewStatusCommand}"
-                            HorizontalAlignment="Stretch"
-                            HorizontalContentAlignment="Stretch"
-                            Background="Transparent"
-                            BorderThickness="0"
-                            Padding="0"
-                            MinHeight="0"
-                            MinWidth="0">
-                        <Button.Template>
-                            <ControlTemplate TargetType="Button">
-                                <Border Background="{TemplateBinding Background}">
-                                    <ContentPresenter HorizontalAlignment="Stretch"
-                                                      VerticalAlignment="Stretch"/>
-                                </Border>
-                            </ControlTemplate>
-                        </Button.Template>
-                        <Grid Height="72" Padding="12,0">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="64"/>
-                                <ColumnDefinition Width="*"/>
-                            </Grid.ColumnDefinitions>
+                    <!-- My status row in the list item design (ring, title, caption, time) + "+". -->
+                    <ListViewItem x:Name="MyStatusItem"
+                                  Style="{StaticResource WhatsAppChatListItemStyle}">
+                    <Grid Height="72"
+                          Padding="12,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="64"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
 
-                            <!-- Same footprint as StatusListAvatarControl (56 outer / 48 photo). -->
-                            <Grid Width="56" Height="56"
-                                  HorizontalAlignment="Left"
-                                  VerticalAlignment="Center">
+                        <Grid Width="56" Height="56"
+                              HorizontalAlignment="Left"
+                              VerticalAlignment="Center">
+                            <controls:StatusListAvatarControl x:Name="MyStatusRing"
+                                                              Width="56" Height="56"
+                                                              Size="56"/>
+                            <Grid x:Name="MyStatusPlainAvatar">
                                 <controls:ChatAvatarControl Width="48" Height="48"
                                                             Size="48"
                                                             HorizontalAlignment="Center"
                                                             VerticalAlignment="Center"
                                                             AvatarUrl="{x:Bind ViewModel.SelfAvatarUrl, Mode=OneWay}"/>
-                                <Grid Width="22" Height="22"
-                                      HorizontalAlignment="Right"
-                                      VerticalAlignment="Bottom"
-                                      Margin="0,0,0,0"
-                                      IsHitTestVisible="False">
-                                    <Ellipse Fill="{ThemeResource WhatsAppGreenFocusBrush}"/>
+                            </Grid>
+
+                            <!-- "+" badge over the photo; its own tap never opens the viewer. -->
+                            <Button x:Name="AddStatusButton"
+                                    Width="24" Height="24"
+                                    HorizontalAlignment="Right"
+                                    VerticalAlignment="Bottom"
+                                    Padding="0"
+                                    MinHeight="0"
+                                    MinWidth="0"
+                                    BorderThickness="0"
+                                    Background="Transparent"
+                                    Command="{x:Bind ViewModel.AddStatusCommand}"
+                                    Tapped="AddStatusButton_Tapped"
+                                    AutomationProperties.Name="Add status">
+                                <Button.Template>
+                                    <ControlTemplate TargetType="Button">
+                                        <ContentPresenter/>
+                                    </ControlTemplate>
+                                </Button.Template>
+                                <Grid>
+                                    <Ellipse Fill="{StaticResource StatusRecentRingBrush}"
+                                             Stroke="{ThemeResource ApplicationPageBackgroundThemeBrush}"
+                                             StrokeThickness="2"/>
                                     <FontIcon Glyph="&#xE710;"
                                               FontFamily="{StaticResource IconFont}"
                                               FontSize="11"
@@ -99,31 +109,38 @@
                                               HorizontalAlignment="Center"
                                               VerticalAlignment="Center"/>
                                 </Grid>
-                            </Grid>
-
-                            <StackPanel Grid.Column="1"
-                                        VerticalAlignment="Center"
-                                        Margin="12,0,12,0">
-                                <TextBlock x:Uid="StatusList_MyStatus"
-                                           Text="My status"
-                                           FontSize="18"
-                                           FontFamily="{StaticResource MainFontSemibold}"
-                                           FontWeight="SemiBold"
-                                           Foreground="{ThemeResource WhatsAppTextHighBrush}"
-                                           TextWrapping="NoWrap"
-                                           TextTrimming="CharacterEllipsis"/>
-                                <TextBlock x:Uid="StatusList_MyStatusHint"
-                                           Text="Tap to update your status…"
-                                           FontSize="13"
-                                           Opacity="0.75"
-                                           Margin="0,2,0,0"
-                                           FontFamily="{StaticResource MainFont}"
-                                           Foreground="{ThemeResource WhatsAppTextMediumBrush}"
-                                           TextWrapping="NoWrap"
-                                           TextTrimming="CharacterEllipsis"/>
-                            </StackPanel>
+                            </Button>
                         </Grid>
-                    </Button>
+
+                        <StackPanel Grid.Column="1"
+                                    VerticalAlignment="Center"
+                                    Margin="12,0,12,0">
+                            <TextBlock x:Uid="StatusList_MyStatus"
+                                       Text="My status"
+                                       FontSize="18"
+                                       FontFamily="{StaticResource MainFontSemibold}"
+                                       FontWeight="SemiBold"
+                                       TextWrapping="NoWrap"
+                                       TextTrimming="CharacterEllipsis"/>
+                            <TextBlock x:Name="MyStatusCaption"
+                                       FontSize="13"
+                                       Opacity="0.75"
+                                       Margin="0,2,0,0"
+                                       FontFamily="{StaticResource MainFont}"
+                                       TextWrapping="NoWrap"
+                                       TextTrimming="CharacterEllipsis"/>
+                        </StackPanel>
+
+                        <TextBlock x:Name="MyStatusTime"
+                                   Grid.Column="2"
+                                   FontSize="12"
+                                   Opacity="0.85"
+                                   Margin="0,0,8,0"
+                                   VerticalAlignment="Center"
+                                   FontFamily="{StaticResource MainFont}"/>
+
+                    </Grid>
+                    </ListViewItem>
 
                     <TextBlock x:Uid="StatusList_RecentHeader"
                                Text="RECENT"
@@ -205,11 +222,14 @@
             </StackPanel>
         </Grid>
 
+        <!-- Bottom-aligned: Stretch + MinHeight host clips Compact→Open (same note as ProfileView). -->
         <Grid Grid.Row="2"
               MinHeight="{StaticResource LegacyCommandBarCompactHeight}"
               Background="{ThemeResource LegacyCommandBarBackgroundBrush}">
         <CommandBar x:Name="StatusCommandBar"
                     Style="{StaticResource LegacyCommandBarStyle}"
+                    DefaultLabelPosition="Bottom"
+                    VerticalAlignment="Bottom"
                     Loaded="StatusCommandBar_Loaded">
             <AppBarButton x:Uid="Shell_LegacyAppBar_Search"
                           Style="{StaticResource LegacyAppBarButtonStyle}"
@@ -222,18 +242,28 @@
                            HorizontalAlignment="Center"
                            VerticalAlignment="Center"/>
             </AppBarButton>
-            <AppBarButton x:Uid="Shell_LegacyAppBar_NewStatus"
+                <AppBarButton x:Uid="Shell_LegacyAppBar_NewStatus"
                           Style="{StaticResource LegacyAppBarButtonStyle}"
                           Label="New status"
                           Command="{x:Bind ViewModel.NewStatusCommand}">
-                <TextBlock Text="&#xEB02;"
+                    <TextBlock Text="&#xEB02;"
                            FontFamily="{StaticResource LegacyIconFont}"
                            FontSize="{StaticResource LegacyAppBarGlyphSize}"
                            TextLineBounds="Tight"
                            HorizontalAlignment="Center"
                            VerticalAlignment="Center"/>
-            </AppBarButton>
-            <CommandBar.SecondaryCommands>
+                </AppBarButton>
+
+                <CommandBar.SecondaryCommands>
+                <!-- Probe item: if "…" opens but labels still hide, overflow still works. -->
+                <AppBarButton x:Uid="Shell_LegacyMenu_StatusMoreProbe"
+                              Label="More probe"
+                              Command="{x:Bind ViewModel.NewStatusCommand}">
+                    <AppBarButton.Icon>
+                        <FontIcon FontFamily="{StaticResource IconFont}" Glyph="&#xE710;"/>
+                    </AppBarButton.Icon>
+                </AppBarButton>
+                <AppBarSeparator/>
                 <AppBarButton x:Name="ProfileSecondaryButton"
                               x:Uid="Shell_LegacyMenu_Profile"
                               Label="Profile"
@@ -260,5 +290,193 @@
             </CommandBar.SecondaryCommands>
         </CommandBar>
         </Grid>
+
+        <!-- My status page: rows 0–1 only so the CommandBar (and new-status dock) stay available. -->
+        <Grid x:Name="MyStatusPanel"
+              Grid.Row="0"
+              Grid.RowSpan="2"
+              Visibility="{x:Bind ViewModel.IsMyStatusOpen, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"
+              Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+            <!-- Border (not Grid.CornerRadius): Creators Update-safe rounded grey strip. -->
+            <Border Background="{ThemeResource CommunityHubHeaderBrush}"
+                    Margin="10,20,10,0"
+                    CornerRadius="3"
+                    Padding="4,10,16,12">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*" MinWidth="0"/>
+                    </Grid.ColumnDefinitions>
+                    <Button Click="MyStatusBackButton_Click"
+                            Style="{StaticResource ModernIconButtonStyle}"
+                            VerticalAlignment="Center"
+                            Margin="4,0,4,0"
+                            AutomationProperties.Name="Back">
+                        <FontIcon Glyph="&#xE72B;"
+                                  FontFamily="{StaticResource IconFont}"
+                                  FontSize="18"
+                                  Foreground="{ThemeResource ChatDetailHeaderTitleBrush}"/>
+                    </Button>
+                    <TextBlock Grid.Column="1"
+                               x:Uid="StatusList_MyStatusPageTitle"
+                               Text="My status"
+                               Margin="4,0,0,0"
+                               VerticalAlignment="Center"
+                               FontSize="18"
+                               FontFamily="{StaticResource MainFontSemibold}"
+                               FontWeight="SemiBold"
+                               Foreground="{ThemeResource ChatDetailHeaderTitleBrush}"
+                               TextWrapping="NoWrap"
+                               TextTrimming="CharacterEllipsis"/>
+                </Grid>
+            </Border>
+
+            <ListView x:Name="OwnStatusList"
+                      Grid.Row="1"
+                      ItemsSource="{x:Bind ViewModel.OwnStatuses, Mode=OneWay}"
+                      ItemContainerStyle="{StaticResource WhatsAppChatListItemStyle}"
+                      SelectionMode="None"
+                      IsItemClickEnabled="True"
+                      ItemClick="OwnStatusList_ItemClick">
+                <ListView.ItemTemplate>
+                    <DataTemplate x:DataType="models:OwnStatusItem">
+                        <Grid Height="72" Padding="12,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="64"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+
+                            <controls:ChatAvatarControl Width="48" Height="48"
+                                                        Size="48"
+                                                        HorizontalAlignment="Left"
+                                                        VerticalAlignment="Center"
+                                                        AvatarUrl="{x:Bind ThumbnailUri}"/>
+
+                            <StackPanel Grid.Column="1"
+                                        VerticalAlignment="Center"
+                                        Margin="12,0,12,0">
+                                <TextBlock Text="{x:Bind ViewCountText, Mode=OneWay}"
+                                           FontSize="18"
+                                           FontFamily="{StaticResource MainFontSemibold}"
+                                           FontWeight="SemiBold"
+                                           TextWrapping="NoWrap"
+                                           TextTrimming="CharacterEllipsis"/>
+                                <TextBlock Text="{x:Bind TimestampUtc, Converter={StaticResource ElapsedTimeConverter}}"
+                                           FontSize="13"
+                                           Opacity="0.75"
+                                           Margin="0,2,0,0"
+                                           FontFamily="{StaticResource MainFont}"
+                                           TextWrapping="NoWrap"
+                                           TextTrimming="CharacterEllipsis"/>
+                            </StackPanel>
+
+                            <Button Grid.Column="2"
+                                    Style="{StaticResource ModernIconButtonStyle}"
+                                    VerticalAlignment="Center"
+                                    AutomationProperties.Name="More options">
+                                <FontIcon Glyph="&#xE712;"
+                                          FontFamily="{StaticResource IconFont}"
+                                          FontSize="18"/>
+                                <Button.Flyout>
+                                    <MenuFlyout MenuFlyoutPresenterStyle="{StaticResource ModernMenuFlyoutStyle}">
+                                        <MenuFlyoutItem x:Uid="StatusList_OwnForward"
+                                                        Text="Forward"
+                                                        Style="{StaticResource ModernMenuFlyoutItemStyle}"/>
+                                        <MenuFlyoutItem x:Uid="StatusList_OwnSave"
+                                                        Text="Save"
+                                                        Style="{StaticResource ModernMenuFlyoutItemStyle}"/>
+                                        <MenuFlyoutItem x:Uid="StatusList_OwnShare"
+                                                        Text="Share"
+                                                        Style="{StaticResource ModernMenuFlyoutItemStyle}"/>
+                                        <MenuFlyoutItem x:Uid="StatusList_OwnDelete"
+                                                        Text="Delete"
+                                                        Style="{StaticResource ModernMenuFlyoutItemStyle}"/>
+                                    </MenuFlyout>
+                                </Button.Flyout>
+                            </Button>
+                        </Grid>
+                    </DataTemplate>
+                </ListView.ItemTemplate>
+            </ListView>
+        </Grid>
+
+        <!--
+            New status dock: same chrome as the chat attachment bar (scrim over everything, bar
+            sliding up over the CommandBar, heading, accent tiles, chevron strip) with two tiles.
+            Driven by IsNewStatusPickerOpen; the slide runs from the view.
+        -->
+        <Border x:Name="NewStatusScrim"
+                Grid.RowSpan="3"
+                Canvas.ZIndex="3"
+                Background="#99000000"
+                Opacity="0"
+                Visibility="Collapsed"
+                Tapped="NewStatusScrim_Tapped"/>
+
+        <Grid x:Name="NewStatusDock"
+              Grid.RowSpan="3"
+              Canvas.ZIndex="4"
+              VerticalAlignment="Bottom"
+              Visibility="Collapsed"
+              Background="{ThemeResource LegacyCommandBarBackgroundBrush}">
+            <Grid.RenderTransform>
+                <TranslateTransform x:Name="NewStatusDockTranslate" Y="1000"/>
+            </Grid.RenderTransform>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="54"/>
+            </Grid.RowDefinitions>
+
+            <TextBlock x:Uid="StatusList_NewStatusDockTitle"
+                       Text="NEW STATUS"
+                       Margin="10,14,10,4"
+                       FontFamily="{StaticResource MainFont}"
+                       FontSize="13"
+                       Foreground="{ThemeResource ChatDetailMutedTextBrush}"/>
+
+            <!-- Same 5px padding + 5px tile margin as the attachment bar; tiles centred. -->
+            <Grid x:Name="NewStatusTilesGrid"
+                  Grid.Row="1"
+                  Padding="5,5,5,0"
+                  HorizontalAlignment="Center">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <controls:AttachTile Grid.Column="0"
+                                     IconGlyph="&#xEB10;"
+                                     IconFontFamily="{StaticResource LegacyIconFont}"
+                                     Label="Photo &amp; video"
+                                     LocalizationUid="StatusList_NewMediaStatusTile"
+                                     Command="{x:Bind ViewModel.StartMediaStatusCommand}"/>
+
+                <controls:AttachTile Grid.Column="1"
+                                     IconGlyph="&#xE8D2;"
+                                     IconFontFamily="{StaticResource IconFont}"
+                                     Label="Text"
+                                     LocalizationUid="StatusList_NewTextStatusTile"
+                                     Command="{x:Bind ViewModel.StartTextStatusCommand}"/>
+            </Grid>
+
+            <Grid Grid.Row="2" Padding="12,0">
+                <Button Style="{StaticResource WhatsAppIconButtonStyle}"
+                        Width="40" Height="40"
+                        HorizontalAlignment="Left"
+                        VerticalAlignment="Center"
+                        Command="{x:Bind ViewModel.CloseNewStatusPickerCommand}"
+                        AutomationProperties.Name="Close">
+                    <TextBlock Text="&#xE70D;" FontFamily="{StaticResource IconFont}" FontSize="16"
+                               Foreground="{ThemeResource ChatDetailMutedTextBrush}"/>
+                </Button>
+            </Grid>
+        </Grid>
+
     </Grid>
 </UserControl>

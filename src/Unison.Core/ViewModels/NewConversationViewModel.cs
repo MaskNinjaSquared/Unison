@@ -24,7 +24,7 @@ namespace Unison.Core.ViewModels
     /// Owns the New Conversation surface. Hosts bind <see cref="IsOpen"/> and
     /// subscribe to <see cref="ChatOpenRequested"/> to navigate into a chat.
     /// </summary>
-    public sealed class NewConversationViewModel : Observable
+    public sealed partial class NewConversationViewModel : Observable
     {
         private readonly IChatStateStore _chatState;
         private readonly IContactService _contacts;
@@ -35,6 +35,7 @@ namespace Unison.Core.ViewModels
         private readonly INewChatDialogViewModelFactory _newChatFactory;
         private readonly IStringResources _strings;
         private readonly IDispatcher _dispatcher;
+        private readonly ILocalContactsService _localContacts;
 
         private bool _isOpen;
         private bool _catalogHooked;
@@ -56,7 +57,8 @@ namespace Unison.Core.ViewModels
             IDialogService dialogs,
             INewChatDialogViewModelFactory newChatFactory,
             IStringResources strings,
-            IDispatcher dispatcher = null)
+            IDispatcher dispatcher = null,
+            ILocalContactsService localContacts = null)
         {
             _chatState = chatState ?? throw new ArgumentNullException(nameof(chatState));
             _contacts = contacts ?? throw new ArgumentNullException(nameof(contacts));
@@ -67,14 +69,16 @@ namespace Unison.Core.ViewModels
             _newChatFactory = newChatFactory ?? throw new ArgumentNullException(nameof(newChatFactory));
             _strings = strings;
             _dispatcher = dispatcher;
+            _localContacts = localContacts;
 
             CloseCommand = new RelayCommand(Close);
-            NewGroupCommand = new RelayCommand(() => _ = ShowComingSoonAsync("NewConversation_NewGroup.Text"));
-            NewContactCommand = new RelayCommand(() => _ = ShowComingSoonAsync("NewConversation_NewContact.Text"));
-            NewCommunityCommand = new RelayCommand(() => _ = ShowComingSoonAsync("NewConversation_NewCommunity.Text"));
+            NewGroupCommand = new RelayCommand(OpenCreateGroup);
+            NewContactCommand = new RelayCommand(() => _ = OpenNewContactAsync());
+            NewCommunityCommand = new RelayCommand(OpenCreateCommunity);
             PhoneNumberCommand = new RelayCommand(() => _ = OpenPhoneDialogAsync());
             NavigateToPrivateChatCommand = new RelayCommand(() => _ = NavigateToPrivateChatAsync());
             SelectContactCommand = new RelayCommand<ChatItem>(chat => _ = OpenContactAsync(chat));
+            InitCreateFlowCommands();
         }
 
         /// <summary>Raised after a contact / phone / self row should open a conversation.</summary>
@@ -97,11 +101,13 @@ namespace Unison.Core.ViewModels
                     RefreshSelfTile();
                     HookCatalog();
                     RebuildCatalog();
+                    RefreshCreateChrome();
                 }
                 else
                 {
                     UnhookCatalog();
                     SearchQuery = string.Empty;
+                    ClearCreateFlow();
                 }
             }
         }
@@ -302,9 +308,12 @@ namespace Unison.Core.ViewModels
             JumpTiles = AlphabetChatGroups.BuildJumpTiles(GroupedContacts);
         }
 
-        private async Task ShowComingSoonAsync(string titleKey)
+        private Task ShowComingSoonAsync(string titleKey) =>
+            ShowComingSoonAsync(titleKey, "Coming soon");
+
+        private async Task ShowComingSoonAsync(string titleKey, string titleFallback)
         {
-            string title = _strings?.Get(titleKey, "Coming soon") ?? "Coming soon";
+            string title = _strings?.Get(titleKey, titleFallback) ?? titleFallback;
             string body = _strings?.Get(
                 "NewConversation_ComingSoon",
                 "This option is not available yet.") ?? "This option is not available yet.";
@@ -317,6 +326,25 @@ namespace Unison.Core.ViewModels
             {
                 Debug.WriteLine("[NewConversation] ComingSoon failed: " + ex.Message);
             }
+        }
+
+        private async Task OpenNewContactAsync()
+        {
+            try
+            {
+                if (_localContacts != null &&
+                    await _localContacts.OpenNewContactEditorAsync().ConfigureAwait(false))
+                {
+                    return;
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[NewConversation] Open People new contact failed: " + ex.Message);
+            }
+
+            await ShowComingSoonAsync("NewConversation_NewContact.Text", "New contact")
+                .ConfigureAwait(false);
         }
 
         private async Task OpenPhoneDialogAsync()

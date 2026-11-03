@@ -21,6 +21,12 @@ namespace Unison.Core.Contracts
         Task<bool> ShowSystemContactCardAsync(string displayName, string phoneDigits, string photoUri);
 
         /// <summary>
+        /// Opens the People app on the blank "add contact" page (URI
+        /// <c>ms-people:savecontacttask</c>, with fallbacks). Must run on the UI thread.
+        /// </summary>
+        Task<bool> OpenNewContactEditorAsync();
+
+        /// <summary>
         /// Writes these people into Unison's People account (<c>UserDataAccount</c> + list).
         /// Upserts; does not merge into the user address book.
         /// </summary>

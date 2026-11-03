@@ -39,14 +39,14 @@ namespace Unison.Uwp.UI.Views
             }
         }
 
-        public async System.Threading.Tasks.Task OpenAuthorAsync(StatusAuthorItem author)
+        public async System.Threading.Tasks.Task OpenAuthorAsync(StatusAuthorItem author, string startMessageId = null)
         {
             if (ViewModel == null || author == null)
             {
                 return;
             }
 
-            await ViewModel.OpenAuthorAsync(author.Jid, author.DisplayName);
+            await ViewModel.OpenAuthorAsync(author.Jid, author.DisplayName, startMessageId);
         }
 
         public async System.Threading.Tasks.Task ClearAsync()

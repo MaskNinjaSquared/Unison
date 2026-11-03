@@ -81,18 +81,25 @@ namespace Unison.Core.Helpers
                     previousLocalDate = localDate;
                 }
 
-                bool isRunStart = i == 0;
-                bool isRunEnd = i == messages.Count - 1;
-
-                if (!isRunStart)
+                // CallEvent bubbles sit inside the timeline without a tip and without
+                // splitting the surrounding sender run (skip them when peering neighbors).
+                if (current.IsCallEvent)
                 {
-                    isRunStart = !IsSameMessageRun(messages[i - 1], current, isGroup);
+                    current.IsRunStart = false;
+                    current.IsRunEnd = false;
+                    current.ShowGroupSenderName = false;
+                    current.ShowContactSlot = false;
+                    current.ShowContact = false;
+                    current.ContactUri = null;
+                    current.ShowQuotedAuthorLink = false;
+                    continue;
                 }
 
-                if (!isRunEnd)
-                {
-                    isRunEnd = !IsSameMessageRun(current, messages[i + 1], isGroup);
-                }
+                ChatMessage previous = FindRunNeighbor(messages, i, forward: false);
+                ChatMessage next = FindRunNeighbor(messages, i, forward: true);
+
+                bool isRunStart = previous == null || !IsSameMessageRun(previous, current, isGroup);
+                bool isRunEnd = next == null || !IsSameMessageRun(current, next, isGroup);
 
                 current.IsRunStart = isRunStart;
                 current.IsRunEnd = isRunEnd;
@@ -116,6 +123,32 @@ namespace Unison.Core.Helpers
                     (!string.IsNullOrWhiteSpace(current.QuotedParticipantJid) ||
                      !string.IsNullOrWhiteSpace(current.QuotedSenderName));
             }
+        }
+
+        /// <summary>
+        /// Previous/next chat bubble for run chrome, skipping CallEvent rows so a voice-call
+        /// card does not force tips on the messages around it.
+        /// </summary>
+        private static ChatMessage FindRunNeighbor(IList<ChatMessage> messages, int index, bool forward)
+        {
+            if (messages == null)
+            {
+                return null;
+            }
+
+            int step = forward ? 1 : -1;
+            for (int i = index + step; i >= 0 && i < messages.Count; i += step)
+            {
+                ChatMessage row = messages[i];
+                if (row == null || row.IsCallEvent)
+                {
+                    continue;
+                }
+
+                return row;
+            }
+
+            return null;
         }
 
         /// <summary>
@@ -265,7 +298,8 @@ namespace Unison.Core.Helpers
                 return false;
             }
 
-            // GroupJoin / CallEvent use date-separator chrome — never share a bubble run.
+            // GroupJoin stays a hard break. CallEvent is skipped in Apply via FindRunNeighbor;
+            // if compared directly it still must not merge with a chat bubble.
             if (left.IsGroupJoin || right.IsGroupJoin || left.IsCallEvent || right.IsCallEvent)
             {
                 return false;

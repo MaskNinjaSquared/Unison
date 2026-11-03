@@ -14,6 +14,9 @@ namespace Unison.Uwp.Services.Themes
 
         Type ResolveShellPage(NavigationDestination destination);
 
+        /// <summary>Page for a full-screen destination, or null when the destination is not full-screen here.</summary>
+        Type ResolveFullScreenPage(NavigationDestination destination);
+
         void OpenSettings(Frame shellFrame, bool openProfile = false);
 
         bool IsSettingsPage(object content);

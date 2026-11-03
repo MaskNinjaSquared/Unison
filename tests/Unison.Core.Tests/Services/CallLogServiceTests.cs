@@ -111,7 +111,35 @@ namespace Unison.Core.Tests.Services
             IReadOnlyList<CallHistoryEntry> history = log.GetHistory("1@s.whatsapp.net");
             Assert.Equal(1, history.Count);
             Assert.Equal(CallEventChromeKind.Missed, history[0].ChromeKind);
+            Assert.Equal(1, log.GetRecents().Count);
             Assert.Equal(CallDirection.Missed, log.GetRecents()[0].Direction);
+        }
+
+        [Fact]
+        public void Upsert_incoming_does_not_recreate_row_after_missed_same_callId()
+        {
+            var log = new CallLogService(new StubJids());
+            log.Upsert(new CallHistoryEntry
+            {
+                CallId = "ring",
+                CanonicalJid = "1@s.whatsapp.net",
+                Direction = CallDirection.Missed,
+                ChromeKind = CallEventChromeKind.Missed,
+                TimestampUtc = DateTime.UtcNow,
+                CategoryLabel = "Missed"
+            });
+            log.Upsert(new CallHistoryEntry
+            {
+                CallId = "ring",
+                CanonicalJid = "1@s.whatsapp.net",
+                Direction = CallDirection.Incoming,
+                ChromeKind = CallEventChromeKind.Incoming,
+                TimestampUtc = DateTime.UtcNow.AddMinutes(-1),
+                CategoryLabel = "Incoming"
+            });
+
+            Assert.Equal(1, log.GetRecents().Count);
+            Assert.Equal(CallEventChromeKind.Missed, log.GetHistory("1@s.whatsapp.net")[0].ChromeKind);
         }
 
         [Fact]

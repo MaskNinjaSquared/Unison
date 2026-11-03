@@ -311,6 +311,87 @@ namespace Unison.WhatsAppClient.Status
             return fallback;
         }
 
+        /// <inheritdoc />
+        public async Task RecordViewersAsync(IEnumerable<string> messageIds, string viewerJid, DateTime viewedAtUtc)
+        {
+            if (messageIds == null || string.IsNullOrWhiteSpace(viewerJid))
+            {
+                return;
+            }
+
+            foreach (string id in messageIds)
+            {
+                if (string.IsNullOrWhiteSpace(id))
+                {
+                    continue;
+                }
+
+                try
+                {
+                    bool added = await _store.RecordViewerAsync(id, viewerJid, viewedAtUtc).ConfigureAwait(false);
+                    if (added)
+                    {
+                        _diagnostics?.Write(
+                            "status",
+                            "viewer-recorded",
+                            "id=" + id + "; viewer=" + viewerJid);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine("[StatusFacade] Record viewer failed id=" + id + ": " + ex.Message);
+                    _diagnostics?.RecordException("status", "viewer-record-fail", ex, "id=" + id);
+                }
+            }
+        }
+
+        /// <inheritdoc />
+        public async Task<IReadOnlyList<OwnStatusItem>> GetOwnStatusesAsync(string selfJid)
+        {
+            if (string.IsNullOrWhiteSpace(selfJid))
+            {
+                return Array.Empty<OwnStatusItem>();
+            }
+
+            IReadOnlyList<HistoryStatus> newestFirst =
+                await _store.GetActiveForAuthorAsync(selfJid).ConfigureAwait(false);
+            if (newestFirst == null || newestFirst.Count == 0)
+            {
+                return Array.Empty<OwnStatusItem>();
+            }
+
+            var ids = new List<string>(newestFirst.Count);
+            for (int i = 0; i < newestFirst.Count; i++)
+            {
+                ids.Add(newestFirst[i].MessageId);
+            }
+
+            IReadOnlyDictionary<string, int> counts =
+                await _store.GetViewerCountsAsync(ids).ConfigureAwait(false);
+
+            var items = new List<OwnStatusItem>(newestFirst.Count);
+            for (int i = 0; i < newestFirst.Count; i++)
+            {
+                HistoryStatus status = newestFirst[i];
+                int viewCount;
+                if (counts == null || !counts.TryGetValue(status.MessageId, out viewCount))
+                {
+                    viewCount = 0;
+                }
+
+                items.Add(new OwnStatusItem
+                {
+                    MessageId = status.MessageId,
+                    AuthorJid = status.AuthorJid,
+                    ThumbnailUri = ResolveListThumbUri(status),
+                    TimestampUtc = status.TimestampUtc,
+                    ViewCount = viewCount
+                });
+            }
+
+            return items;
+        }
+
         public async Task MarkViewedAsync(string authorJid, string messageId)
         {
             try

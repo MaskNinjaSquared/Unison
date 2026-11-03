@@ -62,6 +62,9 @@ namespace Unison.Uwp.Services
         public Type ResolveShellPage(NavigationDestination destination) =>
             Current.ResolveShellPage(destination);
 
+        public Type ResolveFullScreenPage(NavigationDestination destination) =>
+            Current.ResolveFullScreenPage(destination);
+
         public void OpenSettings(Frame shellFrame, bool openProfile = false) =>
             Current.OpenSettings(shellFrame, openProfile);
 

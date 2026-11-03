@@ -87,8 +87,26 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                 contentRoot.ClearValue(FrameworkElement.HeightProperty);
                 if (contentRoot.RowDefinitions.Count > 0)
                 {
-                    contentRoot.RowDefinitions[0].Height = new GridLength(1, GridUnitType.Star);
+                    // When open, Auto lets the label row under the icons measure; Star while
+                    // closed keeps the compact strip filling the host MinHeight.
+                    contentRoot.RowDefinitions[0].Height = bar.IsOpen
+                        ? GridLength.Auto
+                        : new GridLength(1, GridUnitType.Star);
                 }
+            }
+
+            // AppBarButton template starts with TextLabel Collapsed; force Visible when open so
+            // "…" expand shows the description even if ApplicationViewStates lag.
+            if (bar.IsOpen)
+            {
+                EnsurePrimaryLabelsVisible(bar);
+                // ContentFrame / Auto-row hosts often skip a second measure; push one so the
+                // open labels get height instead of staying clipped at the compact strip.
+                bar.InvalidateMeasure();
+                bar.InvalidateArrange();
+                var barHost = bar.Parent as FrameworkElement;
+                barHost?.InvalidateMeasure();
+                barHost?.InvalidateArrange();
             }
 
             var primary = FindDescendant(bar, "PrimaryItemsControl") as FrameworkElement;
@@ -132,6 +150,24 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             var more = FindDescendant(bar, "MoreButton") as UIElement;
             bool hasMore = more != null && more.Visibility == Visibility.Visible;
             host.Margin = new Thickness(hasMore ? MoreButtonWidth : 0, 0, 0, 0);
+        }
+
+        private static void EnsurePrimaryLabelsVisible(CommandBar bar)
+        {
+            foreach (ICommandBarElement element in bar.PrimaryCommands)
+            {
+                var button = element as AppBarButton;
+                if (button == null)
+                {
+                    continue;
+                }
+
+                var label = FindDescendant(button, "TextLabel") as TextBlock;
+                if (label != null)
+                {
+                    label.Visibility = Visibility.Visible;
+                }
+            }
         }
 
         private static StackPanel FindStackPanel(DependencyObject root)

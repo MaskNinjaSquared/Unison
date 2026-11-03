@@ -164,6 +164,11 @@ namespace Unison.Uwp
             }
 
             SystemNavigationManager.GetForCurrentView().BackRequested += MainView_BackRequested;
+            if (_navigator != null)
+            {
+                _navigator.FullScreenChanged += Navigator_FullScreenChanged;
+            }
+
             _uiEventsAttached = true;
         }
 
@@ -172,6 +177,11 @@ namespace Unison.Uwp
             if (_uiEventsAttached)
             {
                 SystemNavigationManager.GetForCurrentView().BackRequested -= MainView_BackRequested;
+                if (_navigator != null)
+                {
+                    _navigator.FullScreenChanged -= Navigator_FullScreenChanged;
+                }
+
                 _uiEventsAttached = false;
             }
 
@@ -196,6 +206,8 @@ namespace Unison.Uwp
             }
 
             _navigator?.AttachShellFrame(ShellContentFrame);
+            _navigator?.AttachFullScreenFrame(FullScreenFrame);
+            ApplyFullScreenVisibility();
             EnsureShellContent();
 
             _shellViewModel.ReportWindowNarrow(IsNarrowWindow());
@@ -410,9 +422,19 @@ namespace Unison.Uwp
             }
         }
 
+        private void Navigator_FullScreenChanged(object sender, EventArgs e) => ApplyFullScreenVisibility();
+
+        private void FullScreenFrame_Navigated(object sender, NavigationEventArgs e) => ApplyFullScreenVisibility();
+
+        private void ApplyFullScreenVisibility()
+        {
+            FullScreenFrame.Visibility = FullScreenFrame.Content != null ? Visibility.Visible : Visibility.Collapsed;
+            ApplySystemBackButton();
+        }
+
         private void ApplySystemBackButton()
         {
-            bool show = ViewModel?.ShowSystemBackButton == true;
+            bool show = ViewModel?.ShowSystemBackButton == true || FullScreenFrame?.Content != null;
             if (!show && ViewModel != null && ShouldShowChatShellBackButton(ShellContentFrame.Content))
             {
                 show = true;
@@ -507,6 +529,18 @@ namespace Unison.Uwp
         {
             if (e.Handled)
             {
+                return;
+            }
+
+            // Full-screen page covers everything: it gets Back first, then closes.
+            if (FullScreenFrame.Content != null)
+            {
+                e.Handled = true;
+                if (!(FullScreenFrame.Content is IFullScreenShellPage page) || !page.TryHandleBack())
+                {
+                    _navigator?.CloseFullScreen();
+                }
+
                 return;
             }
 

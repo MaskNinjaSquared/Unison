@@ -32,6 +32,12 @@ namespace Unison.WhatsAppClient.Messages
         public string Participant { get; set; }
 
         public bool IsGroup { get; set; }
+
+        /// <summary>The raw <c>type</c> attribute ("read", "played", "read-self", …).</summary>
+        public string ReceiptType { get; set; }
+
+        /// <summary>The <c>t</c> attribute; null when absent or unparsable.</summary>
+        public DateTime? TimestampUtc { get; set; }
     }
 
     public sealed class ReceiptReader
@@ -94,8 +100,21 @@ namespace Unison.WhatsAppClient.Messages
                 ChatJid = chatJid,
                 IsGroup = !string.IsNullOrWhiteSpace(chatJid) &&
                           chatJid.EndsWith("@g.us", StringComparison.OrdinalIgnoreCase),
-                Participant = _jids.GetCanonicalJid(JidHelper.Normalize(AttrOrEmpty(node, "participant")))
+                Participant = _jids.GetCanonicalJid(JidHelper.Normalize(AttrOrEmpty(node, "participant"))),
+                ReceiptType = receiptType,
+                TimestampUtc = ReadUnixSeconds(AttrOrEmpty(node, "t"))
             };
+        }
+
+        private static DateTime? ReadUnixSeconds(string raw)
+        {
+            long seconds;
+            if (!long.TryParse(raw, out seconds) || seconds <= 0)
+            {
+                return null;
+            }
+
+            return DateTimeOffset.FromUnixTimeSeconds(seconds).UtcDateTime;
         }
 
         private static string MapStatus(string receiptType) =>

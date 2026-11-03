@@ -1,0 +1,362 @@
+<UserControl
+    x:Class="Unison.Uwp.UI.Controls.CreateConversationFlowView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:Unison.Uwp.UI.Controls"
+    x:Name="Root"
+    Background="{ThemeResource ChatListBackgroundBrush}">
+
+    <UserControl.Resources>
+        <DataTemplate x:Key="CreateFlowContactTemplate">
+            <Grid Padding="12,10" Background="Transparent">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="48"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <controls:ChatAvatarControl Width="40" Height="40"
+                                            Size="40"
+                                            ShowBorder="True"
+                                            VerticalAlignment="Center"
+                                            AvatarUrl="{Binding AvatarUrl}"
+                                            IsGroup="{Binding IsGroup}"/>
+                <TextBlock Grid.Column="1"
+                           Margin="12,0,0,0"
+                           Text="{Binding Name}"
+                           FontSize="17"
+                           FontFamily="{StaticResource MainFontSemibold}"
+                           FontWeight="SemiBold"
+                           Foreground="{ThemeResource WhatsAppTextHighBrush}"
+                           VerticalAlignment="Center"
+                           TextWrapping="NoWrap"
+                           TextTrimming="CharacterEllipsis"
+                           MaxLines="1"/>
+            </Grid>
+        </DataTemplate>
+        <DataTemplate x:Key="CreateFlowGroupHeaderTemplate">
+            <Border Width="36" Height="36"
+                    Margin="10,12,16,4"
+                    HorizontalAlignment="Left"
+                    BorderBrush="{ThemeResource SystemControlHighlightAccentBrush}"
+                    BorderThickness="2"
+                    Background="Transparent">
+                <TextBlock Text="{Binding Key}"
+                           FontSize="18"
+                           FontWeight="SemiBold"
+                           FontFamily="{StaticResource MainFontSemibold}"
+                           Foreground="{ThemeResource SystemControlHighlightAccentBrush}"
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Center"/>
+            </Border>
+        </DataTemplate>
+        <Style x:Key="CreateFlowGroupHeaderContainerStyle" TargetType="ListViewHeaderItem">
+            <Setter Property="HorizontalContentAlignment" Value="Left"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="HorizontalAlignment" Value="Left"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="Margin" Value="0"/>
+            <Setter Property="MinHeight" Value="0"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListViewHeaderItem">
+                        <ContentPresenter Content="{TemplateBinding Content}"
+                                          ContentTemplate="{TemplateBinding ContentTemplate}"
+                                          HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                          VerticalAlignment="{TemplateBinding VerticalContentAlignment}"/>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <DataTemplate x:Key="CreateFlowZoomedOutTemplate">
+            <Border Width="72" Height="72"
+                    Margin="6"
+                    Background="{ThemeResource SystemControlHighlightAccentBrush}"
+                    Opacity="{Binding Opacity}">
+                <TextBlock Text="{Binding Key}"
+                           FontSize="36"
+                           FontWeight="SemiBold"
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Center"
+                           Foreground="White"/>
+            </Border>
+        </DataTemplate>
+    </UserControl.Resources>
+
+    <Grid x:Name="LayoutRoot" Background="{ThemeResource ChatListBackgroundBrush}">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition x:Name="CreateFormColumn" Width="*"/>
+            <ColumnDefinition x:Name="CreateExplainColumn" Width="0" MinWidth="0"/>
+        </Grid.ColumnDefinitions>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <!-- Form-column header: the explain pane and grip run to the top like chat list/detail. -->
+        <Grid x:Name="CreateHeader"
+              Grid.Row="0"
+              Grid.Column="0"
+              Padding="4,8,16,8"
+              Background="{ThemeResource ChatListBackgroundBrush}">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+            <Button Style="{StaticResource ModernIconButtonStyle}"
+                    VerticalAlignment="Center"
+                    Margin="4,0,8,0"
+                    Command="{Binding HeaderBackCommand}">
+                <FontIcon Glyph="&#xE72B;" FontFamily="{StaticResource IconFont}" FontSize="18"/>
+            </Button>
+            <TextBlock Grid.Column="1"
+                       Text="{Binding HeaderTitle}"
+                       FontSize="20"
+                       FontFamily="{StaticResource MainFontSemibold}"
+                       FontWeight="SemiBold"
+                       Foreground="{ThemeResource WhatsAppTextHighBrush}"
+                       VerticalAlignment="Center"
+                       TextWrapping="NoWrap"
+                       TextTrimming="CharacterEllipsis"
+                       MaxLines="1"/>
+        </Grid>
+
+        <!-- Community Minimal intro -->
+        <Grid Grid.Row="1"
+              Visibility="{Binding ShowCommunityIntro, Converter={StaticResource BooleanToVisibilityConverter}}"
+              Padding="24,16">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+            <StackPanel VerticalAlignment="Center" MaxWidth="420" HorizontalAlignment="Center">
+                <TextBlock Text="{Binding CreateExplainTitle}"
+                           FontSize="22"
+                           FontFamily="{StaticResource MainFontSemibold}"
+                           FontWeight="SemiBold"
+                           Foreground="{ThemeResource WhatsAppTextHighBrush}"
+                           TextWrapping="Wrap"/>
+                <TextBlock Text="{Binding CreateExplainBody}"
+                           Margin="0,12,0,0"
+                           FontSize="15"
+                           FontFamily="{StaticResource MainFont}"
+                           Foreground="{ThemeResource WhatsAppTextMediumBrush}"
+                           TextWrapping="Wrap"/>
+            </StackPanel>
+            <Button Grid.Row="1"
+                    HorizontalAlignment="Stretch"
+                    Margin="0,16,0,8"
+                    MinHeight="44"
+                    Background="{ThemeResource WhatsAppGreenFocusBrush}"
+                    Foreground="White"
+                    Command="{Binding StartCommunityCreateCommand}">
+                <TextBlock x:Uid="CreateFlow_Start"
+                           Text="Get started"
+                           FontFamily="{StaticResource MainFontSemibold}"
+                           FontWeight="SemiBold"/>
+            </Button>
+        </Grid>
+
+        <!-- Form -->
+        <Grid Grid.Row="1"
+              Visibility="{Binding ShowCreateForm, Converter={StaticResource BooleanToVisibilityConverter}}">
+            <Pivot x:Name="CreateGroupPivot"
+                   Visibility="{Binding IsCreateGroup, Converter={StaticResource BooleanToVisibilityConverter}}"
+                   SelectionChanged="CreateGroupPivot_SelectionChanged">
+                <PivotItem x:Uid="CreateGroup_MembersHeader" Header="Select members">
+                    <!-- Same A–Z SemanticZoom composition as New Conversation contacts. -->
+                    <SemanticZoom x:Name="MembersZoom">
+                        <SemanticZoom.ZoomedInView>
+                            <ListView x:Name="CreateMembersList"
+                                      SelectionMode="Multiple"
+                                      IsMultiSelectCheckBoxEnabled="True"
+                                      SelectionChanged="CreateMembersList_SelectionChanged"
+                                      ItemTemplate="{StaticResource CreateFlowContactTemplate}"
+                                      Background="Transparent"
+                                      ScrollViewer.IsVerticalScrollChainingEnabled="False">
+                                <ListView.GroupStyle>
+                                    <GroupStyle HeaderTemplate="{StaticResource CreateFlowGroupHeaderTemplate}"
+                                                HeaderContainerStyle="{StaticResource CreateFlowGroupHeaderContainerStyle}"/>
+                                </ListView.GroupStyle>
+                                <ListView.ItemContainerStyle>
+                                    <Style TargetType="ListViewItem">
+                                        <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                                        <Setter Property="Padding" Value="0"/>
+                                        <Setter Property="MinHeight" Value="0"/>
+                                    </Style>
+                                </ListView.ItemContainerStyle>
+                            </ListView>
+                        </SemanticZoom.ZoomedInView>
+                        <SemanticZoom.ZoomedOutView>
+                            <GridView x:Name="MembersJumpList"
+                                      HorizontalAlignment="Center"
+                                      VerticalAlignment="Center"
+                                      ItemTemplate="{StaticResource CreateFlowZoomedOutTemplate}"
+                                      IsItemClickEnabled="True"
+                                      SelectionMode="None"
+                                      Background="Transparent">
+                                <GridView.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <ItemsWrapGrid Orientation="Horizontal"
+                                                       HorizontalAlignment="Center"
+                                                       MaximumRowsOrColumns="4"/>
+                                    </ItemsPanelTemplate>
+                                </GridView.ItemsPanel>
+                                <GridView.ItemContainerStyle>
+                                    <Style TargetType="GridViewItem">
+                                        <Setter Property="HorizontalContentAlignment" Value="Center"/>
+                                        <Setter Property="VerticalContentAlignment" Value="Center"/>
+                                        <Setter Property="Margin" Value="0"/>
+                                        <Setter Property="Padding" Value="0"/>
+                                        <Setter Property="MinWidth" Value="0"/>
+                                        <Setter Property="MinHeight" Value="0"/>
+                                    </Style>
+                                </GridView.ItemContainerStyle>
+                            </GridView>
+                        </SemanticZoom.ZoomedOutView>
+                    </SemanticZoom>
+                </PivotItem>
+                <PivotItem x:Uid="CreateGroup_InfoHeader" Header="Group details">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <StackPanel Padding="16,24" MaxWidth="420" HorizontalAlignment="Center">
+                            <Border Width="96" Height="96"
+                                    CornerRadius="5"
+                                    Background="{ThemeResource ChatListSearchBackgroundBrush}"
+                                    HorizontalAlignment="Center">
+                                <FontIcon Glyph="&#xE8B8;"
+                                          FontFamily="{StaticResource IconFont}"
+                                          FontSize="36"
+                                          Foreground="{ThemeResource WhatsAppTextMediumBrush}"
+                                          HorizontalAlignment="Center"
+                                          VerticalAlignment="Center"/>
+                            </Border>
+                            <TextBox x:Uid="CreateGroup_Name"
+                                     Margin="0,20,0,0"
+                                     PlaceholderText="Group name"
+                                     Text="{Binding GroupName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                        </StackPanel>
+                    </ScrollViewer>
+                </PivotItem>
+            </Pivot>
+
+            <ScrollViewer Visibility="{Binding IsCreateCommunity, Converter={StaticResource BooleanToVisibilityConverter}}"
+                          VerticalScrollBarVisibility="Auto">
+                <StackPanel Padding="16,24" MaxWidth="420" HorizontalAlignment="Center">
+                    <Border Width="120" Height="120"
+                            CornerRadius="5"
+                            Background="{ThemeResource ChatListSearchBackgroundBrush}"
+                            HorizontalAlignment="Center">
+                        <FontIcon Glyph="&#xE8B8;"
+                                  FontFamily="{StaticResource IconFont}"
+                                  FontSize="40"
+                                  Foreground="{ThemeResource WhatsAppTextMediumBrush}"
+                                  HorizontalAlignment="Center"
+                                  VerticalAlignment="Center"/>
+                    </Border>
+                    <TextBox x:Uid="CreateCommunity_Name"
+                             Margin="0,20,0,0"
+                             PlaceholderText="Community name"
+                             Text="{Binding CommunityName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                    <TextBox x:Uid="CreateCommunity_Description"
+                             Margin="0,12,0,0"
+                             MinHeight="120"
+                             AcceptsReturn="True"
+                             TextWrapping="Wrap"
+                             PlaceholderText="Community description"
+                             Text="{Binding CommunityDescription, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                </StackPanel>
+            </ScrollViewer>
+
+            <!-- Circular FAB: next glyph, then confirm glyph. -->
+            <Button x:Name="CreateFabButton"
+                    Width="56" Height="56"
+                    HorizontalAlignment="Right"
+                    VerticalAlignment="Bottom"
+                    Margin="0,0,16,16"
+                    Padding="0"
+                    MinWidth="0"
+                    MinHeight="0"
+                    BorderThickness="0"
+                    Background="Transparent"
+                    Command="{Binding CreateNextCommand}"
+                    AutomationProperties.Name="{Binding PrimaryActionLabel}">
+                <Button.Template>
+                    <ControlTemplate TargetType="Button">
+                        <Grid Width="56" Height="56">
+                            <Ellipse Fill="{ThemeResource WhatsAppGreenFocusBrush}"/>
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Grid>
+                    </ControlTemplate>
+                </Button.Template>
+                <FontIcon Glyph="{Binding PrimaryActionGlyph}"
+                          FontFamily="{StaticResource IconFont}"
+                          FontSize="20"
+                          Foreground="White"/>
+            </Button>
+        </Grid>
+
+        <!-- Same empty layout as CallsEmpty / chat empty: 1px divider + centered icon + title + body. -->
+        <Border x:Name="CreateExplainPane"
+                Grid.RowSpan="2"
+                Grid.Column="1"
+                Visibility="{Binding ShowCreateExplainPane, Converter={StaticResource BooleanToVisibilityConverter}}"
+                Background="{ThemeResource ChatListBackgroundBrush}"
+                BorderBrush="{ThemeResource ChatDetailInputBarTopBorderBrush}"
+                BorderThickness="1,0,0,0">
+            <StackPanel HorizontalAlignment="Center"
+                        VerticalAlignment="Center"
+                        MaxWidth="420"
+                        Margin="32,24">
+                <FontIcon Glyph="{Binding CreateExplainGlyph}"
+                          FontFamily="{StaticResource IconFont}"
+                          FontSize="100"
+                          HorizontalAlignment="Center"
+                          Margin="0,0,0,20"
+                          Foreground="{ThemeResource WhatsAppTextMediumBrush}"/>
+                <TextBlock Text="{Binding CreateExplainTitle}"
+                           HorizontalAlignment="Center"
+                           TextAlignment="Center"
+                           TextWrapping="WrapWholeWords"
+                           FontSize="28"
+                           FontWeight="SemiBold"
+                           FontFamily="{StaticResource MainFontSemibold}"
+                           Foreground="{ThemeResource WhatsAppTextHighBrush}"/>
+                <TextBlock Text="{Binding CreateExplainBody}"
+                           HorizontalAlignment="Center"
+                           TextAlignment="Center"
+                           TextWrapping="WrapWholeWords"
+                           Margin="0,12,0,0"
+                           FontSize="14"
+                           LineHeight="22"
+                           FontFamily="{StaticResource MainFont}"
+                           Foreground="{ThemeResource WhatsAppTextMediumBrush}"/>
+            </StackPanel>
+        </Border>
+
+        <!-- Same grip as the chats list/detail PaneSplitter: chrome only on hover / drag. -->
+        <Border x:Name="CreateSplitter"
+                Grid.RowSpan="2"
+                Grid.ColumnSpan="2"
+                Canvas.ZIndex="2"
+                Width="10"
+                HorizontalAlignment="Left"
+                VerticalAlignment="Stretch"
+                Background="Transparent"
+                Visibility="Collapsed"
+                ManipulationMode="None">
+            <Border x:Name="CreateSplitterChrome"
+                    Background="{ThemeResource ChatPaneSplitterBackgroundBrush}"
+                    Opacity="0"
+                    IsHitTestVisible="False">
+                <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                    <Ellipse Width="3" Height="3" Margin="0,2"
+                             Fill="{ThemeResource ChatPaneSplitterGripBrush}"/>
+                    <Ellipse Width="3" Height="3" Margin="0,2"
+                             Fill="{ThemeResource ChatPaneSplitterGripBrush}"/>
+                    <Ellipse Width="3" Height="3" Margin="0,2"
+                             Fill="{ThemeResource ChatPaneSplitterGripBrush}"/>
+                </StackPanel>
+            </Border>
+        </Border>
+    </Grid>
+</UserControl>

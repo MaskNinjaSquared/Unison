@@ -41,7 +41,8 @@
 
             <DataTemplate x:Key="NewConversationGroupHeaderTemplate">
                 <Border Width="36" Height="36"
-                        Margin="16,12,16,4"
+                        Margin="10,12,16,4"
+                        HorizontalAlignment="Left"
                         BorderBrush="{ThemeResource SystemControlHighlightAccentBrush}"
                         BorderThickness="2"
                         Background="Transparent">
@@ -205,7 +206,7 @@
                 </VisualState>
                 <VisualState x:Name="Extended">
                     <VisualState.StateTriggers>
-                        <AdaptiveTrigger MinWindowWidth="500"/>
+                        <AdaptiveTrigger MinWindowWidth="560"/>
                     </VisualState.StateTriggers>
                     <VisualState.Setters>
                         <Setter Target="OptionsTilesHost.Visibility" Value="Collapsed"/>
@@ -221,24 +222,22 @@
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
 
-        <Grid Grid.Row="0" Padding="4,8,16,8" Background="{ThemeResource ChatListBackgroundBrush}">
+        <Grid x:Name="CatalogHeader" Grid.Row="0" Padding="4,8,16,8" Background="{ThemeResource ChatListBackgroundBrush}">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="*"/>
             </Grid.ColumnDefinitions>
 
             <Button x:Name="BackButton"
-                    Click="BackButton_Click"
                     Style="{StaticResource ModernIconButtonStyle}"
                     VerticalAlignment="Center"
                     Margin="4,0,8,0"
-                    Command="{Binding CloseCommand}">
+                    Command="{Binding HeaderBackCommand}">
                 <FontIcon Glyph="&#xE72B;" FontFamily="{StaticResource IconFont}" FontSize="18"/>
             </Button>
 
-            <TextBlock x:Uid="NewConversation_Title"
-                       Grid.Column="1"
-                       Text="New chat"
+            <TextBlock Grid.Column="1"
+                       Text="{Binding HeaderTitle}"
                        FontSize="20"
                        FontFamily="{StaticResource MainFontSemibold}"
                        FontWeight="SemiBold"
@@ -253,6 +252,7 @@
                  Grid.Row="1"
                  x:Uid="NewConversation_Search"
                  Margin="16,0,16,8"
+                 Style="{ThemeResource ChatListSearchTextBoxStyle}"
                  PlaceholderText="Search name or number"
                  Text="{Binding SearchQuery, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
 
@@ -595,5 +595,12 @@
                 </GridView>
             </SemanticZoom.ZoomedOutView>
         </SemanticZoom>
+
+        <!-- Unison / WhatsApp create scaffold (SemanticZoom members + circular FAB). -->
+        <controls:CreateConversationFlowView x:Name="CreateFlowPart"
+                                             Grid.Row="0"
+                                             Grid.RowSpan="3"
+                                             Visibility="Collapsed"/>
+
     </Grid>
 </UserControl>

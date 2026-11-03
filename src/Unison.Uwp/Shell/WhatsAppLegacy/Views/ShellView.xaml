@@ -4,6 +4,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:local="using:Unison.Uwp.Shell.WhatsAppLegacy.Views"
     xmlns:controls="using:Unison.Uwp.UI.Controls"
+    xmlns:legacyControls="using:Unison.Uwp.Shell.WhatsAppLegacy.Controls"
     xmlns:views="using:Unison.Uwp.UI.Views"
     Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
 
@@ -96,7 +97,7 @@
                 <TextBox x:Name="ShellSearchBox"
                          Grid.Row="1"
                          Margin="0,10,0,8"
-                         Style="{StaticResource LegacySearchBoxStyle}"
+                         Style="{ThemeResource ChatListSearchTextBoxStyle}"
                          x:Uid="Shell_LegacySearchBox"
                          PlaceholderText="search"
                          VerticalAlignment="Center"
@@ -238,7 +239,7 @@
             ItemClickCommand="{x:Bind ViewModel.SelectShareChatCommand}"
             BackCommand="{x:Bind ViewModel.CloseSharePickerCommand}"/>
 
-        <controls:NewConversationView
+        <legacyControls:NewConversationView
             x:Name="NewConversationOverlay"
             Grid.Column="0"
             Grid.ColumnSpan="2"

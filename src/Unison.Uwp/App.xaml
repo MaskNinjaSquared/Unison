@@ -34,10 +34,13 @@
             <converters:InvertedStringToVisibilityConverter x:Key="InvertedStringToVisibilityConverter"/>
             <converters:BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
             <converters:InvertedBooleanToVisibilityConverter x:Key="InvertedBooleanToVisibilityConverter"/>
+            <converters:HexColorToBrushConverter x:Key="HexColorToBrushConverter"/>
+            <converters:FontFamilyNameConverter x:Key="FontFamilyNameConverter"/>
             <converters:EmojiJumpFontConverter x:Key="EmojiJumpFontConverter"/>
             <converters:ChatPreviewKindToLabelConverter x:Key="ChatPreviewKindToLabelConverter"/>
             <converters:ChatPreviewKindToBrushConverter x:Key="ChatPreviewKindToBrushConverter"/>
             <converters:RelativeTimestampConverter x:Key="RelativeTimestampConverter"/>
+            <converters:ElapsedTimeConverter x:Key="ElapsedTimeConverter"/>
             <converters:LocalTimeConverter x:Key="LocalTimeConverter"/>
             <converters:ByteSizeConverter x:Key="ByteSizeConverter"/>
             <converters:FileSizeConverter x:Key="FileSizeConverter"/>
@@ -68,6 +71,8 @@
             <!-- Branding Colors -->
             <SolidColorBrush x:Key="UnisonGreenBrush" Color="#FF20C064"/>
             <SolidColorBrush x:Key="UnisonGreenBrightBrush" Color="#FF3DCA75"/>
+            <!-- Status ring (unseen) and the "My status" + badge; same green in every shell. -->
+            <SolidColorBrush x:Key="StatusRecentRingBrush" Color="#FF25D366"/>
             <!-- Fallback only; each shell ThemeDictionaries defines BootSurfaceBrush. -->
             <SolidColorBrush x:Key="BootSurfaceBrush" Color="#FF20C064"/>
             <SolidColorBrush x:Key="TextBoxBackgroundThemeBrush" Color="Transparent"/>

@@ -45,6 +45,26 @@ namespace Unison.Core.Contracts
         event System.EventHandler<string> ShellNavigated;
 
         /// <summary>
+        /// Wire the full-screen Frame that covers the whole shell (sidebar / pivot / detail).
+        /// Unison and WhatsApp: overlay Frame on MainView. Legacy: its Settings/Debug overlay Frame.
+        /// </summary>
+        void AttachFullScreenFrame(object frame);
+
+        /// <summary>
+        /// Open a full-screen page over the shell. The active shell strategy decides which
+        /// destinations are full-screen (Legacy: Settings / Debug; every shell: StatusComposer).
+        /// </summary>
+        void NavigateFullScreen(NavigationDestination destination, object parameter = null);
+
+        /// <summary>Close the full-screen page and drop its stack; no-op when nothing is open.</summary>
+        void CloseFullScreen();
+
+        bool IsFullScreenOpen { get; }
+
+        /// <summary>Raised after a full-screen page opens or closes.</summary>
+        event System.EventHandler FullScreenChanged;
+
+        /// <summary>
         /// Drop shell back/forward stacks and disable cache on the current shell page
         /// so logout/login does not revive a stale Chats/Settings instance.
         /// </summary>

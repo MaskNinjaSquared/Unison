@@ -252,5 +252,12 @@
             x:Name="NewConversationOverlay"
             Canvas.ZIndex="101"
             ViewModel="{x:Bind ViewModel.NewConversation, Mode=OneWay}"/>
+
+        <!-- Full-screen pages (INavigator.NavigateFullScreen): over the sidebar and every overlay. -->
+        <Frame x:Name="FullScreenFrame"
+               Canvas.ZIndex="102"
+               Visibility="Collapsed"
+               Background="{ThemeResource WhatsAppBackgroundBrush}"
+               Navigated="FullScreenFrame_Navigated"/>
     </Grid>
 </Page>

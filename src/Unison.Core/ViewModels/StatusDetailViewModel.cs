@@ -44,6 +44,7 @@ namespace Unison.Core.ViewModels
         private DateTime _itemShownUtc;
         private TimeSpan _itemDuration;
         private string _openingAuthorJid;
+        private string _startMessageId;
         private readonly RelayCommand _downloadCommand;
 
         public StatusDetailViewModel(
@@ -149,12 +150,18 @@ namespace Unison.Core.ViewModels
 
         public event EventHandler Closed;
 
-        public async Task OpenAuthorAsync(string authorJid, string displayName)
+        /// <param name="startMessageId">Status to show first (own "My status" page); null starts at the oldest.</param>
+        public async Task OpenAuthorAsync(string authorJid, string displayName, string startMessageId = null)
         {
             // SelectionChanged / list reload often re-raises the same author while EnsureMedia
             // is in flight. Bumping generation there cancelled show before any media log.
             if (IsSameAuthorOpen(authorJid))
             {
+                if (TryJumpTo(startMessageId))
+                {
+                    return;
+                }
+
                 LogStatus(
                     "open-skip-same",
                     "author=" + (authorJid ?? "-") +
@@ -168,6 +175,7 @@ namespace Unison.Core.ViewModels
             int generation = _openGeneration;
             _authorJid = authorJid;
             _openingAuthorJid = authorJid;
+            _startMessageId = startMessageId;
             AuthorName = displayName ?? string.Empty;
             HasOpenAuthor = !string.IsNullOrWhiteSpace(authorJid);
 
@@ -223,7 +231,8 @@ namespace Unison.Core.ViewModels
                 }
 
                 RebuildSegments(_items.Count);
-                _index = 0;
+                _index = StatusStartIndex.Resolve(_items, _startMessageId);
+                _startMessageId = null;
             }).ConfigureAwait(false);
 
             if (generation != _openGeneration)
@@ -253,6 +262,35 @@ namespace Unison.Core.ViewModels
             }
         }
 
+        /// <summary>
+        /// Same author re-opened on another item: still loading → remember the target;
+        /// already showing → move there. False when there is nothing to jump to.
+        /// </summary>
+        private bool TryJumpTo(string startMessageId)
+        {
+            if (string.IsNullOrWhiteSpace(startMessageId))
+            {
+                return false;
+            }
+
+            if (!string.IsNullOrWhiteSpace(_openingAuthorJid))
+            {
+                _startMessageId = startMessageId;
+                return true;
+            }
+
+            int? target = StatusStartIndex.Find(_items, startMessageId);
+            if (!target.HasValue || target.Value == _index)
+            {
+                return false;
+            }
+
+            LogStatus("open-jump", "from=" + _index + "; to=" + target.Value + "; id=" + startMessageId);
+            _index = target.Value;
+            _ = ShowCurrentAsync(_openGeneration);
+            return true;
+        }
+
         private bool IsSameAuthorOpen(string authorJid)
         {
             if (string.IsNullOrWhiteSpace(authorJid))
@@ -277,6 +315,7 @@ namespace Unison.Core.ViewModels
             _openGeneration++;
             _authorJid = null;
             _openingAuthorJid = null;
+            _startMessageId = null;
             _items = Array.Empty<HistoryStatus>();
             HasOpenAuthor = false;
             ResetVisual();
@@ -383,6 +422,7 @@ namespace Unison.Core.ViewModels
             _openGeneration++;
             _authorJid = null;
             _openingAuthorJid = null;
+            _startMessageId = null;
             _items = Array.Empty<HistoryStatus>();
             HasOpenAuthor = false;
             ResetVisual();

@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="15.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
   <PropertyGroup>
@@ -240,6 +240,7 @@
     </Compile>
     <Compile Include="Shell\WhatsAppLegacy\Views\LegacyCommandBarLayout.cs" />
     <Compile Include="Shell\WhatsAppLegacy\Views\LegacyProfileSecondary.cs" />
+    <Compile Include="UI\Views\MyStatusRowChrome.cs" />
     <Compile Include="Shell\WhatsAppLegacy\Views\LegacySectionAppBar.xaml.cs">
       <DependentUpon>LegacySectionAppBar.xaml</DependentUpon>
     </Compile>
@@ -357,6 +358,7 @@
     <Compile Include="Data\Entities\HistoryMessageRow.cs" />
     <Compile Include="Data\Entities\HistoryMessageReactionRow.cs" />
     <Compile Include="Data\Entities\HistoryStatusRow.cs" />
+    <Compile Include="Data\Entities\HistoryStatusViewerRow.cs" />
     <Compile Include="Data\Entities\CallLogRow.cs" />
     <Compile Include="Data\Entities\LidMappingRow.cs" />
     <Compile Include="UI\Controls\LoginInstructionHeader.xaml.cs">
@@ -502,7 +504,25 @@
     <Compile Include="UI\Controls\ContactsVisualizerControl.xaml.cs">
       <DependentUpon>ContactsVisualizerControl.xaml</DependentUpon>
     </Compile>
+    <Compile Include="UI\Controls\AlphabetSemanticZoomHost.cs" />
+    <Compile Include="UI\Controls\PaneSplitterHost.cs" />
+    <Compile Include="UI\Views\IFullScreenShellPage.cs" />
+    <Compile Include="UI\Views\StatusComposerView.xaml.cs">
+      <DependentUpon>StatusComposerView.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Shell\WhatsAppLegacy\Views\StatusComposerView.xaml.cs">
+      <DependentUpon>StatusComposerView.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="UI\Controls\CreateConversationFlowView.xaml.cs">
+      <DependentUpon>CreateConversationFlowView.xaml</DependentUpon>
+    </Compile>
     <Compile Include="UI\Controls\NewConversationView.xaml.cs">
+      <DependentUpon>NewConversationView.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Shell\WhatsAppLegacy\Controls\CreateConversationFlowView.xaml.cs">
+      <DependentUpon>CreateConversationFlowView.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Shell\WhatsAppLegacy\Controls\NewConversationView.xaml.cs">
       <DependentUpon>NewConversationView.xaml</DependentUpon>
     </Compile>
     <Compile Include="UI\Controls\FavoritesEmptyControl.xaml.cs">
@@ -552,10 +572,13 @@
     <Compile Include="UI\Converters\StringToImageSourceConverter.cs" />
     <Compile Include="UI\Converters\BooleanToVisibilityConverter.cs" />
     <Compile Include="UI\Converters\InvertedBooleanToVisibilityConverter.cs" />
+    <Compile Include="UI\Converters\HexColorToBrushConverter.cs" />
+    <Compile Include="UI\Converters\FontFamilyNameConverter.cs" />
     <Compile Include="UI\Converters\EmojiJumpFontConverter.cs" />
     <Compile Include="UI\Converters\InvertedStringToVisibilityConverter.cs" />
     <Compile Include="UI\Converters\ChatPreviewKindConverters.cs" />
     <Compile Include="UI\Converters\RelativeTimestampConverter.cs" />
+    <Compile Include="UI\Converters\ElapsedTimeConverter.cs" />
     <Compile Include="UI\Converters\LocalTimeConverter.cs" />
     <Compile Include="UI\Converters\ByteSizeConverter.cs" />
     <Compile Include="UI\Converters\FileSizeConverter.cs" />
@@ -725,6 +748,7 @@
     <Content Include="Assets\WhatsAppLegacy\default-contact-icon.png" />
     <Content Include="Assets\WhatsAppLegacy\default-group-icon.png" />
     <Content Include="Assets\WhatsAppLegacy\Icons\appbar-add.png" />
+    <Content Include="Assets\WhatsAppLegacy\Icons\appbar-next.png" />
     <Content Include="Assets\WhatsAppLegacy\Icons\appbar-search.png" />
     <Content Include="Assets\WhatsAppLegacy\Icons\composer-attach.png" />
     <Content Include="Assets\WhatsAppLegacy\Icons\composer-mic.png" />
@@ -1248,7 +1272,27 @@
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </Page>
+    <Page Include="UI\Views\StatusComposerView.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Include="Shell\WhatsAppLegacy\Views\StatusComposerView.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Include="UI\Controls\CreateConversationFlowView.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
     <Page Include="UI\Controls\NewConversationView.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Include="Shell\WhatsAppLegacy\Controls\CreateConversationFlowView.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Include="Shell\WhatsAppLegacy\Controls\NewConversationView.xaml">
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </Page>

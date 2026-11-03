@@ -1,0 +1,376 @@
+using System;
+using System.ComponentModel;
+using Unison.Core.Helpers;
+using Unison.Core.Models;
+using Unison.Core.ViewModels;
+using Unison.Uwp.UI.Controls;
+using Windows.UI.Core;
+using Windows.UI.Xaml;
+using Windows.UI.Xaml.Controls;
+using Windows.UI.Xaml.Data;
+using Windows.UI.Xaml.Media.Animation;
+
+namespace Unison.Uwp.Shell.WhatsAppLegacy.Controls
+{
+    /// <summary>
+    /// WhatsApp Legacy New Conversation overlay; hosts Legacy CreateConversationFlowView (CommandBar).
+    /// </summary>
+    public sealed partial class NewConversationView : UserControl
+    {
+        public static readonly DependencyProperty ViewModelProperty =
+            DependencyProperty.Register(
+                nameof(ViewModel),
+                typeof(NewConversationViewModel),
+                typeof(NewConversationView),
+                new PropertyMetadata(null, OnViewModelChanged));
+
+        private NewConversationViewModel _hookedVm;
+        private bool _backHooked;
+        private bool _layoutHooked;
+        private VisualStateGroup _layoutStates;
+        private AlphabetSemanticZoomHost _contactsZoom;
+
+        public NewConversationView()
+        {
+            InitializeComponent();
+            Visibility = Visibility.Collapsed;
+            Opacity = 1;
+            Loaded += NewConversationView_Loaded;
+            Unloaded += NewConversationView_Unloaded;
+        }
+
+        public NewConversationViewModel ViewModel
+        {
+            get => (NewConversationViewModel)GetValue(ViewModelProperty);
+            set => SetValue(ViewModelProperty, value);
+        }
+
+        private static void OnViewModelChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+        {
+            var control = d as NewConversationView;
+            control?.AttachViewModel(e.OldValue as NewConversationViewModel, e.NewValue as NewConversationViewModel);
+        }
+
+        private void AttachViewModel(NewConversationViewModel oldVm, NewConversationViewModel newVm)
+        {
+            if (_hookedVm != null)
+            {
+                _hookedVm.PropertyChanged -= ViewModel_PropertyChanged;
+                _hookedVm = null;
+            }
+
+            DataContext = newVm;
+            CreateFlowPart.ViewModel = newVm;
+            _hookedVm = newVm;
+            ApplyCreateFlowVisibility();
+            if (_hookedVm == null)
+            {
+                BeginClose(animate: false);
+                return;
+            }
+
+            _hookedVm.PropertyChanged += ViewModel_PropertyChanged;
+            if (_hookedVm.IsOpen)
+            {
+                BeginOpen();
+            }
+            else
+            {
+                BeginClose(animate: false);
+            }
+        }
+
+        private void ViewModel_PropertyChanged(object sender, PropertyChangedEventArgs e)
+        {
+            if (e == null || ViewModel == null)
+            {
+                return;
+            }
+
+            if (string.Equals(e.PropertyName, nameof(NewConversationViewModel.IsOpen), StringComparison.Ordinal))
+            {
+                if (ViewModel.IsOpen)
+                {
+                    BeginOpen();
+                }
+                else
+                {
+                    BeginClose(animate: true);
+                }
+
+                return;
+            }
+
+            if (string.Equals(e.PropertyName, nameof(NewConversationViewModel.IsCreateFlowOpen), StringComparison.Ordinal))
+            {
+                ApplyCreateFlowVisibility();
+                return;
+            }
+
+            if (string.Equals(e.PropertyName, nameof(NewConversationViewModel.GroupedContacts), StringComparison.Ordinal) ||
+                string.Equals(e.PropertyName, nameof(NewConversationViewModel.JumpTiles), StringComparison.Ordinal))
+            {
+                BindGroupedSource();
+            }
+        }
+
+        private void BeginOpen()
+        {
+            EnsureContactsZoom();
+            _contactsZoom?.ResetZoomedIn();
+            Opacity = 0;
+            Visibility = Visibility.Visible;
+            ApplyCreateFlowVisibility();
+            HookBack();
+            HookLayoutStates();
+            BindGroupedSource();
+            RunOpenFade();
+        }
+
+        private void BeginClose(bool animate)
+        {
+            UnhookBack();
+            _contactsZoom?.Clear();
+            Opacity = 1;
+            Visibility = Visibility.Collapsed;
+        }
+
+        private void EnsureContactsZoom()
+        {
+            if (_contactsZoom != null || ContactsZoom == null || ContactsList == null || JumpList == null)
+            {
+                return;
+            }
+
+            _contactsZoom = new AlphabetSemanticZoomHost(ContactsZoom, ContactsList, JumpList);
+        }
+
+        private void BindGroupedSource()
+        {
+            if (ViewModel == null)
+            {
+                return;
+            }
+
+            EnsureContactsZoom();
+            _contactsZoom?.Bind(ViewModel.GroupedContacts, ViewModel.JumpTiles);
+        }
+
+        /// <summary>Catalog (search + tiles + contacts) and the create wizard never share the screen.</summary>
+        private void ApplyCreateFlowVisibility()
+        {
+            bool isCreateFlowOpen = ViewModel != null && ViewModel.IsCreateFlowOpen;
+            Visibility catalog = isCreateFlowOpen ? Visibility.Collapsed : Visibility.Visible;
+            CatalogHeader.Visibility = catalog;
+            SearchBox.Visibility = catalog;
+            ContactsZoom.Visibility = catalog;
+            CreateFlowPart.Visibility = isCreateFlowOpen ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        private void RunOpenFade()
+        {
+            var anim = new DoubleAnimation
+            {
+                From = 0,
+                To = 1,
+                Duration = TimeSpan.FromMilliseconds(160),
+                EnableDependentAnimation = true
+            };
+            Storyboard.SetTarget(anim, this);
+            Storyboard.SetTargetProperty(anim, "Opacity");
+            var sb = new Storyboard();
+            sb.Children.Add(anim);
+            sb.Begin();
+        }
+
+        private void HookBack()
+        {
+            if (_backHooked)
+            {
+                return;
+            }
+
+            SystemNavigationManager.GetForCurrentView().BackRequested += OnBackRequested;
+            _backHooked = true;
+        }
+
+        private void UnhookBack()
+        {
+            if (!_backHooked)
+            {
+                return;
+            }
+
+            SystemNavigationManager.GetForCurrentView().BackRequested -= OnBackRequested;
+            _backHooked = false;
+        }
+
+        private void HookLayoutStates()
+        {
+            if (_layoutHooked)
+            {
+                return;
+            }
+
+            FrameworkElement host = LayoutRoot ?? (Content as FrameworkElement);
+            if (host == null)
+            {
+                return;
+            }
+
+            foreach (VisualStateGroup group in VisualStateManager.GetVisualStateGroups(host))
+            {
+                if (group.Name != "LayoutStates")
+                {
+                    continue;
+                }
+
+                _layoutStates = group;
+                _layoutStates.CurrentStateChanged += LayoutStates_CurrentStateChanged;
+                _layoutHooked = true;
+                ReportLayoutFromStates();
+                return;
+            }
+        }
+
+        private void UnhookLayoutStates()
+        {
+            if (!_layoutHooked || _layoutStates == null)
+            {
+                return;
+            }
+
+            _layoutStates.CurrentStateChanged -= LayoutStates_CurrentStateChanged;
+            _layoutStates = null;
+            _layoutHooked = false;
+        }
+
+        private void LayoutStates_CurrentStateChanged(object sender, VisualStateChangedEventArgs e)
+        {
+            ReportLayoutFromStates();
+        }
+
+        private void ReportLayoutFromStates()
+        {
+            string name = _layoutStates?.CurrentState?.Name;
+            bool minimal = string.IsNullOrEmpty(name) ||
+                           string.Equals(name, "Minimal", StringComparison.Ordinal);
+            ViewModel?.ReportLayoutMinimal(minimal);
+        }
+
+        private void OnBackRequested(object sender, BackRequestedEventArgs e)
+        {
+            if (ViewModel == null || !ViewModel.IsOpen)
+            {
+                return;
+            }
+
+            if (CreateFlowPart != null && CreateFlowPart.TryHandleMembersZoomBack())
+            {
+                e.Handled = true;
+                return;
+            }
+
+            if (ViewModel.TryHandleCreateBack())
+            {
+                e.Handled = true;
+                return;
+            }
+
+            if (_contactsZoom != null && _contactsZoom.TryHandleBackToZoomedIn())
+            {
+                e.Handled = true;
+                return;
+            }
+
+            e.Handled = true;
+            ViewModel.Close();
+        }
+
+        private void NewConversationView_Loaded(object sender, RoutedEventArgs e)
+        {
+            EnsureContactsZoom();
+            HookLayoutStates();
+        }
+
+        private void NewConversationView_Unloaded(object sender, RoutedEventArgs e)
+        {
+            UnhookBack();
+            UnhookLayoutStates();
+            if (_hookedVm != null)
+            {
+                _hookedVm.PropertyChanged -= ViewModel_PropertyChanged;
+                _hookedVm = null;
+            }
+        }
+
+        private void OptionsTilesHost_SizeChanged(object sender, SizeChangedEventArgs e)
+        {
+            if (OptionsTilesHost == null ||
+                OptionsTilesHost.Visibility != Visibility.Visible ||
+                e.NewSize.Width <= 0)
+            {
+                return;
+            }
+
+            const double tileMargin = 5;
+            const double maxSide = 150;
+            const int columns = 3;
+            double side = Math.Floor((e.NewSize.Width / columns) - (tileMargin * 2));
+            if (side < 1)
+            {
+                return;
+            }
+
+            if (side > maxSide)
+            {
+                side = maxSide;
+            }
+
+            ApplyMinimalTileSide(TileNewGroup, side);
+            ApplyMinimalTileSide(TileNewContact, side);
+            ApplyMinimalTileSide(TileNewCommunity, side);
+            ApplyMinimalTileSide(TilePhoneNumber, side);
+            ApplyMinimalTileSide(SelfTile, side);
+        }
+
+        private static void ApplyMinimalTileSide(FrameworkElement tile, double side)
+        {
+            if (tile == null)
+            {
+                return;
+            }
+
+            tile.Width = side;
+            tile.Height = side;
+        }
+
+        private void ContactsList_ItemClick(object sender, ItemClickEventArgs e)
+        {
+            var chat = e.ClickedItem as ChatItem;
+            if (chat == null || ViewModel?.SelectContactCommand == null)
+            {
+                return;
+            }
+
+            if (ViewModel.SelectContactCommand.CanExecute(chat))
+            {
+                ViewModel.SelectContactCommand.Execute(chat);
+            }
+        }
+
+        // Jump / SemanticZoom handlers kept for XAML event wiring; host owns the logic.
+        private void JumpList_ItemClick(object sender, ItemClickEventArgs e)
+        {
+            // AlphabetSemanticZoomHost also listens; keep empty for XAML compatibility if wired.
+        }
+
+        private void ContactsZoom_ViewChangeStarted(object sender, SemanticZoomViewChangedEventArgs e)
+        {
+        }
+
+        private void ContactsZoom_ViewChangeCompleted(object sender, SemanticZoomViewChangedEventArgs e)
+        {
+        }
+    }
+}

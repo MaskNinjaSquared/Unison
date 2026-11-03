@@ -24,6 +24,27 @@ namespace Unison.Uwp.Services
             }
         }
 
+        public async Task<bool> LaunchForResultsAsync(string url)
+        {
+            if (string.IsNullOrWhiteSpace(url))
+            {
+                return false;
+            }
+
+            try
+            {
+                LaunchUriResult result = await Launcher.LaunchUriForResultsAsync(
+                    new Uri(url),
+                    new LauncherOptions());
+                return result != null && result.Status == LaunchUriStatus.Success;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine("[UriLauncherService] ForResults: " + ex.Message);
+                return false;
+            }
+        }
+
         public async Task<bool> LaunchLocalFileAsync(string uriOrPath)
         {
             if (string.IsNullOrWhiteSpace(uriOrPath))

@@ -15,8 +15,9 @@ namespace Unison.Uwp.UI.Controls
     /// </summary>
     public sealed partial class StatusListAvatarControl : UserControl
     {
-        private static readonly SolidColorBrush RecentRingBrush =
-            new SolidColorBrush(Color.FromArgb(0xFF, 0x25, 0xD3, 0x66));
+        private static readonly Brush RecentRingBrush =
+            (Application.Current?.Resources["StatusRecentRingBrush"] as Brush)
+            ?? new SolidColorBrush(Color.FromArgb(0xFF, 0x25, 0xD3, 0x66));
 
         private static readonly SolidColorBrush ViewedRingBrush =
             new SolidColorBrush(Color.FromArgb(0xFF, 0x9E, 0x9E, 0x9E));

@@ -13,6 +13,7 @@ namespace Unison.Uwp.Services
         private readonly Frame _rootFrame;
         private readonly IShellNavigationStrategy _shellNav;
         private Frame _shellFrame;
+        private Frame _fullScreenFrame;
 
         public NavigatorService(Frame frame, IShellNavigationStrategy shellNav)
         {
@@ -27,6 +28,10 @@ namespace Unison.Uwp.Services
         public string CurrentShellRoute => ResolveShellRoute(_shellFrame?.Content);
 
         public event EventHandler<string> ShellNavigated;
+
+        public event EventHandler FullScreenChanged;
+
+        public bool IsFullScreenOpen => _fullScreenFrame?.Content != null;
 
         public void AttachShellFrame(object frame)
         {
@@ -75,6 +80,12 @@ namespace Unison.Uwp.Services
                 return;
             }
 
+            if (IsFullScreenDestination(destination))
+            {
+                NavigateFullScreen(destination, parameter);
+                return;
+            }
+
             NavigateCore(_shellFrame, _shellNav.ResolveShellPage(destination), parameter, clearStack: false);
         }
 
@@ -86,18 +97,65 @@ namespace Unison.Uwp.Services
                 return;
             }
 
+            if (IsFullScreenDestination(destination))
+            {
+                NavigateFullScreen(destination, parameter);
+                return;
+            }
+
             NavigateCore(_shellFrame, _shellNav.ResolveShellPage(destination), parameter, clearStack: true);
         }
 
         public void OpenSettings(bool openProfile = false)
         {
-            if (_shellFrame == null)
+            bool fullScreen = IsFullScreenDestination(NavigationDestination.Settings);
+            Frame target = fullScreen ? _fullScreenFrame : _shellFrame;
+            if (target == null)
             {
                 throw new InvalidOperationException("Shell frame is not ready for OpenSettings.");
             }
 
-            _shellNav.OpenSettings(_shellFrame, openProfile);
+            _shellNav.OpenSettings(target, openProfile);
             RaiseShellNavigated();
+            if (fullScreen)
+            {
+                FullScreenChanged?.Invoke(this, EventArgs.Empty);
+            }
+        }
+
+        public void AttachFullScreenFrame(object frame)
+        {
+            _fullScreenFrame = frame as Frame;
+        }
+
+        public void NavigateFullScreen(NavigationDestination destination, object parameter = null)
+        {
+            if (destination == NavigationDestination.Settings)
+            {
+                OpenSettings(parameter is bool openProfile && openProfile);
+                return;
+            }
+
+            Type pageType = _shellNav.ResolveFullScreenPage(destination);
+            if (pageType == null)
+            {
+                throw new InvalidOperationException(destination + " is not a full-screen destination for this shell.");
+            }
+
+            NavigateCore(_fullScreenFrame, pageType, parameter, clearStack: false);
+            FullScreenChanged?.Invoke(this, EventArgs.Empty);
+        }
+
+        public void CloseFullScreen()
+        {
+            if (!IsFullScreenOpen)
+            {
+                return;
+            }
+
+            ClearFrameBackStack(_fullScreenFrame);
+            _fullScreenFrame.Content = null;
+            FullScreenChanged?.Invoke(this, EventArgs.Empty);
         }
 
         public void GoBackInShell()
@@ -128,6 +186,9 @@ namespace Unison.Uwp.Services
 
             ClearFrameBackStack(_shellFrame);
         }
+
+        private bool IsFullScreenDestination(NavigationDestination destination) =>
+            _fullScreenFrame != null && _shellNav.ResolveFullScreenPage(destination) != null;
 
         private void ShellFrame_Navigated(object sender, NavigationEventArgs e)
         {

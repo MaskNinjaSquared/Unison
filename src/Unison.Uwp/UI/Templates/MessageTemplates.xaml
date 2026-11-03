@@ -1381,9 +1381,9 @@
         </Grid>
     </DataTemplate>
 
-    <!-- CallEvent: quote-style bubble (not GroupJoin system line). -->
+    <!-- CallEvent: normal chat bubble chrome; quote strip inside (MinHeight 50). -->
     <DataTemplate x:Key="MessageCallEventTemplate" x:DataType="vm:ChatMessageViewModel">
-        <Grid HorizontalAlignment="Stretch" Margin="12,2,12,2">
+        <Grid HorizontalAlignment="Stretch">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="Auto"/>
@@ -1397,41 +1397,141 @@
                 Grid.Row="1"
                 Text="{x:Bind UnreadDividerText, Mode=OneWay}"
                 Visibility="{x:Bind IsUnreadDivider, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
-            <Border Grid.Row="2"
-                    HorizontalAlignment="Left"
-                    Background="{ThemeResource ChatDetailReceivedQuoteBackgroundBrush}"
-                    CornerRadius="8"
-                    Padding="12,10"
-                    MaxWidth="432">
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto"/>
-                        <ColumnDefinition Width="*"/>
-                    </Grid.ColumnDefinitions>
-                    <FontIcon Glyph="{x:Bind CallGlyph, Mode=OneWay}"
-                              FontFamily="{StaticResource IconFont}"
-                              FontSize="20"
-                              VerticalAlignment="Center"
-                              Margin="0,0,12,0"
-                              Foreground="{x:Bind IsMissedCall, Mode=OneWay, Converter={StaticResource CallMissedToBrushConverter}}"/>
-                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                        <TextBlock Text="{x:Bind CallTitle, Mode=OneWay}"
-                                   FontSize="15"
-                                   FontWeight="SemiBold"
-                                   FontFamily="{StaticResource MainFontSemibold}"
-                                   Foreground="{ThemeResource WhatsAppTextHighBrush}"
-                                   TextWrapping="NoWrap"
-                                   TextTrimming="CharacterEllipsis"/>
-                        <TextBlock Text="{x:Bind CallSubtitle, Mode=OneWay}"
-                                   FontSize="13"
-                                   Margin="0,2,0,0"
-                                   FontFamily="{StaticResource MainFont}"
-                                   Foreground="{x:Bind IsMissedCall, Mode=OneWay, Converter={StaticResource CallMissedToBrushConverter}}"
-                                   TextWrapping="WrapWholeWords"
-                                   Visibility="{x:Bind HasCallSubtitle, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
-                    </StackPanel>
+
+            <!-- Call cards always get run-start spacing (top+bottom) so they do not glue to neighbors. -->
+            <StackPanel Grid.Row="2">
+                <Border Height="5" Background="Transparent"/>
+
+                <!-- Outgoing call bubble -->
+                <Grid HorizontalAlignment="Right"
+                      Margin="48,0,12,0"
+                      MaxWidth="432"
+                      Visibility="{x:Bind IsFromMe, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}">
+                    <controls:MessageBubbleChromeHost
+                        IsFromMe="True"
+                        IsRunStart="False"
+                        IsRunEnd="False"
+                        IsGroupChat="{x:Bind IsGroupChat, Mode=OneWay}"/>
+                    <Border Background="Transparent" Margin="0,1,0,0" Padding="12,8,16,8">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+                            <Border Background="{ThemeResource ChatDetailSentQuoteBackgroundBrush}"
+                                    CornerRadius="8"
+                                    Padding="10,8"
+                                    MinHeight="50"
+                                    VerticalAlignment="Stretch">
+                                <Grid VerticalAlignment="Center">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <FontIcon Glyph="{x:Bind CallGlyph, Mode=OneWay}"
+                                              FontFamily="{StaticResource IconFont}"
+                                              FontSize="20"
+                                              Width="20" Height="20"
+                                              VerticalAlignment="Center"
+                                              Margin="0,0,10,0"
+                                              Foreground="{x:Bind IsMissedCall, Mode=OneWay, Converter={StaticResource CallMissedToBrushConverter}}"/>
+                                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                        <TextBlock Text="{x:Bind CallTitle, Mode=OneWay}"
+                                                   FontSize="15"
+                                                   FontWeight="SemiBold"
+                                                   FontFamily="{StaticResource MainFontSemibold}"
+                                                   Foreground="{ThemeResource ChatDetailSentTextBrush}"
+                                                   TextWrapping="NoWrap"
+                                                   TextTrimming="CharacterEllipsis"/>
+                                        <TextBlock Text="{x:Bind CallSubtitle, Mode=OneWay}"
+                                                   FontSize="13"
+                                                   Margin="0,2,0,0"
+                                                   FontFamily="{StaticResource MainFont}"
+                                                   Foreground="{x:Bind IsMissedCall, Mode=OneWay, Converter={StaticResource CallMissedToBrushConverter}}"
+                                                   TextWrapping="WrapWholeWords"
+                                                   Visibility="{x:Bind HasCallSubtitle, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                                    </StackPanel>
+                                </Grid>
+                            </Border>
+                            <StackPanel Grid.Row="1"
+                                        Orientation="Horizontal"
+                                        HorizontalAlignment="Right"
+                                        Margin="0,4,0,0">
+                                <TextBlock Text="{x:Bind Timestamp, Mode=OneWay, Converter={StaticResource LocalTimeConverter}}"
+                                           Foreground="{ThemeResource ChatDetailSentMetaBrush}"
+                                           FontSize="11"
+                                           FontFamily="{StaticResource MainFont}"/>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
                 </Grid>
-            </Border>
+
+                <!-- Incoming call bubble -->
+                <Grid HorizontalAlignment="Left"
+                      Margin="12,0,48,0"
+                      MaxWidth="432"
+                      Visibility="{x:Bind IsFromMe, Mode=OneWay, Converter={StaticResource InvertedBooleanToVisibilityConverter}}">
+                    <controls:MessageBubbleChromeHost
+                        IsFromMe="False"
+                        IsRunStart="False"
+                        IsRunEnd="False"
+                        IsGroupChat="{x:Bind IsGroupChat, Mode=OneWay}"/>
+                    <Border Background="Transparent" Margin="0,1,0,0" Padding="16,8,12,8">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+                            <Border Background="{ThemeResource ChatDetailReceivedQuoteBackgroundBrush}"
+                                    CornerRadius="8"
+                                    Padding="10,8"
+                                    MinHeight="50"
+                                    VerticalAlignment="Stretch">
+                                <Grid VerticalAlignment="Center">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <FontIcon Glyph="{x:Bind CallGlyph, Mode=OneWay}"
+                                              FontFamily="{StaticResource IconFont}"
+                                              FontSize="20"
+                                              Width="20" Height="20"
+                                              VerticalAlignment="Center"
+                                              Margin="0,0,10,0"
+                                              Foreground="{x:Bind IsMissedCall, Mode=OneWay, Converter={StaticResource CallMissedToBrushConverter}}"/>
+                                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                        <TextBlock Text="{x:Bind CallTitle, Mode=OneWay}"
+                                                   FontSize="15"
+                                                   FontWeight="SemiBold"
+                                                   FontFamily="{StaticResource MainFontSemibold}"
+                                                   Foreground="{ThemeResource ChatDetailReceivedTextBrush}"
+                                                   TextWrapping="NoWrap"
+                                                   TextTrimming="CharacterEllipsis"/>
+                                        <TextBlock Text="{x:Bind CallSubtitle, Mode=OneWay}"
+                                                   FontSize="13"
+                                                   Margin="0,2,0,0"
+                                                   FontFamily="{StaticResource MainFont}"
+                                                   Foreground="{x:Bind IsMissedCall, Mode=OneWay, Converter={StaticResource CallMissedToBrushConverter}}"
+                                                   TextWrapping="WrapWholeWords"
+                                                   Visibility="{x:Bind HasCallSubtitle, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                                    </StackPanel>
+                                </Grid>
+                            </Border>
+                            <StackPanel Grid.Row="1"
+                                        Orientation="Horizontal"
+                                        HorizontalAlignment="Right"
+                                        Margin="0,4,0,0">
+                                <TextBlock Text="{x:Bind Timestamp, Mode=OneWay, Converter={StaticResource LocalTimeConverter}}"
+                                           Foreground="{ThemeResource ChatDetailReceivedMetaBrush}"
+                                           FontSize="11"
+                                           FontFamily="{StaticResource MainFont}"/>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+                </Grid>
+
+                <Border Height="5" Background="Transparent"/>
+            </StackPanel>
         </Grid>
     </DataTemplate>
 

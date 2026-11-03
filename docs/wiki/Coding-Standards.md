@@ -197,6 +197,7 @@ Text normalization: `ChatPreviewNormalizer.Normalize` is the **chat-list preview
 - Page **types** only in `ShellThemeStrategy` / `NavigatorService`. Core never names a view type.
 - **Settings:** `INavigator.OpenSettings()` (explicit). Unison: `Shell/Unison/Views/SettingsView`. WhatsApp: `Shell/WhatsApp/Dialogs/SettingsDialog` (section UI in code-behind).
 - Other shell sections: `NavigateInShell(NavigationDestination.Chats|Archived|Status|Debug)`.
+- **Full-screen pages** (cover sidebar / pivot / detail): `INavigator.NavigateFullScreen(destination)` / `CloseFullScreen()`. Each shell attaches its frame with `AttachFullScreenFrame` (MainView: `FullScreenFrame` over the SplitView; Legacy: `ContentFrame`). `ShellThemeStrategy.ResolveFullScreenPage` decides which destinations are full-screen: every shell maps `StatusComposer`; Legacy also maps `Settings` and `Debug`, so `OpenSettings` / `NavigateInShell(Debug)` land there too. Pages implement `IFullScreenShellPage` to get system Back first.
 - Auth boundaries: `NavigateAndClear` (Boot / Start / Login / AppShell). No back stack into login.
 - Master-detail stays on `ChatsView` / `StatusView` (not a Frame push list → detail). Route pages such as `ArchivedChatsView` are separate shell pages with matching XAML (`x:Class`), not derived `Page` types loading a base `.xaml`.
 - Settings keys and defaults: `LocalSettingsConstants`. Do not invent a parallel key string; Background toasts that share a key must keep the **same literal**.

@@ -989,6 +989,7 @@ namespace Unison.Uwp
             services.AddTransient<FavoritesViewModel>();
             services.AddTransient<CallsViewModel>();
             services.AddTransient<ChatDetailViewModel>();
+            services.AddTransient<StatusComposerViewModel>();
             services.AddTransient<StatusListViewModel>();
             services.AddTransient<StatusDetailViewModel>();
             services.AddTransient<DebugViewModel>();

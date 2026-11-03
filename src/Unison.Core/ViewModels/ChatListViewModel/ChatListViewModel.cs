@@ -216,6 +216,7 @@ namespace Unison.Core.ViewModels
         /// opens the phone-number path.
         /// </summary>
         private readonly INewChatDialogViewModelFactory _newChatFactory;
+        private readonly ILocalContactsService _localContacts;
 
         /// <summary>Full-bleed New Conversation overlay (tiles + A–Z).</summary>
         private readonly NewConversationViewModel _newConversation;
@@ -249,7 +250,8 @@ namespace Unison.Core.ViewModels
             ChatTimelineLoadPriorityGate timelineLoadPriority = null,
             ISystemInfoProvider systemInfo = null,
             IAppVisibility appVisibility = null,
-            NewConversationViewModel newConversation = null)
+            NewConversationViewModel newConversation = null,
+            ILocalContactsService localContacts = null)
         {
             _jids = jids ?? throw new ArgumentNullException(nameof(jids));
             _chatService = chatService;
@@ -279,6 +281,7 @@ namespace Unison.Core.ViewModels
             _groupPreviewFactory = groupPreviewFactory;
             _newChatFactory = newChatFactory ?? throw new ArgumentNullException(nameof(newChatFactory));
             _newConversation = newConversation;
+            _localContacts = localContacts;
 
             // Strategy-driven: WhatsApp always inline; Unison Mobile uses StatusBar.
             DisplaySync = theme == null || theme.DisplaySyncInChatList;
@@ -334,7 +337,7 @@ namespace Unison.Core.ViewModels
                            _chatStore != null);
             OpenMenuCommand = new RelayCommand(() => MenuRequested?.Invoke(this, EventArgs.Empty));
             NewChatCommand = new RelayCommand(OpenNewConversation);
-            AddContactCommand = new RelayCommand(BeginAddContact);
+            AddContactCommand = new RelayCommand(() => _ = BeginAddContactAsync());
             FilterChatsCommand = new RelayCommand<int>(ApplyChatListFilter);
         }
 
@@ -581,8 +584,25 @@ namespace Unison.Core.ViewModels
         /// </summary>
         public ICommand FilterChatsCommand { get; }
 
-        private static void BeginAddContact()
+        /// <summary>
+        /// Legacy list CommandBar "Add contact" — same People blank editor as New Conversation.
+        /// Unison/WhatsApp list chrome has no equivalent; chat-detail Add Contact stays per-person.
+        /// </summary>
+        private async Task BeginAddContactAsync()
         {
+            if (_localContacts == null)
+            {
+                return;
+            }
+
+            try
+            {
+                await _localContacts.OpenNewContactEditorAsync().ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[ChatList] Add contact failed: " + ex.Message);
+            }
         }
 
         // ---------------------------------------------------------------------
