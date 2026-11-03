@@ -108,10 +108,7 @@ namespace Unison.WhatsAppClient.Helpers
             }
 
             return source
-                .OrderByDescending(c => c.IsChatPinned)
-                .ThenByDescending(c => c.PinnedTimestamp ?? 0)
-                .ThenByDescending(c => c.LastMessageTimestampUtc ?? DateTime.MinValue)
-                .ThenBy(c => c.Name ?? string.Empty, StringComparer.CurrentCultureIgnoreCase)
+                .OrderBy(c => c, Comparer<ChatItem>.Create(ChatDisplayOrder.Compare))
                 .ToList();
         }
     }

@@ -14,6 +14,7 @@ namespace Unison.Core.Models
         private string _jid;
         private ChatStatus _status = ChatStatus.Active;
         private bool _isChatPinned;
+        private long? _pinnedTimestamp;
         private bool _isWidgetPinned;
         private bool _isFavorite;
         private long? _mutedUntil;
@@ -44,6 +45,16 @@ namespace Unison.Core.Models
                 _isChatPinned = value;
                 _known |= ChatLocalStateFields.Pin;
             }
+        }
+
+        /// <summary>
+        /// Unix-seconds sort key assigned when WhatsApp pinned this chat. It travels with the pin
+        /// state so message activity cannot replace the user's pinned-chat order after a restart.
+        /// </summary>
+        public long? PinnedTimestamp
+        {
+            get { return _pinnedTimestamp; }
+            set { _pinnedTimestamp = value; }
         }
 
         /// <summary>Start live-tile / secondary tile pin.</summary>

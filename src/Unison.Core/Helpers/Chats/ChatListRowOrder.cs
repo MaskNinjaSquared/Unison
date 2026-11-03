@@ -43,6 +43,10 @@ namespace Unison.Core.Helpers.Chats
                 {
                     return pinCompare;
                 }
+
+                // WhatsApp pin timestamps are only second-precision. Equal pins retain their
+                // existing list order; activity in either chat must not change that order.
+                return 0;
             }
 
             DateTime leftTime = left.LastMessageTimestampUtc.HasValue

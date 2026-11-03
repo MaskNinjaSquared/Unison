@@ -54,6 +54,10 @@ namespace Unison.WhatsAppClient.Helpers
                 {
                     return pinCompare;
                 }
+
+                // Equal second-precision pin times are a stable tie. Do not let message activity
+                // reorder chats the user has already pinned.
+                return 0;
             }
 
             DateTime leftTime = left.LastMessageTimestampUtc.HasValue

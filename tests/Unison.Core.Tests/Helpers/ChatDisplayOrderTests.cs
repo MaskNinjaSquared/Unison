@@ -67,12 +67,13 @@ namespace Unison.Core.Tests.Helpers
         }
 
         [Fact]
-        public void Pinned_chats_with_the_same_pin_time_fall_through_to_last_message()
+        public void Pinned_chats_with_the_same_pin_time_keep_their_existing_order()
         {
             var older = Chat("a", Utc(1), pinned: true, pinnedAt: 100);
             var newer = Chat("b", Utc(20), pinned: true, pinnedAt: 100);
 
-            Assert.True(LeftComesFirst(newer, older));
+            Assert.Equal(0, ChatDisplayOrder.Compare(older, newer));
+            Assert.Equal(0, ChatDisplayOrder.Compare(newer, older));
         }
 
         // --- recency ---------------------------------------------------------
