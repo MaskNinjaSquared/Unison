@@ -938,31 +938,28 @@ namespace Unison.Uwp.Data
 
         private async Task EnsureMediaBatchColumnsAsync()
         {
-            List<SqliteTableInfoRow> cols = await _connection
-                .QueryAsync<SqliteTableInfoRow>("PRAGMA table_info(history_message)")
-                .ConfigureAwait(false);
-            await AddColumnIfMissingAsync(cols, "LocalMediaBatchId", "TEXT").ConfigureAwait(false);
-            await AddColumnIfMissingAsync(cols, "LocalMediaBatchIndex", "INTEGER NOT NULL DEFAULT 0").ConfigureAwait(false);
-            await AddColumnIfMissingAsync(cols, "LocalMediaBatchCount", "INTEGER NOT NULL DEFAULT 0").ConfigureAwait(false);
+            await AddColumnIfMissingAsync("LocalMediaBatchId", "TEXT").ConfigureAwait(false);
+            await AddColumnIfMissingAsync("LocalMediaBatchIndex", "INTEGER NOT NULL DEFAULT 0").ConfigureAwait(false);
+            await AddColumnIfMissingAsync("LocalMediaBatchCount", "INTEGER NOT NULL DEFAULT 0").ConfigureAwait(false);
         }
 
-        private async Task AddColumnIfMissingAsync(
-            IReadOnlyList<SqliteTableInfoRow> columns,
-            string name,
-            string definition)
+        /// <summary>
+        /// Relies on "duplicate column name" instead of PRAGMA table_info: under .NET Native the
+        /// private row type used for PRAGMA mapping loses its setters, so names read back null.
+        /// </summary>
+        private async Task AddColumnIfMissingAsync(string name, string definition)
         {
-            for (int i = 0; i < columns.Count; i++)
+            try
             {
-                if (columns[i] != null &&
-                    string.Equals(columns[i].name, name, StringComparison.OrdinalIgnoreCase))
-                {
-                    return;
-                }
+                await _connection
+                    .ExecuteAsync("ALTER TABLE history_message ADD COLUMN " + name + " " + definition)
+                    .ConfigureAwait(false);
             }
-
-            await _connection
-                .ExecuteAsync("ALTER TABLE history_message ADD COLUMN " + name + " " + definition)
-                .ConfigureAwait(false);
+            catch (SQLiteException ex) when (
+                ex.Message != null &&
+                ex.Message.IndexOf("duplicate column name", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+            }
         }
 
         private sealed class SqliteTableInfoRow
