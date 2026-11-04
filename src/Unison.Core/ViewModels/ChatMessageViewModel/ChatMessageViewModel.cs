@@ -333,7 +333,7 @@ namespace Unison.Core.ViewModels
                 name == nameof(ChatMessage.LocalMediaBatchIndex) ||
                 name == nameof(ChatMessage.LocalMediaBatchCount))
             {
-                RaiseCore(nameof(ShowInTimeline), nameof(IsGalleryLead), nameof(GalleryCountLabel));
+                RaiseCore(nameof(IsGalleryLead), nameof(GalleryCountLabel));
             }
         }
 
@@ -1036,16 +1036,6 @@ namespace Unison.Core.ViewModels
         }
 
         public string ImageUri => Model.ImageUri;
-
-        /// <summary>
-        /// Followers in a locally-created image batch remain separate models for message actions,
-        /// but are visually represented by the batch lead.
-        /// </summary>
-        public bool ShowInTimeline =>
-            !Model.IsFromMe ||
-            string.IsNullOrWhiteSpace(Model.LocalMediaBatchId) ||
-            Model.LocalMediaBatchCount < 2 ||
-            Model.LocalMediaBatchIndex == 0;
 
         public bool IsGalleryLead =>
             Model.IsFromMe &&
