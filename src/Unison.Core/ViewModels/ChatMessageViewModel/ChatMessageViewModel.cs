@@ -333,7 +333,7 @@ namespace Unison.Core.ViewModels
                 name == nameof(ChatMessage.LocalMediaBatchIndex) ||
                 name == nameof(ChatMessage.LocalMediaBatchCount))
             {
-                RaiseCore(nameof(IsGalleryLead), nameof(GalleryCountLabel));
+                RaiseCore(nameof(IsGalleryItem), nameof(GalleryPositionLabel));
             }
         }
 
@@ -1037,13 +1037,16 @@ namespace Unison.Core.ViewModels
 
         public string ImageUri => Model.ImageUri;
 
-        public bool IsGalleryLead =>
+        public bool IsGalleryItem =>
             Model.IsFromMe &&
             !string.IsNullOrWhiteSpace(Model.LocalMediaBatchId) &&
             Model.LocalMediaBatchCount > 1 &&
-            Model.LocalMediaBatchIndex == 0;
+            Model.LocalMediaBatchIndex >= 0 &&
+            Model.LocalMediaBatchIndex < Model.LocalMediaBatchCount;
 
-        public string GalleryCountLabel => IsGalleryLead ? "+" + (Model.LocalMediaBatchCount - 1) : string.Empty;
+        public string GalleryPositionLabel => IsGalleryItem
+            ? (Model.LocalMediaBatchIndex + 1) + "/" + Model.LocalMediaBatchCount
+            : string.Empty;
 
         /// <summary>Local picture for a minimized reply chrome. Thumbnail when the full file is not here.</summary>
         public string PreviewImageUri
