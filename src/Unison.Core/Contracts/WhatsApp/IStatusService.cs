@@ -60,5 +60,12 @@ namespace Unison.Core.Contracts.WhatsApp
         /// ingest (thumb + store).
         /// </summary>
         Task IngestLiveFromDecryptedAsync(IncomingLiveStatusRequest request);
+
+        /// <summary>
+        /// Publishes a text Status to <see cref="StatusTextPost.RecipientJids"/> plus the
+        /// account's own devices. Throws when not connected or when there is nobody to send to;
+        /// the sent item reaches "My status" through the normal live ingest.
+        /// </summary>
+        Task<string> PublishTextStatusAsync(StatusTextPost post);
     }
 }

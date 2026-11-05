@@ -564,12 +564,16 @@ namespace Unison.Uwp
                 sp.GetRequiredService<ILidMappingDiskPersistGate>()));
             services.AddSingleton<IHistoryService>(sp => sp.GetRequiredService<HistoryFacade>());
 
+            services.AddSingleton<IStatusWireActions>(sp => new BridgeStatusWireActions(
+                sp.GetRequiredService<UwpSessionProvider>()));
             services.AddSingleton(sp => new StatusFacade(
                 sp.GetRequiredService<IHistoryStatusStore>(),
                 sp.GetRequiredService<IPersonStore>(),
                 sp.GetRequiredService<IMessageService>(),
                 sp.GetRequiredService<IStatusThumbnailMaterializer>(),
-                sp.GetRequiredService<IRuntimeDiagnostics>()));
+                sp.GetRequiredService<IRuntimeDiagnostics>(),
+                sp.GetRequiredService<IStatusWireActions>(),
+                sp.GetRequiredService<IJidResolver>()));
             services.AddSingleton<IStatusService>(sp => sp.GetRequiredService<StatusFacade>());
 
             services.AddSingleton<IMediaDownloadHost>(sp => new QuietMediaMessagePersist(

@@ -11,21 +11,17 @@
 
     <!-- Full-screen page (INavigator.NavigateFullScreen). DataContext: StatusComposerViewModel. Floating chrome (privacy pill + circular send). -->
     <Page.Resources>
-        <!-- No chrome in any state: only the text and its placeholder. -->
-        <Style x:Key="StatusComposerTextBoxStyle" TargetType="TextBox">
+        <!-- No chrome in any state: only the text and its placeholder. RichEditBox so emoji
+             render with the packaged WhatsApp face (a TextBox cannot mix fonts per character). -->
+        <Style x:Key="StatusComposerInputStyle" TargetType="RichEditBox">
             <Setter Property="Foreground" Value="White"/>
-            <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="Padding" Value="0"/>
             <Setter Property="FontSize" Value="32"/>
             <Setter Property="TextAlignment" Value="Center"/>
-            <Setter Property="TextWrapping" Value="Wrap"/>
-            <Setter Property="AcceptsReturn" Value="True"/>
             <Setter Property="IsSpellCheckEnabled" Value="False"/>
             <Setter Property="UseSystemFocusVisuals" Value="False"/>
             <Setter Property="Template">
                 <Setter.Value>
-                    <ControlTemplate TargetType="TextBox">
+                    <ControlTemplate TargetType="RichEditBox">
                         <Grid Background="Transparent">
                             <ContentControl x:Name="PlaceholderTextContentPresenter"
                                             Content="{TemplateBinding PlaceholderText}"
@@ -174,16 +170,22 @@
             </StackPanel>
         </Grid>
 
-        <TextBox x:Name="StatusTextInput"
-                 x:Uid="StatusComposer_Input"
-                 Grid.Row="1"
-                 Margin="24,16,24,88"
-                 VerticalAlignment="Center"
-                 MaxLength="700"
-                 PlaceholderText="Type a status"
-                 Style="{StaticResource StatusComposerTextBoxStyle}"
-                 FontFamily="{Binding FontFamilyName, Converter={StaticResource FontFamilyNameConverter}}"
-                 Text="{Binding Text, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+        <!-- ChatComposerInput sets chat-sized layout locally in its constructor; these attributes override it. -->
+        <controls:ChatComposerInput x:Name="StatusTextInput"
+                                    x:Uid="StatusComposer_Input"
+                                    Grid.Row="1"
+                                    Margin="24,16,24,88"
+                                    VerticalAlignment="Center"
+                                    Padding="0"
+                                    MinHeight="0"
+                                    MaxHeight="100000"
+                                    AcceptsReturn="True"
+                                    Background="Transparent"
+                                    MaxLength="700"
+                                    PlaceholderText="Type a status"
+                                    Style="{StaticResource StatusComposerInputStyle}"
+                                    FontFamily="{Binding FontFamilyName, Converter={StaticResource FontFamilyNameConverter}, ConverterParameter=Emoji}"
+                                    BoundText="{Binding Text, Mode=TwoWay}"/>
 
         <Grid Grid.Row="1"
               VerticalAlignment="Bottom"
@@ -206,5 +208,29 @@
 
         <controls:ChatStickerBox Grid.Row="2"
                                  Visibility="{Binding IsEmojiTrayOpen, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+
+        <controls:StatusContactPickerView x:Name="ContactPicker"
+                                          Grid.RowSpan="3"
+                                          Canvas.ZIndex="5"
+                                          ViewModel="{Binding}"
+                                          Visibility="{Binding IsContactPickerOpen, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+
+        <Grid Grid.RowSpan="3"
+              Canvas.ZIndex="10"
+              Background="#B3000000"
+              Visibility="{Binding IsPublishing, Converter={StaticResource BooleanToVisibilityConverter}}">
+            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                <controls:ModernProgressRing IsActive="{Binding IsPublishing}"
+                                             Width="48" Height="48"
+                                             HorizontalAlignment="Center"/>
+                <TextBlock x:Uid="StatusComposer_Publishing"
+                           Text="Publishing status..."
+                           Margin="0,16,0,0"
+                           FontSize="15"
+                           FontFamily="{StaticResource MainFont}"
+                           Foreground="White"
+                           HorizontalAlignment="Center"/>
+            </StackPanel>
+        </Grid>
     </Grid>
 </Page>

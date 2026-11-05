@@ -23,7 +23,20 @@ namespace Unison.Uwp.UI.Views
 
         public StatusComposerViewModel ViewModel { get; }
 
-        public bool TryHandleBack() => ViewModel != null && ViewModel.TryHandleBack();
+        public bool TryHandleBack()
+        {
+            if (ViewModel == null)
+            {
+                return false;
+            }
+
+            if (ViewModel.IsContactPickerOpen && ContactPicker.TryHandleZoomBack())
+            {
+                return true;
+            }
+
+            return ViewModel.TryHandleBack();
+        }
 
         protected override void OnNavigatedTo(NavigationEventArgs e)
         {

@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using Unison.Core.Contracts;
 using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Models;
+using Unison.Core.State;
 using Unison.Core.Tests.Helpers;
 using Unison.Core.ViewModels;
 using Xunit;
@@ -56,7 +57,7 @@ namespace Unison.Core.Tests.ViewModels
         }
 
         [Fact]
-        public void Send_needs_text_and_only_shows_unavailable_dialog()
+        public void Send_needs_text_and_without_a_status_service_only_shows_unavailable_dialog()
         {
             var dialogs = new RecordingDialogs();
             var vm = new StatusComposerViewModel(new CountingDispatcher(), dialogs);
@@ -72,16 +73,225 @@ namespace Unison.Core.Tests.ViewModels
         }
 
         [Fact]
-        public void Privacy_opens_an_empty_dialog()
+        public void Privacy_defaults_to_all_contacts()
         {
-            var dialogs = new RecordingDialogs();
+            var vm = new StatusComposerViewModel(new CountingDispatcher());
+
+            Assert.Equal(StatusAudienceMode.Contacts, vm.AudienceMode);
+            Assert.Equal("Status: Contacts", vm.PrivacyLabel);
+            Assert.Equal("0 contacts excluded", vm.ExcludedCountLabel);
+            Assert.Equal("0 contacts selected", vm.OnlyShareWithCountLabel);
+        }
+
+        [Fact]
+        public void Privacy_except_opens_picker_then_reshows_dialog_and_commits_on_confirm()
+        {
+            var dialogs = new RecordingDialogs(
+                StatusPrivacyDialogChoice.PickExcluded,
+                StatusPrivacyDialogChoice.Confirm);
             var vm = new StatusComposerViewModel(new CountingDispatcher(), dialogs);
 
             vm.PrivacyCommand.Execute(null);
 
+            Assert.True(vm.IsContactPickerOpen);
+            Assert.Equal(StatusAudienceMode.ContactsExcept, vm.ContactPickerMode);
+            Assert.True(vm.ContactPickerConfirmCommand.CanExecute(null));
+
+            vm.SetPickerSelection(new[] { "1@s.whatsapp.net", "2@s.whatsapp.net" });
+            Assert.Equal("2 selected", vm.ContactPickerSubtitle);
+            vm.ContactPickerConfirmCommand.Execute(null);
+
+            Assert.False(vm.IsContactPickerOpen);
+            Assert.Equal(2, dialogs.PrivacyShown);
+            Assert.Equal(StatusAudienceMode.ContactsExcept, vm.AudienceMode);
+            Assert.Equal(new[] { "1@s.whatsapp.net", "2@s.whatsapp.net" }, vm.ExcludedContactJids);
+            Assert.Equal("2 contacts excluded", vm.ExcludedCountLabel);
+            Assert.Equal("Status: Contacts except 2", vm.PrivacyLabel);
+        }
+
+        [Fact]
+        public void Privacy_picker_reopens_with_the_saved_selection()
+        {
+            var dialogs = new RecordingDialogs(
+                StatusPrivacyDialogChoice.PickOnlyShareWith,
+                StatusPrivacyDialogChoice.Confirm,
+                StatusPrivacyDialogChoice.PickOnlyShareWith);
+            var vm = new StatusComposerViewModel(new CountingDispatcher(), dialogs);
+
+            vm.PrivacyCommand.Execute(null);
+            vm.SetPickerSelection(new[] { "1@s.whatsapp.net" });
+            vm.ContactPickerConfirmCommand.Execute(null);
+            Assert.Equal("1 contacts selected", vm.OnlyShareWithCountLabel);
+
+            vm.PrivacyCommand.Execute(null);
+
+            Assert.True(vm.IsContactPickerOpen);
+            Assert.Equal(StatusAudienceMode.OnlyShareWith, vm.ContactPickerMode);
+            Assert.True(vm.IsPickerContactSelected("1@s.whatsapp.net"));
+            Assert.False(vm.IsPickerContactSelected("2@s.whatsapp.net"));
+        }
+
+        [Fact]
+        public void Privacy_only_share_with_needs_at_least_one_contact()
+        {
+            var dialogs = new RecordingDialogs(StatusPrivacyDialogChoice.PickOnlyShareWith);
+            var vm = new StatusComposerViewModel(new CountingDispatcher(), dialogs);
+
+            vm.PrivacyCommand.Execute(null);
+
+            Assert.False(vm.ContactPickerConfirmCommand.CanExecute(null));
+            vm.SetPickerSelection(new[] { "1@s.whatsapp.net" });
+            Assert.True(vm.ContactPickerConfirmCommand.CanExecute(null));
+        }
+
+        [Fact]
+        public void Privacy_cancelled_picker_keeps_the_previous_audience_and_list()
+        {
+            var dialogs = new RecordingDialogs(
+                StatusPrivacyDialogChoice.PickExcluded,
+                StatusPrivacyDialogChoice.Confirm);
+            var vm = new StatusComposerViewModel(new CountingDispatcher(), dialogs);
+
+            vm.PrivacyCommand.Execute(null);
+            vm.SetPickerSelection(new[] { "1@s.whatsapp.net" });
+            Assert.True(vm.TryHandleBack());
+
+            Assert.False(vm.IsContactPickerOpen);
+            Assert.Equal(StatusAudienceMode.Contacts, vm.AudienceMode);
+            Assert.Empty(vm.ExcludedContactJids);
+        }
+
+        [Fact]
+        public void Privacy_cancel_reverts_the_pending_choice()
+        {
+            var dialogs = new RecordingDialogs(
+                StatusPrivacyDialogChoice.PickExcluded,
+                StatusPrivacyDialogChoice.Cancel);
+            var vm = new StatusComposerViewModel(new CountingDispatcher(), dialogs);
+
+            vm.PrivacyCommand.Execute(null);
+            vm.SetPickerSelection(new[] { "1@s.whatsapp.net" });
+            vm.ContactPickerConfirmCommand.Execute(null);
+
+            Assert.Equal(StatusAudienceMode.Contacts, vm.AudienceMode);
+            Assert.Single(vm.ExcludedContactJids);
+        }
+
+        [Fact]
+        public void Publish_sends_to_only_share_with_list_then_toasts_and_closes()
+        {
+            var status = new RecordingStatus();
+            var notifications = new RecordingNotifications();
+            var navigator = new RecordingNavigator();
+            var dialogs = new RecordingDialogs(
+                StatusPrivacyDialogChoice.PickOnlyShareWith,
+                StatusPrivacyDialogChoice.Confirm);
+            var vm = new StatusComposerViewModel(
+                new CountingDispatcher(),
+                dialogs,
+                navigator: navigator,
+                status: status,
+                notifications: notifications);
+            vm.PrivacyCommand.Execute(null);
+            vm.SetPickerSelection(new[] { "1@s.whatsapp.net" });
+            vm.ContactPickerConfirmCommand.Execute(null);
+            vm.Text = " hi 😀 ";
+
+            vm.SendCommand.Execute(null);
+
+            Assert.NotNull(status.LastPost);
+            Assert.Equal("hi 😀", status.LastPost.Text);
+            Assert.Equal(new[] { "1@s.whatsapp.net" }, status.LastPost.RecipientJids);
+            Assert.Equal(0xFFFFFFFFu, status.LastPost.TextArgb);
+            Assert.Equal(StatusComposerViewModel.ParseArgb(vm.BackgroundColor), status.LastPost.BackgroundArgb);
+            Assert.Equal(StatusComposerViewModel.FontWireTypes[0], status.LastPost.Font);
+            Assert.False(vm.IsPublishing);
+            Assert.Equal("Status published", notifications.LastTitle);
+            Assert.Equal(1, navigator.CloseFullScreenCalls);
+        }
+
+        [Fact]
+        public void Publish_to_all_contacts_uses_people_from_the_chat_list()
+        {
+            var dispatcher = new CountingDispatcher();
+            var chats = new ChatStateStore(dispatcher);
+            chats.Chats.Add(new ChatItem { JID = "1@s.whatsapp.net", Name = "Ana", Kind = ChatKind.Direct });
+            chats.Chats.Add(new ChatItem { JID = "2@s.whatsapp.net", Name = "Bia", Kind = ChatKind.Direct });
+            chats.Chats.Add(new ChatItem { JID = "9@g.us", Name = "Group", Kind = ChatKind.Group });
+            var status = new RecordingStatus();
+            var dialogs = new RecordingDialogs(
+                StatusPrivacyDialogChoice.PickExcluded,
+                StatusPrivacyDialogChoice.Confirm);
+            var vm = new StatusComposerViewModel(dispatcher, dialogs, status: status, chatState: chats);
+            vm.PrivacyCommand.Execute(null);
+            Assert.Equal(2, CountRows(vm));
+            vm.SetPickerSelection(new[] { "2@s.whatsapp.net" });
+            vm.ContactPickerConfirmCommand.Execute(null);
+            vm.Text = "hi";
+
+            vm.SendCommand.Execute(null);
+
+            Assert.Equal(new[] { "1@s.whatsapp.net" }, status.LastPost.RecipientJids);
+        }
+
+        [Fact]
+        public void Publish_failure_drops_the_overlay_and_keeps_the_draft()
+        {
+            var status = new RecordingStatus { Fail = true };
+            var navigator = new RecordingNavigator();
+            var dialogs = new RecordingDialogs(
+                StatusPrivacyDialogChoice.PickOnlyShareWith,
+                StatusPrivacyDialogChoice.Confirm);
+            var vm = new StatusComposerViewModel(
+                new CountingDispatcher(),
+                dialogs,
+                navigator: navigator,
+                status: status,
+                notifications: new RecordingNotifications());
+            vm.PrivacyCommand.Execute(null);
+            vm.SetPickerSelection(new[] { "1@s.whatsapp.net" });
+            vm.ContactPickerConfirmCommand.Execute(null);
+            vm.Text = "hi";
+
+            vm.SendCommand.Execute(null);
+
+            Assert.False(vm.IsPublishing);
+            Assert.Equal("hi", vm.Text);
             Assert.Equal(1, dialogs.Shown);
-            Assert.Equal(string.Empty, dialogs.LastContent);
-            Assert.Equal("Status: Contacts", vm.PrivacyLabel);
+            Assert.Equal(0, navigator.CloseFullScreenCalls);
+        }
+
+        [Fact]
+        public void Publish_without_recipients_does_not_send()
+        {
+            var status = new RecordingStatus();
+            var dialogs = new RecordingDialogs();
+            var vm = new StatusComposerViewModel(new CountingDispatcher(), dialogs, status: status);
+            vm.Text = "hi";
+
+            vm.SendCommand.Execute(null);
+
+            Assert.Null(status.LastPost);
+            Assert.Equal(1, dialogs.Shown);
+        }
+
+        [Fact]
+        public void ParseArgb_reads_palette_hex()
+        {
+            Assert.Equal(0xFF128C7Eu, StatusComposerViewModel.ParseArgb("#FF128C7E"));
+            Assert.Equal(0xFF5696FFu, StatusComposerViewModel.ParseArgb("5696FF"));
+            Assert.Equal(StatusComposerViewModel.FontPalette.Count, StatusComposerViewModel.FontWireTypes.Count);
+        }
+
+        private static int CountRows(StatusComposerViewModel vm)
+        {
+            int count = 0;
+            foreach (var group in vm.PickerGroupedContacts)
+            {
+                count += group.Count;
+            }
+
+            return count;
         }
 
         [Fact]
@@ -233,10 +443,99 @@ namespace Unison.Core.Tests.ViewModels
             public string DescribeStatusItem(HistoryStatus item, int index = -1) => string.Empty;
 
             public Task IngestLiveFromDecryptedAsync(IncomingLiveStatusRequest request) => Task.CompletedTask;
+
+            public Task<string> PublishTextStatusAsync(StatusTextPost post) => Task.FromResult("id");
+        }
+
+        private sealed class RecordingStatus : IStatusService
+        {
+            public bool Fail { get; set; }
+
+            public StatusTextPost LastPost { get; private set; }
+
+            public event EventHandler StatusUpdated { add { } remove { } }
+
+            public Task<string> PublishTextStatusAsync(StatusTextPost post)
+            {
+                if (Fail)
+                {
+                    throw new InvalidOperationException("offline");
+                }
+
+                LastPost = post;
+                return Task.FromResult("id");
+            }
+
+            public Task<IReadOnlyList<StatusAuthorItem>> GetActiveAuthorsAsync() =>
+                Task.FromResult<IReadOnlyList<StatusAuthorItem>>(Array.Empty<StatusAuthorItem>());
+
+            public Task<IReadOnlyList<HistoryStatus>> GetActiveForAuthorAsync(string authorJid) =>
+                Task.FromResult<IReadOnlyList<HistoryStatus>>(Array.Empty<HistoryStatus>());
+
+            public Task<string> EnsureMediaAsync(HistoryStatus status) => Task.FromResult<string>(null);
+
+            public Task MarkViewedAsync(string authorJid, string messageId) => Task.CompletedTask;
+
+            public Task RecordViewersAsync(IEnumerable<string> messageIds, string viewerJid, DateTime viewedAtUtc) =>
+                Task.CompletedTask;
+
+            public Task<IReadOnlyList<OwnStatusItem>> GetOwnStatusesAsync(string selfJid) =>
+                Task.FromResult<IReadOnlyList<OwnStatusItem>>(Array.Empty<OwnStatusItem>());
+
+            public string ResolveMediaDisplayUri(string downloadedUri, HistoryStatus item) => downloadedUri;
+
+            public bool ShowStatusAsVideo(ChatPreviewKind kind, string displayUri) => false;
+
+            public bool ShowStatusAsImage(ChatPreviewKind kind, string displayUri) => false;
+
+            public string DescribeStatusItem(HistoryStatus item, int index = -1) => string.Empty;
+
+            public Task IngestLiveFromDecryptedAsync(IncomingLiveStatusRequest request) => Task.CompletedTask;
+        }
+
+        private sealed class RecordingNotifications : INotificationService
+        {
+            public string LastTitle { get; private set; }
+
+            public void ShowToast(string title, string body) => LastTitle = title;
+
+            public void Initialize() { }
+
+            public void NotifyIncomingMessage(
+                string chatJid, string chatName, string senderName, string preview, bool isGroup, bool isMuted,
+                bool suppressToast, int totalUnread, string avatarUrl = null, int chatUnread = -1,
+                bool isCommunityAnnounce = false, bool isFavorite = false, bool isChannel = false) { }
+
+            public void NotifyCallAlert(
+                string title, string body, string chatJid = null, bool updateLiveTile = false, bool isFavorite = false) { }
+
+            public void RefreshUnreadState(IEnumerable<ChatItem> chats) { }
+
+            public void UpdateBadge(int totalUnread) { }
+
+            public void ClearAll() { }
+
+            public void OnNotificationsConfigChanged() { }
         }
 
         private sealed class RecordingDialogs : IDialogService
         {
+            private readonly Queue<StatusPrivacyDialogChoice> _privacyChoices;
+
+            public RecordingDialogs(params StatusPrivacyDialogChoice[] privacyChoices)
+            {
+                _privacyChoices = new Queue<StatusPrivacyDialogChoice>(privacyChoices);
+            }
+
+            public int PrivacyShown { get; private set; }
+
+            public Task<StatusPrivacyDialogChoice> ShowStatusPrivacyAsync(StatusComposerViewModel composer)
+            {
+                PrivacyShown++;
+                return Task.FromResult(
+                    _privacyChoices.Count > 0 ? _privacyChoices.Dequeue() : StatusPrivacyDialogChoice.Cancel);
+            }
+
             public int Shown { get; private set; }
 
             public string LastContent { get; private set; }
@@ -272,7 +571,7 @@ namespace Unison.Core.Tests.ViewModels
                 Task.FromResult(false);
 
             public Task<ImageSendPreviewResult> ShowImageSendPreviewAsync(
-                byte[] imageBytes, string infoText, string initialCaption = null) =>
+                IReadOnlyList<byte[]> imageBytes, string infoText, string initialCaption = null) =>
                 Task.FromResult(new ImageSendPreviewResult());
 
             public Task<ImageSendPreviewResult> ShowDocumentSendPreviewAsync(
@@ -297,6 +596,11 @@ namespace Unison.Core.Tests.ViewModels
                 Task.FromResult<LockScreenNotificationScope?>(null);
 
             public Task<bool> ShowChatExportOptionsAsync() => Task.FromResult(false);
+
+            public Task ShowCallBackAsync(string phoneDigitsOrRaw) => Task.CompletedTask;
+
+            public Task<GroupEphemeralDuration?> ShowGroupEphemeralAsync(GroupEphemeralDuration current) =>
+                Task.FromResult<GroupEphemeralDuration?>(null);
 
             public Task<ChatExportReadyChoice> ShowChatExportReadyAsync(string fileName, string infoText) =>
                 Task.FromResult(ChatExportReadyChoice.Dismissed);

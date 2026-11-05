@@ -625,6 +625,57 @@ Desative depois de diagnosticar: manter ligado deixa o app lento.</value>
   <data name="CreateGroup_Name.PlaceholderText" xml:space="preserve">
     <value>Nome do grupo</value>
   </data>
+  <data name="CreateGroup_Name.Header" xml:space="preserve">
+    <value>Nome do grupo</value>
+  </data>
+  <data name="CreateGroup_AddPhotoOverlay.Text" xml:space="preserve">
+    <value>Adicionar imagem do grupo...</value>
+  </data>
+  <data name="CreateGroup_EphemeralTitle.Text" xml:space="preserve">
+    <value>Mensagens temporárias</value>
+  </data>
+  <data name="CreateGroup_EphemeralDialog.Title" xml:space="preserve">
+    <value>Mensagens temporárias</value>
+  </data>
+  <data name="CreateGroup_EphemeralDialog.PrimaryButtonText" xml:space="preserve">
+    <value>OK</value>
+  </data>
+  <data name="CreateGroup_EphemeralDialog.CloseButtonText" xml:space="preserve">
+    <value>Cancelar</value>
+  </data>
+  <data name="CreateGroup_EphemeralDialogBody.Text" xml:space="preserve">
+    <value>Todas as novas mensagens desta conversa desaparecerão após o período selecionado...</value>
+  </data>
+  <data name="CreateGroup_Ephemeral_24Hours.Content" xml:space="preserve">
+    <value>24 horas</value>
+  </data>
+  <data name="CreateGroup_Ephemeral_7Days.Content" xml:space="preserve">
+    <value>7 dias</value>
+  </data>
+  <data name="CreateGroup_Ephemeral_90Days.Content" xml:space="preserve">
+    <value>90 dias</value>
+  </data>
+  <data name="CreateGroup_Ephemeral_Off.Content" xml:space="preserve">
+    <value>Desativadas</value>
+  </data>
+  <data name="CreateGroup_EphemeralStatus_24Hours" xml:space="preserve">
+    <value>24 horas</value>
+  </data>
+  <data name="CreateGroup_EphemeralStatus_7Days" xml:space="preserve">
+    <value>7 dias</value>
+  </data>
+  <data name="CreateGroup_EphemeralStatus_90Days" xml:space="preserve">
+    <value>90 dias</value>
+  </data>
+  <data name="CreateGroup_EphemeralStatus_Off" xml:space="preserve">
+    <value>Desativadas</value>
+  </data>
+  <data name="CreateGroup_PermissionsTitle.Text" xml:space="preserve">
+    <value>Permissão de grupo</value>
+  </data>
+  <data name="CreateGroup_PermissionsOverlayTitle.Text" xml:space="preserve">
+    <value>Permissões de grupo</value>
+  </data>
   <data name="CreateCommunity_ExplainTitle" xml:space="preserve">
     <value>Criar comunidade</value>
   </data>
@@ -634,8 +685,26 @@ Desative depois de diagnosticar: manter ligado deixa o app lento.</value>
   <data name="CreateCommunity_Name.PlaceholderText" xml:space="preserve">
     <value>Nome da comunidade</value>
   </data>
+  <data name="CreateCommunity_Name.Header" xml:space="preserve">
+    <value>Nome da Comunidade</value>
+  </data>
   <data name="CreateCommunity_Description.PlaceholderText" xml:space="preserve">
     <value>Olá! Esta comunidade foi criada para que os participantes possam conversar em grupos de assuntos específicos e receber avisos importantes.</value>
+  </data>
+  <data name="CreateCommunity_Description.Header" xml:space="preserve">
+    <value>Descrição da Comunidade</value>
+  </data>
+  <data name="CreateCommunity_AddPhotoOverlay.Text" xml:space="preserve">
+    <value>Adicionar Imagem da Comunidade...</value>
+  </data>
+  <data name="CallBack_TitleFormat" xml:space="preserve">
+    <value>Ligar para {0}</value>
+  </data>
+  <data name="CallBack_VoiceCall" xml:space="preserve">
+    <value>Ligação de Voz</value>
+  </data>
+  <data name="CallBack_CallBackLink.Content" xml:space="preserve">
+    <value>Ligar de volta</value>
   </data>
   <data name="NewConversation_SelfUnavailable" xml:space="preserve">
     <value>Sua conta ainda não está pronta.</value>
@@ -1959,6 +2028,75 @@ Desative depois de diagnosticar: manter ligado deixa o app lento.</value>
   </data>
   <data name="StatusComposer_Title" xml:space="preserve">
     <value>Status de texto</value>
+  </data>
+  <data name="StatusComposer_PrivacyExcept" xml:space="preserve">
+    <value>Status: Contatos exceto {0}</value>
+  </data>
+  <data name="StatusComposer_PrivacyOnly" xml:space="preserve">
+    <value>Status: Somente {0}</value>
+  </data>
+  <data name="StatusComposer_Publishing.Text" xml:space="preserve">
+    <value>Publicando status...</value>
+  </data>
+  <data name="StatusComposer_NoRecipients" xml:space="preserve">
+    <value>Não há contatos para compartilhar este status.</value>
+  </data>
+  <data name="StatusComposer_PublishFailedTitle" xml:space="preserve">
+    <value>Status não publicado</value>
+  </data>
+  <data name="StatusComposer_PublishFailedBody" xml:space="preserve">
+    <value>Não foi possível publicar seu status. Verifique sua conexão e tente novamente.</value>
+  </data>
+  <data name="StatusComposer_PublishedTitle" xml:space="preserve">
+    <value>Status Publicado</value>
+  </data>
+  <data name="StatusComposer_PublishedBody" xml:space="preserve">
+    <value>Seu status já está visível para quem você escolheu pelas próximas 24 horas.</value>
+  </data>
+  <data name="StatusPrivacyDialog.Title" xml:space="preserve">
+    <value>Privacidade do Status</value>
+  </data>
+  <data name="StatusPrivacyDialog.PrimaryButtonText" xml:space="preserve">
+    <value>Confirmar</value>
+  </data>
+  <data name="StatusPrivacyDialog.CloseButtonText" xml:space="preserve">
+    <value>Cancelar</value>
+  </data>
+  <data name="StatusPrivacyDialog_Prompt.Text" xml:space="preserve">
+    <value>Para quem meu status é exibido no WhatsApp</value>
+  </data>
+  <data name="StatusPrivacyDialog_Contacts.Text" xml:space="preserve">
+    <value>Meus contatos</value>
+  </data>
+  <data name="StatusPrivacyDialog_ContactsHint.Text" xml:space="preserve">
+    <value>Compartilhar com todos os seus contatos</value>
+  </data>
+  <data name="StatusPrivacyDialog_Except.Text" xml:space="preserve">
+    <value>Meus contatos, exceto...</value>
+  </data>
+  <data name="StatusPrivacyDialog_Only.Text" xml:space="preserve">
+    <value>Compartilhar somente com...</value>
+  </data>
+  <data name="StatusPrivacy_ExcludedCount" xml:space="preserve">
+    <value>{0} contatos excluídos</value>
+  </data>
+  <data name="StatusPrivacy_SelectedCount" xml:space="preserve">
+    <value>{0} contatos selecionados</value>
+  </data>
+  <data name="StatusPrivacy_ExceptTitle" xml:space="preserve">
+    <value>Meus contatos, exceto...</value>
+  </data>
+  <data name="StatusPrivacy_OnlyShareWithTitle" xml:space="preserve">
+    <value>Compartilhar somente com...</value>
+  </data>
+  <data name="StatusPrivacy_PickerSelected" xml:space="preserve">
+    <value>{0} selecionados</value>
+  </data>
+  <data name="StatusPicker_ConfirmAppBar.Label" xml:space="preserve">
+    <value>Confirmar</value>
+  </data>
+  <data name="StatusPicker_CancelAppBar.Label" xml:space="preserve">
+    <value>Cancelar</value>
   </data>
   <data name="StatusList_NewStatusDockTitle.Text" xml:space="preserve">
     <value>NOVO STATUS</value>

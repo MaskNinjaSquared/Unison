@@ -1,5 +1,6 @@
 <UserControl
     x:Class="Unison.Uwp.Shell.WhatsAppLegacy.Views.StatusListView"
+    x:Name="Root"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:models="using:Unison.Core.Models"
@@ -383,12 +384,14 @@
                                           FontFamily="{StaticResource IconFont}"
                                           FontSize="18"/>
                                 <Button.Flyout>
-                                    <MenuFlyout MenuFlyoutPresenterStyle="{StaticResource ModernMenuFlyoutStyle}">
+                                    <MenuFlyout MenuFlyoutPresenterStyle="{StaticResource ModernMenuFlyoutStyle}"
+                                                Opening="OwnStatusMoreFlyout_Opening">
                                         <MenuFlyoutItem x:Uid="StatusList_OwnForward"
                                                         Text="Forward"
                                                         Style="{StaticResource ModernMenuFlyoutItemStyle}"/>
                                         <MenuFlyoutItem x:Uid="StatusList_OwnSave"
                                                         Text="Save"
+                                                        Click="OwnStatusSave_Click"
                                                         Style="{StaticResource ModernMenuFlyoutItemStyle}"/>
                                         <MenuFlyoutItem x:Uid="StatusList_OwnShare"
                                                         Text="Share"

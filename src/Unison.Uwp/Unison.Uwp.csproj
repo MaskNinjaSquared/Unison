@@ -207,6 +207,7 @@
     <Compile Include="Services\Network\WinRtNetworkAccess.cs" />
     <Compile Include="Services\WinRtAppMemoryInfo.cs" />
     <Compile Include="Services\WhatsApp\Messages\BridgeMessageWireActions.cs" />
+    <Compile Include="Services\WhatsApp\Messages\BridgeStatusWireActions.cs" />
     <Compile Include="Services\WhatsApp\Messages\MediaAvailability.cs" />
     <Compile Include="Services\WhatsApp\Messages\BaileysMediaDownload.cs" />
     <Compile Include="Services\Socket\DelegateSocketLog.cs" />
@@ -505,6 +506,20 @@
       <DependentUpon>ContactsVisualizerControl.xaml</DependentUpon>
     </Compile>
     <Compile Include="UI\Controls\AlphabetSemanticZoomHost.cs" />
+    <Compile Include="UI\Controls\StatusContactPickerHost.cs" />
+    <Compile Include="UI\Controls\StatusContactPickerView.xaml.cs">
+      <DependentUpon>StatusContactPickerView.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Shell\WhatsAppLegacy\Controls\StatusContactPickerView.xaml.cs">
+      <DependentUpon>StatusContactPickerView.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="UI\Helpers\EmojiTextBlock.cs" />
+    <Compile Include="UI\Dialogs\GroupEphemeralDialog.xaml.cs">
+      <DependentUpon>GroupEphemeralDialog.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="UI\Dialogs\StatusPrivacyDialog.xaml.cs">
+      <DependentUpon>StatusPrivacyDialog.xaml</DependentUpon>
+    </Compile>
     <Compile Include="UI\Controls\PaneSplitterHost.cs" />
     <Compile Include="UI\Views\IFullScreenShellPage.cs" />
     <Compile Include="UI\Views\StatusComposerView.xaml.cs">
@@ -585,6 +600,10 @@
     <Compile Include="UI\Converters\BoolToDesktopCursorKindConverter.cs" />
     <Compile Include="UI\Converters\CallDirectionToBrushConverter.cs" />
     <Compile Include="UI\Converters\CallMissedToBrushConverter.cs" />
+    <Compile Include="UI\Converters\PhoneDisplayMaskConverter.cs" />
+    <Compile Include="UI\Controls\RichLabeledTextBox.xaml.cs">
+      <DependentUpon>RichLabeledTextBox.xaml</DependentUpon>
+    </Compile>
     <Compile Include="UI\Controls\ChatListPreviewStrip.xaml.cs">
       <DependentUpon>ChatListPreviewStrip.xaml</DependentUpon>
     </Compile>
@@ -1280,6 +1299,10 @@
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </Page>
+    <Page Include="UI\Controls\RichLabeledTextBox.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
     <Page Include="UI\Controls\CreateConversationFlowView.xaml">
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
@@ -1333,6 +1356,22 @@
       <SubType>Designer</SubType>
     </Page>
     <Page Include="UI\Dialogs\NotificationFilterDialog.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Include="UI\Dialogs\GroupEphemeralDialog.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Include="UI\Dialogs\StatusPrivacyDialog.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Include="UI\Controls\StatusContactPickerView.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Include="Shell\WhatsAppLegacy\Controls\StatusContactPickerView.xaml">
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </Page>

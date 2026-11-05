@@ -116,6 +116,47 @@ namespace Unison.Core.Tests.ViewModels
             Assert.False(vm.IsMyStatusOpen);
         }
 
+        [Fact]
+        public async Task SaveOwnStatus_ensures_media_and_opens_file_picker()
+        {
+            var statusRow = new HistoryStatus
+            {
+                MessageId = "MSG_SAVE_1",
+                AuthorJid = SelfJid,
+                Kind = ChatPreviewKind.Image,
+                MediaMimeType = "image/jpeg"
+            };
+            var status = new FakeStatus(new[]
+            {
+                new StatusAuthorItem { Jid = SelfJid, ItemCount = 1 }
+            })
+            {
+                OwnStatuses = new[]
+                {
+                    new OwnStatusItem { MessageId = "MSG_SAVE_1", AuthorJid = SelfJid, ViewCount = 0 }
+                },
+                AuthorStatuses = new[] { statusRow },
+                EnsuredUri = "ms-appdata:///local/status/MSG_SAVE_1.jpg"
+            };
+            var files = new RecordingFilePicker();
+            var vm = new StatusListViewModel(
+                status,
+                new CountingDispatcher(),
+                jids: new SelfJids(SelfJid),
+                files: files);
+            await vm.ReloadAsync();
+            await vm.OpenMyStatusAsync();
+
+            Assert.NotNull(vm.OwnStatuses[0].SaveCommand);
+            Assert.True(vm.OwnStatuses[0].SaveCommand.CanExecute(null));
+
+            await vm.SaveOwnStatusAsync(vm.OwnStatuses[0]);
+
+            Assert.Same(statusRow, status.LastEnsured);
+            Assert.Equal("ms-appdata:///local/status/MSG_SAVE_1.jpg", files.LastSourceUri);
+            Assert.StartsWith("Unison_Status_MSG_SAVE_1", files.LastSuggestedName);
+        }
+
         private static StatusListViewModel CreateViewModel()
         {
             var status = new FakeStatus(new[]
@@ -137,12 +178,22 @@ namespace Unison.Core.Tests.ViewModels
 
             public event EventHandler StatusUpdated { add { } remove { } }
 
+            public IReadOnlyList<HistoryStatus> AuthorStatuses { get; set; } = Array.Empty<HistoryStatus>();
+
+            public string EnsuredUri { get; set; }
+
+            public HistoryStatus LastEnsured { get; private set; }
+
             public Task<IReadOnlyList<StatusAuthorItem>> GetActiveAuthorsAsync() => Task.FromResult(_authors);
 
             public Task<IReadOnlyList<HistoryStatus>> GetActiveForAuthorAsync(string authorJid) =>
-                Task.FromResult<IReadOnlyList<HistoryStatus>>(Array.Empty<HistoryStatus>());
+                Task.FromResult(AuthorStatuses);
 
-            public Task<string> EnsureMediaAsync(HistoryStatus status) => Task.FromResult<string>(null);
+            public Task<string> EnsureMediaAsync(HistoryStatus status)
+            {
+                LastEnsured = status;
+                return Task.FromResult(EnsuredUri);
+            }
 
             public Task MarkViewedAsync(string authorJid, string messageId) => Task.CompletedTask;
 
@@ -168,6 +219,44 @@ namespace Unison.Core.Tests.ViewModels
             public string DescribeStatusItem(HistoryStatus item, int index = -1) => string.Empty;
 
             public Task IngestLiveFromDecryptedAsync(IncomingLiveStatusRequest request) => Task.CompletedTask;
+
+            public Task<string> PublishTextStatusAsync(StatusTextPost post) => Task.FromResult("id");
+        }
+
+        private sealed class RecordingFilePicker : IFilePicker
+        {
+            public string LastSourceUri { get; private set; }
+
+            public string LastSuggestedName { get; private set; }
+
+            public Task<string> PickOpenImagePathAsync() => Task.FromResult<string>(null);
+
+            public Task<string> PickSaveTextFileAsync(string suggestedFileName, string content) =>
+                Task.FromResult<string>(null);
+
+            public Task<PickedChatMedia> PickChatAttachmentAsync() => Task.FromResult<PickedChatMedia>(null);
+
+            public Task<PickedChatMedia> PickChatImageAsync() => Task.FromResult<PickedChatMedia>(null);
+
+            public Task<IReadOnlyList<PickedChatMedia>> PickChatImagesAsync() =>
+                Task.FromResult<IReadOnlyList<PickedChatMedia>>(Array.Empty<PickedChatMedia>());
+
+            public Task<PickedChatMedia> PickChatAudioAsync() => Task.FromResult<PickedChatMedia>(null);
+
+            public Task<PickedChatMedia> PickChatDocumentAsync() => Task.FromResult<PickedChatMedia>(null);
+
+            public Task<string> PickSaveLocalImageAsync(string sourceUriOrPath, string suggestedFileName) =>
+                Task.FromResult<string>(null);
+
+            public Task<string> PickSaveLocalFileAsync(
+                string sourceUriOrPath,
+                string suggestedFileName,
+                string mimeType = null)
+            {
+                LastSourceUri = sourceUriOrPath;
+                LastSuggestedName = suggestedFileName;
+                return Task.FromResult(@"C:\Users\test\Saved\status.jpg");
+            }
         }
 
         private sealed class SelfJids : IJidResolver

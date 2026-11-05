@@ -446,5 +446,31 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
         {
             MenuClicked?.Invoke(this, EventArgs.Empty);
         }
+
+        private OwnStatusItem _ownStatusFlyoutItem;
+
+        /// <summary>
+        /// MenuFlyout pops out of the item tree — capture the row so Save Click is not Command-bound
+        /// (CommandParameter is flaky on older Mobile UWP builds).
+        /// </summary>
+        private void OwnStatusMoreFlyout_Opening(object sender, object e)
+        {
+            var flyout = sender as MenuFlyout;
+            var target = flyout?.Target as FrameworkElement;
+            _ownStatusFlyoutItem = target?.DataContext as OwnStatusItem;
+        }
+
+        private void OwnStatusSave_Click(object sender, RoutedEventArgs e)
+        {
+            OwnStatusItem item = _ownStatusFlyoutItem
+                ?? (sender as FrameworkElement)?.DataContext as OwnStatusItem;
+            if (item == null || ViewModel == null)
+            {
+                Debug.WriteLine("[StatusList] OwnStatusSave: no item");
+                return;
+            }
+
+            _ = ViewModel.SaveOwnStatusAsync(item);
+        }
     }
 }

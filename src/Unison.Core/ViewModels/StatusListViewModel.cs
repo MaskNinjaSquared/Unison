@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
+using System.IO;
 using System.Threading.Tasks;
 using System.Windows.Input;
 using Unison.Core.Contracts;
@@ -20,6 +21,7 @@ namespace Unison.Core.ViewModels
         private readonly IDialogService _dialogs;
         private readonly IProfileService _profile;
         private readonly IJidResolver _jids;
+        private readonly IFilePicker _files;
         private readonly List<StatusAuthorItem> _allAuthors = new List<StatusAuthorItem>();
         private bool _attached;
         private bool _isEmpty = true;
@@ -31,6 +33,7 @@ namespace Unison.Core.ViewModels
         private bool _isMyStatusOpen;
         private readonly INavigator _navigator;
         private bool _isNewStatusPickerOpen;
+        private bool _isSavingOwnStatus;
 
         public StatusListViewModel(
             IStatusService status,
@@ -39,7 +42,8 @@ namespace Unison.Core.ViewModels
             IDialogService dialogs = null,
             IProfileService profile = null,
             IJidResolver jids = null,
-            INavigator navigator = null)
+            INavigator navigator = null,
+            IFilePicker files = null)
         {
             _status = status ?? throw new ArgumentNullException(nameof(status));
             _dispatcher = dispatcher ?? throw new ArgumentNullException(nameof(dispatcher));
@@ -48,6 +52,7 @@ namespace Unison.Core.ViewModels
             _profile = profile;
             _jids = jids;
             _navigator = navigator;
+            _files = files;
             MenuCommand = new RelayCommand(() => MenuRequested?.Invoke(this, EventArgs.Empty));
             NewStatusCommand = new RelayCommand(OpenNewStatusPicker);
             AddStatusCommand = NewStatusCommand;
@@ -55,6 +60,9 @@ namespace Unison.Core.ViewModels
             StartTextStatusCommand = new RelayCommand(StartTextStatus);
             StartMediaStatusCommand = new RelayCommand(() => { }, () => false);
             FilterStatusCommand = new RelayCommand<int>(ApplyStatusListFilter);
+            SaveOwnStatusCommand = new RelayCommand<OwnStatusItem>(
+                item => _ = SaveOwnStatusAsync(item),
+                item => item != null && _files != null && !_isSavingOwnStatus);
             RefreshSelfAvatar();
         }
 
@@ -174,9 +182,195 @@ namespace Unison.Core.ViewModels
         /// <summary>Flyout filter: All / Recent / Viewed.</summary>
         public ICommand FilterStatusCommand { get; }
 
+        /// <summary>My status row "…" → Save: FileSavePicker for that item's media.</summary>
+        public ICommand SaveOwnStatusCommand { get; }
+
         /// <summary>Own statuses (newest first) listed on the "My status" page with their view counts.</summary>
         public ObservableCollection<OwnStatusItem> OwnStatuses { get; } =
             new ObservableCollection<OwnStatusItem>();
+
+        /// <summary>Saves one of the account's own Status items via the platform file picker.</summary>
+        public async Task SaveOwnStatusAsync(OwnStatusItem item)
+        {
+            if (item == null || _isSavingOwnStatus)
+            {
+                return;
+            }
+
+            if (_files == null)
+            {
+                Debug.WriteLine("[StatusList] Save own status: IFilePicker not injected");
+                return;
+            }
+
+            _isSavingOwnStatus = true;
+            RaiseOwnSaveCanExecuteChanged();
+
+            try
+            {
+                string authorJid = item.AuthorJid;
+                if (string.IsNullOrWhiteSpace(authorJid))
+                {
+                    authorJid = _selfStatus?.Jid;
+                }
+
+                if (string.IsNullOrWhiteSpace(authorJid) || string.IsNullOrWhiteSpace(item.MessageId))
+                {
+                    Debug.WriteLine("[StatusList] Save own status: missing author/id");
+                    return;
+                }
+
+                HistoryStatus match = await FindOwnStatusAsync(authorJid, item.MessageId).ConfigureAwait(false);
+                if (match == null &&
+                    _selfStatus != null &&
+                    !string.Equals(authorJid, _selfStatus.Jid, StringComparison.OrdinalIgnoreCase))
+                {
+                    match = await FindOwnStatusAsync(_selfStatus.Jid, item.MessageId).ConfigureAwait(false);
+                }
+
+                string uri = null;
+                string mime = null;
+                if (match != null)
+                {
+                    try
+                    {
+                        uri = await _status.EnsureMediaAsync(match).ConfigureAwait(false);
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.WriteLine("[StatusList] Save ensure-media failed: " + ex.Message);
+                    }
+
+                    if (string.IsNullOrWhiteSpace(uri))
+                    {
+                        uri = _status.ResolveMediaDisplayUri(null, match);
+                    }
+
+                    mime = match.MediaMimeType;
+                }
+
+                if (string.IsNullOrWhiteSpace(uri))
+                {
+                    uri = item.ThumbnailUri;
+                }
+
+                if (string.IsNullOrWhiteSpace(uri))
+                {
+                    Debug.WriteLine("[StatusList] Save own status: no local uri id=" + item.MessageId);
+                    return;
+                }
+
+                string suggested = BuildOwnStatusFileName(match, uri);
+                // FilePickerService marshals to the UI thread; stay off it here for EnsureMedia.
+                await _files
+                    .PickSaveLocalFileAsync(uri, suggested, mime)
+                    .ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[StatusList] Save own status failed: " + ex.Message);
+            }
+            finally
+            {
+                _isSavingOwnStatus = false;
+                await _dispatcher.RunAsync(RaiseOwnSaveCanExecuteChanged).ConfigureAwait(false);
+            }
+        }
+
+        private void RaiseOwnSaveCanExecuteChanged()
+        {
+            ((RelayCommand<OwnStatusItem>)SaveOwnStatusCommand).RaiseCanExecuteChanged();
+            for (int i = 0; i < OwnStatuses.Count; i++)
+            {
+                (OwnStatuses[i].SaveCommand as RelayCommand)?.RaiseCanExecuteChanged();
+            }
+        }
+
+        private async Task<HistoryStatus> FindOwnStatusAsync(string authorJid, string messageId)
+        {
+            IReadOnlyList<HistoryStatus> items;
+            try
+            {
+                items = await _status.GetActiveForAuthorAsync(authorJid).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[StatusList] Find own status failed: " + ex.Message);
+                return null;
+            }
+
+            if (items == null)
+            {
+                return null;
+            }
+
+            for (int i = 0; i < items.Count; i++)
+            {
+                HistoryStatus row = items[i];
+                if (row != null &&
+                    string.Equals(row.MessageId, messageId, StringComparison.Ordinal))
+                {
+                    return row;
+                }
+            }
+
+            return null;
+        }
+
+        private static string BuildOwnStatusFileName(HistoryStatus item, string uri)
+        {
+            string extension = ".jpg";
+            if (!string.IsNullOrWhiteSpace(item?.MediaFileName))
+            {
+                string fromName = Path.GetExtension(item.MediaFileName);
+                if (!string.IsNullOrWhiteSpace(fromName))
+                {
+                    extension = fromName;
+                }
+            }
+            else if (item != null && item.Kind == ChatPreviewKind.Video)
+            {
+                extension = ".mp4";
+            }
+            else if (!string.IsNullOrWhiteSpace(uri))
+            {
+                try
+                {
+                    string path = uri;
+                    int q = path.IndexOf('?');
+                    if (q >= 0)
+                    {
+                        path = path.Substring(0, q);
+                    }
+
+                    string fromUri = Path.GetExtension(path);
+                    if (!string.IsNullOrWhiteSpace(fromUri) && fromUri.Length <= 5)
+                    {
+                        extension = fromUri;
+                    }
+                }
+                catch
+                {
+                }
+            }
+
+            string id = item?.MessageId;
+            if (string.IsNullOrWhiteSpace(id))
+            {
+                id = DateTime.UtcNow.ToString("yyyyMMdd_HHmmss");
+            }
+            else if (id.Length > 12)
+            {
+                id = id.Substring(0, 12);
+            }
+
+            foreach (char c in Path.GetInvalidFileNameChars())
+            {
+                id = id.Replace(c, '_');
+            }
+
+            return "Unison_Status_" + id + extension;
+        }
 
         public bool IsMyStatusOpen
         {
@@ -314,6 +508,10 @@ namespace Unison.Core.ViewModels
                 }
 
                 item.ViewCountText = ViewCountText(item.ViewCount);
+                OwnStatusItem captured = item;
+                item.SaveCommand = new RelayCommand(
+                    () => _ = SaveOwnStatusAsync(captured),
+                    () => _files != null && !_isSavingOwnStatus);
                 OwnStatuses.Add(item);
             }
         }

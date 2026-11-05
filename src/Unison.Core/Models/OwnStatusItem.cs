@@ -1,4 +1,5 @@
 using System;
+using System.Windows.Input;
 using Unison.Core.Helpers;
 
 namespace Unison.Core.Models
@@ -17,6 +18,9 @@ namespace Unison.Core.Models
         public string ThumbnailUri { get; set; }
 
         public DateTime? TimestampUtc { get; set; }
+
+        /// <summary>Wired by <c>StatusListViewModel</c> — Save via FileSavePicker.</summary>
+        public ICommand SaveCommand { get; set; }
 
         public int ViewCount
         {

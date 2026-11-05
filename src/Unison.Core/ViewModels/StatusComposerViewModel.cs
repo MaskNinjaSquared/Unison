@@ -5,16 +5,22 @@ using System.Diagnostics;
 using System.Threading.Tasks;
 using System.Windows.Input;
 using Unison.Core.Contracts;
+using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Helpers;
 using Unison.Core.Models;
+using Unison.Core.State;
 
 namespace Unison.Core.ViewModels
 {
     /// <summary>
-    /// Text status composer (prototype, full-screen page): background / font cycling, emoji tray,
-    /// privacy and send chrome. Publishing is not wired — Send only shows the "not available yet" dialog.
+    /// Text status composer (full-screen page): background / font cycling, emoji tray, privacy
+    /// audience (<see cref="StatusComposerViewModel"/>.Privacy) and publishing (.Publish).
     /// </summary>
-    public sealed class StatusComposerViewModel : Observable
+    /// <remarks>
+    /// Transient: the privacy audience and its contact lists live only while one composer is open
+    /// (they survive reopening the privacy dialog, not reopening the composer).
+    /// </remarks>
+    public sealed partial class StatusComposerViewModel : Observable
     {
         /// <summary>Segoe MDL2 emoji face (tray closed).</summary>
         public const string GlyphEmoji = "\uE76E";
@@ -55,11 +61,22 @@ namespace Unison.Core.ViewModels
             "Times New Roman"
         };
 
+        /// <summary>
+        /// Closest WhatsApp ExtendedTextMessage font type for each <see cref="FontPalette"/> entry
+        /// (SYSTEM, SYSTEM_TEXT serif, COURIERPRIME_BOLD, FB_SCRIPT, SYSTEM_TEXT serif).
+        /// </summary>
+        public static readonly IReadOnlyList<int> FontWireTypes = new[] { 0, 1, 10, 2, 1 };
+
         private readonly IDispatcher _dispatcher;
         private readonly IDialogService _dialogs;
         private readonly IStringResources _strings;
         private readonly ISystemInfoProvider _systemInfo;
         private readonly INavigator _navigator;
+        private readonly IStatusService _status;
+        private readonly INotificationService _notifications;
+        private readonly IChatStateStore _chatState;
+        private readonly IContactService _contacts;
+        private readonly IJidResolver _jids;
         private readonly Random _random;
         private string _text = string.Empty;
         private string _backgroundColor = BackgroundPalette[0];
@@ -75,6 +92,11 @@ namespace Unison.Core.ViewModels
             IStringResources strings = null,
             ISystemInfoProvider systemInfo = null,
             INavigator navigator = null,
+            IStatusService status = null,
+            INotificationService notifications = null,
+            IChatStateStore chatState = null,
+            IContactService contacts = null,
+            IJidResolver jids = null,
             Random random = null)
         {
             _dispatcher = dispatcher ?? throw new ArgumentNullException(nameof(dispatcher));
@@ -82,6 +104,11 @@ namespace Unison.Core.ViewModels
             _strings = strings;
             _systemInfo = systemInfo;
             _navigator = navigator;
+            _status = status;
+            _notifications = notifications;
+            _chatState = chatState;
+            _contacts = contacts;
+            _jids = jids;
             _random = random ?? new Random();
 
             BackCommand = new RelayCommand(Close);
@@ -89,8 +116,10 @@ namespace Unison.Core.ViewModels
             CycleBackgroundCommand = new RelayCommand(CycleBackground);
             CycleFontCommand = new RelayCommand(CycleFont);
             InsertEmojiCommand = new RelayCommand<string>(InsertEmoji, emoji => !string.IsNullOrWhiteSpace(emoji));
-            SendCommand = new RelayCommand(() => _ = ShowSendUnavailableAsync(), () => CanSend);
-            PrivacyCommand = new RelayCommand(() => _ = ShowPrivacyAsync());
+            SendCommand = new RelayCommand(() => _ = PublishAsync(), () => CanSend && !IsPublishing);
+            PrivacyCommand = new RelayCommand(() => _ = ShowPrivacyAsync(), () => !IsPublishing);
+            ContactPickerConfirmCommand = new RelayCommand(ConfirmContactPicker, CanConfirmContactPicker);
+            ContactPickerCancelCommand = new RelayCommand(CancelContactPicker);
         }
 
         public string Text
@@ -119,10 +148,6 @@ namespace Unison.Core.ViewModels
 
         /// <summary>Current text font family name (one of <see cref="FontPalette"/>).</summary>
         public string FontFamilyName => FontPalette[_fontIndex];
-
-        /// <summary>Hardcoded until status privacy is wired.</summary>
-        public string PrivacyLabel =>
-            _strings?.Get("StatusComposer_PrivacyContacts", "Status: Contacts") ?? "Status: Contacts";
 
         public bool IsEmojiTrayOpen
         {
@@ -183,9 +208,23 @@ namespace Unison.Core.ViewModels
             CloseEmojiTray();
         }
 
-        /// <summary>Back closes the emoji tray first, then the composer. Always consumed.</summary>
+        /// <summary>
+        /// Back is ignored while publishing, cancels the contact picker, closes the emoji tray,
+        /// then the composer. Always consumed.
+        /// </summary>
         public bool TryHandleBack()
         {
+            if (_isPublishing)
+            {
+                return true;
+            }
+
+            if (_isContactPickerOpen)
+            {
+                CancelContactPicker();
+                return true;
+            }
+
             if (_isEmojiTrayOpen)
             {
                 CloseEmojiTray();
@@ -313,36 +352,17 @@ namespace Unison.Core.ViewModels
             }).ConfigureAwait(false);
         }
 
-        private async Task ShowSendUnavailableAsync()
-        {
-            if (_dialogs == null)
-            {
-                return;
-            }
-
-            string title = _strings?.Get("StatusComposer_Title", "Text status") ?? "Text status";
-            string body = _strings?.Get("StatusList_NewStatusUnavailable", "This option is not available yet.")
-                ?? "This option is not available yet.";
-            await ShowDialogAsync(title, body).ConfigureAwait(false);
-        }
-
-        private async Task ShowPrivacyAsync()
-        {
-            if (_dialogs == null)
-            {
-                return;
-            }
-
-            string title = _strings?.Get("StatusComposer_PrivacyTitle", "Status privacy") ?? "Status privacy";
-            await ShowDialogAsync(title, string.Empty).ConfigureAwait(false);
-        }
-
         private async Task ShowDialogAsync(string title, string body)
         {
+            if (_dialogs == null)
+            {
+                return;
+            }
+
             string close = _strings?.Get("Common_Close", "Close") ?? "Close";
             try
             {
-                await _dialogs.ShowMessageAsync(title, body, close).ConfigureAwait(false);
+                await _dialogs.ShowMessageAsync(title, body, close);
             }
             catch (Exception ex)
             {
