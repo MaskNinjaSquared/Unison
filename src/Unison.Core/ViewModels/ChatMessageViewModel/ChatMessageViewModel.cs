@@ -148,6 +148,7 @@ namespace Unison.Core.ViewModels
 
             CopyCommand = new RelayCommand(CopyText, () => !string.IsNullOrWhiteSpace(CopyableText));
             ReplyCommand = new RelayCommand(() => ReplyRequested?.Invoke(this, EventArgs.Empty));
+            CallBackCommand = new RelayCommand(() => CallBackRequested?.Invoke(this, EventArgs.Empty));
             ForwardCommand = new RelayCommand(
                 () =>
                 {
@@ -497,6 +498,9 @@ namespace Unison.Core.ViewModels
         /// <summary>Reply to this bubble. The conversation opens the composer bar.</summary>
         public ICommand ReplyCommand { get; }
 
+        /// <summary>Call-back from a call-event bubble (host shows confirm dialog).</summary>
+        public ICommand CallBackCommand { get; }
+
         /// <summary>Forward this bubble. The shell opens the people picker titled Forward.</summary>
         public ICommand ForwardCommand { get; }
 
@@ -510,6 +514,8 @@ namespace Unison.Core.ViewModels
         public ICommand DeleteForEveryoneCommand { get; }
 
         public event EventHandler ReplyRequested;
+
+        public event EventHandler CallBackRequested;
 
         public event EventHandler ForwardRequested;
 

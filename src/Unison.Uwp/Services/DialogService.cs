@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
 using Unison.Core.Contracts;
+using Unison.Core.Helpers;
 using Unison.Core.Models;
 using Unison.Core.ViewModels;
 using Unison.Uwp.Helpers;
@@ -10,6 +11,7 @@ using Unison.Uwp.UI.Dialogs;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
 using Windows.UI.Xaml.Input;
+using Windows.UI.Xaml.Media;
 
 namespace Unison.Uwp.Services
 {
@@ -475,6 +477,43 @@ namespace Unison.Uwp.Services
             }
         }
 
+        public async Task<StatusPrivacyDialogChoice> ShowStatusPrivacyAsync(StatusComposerViewModel composer)
+        {
+            if (composer == null)
+            {
+                return StatusPrivacyDialogChoice.Cancel;
+            }
+
+            try
+            {
+                var dialog = new StatusPrivacyDialog();
+                dialog.Bind(composer);
+                ContentDialogResult result = await dialog.ShowAsync();
+                if (dialog.PickRequest.HasValue)
+                {
+                    return dialog.PickRequest.Value;
+                }
+
+                return result == ContentDialogResult.Primary
+                    ? StatusPrivacyDialogChoice.Confirm
+                    : StatusPrivacyDialogChoice.Cancel;
+            }
+            catch (System.Runtime.InteropServices.COMException ex)
+                when (ex.Message.Contains("single ContentDialog") ||
+                      ex.HResult == unchecked((int)0x80070057))
+            {
+                System.Diagnostics.Debug.WriteLine(
+                    "[DialogService] Another dialog is already open (status privacy).");
+                return StatusPrivacyDialogChoice.Cancel;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine(
+                    "[DialogService] ShowStatusPrivacyAsync: " + ex.Message);
+                return StatusPrivacyDialogChoice.Cancel;
+            }
+        }
+
         public Task ShowQrFullscreenAsync(LoginViewModel loginVm)
         {
             if (loginVm == null || string.IsNullOrEmpty(loginVm.QRData))
@@ -593,6 +632,87 @@ namespace Unison.Uwp.Services
             {
                 System.Diagnostics.Debug.WriteLine("[DialogService] ShowChatExportReadyAsync: " + ex.Message);
                 return ChatExportReadyChoice.Dismissed;
+            }
+        }
+
+        public async Task<GroupEphemeralDuration?> ShowGroupEphemeralAsync(GroupEphemeralDuration current)
+        {
+            try
+            {
+                var dialog = new GroupEphemeralDialog();
+                dialog.SetCurrent(current);
+                ContentDialogResult result = await dialog.ShowAsync();
+                if (result != ContentDialogResult.Primary)
+                {
+                    return null;
+                }
+
+                return dialog.SelectedDuration;
+            }
+            catch (System.Runtime.InteropServices.COMException ex)
+                when (ex.Message.Contains("single ContentDialog") ||
+                      ex.HResult == unchecked((int)0x80070057))
+            {
+                System.Diagnostics.Debug.WriteLine("[DialogService] Another dialog is already open (group ephemeral).");
+                return null;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine("[DialogService] ShowGroupEphemeralAsync: " + ex.Message);
+                return null;
+            }
+        }
+
+        public async Task ShowCallBackAsync(string phoneDigitsOrRaw)
+        {
+            string masked = PhoneDisplayMask.Format(phoneDigitsOrRaw);
+            if (string.IsNullOrEmpty(masked))
+            {
+                return;
+            }
+
+            try
+            {
+                string title = string.Format(
+                    LocalizedStrings.Get("CallBack_TitleFormat", "Call {0}"),
+                    masked);
+                string voiceLabel = LocalizedStrings.Get("CallBack_VoiceCall", "Voice call");
+                string cancel = LocalizedStrings.Get("Common_Cancel", "Cancel");
+
+                var iconFont = Application.Current.Resources["IconFont"] as FontFamily
+                    ?? new FontFamily("Segoe MDL2 Assets");
+
+                // Glyph in the body; "Ligação de Voz" is the Primary action (Cancel = close).
+                var content = new FontIcon
+                {
+                    Glyph = "\uE717",
+                    FontFamily = iconFont,
+                    FontSize = 28,
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                    Margin = new Thickness(0, 8, 0, 4)
+                };
+
+                var dialog = new ContentDialog
+                {
+                    Title = title,
+                    Content = content,
+                    PrimaryButtonText = voiceLabel,
+                    CloseButtonText = cancel,
+                    DefaultButton = ContentDialogButton.Primary
+                };
+
+                // Primary (= voice call): hide only — no dialer / empty command.
+                await dialog.ShowAsync();
+            }
+            catch (System.Runtime.InteropServices.COMException ex)
+                when (ex.Message.Contains("single ContentDialog") ||
+                      ex.HResult == unchecked((int)0x80070057))
+            {
+                System.Diagnostics.Debug.WriteLine("[DialogService] Another dialog is already open (call back).");
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine("[DialogService] ShowCallBackAsync: " + ex.Message);
             }
         }
     }

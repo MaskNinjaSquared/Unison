@@ -1189,6 +1189,25 @@ namespace Unison.Core.ViewModels
         }
 
         /// <summary>
+        /// Call-event balloon / shared entry: confirm dialog only (no dialer).
+        /// </summary>
+        private async Task ShowCallBackDialogAsync()
+        {
+            if (_dialogs == null)
+            {
+                return;
+            }
+
+            string phone = ResolveActiveChatPhone();
+            if (string.IsNullOrEmpty(phone))
+            {
+                return;
+            }
+
+            await _dialogs.ShowCallBackAsync(phone).ConfigureAwait(false);
+        }
+
+        /// <summary>
         /// Re-reads the local chat row before the overflow menu is built. Mute can be changed from
         /// the chat list, from a notification, or on another device, and the menu has to offer
         /// "mute" or "unmute" based on what is true now rather than on what was true when the

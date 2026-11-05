@@ -30,6 +30,8 @@ namespace Unison.Core.ViewModels
         private readonly IJidResolver _jids;
         private readonly IStringResources _strings;
         private readonly IDispatcher _ui;
+        private readonly IDialogService _dialogs;
+        private readonly IContactService _contacts;
 
         private ObservableCollection<CallFavoriteItem> _favoritePreview =
             new ObservableCollection<CallFavoriteItem>();
@@ -54,7 +56,9 @@ namespace Unison.Core.ViewModels
             IDispatcher ui,
             ICallLogService callLog = null,
             IPersonStore people = null,
-            IJidResolver jids = null)
+            IJidResolver jids = null,
+            IDialogService dialogs = null,
+            IContactService contacts = null)
         {
             _chatState = chatState ?? throw new ArgumentNullException(nameof(chatState));
             _chats = chats ?? throw new ArgumentNullException(nameof(chats));
@@ -63,6 +67,8 @@ namespace Unison.Core.ViewModels
             _callLog = callLog;
             _people = people;
             _jids = jids;
+            _dialogs = dialogs;
+            _contacts = contacts;
 
             OpenNewCallCommand = new RelayCommand(() => NewCallRequested?.Invoke(this, EventArgs.Empty));
             OpenMenuCommand = new RelayCommand(() => MenuRequested?.Invoke(this, EventArgs.Empty));
@@ -71,6 +77,8 @@ namespace Unison.Core.ViewModels
             SelectRecentCommand = new RelayCommand<CallRecentItem>(SelectRecent);
             CloseDetailsCommand = new RelayCommand(CloseDetails);
             OpenChatCommand = new RelayCommand(OpenSelectedChat, CanOpenSelectedChat);
+            CallFavoriteVoiceCommand = new RelayCommand<CallFavoriteItem>(
+                item => _ = CallFavoriteVoiceAsync(item));
 
             _chatState.Chats.CollectionChanged += OnChatsCollectionChanged;
             _chats.FavoritesMembershipChanged += OnFavoritesMembershipChanged;
@@ -304,6 +312,9 @@ namespace Unison.Core.ViewModels
 
         public ICommand OpenChatCommand { get; }
 
+        /// <summary>Favourites voice button → call-back confirm dialog (hide only).</summary>
+        public ICommand CallFavoriteVoiceCommand { get; }
+
         public string DirectionLabel(CallDirection direction)
         {
             switch (direction)
@@ -347,6 +358,37 @@ namespace Unison.Core.ViewModels
             };
             LoadSelectedHistory(item.Jid);
             IsCallDetailsOpen = true;
+        }
+
+        private async System.Threading.Tasks.Task CallFavoriteVoiceAsync(CallFavoriteItem item)
+        {
+            if (item == null || _dialogs == null)
+            {
+                return;
+            }
+
+            if (item.Chat != null && item.Chat.IsGroup)
+            {
+                return;
+            }
+
+            string phone = null;
+            if (_contacts != null && !string.IsNullOrEmpty(item.Jid))
+            {
+                phone = _contacts.TryResolvePhone(item.Jid);
+            }
+
+            if (string.IsNullOrEmpty(phone))
+            {
+                phone = JidHelper.TryPhoneFromJid(item.Jid);
+            }
+
+            if (string.IsNullOrEmpty(phone))
+            {
+                return;
+            }
+
+            await _dialogs.ShowCallBackAsync(phone).ConfigureAwait(false);
         }
 
         private void SelectRecent(CallRecentItem item)

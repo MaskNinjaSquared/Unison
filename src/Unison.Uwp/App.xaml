@@ -47,6 +47,7 @@
             <converters:BoolToDesktopCursorKindConverter x:Key="BoolToDesktopCursorKindConverter"/>
             <converters:CallDirectionToBrushConverter x:Key="CallDirectionToBrushConverter"/>
             <converters:CallMissedToBrushConverter x:Key="CallMissedToBrushConverter"/>
+            <converters:PhoneDisplayMaskConverter x:Key="PhoneDisplayMaskConverter"/>
             
             <!-- Custom Fonts -->
             <FontFamily x:Key="MainFont">ms-appx:///Assets/Fonts/SegUIVar-Regular.ttf#Segoe UI Variable</FontFamily>

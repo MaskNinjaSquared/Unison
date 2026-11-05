@@ -72,6 +72,8 @@ namespace Unison.Core.ViewModels
                 vm.PinnedChanged += OnBubblePinnedChanged;
                 vm.ReplyRequested -= OnBubbleReplyRequested;
                 vm.ReplyRequested += OnBubbleReplyRequested;
+                vm.CallBackRequested -= OnBubbleCallBackRequested;
+                vm.CallBackRequested += OnBubbleCallBackRequested;
                 vm.ForwardRequested -= OnBubbleForwardRequested;
                 vm.ForwardRequested += OnBubbleForwardRequested;
                 vm.DeletedForMe -= OnBubbleDeletedForMe;
@@ -232,6 +234,7 @@ namespace Unison.Core.ViewModels
 
             vm.PinnedChanged -= OnBubblePinnedChanged;
             vm.ReplyRequested -= OnBubbleReplyRequested;
+            vm.CallBackRequested -= OnBubbleCallBackRequested;
             vm.ForwardRequested -= OnBubbleForwardRequested;
             vm.DeletedForMe -= OnBubbleDeletedForMe;
             vm.AudioPlayPauseRequested -= OnBubbleAudioPlayPauseRequested;
@@ -246,6 +249,11 @@ namespace Unison.Core.ViewModels
         private void OnBubbleReplyRequested(object sender, EventArgs e)
         {
             BeginReply(sender as ChatMessageViewModel);
+        }
+
+        private void OnBubbleCallBackRequested(object sender, EventArgs e)
+        {
+            _ = ShowCallBackDialogAsync();
         }
 
         private void OnBubbleForwardRequested(object sender, EventArgs e)

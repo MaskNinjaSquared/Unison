@@ -1468,15 +1468,23 @@
                                     </StackPanel>
                                 </Grid>
                             </Border>
-                            <StackPanel Grid.Row="1"
-                                        Orientation="Horizontal"
-                                        HorizontalAlignment="Right"
-                                        Margin="0,4,0,0">
+                            <Grid Grid.Row="1" Margin="0,4,0,0">
+                                <HyperlinkButton x:Uid="CallBack_CallBackLink"
+                                                 Content="Call back"
+                                                 Command="{x:Bind CallBackCommand}"
+                                                 Padding="0"
+                                                 FontSize="13"
+                                                 FontFamily="{StaticResource MainFont}"
+                                                 Foreground="{ThemeResource ChatDetailAccentBrush}"
+                                                 HorizontalAlignment="Left"
+                                                 VerticalAlignment="Center"/>
                                 <TextBlock Text="{x:Bind Timestamp, Mode=OneWay, Converter={StaticResource LocalTimeConverter}}"
                                            Foreground="{ThemeResource ChatDetailSentMetaBrush}"
                                            FontSize="11"
-                                           FontFamily="{StaticResource MainFont}"/>
-                            </StackPanel>
+                                           FontFamily="{StaticResource MainFont}"
+                                           HorizontalAlignment="Right"
+                                           VerticalAlignment="Center"/>
+                            </Grid>
                         </Grid>
                     </Border>
                 </Grid>
@@ -1532,15 +1540,23 @@
                                     </StackPanel>
                                 </Grid>
                             </Border>
-                            <StackPanel Grid.Row="1"
-                                        Orientation="Horizontal"
-                                        HorizontalAlignment="Right"
-                                        Margin="0,4,0,0">
+                            <Grid Grid.Row="1" Margin="0,4,0,0">
+                                <HyperlinkButton x:Uid="CallBack_CallBackLink"
+                                                 Content="Call back"
+                                                 Command="{x:Bind CallBackCommand}"
+                                                 Padding="0"
+                                                 FontSize="13"
+                                                 FontFamily="{StaticResource MainFont}"
+                                                 Foreground="{ThemeResource ChatDetailAccentBrush}"
+                                                 HorizontalAlignment="Left"
+                                                 VerticalAlignment="Center"/>
                                 <TextBlock Text="{x:Bind Timestamp, Mode=OneWay, Converter={StaticResource LocalTimeConverter}}"
                                            Foreground="{ThemeResource ChatDetailReceivedMetaBrush}"
                                            FontSize="11"
-                                           FontFamily="{StaticResource MainFont}"/>
-                            </StackPanel>
+                                           FontFamily="{StaticResource MainFont}"
+                                           HorizontalAlignment="Right"
+                                           VerticalAlignment="Center"/>
+                            </Grid>
                         </Grid>
                     </Border>
                 </Grid>

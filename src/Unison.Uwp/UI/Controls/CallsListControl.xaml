@@ -54,11 +54,11 @@
                         <FontIcon Glyph="&#xE714;" FontFamily="{StaticResource IconFont}" FontSize="18"
                                   Foreground="{ThemeResource WhatsAppTextMediumBrush}"/>
                     </Button>
-                    <Button IsEnabled="False"
-                            Style="{StaticResource ModernIconButtonStyle}"
+                    <Button Style="{StaticResource ModernIconButtonStyle}"
+                            Click="FavoriteVoiceCallButton_Click"
                             AutomationProperties.Name="Voice call">
                         <FontIcon Glyph="&#xE717;" FontFamily="{StaticResource IconFont}" FontSize="18"
-                                  Foreground="{ThemeResource WhatsAppTextMediumBrush}"/>
+                                  Foreground="{ThemeResource WhatsAppTextHighBrush}"/>
                     </Button>
                 </StackPanel>
             </Grid>
