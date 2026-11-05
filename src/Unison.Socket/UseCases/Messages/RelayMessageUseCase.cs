@@ -549,14 +549,21 @@ namespace Unison.Socket.UseCases.Messages
 
                 if (_sessions != null)
                 {
+                    _log.Info(
+                        "[Send] Group " + jid + " SKDM assert-sessions begin; targets=" + needSenderKey.Count);
                     await _sessions.ExecuteAsync(needSenderKey).ConfigureAwait(false);
+                    _log.Info("[Send] Group " + jid + " SKDM assert-sessions done");
                 }
 
                 // Bare SKDM for everyone including our phone (Baileys). DeviceSentMessage on the
                 // initial group send left the Android copy pending and is not required for skmsg.
+                _log.Info(
+                    "[Send] Group " + jid + " SKDM encrypt-participants begin; targets=" + needSenderKey.Count);
                 var nodes = await _participants
                     .ExecuteAsync(needSenderKey, senderKeyMessage, extraAttrs)
                     .ConfigureAwait(false);
+                _log.Info(
+                    "[Send] Group " + jid + " SKDM encrypt-participants done; nodes=" + nodes.Nodes.Count);
 
                 result.ParticipantNodes.AddRange(nodes.Nodes);
                 result.ShouldIncludeDeviceIdentity = nodes.ShouldIncludeDeviceIdentity;

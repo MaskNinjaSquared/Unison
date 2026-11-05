@@ -76,6 +76,17 @@ namespace Unison.Socket.Signal
         /// </param>
         Task<EncryptedPayload> EncryptMessageAsync(string jid, byte[] plaintext);
 
+        /// <summary>
+        /// Nestable. While deferred, <see cref="EncryptMessageAsync"/> advances memory only and
+        /// queues the disk write; call <see cref="EndDeferredSessionPersistAsync"/> when the bulk
+        /// encrypt finishes so status/group SKDM to hundreds of devices does not serialize UWP
+        /// StorageFile I/O per recipient.
+        /// </summary>
+        void BeginDeferredSessionPersist();
+
+        /// <summary>Flushes every session dirtied under the matching <see cref="BeginDeferredSessionPersist"/>.</summary>
+        Task EndDeferredSessionPersistAsync();
+
         /// <param name="senderJid">Our own identity in the space the group addresses us by.</param>
         Task<GroupEncryptedPayload> EncryptGroupMessageAsync(string groupJid, string senderJid, byte[] plaintext);
 

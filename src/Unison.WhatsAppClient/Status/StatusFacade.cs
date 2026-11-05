@@ -13,6 +13,7 @@ using Unison.Core.Contracts;
 using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Helpers;
 using Unison.Core.Models;
+using Unison.WhatsAppClient.Abstractions;
 using Unison.WhatsAppClient.Helpers;
 
 namespace Unison.WhatsAppClient.Status
@@ -24,19 +25,25 @@ namespace Unison.WhatsAppClient.Status
         private readonly IMessageService _messages;
         private readonly IStatusThumbnailMaterializer _thumbs;
         private readonly IRuntimeDiagnostics _diagnostics;
+        private readonly IStatusWireActions _wire;
+        private readonly IJidResolver _jids;
 
         public StatusFacade(
             IHistoryStatusStore store,
             IPersonStore people,
             IMessageService messages,
             IStatusThumbnailMaterializer thumbs,
-            IRuntimeDiagnostics diagnostics = null)
+            IRuntimeDiagnostics diagnostics = null,
+            IStatusWireActions wire = null,
+            IJidResolver jids = null)
         {
             _store = store ?? throw new ArgumentNullException(nameof(store));
             _people = people ?? throw new ArgumentNullException(nameof(people));
             _messages = messages ?? throw new ArgumentNullException(nameof(messages));
             _thumbs = thumbs ?? throw new ArgumentNullException(nameof(thumbs));
             _diagnostics = diagnostics;
+            _wire = wire;
+            _jids = jids;
             _store.Changed += Store_Changed;
         }
 
@@ -88,6 +95,37 @@ namespace Unison.WhatsAppClient.Status
                 StatusItemDiagnostics.DescribeProtoGaps(request.Message));
 
             return IngestLiveSafeAsync(row);
+        }
+
+        /// <inheritdoc />
+        public async Task<string> PublishTextStatusAsync(StatusTextPost post)
+        {
+            if (post == null || string.IsNullOrWhiteSpace(post.Text))
+            {
+                throw new ArgumentException("A text Status needs text", nameof(post));
+            }
+
+            if (_wire == null || !_wire.CanPublish)
+            {
+                throw new InvalidOperationException("Not connected: the Status was not published.");
+            }
+
+            string self = _jids?.Self?.Id;
+            if (string.IsNullOrWhiteSpace(self))
+            {
+                throw new InvalidOperationException("The account is not ready: the Status was not published.");
+            }
+
+            List<string> recipients = StatusRecipientList.Build(post.RecipientJids, self);
+            string id = await _wire
+                .SendTextStatusAsync(post.Text, post.BackgroundArgb, post.TextArgb, post.Font, recipients)
+                .ConfigureAwait(false);
+
+            _diagnostics?.Write(
+                "status",
+                "published",
+                "id=" + id + "; recipients=" + recipients.Count);
+            return id;
         }
 
         public async Task<IReadOnlyList<StatusAuthorItem>> GetActiveAuthorsAsync()

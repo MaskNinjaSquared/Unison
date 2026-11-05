@@ -1578,6 +1578,28 @@ namespace Unison.Uwp.Client
             return SendAsync(jid, content, explicitMessageId);
         }
 
+        public Task<string> SendTextStatusAsync(
+            string text,
+            uint backgroundArgb,
+            uint textArgb,
+            int font,
+            IList<string> statusJidList)
+        {
+            if (statusJidList == null || statusJidList.Count == 0)
+            {
+                throw new ArgumentException("A Status needs at least one recipient", nameof(statusJidList));
+            }
+
+            var content = new StatusTextContent(text)
+            {
+                BackgroundArgb = backgroundArgb,
+                TextArgb = textArgb,
+                Font = font
+            };
+
+            return SendAsync(JidUtils.StatusBroadcast, content, null, statusJidList);
+        }
+
         public async Task<string> SendImageMessageAsync(
             string jid,
             byte[] imageBytes,
@@ -2806,13 +2828,19 @@ namespace Unison.Uwp.Client
         /// Sends and reports the outcome the way the legacy client did, since the service tracks
         /// an outgoing message by those two events rather than by the returned id alone.
         /// </summary>
-        private async Task<string> SendAsync(string jid, OutgoingContent content, string explicitMessageId)
+        private async Task<string> SendAsync(
+            string jid,
+            OutgoingContent content,
+            string explicitMessageId,
+            IList<string> statusJidList = null)
         {
             var module = RequireMessages();
 
             try
             {
-                var sent = await module.Send.ExecuteAsync(jid, content, explicitMessageId).ConfigureAwait(false);
+                var sent = await module.Send
+                    .ExecuteAsync(jid, content, explicitMessageId, statusJidList)
+                    .ConfigureAwait(false);
 
                 RaiseStatus(sent.Key.Id, "sent", null);
                 return sent.Key.Id;

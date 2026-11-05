@@ -72,6 +72,27 @@ namespace Unison.Socket.Messages.Content
     }
 
     /// <summary>
+    /// A text Status update: the text plus the colours and font the phone paints it with.
+    /// Only meaningful when sent to status@broadcast.
+    /// </summary>
+    public sealed class StatusTextContent : OutgoingContent
+    {
+        public StatusTextContent(string text)
+        {
+            Text = text;
+        }
+
+        public string Text { get; set; }
+
+        public uint BackgroundArgb { get; set; }
+
+        public uint TextArgb { get; set; }
+
+        /// <summary>Wire value of <c>ExtendedTextMessage.FontType</c>.</summary>
+        public int Font { get; set; }
+    }
+
+    /// <summary>
     /// A file with the metadata its message type needs. The bytes are uploaded as they are:
     /// transcoding, thumbnails and durations are the host's job, since they need codecs the
     /// protocol layer has no business carrying.

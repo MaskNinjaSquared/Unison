@@ -708,21 +708,31 @@ namespace Unison.Baileys.Client
         public bool HasSession(string jid)
         {
             jid = WA.NormalizeDeviceJid(jid);
+            byte[] sessionJson;
             lock (_sessionLock)
             {
-                if (!_authState.Sessions.TryGetValue(jid, out var sessionJson))
-                    return false;
-                
-                // Check if session can send (not just receive-only)
-                try
-                {
-                    var session = NormalizeSessionData(JsonConvert.DeserializeObject<SessionData>(System.Text.Encoding.UTF8.GetString(sessionJson)));
-                    return session?.CanSend == true;
-                }
-                catch
+                if (!_authState.Sessions.TryGetValue(jid, out sessionJson) || sessionJson == null)
                 {
                     return false;
                 }
+
+                // Copy under the lock; deserialize outside. AssertSessions walks hundreds of
+                // JIDs for status@broadcast — holding _sessionLock across JsonConvert blocked
+                // decrypt/send for the whole fan-out.
+                sessionJson = (byte[])sessionJson.Clone();
+            }
+
+            // Check if session can send (not just receive-only)
+            try
+            {
+                var session = NormalizeSessionData(
+                    JsonConvert.DeserializeObject<SessionData>(
+                        System.Text.Encoding.UTF8.GetString(sessionJson)));
+                return session?.CanSend == true;
+            }
+            catch
+            {
+                return false;
             }
         }
 
@@ -1078,9 +1088,10 @@ namespace Unison.Baileys.Client
                 byte[] cipherKey;
                 DeriveSenderMessageCipherMaterial(messageKeySeed, out iv, out cipherKey);
 
-                // Decrypt ciphertext using AES-CBC, then peel Signal pad (padRandomMax16).
+                // Still carries padRandomMax16, like the 1:1 path: the caller (MessageDecryptor /
+                // decode-wa-message) peels it once. Peeling here too truncates the protobuf.
                 byte[] ciphertext = skMsg.Ciphertext.ToByteArray();
-                byte[] plaintext = UnpadRandomMax16(CryptoUtils.AesCbcDecrypt(ciphertext, cipherKey, iv));
+                byte[] plaintext = CryptoUtils.AesCbcDecrypt(ciphertext, cipherKey, iv);
 
                 // Update stored state: advance chain one more step for next message
                 state.Iteration = targetIteration + 1;
@@ -1565,6 +1576,31 @@ namespace Unison.Baileys.Client
             lock (_sessionLock)
             {
                 _authState.Sessions.TryGetValue(key, out stateBytes);
+            }
+
+            // Cold start / status@broadcast: memory may lag the keystore cache that LoadSessions
+            // already filled. Without this we mint a new key every publish and redistribute SKDM
+            // to every contact device again.
+            if (stateBytes == null && _keyStore != null)
+            {
+                try
+                {
+                    stateBytes = _keyStore.GetSenderKeyAsync(groupJid, senderJid)
+                        .ConfigureAwait(false)
+                        .GetAwaiter()
+                        .GetResult();
+                    if (stateBytes != null)
+                    {
+                        lock (_sessionLock)
+                        {
+                            _authState.Sessions[key] = stateBytes;
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    ProtocolRuntimeLog.Write($"[Signal] Failed to load SenderKeyState from store for {key}: {ex.Message}");
+                }
             }
 
             if (stateBytes != null)
@@ -2280,26 +2316,6 @@ namespace Unison.Baileys.Client
             for (int i = 0; i < padLen - 1; i++)
                 result[data.Length + i] = noise[i + 1];
             result[result.Length - 1] = (byte)padLen;
-            return result;
-        }
-
-        /// <summary>Inverse of <see cref="PadRandomMax16"/> — last byte is the pad length (1-16).</summary>
-        private static byte[] UnpadRandomMax16(byte[] data)
-        {
-            if (data == null || data.Length == 0)
-            {
-                return data;
-            }
-
-            int padLen = data[data.Length - 1] & 0xFF;
-            if (padLen < 1 || padLen > 16 || padLen > data.Length)
-            {
-                // Legacy skmsg without Signal pad (PKCS7-only era): keep bytes as-is.
-                return data;
-            }
-
-            var result = new byte[data.Length - padLen];
-            Array.Copy(data, result, result.Length);
             return result;
         }
 

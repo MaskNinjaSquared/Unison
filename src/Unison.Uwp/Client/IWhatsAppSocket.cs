@@ -217,6 +217,17 @@ namespace Unison.Uwp.Client
             bool markAsForwarded = false,
             uint forwardingScore = 0);
 
+        /// <summary>
+        /// Publishes a text Status to status@broadcast for <paramref name="statusJidList"/>.
+        /// Returns the message id.
+        /// </summary>
+        Task<string> SendTextStatusAsync(
+            string text,
+            uint backgroundArgb,
+            uint textArgb,
+            int font,
+            IList<string> statusJidList);
+
         Task<string> SendImageMessageAsync(
             string jid,
             byte[] imageBytes,
