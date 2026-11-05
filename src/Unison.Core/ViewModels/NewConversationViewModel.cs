@@ -36,6 +36,7 @@ namespace Unison.Core.ViewModels
         private readonly IStringResources _strings;
         private readonly IDispatcher _dispatcher;
         private readonly ILocalContactsService _localContacts;
+        private readonly IFilePicker _filePicker;
 
         private bool _isOpen;
         private bool _catalogHooked;
@@ -58,7 +59,8 @@ namespace Unison.Core.ViewModels
             INewChatDialogViewModelFactory newChatFactory,
             IStringResources strings,
             IDispatcher dispatcher = null,
-            ILocalContactsService localContacts = null)
+            ILocalContactsService localContacts = null,
+            IFilePicker filePicker = null)
         {
             _chatState = chatState ?? throw new ArgumentNullException(nameof(chatState));
             _contacts = contacts ?? throw new ArgumentNullException(nameof(contacts));
@@ -70,6 +72,7 @@ namespace Unison.Core.ViewModels
             _strings = strings;
             _dispatcher = dispatcher;
             _localContacts = localContacts;
+            _filePicker = filePicker;
 
             CloseCommand = new RelayCommand(Close);
             NewGroupCommand = new RelayCommand(OpenCreateGroup);

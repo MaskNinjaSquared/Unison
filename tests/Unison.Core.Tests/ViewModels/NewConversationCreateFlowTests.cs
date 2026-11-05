@@ -115,6 +115,118 @@ namespace Unison.Core.Tests.ViewModels
         }
 
         [Fact]
+        public async Task PickCommunityPhoto_loads_bytes_from_file_picker()
+        {
+            var picker = new FakeFilePicker
+            {
+                NextImage = new PickedChatMedia
+                {
+                    Bytes = new byte[] { 1, 2, 3, 4 },
+                    MimeType = "image/jpeg",
+                    FileName = "photo.jpg",
+                    IsImage = true
+                }
+            };
+            var vm = CreateVm(filePicker: picker);
+            vm.NewCommunityCommand.Execute(null);
+
+            vm.PickCommunityPhotoCommand.Execute(null);
+            await picker.WaitPickedAsync();
+            Assert.True(SpinWait.SpinUntil(() => vm.HasCommunityPhoto, TimeSpan.FromSeconds(2)));
+
+            Assert.Equal(new byte[] { 1, 2, 3, 4 }, vm.CommunityPhotoBytes);
+            Assert.Equal(1, picker.PickImageCount);
+        }
+
+        [Fact]
+        public void Leaving_community_flow_clears_photo_bytes()
+        {
+            var picker = new FakeFilePicker
+            {
+                NextImage = new PickedChatMedia
+                {
+                    Bytes = new byte[] { 9 },
+                    IsImage = true
+                }
+            };
+            var vm = CreateVm(filePicker: picker);
+            vm.NewCommunityCommand.Execute(null);
+            vm.CommunityPhotoBytes = new byte[] { 9 };
+            Assert.True(vm.HasCommunityPhoto);
+
+            vm.TryHandleCreateBack();
+
+            Assert.False(vm.HasCommunityPhoto);
+            Assert.Null(vm.CommunityPhotoBytes);
+        }
+
+        [Fact]
+        public void Group_info_ephemeral_defaults_to_off()
+        {
+            var vm = CreateVm();
+            vm.NewGroupCommand.Execute(null);
+            vm.CreateNextCommand.Execute(null);
+
+            Assert.Equal(GroupEphemeralDuration.Off, vm.GroupEphemeralDuration);
+            Assert.False(vm.HasGroupPhoto);
+            Assert.False(vm.IsGroupPermissionsOpen);
+        }
+
+        [Fact]
+        public async Task PickGroupPhoto_loads_bytes()
+        {
+            var picker = new FakeFilePicker
+            {
+                NextImage = new PickedChatMedia
+                {
+                    Bytes = new byte[] { 5, 6, 7 },
+                    IsImage = true
+                }
+            };
+            var vm = CreateVm(filePicker: picker);
+            vm.NewGroupCommand.Execute(null);
+
+            vm.PickGroupPhotoCommand.Execute(null);
+            await picker.WaitPickedAsync();
+            Assert.True(SpinWait.SpinUntil(() => vm.HasGroupPhoto, TimeSpan.FromSeconds(2)));
+            Assert.Equal(new byte[] { 5, 6, 7 }, vm.GroupPhotoBytes);
+        }
+
+        [Fact]
+        public async Task EditGroupEphemeral_applies_dialog_choice()
+        {
+            var dialogs = new FakeDialogs { NextEphemeral = GroupEphemeralDuration.Days7 };
+            var vm = CreateVm(dialogs);
+            vm.NewGroupCommand.Execute(null);
+
+            vm.EditGroupEphemeralCommand.Execute(null);
+            await dialogs.WaitEphemeralShownAsync();
+            Assert.True(SpinWait.SpinUntil(
+                () => vm.GroupEphemeralDuration == GroupEphemeralDuration.Days7,
+                TimeSpan.FromSeconds(2)));
+        }
+
+        [Fact]
+        public void Group_permissions_overlay_back_keeps_info_step()
+        {
+            var vm = CreateVm();
+            vm.NewGroupCommand.Execute(null);
+            vm.CreateNextCommand.Execute(null);
+
+            vm.OpenGroupPermissionsCommand.Execute(null);
+            Assert.True(vm.IsGroupPermissionsOpen);
+            Assert.False(vm.ShowCreateFlowHeader);
+            Assert.False(vm.ShowCreateActionChrome);
+
+            Assert.True(vm.TryHandleCreateBack());
+            Assert.False(vm.IsGroupPermissionsOpen);
+            Assert.True(vm.ShowCreateFlowHeader);
+            Assert.True(vm.ShowCreateActionChrome);
+            Assert.Equal(NewConversationCreateFlow.Group, vm.CreateFlow);
+            Assert.Equal(1, vm.GroupStepIndex);
+        }
+
+        [Fact]
         public void Closing_overlay_clears_create_flow()
         {
             var dispatcher = new CountingDispatcher();
@@ -153,7 +265,8 @@ namespace Unison.Core.Tests.ViewModels
 
         private static NewConversationViewModel CreateVm(
             FakeDialogs dialogs = null,
-            ILocalContactsService localContacts = null)
+            ILocalContactsService localContacts = null,
+            IFilePicker filePicker = null)
         {
             var dispatcher = new CountingDispatcher();
             return new NewConversationViewModel(
@@ -166,7 +279,50 @@ namespace Unison.Core.Tests.ViewModels
                 newChatFactory: new FakeNewChatFactory(),
                 strings: null,
                 dispatcher: dispatcher,
-                localContacts: localContacts);
+                localContacts: localContacts,
+                filePicker: filePicker);
+        }
+
+        private sealed class FakeFilePicker : IFilePicker
+        {
+            private readonly TaskCompletionSource<bool> _picked =
+                new TaskCompletionSource<bool>();
+
+            public PickedChatMedia NextImage { get; set; }
+
+            public int PickImageCount { get; private set; }
+
+            public Task WaitPickedAsync() => _picked.Task;
+
+            public Task<string> PickOpenImagePathAsync() => Task.FromResult<string>(null);
+
+            public Task<string> PickSaveTextFileAsync(string suggestedFileName, string content) =>
+                Task.FromResult<string>(null);
+
+            public Task<PickedChatMedia> PickChatAttachmentAsync() => Task.FromResult<PickedChatMedia>(null);
+
+            public Task<PickedChatMedia> PickChatImageAsync()
+            {
+                PickImageCount++;
+                _picked.TrySetResult(true);
+                return Task.FromResult(NextImage);
+            }
+
+            public Task<IReadOnlyList<PickedChatMedia>> PickChatImagesAsync() =>
+                Task.FromResult<IReadOnlyList<PickedChatMedia>>(null);
+
+            public Task<PickedChatMedia> PickChatAudioAsync() => Task.FromResult<PickedChatMedia>(null);
+
+            public Task<PickedChatMedia> PickChatDocumentAsync() => Task.FromResult<PickedChatMedia>(null);
+
+            public Task<string> PickSaveLocalImageAsync(string sourceUriOrPath, string suggestedFileName) =>
+                Task.FromResult<string>(null);
+
+            public Task<string> PickSaveLocalFileAsync(
+                string sourceUriOrPath,
+                string suggestedFileName,
+                string mimeType = null) =>
+                Task.FromResult<string>(null);
         }
 
         private sealed class FakeLocalContacts : ILocalContactsService
@@ -240,7 +396,7 @@ namespace Unison.Core.Tests.ViewModels
                 Task.FromResult(false);
 
             public Task<ImageSendPreviewResult> ShowImageSendPreviewAsync(
-                byte[] imageBytes, string infoText, string initialCaption = null) =>
+                IReadOnlyList<byte[]> imageBytes, string infoText, string initialCaption = null) =>
                 Task.FromResult(new ImageSendPreviewResult());
 
             public Task<ImageSendPreviewResult> ShowDocumentSendPreviewAsync(
@@ -268,6 +424,24 @@ namespace Unison.Core.Tests.ViewModels
 
             public Task<ChatExportReadyChoice> ShowChatExportReadyAsync(string fileName, string infoText) =>
                 Task.FromResult(ChatExportReadyChoice.Dismissed);
+
+            public Task<StatusPrivacyDialogChoice> ShowStatusPrivacyAsync(StatusComposerViewModel composer) =>
+                Task.FromResult(StatusPrivacyDialogChoice.Cancel);
+
+            public Task ShowCallBackAsync(string phoneDigitsOrRaw) => Task.CompletedTask;
+
+            public GroupEphemeralDuration? NextEphemeral { get; set; }
+
+            private readonly TaskCompletionSource<bool> _ephemeralShown =
+                new TaskCompletionSource<bool>();
+
+            public Task WaitEphemeralShownAsync() => _ephemeralShown.Task;
+
+            public Task<GroupEphemeralDuration?> ShowGroupEphemeralAsync(GroupEphemeralDuration current)
+            {
+                _ephemeralShown.TrySetResult(true);
+                return Task.FromResult(NextEphemeral);
+            }
         }
 
         private sealed class StubContacts : IContactService

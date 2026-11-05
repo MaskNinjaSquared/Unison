@@ -3,6 +3,7 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:controls="using:Unison.Uwp.UI.Controls"
+    xmlns:toolkit="using:Microsoft.Toolkit.Uwp.UI.Controls"
     x:Name="Root"
     Background="{ThemeResource ChatListBackgroundBrush}">
 
@@ -94,12 +95,14 @@
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <!-- Form-column header: the explain pane and grip run to the top like chat list/detail. -->
+        <!-- Form-column header: the explain pane and grip run to the top like chat list/detail.
+             Hidden while GroupPermissionsOverlay owns back + title. -->
         <Grid x:Name="CreateHeader"
               Grid.Row="0"
               Grid.Column="0"
               Padding="4,8,16,8"
-              Background="{ThemeResource ChatListBackgroundBrush}">
+              Background="{ThemeResource ChatListBackgroundBrush}"
+              Visibility="{Binding ShowCreateFlowHeader, Converter={StaticResource BooleanToVisibilityConverter}}">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="*"/>
@@ -220,55 +223,323 @@
                     </SemanticZoom>
                 </PivotItem>
                 <PivotItem x:Uid="CreateGroup_InfoHeader" Header="Group details">
-                    <ScrollViewer VerticalScrollBarVisibility="Auto">
-                        <StackPanel Padding="16,24" MaxWidth="420" HorizontalAlignment="Center">
-                            <Border Width="96" Height="96"
-                                    CornerRadius="5"
-                                    Background="{ThemeResource ChatListSearchBackgroundBrush}"
-                                    HorizontalAlignment="Center">
-                                <FontIcon Glyph="&#xE8B8;"
-                                          FontFamily="{StaticResource IconFont}"
-                                          FontSize="36"
-                                          Foreground="{ThemeResource WhatsAppTextMediumBrush}"
-                                          HorizontalAlignment="Center"
-                                          VerticalAlignment="Center"/>
-                            </Border>
-                            <TextBox x:Uid="CreateGroup_Name"
-                                     Margin="0,20,0,0"
-                                     PlaceholderText="Group name"
-                                     Text="{Binding GroupName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
-                        </StackPanel>
-                    </ScrollViewer>
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="*"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+                        <ScrollViewer x:Name="GroupInfoScroll"
+                                      VerticalScrollBarVisibility="Auto"
+                                      HorizontalScrollMode="Disabled"
+                                      HorizontalScrollBarVisibility="Disabled">
+                            <Grid Padding="16,24" HorizontalAlignment="Stretch">
+                                <StackPanel MaxWidth="600" HorizontalAlignment="Stretch">
+                                <Grid Width="160" Height="160" HorizontalAlignment="Center">
+                                    <toolkit:DropShadowPanel BlurRadius="24"
+                                                             OffsetX="0"
+                                                             OffsetY="4"
+                                                             ShadowOpacity="0.45"
+                                                             Color="Black"
+                                                             HorizontalAlignment="Center"
+                                                             VerticalAlignment="Center">
+                                        <Grid Width="160" Height="160">
+                                            <Ellipse Fill="{ThemeResource AvatarFallbackBackgroundBrush}"/>
+                                            <Viewbox Width="64" Height="64"
+                                                     HorizontalAlignment="Center"
+                                                     VerticalAlignment="Center"
+                                                     Visibility="{Binding HasGroupPhoto, Converter={StaticResource InvertedBooleanToVisibilityConverter}}">
+                                                <Canvas Width="20" Height="19">
+                                                    <Path Fill="{ThemeResource AvatarFallbackIconBrush}"
+                                                          Data="M1.50,11.00L11.50,11.00C12.27,11.00,12.92,11.59,12.99,12.36L13.00,12.50 13.00,14.50C13.00,18.00 9.28,19.00 6.50,19.00 3.78,19.00 0.16,18.04 0.00,14.73L0.00,14.50 0.00,12.50C0.00,11.73 0.59,11.08 1.36,11.01z M13.49,11.00L18.50,11.00C19.27,11.00 19.92,11.59 19.99,12.35L20.00,12.50 20.00,14.00C20.00,17.06 17.14,18.00 15.00,18.00 14.27,18.00 13.55,17.89 12.86,17.68 13.51,16.93 13.94,15.97 13.99,14.78L14.00,14.50 14.00,12.50C14.00,12.01 13.85,11.55 13.60,11.16L13.49,11.00 18.50,11.00z M6.50,0.00C8.99,0.00 11.00,2.01 11.00,4.50 11.00,6.99 8.99,9.00 6.50,9.00 4.01,9.00 2.00,6.99 2.00,4.50 2.00,2.01 4.01,0.00 6.50,0.00z M15.50,2.00C17.43,2.00 19.00,3.57 19.00,5.50 19.00,7.43 17.43,9.00 15.50,9.00 13.57,9.00 12.00,7.43 12.00,5.50 12.00,3.57 13.57,2.00 15.50,2.00z"/>
+                                                </Canvas>
+                                            </Viewbox>
+                                            <Ellipse Visibility="{Binding HasGroupPhoto, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                                <Ellipse.Fill>
+                                                    <ImageBrush x:Name="GroupPhotoBrush"
+                                                                Stretch="UniformToFill"
+                                                                AlignmentX="Center"
+                                                                AlignmentY="Center"/>
+                                                </Ellipse.Fill>
+                                            </Ellipse>
+                                            <Ellipse Fill="#66000000"
+                                                     Visibility="{Binding HasGroupPhoto, Converter={StaticResource InvertedBooleanToVisibilityConverter}}"
+                                                     IsHitTestVisible="False"/>
+                                            <TextBlock x:Uid="CreateGroup_AddPhotoOverlay"
+                                                       Text="Add group image..."
+                                                       HorizontalAlignment="Center"
+                                                       VerticalAlignment="Center"
+                                                       TextAlignment="Center"
+                                                       TextWrapping="WrapWholeWords"
+                                                       Margin="20"
+                                                       FontSize="13"
+                                                       FontFamily="{StaticResource MainFont}"
+                                                       Foreground="White"
+                                                       Visibility="{Binding HasGroupPhoto, Converter={StaticResource InvertedBooleanToVisibilityConverter}}"/>
+                                        </Grid>
+                                    </toolkit:DropShadowPanel>
+                                    <controls:ProfilePhotoButton x:Name="GroupPhotoButton"
+                                                                 HorizontalAlignment="Right"
+                                                                 VerticalAlignment="Bottom"
+                                                                 Margin="0,0,-4,-4"
+                                                                 Canvas.ZIndex="1"/>
+                                </Grid>
+
+                                <controls:RichLabeledTextBox x:Name="GroupNameField"
+                                                             x:Uid="CreateGroup_Name"
+                                                             Margin="0,20,0,0"
+                                                             Header="Group name"
+                                                             PlaceholderText="Group name"
+                                                             Text="{Binding GroupName, Mode=TwoWay}"
+                                                             AcceptsReturn="False"
+                                                             TextWrapping="NoWrap"
+                                                             MaxInputHeight="36"
+                                                             MinBoxHeight="56"
+                                                             HorizontalAlignment="Stretch"
+                                                             EmojiInvoked="GroupField_EmojiInvoked"/>
+
+                                <Button Margin="0,20,0,0"
+                                        Padding="4,12"
+                                        HorizontalAlignment="Stretch"
+                                        HorizontalContentAlignment="Stretch"
+                                        Background="Transparent"
+                                        BorderThickness="0"
+                                        Command="{Binding EditGroupEphemeralCommand}">
+                                    <Grid HorizontalAlignment="Stretch">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel VerticalAlignment="Center" HorizontalAlignment="Stretch">
+                                            <TextBlock x:Uid="CreateGroup_EphemeralTitle"
+                                                       Text="Temporary messages"
+                                                       FontSize="16"
+                                                       FontFamily="{StaticResource MainFontSemibold}"
+                                                       FontWeight="SemiBold"
+                                                       TextWrapping="NoWrap"
+                                                       TextTrimming="CharacterEllipsis"
+                                                       Foreground="{ThemeResource WhatsAppTextHighBrush}"/>
+                                            <TextBlock Text="{Binding GroupEphemeralStatusLabel}"
+                                                       Margin="0,2,0,0"
+                                                       FontSize="14"
+                                                       FontFamily="{StaticResource MainFont}"
+                                                       TextWrapping="NoWrap"
+                                                       TextTrimming="CharacterEllipsis"
+                                                       Foreground="{ThemeResource WhatsAppTextMediumBrush}"/>
+                                        </StackPanel>
+                                        <FontIcon Grid.Column="1"
+                                                  Glyph="&#xEA0A;"
+                                                  FontFamily="{StaticResource UnisonIconFont}"
+                                                  FontSize="22"
+                                                  VerticalAlignment="Center"
+                                                  Margin="12,0,0,0"
+                                                  Foreground="{ThemeResource WhatsAppTextMediumBrush}"/>
+                                    </Grid>
+                                </Button>
+
+                                <Button Margin="0,4,0,0"
+                                        Padding="4,12"
+                                        HorizontalAlignment="Stretch"
+                                        HorizontalContentAlignment="Stretch"
+                                        Background="Transparent"
+                                        BorderThickness="0"
+                                        Command="{Binding OpenGroupPermissionsCommand}">
+                                    <Grid HorizontalAlignment="Stretch">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <FontIcon Glyph="&#xE713;"
+                                                  FontFamily="{StaticResource IconFont}"
+                                                  FontSize="20"
+                                                  VerticalAlignment="Center"
+                                                  Margin="0,0,12,0"
+                                                  Foreground="{ThemeResource WhatsAppTextMediumBrush}"/>
+                                        <TextBlock Grid.Column="1"
+                                                   x:Uid="CreateGroup_PermissionsTitle"
+                                                   Text="Group permissions"
+                                                   FontSize="16"
+                                                   FontFamily="{StaticResource MainFontSemibold}"
+                                                   FontWeight="SemiBold"
+                                                   VerticalAlignment="Center"
+                                                   TextWrapping="NoWrap"
+                                                   TextTrimming="CharacterEllipsis"
+                                                   Foreground="{ThemeResource WhatsAppTextHighBrush}"/>
+                                    </Grid>
+                                </Button>
+                                </StackPanel>
+                            </Grid>
+                        </ScrollViewer>
+
+                        <Border x:Name="GroupEmojiDock"
+                                Grid.Row="1"
+                                Height="280"
+                                Visibility="Collapsed"
+                                Background="{ThemeResource ChatDetailInputBarBackgroundBrush}"
+                                BorderBrush="{ThemeResource ChatDetailInputBarTopBorderBrush}"
+                                BorderThickness="0,1,0,0">
+                            <controls:EmojiPickerPanel x:Name="GroupEmojiPanel"
+                                                       GlyphPicked="GroupEmojiPanel_GlyphPicked"/>
+                        </Border>
+                    </Grid>
                 </PivotItem>
             </Pivot>
 
-            <ScrollViewer Visibility="{Binding IsCreateCommunity, Converter={StaticResource BooleanToVisibilityConverter}}"
-                          VerticalScrollBarVisibility="Auto">
-                <StackPanel Padding="16,24" MaxWidth="420" HorizontalAlignment="Center">
-                    <Border Width="120" Height="120"
-                            CornerRadius="5"
-                            Background="{ThemeResource ChatListSearchBackgroundBrush}"
-                            HorizontalAlignment="Center">
-                        <FontIcon Glyph="&#xE8B8;"
-                                  FontFamily="{StaticResource IconFont}"
-                                  FontSize="40"
-                                  Foreground="{ThemeResource WhatsAppTextMediumBrush}"
-                                  HorizontalAlignment="Center"
-                                  VerticalAlignment="Center"/>
-                    </Border>
-                    <TextBox x:Uid="CreateCommunity_Name"
-                             Margin="0,20,0,0"
-                             PlaceholderText="Community name"
-                             Text="{Binding CommunityName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
-                    <TextBox x:Uid="CreateCommunity_Description"
-                             Margin="0,12,0,0"
-                             MinHeight="120"
-                             AcceptsReturn="True"
-                             TextWrapping="Wrap"
-                             PlaceholderText="Community description"
-                             Text="{Binding CommunityDescription, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
-                </StackPanel>
-            </ScrollViewer>
+            <Grid Visibility="{Binding IsCreateCommunity, Converter={StaticResource BooleanToVisibilityConverter}}">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel Padding="16,24" MaxWidth="420" HorizontalAlignment="Center">
+                        <Grid Width="160" Height="160" HorizontalAlignment="Center">
+                            <toolkit:DropShadowPanel BlurRadius="24"
+                                                     OffsetX="0"
+                                                     OffsetY="4"
+                                                     ShadowOpacity="0.45"
+                                                     Color="Black"
+                                                     HorizontalAlignment="Stretch"
+                                                     VerticalAlignment="Stretch">
+                                <Border Width="160" Height="160"
+                                        CornerRadius="12"
+                                        Background="{ThemeResource AvatarFallbackBackgroundBrush}">
+                                    <Grid>
+                                        <Viewbox Width="64" Height="64"
+                                                 HorizontalAlignment="Center"
+                                                 VerticalAlignment="Center"
+                                                 Visibility="{Binding HasCommunityPhoto, Converter={StaticResource InvertedBooleanToVisibilityConverter}}">
+                                            <Canvas Width="20" Height="19">
+                                                <Path Fill="{ThemeResource AvatarFallbackIconBrush}"
+                                                      Data="M1.50,11.00L11.50,11.00C12.27,11.00,12.92,11.59,12.99,12.36L13.00,12.50 13.00,14.50C13.00,18.00 9.28,19.00 6.50,19.00 3.78,19.00 0.16,18.04 0.00,14.73L0.00,14.50 0.00,12.50C0.00,11.73 0.59,11.08 1.36,11.01z M13.49,11.00L18.50,11.00C19.27,11.00 19.92,11.59 19.99,12.35L20.00,12.50 20.00,14.00C20.00,17.06 17.14,18.00 15.00,18.00 14.27,18.00 13.55,17.89 12.86,17.68 13.51,16.93 13.94,15.97 13.99,14.78L14.00,14.50 14.00,12.50C14.00,12.01 13.85,11.55 13.60,11.16L13.49,11.00 18.50,11.00z M6.50,0.00C8.99,0.00 11.00,2.01 11.00,4.50 11.00,6.99 8.99,9.00 6.50,9.00 4.01,9.00 2.00,6.99 2.00,4.50 2.00,2.01 4.01,0.00 6.50,0.00z M15.50,2.00C17.43,2.00 19.00,3.57 19.00,5.50 19.00,7.43 17.43,9.00 15.50,9.00 13.57,9.00 12.00,7.43 12.00,5.50 12.00,3.57 13.57,2.00 15.50,2.00z"/>
+                                            </Canvas>
+                                        </Viewbox>
+                                        <Border x:Name="CommunityPhotoImageHost"
+                                                CornerRadius="12"
+                                                Visibility="{Binding HasCommunityPhoto, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                            <Border.Background>
+                                                <ImageBrush x:Name="CommunityPhotoBrush"
+                                                            Stretch="UniformToFill"
+                                                            AlignmentX="Center"
+                                                            AlignmentY="Center"/>
+                                            </Border.Background>
+                                        </Border>
+                                        <Border Background="#66000000"
+                                                CornerRadius="12"
+                                                Visibility="{Binding HasCommunityPhoto, Converter={StaticResource InvertedBooleanToVisibilityConverter}}">
+                                            <TextBlock x:Uid="CreateCommunity_AddPhotoOverlay"
+                                                       Text="Add community image..."
+                                                       HorizontalAlignment="Center"
+                                                       VerticalAlignment="Center"
+                                                       TextAlignment="Center"
+                                                       TextWrapping="WrapWholeWords"
+                                                       Margin="16"
+                                                       FontSize="13"
+                                                       FontFamily="{StaticResource MainFont}"
+                                                       Foreground="White"/>
+                                        </Border>
+                                    </Grid>
+                                </Border>
+                            </toolkit:DropShadowPanel>
+                            <Button Width="36" Height="36"
+                                    HorizontalAlignment="Right"
+                                    VerticalAlignment="Bottom"
+                                    Margin="0,0,-4,-4"
+                                    Padding="0"
+                                    MinWidth="0"
+                                    MinHeight="0"
+                                    BorderThickness="0"
+                                    Background="{ThemeResource WhatsAppGreenFocusBrush}"
+                                    Command="{Binding PickCommunityPhotoCommand}"
+                                    AutomationProperties.Name="Change community photo"
+                                    Canvas.ZIndex="1">
+                                <Button.Template>
+                                    <ControlTemplate TargetType="Button">
+                                        <Grid>
+                                            <Ellipse Fill="{TemplateBinding Background}"/>
+                                            <ContentPresenter HorizontalAlignment="Center"
+                                                              VerticalAlignment="Center"/>
+                                        </Grid>
+                                    </ControlTemplate>
+                                </Button.Template>
+                                <FontIcon Glyph="&#xE72C;"
+                                          FontFamily="{StaticResource IconFont}"
+                                          FontSize="14"
+                                          Foreground="White"/>
+                            </Button>
+                        </Grid>
+
+                        <controls:RichLabeledTextBox x:Name="CommunityNameField"
+                                                     x:Uid="CreateCommunity_Name"
+                                                     Margin="0,20,0,0"
+                                                     Header="Community name"
+                                                     PlaceholderText="Community name"
+                                                     Text="{Binding CommunityName, Mode=TwoWay}"
+                                                     MinBoxHeight="56"
+                                                     EmojiInvoked="CommunityField_EmojiInvoked"/>
+                        <controls:RichLabeledTextBox x:Name="CommunityDescriptionField"
+                                                     x:Uid="CreateCommunity_Description"
+                                                     Margin="0,12,0,0"
+                                                     Header="Community description"
+                                                     PlaceholderText="Community description"
+                                                     Text="{Binding CommunityDescription, Mode=TwoWay}"
+                                                     AcceptsReturn="True"
+                                                     TextWrapping="Wrap"
+                                                     InputVerticalContentAlignment="Top"
+                                                     MinBoxHeight="140"
+                                                     MaxInputHeight="220"
+                                                     EmojiInvoked="CommunityField_EmojiInvoked"/>
+                    </StackPanel>
+                </ScrollViewer>
+
+                <Border x:Name="CommunityEmojiDock"
+                        Grid.Row="1"
+                        Height="280"
+                        Visibility="Collapsed"
+                        Background="{ThemeResource ChatDetailInputBarBackgroundBrush}"
+                        BorderBrush="{ThemeResource ChatDetailInputBarTopBorderBrush}"
+                        BorderThickness="0,1,0,0">
+                    <controls:EmojiPickerPanel x:Name="CommunityEmojiPanel"
+                                               GlyphPicked="CommunityEmojiPanel_GlyphPicked"/>
+                </Border>
+            </Grid>
+        </Grid>
+
+        <!-- Replaces create header + both group pivots + Legacy command bar. -->
+        <Grid x:Name="GroupPermissionsOverlay"
+              Grid.Row="0"
+              Grid.RowSpan="3"
+              Grid.Column="0"
+              Canvas.ZIndex="10"
+              Visibility="{Binding IsGroupPermissionsOpen, Converter={StaticResource BooleanToVisibilityConverter}}"
+              Background="{ThemeResource ChatListBackgroundBrush}">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+            <Grid Padding="4,8,16,8"
+                  BorderBrush="{ThemeResource ChatDetailInputBarTopBorderBrush}"
+                  BorderThickness="0,0,0,1">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <Button Style="{StaticResource ModernIconButtonStyle}"
+                        VerticalAlignment="Center"
+                        Margin="4,0,8,0"
+                        Command="{Binding CloseGroupPermissionsCommand}">
+                    <FontIcon Glyph="&#xE72B;" FontFamily="{StaticResource IconFont}" FontSize="18"/>
+                </Button>
+                <TextBlock Grid.Column="1"
+                           x:Uid="CreateGroup_PermissionsOverlayTitle"
+                           Text="Group permissions"
+                           FontSize="20"
+                           FontFamily="{StaticResource MainFontSemibold}"
+                           FontWeight="SemiBold"
+                           Foreground="{ThemeResource WhatsAppTextHighBrush}"
+                           VerticalAlignment="Center"
+                           TextWrapping="NoWrap"
+                           TextTrimming="CharacterEllipsis"
+                           MaxLines="1"/>
+            </Grid>
         </Grid>
 
         <!-- Same empty layout as CallsEmpty / chat empty: 1px divider + centered icon + title + body. -->
@@ -316,7 +587,7 @@
               MinHeight="{StaticResource LegacyCommandBarCompactHeight}"
               VerticalAlignment="Bottom"
               Background="{ThemeResource LegacyCommandBarBackgroundBrush}"
-              Visibility="{Binding ShowCreateForm, Converter={StaticResource BooleanToVisibilityConverter}}">
+              Visibility="{Binding ShowCreateActionChrome, Converter={StaticResource BooleanToVisibilityConverter}}">
             <CommandBar x:Name="CreateLegacyCommandBar"
                         Style="{StaticResource LegacyCommandBarStyle}"
                         DefaultLabelPosition="Bottom"

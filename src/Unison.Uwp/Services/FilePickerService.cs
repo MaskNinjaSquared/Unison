@@ -6,10 +6,13 @@ using Unison.Core.Contracts;
 using Unison.Core.Helpers;
 using Unison.Core.Models;
 using Unison.WhatsAppClient.Helpers;
+using Windows.ApplicationModel.Core;
 using Windows.Graphics.Imaging;
 using Windows.Storage;
 using Windows.Storage.Pickers;
 using Windows.Storage.Streams;
+using Windows.UI.Core;
+using Windows.UI.Xaml;
 
 namespace Unison.Uwp.Services
 {
@@ -337,7 +340,13 @@ namespace Unison.Uwp.Services
             }
         }
 
-        public async Task<string> PickSaveLocalImageAsync(string sourceUriOrPath, string suggestedFileName)
+        public Task<string> PickSaveLocalImageAsync(string sourceUriOrPath, string suggestedFileName)
+        {
+            // FileSavePicker must run on the UI thread; callers often ContinueAwait(false) after media I/O.
+            return RunOnUiThreadAsync(() => PickSaveLocalImageCoreAsync(sourceUriOrPath, suggestedFileName));
+        }
+
+        private async Task<string> PickSaveLocalImageCoreAsync(string sourceUriOrPath, string suggestedFileName)
         {
             try
             {
@@ -371,10 +380,18 @@ namespace Unison.Uwp.Services
             }
         }
 
-        public async Task<string> PickSaveLocalFileAsync(
+        public Task<string> PickSaveLocalFileAsync(
             string sourceUriOrPath,
             string suggestedFileName,
             string mimeType = null)
+        {
+            return RunOnUiThreadAsync(() => PickSaveLocalFileCoreAsync(sourceUriOrPath, suggestedFileName, mimeType));
+        }
+
+        private async Task<string> PickSaveLocalFileCoreAsync(
+            string sourceUriOrPath,
+            string suggestedFileName,
+            string mimeType)
         {
             try
             {
@@ -410,6 +427,58 @@ namespace Unison.Uwp.Services
                 System.Diagnostics.Debug.WriteLine("[FilePickerService] SaveFile: " + ex.Message);
                 throw;
             }
+        }
+
+        /// <summary>
+        /// FileSavePicker / FileOpenPicker require the UI thread. Core VMs often hop off it with
+        /// ConfigureAwait(false) after EnsureMedia — without this hop the picker never appears.
+        /// </summary>
+        private static Task<T> RunOnUiThreadAsync<T>(Func<Task<T>> action)
+        {
+            if (action == null)
+            {
+                throw new ArgumentNullException(nameof(action));
+            }
+
+            CoreDispatcher dispatcher = Window.Current?.Dispatcher
+                ?? CoreWindow.GetForCurrentThread()?.Dispatcher;
+
+            if (dispatcher == null)
+            {
+                try
+                {
+                    dispatcher = CoreApplication.MainView?.CoreWindow?.Dispatcher;
+                }
+                catch
+                {
+                    dispatcher = null;
+                }
+            }
+
+            if (dispatcher == null || dispatcher.HasThreadAccess)
+            {
+                return action();
+            }
+
+            var tcs = new TaskCompletionSource<T>();
+            _ = dispatcher.RunAsync(CoreDispatcherPriority.Normal, () =>
+            {
+                async void Run()
+                {
+                    try
+                    {
+                        T result = await action().ConfigureAwait(true);
+                        tcs.TrySetResult(result);
+                    }
+                    catch (Exception ex)
+                    {
+                        tcs.TrySetException(ex);
+                    }
+                }
+
+                Run();
+            });
+            return tcs.Task;
         }
 
         private static string GetSaveExtension(string suggestedFileName, string sourceFileType, string mimeType)
