@@ -1,10 +1,11 @@
 using System;
 using System.ComponentModel;
+using Microsoft.Extensions.DependencyInjection;
+using Unison.Core.Contracts;
 using Unison.Core.Helpers;
 using Unison.Core.Models;
 using Unison.Core.ViewModels;
 using Unison.Uwp.UI.Controls;
-using Windows.UI.Core;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
 using Windows.UI.Xaml.Data;
@@ -14,6 +15,7 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Controls
 {
     /// <summary>
     /// WhatsApp Legacy New Conversation overlay; hosts Legacy CreateConversationFlowView (CommandBar).
+    /// System Back via <see cref="INavigator.PushLocalBack"/> (not a direct BackRequested hook).
     /// </summary>
     public sealed partial class NewConversationView : UserControl
     {
@@ -25,7 +27,7 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Controls
                 new PropertyMetadata(null, OnViewModelChanged));
 
         private NewConversationViewModel _hookedVm;
-        private bool _backHooked;
+        private IDisposable _localBackRegistration;
         private bool _layoutHooked;
         private VisualStateGroup _layoutStates;
         private AlphabetSemanticZoomHost _contactsZoom;
@@ -185,24 +187,24 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Controls
 
         private void HookBack()
         {
-            if (_backHooked)
+            if (_localBackRegistration != null)
             {
                 return;
             }
 
-            SystemNavigationManager.GetForCurrentView().BackRequested += OnBackRequested;
-            _backHooked = true;
+            INavigator navigator = App.Services?.GetService<INavigator>();
+            if (navigator == null)
+            {
+                return;
+            }
+
+            _localBackRegistration = navigator.PushLocalBack(TryHandleLocalBack);
         }
 
         private void UnhookBack()
         {
-            if (!_backHooked)
-            {
-                return;
-            }
-
-            SystemNavigationManager.GetForCurrentView().BackRequested -= OnBackRequested;
-            _backHooked = false;
+            _localBackRegistration?.Dispose();
+            _localBackRegistration = null;
         }
 
         private void HookLayoutStates()
@@ -258,33 +260,30 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Controls
             ViewModel?.ReportLayoutMinimal(minimal);
         }
 
-        private void OnBackRequested(object sender, BackRequestedEventArgs e)
+        private bool TryHandleLocalBack()
         {
             if (ViewModel == null || !ViewModel.IsOpen)
             {
-                return;
+                return false;
             }
 
             if (CreateFlowPart != null && CreateFlowPart.TryHandleMembersZoomBack())
             {
-                e.Handled = true;
-                return;
+                return true;
             }
 
             if (ViewModel.TryHandleCreateBack())
             {
-                e.Handled = true;
-                return;
+                return true;
             }
 
             if (_contactsZoom != null && _contactsZoom.TryHandleBackToZoomedIn())
             {
-                e.Handled = true;
-                return;
+                return true;
             }
 
-            e.Handled = true;
             ViewModel.Close();
+            return true;
         }
 
         private void NewConversationView_Loaded(object sender, RoutedEventArgs e)

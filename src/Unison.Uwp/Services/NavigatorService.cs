@@ -2,6 +2,7 @@ using System;
 using Unison.Core.Constants;
 using Unison.Core.Contracts;
 using Unison.Core.Models;
+using Unison.Core.Navigation;
 using Unison.Uwp.Services.Themes;
 using Windows.UI.Xaml.Controls;
 using Windows.UI.Xaml.Navigation;
@@ -12,6 +13,7 @@ namespace Unison.Uwp.Services
     {
         private readonly Frame _rootFrame;
         private readonly IShellNavigationStrategy _shellNav;
+        private readonly LocalBackStack _localBack = new LocalBackStack();
         private Frame _shellFrame;
         private Frame _fullScreenFrame;
 
@@ -19,6 +21,7 @@ namespace Unison.Uwp.Services
         {
             _rootFrame = frame ?? throw new ArgumentNullException(nameof(frame));
             _shellNav = shellNav ?? throw new ArgumentNullException(nameof(shellNav));
+            _localBack.Changed += (s, e) => LocalBackChanged?.Invoke(this, EventArgs.Empty);
         }
 
         public bool CanGoBack => _rootFrame?.CanGoBack ?? false;
@@ -31,7 +34,15 @@ namespace Unison.Uwp.Services
 
         public event EventHandler FullScreenChanged;
 
+        public event EventHandler LocalBackChanged;
+
         public bool IsFullScreenOpen => _fullScreenFrame?.Content != null;
+
+        public bool HasLocalBack => _localBack.HasHandlers;
+
+        public IDisposable PushLocalBack(Func<bool> handler) => _localBack.Push(handler);
+
+        public bool TryHandleLocalBack() => _localBack.TryHandle();
 
         public void AttachShellFrame(object frame)
         {

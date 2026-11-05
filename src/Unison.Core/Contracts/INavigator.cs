@@ -1,3 +1,4 @@
+using System;
 using Unison.Core.Models;
 
 namespace Unison.Core.Contracts
@@ -5,6 +6,7 @@ namespace Unison.Core.Contracts
     /// <summary>
     /// Root + shell navigation. Root used for Start / Login / AppShell (no auth backstack).
     /// Shell frame hosts Chats / Status / Debug inside AppShell; Settings via <see cref="OpenSettings"/>.
+    /// Overlays that are not Frame pages register a virtual back via <see cref="PushLocalBack"/>.
     /// </summary>
     public interface INavigator
     {
@@ -42,7 +44,7 @@ namespace Unison.Core.Contracts
         string CurrentShellRoute { get; }
 
         /// <summary>Raised after shell frame navigation (forward or back). Arg is <see cref="CurrentShellRoute"/>.</summary>
-        event System.EventHandler<string> ShellNavigated;
+        event EventHandler<string> ShellNavigated;
 
         /// <summary>
         /// Wire the full-screen Frame that covers the whole shell (sidebar / pivot / detail).
@@ -62,7 +64,25 @@ namespace Unison.Core.Contracts
         bool IsFullScreenOpen { get; }
 
         /// <summary>Raised after a full-screen page opens or closes.</summary>
-        event System.EventHandler FullScreenChanged;
+        event EventHandler FullScreenChanged;
+
+        /// <summary>
+        /// Register a virtual back handler (LIFO) for overlays that are not Frame pages
+        /// (New Conversation, share/favorites pickers, nested create chrome). Dispose to unregister.
+        /// The shell calls <see cref="TryHandleLocalBack"/> before Frame / section back so hardware
+        /// and title-bar Back cannot skip the open overlay.
+        /// </summary>
+        /// <param name="handler">Returns true when Back was consumed.</param>
+        IDisposable PushLocalBack(Func<bool> handler);
+
+        /// <summary>Invokes the topmost local back handler. False when the stack is empty.</summary>
+        bool TryHandleLocalBack();
+
+        /// <summary>True when at least one local back handler is registered.</summary>
+        bool HasLocalBack { get; }
+
+        /// <summary>Raised after <see cref="PushLocalBack"/> / dispose changes the local stack.</summary>
+        event EventHandler LocalBackChanged;
 
         /// <summary>
         /// Drop shell back/forward stacks and disable cache on the current shell page

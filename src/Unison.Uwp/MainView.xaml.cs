@@ -167,6 +167,7 @@ namespace Unison.Uwp
             if (_navigator != null)
             {
                 _navigator.FullScreenChanged += Navigator_FullScreenChanged;
+                _navigator.LocalBackChanged += Navigator_LocalBackChanged;
             }
 
             _uiEventsAttached = true;
@@ -180,6 +181,7 @@ namespace Unison.Uwp
                 if (_navigator != null)
                 {
                     _navigator.FullScreenChanged -= Navigator_FullScreenChanged;
+                    _navigator.LocalBackChanged -= Navigator_LocalBackChanged;
                 }
 
                 _uiEventsAttached = false;
@@ -187,6 +189,8 @@ namespace Unison.Uwp
 
             UnhookViewModel();
         }
+
+        private void Navigator_LocalBackChanged(object sender, EventArgs e) => ApplySystemBackButton();
 
         private void MainView_Loaded(object sender, RoutedEventArgs e)
         {
@@ -434,7 +438,9 @@ namespace Unison.Uwp
 
         private void ApplySystemBackButton()
         {
-            bool show = ViewModel?.ShowSystemBackButton == true || FullScreenFrame?.Content != null;
+            bool show = ViewModel?.ShowSystemBackButton == true ||
+                        FullScreenFrame?.Content != null ||
+                        (_navigator != null && _navigator.HasLocalBack);
             if (!show && ViewModel != null && ShouldShowChatShellBackButton(ShellContentFrame.Content))
             {
                 show = true;
@@ -529,6 +535,13 @@ namespace Unison.Uwp
         {
             if (e.Handled)
             {
+                return;
+            }
+
+            // Overlays registered on INavigator (New Conversation, share/favorites pickers).
+            if (_navigator != null && _navigator.TryHandleLocalBack())
+            {
+                e.Handled = true;
                 return;
             }
 

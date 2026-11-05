@@ -102,6 +102,8 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             {
                 _navigator.FullScreenChanged -= Navigator_FullScreenChanged;
                 _navigator.FullScreenChanged += Navigator_FullScreenChanged;
+                _navigator.LocalBackChanged -= Navigator_LocalBackChanged;
+                _navigator.LocalBackChanged += Navigator_LocalBackChanged;
             }
 
             _pivotReady = true;
@@ -139,6 +141,7 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             if (_navigator != null)
             {
                 _navigator.FullScreenChanged -= Navigator_FullScreenChanged;
+                _navigator.LocalBackChanged -= Navigator_LocalBackChanged;
             }
 
             UnhookListChrome();
@@ -157,6 +160,8 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                 DismissOverlay();
             }
         }
+
+        private void Navigator_LocalBackChanged(object sender, EventArgs e) => ApplyShellChrome();
 
         private void HookDetail()
         {
@@ -220,6 +225,13 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
 
         private void ShellView_BackRequested(object sender, BackRequestedEventArgs e)
         {
+            // Virtual overlay backs (New Conversation, share/favorites pickers) before Frame chrome.
+            if (_navigator != null && _navigator.TryHandleLocalBack())
+            {
+                e.Handled = true;
+                return;
+            }
+
             // Overlay first: Settings/Debug sit above the list and any open chat. Checking
             // _detailOpen before them left the hardware back closing the chat underneath
             // while the overlay stayed up (CloseDetailAsync is async and can still be mid-flight).
@@ -614,6 +626,7 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             {
                 bool showBack = hideChrome || _searchState || _detailOpen ||
                     _statusDetailHostOpen || _callDetailHostOpen || settingsPage ||
+                    (_navigator != null && _navigator.HasLocalBack) ||
                     (_shell != null && _shell.ShowSystemBackButton);
                 SystemNavigationManager.GetForCurrentView().AppViewBackButtonVisibility =
                     showBack

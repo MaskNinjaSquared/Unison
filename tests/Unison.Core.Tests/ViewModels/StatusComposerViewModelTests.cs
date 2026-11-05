@@ -382,6 +382,14 @@ namespace Unison.Core.Tests.ViewModels
 
             public event EventHandler FullScreenChanged { add { } remove { } }
 
+            public event EventHandler LocalBackChanged { add { } remove { } }
+
+            public bool HasLocalBack => false;
+
+            public IDisposable PushLocalBack(Func<bool> handler) => new NoopDisposable();
+
+            public bool TryHandleLocalBack() => false;
+
             public void Navigate(NavigationDestination destination, object parameter = null) { }
 
             public void NavigateAndClear(NavigationDestination destination, object parameter = null) { }
@@ -412,6 +420,11 @@ namespace Unison.Core.Tests.ViewModels
             }
 
             public void PurgeShellNavigation() { }
+
+            private sealed class NoopDisposable : IDisposable
+            {
+                public void Dispose() { }
+            }
         }
 
         private sealed class EmptyStatus : IStatusService
