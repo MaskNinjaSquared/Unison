@@ -1299,6 +1299,43 @@ namespace Unison.Uwp.Client
             }
         }
 
+        public async Task<Unison.Socket.UseCases.Newsletter.NewsletterMetadataResult> CreateNewsletterAsync(
+            string name,
+            string description)
+        {
+            var session = Require();
+            RuntimeDiagnosticsService.Instance.Write(
+                "channels",
+                "channel-create-begin",
+                "descriptionLen=" + (description != null ? description.Length : 0));
+            Unison.Socket.UseCases.Newsletter.NewsletterMetadataResult created =
+                await new Unison.Socket.UseCases.Newsletter.CreateNewsletterUseCase(session.Connection)
+                    .ExecuteAsync(name, description)
+                    .ConfigureAwait(false);
+            if (string.IsNullOrEmpty(created.Id))
+            {
+                // The VM only shows a generic failure; the server's answer lands in Runtime Health.
+                RuntimeDiagnosticsService.Instance.Write(
+                    "channels",
+                    "channel-create-failed",
+                    created.FailureReason ?? "(none)");
+                throw new InvalidOperationException(created.FailureReason ?? "no-channel");
+            }
+
+            RuntimeDiagnosticsService.Instance.Write(
+                "channels",
+                "channel-create-ok",
+                "jid=" + created.Id + "; role=" + (created.ViewerRole ?? "(none)"));
+            return created;
+        }
+
+        public Task UpdateNewsletterPictureAsync(string newsletterJid, byte[] jpeg)
+        {
+            var session = Require();
+            return new Unison.Socket.UseCases.Newsletter.UpdateNewsletterPictureUseCase(session.Connection)
+                .ExecuteAsync(newsletterJid, jpeg);
+        }
+
         private async Task<ProfilePictureResult> GetNewsletterProfilePictureResultAsync(string jid)
         {
             Unison.Socket.UseCases.Newsletter.NewsletterMetadataResult meta =

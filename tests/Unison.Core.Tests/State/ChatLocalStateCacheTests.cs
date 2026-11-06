@@ -187,6 +187,62 @@ namespace Unison.Core.Tests.State
         }
 
         [Fact]
+        public void A_channel_role_is_kept_next_to_the_other_flags()
+        {
+            var cache = new ChatLocalStateCache();
+            cache.Mutate(Jid, state => state.IsChatPinned = true);
+            cache.Mutate(Jid, state => state.ChannelRole = ChannelViewerRole.Admin);
+
+            ChatLocalState stored = cache.TryGet(Jid);
+            Assert.True(stored.IsChatPinned);
+            Assert.Equal(ChannelViewerRole.Admin, stored.ChannelRole);
+            Assert.True(stored.Knows(ChatLocalStateFields.ChannelRole));
+        }
+
+        [Fact]
+        public void Warm_keeps_a_stored_channel_role()
+        {
+            var cache = new ChatLocalStateCache();
+
+            cache.LoadWarm(new[]
+            {
+                new ChatLocalState { Jid = Jid, ChannelRole = ChannelViewerRole.Owner }
+            });
+
+            ChatLocalState stored = cache.TryGet(Jid);
+            Assert.Equal(ChannelViewerRole.Owner, stored.ChannelRole);
+            Assert.True(stored.Knows(ChatLocalStateFields.ChannelRole));
+        }
+
+        [Fact]
+        public void Warm_row_without_a_channel_role_does_not_claim_to_know_one()
+        {
+            // Most rows are not channels: "never fetched" must not read as Unknown and clear a
+            // role the row already holds.
+            var cache = new ChatLocalStateCache();
+
+            cache.LoadWarm(new[] { new ChatLocalState { Jid = Jid, IsChatPinned = true } });
+
+            Assert.False(cache.TryGet(Jid).Knows(ChatLocalStateFields.ChannelRole));
+        }
+
+        [Fact]
+        public void Warm_fills_a_channel_role_the_cache_never_learned()
+        {
+            var cache = new ChatLocalStateCache();
+            cache.Mutate(Jid, state => state.MutedUntil = MuteDeadline);
+
+            cache.LoadWarm(new[]
+            {
+                new ChatLocalState { Jid = Jid, ChannelRole = ChannelViewerRole.Admin }
+            });
+
+            ChatLocalState stored = cache.TryGet(Jid);
+            Assert.Equal(ChannelViewerRole.Admin, stored.ChannelRole);
+            Assert.Equal(MuteDeadline, stored.MutedUntil);
+        }
+
+        [Fact]
         public void Blank_addresses_are_ignored_by_every_operation()
         {
             var cache = new ChatLocalStateCache();

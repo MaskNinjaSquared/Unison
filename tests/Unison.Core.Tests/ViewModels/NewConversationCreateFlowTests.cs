@@ -298,24 +298,87 @@ namespace Unison.Core.Tests.ViewModels
         }
 
         [Fact]
-        public void Channel_confirm_is_a_no_op_prototype()
+        public void Channel_confirm_creates_through_the_facade_and_opens_the_channel()
         {
-            var groups = new FakeGroups
+            const string channelJid = "120363000000000010@newsletter";
+            var groups = new FakeGroups();
+            var channels = new FakeChannels
             {
-                NextResult = new GroupCreateResult { GroupJid = "120363000000000099@g.us" }
+                NextResult = new ChannelCreateResult { ChannelJid = channelJid }
             };
-            var vm = CreateVm(groups: groups);
+            var chats = new RecordingChats();
+            var notifications = new RecordingNotifications();
+            var vm = CreateVm(groups: groups, chats: chats, notifications: notifications, channels: channels);
+            string opened = null;
+            vm.ChatOpenRequested += (s, jid) => opened = jid;
+            vm.Open();
             vm.ReportLayoutMinimal(false);
             vm.NewChannelCommand.Execute(null);
             vm.ChannelName = "News";
             vm.ChannelDescription = "Updates";
+            vm.ChannelPhotoBytes = new byte[] { 7 };
 
             vm.CreateNextCommand.Execute(null);
 
-            Assert.Equal(NewConversationCreateFlow.Channel, vm.CreateFlow);
+            Assert.True(SpinWait.SpinUntil(() => opened != null, TimeSpan.FromSeconds(2)));
+            Assert.Equal(channelJid, opened);
+            Assert.Equal("News", channels.LastRequest.Name);
+            Assert.Equal("Updates", channels.LastRequest.Description);
+            Assert.Equal(new byte[] { 7 }, channels.LastRequest.PhotoBytes);
             Assert.Null(groups.LastGroup);
             Assert.Null(groups.LastCommunity);
-            Assert.Equal("News", vm.ChannelName);
+            Assert.Equal(channelJid, chats.LastStartJid);
+            Assert.Equal("News", chats.LastStartDisplayName);
+            Assert.Equal(NewConversationCreateFlow.None, vm.CreateFlow);
+            Assert.True(SpinWait.SpinUntil(() => notifications.LastBody != null, TimeSpan.FromSeconds(2)));
+            Assert.Equal("Channel created", notifications.LastTitle);
+            Assert.Equal("News created successfully.", notifications.LastBody);
+        }
+
+        [Fact]
+        public async Task Channel_confirm_refused_shows_why_and_stays_on_the_form()
+        {
+            var dialogs = new FakeDialogs();
+            var channels = new FakeChannels
+            {
+                NextResult = ChannelCreateResult.Failed(ChannelCreateResult.ReasonEmptyName)
+            };
+            var chats = new RecordingChats();
+            var vm = CreateVm(dialogs, chats: chats, channels: channels);
+            vm.ReportLayoutMinimal(false);
+            vm.NewChannelCommand.Execute(null);
+
+            vm.CreateNextCommand.Execute(null);
+            await dialogs.WaitShownAsync();
+
+            Assert.Equal("Enter a channel name.", dialogs.LastContent);
+            Assert.Equal(NewConversationCreateFlow.Channel, vm.CreateFlow);
+            Assert.Null(chats.LastStartJid);
+        }
+
+        [Fact]
+        public async Task Channel_photo_failure_is_reported_after_the_channel_opens()
+        {
+            var dialogs = new FakeDialogs();
+            var channels = new FakeChannels
+            {
+                NextResult = new ChannelCreateResult
+                {
+                    ChannelJid = "120363000000000010@newsletter",
+                    PhotoFailed = true
+                }
+            };
+            var vm = CreateVm(dialogs, chats: new RecordingChats(), channels: channels);
+            vm.ReportLayoutMinimal(false);
+            vm.NewChannelCommand.Execute(null);
+            vm.ChannelName = "News";
+
+            vm.CreateNextCommand.Execute(null);
+            await dialogs.WaitShownAsync();
+
+            Assert.Equal(
+                "Channel created, but the photo couldn't be applied. You can change it in the channel info.",
+                dialogs.LastContent);
         }
 
         [Fact]
@@ -526,7 +589,8 @@ namespace Unison.Core.Tests.ViewModels
             IGroupService groups = null,
             CountingDispatcher dispatcher = null,
             IChatService chats = null,
-            INotificationService notifications = null)
+            INotificationService notifications = null,
+            IChannelService channels = null)
         {
             dispatcher = dispatcher ?? new CountingDispatcher();
             return new NewConversationViewModel(
@@ -542,7 +606,23 @@ namespace Unison.Core.Tests.ViewModels
                 localContacts: localContacts,
                 filePicker: filePicker,
                 groups: groups,
-                notifications: notifications);
+                notifications: notifications,
+                channels: channels);
+        }
+
+        private sealed class FakeChannels : IChannelService
+        {
+            public ChannelCreateResult NextResult { get; set; }
+
+            public ChannelCreateRequest LastRequest { get; private set; }
+
+            public Task<ChannelCreateResult> CreateChannelAsync(ChannelCreateRequest request)
+            {
+                LastRequest = request;
+                return Task.FromResult(NextResult);
+            }
+
+            public Task RefreshViewerRoleAsync(ChatItem channel) => Task.CompletedTask;
         }
 
         private sealed class RecordingNotifications : INotificationService
@@ -650,6 +730,8 @@ namespace Unison.Core.Tests.ViewModels
                 Task.CompletedTask;
 
             public Task EnsureGroupRosterLoadedFromStoreAsync(string groupJid) => Task.CompletedTask;
+
+            public Task RestoreMyGroupRoleAsync(ChatItem group) => Task.CompletedTask;
 
             public GroupMember TryGetMember(string groupJid, string memberJid) => null;
 

@@ -614,6 +614,7 @@ namespace Unison.WhatsAppClient.Helpers
             }
 
             chat.MyGroupRole = metadata.MyRole;
+            chat.IsMyGroupRoleFromServer = true;
             if (metadata.SelfIsParticipant.HasValue)
             {
                 chat.LeftGroup = !metadata.SelfIsParticipant.Value;

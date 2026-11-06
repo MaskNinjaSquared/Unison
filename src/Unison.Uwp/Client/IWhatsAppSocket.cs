@@ -184,6 +184,17 @@ namespace Unison.Uwp.Client
         Task<Unison.Socket.UseCases.Newsletter.NewsletterMetadataResult> GetNewsletterMetadataAsync(
             string jid);
 
+        /// <summary>
+        /// Baileys <c>newsletterCreate</c>. Returns the new channel (id + viewer role);
+        /// throws when the server refuses it.
+        /// </summary>
+        Task<Unison.Socket.UseCases.Newsletter.NewsletterMetadataResult> CreateNewsletterAsync(
+            string name,
+            string description);
+
+        /// <summary>Baileys <c>newsletterUpdatePicture</c>. Square JPEG; throws when refused.</summary>
+        Task UpdateNewsletterPictureAsync(string newsletterJid, byte[] jpeg);
+
         Task<byte[]> DownloadAndDecryptMediaAsync(
             string url,
             string directPath,

@@ -730,6 +730,21 @@ Desative depois de diagnosticar: manter ligado deixa o app lento.</value>
   <data name="CreateFlow_CommunityCreatedBody" xml:space="preserve">
     <value>{0} criada com sucesso.</value>
   </data>
+  <data name="CreateFlow_ChannelCreatedTitle" xml:space="preserve">
+    <value>Canal criado</value>
+  </data>
+  <data name="CreateFlow_ChannelCreatedBody" xml:space="preserve">
+    <value>{0} criado com sucesso.</value>
+  </data>
+  <data name="CreateChannel_Error_NameRequired" xml:space="preserve">
+    <value>Insira um nome para o canal.</value>
+  </data>
+  <data name="CreateChannel_Error_Failed" xml:space="preserve">
+    <value>Não foi possível criar o canal. Tente novamente.</value>
+  </data>
+  <data name="CreateChannel_PhotoFailed" xml:space="preserve">
+    <value>Canal criado, mas não foi possível aplicar a foto. Você pode alterá-la nos dados do canal.</value>
+  </data>
   <data name="CreateChannel_ExplainTitle" xml:space="preserve">
     <value>Crie um canal para alcançar um número ilimitado de pessoas.</value>
   </data>

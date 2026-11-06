@@ -766,6 +766,21 @@ Disable after diagnosing: keeping it on slows the app.</value>
   <data name="CreateFlow_CommunityCreatedBody" xml:space="preserve">
     <value>{0} created successfully.</value>
   </data>
+  <data name="CreateFlow_ChannelCreatedTitle" xml:space="preserve">
+    <value>Channel created</value>
+  </data>
+  <data name="CreateFlow_ChannelCreatedBody" xml:space="preserve">
+    <value>{0} created successfully.</value>
+  </data>
+  <data name="CreateChannel_Error_NameRequired" xml:space="preserve">
+    <value>Enter a channel name.</value>
+  </data>
+  <data name="CreateChannel_Error_Failed" xml:space="preserve">
+    <value>Couldn't create the channel. Try again.</value>
+  </data>
+  <data name="CreateChannel_PhotoFailed" xml:space="preserve">
+    <value>Channel created, but the photo couldn't be applied. You can change it in the channel info.</value>
+  </data>
   <data name="CreateChannel_ExplainTitle" xml:space="preserve">
     <value>Create a channel to reach an unlimited number of people.</value>
   </data>

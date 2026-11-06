@@ -2,8 +2,8 @@
 // NewConversationViewModel.CreateFlow
 //
 // New Group / New Community / New Channel wizards hosted inside the New Conversation
-// overlay. Confirm creates through IGroupService for group/community; channel is
-// layout-only until the create API is wired.
+// overlay. Confirm creates through IGroupService for group/community and through
+// IChannelService for channels.
 // =============================================================================
 using System;
 using System.Collections.Generic;
@@ -13,6 +13,7 @@ using System.Diagnostics;
 using System.Threading.Tasks;
 using System.Windows.Input;
 using Unison.Core.Helpers;
+using Unison.Core.Helpers.Channels;
 using Unison.Core.Helpers.Groups;
 using Unison.Core.Models;
 
@@ -645,9 +646,9 @@ namespace Unison.Core.ViewModels
                 return;
             }
 
-            // Channel create is layout-only until the newsletter API is wired.
             if (_createFlow == NewConversationCreateFlow.Channel)
             {
+                await CreateChannelGuardedAsync().ConfigureAwait(false);
                 return;
             }
 
@@ -755,6 +756,93 @@ namespace Unison.Core.ViewModels
             await ShowPartialFailureIfAnyAsync(true, result).ConfigureAwait(false);
         }
 
+        private async Task CreateChannelGuardedAsync()
+        {
+            if (_channels == null)
+            {
+                await ShowNotImplementedAsync().ConfigureAwait(false);
+                return;
+            }
+
+            if (_isCreating)
+            {
+                Debug.WriteLine("[NewConversation] Create ignored: one already in flight");
+                return;
+            }
+
+            IsCreating = true;
+            try
+            {
+                await ConfirmCreateChannelAsync().ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[NewConversation] Channel create failed: " + ex.GetBaseException().Message);
+                await ShowChannelCreateFailureAsync(null).ConfigureAwait(false);
+            }
+            finally
+            {
+                await RunOnUiAsync(() => IsCreating = false).ConfigureAwait(false);
+            }
+        }
+
+        private async Task ConfirmCreateChannelAsync()
+        {
+            string createdName = _channelName?.Trim();
+            var request = new ChannelCreateRequest
+            {
+                Name = createdName,
+                Description = _channelDescription,
+                PhotoBytes = _channelPhotoBytes
+            };
+
+            ChannelCreateResult result = await _channels.CreateChannelAsync(request).ConfigureAwait(false);
+            if (result == null || !result.Succeeded)
+            {
+                await ShowChannelCreateFailureAsync(result?.FailureReason).ConfigureAwait(false);
+                return;
+            }
+
+            _chats?.StartNewChat(result.ChannelJid, createdName);
+            // StartNewChat queues the row insert on the UI; opening before it lands finds no row.
+            await Task.Delay(NewRowSettleMilliseconds).ConfigureAwait(false);
+            await RunOnUiAsync(() =>
+            {
+                IsOpen = false;
+                ChatOpenRequested?.Invoke(this, result.ChannelJid);
+            }).ConfigureAwait(false);
+
+            NotifyChannelCreated(createdName);
+            if (result.PhotoFailed)
+            {
+                const string fallback =
+                    "Channel created, but the photo couldn't be applied. You can change it in the channel info.";
+                await ShowChannelMessageAsync(
+                    _strings?.Get("CreateChannel_PhotoFailed", fallback) ?? fallback).ConfigureAwait(false);
+            }
+        }
+
+        private void NotifyChannelCreated(string name)
+        {
+            string title = _strings?.Get("CreateFlow_ChannelCreatedTitle", "Channel created") ?? "Channel created";
+            string bodyFormat = _strings?.Get("CreateFlow_ChannelCreatedBody", "{0} created successfully.")
+                ?? "{0} created successfully.";
+            _notifications?.ShowToast(title, string.Format(bodyFormat, name ?? string.Empty));
+        }
+
+        private Task ShowChannelCreateFailureAsync(string reason)
+        {
+            Debug.WriteLine("[NewConversation] Create channel refused: " + (reason ?? "(exception)"));
+            ChannelCreateFailureText.Resolve(reason, out string key, out string fallback);
+            return ShowChannelMessageAsync(_strings?.Get(key, fallback) ?? fallback);
+        }
+
+        private Task ShowChannelMessageAsync(string body)
+        {
+            string title = _strings?.Get("NewConversation_NewChannel.Text", "New channel") ?? "New channel";
+            return ShowCreateMessageCoreAsync(title, body);
+        }
+
         private void NotifyCreatedSuccessfully(bool isCommunity, string name)
         {
             string title = isCommunity
@@ -791,13 +879,18 @@ namespace Unison.Core.ViewModels
                 _strings?.Get("CreateFlow_PartialFailure", fallback) ?? fallback);
         }
 
-        private async Task ShowCreateMessageAsync(bool isCommunity, string body)
+        private Task ShowCreateMessageAsync(bool isCommunity, string body)
         {
             string titleKey = isCommunity
                 ? "NewConversation_NewCommunity.Text"
                 : "NewConversation_NewGroup.Text";
             string titleFallback = isCommunity ? "New community" : "New group";
             string title = _strings?.Get(titleKey, titleFallback) ?? titleFallback;
+            return ShowCreateMessageCoreAsync(title, body);
+        }
+
+        private async Task ShowCreateMessageCoreAsync(string title, string body)
+        {
             string close = _strings?.Get("Common_Close", "Close") ?? "Close";
             try
             {

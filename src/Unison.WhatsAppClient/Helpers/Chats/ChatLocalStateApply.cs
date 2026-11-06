@@ -62,6 +62,12 @@ namespace Unison.WhatsAppClient.Helpers
                 chat.IsFavorite = state.IsFavorite;
             }
 
+            if (state.Knows(ChatLocalStateFields.ChannelRole) &&
+                state.ChannelRole != ChannelViewerRole.Unknown)
+            {
+                chat.ChannelRole = state.ChannelRole;
+            }
+
             if (!state.Knows(ChatLocalStateFields.Pin))
             {
                 return;

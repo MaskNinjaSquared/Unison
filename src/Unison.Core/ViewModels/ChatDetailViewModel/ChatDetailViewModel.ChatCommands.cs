@@ -127,10 +127,22 @@ namespace Unison.Core.ViewModels
 
             if (LooksLikeGroupChat(chat))
             {
+                // Before the w:g2 refresh below: the stored self row answers the composer lock
+                // until the server does, and loses to it once it has.
+                if (_groupService != null)
+                {
+                    _ = _groupService.RestoreMyGroupRoleAsync(chat);
+                }
+
                 // Strip after Yield only. Subject/meta IQ once here (not on ProgressBar arm) so
                 // a brand-new group still gets a name while the timeline loads.
                 _ = DeferGroupOpenEnrichmentAsync(chat.JID);
                 TryRefreshGroupSubjectOnce();
+            }
+
+            if (chat.IsChannel && _channels != null)
+            {
+                _ = _channels.RefreshViewerRoleAsync(chat);
             }
 
             bool isMobile = _systemInfo != null && _systemInfo.IsMobile();
@@ -172,6 +184,7 @@ namespace Unison.Core.ViewModels
                 e.PropertyName == nameof(ChatItem.LeftGroup) ||
                 e.PropertyName == nameof(ChatItem.IsComposerLocked) ||
                 e.PropertyName == nameof(ChatItem.IsChannel) ||
+                e.PropertyName == nameof(ChatItem.ChannelRole) ||
                 e.PropertyName == nameof(ChatItem.Kind) ||
                 e.PropertyName == nameof(ChatItem.IsAnnounceOnly) ||
                 e.PropertyName == nameof(ChatItem.MyGroupRole) ||

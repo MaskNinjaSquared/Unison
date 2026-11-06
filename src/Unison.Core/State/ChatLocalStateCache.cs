@@ -154,7 +154,8 @@ namespace Unison.Core.State
 
                 ChatLocalState fromDisk = Clone(row);
                 fromDisk.Jid = key;
-                fromDisk.KnownFields = ChatLocalStateFields.All;
+                fromDisk.KnownFields = ChatLocalStateFields.All |
+                    (row.KnownFields & ChatLocalStateFields.ChannelRole);
 
                 _rows.AddOrUpdate(
                     key,
@@ -208,6 +209,12 @@ namespace Unison.Core.State
                 merged.IsFavorite = fromDisk.IsFavorite;
             }
 
+            if (!merged.Knows(ChatLocalStateFields.ChannelRole) &&
+                fromDisk.Knows(ChatLocalStateFields.ChannelRole))
+            {
+                merged.ChannelRole = fromDisk.ChannelRole;
+            }
+
             return merged;
         }
 
@@ -249,6 +256,11 @@ namespace Unison.Core.State
             if (source.Knows(ChatLocalStateFields.Favorite))
             {
                 copy.IsFavorite = source.IsFavorite;
+            }
+
+            if (source.Knows(ChatLocalStateFields.ChannelRole))
+            {
+                copy.ChannelRole = source.ChannelRole;
             }
 
             return copy;

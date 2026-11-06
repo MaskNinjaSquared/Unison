@@ -155,6 +155,9 @@ namespace Unison.Core.ViewModels
         /// <summary>Which JIDs are the same person (PN vs LID).</summary>
         private readonly IJidResolver _jids;
 
+        /// <summary>Owner / admin role on an open channel — decides whether the composer shows.</summary>
+        private readonly IChannelService _channels;
+
         /// <summary>How many bubble VMs to materialize when opening a chat (service may hold more data).</summary>
         public int InitialUiMessageWindow { get; }
 
@@ -191,8 +194,10 @@ namespace Unison.Core.ViewModels
             IEmojiRecentStore emojiRecents = null,
             IChatExportService chatExport = null,
             IProfileService profile = null,
-            IShareService share = null)
+            IShareService share = null,
+            IChannelService channels = null)
         {
+            _channels = channels;
             _chatService = chatService;
             _connectionService = connectionService;
             _groupService = groupService;
@@ -489,8 +494,12 @@ namespace Unison.Core.ViewModels
         /// <summary>Channel subscriber or announce-only group — hide the composer.</summary>
         public bool IsComposerLocked => ActiveChat != null && ActiveChat.IsComposerLocked;
 
-        /// <summary>WhatsApp Channel open — banner copy differs from group announce-only.</summary>
-        public bool IsChannelReadOnly => ActiveChat != null && ActiveChat.IsChannel;
+        /// <summary>
+        /// WhatsApp Channel this account only follows — banner copy differs from group
+        /// announce-only. Owners and admins get the composer instead.
+        /// </summary>
+        public bool IsChannelReadOnly =>
+            ActiveChat != null && ActiveChat.IsChannel && !ActiveChat.CanPostToChannel;
 
         public string MessageText
         {

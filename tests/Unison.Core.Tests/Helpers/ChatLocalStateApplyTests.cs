@@ -181,6 +181,29 @@ public class ChatLocalStateApplyTests
     }
 
     [Fact]
+    public void A_stored_channel_role_comes_back_onto_the_row()
+    {
+        // Restored before paint so an owner does not see the read-only strip flash first.
+        var chat = new ChatItem { JID = "1@newsletter" };
+
+        ChatLocalStateApply.Apply(
+            chat,
+            new ChatLocalState { Jid = "1@newsletter", ChannelRole = ChannelViewerRole.Owner });
+
+        Assert.Equal(ChannelViewerRole.Owner, chat.ChannelRole);
+    }
+
+    [Fact]
+    public void A_row_without_a_stored_channel_role_keeps_the_one_it_holds()
+    {
+        var chat = new ChatItem { JID = "1@newsletter", ChannelRole = ChannelViewerRole.Admin };
+
+        ChatLocalStateApply.Apply(chat, new ChatLocalState { Jid = "1@newsletter", IsChatPinned = true });
+
+        Assert.Equal(ChannelViewerRole.Admin, chat.ChannelRole);
+    }
+
+    [Fact]
     public void A_null_chat_is_ignored_rather_than_thrown_at()
     {
         ChatLocalStateApply.Apply(null, new ChatLocalState { Jid = "a@s.whatsapp.net" });

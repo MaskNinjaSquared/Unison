@@ -42,7 +42,9 @@ using Unison.Uwp.Services.Network;
 using Unison.Uwp.Services.Socket;
 using Unison.Uwp.Services.Themes;
 using Unison.Uwp.Services.WhatsApp;
+using Unison.Uwp.Services.WhatsApp.Channels;
 using Unison.Uwp.Services.WhatsApp.Chats;
+using Unison.WhatsAppClient.Channels;
 using Unison.WhatsAppClient.Chats;
 using Unison.WhatsAppClient.Connection;
 using Unison.Uwp.Services.WhatsApp.Contacts;
@@ -911,8 +913,19 @@ namespace Unison.Uwp
                 sp.GetRequiredService<ChatNameRefresh>(),
                 sp.GetRequiredService<IRuntimeDiagnostics>(),
                 sp.GetRequiredService<IAppVisibility>(),
-                sp.GetRequiredService<IProfilePictureEncoder>()));
+                sp.GetRequiredService<IProfilePictureEncoder>(),
+                new GroupSelfRoleRestore(
+                    sp.GetRequiredService<IGroupRosterStore>(),
+                    sp.GetRequiredService<IJidResolver>(),
+                    sp.GetRequiredService<AttachedUiDispatcher>())));
             services.AddSingleton<IProfilePictureEncoder, ProfilePictureEncoder>();
+            services.AddSingleton<IChannelWireActions>(sp => new BridgeChannelWireActions(
+                sp.GetRequiredService<UwpSessionProvider>()));
+            services.AddSingleton<IChannelService>(sp => new ChannelFacade(
+                sp.GetRequiredService<IChannelWireActions>(),
+                sp.GetRequiredService<AttachedUiDispatcher>(),
+                sp.GetRequiredService<IChatStore>(),
+                sp.GetRequiredService<IProfilePictureEncoder>()));
             services.AddSingleton<ILiveTilesService>(_ => LiveTilesService.Instance);
             services.AddSingleton<IShortcutService, ShortcutService>();
             services.AddSingleton<INotificationService>(sp =>

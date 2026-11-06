@@ -50,6 +50,12 @@ namespace Unison.Core.Contracts.WhatsApp
         Task EnsureGroupRosterLoadedFromStoreAsync(string groupJid);
 
         /// <summary>
+        /// Puts this account's role from its stored roster row onto <paramref name="group"/>, unless
+        /// a metadata reply already set it this session. One local lookup; never hits the network.
+        /// </summary>
+        Task RestoreMyGroupRoleAsync(ChatItem group);
+
+        /// <summary>
         /// One participant from memory (row or roster index), or null. Cheap; bubbles and the
         /// list strip call it per author. UI thread.
         /// </summary>

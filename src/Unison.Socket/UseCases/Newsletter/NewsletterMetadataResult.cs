@@ -18,6 +18,12 @@ namespace Unison.Socket.UseCases.Newsletter
 
         public string PictureDirectPath { get; set; }
 
+        /// <summary>
+        /// <c>viewer_metadata.role</c> as sent: OWNER, ADMIN, SUBSCRIBER or GUEST.
+        /// Null when the reply did not carry viewer metadata.
+        /// </summary>
+        public string ViewerRole { get; set; }
+
         public bool IsNotFound { get; set; }
 
         public string FailureReason { get; set; }

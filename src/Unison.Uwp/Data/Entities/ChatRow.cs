@@ -28,6 +28,9 @@ namespace Unison.Uwp.Data.Entities
         /// <summary>Unix seconds; null = not muted.</summary>
         public long? MutedUntil { get; set; }
 
+        /// <summary><see cref="Unison.Core.Models.ChannelViewerRole"/> as int; null = never fetched.</summary>
+        public int? ChannelRole { get; set; }
+
         public DateTime UpdatedAtUtc { get; set; }
     }
 }

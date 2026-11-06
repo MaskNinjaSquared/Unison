@@ -15,7 +15,15 @@ namespace Unison.Socket.UseCases.Newsletter
     {
         public const string DataPath = "xwa2_newsletter";
 
+        /// <summary>Baileys <c>XWAPaths.xwa2_newsletter_create</c>.</summary>
+        public const string CreateDataPath = "xwa2_newsletter_create";
+
         public static NewsletterMetadataResult TryParse(string json)
+        {
+            return TryParse(json, DataPath);
+        }
+
+        public static NewsletterMetadataResult TryParse(string json, string dataPath)
         {
             if (string.IsNullOrWhiteSpace(json))
             {
@@ -49,7 +57,7 @@ namespace Unison.Socket.UseCases.Newsletter
                 };
             }
 
-            JToken payload = root["data"]?[DataPath] ?? root[DataPath] ?? root;
+            JToken payload = root["data"]?[dataPath] ?? root[dataPath] ?? root;
             if (payload == null || payload.Type == JTokenType.Null)
             {
                 return new NewsletterMetadataResult
@@ -80,7 +88,8 @@ namespace Unison.Socket.UseCases.Newsletter
         {
             var result = new NewsletterMetadataResult
             {
-                Id = TokenString(obj["id"])
+                Id = TokenString(obj["id"]),
+                ViewerRole = TokenString(obj["viewer_metadata"]?["role"])
             };
 
             JObject thread = obj["thread_metadata"] as JObject;

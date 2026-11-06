@@ -206,6 +206,7 @@ namespace Unison.Core.Tests.Helpers
             Assert.True(chat.IsAnnounceOnly);
             Assert.True(chat.IsCommunityAnnounce);
             Assert.Equal(GroupParticipantRole.SuperAdmin, chat.MyGroupRole);
+            Assert.True(chat.IsMyGroupRoleFromServer);
             Assert.Equal(7, chat.GroupMemberCount);
             Assert.Single(chat.GroupMembers);
             Assert.Equal(1, f.Catalog.Schedules);

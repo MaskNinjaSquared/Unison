@@ -62,6 +62,57 @@ namespace Unison.Core.Tests.Helpers
         }
 
         [Fact]
+        public void Reads_the_viewer_role()
+        {
+            const string json =
+                "{\"data\":{\"xwa2_newsletter\":{" +
+                "\"id\":\"120363@newsletter\"," +
+                "\"thread_metadata\":{\"name\":{\"text\":\"Mine\"}}," +
+                "\"viewer_metadata\":{\"mute\":\"OFF\",\"role\":\"ADMIN\"}" +
+                "}}}";
+
+            NewsletterMetadataResult result = NewsletterMetadataWireParse.TryParse(json);
+
+            Assert.Equal("ADMIN", result.ViewerRole);
+        }
+
+        [Fact]
+        public void Create_reply_is_read_from_its_own_data_path()
+        {
+            const string json =
+                "{\"data\":{\"xwa2_newsletter_create\":{" +
+                "\"id\":\"120363000000000010@newsletter\"," +
+                "\"state\":{\"type\":\"ACTIVE\"}," +
+                "\"thread_metadata\":{\"name\":{\"text\":\"Unison News\"}," +
+                "\"description\":{\"text\":\"Updates\"},\"invite\":\"AbC\"}," +
+                "\"viewer_metadata\":{\"mute\":\"OFF\",\"role\":\"OWNER\"}" +
+                "}}}";
+
+            NewsletterMetadataResult result = NewsletterMetadataWireParse.TryParse(
+                json,
+                NewsletterMetadataWireParse.CreateDataPath);
+
+            Assert.Equal("120363000000000010@newsletter", result.Id);
+            Assert.Equal("Unison News", result.Name);
+            Assert.Equal("OWNER", result.ViewerRole);
+        }
+
+        [Fact]
+        public void Create_reply_without_thread_metadata_still_yields_the_jid()
+        {
+            // Baileys rc9 issue #2313: the server may omit thread_metadata on create.
+            const string json =
+                "{\"data\":{\"xwa2_newsletter_create\":{\"id\":\"120363000000000011@newsletter\"}}}";
+
+            NewsletterMetadataResult result = NewsletterMetadataWireParse.TryParse(
+                json,
+                NewsletterMetadataWireParse.CreateDataPath);
+
+            Assert.Equal("120363000000000011@newsletter", result.Id);
+            Assert.Null(result.ViewerRole);
+        }
+
+        [Fact]
         public void Resolve_prefers_https_url_over_direct_path()
         {
             Assert.Equal(

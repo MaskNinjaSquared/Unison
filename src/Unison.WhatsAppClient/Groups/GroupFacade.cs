@@ -45,6 +45,7 @@ namespace Unison.WhatsAppClient.Groups
         private readonly GroupMetadataReader _reader;
         private readonly GroupMetadataApply _apply;
         private readonly GroupRosterDemand _rosterDemand;
+        private readonly GroupSelfRoleRestore _selfRole;
         private readonly IGroupAvatarActions _avatars;
         private readonly IUsyncGate _usyncGate;
         private readonly SyncStatusChannel _syncStatus;
@@ -101,8 +102,10 @@ namespace Unison.WhatsAppClient.Groups
             ChatNameRefresh nameRefresh,
             IRuntimeDiagnostics diagnostics = null,
             IAppVisibility visibility = null,
-            IProfilePictureEncoder pictureEncoder = null)
+            IProfilePictureEncoder pictureEncoder = null,
+            GroupSelfRoleRestore selfRole = null)
         {
+            _selfRole = selfRole;
             _workload = workload ?? throw new ArgumentNullException(nameof(workload));
             _syncStatus = syncStatus ?? throw new ArgumentNullException(nameof(syncStatus));
             _syncWork = syncWork ?? throw new ArgumentNullException(nameof(syncWork));
@@ -339,6 +342,11 @@ namespace Unison.WhatsAppClient.Groups
         public Task EnsureGroupRosterLoadedFromStoreAsync(string groupJid)
         {
             return _rosterDemand.RestoreFromStoreAsync(groupJid);
+        }
+
+        public Task RestoreMyGroupRoleAsync(ChatItem group)
+        {
+            return _selfRole?.RestoreAsync(group) ?? Task.CompletedTask;
         }
 
         /// <inheritdoc />

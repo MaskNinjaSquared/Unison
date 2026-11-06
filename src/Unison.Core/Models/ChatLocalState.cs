@@ -18,6 +18,7 @@ namespace Unison.Core.Models
         private bool _isWidgetPinned;
         private bool _isFavorite;
         private long? _mutedUntil;
+        private ChannelViewerRole _channelRole;
         private ChatLocalStateFields _known;
 
         public string Jid
@@ -87,6 +88,17 @@ namespace Unison.Core.Models
             {
                 _mutedUntil = value;
                 _known |= ChatLocalStateFields.Mute;
+            }
+        }
+
+        /// <summary>This account's role in a channel, as the server last answered it.</summary>
+        public ChannelViewerRole ChannelRole
+        {
+            get { return _channelRole; }
+            set
+            {
+                _channelRole = value;
+                _known |= ChatLocalStateFields.ChannelRole;
             }
         }
 

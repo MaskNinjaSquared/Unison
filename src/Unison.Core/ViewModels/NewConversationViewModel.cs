@@ -39,6 +39,7 @@ namespace Unison.Core.ViewModels
         private readonly IFilePicker _filePicker;
         private readonly IGroupService _groups;
         private readonly INotificationService _notifications;
+        private readonly IChannelService _channels;
 
         private bool _isOpen;
         private bool _catalogHooked;
@@ -64,7 +65,8 @@ namespace Unison.Core.ViewModels
             ILocalContactsService localContacts = null,
             IFilePicker filePicker = null,
             IGroupService groups = null,
-            INotificationService notifications = null)
+            INotificationService notifications = null,
+            IChannelService channels = null)
         {
             _chatState = chatState ?? throw new ArgumentNullException(nameof(chatState));
             _contacts = contacts ?? throw new ArgumentNullException(nameof(contacts));
@@ -79,6 +81,7 @@ namespace Unison.Core.ViewModels
             _filePicker = filePicker;
             _groups = groups;
             _notifications = notifications;
+            _channels = channels;
 
             CloseCommand = new RelayCommand(Close);
             NewGroupCommand = new RelayCommand(OpenCreateGroup);

@@ -196,6 +196,7 @@
     <Compile Include="Services\WhatsApp\Contacts\BridgeContactBlockActions.cs" />
     <Compile Include="Services\WhatsApp\Chats\BridgeChatAccountActions.cs" />
     <Compile Include="Services\WhatsApp\Groups\BridgeGroupWireActions.cs" />
+    <Compile Include="Services\WhatsApp\Channels\BridgeChannelWireActions.cs" />
     <Compile Include="Services\WhatsApp\Groups\BridgeGroupAvatarActions.cs" />
     <Compile Include="Services\WhatsApp\History\HistoryThumbnailMaterializer.cs" />
     <Compile Include="Services\WhatsApp\History\WinRtHistoryMessageThumbnailMaterializer.cs" />
