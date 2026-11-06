@@ -29,6 +29,9 @@ namespace Unison.WhatsAppClient.Abstractions
 
         Task PresenceSubscribeAsync(string jid);
 
+        /// <summary>Account-wide online / offline. Null / disconnected socket — no-op.</summary>
+        Task SendOwnAvailabilityAsync(bool available);
+
         Task SendPinInChatMessageAsync(
             string chatJid,
             MessageKey targetKey,

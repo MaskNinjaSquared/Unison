@@ -1957,7 +1957,7 @@ namespace Unison.Uwp.UI.Views
                 {
                     ViewModel.StopPresenceWatch();
                 }
-                else if (!_isWindowsMobile)
+                else
                 {
                     ViewModel.StartPresenceWatch(chat.JID);
                 }

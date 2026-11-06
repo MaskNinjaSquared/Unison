@@ -209,6 +209,8 @@ namespace Unison.WhatsAppClient.Messages
             // Same SQLite page sizes as desktop (Mobile used to use 30/20).
             _sqlOpenPageSize = 50;
             _sqlLoadMorePageSize = 30;
+
+            _visibility.Changed += OnVisibilityChangedForPresence;
             _thinTimelineThreshold = Math.Max(5, _sqlOpenPageSize - ThinTimelineOnDemandMargin);
         }
 
@@ -561,14 +563,44 @@ namespace Unison.WhatsAppClient.Messages
             }
         }
 
-        public Task SubscribeToPresenceAsync(string jid)
+        public async Task SubscribeToPresenceAsync(string jid)
         {
             if (string.IsNullOrWhiteSpace(jid) || !_wire.CanSubscribePresence)
             {
-                return Task.CompletedTask;
+                return;
             }
 
-            return _wire.PresenceSubscribeAsync(jid);
+            // The server only forwards a contact's presence to a device that is itself available.
+            // Re-announced here because a reconnect drops it.
+            if (_visibility.IsWindowVisible)
+            {
+                await SendOwnAvailabilitySafeAsync(true).ConfigureAwait(false);
+            }
+
+            await _wire.PresenceSubscribeAsync(jid).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// Online only while the window is visible, so the phone keeps its own notifications and
+        /// contacts see a last-seen time once the app is put away.
+        /// </summary>
+        private void OnVisibilityChangedForPresence(object sender, EventArgs e)
+        {
+            _ = SendOwnAvailabilitySafeAsync(_visibility.IsWindowVisible);
+        }
+
+        private async Task SendOwnAvailabilitySafeAsync(bool available)
+        {
+            try
+            {
+                await _wire.SendOwnAvailabilityAsync(available).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine(
+                    "[MessageFacade] Presence " + (available ? "available" : "unavailable") +
+                    " failed: " + ex.Message);
+            }
         }
 
         private static void Relay(Action raise, string name)
