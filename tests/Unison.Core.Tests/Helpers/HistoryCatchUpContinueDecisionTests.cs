@@ -243,7 +243,7 @@ namespace Unison.Core.Tests.Helpers
                 progressSignals: 0,
                 stillStale: true,
                 stagnantCycles: 0,
-                stagnantStop: 3,
+                stagnantStop: 2,
                 continueRound: 0,
                 maxRounds: 4,
                 ackAccepted: true,
@@ -254,6 +254,41 @@ namespace Unison.Core.Tests.Helpers
             Assert.Equal(1, r.NextStagnantCycles);
             Assert.Equal(Noon, r.NextWatermarkUtc);
             Assert.Equal(0, r.NextContinueRound);
+        }
+
+        [Fact]
+        public void Low_frugal_stagnant_stop_two_finishes_after_second_quiet_lot()
+        {
+            // Safety net when empty-ack finish is unavailable: Low stagnantStop=2.
+            HistoryCatchUpContinueResult first = HistoryCatchUpContinueDecision.Decide(
+                newestUtc: Noon,
+                watermarkUtc: Noon,
+                progressSignals: 0,
+                stillStale: true,
+                stagnantCycles: 0,
+                stagnantStop: 2,
+                continueRound: 0,
+                maxRounds: 4,
+                ackAccepted: false,
+                finishOnEmptyAckLot: false);
+
+            Assert.Equal(HistoryCatchUpContinueAction.Continue, first.Action);
+            Assert.Equal(1, first.NextStagnantCycles);
+
+            HistoryCatchUpContinueResult second = HistoryCatchUpContinueDecision.Decide(
+                newestUtc: Noon,
+                watermarkUtc: Noon,
+                progressSignals: 0,
+                stillStale: true,
+                stagnantCycles: 1,
+                stagnantStop: 2,
+                continueRound: 1,
+                maxRounds: 4,
+                ackAccepted: false,
+                finishOnEmptyAckLot: false);
+
+            Assert.Equal(HistoryCatchUpContinueAction.FinishStagnantProgress, second.Action);
+            Assert.Equal(2, second.NextStagnantCycles);
         }
 
         [Fact]

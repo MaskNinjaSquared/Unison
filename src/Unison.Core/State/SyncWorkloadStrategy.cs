@@ -353,7 +353,9 @@ namespace Unison.Core.State
 
         public override int DeferredAvatarMaxRetries => 2;
 
-        protected override SyncPacing FrugalPacing { get; } = new SyncPacing(4000, 7000, 50, 3);
+        // Empty-ack finish ends a quiet ghost lot in one round; these caps are the
+        // safety net when ack metadata is missing (Lumia / 1 GB: ~60s worst case).
+        protected override SyncPacing FrugalPacing { get; } = new SyncPacing(4000, 7000, 30, 2);
 
         protected override SyncPacing GenerousPacing { get; } = new SyncPacing(1200, 2000, 40, 2);
     }

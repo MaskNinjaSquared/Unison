@@ -41,6 +41,21 @@ namespace Unison.Core.Tests.Helpers
             Assert.True(host.MarkedAwaiting);
         }
 
+        [Fact]
+        public async Task Skips_retry_empty_when_tip_fresh_and_offline_empty()
+        {
+            var host = new FakeHost
+            {
+                Stale = false,
+                CatchUpActive = true,
+                DrainAction = HistoryCatchUpDrainAction.RetryEmpty
+            };
+            await HistoryPostOfflineFreshnessDispatch.RunAsync(host, offlineCount: 0);
+            Assert.Equal("offline-fresh-skip-retry-empty", host.FinishReason);
+            Assert.Null(host.RequestedReason);
+            Assert.True(host.MarkedAwaiting);
+        }
+
         private sealed class FakeHost : IHistoryPostOfflineFreshnessHost
         {
             public bool Stale { get; set; }

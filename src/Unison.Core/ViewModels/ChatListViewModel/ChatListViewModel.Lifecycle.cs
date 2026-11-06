@@ -34,6 +34,7 @@ namespace Unison.Core.ViewModels
         {
             if (_attached) return;
             _attached = true;
+            _visiblePaintGeneration = ChatListVisiblePaintOwner.Claim(this);
 
             _connection.StatusChanged += Connection_StatusChanged;
             _history.SyncStatusChanged += History_SyncStatusChanged;
@@ -176,6 +177,8 @@ namespace Unison.Core.ViewModels
         {
             if (!_attached) return;
             _attached = false;
+            ChatListVisiblePaintOwner.Release(this, _visiblePaintGeneration);
+            _visiblePaintGeneration = 0;
 
             CancellationTokenSource running;
             lock (_messagePreviewReconcileGate)

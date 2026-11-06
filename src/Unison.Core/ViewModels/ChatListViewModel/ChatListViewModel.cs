@@ -135,6 +135,8 @@ namespace Unison.Core.ViewModels
         private string _lastSelectedChatJid;
         private ChatItem _selectedChat;
         private bool _attached;
+        /// <summary>Stamp from <see cref="ChatListVisiblePaintOwner.Claim"/> while attached.</summary>
+        private int _visiblePaintGeneration;
         private bool _menuActionBusy;
         private bool _awaitingResyncHistory;
         private readonly RelayCommand _refreshContactNamesCommand;

@@ -335,7 +335,14 @@ namespace Unison.Socket.UseCases.Messages
                 }
             }
 
-            await _connection.SendNodeAsync(new BinaryNode("message", stanzaAttrs, content)).ConfigureAwait(false);
+            var stanza = new BinaryNode("message", stanzaAttrs, content);
+            if (isStatus)
+            {
+                // The server answers a bad Status with a bare code in its ack; this is what to compare.
+                _log.Info("[Send] Status stanza " + StanzaShape.Describe(stanza));
+            }
+
+            await _connection.SendNodeAsync(stanza).ConfigureAwait(false);
             _log.Debug("[Send] Relayed " + messageId + " to " + destinationJid + " across " + participantNodes.Count + " device(s)");
 
             if (groupResult != null && groupResult.SenderKeyMemory != null)
@@ -441,9 +448,27 @@ namespace Unison.Socket.UseCases.Messages
                 result.Devices.AddRange(enumerated);
             }
 
+            if (isStatus)
+            {
+                var lidMapping = _signal.LidMapping;
+                int dropped = SameDeviceAddressDedupe.Apply(
+                    result.Devices,
+                    deviceJid =>
+                    {
+                        string paired;
+                        return lidMapping != null && lidMapping.TryGetCachedPairedJid(deviceJid, out paired)
+                            ? paired
+                            : null;
+                    });
+                _log.Info("[Send] Status audience devices=" + result.Devices.Count + "; sameDeviceDropped=" + dropped);
+            }
+
             // Usync can answer empty (timeout, partial). Without at least each member's primary
             // device the stanza carries an skmsg and no SKDM — sealed for nobody but us.
-            EnsurePrimaryParticipantDevices(result.Devices, participantJids);
+            if (SkmsgFanoutPolicy.FillsMissingPrimaryDevices(isStatus))
+            {
+                EnsurePrimaryParticipantDevices(result.Devices, participantJids);
+            }
 
             // The group decides which of our identities signs its messages, so a guess here does
             // not degrade gracefully: the recipients derive the sender key from an address we
@@ -477,16 +502,16 @@ namespace Unison.Socket.UseCases.Messages
                 "[Send] Group " + jid + " encrypt ok; keyId=" + encrypted.KeyId +
                 "; newKey=" + encrypted.CreatedNewSenderKey);
 
-            var senderKeyMemory = GetSenderKeyMemory(
-                jid,
-                senderIdentity,
-                encrypted.KeyId,
-                encrypted.CreatedNewSenderKey);
+            var senderKeyMemory = SkmsgFanoutPolicy.UsesSenderKeyMemory(isStatus)
+                ? GetSenderKeyMemory(jid, senderIdentity, encrypted.KeyId, encrypted.CreatedNewSenderKey)
+                : null;
 
             var alreadyHasKey = new HashSet<string>(
-                senderKeyMemory
-                    .Where(entry => !entry.StartsWith(KeyIdMarker, StringComparison.Ordinal))
-                    .Select(WA.NormalizeDeviceJid),
+                senderKeyMemory != null
+                    ? senderKeyMemory
+                        .Where(entry => !entry.StartsWith(KeyIdMarker, StringComparison.Ordinal))
+                        .Select(WA.NormalizeDeviceJid)
+                    : Enumerable.Empty<string>(),
                 StringComparer.OrdinalIgnoreCase);
 
             // Phone (device 0) must be able to open what we seal. Only the address space of this

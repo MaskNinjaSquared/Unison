@@ -157,6 +157,9 @@ namespace Unison.WhatsAppClient.Messages
         int IIncomingPumpDrainHost.LiveTimeoutMilliseconds =>
             IncomingPumpDrainDispatch.DefaultLiveTimeoutMilliseconds;
 
+        int IIncomingPumpDrainHost.RouteSlowWarnMilliseconds =>
+            IncomingPumpDrainDispatch.DefaultRouteSlowWarnMilliseconds;
+
         bool IIncomingPumpDrainHost.TryTakeNext(int generation, DateTime utcNow)
         {
             IncomingDecryptedNotifyRequest next;
@@ -226,6 +229,17 @@ namespace Unison.WhatsAppClient.Messages
                 "id=" + (messageId ?? "<none>") +
                 "; stage=" + stage +
                 "; timeoutMs=" + timeoutMs);
+
+        void IIncomingPumpDrainHost.LogRouteSlow(
+            string messageId,
+            string stage,
+            int elapsedMs) =>
+            _diagnostics?.Write(
+                "messages",
+                "route-slow",
+                "id=" + (messageId ?? "<none>") +
+                "; stage=" + stage +
+                "; elapsedMs=" + elapsedMs);
 
         void IIncomingPumpDrainHost.ObserveLateHandleFault(Task handleTask, string messageId)
         {

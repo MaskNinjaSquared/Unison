@@ -14,6 +14,9 @@ namespace Unison.Core.Tests.Helpers
 
         private int _depth;
 
+        /// <summary>True while an action handed to <see cref="RunAsync"/> is executing.</summary>
+        public bool IsRunningAction => _depth > 0;
+
         public Task RunAsync(Action action, string caller = null, string callerFile = null)
         {
             Passes++;

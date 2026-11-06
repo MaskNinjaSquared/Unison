@@ -1,6 +1,8 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Extensions.DependencyInjection;
+using Unison.Core.Contracts;
 using Unison.Core.Helpers;
 using Unison.Uwp.Services;
 using Unison.WhatsAppClient.Helpers;
@@ -95,7 +97,13 @@ namespace Unison.Uwp.Services.WhatsApp
         /// </summary>
         private IDisposable TraceStartupPhase(string phase)
         {
-            return new StartupPhaseTrace(phase, _appMemory, RuntimeDiagnosticsService.Instance);
+            IAppVisibility visibility =
+                Unison.Uwp.App.Services?.GetService<IAppVisibility>();
+            return new StartupPhaseTrace(
+                phase,
+                _appMemory,
+                RuntimeDiagnosticsService.Instance,
+                visibility);
         }
     }
 }

@@ -35,6 +35,13 @@ namespace Unison.Core.ViewModels
                 return;
             }
 
+            if (!OwnsVisiblePaint())
+            {
+                _refreshCts?.Cancel();
+                _refreshContinueCts?.Cancel();
+                return;
+            }
+
             // Chat open owns the dispatcher: do not start (or continue) list Moves until Release.
             if (_timelinePriority != null && _timelinePriority.IsHeld)
             {
@@ -107,6 +114,12 @@ namespace Unison.Core.ViewModels
         {
             if (_batchRendering || IsInSafeMode || IsListHeldForSync)
             {
+                return;
+            }
+
+            if (!OwnsVisiblePaint())
+            {
+                _refreshContinueCts?.Cancel();
                 return;
             }
 
@@ -308,10 +321,19 @@ namespace Unison.Core.ViewModels
         /// </summary>
         private void ScheduleRefreshVisibleChatsContinue(bool coldPopulate = false)
         {
+            if (!OwnsVisiblePaint())
+            {
+                _refreshContinueCts?.Cancel();
+                return;
+            }
+
+            // Chat-open / hidden: keep only the cold first viewport; do not keep slicing
+            // budget=10 → 249 while the conversation owns the dispatcher.
             if (_timelinePriority != null && _timelinePriority.IsHeld)
             {
                 _refreshDeferredForTimelinePriority = true;
                 _visibleOrderDirty = true;
+                _refreshContinueCts?.Cancel();
                 return;
             }
 
@@ -319,6 +341,7 @@ namespace Unison.Core.ViewModels
             {
                 _refreshDeferredForWindowHidden = true;
                 _visibleOrderDirty = true;
+                _refreshContinueCts?.Cancel();
                 return;
             }
 
@@ -851,6 +874,10 @@ namespace Unison.Core.ViewModels
 
         private bool IsWindowHidden =>
             _appVisibility != null && !_appVisibility.IsWindowVisible;
+
+        private bool OwnsVisiblePaint() =>
+            _attached &&
+            ChatListVisiblePaintOwner.IsCurrent(this, _visiblePaintGeneration);
 
         private void TimelinePriority_Changed(object sender, EventArgs e)
         {

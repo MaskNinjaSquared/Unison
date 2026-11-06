@@ -74,6 +74,16 @@ namespace Unison.WhatsAppClient.Helpers
                         return;
                     }
 
+                    // Tip already fresh + empty offline drain: do not rearm FULL_HISTORY
+                    // (resume used to loop catch-up-retry-empty for minutes on Low).
+                    if (drain == HistoryCatchUpDrainAction.RetryEmpty && offlineCount == 0)
+                    {
+                        host.FinishHistoryCatchUpContinue(
+                            "offline-fresh-skip-retry-empty",
+                            releaseEnrichment: true);
+                        return;
+                    }
+
                     await host.RequestReconnectHistoryCatchUpAsync(
                             "catch-up-retry-empty:" + stagnantCycles)
                         .ConfigureAwait(false);

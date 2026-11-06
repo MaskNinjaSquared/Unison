@@ -130,6 +130,16 @@ namespace Unison.Baileys.Protocol
                 return;
             }
 
+            // Server-only JID ("@g.us"): rc14 jidDecode accepts an empty user. As a raw string
+            // the server drops the IQ without answering.
+            if (str.Length > 1 && str[0] == '@' && str.IndexOf('@', 1) < 0)
+            {
+                WriteByte(250); // JID_PAIR
+                WriteByte(0); // LIST_EMPTY for empty user
+                WriteString(str.Substring(1));
+                return;
+            }
+
             // Check if it's a JID
             if (str.IndexOf('@') >= 0 &&
                 WA.TryDecodeJid(str, out var jidUser, out var jidServer, out var jidDevice, out var jidDomainType))

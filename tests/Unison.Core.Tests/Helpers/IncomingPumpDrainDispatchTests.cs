@@ -53,6 +53,33 @@ namespace Unison.Core.Tests.Helpers
         }
 
         [Fact]
+        public void Default_live_timeout_matches_health_stall_budget()
+        {
+            Assert.Equal(18000, IncomingPumpDrainDispatch.DefaultLiveTimeoutMilliseconds);
+            Assert.Equal(8000, IncomingPumpDrainDispatch.DefaultRouteSlowWarnMilliseconds);
+            Assert.True(IncomingPumpDrainDispatch.DefaultRouteSlowWarnMilliseconds
+                < IncomingPumpDrainDispatch.DefaultLiveTimeoutMilliseconds);
+        }
+
+        [Fact]
+        public async Task Live_handle_journals_route_slow_before_timeout()
+        {
+            var host = new FakeHost
+            {
+                LiveTimeoutMilliseconds = 400,
+                RouteSlowWarnMilliseconds = 40,
+                HandleDelayMs = 120
+            };
+            host.Enqueue(offline: false, id: "slow1");
+
+            await IncomingPumpDrainDispatch.RunAsync(host, generation: 1);
+
+            Assert.Contains("route-slow:slow1:40", host.Log);
+            Assert.Contains("applied", host.Log);
+            Assert.DoesNotContain(host.Log, line => line.StartsWith("timeout:"));
+        }
+
+        [Fact]
         public async Task Live_success_forgets_timeout_and_applies()
         {
             var host = new FakeHost { LiveTimeoutMilliseconds = 500 };
@@ -111,6 +138,8 @@ namespace Unison.Core.Tests.Helpers
 
             public int LiveTimeoutMilliseconds { get; set; } =
                 IncomingPumpDrainDispatch.DefaultLiveTimeoutMilliseconds;
+
+            public int RouteSlowWarnMilliseconds { get; set; }
 
             public int HandleDelayMs { get; set; }
 
@@ -179,6 +208,9 @@ namespace Unison.Core.Tests.Helpers
 
             public void LogLiveTimeout(string messageId, string stage, int timeoutMs) =>
                 Log.Add("timeout:" + messageId);
+
+            public void LogRouteSlow(string messageId, string stage, int elapsedMs) =>
+                Log.Add("route-slow:" + messageId + ":" + elapsedMs);
 
             public void ObserveLateHandleFault(Task handleTask, string messageId) =>
                 Log.Add("late:" + messageId);

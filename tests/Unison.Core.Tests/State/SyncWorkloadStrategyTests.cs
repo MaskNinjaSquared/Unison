@@ -182,8 +182,10 @@ namespace Unison.Core.Tests.State
 
             Assert.Equal(4000, low.StartupQuietFloorMs);
             Assert.Equal(7000, low.DeferredStartupQuietMs);
-            Assert.Equal(50, low.CatchUpIdleAbortSeconds);
-            Assert.Equal(3, low.CatchUpStagnantCyclesBeforeStop);
+            // Catch-up abort is tighter on Low so empty-ack ghosts cannot burn minutes.
+            Assert.Equal(30, low.CatchUpIdleAbortSeconds);
+            Assert.Equal(2, low.CatchUpStagnantCyclesBeforeStop);
+            Assert.True(low.CatchUpIdleAbortSeconds < high.CatchUpIdleAbortSeconds);
             Assert.True(low.StartupQuietFloorMs > high.StartupQuietFloorMs);
             Assert.True(low.DeferredStartupQuietMs > high.DeferredStartupQuietMs);
         }

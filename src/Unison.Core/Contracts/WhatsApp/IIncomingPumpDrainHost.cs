@@ -14,6 +14,11 @@ namespace Unison.Core.Contracts.WhatsApp
         /// <summary>Live-message handle timeout (offline items are not timed).</summary>
         int LiveTimeoutMilliseconds { get; }
 
+        /// <summary>
+        /// Soft journal budget before <see cref="LiveTimeoutMilliseconds"/>. Zero disables.
+        /// </summary>
+        int RouteSlowWarnMilliseconds { get; }
+
         /// <summary>Takes the next item into the host's current slot. False when idle/retired.</summary>
         bool TryTakeNext(int generation, DateTime utcNow);
 
@@ -44,6 +49,12 @@ namespace Unison.Core.Contracts.WhatsApp
         void NotifyMessageApplied();
 
         void LogLiveTimeout(string messageId, string stage, int timeoutMs);
+
+        /// <summary>
+        /// Soft warn when a live handle stays in a stage past the slow budget but
+        /// before <see cref="LiveTimeoutMilliseconds"/> (journal only).
+        /// </summary>
+        void LogRouteSlow(string messageId, string stage, int elapsedMs);
 
         void ObserveLateHandleFault(Task handleTask, string messageId);
 
