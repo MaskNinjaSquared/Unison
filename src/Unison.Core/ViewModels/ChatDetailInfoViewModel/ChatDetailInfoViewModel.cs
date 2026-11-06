@@ -46,6 +46,7 @@ namespace Unison.Core.ViewModels
         private readonly ChatItem _source;
         private readonly GroupMember _member;
         private readonly bool _isGroup;
+        private readonly bool _isChannel;
         private readonly bool _isGroupMember;
         private int _rebuildBusy;
         private bool _rebuildAgain;
@@ -96,14 +97,16 @@ namespace Unison.Core.ViewModels
             ParticipantResolutionContext participants = null,
             IUriLauncher uriLauncher = null,
             IChatStateStore chatState = null,
-            ISystemInfoProvider systemInfo = null)
+            ISystemInfoProvider systemInfo = null,
+            bool isChannel = false)
         {
             _source = source ?? throw new ArgumentNullException(nameof(source));
             _participants = participants;
             _jids = participants?.Jids;
             _member = member;
             _isGroupMember = member != null;
-            _isGroup = isGroup && !_isGroupMember;
+            _isChannel = isChannel && !_isGroupMember;
+            _isGroup = isGroup && !_isGroupMember && !_isChannel;
             _shortcutService = shortcutService;
             _chatStore = chatStore;
             _chatService = chatService;
@@ -256,9 +259,30 @@ namespace Unison.Core.ViewModels
 
         public bool IsGroup => _isGroup;
 
+        public bool IsChannel => _isChannel;
+
         public bool IsGroupMember => _isGroupMember;
 
-        public bool IsUser => !_isGroup && !_isGroupMember;
+        public bool IsUser => !_isGroup && !_isGroupMember && !_isChannel;
+
+        private static readonly ChatDetailInfoPivotKind[] GroupPivots =
+        {
+            ChatDetailInfoPivotKind.Profile,
+            ChatDetailInfoPivotKind.Members,
+            ChatDetailInfoPivotKind.Media,
+            ChatDetailInfoPivotKind.Files
+        };
+
+        private static readonly ChatDetailInfoPivotKind[] ChannelPivots =
+        {
+            ChatDetailInfoPivotKind.Profile
+        };
+
+        /// <summary>
+        /// Pivot tabs this pane should show. Channels keep only the profile tab; groups get the full set.
+        /// </summary>
+        public IReadOnlyList<ChatDetailInfoPivotKind> VisiblePivots =>
+            _isChannel ? ChannelPivots : GroupPivots;
 
         /// <summary>Caption when this account created the group; empty otherwise.</summary>
         public string CreatedByYouText
@@ -334,7 +358,7 @@ namespace Unison.Core.ViewModels
         {
             get
             {
-                if (_isGroup)
+                if (_isGroup || _isChannel)
                 {
                     return string.Empty;
                 }
@@ -370,11 +394,13 @@ namespace Unison.Core.ViewModels
         /// <summary>Non-group profiles with a phone — drives the dialer hyperlink.</summary>
         public bool CanCallPhone =>
             !_isGroup &&
+            !_isChannel &&
             _uriLauncher != null &&
             HasPhone;
 
         public bool CanAddToAddressBook =>
             !_isGroup &&
+            !_isChannel &&
             _contacts != null &&
             _contacts.CanAddToAddressBook(LookupJid, PhoneValue);
 
@@ -402,12 +428,31 @@ namespace Unison.Core.ViewModels
 
         public bool IsMemberAdmin => _member != null && _member.IsAdmin;
 
-        public bool HasMembersCount => _source.GroupMemberCount > 0;
+        public bool HasMembersCount =>
+            _isChannel ? _source.ChannelFollowerCount > 0 : _source.GroupMemberCount > 0;
 
         public string MembersCountText
         {
             get
             {
+                if (_isChannel)
+                {
+                    int followers = _source.ChannelFollowerCount;
+                    if (followers <= 0)
+                    {
+                        return "—";
+                    }
+
+                    if (followers == 1)
+                    {
+                        return Loc("ChatDetailInfo_FollowerCountSingular", "1 follower");
+                    }
+
+                    return string.Format(
+                        Loc("ChatDetailInfo_FollowerCount", "{0} followers"),
+                        followers);
+                }
+
                 int count = _source.GroupMemberCount;
                 if (count <= 0)
                 {

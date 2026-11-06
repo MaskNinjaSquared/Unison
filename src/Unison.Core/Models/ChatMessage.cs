@@ -136,6 +136,12 @@ namespace Unison.Core.Models
             get
             {
                 if (!IsFromMe || IsSendFailed) return string.Empty;
+                // Channels have no peer delivery/read receipts — always the single sent tick.
+                if (JidHelper.IsNewsletterJid(RemoteJid))
+                {
+                    return "\uEA03";
+                }
+
                 switch ((Status ?? string.Empty).ToLowerInvariant())
                 {
                     case StatusDelivered:
@@ -181,7 +187,9 @@ namespace Unison.Core.Models
         public bool HasStatusCheckmark => !string.IsNullOrEmpty(StatusGlyph);
 
         [JsonIgnore]
-        public bool IsReadStatus => string.Equals(Status, StatusRead, StringComparison.OrdinalIgnoreCase);
+        public bool IsReadStatus =>
+            !JidHelper.IsNewsletterJid(RemoteJid) &&
+            string.Equals(Status, StatusRead, StringComparison.OrdinalIgnoreCase);
 
         [JsonIgnore]
         public bool ShowReadStatusCheckmark => HasStatusCheckmark && IsReadStatus;
@@ -989,8 +997,36 @@ namespace Unison.Core.Models
                 if (string.Equals(_remoteJid, value, StringComparison.Ordinal)) return;
                 _remoteJid = value;
                 OnPropertyChanged();
+                OnPropertyChanged(nameof(StatusGlyph));
+                OnPropertyChanged(nameof(IsReadStatus));
+                OnPropertyChanged(nameof(ShowViewCount));
             }
         }
+
+        private int _viewCount;
+        /// <summary>
+        /// Channel update views from Baileys <c>newsletter.view</c> / fetched <c>views_count</c>.
+        /// 0 means unknown or not yet received.
+        /// </summary>
+        public int ViewCount
+        {
+            get => _viewCount;
+            set
+            {
+                if (_viewCount == value) return;
+                _viewCount = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(ShowViewCount));
+                OnPropertyChanged(nameof(ViewCountText));
+            }
+        }
+
+        [JsonIgnore]
+        public bool ShowViewCount =>
+            JidHelper.IsNewsletterJid(RemoteJid) && _viewCount > 0;
+
+        [JsonIgnore]
+        public string ViewCountText => _viewCount > 0 ? _viewCount.ToString() : string.Empty;
 
         private string _participantJid;
         public string ParticipantJid

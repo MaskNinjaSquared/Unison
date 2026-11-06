@@ -42,9 +42,21 @@ namespace Unison.Core.ViewModels
                 return;
             }
 
-            ShowInfoPane(chat.IsGroup
-                ? _infoFactory.CreateGroup(chat)
-                : _infoFactory.CreateUser(chat));
+            ChatDetailInfoViewModel pane;
+            if (chat.IsChannel)
+            {
+                pane = _infoFactory.CreateChannel(chat);
+            }
+            else if (chat.IsGroup)
+            {
+                pane = _infoFactory.CreateGroup(chat);
+            }
+            else
+            {
+                pane = _infoFactory.CreateUser(chat);
+            }
+
+            ShowInfoPane(pane);
 
             (OpenChatDetailInfoCommand as RelayCommand)?.RaiseCanExecuteChanged();
             (OpenChatDetailInfoFromAvatarCommand as RelayCommand)?.RaiseCanExecuteChanged();

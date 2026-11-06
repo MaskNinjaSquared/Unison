@@ -56,6 +56,16 @@ namespace Unison.Core.ViewModels
                 return;
             }
 
+            if (jid.IndexOf("@newsletter", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                _presenceReceived = true;
+                _pendingPresenceText = _strings.Get(
+                    "ChatDetail_SelectForChannelInfo",
+                    "tap here for channel info");
+                _ = RunPresenceTimerAsync(_presenceCts.Token, null);
+                return;
+            }
+
             _ = RunPresenceTimerAsync(_presenceCts.Token, jid);
         }
 

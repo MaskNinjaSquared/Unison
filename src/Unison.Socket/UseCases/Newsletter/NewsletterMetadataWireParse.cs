@@ -96,6 +96,7 @@ namespace Unison.Socket.UseCases.Newsletter
             if (thread != null)
             {
                 result.Name = TokenString(thread["name"]?["text"]) ?? TokenString(thread["name"]);
+                result.SubscribersCount = TokenInt(thread["subscribers_count"]);
                 ApplyPicture(result, thread["picture"] as JObject);
                 if (!result.HasPicture)
                 {
@@ -163,6 +164,15 @@ namespace Unison.Socket.UseCases.Newsletter
 
             string text = token.ToString();
             return string.IsNullOrWhiteSpace(text) ? null : text.Trim();
+        }
+
+        private static int TokenInt(JToken token)
+        {
+            string text = TokenString(token);
+            int value;
+            return !string.IsNullOrEmpty(text) && int.TryParse(text, out value) && value > 0
+                ? value
+                : 0;
         }
     }
 }

@@ -329,6 +329,21 @@ namespace Unison.Core.Models
             }
         }
 
+        private int _channelFollowerCount;
+        /// <summary>
+        /// Channel <c>subscribers_count</c> from newsletter metadata. 0 = not yet known.
+        /// </summary>
+        public int ChannelFollowerCount
+        {
+            get => _channelFollowerCount;
+            set
+            {
+                if (_channelFollowerCount == value) return;
+                _channelFollowerCount = value;
+                OnPropertyChanged();
+            }
+        }
+
         private System.Collections.Generic.List<GroupMember> _groupMembers;
         private System.Collections.Generic.IReadOnlyDictionary<string, string> _mentionLookup =
             MentionLookupBuilder.Empty;

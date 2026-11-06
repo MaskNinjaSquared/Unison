@@ -651,6 +651,22 @@
                             <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
                                 <TextBlock Text="&#xE718;" FontFamily="{StaticResource IconFont}" Foreground="{ThemeResource ChatDetailSentMetaBrush}" FontSize="10" Margin="0,0,4,0"
                                            Visibility="{x:Bind IsPinned, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                                <StackPanel Orientation="Horizontal"
+                                            Margin="0,0,6,0"
+                                            VerticalAlignment="Center"
+                                            Visibility="{x:Bind ShowViewCount, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                    <FontIcon Glyph="&#xE890;"
+                                              FontFamily="{StaticResource IconFont}"
+                                              FontSize="11"
+                                              Foreground="{ThemeResource ChatDetailSentMetaBrush}"
+                                              VerticalAlignment="Center"
+                                              Margin="0,0,3,0"/>
+                                    <TextBlock Text="{x:Bind ViewCountText, Mode=OneWay}"
+                                               Foreground="{ThemeResource ChatDetailSentMetaBrush}"
+                                               FontSize="11"
+                                               FontFamily="{StaticResource MainFont}"
+                                               VerticalAlignment="Center"/>
+                                </StackPanel>
                                 <TextBlock Text="{x:Bind Timestamp, Mode=OneWay, Converter={StaticResource LocalTimeConverter}}"
                                            Foreground="{ThemeResource ChatDetailSentMetaBrush}"
                                            FontSize="11"
@@ -1390,7 +1406,7 @@
                         Width="40"
                         Visibility="{x:Bind ShowContactSlot, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
                 <Button Grid.Column="1"
-                        Margin="0,-4,4,0"
+                        Margin="40,-4,4,0"
                         Style="{StaticResource ChatDetailReactionChipButtonStyle}"
                         Background="{ThemeResource ChatDetailReactionChipReceivedBrush}"
                         BorderBrush="{ThemeResource ChatDetailReactionChipReceivedBorderBrush}"

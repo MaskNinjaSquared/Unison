@@ -30,6 +30,13 @@ namespace Unison.Uwp.UI.Controls
                 typeof(ChatAvatarControl),
                 new PropertyMetadata(false, OnVisualPropertyChanged));
 
+        public static readonly DependencyProperty IsChannelProperty =
+            DependencyProperty.Register(
+                nameof(IsChannel),
+                typeof(bool),
+                typeof(ChatAvatarControl),
+                new PropertyMetadata(false, OnVisualPropertyChanged));
+
         public static readonly DependencyProperty SizeProperty =
             DependencyProperty.Register(
                 nameof(Size),
@@ -64,6 +71,13 @@ namespace Unison.Uwp.UI.Controls
         {
             get { return (bool)GetValue(IsGroupProperty); }
             set { SetValue(IsGroupProperty, value); }
+        }
+
+        /// <summary>Uses the Unison channel glyph (<c>E8BD</c>) as the empty-avatar fallback.</summary>
+        public bool IsChannel
+        {
+            get { return (bool)GetValue(IsChannelProperty); }
+            set { SetValue(IsChannelProperty, value); }
         }
 
         public double Size
@@ -112,8 +126,7 @@ namespace Unison.Uwp.UI.Controls
             GroupFallbackHost.Width = size * 0.5;
             GroupFallbackHost.Height = size * 0.5;
 
-            bool group = IsGroup;
-            ApplyFallbackVisual(group);
+            ApplyFallbackVisual(IsGroup, IsChannel);
 
             string url = AvatarUrl;
             if (string.IsNullOrWhiteSpace(url))
@@ -170,8 +183,35 @@ namespace Unison.Uwp.UI.Controls
         /// <summary>
         /// WhatsApp Legacy registers full-bleed placeholder bitmaps; other shells keep glyph fallbacks.
         /// </summary>
-        private void ApplyFallbackVisual(bool group)
+        private void ApplyFallbackVisual(bool group, bool channel)
         {
+            if (channel)
+            {
+                if (ContactFallbackIcon != null)
+                {
+                    ContactFallbackIcon.Glyph = "\uE8BD";
+                    ContactFallbackIcon.Visibility = Visibility.Visible;
+                }
+
+                if (GroupFallbackHost != null)
+                {
+                    GroupFallbackHost.Visibility = Visibility.Collapsed;
+                }
+
+                if (FallbackEllipse != null)
+                {
+                    FallbackEllipse.Fill = TryGetAppResource("AvatarFallbackBackgroundBrush") as Brush
+                        ?? FallbackEllipse.Fill;
+                }
+
+                return;
+            }
+
+            if (ContactFallbackIcon != null)
+            {
+                ContactFallbackIcon.Glyph = "\uEA8C";
+            }
+
             string imageKey = group ? "AvatarGroupFallbackImage" : "AvatarContactFallbackImage";
             ImageSource image = TryGetAppResource(imageKey) as ImageSource;
             if (image != null)

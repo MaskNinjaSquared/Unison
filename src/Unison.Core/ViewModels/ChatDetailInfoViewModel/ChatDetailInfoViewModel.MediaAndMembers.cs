@@ -736,6 +736,11 @@ namespace Unison.Core.ViewModels
                 OnPropertyChanged(nameof(HasMembers));
                 OnPropertyChanged(nameof(MentionLookup));
             }
+            else if (e.PropertyName == nameof(ChatItem.ChannelFollowerCount))
+            {
+                OnPropertyChanged(nameof(HasMembersCount));
+                OnPropertyChanged(nameof(MembersCountText));
+            }
             else if (e.PropertyName == nameof(ChatItem.MutedUntil) ||
                      e.PropertyName == nameof(ChatItem.IsMutedLocally))
             {

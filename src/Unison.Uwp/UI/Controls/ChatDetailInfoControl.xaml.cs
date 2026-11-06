@@ -150,8 +150,9 @@ namespace Unison.Uwp.UI.Controls
 
             if (_groupInfoHost != null)
             {
-                _groupInfoHost.InfoViewModel = vm != null && vm.IsGroup ? vm : null;
-                _groupInfoHost.Visibility = vm != null && vm.IsGroup ? Visibility.Visible : Visibility.Collapsed;
+                bool showGroupOrChannel = vm != null && (vm.IsGroup || vm.IsChannel);
+                _groupInfoHost.InfoViewModel = showGroupOrChannel ? vm : null;
+                _groupInfoHost.Visibility = showGroupOrChannel ? Visibility.Visible : Visibility.Collapsed;
             }
 
             if (vm == null)

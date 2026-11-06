@@ -41,6 +41,18 @@ namespace Unison.Core.Tests.Helpers
         }
 
         [Fact]
+        public void TryApplyFollowerCount_writes_a_positive_subscribers_count()
+        {
+            var chat = new ChatItem { JID = Channel };
+            chat.ApplyKind(Channel, isSelfChat: false);
+
+            Assert.True(ChannelIdentityApply.TryApplyFollowerCount(chat, 42));
+            Assert.Equal(42, chat.ChannelFollowerCount);
+            Assert.False(ChannelIdentityApply.TryApplyFollowerCount(chat, 42));
+            Assert.False(ChannelIdentityApply.TryApplyFollowerCount(chat, 0));
+        }
+
+        [Fact]
         public void TryApplyPictureHint_sets_id_and_remote_url_when_blank()
         {
             var chat = new ChatItem { JID = Channel };

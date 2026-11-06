@@ -24,6 +24,9 @@ namespace Unison.Socket.UseCases.Newsletter
         /// </summary>
         public string ViewerRole { get; set; }
 
+        /// <summary><c>thread_metadata.subscribers_count</c>; 0 when the reply omitted it.</summary>
+        public int SubscribersCount { get; set; }
+
         public bool IsNotFound { get; set; }
 
         public string FailureReason { get; set; }

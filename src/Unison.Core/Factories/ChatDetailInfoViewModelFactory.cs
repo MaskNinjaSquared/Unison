@@ -70,7 +70,7 @@ namespace Unison.Core.Factories
                 throw new ArgumentNullException(nameof(contact));
             }
 
-            return Create(contact, isGroup: false, member: null);
+            return Create(contact, isGroup: false, isChannel: false, member: null);
         }
 
         public ChatDetailInfoViewModel CreateGroup(ChatItem group)
@@ -80,7 +80,17 @@ namespace Unison.Core.Factories
                 throw new ArgumentNullException(nameof(group));
             }
 
-            return Create(group, isGroup: true, member: null);
+            return Create(group, isGroup: true, isChannel: false, member: null);
+        }
+
+        public ChatDetailInfoViewModel CreateChannel(ChatItem channel)
+        {
+            if (channel == null)
+            {
+                throw new ArgumentNullException(nameof(channel));
+            }
+
+            return Create(channel, isGroup: false, isChannel: true, member: null);
         }
 
         public ChatDetailInfoViewModel CreateGroupMember(ChatItem group, GroupMember member)
@@ -95,10 +105,14 @@ namespace Unison.Core.Factories
                 throw new ArgumentNullException(nameof(member));
             }
 
-            return Create(group, isGroup: false, member: member);
+            return Create(group, isGroup: false, isChannel: false, member: member);
         }
 
-        private ChatDetailInfoViewModel Create(ChatItem source, bool isGroup, GroupMember member)
+        private ChatDetailInfoViewModel Create(
+            ChatItem source,
+            bool isGroup,
+            bool isChannel,
+            GroupMember member)
         {
             return new ChatDetailInfoViewModel(
                 source,
@@ -119,7 +133,8 @@ namespace Unison.Core.Factories
                 _participants,
                 _uriLauncher,
                 _chatState,
-                _systemInfo);
+                _systemInfo,
+                isChannel);
         }
     }
 }

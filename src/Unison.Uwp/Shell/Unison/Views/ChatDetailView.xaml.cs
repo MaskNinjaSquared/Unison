@@ -1900,6 +1900,7 @@ namespace Unison.Uwp.Shell.Unison.Views
 
             // Bind only — roster/avatar enrich runs after NarrowDetail + ProgressBar paint.
             ViewModel?.BindActiveChatForOpen(chat);
+            ApplyChannelOpenChrome(chat);
 
             // A menu belongs to the conversation it was opened over, so a different one arriving
             // takes it down with everything else that was on screen.
@@ -2394,6 +2395,40 @@ namespace Unison.Uwp.Shell.Unison.Views
             }
         }
 
+        private void ApplyChannelOpenChrome(ChatItem chat)
+        {
+            if (MessageInput != null && ViewModel != null)
+            {
+                MessageInput.PlaceholderText = ViewModel.ComposerPlaceholderText;
+            }
+
+            bool isChannel = chat != null && chat.IsChannel;
+            Brush background = isChannel
+                ? (TryFindThemeBrush("ChatDetailChannelBackgroundBrush")
+                   ?? TryFindThemeBrush("ChatDetailBackgroundBrush"))
+                : TryFindThemeBrush("ChatDetailBackgroundBrush");
+            if (background != null && ActiveChatGrid != null)
+            {
+                ActiveChatGrid.Background = background;
+            }
+        }
+
+        private static Brush TryFindThemeBrush(string key)
+        {
+            try
+            {
+                if (Application.Current.Resources.ContainsKey(key))
+                {
+                    return Application.Current.Resources[key] as Brush;
+                }
+            }
+            catch
+            {
+            }
+
+            return null;
+        }
+
         private void ApplyHeaderAvatar(ChatItem chat)
         {
             if (chat == null || (HeaderAvatar == null && HeaderAnnouncementsAvatar == null))
@@ -2410,7 +2445,8 @@ namespace Unison.Uwp.Shell.Unison.Views
 
             if (HeaderAvatar != null)
             {
-                HeaderAvatar.IsGroup = isGroup;
+                HeaderAvatar.IsGroup = isGroup && !chat.IsChannel;
+                HeaderAvatar.IsChannel = chat.IsChannel;
                 HeaderAvatar.AvatarUrl = url;
                 HeaderAvatar.Visibility = announce ? Visibility.Collapsed : Visibility.Visible;
             }
@@ -3647,11 +3683,19 @@ namespace Unison.Uwp.Shell.Unison.Views
                     (_activeChat.IsGroup ||
                      (!string.IsNullOrWhiteSpace(_activeChat.JID) &&
                       _activeChat.JID.IndexOf("@g.us", StringComparison.OrdinalIgnoreCase) >= 0));
+                bool isChannel = _activeChat != null &&
+                    (_activeChat.IsChannel ||
+                     (!string.IsNullOrWhiteSpace(_activeChat.JID) &&
+                      _activeChat.JID.IndexOf("@newsletter", StringComparison.OrdinalIgnoreCase) >= 0));
 
                 // Loop every ~90s while this chat stays open (cancel on leave / Unloaded).
                 while (!ct.IsCancellationRequested)
                 {
-                    if (isGroup)
+                    if (isChannel)
+                    {
+                        await AnimateChannelStatusSequenceAsync(statusText, ct);
+                    }
+                    else if (isGroup)
                     {
                         await AnimateGroupStatusSequenceAsync(statusText, ct);
                     }
@@ -3678,6 +3722,62 @@ namespace Unison.Uwp.Shell.Unison.Views
             catch (Exception ex)
             {
                 Debug.WriteLine("[ChatDetailView] Presence animation: " + ex.Message);
+            }
+        }
+
+        /// <summary>
+        /// Channel: hint → "{0} followers" → fade out (then the outer loop waits ~90s).
+        /// </summary>
+        private async Task AnimateChannelStatusSequenceAsync(string statusText, CancellationToken ct)
+        {
+            try
+            {
+                if (ct.IsCancellationRequested)
+                {
+                    return;
+                }
+
+                string hint = !string.IsNullOrWhiteSpace(statusText)
+                    ? statusText
+                    : (_strings != null
+                        ? _strings.Get("ChatDetail_SelectForChannelInfo", "tap here for channel info")
+                        : "tap here for channel info");
+
+                ChatStatusText.Text = hint;
+                AnimateSlideUp();
+                AnimateFadeIn(ChatStatusText);
+
+                await Task.Delay(5000, ct);
+                if (ct.IsCancellationRequested)
+                {
+                    return;
+                }
+
+                AnimateFadeOut(ChatStatusText);
+                await Task.Delay(250, ct);
+                if (ct.IsCancellationRequested)
+                {
+                    return;
+                }
+
+                string followers = ViewModel?.FormatChannelFollowersSummary(_activeChat);
+                if (!string.IsNullOrWhiteSpace(followers))
+                {
+                    ChatStatusText.Text = followers;
+                    AnimateFadeIn(ChatStatusText);
+
+                    await Task.Delay(6000, ct);
+                    if (ct.IsCancellationRequested)
+                    {
+                        return;
+                    }
+
+                    AnimateFadeOut(ChatStatusText);
+                    await Task.Delay(250, ct);
+                }
+            }
+            catch (OperationCanceledException)
+            {
             }
         }
 

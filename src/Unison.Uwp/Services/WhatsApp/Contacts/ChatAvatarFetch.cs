@@ -130,7 +130,10 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
                     chat,
                     meta.PictureId,
                     meta.ResolvedPictureUrl);
-                if (nameChanged || pictureHintChanged)
+                bool followersChanged = ChannelIdentityApply.TryApplyFollowerCount(
+                    chat,
+                    meta.SubscribersCount);
+                if (nameChanged || pictureHintChanged || followersChanged)
                 {
                     _catalog.Schedule();
                 }

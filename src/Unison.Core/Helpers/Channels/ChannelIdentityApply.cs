@@ -46,6 +46,25 @@ namespace Unison.Core.Helpers
         }
 
         /// <summary>
+        /// Writes <see cref="ChatItem.ChannelFollowerCount"/> when the server sent a positive count.
+        /// </summary>
+        public static bool TryApplyFollowerCount(ChatItem chat, int subscribersCount)
+        {
+            if (chat == null || !chat.IsChannel || subscribersCount <= 0)
+            {
+                return false;
+            }
+
+            if (chat.ChannelFollowerCount == subscribersCount)
+            {
+                return false;
+            }
+
+            chat.ChannelFollowerCount = subscribersCount;
+            return true;
+        }
+
+        /// <summary>
         /// Stores a remote picture id / path on the existing avatar fields when missing.
         /// Local download stays on the contact/avatar façades.
         /// </summary>

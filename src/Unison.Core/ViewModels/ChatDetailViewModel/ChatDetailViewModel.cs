@@ -439,6 +439,30 @@ namespace Unison.Core.ViewModels
             return joined.Substring(0, maxLen - 1).TrimEnd(',', ' ') + "…";
         }
 
+        /// <summary>"{0} followers" for the channel header subtitle, or null when the count is unknown.</summary>
+        public string FormatChannelFollowersSummary(ChatItem channel)
+        {
+            if (channel == null || !channel.IsChannel || channel.ChannelFollowerCount <= 0)
+            {
+                return null;
+            }
+
+            string template = _strings != null
+                ? _strings.Get("ChatDetail_ChannelFollowers", "{0} followers")
+                : "{0} followers";
+            return string.Format(template, channel.ChannelFollowerCount);
+        }
+
+        /// <summary>Composer watermark: channels ask for an update, chats for a message.</summary>
+        public string ComposerPlaceholderText =>
+            ActiveChat != null && ActiveChat.IsChannel
+                ? (_strings != null
+                    ? _strings.Get("ChatDetail_ChannelUpdateInput", "Write an update...")
+                    : "Write an update...")
+                : (_strings != null
+                    ? _strings.Get("ChatDetail_MessageInput.PlaceholderText", "Type a message")
+                    : "Type a message");
+
         // ── Bindable state ────────────────────────────────────────────────────
 
         public ObservableCollection<ChatMessageViewModel> Messages { get; }
@@ -466,6 +490,7 @@ namespace Unison.Core.ViewModels
                 OnPropertyChanged(nameof(ShowsAnnounceOnlyComposerLock));
                 OnPropertyChanged(nameof(IsComposerLocked));
                 OnPropertyChanged(nameof(IsChannelReadOnly));
+                OnPropertyChanged(nameof(ComposerPlaceholderText));
                 OnPropertyChanged(nameof(CanLoadMore));
                 CloseMentionMenu();
                 DismissMessageActions();

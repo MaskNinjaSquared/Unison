@@ -326,6 +326,9 @@ Desative depois de diagnosticar: manter ligado deixa o app lento.</value>
   <data name="ChatDetail_MessageInput.PlaceholderText" xml:space="preserve">
     <value>Digite uma mensagem</value>
   </data>
+  <data name="ChatDetail_ChannelUpdateInput" xml:space="preserve">
+    <value>Escrever atualização...</value>
+  </data>
   <data name="ChatDetail_MentionEveryone" xml:space="preserve">
     <value>Todos</value>
   </data>
@@ -490,6 +493,12 @@ Desative depois de diagnosticar: manter ligado deixa o app lento.</value>
   </data>
   <data name="ChatDetail_SelectForGroupInfo" xml:space="preserve">
     <value>toque aqui para info do grupo</value>
+  </data>
+  <data name="ChatDetail_SelectForChannelInfo" xml:space="preserve">
+    <value>toque aqui para info do canal</value>
+  </data>
+  <data name="ChatDetail_ChannelFollowers" xml:space="preserve">
+    <value>{0} seguidores</value>
   </data>
   <data name="ImageViewer_UnknownSender" xml:space="preserve">
     <value>Contato</value>
@@ -1551,6 +1560,21 @@ Desative depois de diagnosticar: manter ligado deixa o app lento.</value>
   </data>
   <data name="ChatDetailInfo_MemberCountSingular" xml:space="preserve">
     <value>1 membro</value>
+  </data>
+  <data name="ChatDetailInfo_FollowerCount" xml:space="preserve">
+    <value>{0} seguidores</value>
+  </data>
+  <data name="ChatDetailInfo_FollowerCountSingular" xml:space="preserve">
+    <value>1 seguidor</value>
+  </data>
+  <data name="ChatDetailInfo_FollowersLabel" xml:space="preserve">
+    <value>SEGUIDORES</value>
+  </data>
+  <data name="ChatDetailInfo_ChannelInfo.Header" xml:space="preserve">
+    <value>INFO DO CANAL</value>
+  </data>
+  <data name="ChatDetailInfo_ChannelName" xml:space="preserve">
+    <value>NOME DO CANAL</value>
   </data>
   <data name="ChatDetail_ShowContact.Text" xml:space="preserve">
     <value>Ver contato</value>

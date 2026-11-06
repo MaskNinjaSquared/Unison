@@ -77,6 +77,22 @@ namespace Unison.Core.Tests.Helpers
         }
 
         [Fact]
+        public void Reads_subscribers_count_as_followers()
+        {
+            const string json =
+                "{\"data\":{\"xwa2_newsletter\":{" +
+                "\"id\":\"120363@newsletter\"," +
+                "\"thread_metadata\":{" +
+                "\"name\":{\"text\":\"Mine\"}," +
+                "\"subscribers_count\":\"1284\"" +
+                "}}}}";
+
+            NewsletterMetadataResult result = NewsletterMetadataWireParse.TryParse(json);
+
+            Assert.Equal(1284, result.SubscribersCount);
+        }
+
+        [Fact]
         public void Create_reply_is_read_from_its_own_data_path()
         {
             const string json =

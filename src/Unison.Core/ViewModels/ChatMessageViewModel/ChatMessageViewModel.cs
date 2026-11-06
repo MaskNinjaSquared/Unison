@@ -290,6 +290,14 @@ namespace Unison.Core.ViewModels
                 RaiseCore(nameof(ForwardedLabelText));
             }
 
+            if (name == nameof(ChatMessage.ViewCount) ||
+                name == nameof(ChatMessage.ShowViewCount) ||
+                name == nameof(ChatMessage.ViewCountText))
+            {
+                RaiseCore(nameof(ShowViewCount));
+                RaiseCore(nameof(ViewCountText));
+            }
+
             if (name == nameof(ChatMessage.ShowQuotedAuthorLink))
             {
                 RaiseCore(nameof(ShowQuotedAuthorLink));
@@ -630,6 +638,10 @@ namespace Unison.Core.ViewModels
 
         public string StatusCheckmarkUri => Model.StatusCheckmarkUri;
         public string StatusGlyph => Model.StatusGlyph;
+
+        public bool ShowViewCount => Model.ShowViewCount;
+
+        public string ViewCountText => Model.ViewCountText;
         public bool HasStatusCheckmark => Model.HasStatusCheckmark;
         public bool IsReadStatus => Model.IsReadStatus;
         public bool ShowReadStatusCheckmark => Model.ShowReadStatusCheckmark;

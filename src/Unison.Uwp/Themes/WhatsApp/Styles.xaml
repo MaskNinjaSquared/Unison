@@ -11,6 +11,7 @@
         <ResourceDictionary x:Key="Default">
             <SolidColorBrush x:Key="WhatsAppBackgroundBrush" Color="#FF2C2C2C"/>
             <SolidColorBrush x:Key="ChatDetailBackgroundBrush" Color="#FF2C2C2C"/>
+            <SolidColorBrush x:Key="ChatDetailChannelBackgroundBrush" Color="#FF3A3A3A"/>
             <SolidColorBrush x:Key="ChatDetailWallpaperBackgroundBrush" Color="#FF2C2C2C"/>
             <SolidColorBrush x:Key="ChatDetailDateSeparatorBackgroundBrush" Color="#FF2C2C2C"/>
             <SolidColorBrush x:Key="ChatDetailDateSeparatorForegroundBrush" Color="#FFFFFFFF"/>
@@ -153,6 +154,7 @@
         <ResourceDictionary x:Key="Dark">
             <SolidColorBrush x:Key="WhatsAppBackgroundBrush" Color="#FF2C2C2C"/>
             <SolidColorBrush x:Key="ChatDetailBackgroundBrush" Color="#FF2C2C2C"/>
+            <SolidColorBrush x:Key="ChatDetailChannelBackgroundBrush" Color="#FF3A3A3A"/>
             <SolidColorBrush x:Key="ChatDetailWallpaperBackgroundBrush" Color="#FF2C2C2C"/>
             <SolidColorBrush x:Key="ChatDetailDateSeparatorBackgroundBrush" Color="#FF2C2C2C"/>
             <SolidColorBrush x:Key="ChatDetailDateSeparatorForegroundBrush" Color="#FFFFFFFF"/>
@@ -293,6 +295,7 @@
         <ResourceDictionary x:Key="Light">
             <SolidColorBrush x:Key="WhatsAppBackgroundBrush" Color="#FFF0F2F5"/>
             <SolidColorBrush x:Key="ChatDetailBackgroundBrush" Color="#FFEFEAE2"/>
+            <SolidColorBrush x:Key="ChatDetailChannelBackgroundBrush" Color="#FFF5F2EC"/>
             <SolidColorBrush x:Key="ChatDetailWallpaperBackgroundBrush" Color="#FFEFEAE2"/>
             <SolidColorBrush x:Key="ChatDetailDateSeparatorBackgroundBrush" Color="#FFEFEAE2"/>
             <SolidColorBrush x:Key="ChatDetailDateSeparatorForegroundBrush" Color="#FF111B21"/>
