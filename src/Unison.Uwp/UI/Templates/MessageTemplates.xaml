@@ -577,8 +577,23 @@
                                 <ColumnDefinition Width="*"/>
                                 <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
-                            <!-- Kind glyph (list chips): photo E91B / video E979 — left of timestamp row -->
+                            <!-- Kind glyph (list chips): photo E91B / video E979 — left of timestamp row.
+                                 Revoked: eye in that slot opens retained original / arrived-deleted info. -->
                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                <Button Style="{StaticResource TransparentMediaButtonStyle}"
+                                        Padding="0"
+                                        MinWidth="0"
+                                        MinHeight="0"
+                                        VerticalAlignment="Center"
+                                        Command="{x:Bind ViewDeletedContentCommand, Mode=OneWay}"
+                                        Visibility="{x:Bind IsRevoked, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"
+                                        AutomationProperties.Name="View deleted message">
+                                    <FontIcon Glyph="&#xE7B3;"
+                                              FontFamily="{StaticResource IconFont}"
+                                              FontSize="14"
+                                              Foreground="{ThemeResource ChatDetailSentMetaBrush}"
+                                              Opacity="0.85"/>
+                                </Button>
                                 <TextBlock Text="&#xE91B;"
                                            FontFamily="{StaticResource IconFont}"
                                            FontSize="12"
@@ -1272,6 +1287,20 @@
                                 <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                <Button Style="{StaticResource TransparentMediaButtonStyle}"
+                                        Padding="0"
+                                        MinWidth="0"
+                                        MinHeight="0"
+                                        VerticalAlignment="Center"
+                                        Command="{x:Bind ViewDeletedContentCommand, Mode=OneWay}"
+                                        Visibility="{x:Bind IsRevoked, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"
+                                        AutomationProperties.Name="View deleted message">
+                                    <FontIcon Glyph="&#xE7B3;"
+                                              FontFamily="{StaticResource IconFont}"
+                                              FontSize="14"
+                                              Foreground="{ThemeResource ChatDetailReceivedMetaBrush}"
+                                              Opacity="0.85"/>
+                                </Button>
                                 <TextBlock Text="&#xE91B;"
                                            FontFamily="{StaticResource IconFont}"
                                            FontSize="12"

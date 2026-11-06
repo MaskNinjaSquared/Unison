@@ -69,22 +69,35 @@ namespace Unison.WhatsAppClient.Helpers
                 ? ChatPreviewKind.Text
                 : ChatPreviewNormalizer.InferKindFromMessage(message);
             string body = message.Content ?? string.Empty;
-            if (!revoked &&
-                (kind == ChatPreviewKind.Image ||
-                 kind == ChatPreviewKind.Video ||
-                 kind == ChatPreviewKind.Gif ||
-                 kind == ChatPreviewKind.Document) &&
-                !string.IsNullOrWhiteSpace(message.Caption))
+            if (revoked)
+            {
+                // Soft delete: keep original body for "view original". Drop the legacy
+                // English marker — it is not real content.
+                if (string.Equals(body, LegacyDeletedPreview.Marker, StringComparison.OrdinalIgnoreCase))
+                {
+                    body = string.Empty;
+                }
+                else if (string.IsNullOrWhiteSpace(body) &&
+                         !string.IsNullOrWhiteSpace(message.Caption))
+                {
+                    body = message.Caption;
+                }
+            }
+            else if ((kind == ChatPreviewKind.Image ||
+                      kind == ChatPreviewKind.Video ||
+                      kind == ChatPreviewKind.Gif ||
+                      kind == ChatPreviewKind.Document) &&
+                     !string.IsNullOrWhiteSpace(message.Caption))
             {
                 body = message.Caption;
             }
-            else if (!revoked && kind == ChatPreviewKind.Document)
+            else if (kind == ChatPreviewKind.Document)
             {
                 // File name lives on MediaFileName; do not persist the "[Document] name" preview
                 // tag as Body or a reload shows as plain text when Kind is mis-applied.
                 body = string.Empty;
             }
-            else if (!revoked && kind == ChatPreviewKind.Contact)
+            else if (kind == ChatPreviewKind.Contact)
             {
                 // Display name on MediaFileName; Body keeps the name for list preview text.
                 body = !string.IsNullOrWhiteSpace(message.ContactCardDisplayName)
@@ -111,7 +124,7 @@ namespace Unison.WhatsAppClient.Helpers
                 IsRead = message.IsFromMe ? (bool?)null : message.IsRead,
                 ParticipantJid = JidHelper.Normalize(message.ParticipantJid),
                 SenderName = message.SenderName,
-                Body = revoked ? string.Empty : body,
+                Body = body,
                 Kind = kind,
                 LocalMediaBatchId = message.LocalMediaBatchId,
                 LocalMediaBatchIndex = message.LocalMediaBatchIndex,

@@ -17,14 +17,38 @@ namespace Unison.Core.Tests.Helpers
         private static readonly DateTime At = new DateTime(2026, 10, 16, 12, 0, 0, DateTimeKind.Utc);
 
         [Fact]
-        public void A_stored_revoke_reads_back_flagged_with_no_body()
+        public void Soft_tombstone_keeps_original_body_and_drops_media_flags()
+        {
+            var message = new ChatMessage
+            {
+                Id = "m1",
+                Content = "hello there",
+                Caption = "cap",
+                Kind = ChatMessageKind.Image,
+                IsImage = true,
+                ImageUri = "ms-appdata:///local/x.jpg",
+                Timestamp = At
+            };
+
+            MessageRevocationContent.ApplyTombstone(message);
+
+            Assert.True(message.IsRevoked);
+            Assert.Equal("hello there", message.Content);
+            Assert.Equal("cap", message.Caption);
+            Assert.False(message.IsImage);
+            Assert.Null(message.ImageUri);
+            Assert.False(message.ShowTextContent);
+        }
+
+        [Fact]
+        public void A_stored_revoke_reads_back_flagged_and_keeps_body_for_view()
         {
             var row = new HistoryMessage
             {
                 ChatJid = "1@s.whatsapp.net",
                 MessageId = "m1",
-                Body = "[Message Deleted]",
-                Kind = ChatPreviewKind.Image,
+                Body = "kept original",
+                Kind = ChatPreviewKind.Text,
                 IsRevoked = true,
                 TimestampUtc = At
             };
@@ -32,20 +56,25 @@ namespace Unison.Core.Tests.Helpers
             ChatMessage message = HistoryMessageMapper.ToChatMessage(row);
 
             Assert.True(message.IsRevoked);
-            Assert.Equal(string.Empty, message.Content);
-            Assert.Equal(ChatMessageKind.Text, message.Kind);
+            Assert.Equal("kept original", message.Content);
+            Assert.False(message.ShowTextContent);
         }
 
         [Fact]
-        public void A_revoke_is_written_as_the_flag_with_an_empty_text_row()
+        public void A_revoke_is_written_as_the_flag_with_retained_body()
         {
-            var message = new ChatMessage { Id = "m1", Content = string.Empty, IsRevoked = true, Timestamp = At };
+            var message = new ChatMessage
+            {
+                Id = "m1",
+                Content = "kept original",
+                IsRevoked = true,
+                Timestamp = At
+            };
 
             HistoryMessage row = HistoryLiveMessageMapper.ToHistoryMessage("1@s.whatsapp.net", message);
 
             Assert.True(row.IsRevoked);
-            Assert.Equal(string.Empty, row.Body);
-            Assert.Equal(ChatPreviewKind.Text, row.Kind);
+            Assert.Equal("kept original", row.Body);
         }
 
         [Fact]
@@ -56,7 +85,27 @@ namespace Unison.Core.Tests.Helpers
             HistoryMessage row = HistoryLiveMessageMapper.ToHistoryMessage("1@s.whatsapp.net", message);
 
             Assert.True(row.IsRevoked);
+            // Legacy marker is not useful as "original" — store empty.
             Assert.Equal(string.Empty, row.Body);
+        }
+
+        [Fact]
+        public void Arrived_deleted_row_has_flag_and_empty_body()
+        {
+            var row = new HistoryMessage
+            {
+                ChatJid = "1@s.whatsapp.net",
+                MessageId = "m1",
+                Body = string.Empty,
+                Kind = ChatPreviewKind.Text,
+                IsRevoked = true,
+                TimestampUtc = At
+            };
+
+            ChatMessage message = HistoryMessageMapper.ToChatMessage(row);
+
+            Assert.True(message.IsRevoked);
+            Assert.Equal(string.Empty, message.Content);
         }
 
         [Fact]

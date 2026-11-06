@@ -149,6 +149,9 @@ namespace Unison.Core.ViewModels
             CopyCommand = new RelayCommand(CopyText, () => !string.IsNullOrWhiteSpace(CopyableText));
             ReplyCommand = new RelayCommand(() => ReplyRequested?.Invoke(this, EventArgs.Empty));
             CallBackCommand = new RelayCommand(() => CallBackRequested?.Invoke(this, EventArgs.Empty));
+            ViewDeletedContentCommand = new RelayCommand(
+                () => _ = ViewDeletedContentAsync(),
+                () => IsRevoked && _dialogs != null);
             ForwardCommand = new RelayCommand(
                 () =>
                 {
@@ -272,6 +275,7 @@ namespace Unison.Core.ViewModels
                 (DeleteCommand as RelayCommand)?.RaiseCanExecuteChanged();
                 (DeleteForMeCommand as RelayCommand)?.RaiseCanExecuteChanged();
                 (DeleteForEveryoneCommand as RelayCommand)?.RaiseCanExecuteChanged();
+                (ViewDeletedContentCommand as RelayCommand)?.RaiseCanExecuteChanged();
             }
 
             if (name == nameof(ChatMessage.MentionedJids))
@@ -500,6 +504,12 @@ namespace Unison.Core.ViewModels
 
         /// <summary>Call-back from a call-event bubble (host shows confirm dialog).</summary>
         public ICommand CallBackCommand { get; }
+
+        /// <summary>
+        /// Eye on a revoked bubble: shows the retained original body, or explains that the
+        /// message arrived already deleted when nothing was ever stored.
+        /// </summary>
+        public ICommand ViewDeletedContentCommand { get; }
 
         /// <summary>Forward this bubble. The shell opens the people picker titled Forward.</summary>
         public ICommand ForwardCommand { get; }

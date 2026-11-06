@@ -1,13 +1,11 @@
 // =============================================================================
 // MessageRevocationContent
 //
-// What a revoked message looks like on the timeline: flagged, with no body and
-// no media. The words the user reads are the UI's, in the user's language.
-// Extracted so revoke apply cannot drift from history replay or a future
-// façade path.
+// Soft delete: flag IsRevoked and strip media chrome from the bubble, but keep
+// Content / Caption so the UI can offer "view original". The italic "deleted"
+// line is always UI-owned (localized), never written into Content.
 // =============================================================================
 using Unison.Core.Models;
-using Unison.Core.Helpers;
 
 namespace Unison.WhatsAppClient.Helpers
 {
@@ -21,8 +19,7 @@ namespace Unison.WhatsAppClient.Helpers
             }
 
             target.IsRevoked = true;
-            target.Content = string.Empty;
-            target.Caption = string.Empty;
+            // Soft delete — do not wipe Content / Caption (eye dialog).
             target.Kind = ChatMessageKind.Text;
             target.IsImage = false;
             target.ImageUri = null;
@@ -40,13 +37,13 @@ namespace Unison.WhatsAppClient.Helpers
             target.VideoMimeType = null;
             target.VideoDurationSeconds = 0;
             target.IsAnimated = false;
-            // Kind already Text above; clear GIF flag for any residual animated state.
             target.IsAudio = false;
             target.AudioUri = null;
             target.AudioUrl = null;
             target.AudioDirectPath = null;
             target.AudioMediaKeyBase64 = null;
             target.AudioFileEncSha256Base64 = null;
+            // Kind = Text clears IsGif / IsSticker / IsDocument / IsContact derived flags.
         }
     }
 }

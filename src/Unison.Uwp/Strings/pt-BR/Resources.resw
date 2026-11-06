@@ -269,6 +269,12 @@ Desative depois de diagnosticar: manter ligado deixa o app lento.</value>
   <data name="ChatDetail_MessageDeleted.Text" xml:space="preserve">
     <value>Mensagem apagada</value>
   </data>
+  <data name="ChatDetail_DeletedMessageTitle" xml:space="preserve">
+    <value>Mensagem apagada</value>
+  </data>
+  <data name="ChatDetail_DeletedBeforeReceived" xml:space="preserve">
+    <value>Esta mensagem foi apagada antes de ser entregue, então o conteúdo não está disponível.</value>
+  </data>
   <data name="ChatList_Loading.Text" xml:space="preserve">
     <value>Preparando conversas…</value>
   </data>
@@ -627,6 +633,12 @@ Desative depois de diagnosticar: manter ligado deixa o app lento.</value>
   </data>
   <data name="CreateGroup_Name.Header" xml:space="preserve">
     <value>Nome do grupo</value>
+  </data>
+  <data name="CreateGroup_MembersSelectedSuffix.Text" xml:space="preserve">
+    <value> selecionados</value>
+  </data>
+  <data name="CreateGroup_ManageMembers.Content" xml:space="preserve">
+    <value>Gerenciar</value>
   </data>
   <data name="CreateGroup_AddPhotoOverlay.Text" xml:space="preserve">
     <value>Adicionar imagem do grupo...</value>

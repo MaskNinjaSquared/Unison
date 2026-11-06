@@ -1928,22 +1928,45 @@ namespace Unison.WhatsAppClient.Messages
             ChatMessage target;
             AliasLinkedMessageFind.TryFind(cache, aliasKeys, targetId, out _, out target);
 
-            // If the chat is not resident, read the retained local window once. A revoke is
-            // an update to an existing message; it must never be inserted as a new "current" item.
+            // If the chat is not resident, read the retained local window once.
             if (target == null)
             {
                 target = await FindPersistedMessageAsync(canonical, targetId).ConfigureAwait(false);
             }
 
+            bool arrivedDeleted = false;
             if (target == null)
             {
-                return;
+                // Never received the original — soft tombstone with empty body so the eye
+                // dialog can explain that the message arrived already deleted.
+                target = new ChatMessage
+                {
+                    Id = targetId,
+                    RemoteJid = canonical,
+                    Content = string.Empty,
+                    Kind = ChatMessageKind.Text,
+                    Timestamp = DateTime.UtcNow,
+                    IsFromMe = false,
+                    IsRevoked = true
+                };
+                arrivedDeleted = true;
             }
 
             // Tombstone sets IsRevoked (post-1.8.3). That PropertyChanged fans into XAML bindings;
             // apply on the UI thread when a dispatcher is attached so Mobile does not hit 0x8001010E.
-            await _boundMutations.RunAsync(
-                () => MessageRevocationContent.ApplyTombstone(target)).ConfigureAwait(false);
+            await _boundMutations.RunAsync(() =>
+            {
+                if (arrivedDeleted)
+                {
+                    cache.InsertIfAbsent(
+                        canonical,
+                        target,
+                        MaxActiveChatMessagesInMemory,
+                        DateTime.UtcNow);
+                }
+
+                MessageRevocationContent.ApplyTombstone(target);
+            }).ConfigureAwait(false);
 
             try
             {

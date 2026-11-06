@@ -34,7 +34,8 @@ namespace Unison.WhatsAppClient.Helpers
             {
                 Id = row.MessageId,
                 RemoteJid = row.ChatJid,
-                Content = row.IsRevoked ? string.Empty : NormalizeStoredBody(row.Body, row.Kind),
+                // Soft delete keeps Body for "view original"; bubble text stays hidden via IsRevoked.
+                Content = NormalizeStoredBody(row.Body, row.Kind),
                 Timestamp = AsUtc(row.TimestampUtc) ?? DateTime.UtcNow,
                 IsFromMe = row.IsFromMe,
                 IsRead = row.IsRead,

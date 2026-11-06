@@ -284,9 +284,11 @@ namespace Unison.Core.Contracts.WhatsApp
             ChatItem chat);
 
         /// <summary>
-        /// Inbound revoke: tombstone the target (never insert a synthetic deleted row),
+        /// Inbound revoke: soft-tombstone the target (keep original body for "view original"),
         /// drop a leftover envelope row from older builds, persist, notify the open chat,
         /// and refresh the list tip when the revoked message was the preview.
+        /// When the target was never received, inserts an empty soft tombstone so the UI
+        /// can explain that the message arrived already deleted.
         /// </summary>
         Task ApplyIncomingRevocationAsync(
             string chatJid,
