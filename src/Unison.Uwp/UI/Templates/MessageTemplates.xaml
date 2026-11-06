@@ -711,6 +711,8 @@
             </Grid>
 
             <Button Grid.Row="2"
+                    HorizontalAlignment="Left"
+                    Margin="40,-2,10,0"
                     Style="{StaticResource ChatDetailSentReactionChipButtonStyle}"
                     Background="{ThemeResource ChatDetailReactionChipSentBrush}"
                     BorderBrush="{ThemeResource ChatDetailReactionChipSentBorderBrush}"

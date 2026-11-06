@@ -23,13 +23,13 @@
                                              HorizontalAlignment="Center"
                                              VerticalAlignment="Center">
                         <Grid Width="160" Height="160">
-                            <Ellipse Fill="{ThemeResource AvatarFallbackBackgroundBrush}"/>
-                            <FontIcon Glyph="&#xE8BD;"
-                                      FontFamily="{StaticResource IconFont}"
+                            <Ellipse Fill="{StaticResource ChannelAvatarFallbackBackgroundBrush}"/>
+                            <FontIcon Glyph="{StaticResource ChannelGlyph}"
+                                      FontFamily="{StaticResource LegacyIconFont}"
                                       FontSize="64"
                                       HorizontalAlignment="Center"
                                       VerticalAlignment="Center"
-                                      Foreground="{ThemeResource AvatarFallbackIconBrush}"
+                                      Foreground="White"
                                       Visibility="{Binding HasChannelPhoto, Converter={StaticResource InvertedBooleanToVisibilityConverter}}"/>
                             <Ellipse Visibility="{Binding HasChannelPhoto, Converter={StaticResource BooleanToVisibilityConverter}}">
                                 <Ellipse.Fill>

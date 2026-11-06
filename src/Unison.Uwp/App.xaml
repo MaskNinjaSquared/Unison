@@ -60,6 +60,9 @@
             <FontFamily x:Key="UnisonIconFont">ms-appx:///Assets/Fonts/UnisonIcons.ttf#UnisonIcons</FontFamily>
             <!-- WhatsApp Legacy WP8 icons: EB01–EB17 (attach tray EB10–EB15, channels EB17). Regen: scripts/icons/generate-whatsapp-legacy-icons.ps1 -->
             <FontFamily x:Key="LegacyIconFont">ms-appx:///Assets/Fonts/WhatsAppLegacyIcons.ttf#WhatsAppLegacyIcons</FontFamily>
+            <!-- Same glyph as the Channels sidebar entry (WhatsAppLegacyIcons EB17). -->
+            <x:String x:Key="ChannelGlyph">&#xEB17;</x:String>
+            <SolidColorBrush x:Key="ChannelAvatarFallbackBackgroundBrush" Color="#FF545C69"/>
             <!-- Sticker-box glyphs. Explicit emoji face (App TextBlock style uses MainFont, which
                  has no emoji). Fallback Symbol for older W10M builds. Optional: drop
                  WhatsAppColorEmoji.ttf into Assets/Fonts and switch the URI (~42 MB). -->

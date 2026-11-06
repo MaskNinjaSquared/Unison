@@ -46,8 +46,8 @@
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="*"/>
             </Grid.ColumnDefinitions>
-            <FontIcon Glyph="&#xE8BD;"
-                      FontFamily="{StaticResource IconFont}"
+            <FontIcon Glyph="{StaticResource ChannelGlyph}"
+                      FontFamily="{StaticResource LegacyIconFont}"
                       FontSize="24"
                       Margin="0,2,16,0"
                       VerticalAlignment="Top"

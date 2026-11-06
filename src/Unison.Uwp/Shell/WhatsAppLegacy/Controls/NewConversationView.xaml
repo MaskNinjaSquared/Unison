@@ -314,8 +314,8 @@
                                 <controls:AttachTile x:Name="TileNewChannel"
                                                      Grid.Row="1" Grid.Column="0"
                                                      HorizontalAlignment="Center"
-                                                     IconGlyph="&#xE8BD;"
-                                                     IconFontFamily="{StaticResource IconFont}"
+                                                     IconGlyph="{StaticResource ChannelGlyph}"
+                                                     IconFontFamily="{StaticResource LegacyIconFont}"
                                                      Label="New channel"
                                                      LocalizationUid="NewConversation_NewChannel"
                                                      Command="{Binding NewChannelCommand}"/>
@@ -489,9 +489,10 @@
                                             <ColumnDefinition Width="*"/>
                                         </Grid.ColumnDefinitions>
                                         <Border Width="56" Height="56"
-                                                Background="{ThemeResource ChatDetailAccentBrush}">
-                                            <FontIcon Glyph="&#xE8BD;"
-                                                      FontFamily="{StaticResource IconFont}"
+                                                Background="{StaticResource ChannelAvatarFallbackBackgroundBrush}"
+                                                CornerRadius="28">
+                                            <FontIcon Glyph="{StaticResource ChannelGlyph}"
+                                                      FontFamily="{StaticResource LegacyIconFont}"
                                                       FontSize="26"
                                                       Foreground="White"
                                                       HorizontalAlignment="Center"

@@ -23,7 +23,8 @@
         <FontIcon x:Name="ContactFallbackIcon"
                   Glyph="&#xEA8C;"
                   FontFamily="{StaticResource IconFont}"
-                  FontSize="20"
+                  FontSize="28"
+                  Opacity="0.7"
                   Foreground="{ThemeResource AvatarFallbackIconBrush}"
                   HorizontalAlignment="Center"
                   VerticalAlignment="Center"/>

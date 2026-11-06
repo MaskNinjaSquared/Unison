@@ -173,7 +173,8 @@
                                         VerticalAlignment="Center"
                                         x:Load="{x:Bind templates:ChatItemTemplates.ShowsStandardListAvatar(IsCommunityAnnounce), Mode=OneWay}"
                                         AvatarUrl="{x:Bind GetAvatarUrl(AvatarUrl, AvatarHighUrl), Mode=OneWay}"
-                                        IsGroup="{x:Bind templates:ChatItemTemplates.ShowsGroupAvatar(IsGroup, Kind), Mode=OneWay}"/>
+                                        IsGroup="{x:Bind templates:ChatItemTemplates.ShowsGroupAvatar(IsGroup, Kind), Mode=OneWay}"
+                                        IsChannel="{x:Bind templates:ChatItemTemplates.ShowsChannelAvatar(Kind), Mode=OneWay}"/>
             <controls:CommunityAnnouncementsAvatarControl x:Name="RowAnnounceAvatar"
                                                           Width="48" Height="48"
                                                           Size="48"

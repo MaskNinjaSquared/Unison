@@ -73,7 +73,10 @@ namespace Unison.Uwp.UI.Controls
             set { SetValue(IsGroupProperty, value); }
         }
 
-        /// <summary>Uses the Unison channel glyph (<c>E8BD</c>) as the empty-avatar fallback.</summary>
+        /// <summary>
+        /// Uses the Channels sidebar glyph (<c>EB17</c> / <c>LegacyIconFont</c>) and
+        /// <c>ChannelAvatarFallbackBackgroundBrush</c> (#545C69) as the empty-avatar fallback.
+        /// </summary>
         public bool IsChannel
         {
             get { return (bool)GetValue(IsChannelProperty); }
@@ -187,9 +190,24 @@ namespace Unison.Uwp.UI.Controls
         {
             if (channel)
             {
+                Brush channelPlate = TryGetAppResource("ChannelAvatarFallbackBackgroundBrush") as Brush
+                    ?? new SolidColorBrush(Windows.UI.Color.FromArgb(0xFF, 0x54, 0x5C, 0x69));
+                if (FallbackPlate != null)
+                {
+                    FallbackPlate.Fill = channelPlate;
+                }
+
+                if (FallbackEllipse != null)
+                {
+                    FallbackEllipse.Fill = channelPlate;
+                }
+
                 if (ContactFallbackIcon != null)
                 {
-                    ContactFallbackIcon.Glyph = "\uE8BD";
+                    ContactFallbackIcon.Glyph = ResolveChannelGlyph();
+                    ContactFallbackIcon.FontFamily = TryGetAppResource("LegacyIconFont") as FontFamily
+                        ?? ContactFallbackIcon.FontFamily;
+                    ContactFallbackIcon.Foreground = new SolidColorBrush(Windows.UI.Colors.White);
                     ContactFallbackIcon.Visibility = Visibility.Visible;
                 }
 
@@ -198,18 +216,19 @@ namespace Unison.Uwp.UI.Controls
                     GroupFallbackHost.Visibility = Visibility.Collapsed;
                 }
 
-                if (FallbackEllipse != null)
-                {
-                    FallbackEllipse.Fill = TryGetAppResource("AvatarFallbackBackgroundBrush") as Brush
-                        ?? FallbackEllipse.Fill;
-                }
-
                 return;
             }
 
             if (ContactFallbackIcon != null)
             {
                 ContactFallbackIcon.Glyph = "\uEA8C";
+                ContactFallbackIcon.FontFamily = TryGetAppResource("IconFont") as FontFamily
+                    ?? ContactFallbackIcon.FontFamily;
+                object iconBrush = TryGetAppResource("AvatarFallbackIconBrush");
+                if (iconBrush is Brush fallbackIcon)
+                {
+                    ContactFallbackIcon.Foreground = fallbackIcon;
+                }
             }
 
             string imageKey = group ? "AvatarGroupFallbackImage" : "AvatarContactFallbackImage";
@@ -235,6 +254,13 @@ namespace Unison.Uwp.UI.Controls
                 ?? new SolidColorBrush(Windows.UI.Color.FromArgb(0xFF, 0x45, 0x45, 0x45));
             ContactFallbackIcon.Visibility = group ? Visibility.Collapsed : Visibility.Visible;
             GroupFallbackHost.Visibility = group ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        private static string ResolveChannelGlyph()
+        {
+            object glyph = TryGetAppResource("ChannelGlyph");
+            string text = glyph as string;
+            return string.IsNullOrEmpty(text) ? "\uEB17" : text;
         }
 
         private static object TryGetAppResource(string key)
