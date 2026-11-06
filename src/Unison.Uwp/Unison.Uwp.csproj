@@ -534,6 +534,9 @@
     <Compile Include="UI\Controls\NewConversationView.xaml.cs">
       <DependentUpon>NewConversationView.xaml</DependentUpon>
     </Compile>
+    <Compile Include="Shell\WhatsAppLegacy\Controls\LegacyEmojiLabeledTextBox.xaml.cs">
+      <DependentUpon>LegacyEmojiLabeledTextBox.xaml</DependentUpon>
+    </Compile>
     <Compile Include="Shell\WhatsAppLegacy\Controls\CreateConversationFlowView.xaml.cs">
       <DependentUpon>CreateConversationFlowView.xaml</DependentUpon>
     </Compile>
@@ -1308,6 +1311,10 @@
       <SubType>Designer</SubType>
     </Page>
     <Page Include="UI\Controls\NewConversationView.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Include="Shell\WhatsAppLegacy\Controls\LegacyEmojiLabeledTextBox.xaml">
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </Page>

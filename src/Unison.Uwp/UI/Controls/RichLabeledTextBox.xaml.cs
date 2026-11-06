@@ -1,8 +1,8 @@
 // =============================================================================
 // RichLabeledTextBox
 //
-// Composed labeled field: header inside TextBox-like chrome + ChatComposerInput +
-// emoji invoke. Hosts that own an emoji dock subscribe to EmojiInvoked.
+// Labeled field: header inside TextBox chrome + ChatComposerInput + emoji on the input row.
+// Hosts that own an emoji dock subscribe to EmojiInvoked.
 // =============================================================================
 using System;
 using Windows.UI.Xaml;

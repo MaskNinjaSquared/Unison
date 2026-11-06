@@ -31,7 +31,7 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Controls
         private AlphabetSemanticZoomHost _membersZoom;
         private PaneSplitterHost _splitter;
         private bool _suppressPivotSync;
-        private RichLabeledTextBox _emojiTarget;
+        private LegacyEmojiLabeledTextBox _emojiTarget;
         private bool _groupPhotoButtonHooked;
         public CreateConversationFlowView()
         {
@@ -273,13 +273,13 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Controls
         }
 
         private void CommunityField_EmojiInvoked(object sender, EventArgs e) =>
-            ToggleEmojiDock(sender as RichLabeledTextBox, CommunityEmojiDock, EnsureCommunityEmojiCatalog);
+            ToggleEmojiDock(sender as LegacyEmojiLabeledTextBox, CommunityEmojiDock, EnsureCommunityEmojiCatalog);
 
         private void GroupField_EmojiInvoked(object sender, EventArgs e) =>
-            ToggleEmojiDock(sender as RichLabeledTextBox, GroupEmojiDock, EnsureGroupEmojiCatalog);
+            ToggleEmojiDock(sender as LegacyEmojiLabeledTextBox, GroupEmojiDock, EnsureGroupEmojiCatalog);
 
         private void ToggleEmojiDock(
-            RichLabeledTextBox field,
+            LegacyEmojiLabeledTextBox field,
             Border dock,
             Action ensureCatalog)
         {

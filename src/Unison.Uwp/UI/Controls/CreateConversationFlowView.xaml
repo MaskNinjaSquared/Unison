@@ -160,10 +160,15 @@
             </Button>
         </Grid>
 
-        <!-- Form -->
+        <!-- Form: emoji docks sit outside Pivot/community padding (full form width). -->
         <Grid Grid.Row="1"
               Visibility="{Binding ShowCreateForm, Converter={StaticResource BooleanToVisibilityConverter}}">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
             <Pivot x:Name="CreateGroupPivot"
+                   Grid.Row="0"
                    Visibility="{Binding IsCreateGroup, Converter={StaticResource BooleanToVisibilityConverter}}"
                    SelectionChanged="CreateGroupPivot_SelectionChanged">
                 <PivotItem x:Uid="CreateGroup_MembersHeader" Header="Select members">
@@ -220,21 +225,18 @@
                     </SemanticZoom>
                 </PivotItem>
                 <PivotItem x:Uid="CreateGroup_InfoHeader" Header="Group details">
-                    <Grid>
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="*"/>
-                            <RowDefinition Height="Auto"/>
-                        </Grid.RowDefinitions>
                         <ScrollViewer x:Name="GroupInfoScroll"
                                       VerticalScrollBarVisibility="Auto"
+                                      Padding="0,50,0,50"
                                       HorizontalScrollMode="Disabled"
                                       HorizontalScrollBarVisibility="Disabled">
                             <Grid Padding="16,24"
                                   HorizontalAlignment="Stretch">
                                 <StackPanel MaxWidth="600"
                                             HorizontalAlignment="Stretch">
-                                <Grid Width="160" Height="160" HorizontalAlignment="Center">
-                                    <toolkit:DropShadowPanel BlurRadius="24"
+                                <!-- Camera on the right edge (same column as ephemeral status glyph). -->
+                                <Grid MinHeight="160" HorizontalAlignment="Center" Margin="0,0,0,50">
+                                    <toolkit:DropShadowPanel BlurRadius="80"
                                                              OffsetX="0"
                                                              OffsetY="4"
                                                              ShadowOpacity="0.45"
@@ -278,9 +280,7 @@
                                     </toolkit:DropShadowPanel>
                                     <controls:ProfilePhotoButton x:Name="GroupPhotoButton"
                                                                  HorizontalAlignment="Right"
-                                                                 VerticalAlignment="Bottom"
-                                                                 Margin="0,0,-4,-4"
-                                                                 Canvas.ZIndex="1"/>
+                                                                 VerticalAlignment="Bottom"/>
                                 </Grid>
 
                                 <controls:RichLabeledTextBox x:Name="GroupNameField"
@@ -292,12 +292,12 @@
                                                              AcceptsReturn="False"
                                                              TextWrapping="NoWrap"
                                                              MaxInputHeight="36"
-                                                             MinBoxHeight="56"
+                                                             MinBoxHeight="40"
                                                              HorizontalAlignment="Stretch"
                                                              EmojiInvoked="GroupField_EmojiInvoked"/>
 
                                 <Button Margin="0,20,0,0"
-                                        Padding="4,12"
+                                        Padding="10,12,20,12"
                                         HorizontalAlignment="Stretch"
                                         HorizontalContentAlignment="Stretch"
                                         Background="Transparent"
@@ -337,7 +337,8 @@
                                 </Button>
 
                                 <Button Margin="0,4,0,0"
-                                        Padding="4,12"
+                                        Height="65"
+                                        Padding="10,12,20,12"
                                         HorizontalAlignment="Stretch"
                                         HorizontalContentAlignment="Stretch"
                                         Background="Transparent"
@@ -345,17 +346,10 @@
                                         Command="{Binding OpenGroupPermissionsCommand}">
                                     <Grid HorizontalAlignment="Stretch">
                                         <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="Auto"/>
                                             <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
                                         </Grid.ColumnDefinitions>
-                                        <FontIcon Glyph="&#xE713;"
-                                                  FontFamily="{StaticResource IconFont}"
-                                                  FontSize="20"
-                                                  VerticalAlignment="Center"
-                                                  Margin="0,0,12,0"
-                                                  Foreground="{ThemeResource WhatsAppTextMediumBrush}"/>
-                                        <TextBlock Grid.Column="1"
-                                                   x:Uid="CreateGroup_PermissionsTitle"
+                                        <TextBlock x:Uid="CreateGroup_PermissionsTitle"
                                                    Text="Group permissions"
                                                    FontSize="16"
                                                    FontFamily="{StaticResource MainFontSemibold}"
@@ -364,32 +358,51 @@
                                                    TextWrapping="NoWrap"
                                                    TextTrimming="CharacterEllipsis"
                                                    Foreground="{ThemeResource WhatsAppTextHighBrush}"/>
+                                        <FontIcon Grid.Column="1"
+                                                  Glyph="&#xE713;"
+                                                  FontFamily="{StaticResource IconFont}"
+                                                  FontSize="20"
+                                                  VerticalAlignment="Center"
+                                                  Margin="12,0,0,0"
+                                                  Foreground="{ThemeResource WhatsAppTextMediumBrush}"/>
                                     </Grid>
                                 </Button>
+
+                                <Grid Margin="0,12,0,0" HorizontalAlignment="Stretch">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Orientation="Horizontal" Margin="10" VerticalAlignment="Center">
+                                        <TextBlock Text="{Binding SelectedMembersCount}"
+                                                   FontSize="14"
+                                                   FontFamily="{StaticResource MainFont}"
+                                                   Foreground="{ThemeResource WhatsAppTextMediumBrush}"
+                                                   VerticalAlignment="Center"/>
+                                        <TextBlock x:Uid="CreateGroup_MembersSelectedSuffix"
+                                                   Text=" selected"
+                                                   Margin="4,0,0,0"
+                                                   FontSize="14"
+                                                   FontFamily="{StaticResource MainFont}"
+                                                   Foreground="{ThemeResource WhatsAppTextMediumBrush}"
+                                                   VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                    <HyperlinkButton Grid.Column="1"
+                                                     x:Uid="CreateGroup_ManageMembers"
+                                                     Content="Manage"
+                                                     Padding="8,4"
+                                                     VerticalAlignment="Center"
+                                                     Command="{Binding ManageGroupMembersCommand}"/>
+                                </Grid>
                                 </StackPanel>
                             </Grid>
                         </ScrollViewer>
-
-                        <Border x:Name="GroupEmojiDock"
-                                Grid.Row="1"
-                                Height="280"
-                                Visibility="Collapsed"
-                                Background="{ThemeResource ChatDetailInputBarBackgroundBrush}"
-                                BorderBrush="{ThemeResource ChatDetailPaneSeparatorBrush}"
-                                BorderThickness="0,1,0,0">
-                            <controls:EmojiPickerPanel x:Name="GroupEmojiPanel"
-                                                       GlyphPicked="GroupEmojiPanel_GlyphPicked"/>
-                        </Border>
-                    </Grid>
                 </PivotItem>
             </Pivot>
 
-            <Grid Visibility="{Binding IsCreateCommunity, Converter={StaticResource BooleanToVisibilityConverter}}">
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="*"/>
-                    <RowDefinition Height="Auto"/>
-                </Grid.RowDefinitions>
-                <ScrollViewer VerticalScrollBarVisibility="Auto">
+            <ScrollViewer Grid.Row="0"
+                          VerticalScrollBarVisibility="Auto"
+                          Visibility="{Binding IsCreateCommunity, Converter={StaticResource BooleanToVisibilityConverter}}">
                     <StackPanel Padding="16,24" MaxWidth="420" HorizontalAlignment="Center">
                         <Grid Width="160" Height="160" HorizontalAlignment="Center">
                             <toolkit:DropShadowPanel BlurRadius="24"
@@ -488,22 +501,11 @@
                                                      MaxInputHeight="220"
                                                      EmojiInvoked="CommunityField_EmojiInvoked"/>
                     </StackPanel>
-                </ScrollViewer>
-
-                <Border x:Name="CommunityEmojiDock"
-                        Grid.Row="1"
-                        Height="280"
-                        Visibility="Collapsed"
-                        Background="{ThemeResource ChatDetailInputBarBackgroundBrush}"
-                        BorderBrush="{ThemeResource ChatDetailInputBarTopBorderBrush}"
-                        BorderThickness="0,1,0,0">
-                    <controls:EmojiPickerPanel x:Name="CommunityEmojiPanel"
-                                               GlyphPicked="CommunityEmojiPanel_GlyphPicked"/>
-                </Border>
-            </Grid>
+            </ScrollViewer>
 
             <!-- Circular FAB: next glyph, then confirm glyph. -->
             <Button x:Name="CreateFabButton"
+                    Grid.Row="0"
                     Width="56" Height="56"
                     HorizontalAlignment="Right"
                     VerticalAlignment="Bottom"
@@ -529,6 +531,28 @@
                           FontSize="20"
                           Foreground="White"/>
             </Button>
+
+            <Border x:Name="GroupEmojiDock"
+                    Grid.Row="1"
+                    Height="280"
+                    Visibility="Collapsed"
+                    Background="{ThemeResource ChatDetailInputBarBackgroundBrush}"
+                    BorderBrush="{ThemeResource ChatDetailPaneSeparatorBrush}"
+                    BorderThickness="0,1,0,0">
+                <controls:EmojiPickerPanel x:Name="GroupEmojiPanel"
+                                           GlyphPicked="GroupEmojiPanel_GlyphPicked"/>
+            </Border>
+
+            <Border x:Name="CommunityEmojiDock"
+                    Grid.Row="1"
+                    Height="280"
+                    Visibility="Collapsed"
+                    Background="{ThemeResource ChatDetailInputBarBackgroundBrush}"
+                    BorderBrush="{ThemeResource ChatDetailPaneSeparatorBrush}"
+                    BorderThickness="0,1,0,0">
+                <controls:EmojiPickerPanel x:Name="CommunityEmojiPanel"
+                                           GlyphPicked="CommunityEmojiPanel_GlyphPicked"/>
+            </Border>
         </Grid>
 
         <!-- Replaces create header + both group pivots (and FAB) in the form column. -->

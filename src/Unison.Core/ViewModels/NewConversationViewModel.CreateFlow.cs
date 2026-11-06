@@ -6,6 +6,7 @@
 // =============================================================================
 using System;
 using System.Collections.ObjectModel;
+using System.Collections.Specialized;
 using System.Diagnostics;
 using System.Threading.Tasks;
 using System.Windows.Input;
@@ -43,6 +44,9 @@ namespace Unison.Core.ViewModels
         public ObservableCollection<ChatItem> SelectedMembers { get; } =
             new ObservableCollection<ChatItem>();
 
+        /// <summary>How many contacts are checked on the members pivot.</summary>
+        public int SelectedMembersCount => SelectedMembers.Count;
+
         public ICommand CreateNextCommand { get; private set; }
 
         public ICommand CreateBackCommand { get; private set; }
@@ -65,6 +69,9 @@ namespace Unison.Core.ViewModels
 
         /// <summary>Closes the group-permissions overlay.</summary>
         public ICommand CloseGroupPermissionsCommand { get; private set; }
+
+        /// <summary>Info step → members pivot (first PivotItem).</summary>
+        public ICommand ManageGroupMembersCommand { get; private set; }
 
         public NewConversationCreateFlow CreateFlow
         {
@@ -333,7 +340,17 @@ namespace Unison.Core.ViewModels
             EditGroupEphemeralCommand = new RelayCommand(() => _ = EditGroupEphemeralAsync());
             OpenGroupPermissionsCommand = new RelayCommand(() => IsGroupPermissionsOpen = true);
             CloseGroupPermissionsCommand = new RelayCommand(() => IsGroupPermissionsOpen = false);
+            ManageGroupMembersCommand = new RelayCommand(
+                () => GroupStepIndex = 0,
+                () => IsCreateGroup);
+            SelectedMembers.CollectionChanged -= SelectedMembers_CollectionChanged;
+            SelectedMembers.CollectionChanged += SelectedMembers_CollectionChanged;
             RefreshCreateChrome();
+        }
+
+        private void SelectedMembers_CollectionChanged(object sender, NotifyCollectionChangedEventArgs e)
+        {
+            OnPropertyChanged(nameof(SelectedMembersCount));
         }
 
         private async Task PickCommunityPhotoAsync()

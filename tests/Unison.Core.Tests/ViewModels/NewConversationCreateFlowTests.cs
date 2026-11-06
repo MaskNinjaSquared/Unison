@@ -207,6 +207,26 @@ namespace Unison.Core.Tests.ViewModels
         }
 
         [Fact]
+        public void SelectedMembersCount_tracks_selection_and_manage_returns_to_members_step()
+        {
+            var vm = CreateVm();
+            vm.NewGroupCommand.Execute(null);
+            Assert.Equal(0, vm.SelectedMembersCount);
+
+            vm.SelectedMembers.Add(new ChatItem { JID = "a@s.whatsapp.net", Name = "A" });
+            vm.SelectedMembers.Add(new ChatItem { JID = "b@s.whatsapp.net", Name = "B" });
+            Assert.Equal(2, vm.SelectedMembersCount);
+
+            vm.CreateNextCommand.Execute(null);
+            Assert.Equal(1, vm.GroupStepIndex);
+
+            vm.ManageGroupMembersCommand.Execute(null);
+            Assert.Equal(0, vm.GroupStepIndex);
+            Assert.Equal(NewConversationCreateFlow.Group, vm.CreateFlow);
+            Assert.Equal(2, vm.SelectedMembersCount);
+        }
+
+        [Fact]
         public void Group_permissions_overlay_back_keeps_info_step()
         {
             var vm = CreateVm();

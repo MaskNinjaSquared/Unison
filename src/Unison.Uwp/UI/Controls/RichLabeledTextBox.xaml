@@ -6,15 +6,14 @@
     x:Name="Root">
 
     <!--
-      Labeled field that keeps each theme's TextBox chrome (search-box brushes) while
-      hosting ChatComposerInput for emoji-capable text. Emoji glyph raises EmojiInvoked
-      so the host that owns the emoji dock can subscribe.
+      Unison / WhatsApp: label inside the input chrome, emoji aligned with the text.
+      ChatComposerInput stays transparent so focus/typing does not darken the fill.
     -->
     <Border Background="{ThemeResource ChatListSearchBackgroundBrush}"
-            BorderBrush="{ThemeResource ChatDetailInputBarTopBorderBrush}"
+            BorderBrush="{ThemeResource ChatListSearchBorderBrush}"
             BorderThickness="1"
             CornerRadius="4"
-            Padding="12,8,4,8"
+            Padding="12,10,8,10"
             MinHeight="{Binding ElementName=Root, Path=MinBoxHeight}">
         <Grid>
             <Grid.ColumnDefinitions>
@@ -31,7 +30,7 @@
                        FontSize="12"
                        FontFamily="{StaticResource MainFont}"
                        Foreground="{ThemeResource ChatListSearchPlaceholderBrush}"
-                       Margin="0,0,0,2"
+                       Margin="0,0,0,4"
                        TextWrapping="NoWrap"
                        TextTrimming="CharacterEllipsis"/>
 
@@ -42,7 +41,7 @@
                                         AcceptsReturn="{Binding ElementName=Root, Path=AcceptsReturn}"
                                         TextWrapping="{Binding ElementName=Root, Path=TextWrapping}"
                                         BorderThickness="0"
-                                        Padding="0,2,0,2"
+                                        Padding="0,2,4,2"
                                         MinHeight="28"
                                         MaxHeight="{Binding ElementName=Root, Path=MaxInputHeight}"
                                         VerticalAlignment="Stretch"
@@ -54,11 +53,11 @@
                                         ScrollViewer.HorizontalScrollBarVisibility="Disabled"/>
 
             <Button Grid.Column="1"
-                    Grid.RowSpan="2"
+                    Grid.Row="1"
                     Style="{StaticResource ModernIconButtonStyle}"
                     Width="36"
                     Height="36"
-                    VerticalAlignment="Top"
+                    VerticalAlignment="Center"
                     Margin="4,0,0,0"
                     Click="EmojiButton_Click"
                     AutomationProperties.Name="Emoji">
