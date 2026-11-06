@@ -46,7 +46,165 @@ namespace Unison.Core.Tests.ViewModels
         }
 
         [Fact]
-        public async Task Group_confirm_shows_not_implemented_and_stays_open()
+        public void Group_confirm_creates_through_the_facade_and_opens_the_chat()
+        {
+            var groups = new FakeGroups
+            {
+                NextResult = new GroupCreateResult { GroupJid = "120363000000000003@g.us" }
+            };
+            var chats = new RecordingChats();
+            var notifications = new RecordingNotifications();
+            var vm = CreateVm(groups: groups, chats: chats, notifications: notifications);
+            string opened = null;
+            vm.ChatOpenRequested += (s, jid) => opened = jid;
+            vm.Open();
+            vm.NewGroupCommand.Execute(null);
+            vm.SelectedMembers.Add(new ChatItem { JID = "a@s.whatsapp.net", Name = "A" });
+            vm.CreateNextCommand.Execute(null);
+            vm.GroupName = "Família";
+            vm.GroupEphemeralDuration = GroupEphemeralDuration.Days90;
+
+            vm.CreateNextCommand.Execute(null);
+
+            Assert.True(SpinWait.SpinUntil(() => opened != null, TimeSpan.FromSeconds(2)));
+            Assert.Equal("120363000000000003@g.us", opened);
+            Assert.Equal("Família", groups.LastGroup.Subject);
+            Assert.Equal(new[] { "a@s.whatsapp.net" }, groups.LastGroup.ParticipantJids);
+            Assert.Equal(GroupEphemeralDuration.Days90, groups.LastGroup.Ephemeral);
+            Assert.Equal(NewConversationCreateFlow.None, vm.CreateFlow);
+            Assert.Equal("120363000000000003@g.us", chats.LastStartJid);
+            Assert.Equal("Família", chats.LastStartDisplayName);
+            Assert.True(SpinWait.SpinUntil(() => notifications.LastBody != null, TimeSpan.FromSeconds(2)));
+            Assert.Equal("Group created", notifications.LastTitle);
+            Assert.Equal("Família created successfully.", notifications.LastBody);
+        }
+
+        [Fact]
+        public async Task Group_confirm_refused_shows_why_and_stays_on_info()
+        {
+            var dialogs = new FakeDialogs();
+            var groups = new FakeGroups
+            {
+                NextResult = GroupCreateResult.Failed(GroupCreateResult.ReasonEmptySubject)
+            };
+            var vm = CreateVm(dialogs, groups: groups);
+            vm.NewGroupCommand.Execute(null);
+            vm.CreateNextCommand.Execute(null);
+
+            vm.CreateNextCommand.Execute(null);
+            await dialogs.WaitShownAsync();
+
+            Assert.Equal("Enter a group name.", dialogs.LastContent);
+            Assert.Equal(NewConversationCreateFlow.Group, vm.CreateFlow);
+            Assert.Equal(1, vm.GroupStepIndex);
+        }
+
+        [Fact]
+        public async Task Create_failure_dialog_is_shown_on_the_ui_dispatcher()
+        {
+            var dispatcher = new CountingDispatcher();
+            var dialogs = new FakeDialogs { IsOnUi = () => dispatcher.IsRunningAction };
+            var groups = new FakeGroups
+            {
+                NextResult = GroupCreateResult.Failed(GroupCreateResult.ReasonNotConnected)
+            };
+            var vm = CreateVm(dialogs, groups: groups, dispatcher: dispatcher);
+            vm.NewCommunityCommand.Execute(null);
+            vm.CommunityName = "Bairro";
+
+            vm.CreateNextCommand.Execute(null);
+            await dialogs.WaitShownAsync();
+
+            Assert.True(dialogs.ShownOnUi);
+        }
+
+        [Fact]
+        public void Group_confirm_without_members_still_creates()
+        {
+            var groups = new FakeGroups
+            {
+                NextResult = new GroupCreateResult { GroupJid = "120363000000000005@g.us" }
+            };
+            var vm = CreateVm(groups: groups);
+            string opened = null;
+            vm.ChatOpenRequested += (s, jid) => opened = jid;
+            vm.Open();
+            vm.NewGroupCommand.Execute(null);
+            vm.CreateNextCommand.Execute(null);
+            vm.GroupName = "Só eu";
+
+            vm.CreateNextCommand.Execute(null);
+
+            Assert.True(SpinWait.SpinUntil(() => opened != null, TimeSpan.FromSeconds(2)));
+            Assert.Empty(groups.LastGroup.ParticipantJids);
+        }
+
+        [Fact]
+        public async Task Confirm_blocks_the_button_and_shows_busy_until_the_facade_answers()
+        {
+            var release = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var groups = new FakeGroups
+            {
+                NextResult = new GroupCreateResult { GroupJid = "120363000000000007@g.us" },
+                Gate = release.Task
+            };
+            var vm = CreateVm(groups: groups);
+            vm.Open();
+            vm.NewGroupCommand.Execute(null);
+            vm.CreateNextCommand.Execute(null);
+            vm.GroupName = "Busy";
+
+            Assert.False(vm.IsCreating);
+            Assert.True(vm.CreateNextCommand.CanExecute(null));
+
+            vm.CreateNextCommand.Execute(null);
+
+            Assert.True(SpinWait.SpinUntil(() => vm.IsCreating, TimeSpan.FromSeconds(2)));
+            Assert.False(vm.CreateNextCommand.CanExecute(null));
+            Assert.True(vm.TryHandleCreateBack());
+            Assert.Equal(NewConversationCreateFlow.Group, vm.CreateFlow);
+
+            release.TrySetResult(true);
+
+            Assert.True(SpinWait.SpinUntil(() => !vm.IsCreating, TimeSpan.FromSeconds(2)));
+            Assert.True(vm.CreateNextCommand.CanExecute(null) || vm.CreateFlow == NewConversationCreateFlow.None);
+            await Task.CompletedTask;
+        }
+
+        [Fact]
+        public void Community_confirm_creates_and_closes()
+        {
+            var groups = new FakeGroups
+            {
+                NextResult = new GroupCreateResult { GroupJid = "120363000000000004@g.us" }
+            };
+            var notifications = new RecordingNotifications();
+            var chats = new RecordingChats();
+            var vm = CreateVm(groups: groups, chats: chats, notifications: notifications);
+            vm.Open();
+            vm.NewCommunityCommand.Execute(null);
+            vm.CommunityName = "Bairro";
+            vm.CommunityDescription = "Avisos";
+
+            vm.CreateNextCommand.Execute(null);
+
+            Assert.True(SpinWait.SpinUntil(
+                () => vm.CreateFlow == NewConversationCreateFlow.None,
+                TimeSpan.FromSeconds(2)));
+            Assert.True(SpinWait.SpinUntil(() => chats.LastCommunityJid != null, TimeSpan.FromSeconds(2)));
+            Assert.Equal("120363000000000004@g.us", chats.LastCommunityJid);
+            Assert.Equal("Bairro", chats.LastCommunityDisplayName);
+            Assert.Null(chats.LastStartJid);
+            Assert.Equal("Bairro", groups.LastCommunity.Subject);
+            Assert.Equal("Avisos", groups.LastCommunity.Description);
+            Assert.True(SpinWait.SpinUntil(() => groups.ForcedListings == 1, TimeSpan.FromSeconds(2)));
+            Assert.True(SpinWait.SpinUntil(() => notifications.LastBody != null, TimeSpan.FromSeconds(2)));
+            Assert.Equal("Community created", notifications.LastTitle);
+            Assert.Equal("Bairro created successfully.", notifications.LastBody);
+        }
+
+        [Fact]
+        public async Task Group_confirm_without_group_service_shows_not_implemented_and_stays_open()
         {
             var dialogs = new FakeDialogs();
             var vm = CreateVm(dialogs);
@@ -98,6 +256,84 @@ namespace Unison.Core.Tests.ViewModels
             vm.ReportLayoutMinimal(true);
             Assert.False(vm.ShowCommunityIntro);
             Assert.Equal(NewConversationCreateFlow.Community, vm.CreateFlow);
+        }
+
+        [Fact]
+        public void NewChannel_opens_channel_flow_with_confirm_chrome()
+        {
+            var vm = CreateVm();
+            vm.ReportLayoutMinimal(false);
+
+            vm.NewChannelCommand.Execute(null);
+
+            Assert.Equal(NewConversationCreateFlow.Channel, vm.CreateFlow);
+            Assert.True(vm.IsCreateChannel);
+            Assert.True(vm.ShowCreateForm);
+            Assert.False(vm.ShowChannelIntro);
+            Assert.Equal("New channel", vm.HeaderTitle);
+            Assert.Equal("Confirm", vm.PrimaryActionLabel);
+            Assert.Equal("\uE73E", vm.PrimaryActionGlyph);
+            Assert.Equal("\uE8BD", vm.CreateExplainGlyph);
+            Assert.Equal(
+                "Create a channel to reach an unlimited number of people.",
+                vm.CreateExplainTitle);
+        }
+
+        [Fact]
+        public void Channel_start_persists_across_layout_minimal_toggle()
+        {
+            var vm = CreateVm();
+            vm.ReportLayoutMinimal(true);
+            vm.NewChannelCommand.Execute(null);
+            Assert.True(vm.ShowChannelIntro);
+
+            vm.StartChannelCreateCommand.Execute(null);
+            Assert.False(vm.ShowChannelIntro);
+            Assert.True(vm.ShowCreateForm);
+
+            vm.ReportLayoutMinimal(false);
+            vm.ReportLayoutMinimal(true);
+            Assert.False(vm.ShowChannelIntro);
+            Assert.Equal(NewConversationCreateFlow.Channel, vm.CreateFlow);
+        }
+
+        [Fact]
+        public void Channel_confirm_is_a_no_op_prototype()
+        {
+            var groups = new FakeGroups
+            {
+                NextResult = new GroupCreateResult { GroupJid = "120363000000000099@g.us" }
+            };
+            var vm = CreateVm(groups: groups);
+            vm.ReportLayoutMinimal(false);
+            vm.NewChannelCommand.Execute(null);
+            vm.ChannelName = "News";
+            vm.ChannelDescription = "Updates";
+
+            vm.CreateNextCommand.Execute(null);
+
+            Assert.Equal(NewConversationCreateFlow.Channel, vm.CreateFlow);
+            Assert.Null(groups.LastGroup);
+            Assert.Null(groups.LastCommunity);
+            Assert.Equal("News", vm.ChannelName);
+        }
+
+        [Fact]
+        public void Leaving_channel_flow_clears_fields()
+        {
+            var vm = CreateVm();
+            vm.ReportLayoutMinimal(true);
+            vm.NewChannelCommand.Execute(null);
+            vm.StartChannelCreateCommand.Execute(null);
+            vm.ChannelName = "News";
+            vm.ChannelPhotoBytes = new byte[] { 1 };
+
+            vm.TryHandleCreateBack();
+
+            Assert.Equal(NewConversationCreateFlow.None, vm.CreateFlow);
+            Assert.False(vm.HasStartedChannelCreate);
+            Assert.False(vm.HasChannelPhoto);
+            Assert.Equal(string.Empty, vm.ChannelName);
         }
 
         [Fact]
@@ -286,13 +522,17 @@ namespace Unison.Core.Tests.ViewModels
         private static NewConversationViewModel CreateVm(
             FakeDialogs dialogs = null,
             ILocalContactsService localContacts = null,
-            IFilePicker filePicker = null)
+            IFilePicker filePicker = null,
+            IGroupService groups = null,
+            CountingDispatcher dispatcher = null,
+            IChatService chats = null,
+            INotificationService notifications = null)
         {
-            var dispatcher = new CountingDispatcher();
+            dispatcher = dispatcher ?? new CountingDispatcher();
             return new NewConversationViewModel(
                 new ChatStateStore(dispatcher),
                 new StubContacts(),
-                chats: null,
+                chats: chats,
                 profile: null,
                 jids: new SelfJids(),
                 dialogs: dialogs ?? new FakeDialogs(),
@@ -300,7 +540,192 @@ namespace Unison.Core.Tests.ViewModels
                 strings: null,
                 dispatcher: dispatcher,
                 localContacts: localContacts,
-                filePicker: filePicker);
+                filePicker: filePicker,
+                groups: groups,
+                notifications: notifications);
+        }
+
+        private sealed class RecordingNotifications : INotificationService
+        {
+            public string LastTitle { get; private set; }
+
+            public string LastBody { get; private set; }
+
+            public void ShowToast(string title, string body)
+            {
+                LastTitle = title;
+                LastBody = body;
+            }
+
+            public void Initialize() { }
+
+            public void NotifyIncomingMessage(
+                string chatJid,
+                string chatName,
+                string senderName,
+                string preview,
+                bool isGroup,
+                bool isMuted,
+                bool suppressToast,
+                int totalUnread,
+                string avatarUrl = null,
+                int chatUnread = -1,
+                bool isCommunityAnnounce = false,
+                bool isFavorite = false,
+                bool isChannel = false)
+            {
+            }
+
+            public void NotifyCallAlert(
+                string title,
+                string body,
+                string chatJid = null,
+                bool updateLiveTile = false,
+                bool isFavorite = false)
+            {
+            }
+
+            public void RefreshUnreadState(System.Collections.Generic.IEnumerable<ChatItem> chats) { }
+
+            public void UpdateBadge(int totalUnread) { }
+
+            public void ClearAll() { }
+
+            public void OnNotificationsConfigChanged() { }
+        }
+
+        private sealed class FakeGroups : IGroupService
+        {
+            public GroupCreateResult NextResult { get; set; }
+
+            /// <summary>When set, create waits on this before answering (busy-state tests).</summary>
+            public Task Gate { get; set; }
+
+            public GroupCreateRequest LastGroup { get; private set; }
+
+            public CommunityCreateRequest LastCommunity { get; private set; }
+
+            public int ForcedListings { get; private set; }
+
+            public async Task<GroupCreateResult> CreateGroupAsync(GroupCreateRequest request)
+            {
+                LastGroup = request;
+                if (Gate != null)
+                {
+                    await Gate.ConfigureAwait(false);
+                }
+
+                return NextResult;
+            }
+
+            public async Task<GroupCreateResult> CreateCommunityAsync(CommunityCreateRequest request)
+            {
+                LastCommunity = request;
+                if (Gate != null)
+                {
+                    await Gate.ConfigureAwait(false);
+                }
+
+                return NextResult;
+            }
+
+            public Task QueryAllGroupsAsync(bool force)
+            {
+                if (force)
+                {
+                    ForcedListings++;
+                }
+
+                return Task.CompletedTask;
+            }
+
+            public Task QueryAllGroupsAsync() => Task.CompletedTask;
+
+            public Task RefreshGroupSendPermissionsAsync(
+                string groupJid, bool includeRoster = false, CancellationToken cancellationToken = default) =>
+                Task.CompletedTask;
+
+            public Task NoteSelfGroupMembershipAsync(
+                string groupJid, IReadOnlyList<string> participantJids, bool stillMember) =>
+                Task.CompletedTask;
+
+            public Task EnsureGroupRosterLoadedFromStoreAsync(string groupJid) => Task.CompletedTask;
+
+            public GroupMember TryGetMember(string groupJid, string memberJid) => null;
+
+            public void NoteMember(string groupJid, GroupMemberHint hint) { }
+
+            public void RemoveMember(string groupJid, string memberJid, DateTime atUtc) { }
+
+            public void ApplyRosterEvent(GroupRosterEvent change) { }
+
+            public Task EnsureMembersAsync(string groupJid, IReadOnlyList<string> memberJids) =>
+                Task.CompletedTask;
+
+            public Task EnsureFullRosterAsync(
+                string groupJid, string reason, CancellationToken cancellationToken = default) =>
+                Task.CompletedTask;
+
+            public Task EnsureHighQualityGroupAvatarAsync(ChatItem chat) => Task.CompletedTask;
+
+            public Task<GroupMemberAvatarFetchResult> FetchGroupMemberAvatarAsync(
+                GroupMember member, CancellationToken token) =>
+                Task.FromResult<GroupMemberAvatarFetchResult>(null);
+
+            public void ApplyGroupMemberAvatarOutcome(string memberJid, GroupMemberAvatarFetchResult result) { }
+
+            public bool MemberMatches(GroupMember member, string candidateJid) => false;
+
+            public IReadOnlyList<string> MembershipPersonKeys(GroupMember member) => Array.Empty<string>();
+
+            public void EnrichMember(
+                GroupMember member,
+                string participantJid,
+                ChatItem groupChat,
+                ParticipantResolutionContext context,
+                string nameHint = null) { }
+
+            public string ResolveMemberAvatar(
+                string participantJid,
+                ChatItem groupChat,
+                ParticipantResolutionContext context,
+                GroupMember rosterMember = null) => null;
+
+            public string ResolveMemberDisplayName(
+                string participantJid,
+                ChatItem groupChat,
+                ParticipantResolutionContext context,
+                string nameHint = null,
+                GroupMember rosterMember = null) => null;
+
+            public void InvalidateParticipantDirectChatIndex() { }
+
+            public IGroupParticipantLookup CreateOpenChatParticipantLookup(Func<string> selfDisplayLabel) => null;
+
+            public void EnrichMember(
+                GroupMember member, string participantJid, ChatItem groupChat, string nameHint = null) { }
+
+            public Task ApplyGroupMetadataAsync(string groupJid, GroupMetadataSnapshot metadata) =>
+                Task.CompletedTask;
+
+            public Task ApplyGroupMetadataFromResponseAsync(string groupJid, Unison.Baileys.Protocol.BinaryNode response) =>
+                Task.CompletedTask;
+
+            public void NotifyGroupListingDue() { }
+
+            public Task LeaveGroupAsync(string groupJid) => Task.CompletedTask;
+
+            public Task<string> TryGetCreatedByYouCaptionAsync(
+                string groupJid, string dateTemplate, CancellationToken cancellationToken = default) =>
+                Task.FromResult<string>(null);
+
+            public Task RefreshCommunityJoinableGroupsAsync(
+                ChatItem communityHub, CancellationToken cancellationToken = default) =>
+                Task.CompletedTask;
+
+            public Task<bool> JoinGroupAsync(
+                string groupJid, string inviteCode = null, CancellationToken cancellationToken = default) =>
+                Task.FromResult(false);
         }
 
         private sealed class FakeFilePicker : IFilePicker
@@ -383,11 +808,19 @@ namespace Unison.Core.Tests.ViewModels
 
             public bool MessageShown { get; private set; }
 
+            public string LastContent { get; private set; }
+
             public Task WaitShownAsync() => _shown.Task;
+
+            public Func<bool> IsOnUi { get; set; }
+
+            public bool ShownOnUi { get; private set; }
 
             public Task ShowMessageAsync(string title, string content, string closeButtonText)
             {
+                ShownOnUi = IsOnUi != null && IsOnUi();
                 MessageShown = true;
+                LastContent = content;
                 _shown.TrySetResult(true);
                 return Task.CompletedTask;
             }

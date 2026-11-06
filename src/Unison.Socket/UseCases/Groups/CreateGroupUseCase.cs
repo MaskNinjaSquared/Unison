@@ -43,25 +43,42 @@ namespace Unison.Socket.UseCases.Groups
             IEnumerable<string> participants,
             TimeSpan? timeout = null)
         {
-            if (string.IsNullOrEmpty(subject))
-            {
-                throw new ArgumentException("A subject is required", nameof(subject));
-            }
-
-            var create = new BinaryNode(
-                "create",
-                new Dictionary<string, string>
-                {
-                    { "subject", subject },
-                    { "key", MessageContent.GenerateMessageId(null) }
-                },
-                GroupQuery.Participants(participants));
+            var create = BuildCreateNode(subject, participants, MessageContent.GenerateMessageId(null));
 
             var response = await GroupQuery
                 .ExecuteAsync(_connection, GroupQuery.GroupServer, "set", new List<BinaryNode> { create }, timeout)
                 .ConfigureAwait(false);
 
-            return GroupMetadataParser.Parse(response);
+            var created = GroupMetadataParser.Parse(response);
+            if (created == null)
+            {
+                throw new InvalidOperationException("The server answered the group create without a group");
+            }
+
+            return created;
+        }
+
+        /// <summary>The create node exactly as rc14 sends it; no participants is a group of one (test seam).</summary>
+        public static BinaryNode BuildCreateNode(string subject, IEnumerable<string> participants, string key)
+        {
+            if (string.IsNullOrEmpty(subject))
+            {
+                throw new ArgumentException("A subject is required", nameof(subject));
+            }
+
+            if (string.IsNullOrEmpty(key))
+            {
+                throw new ArgumentException("A key is required", nameof(key));
+            }
+
+            return new BinaryNode(
+                "create",
+                new Dictionary<string, string>
+                {
+                    { "subject", subject },
+                    { "key", key }
+                },
+                GroupQuery.Participants(participants));
         }
     }
 }

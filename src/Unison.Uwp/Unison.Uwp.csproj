@@ -312,6 +312,7 @@
     <Compile Include="Services\AppActivationRouter.cs" />
     <Compile Include="Services\UriLauncherService.cs" />
     <Compile Include="Services\FilePickerService.cs" />
+    <Compile Include="Services\ProfilePictureEncoder.cs" />
     <Compile Include="Services\CopyService.cs" />
     <Compile Include="Services\AudioExportService.cs" />
     <Compile Include="UI\Controls\ChatAudioOverflowMenu.cs" />
@@ -527,6 +528,18 @@
     </Compile>
     <Compile Include="Shell\WhatsAppLegacy\Views\StatusComposerView.xaml.cs">
       <DependentUpon>StatusComposerView.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="UI\Controls\CreateChannelInfoContent.xaml.cs">
+      <DependentUpon>CreateChannelInfoContent.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="UI\Controls\CreateChannelIntroOverlay.xaml.cs">
+      <DependentUpon>CreateChannelIntroOverlay.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="UI\Controls\CreateChannelFormOverlay.xaml.cs">
+      <DependentUpon>CreateChannelFormOverlay.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="UI\Controls\CreateChannelExplainOverlay.xaml.cs">
+      <DependentUpon>CreateChannelExplainOverlay.xaml</DependentUpon>
     </Compile>
     <Compile Include="UI\Controls\CreateConversationFlowView.xaml.cs">
       <DependentUpon>CreateConversationFlowView.xaml</DependentUpon>
@@ -1303,6 +1316,22 @@
       <SubType>Designer</SubType>
     </Page>
     <Page Include="UI\Controls\RichLabeledTextBox.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Include="UI\Controls\CreateChannelInfoContent.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Include="UI\Controls\CreateChannelIntroOverlay.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Include="UI\Controls\CreateChannelFormOverlay.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Include="UI\Controls\CreateChannelExplainOverlay.xaml">
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </Page>

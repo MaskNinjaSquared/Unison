@@ -55,6 +55,19 @@ namespace Unison.Socket.UseCases.Groups
             return connection.QueryAsync(iq, timeout);
         }
 
+        /// <summary>Participant nodes for an operation that means nothing without someone to act on.</summary>
+        public static List<BinaryNode> RequiredParticipants(IEnumerable<string> jids)
+        {
+            var nodes = Participants(jids);
+            if (nodes.Count == 0)
+            {
+                throw new ArgumentException("At least one participant is required", nameof(jids));
+            }
+
+            return nodes;
+        }
+
+        /// <summary>Participant nodes, possibly none: rc14 creates a group with only its owner.</summary>
         public static List<BinaryNode> Participants(IEnumerable<string> jids)
         {
             var nodes = new List<BinaryNode>();
@@ -71,11 +84,6 @@ namespace Unison.Socket.UseCases.Groups
                         "participant",
                         new Dictionary<string, string> { { "jid", jid } }));
                 }
-            }
-
-            if (nodes.Count == 0)
-            {
-                throw new ArgumentException("At least one participant is required", nameof(jids));
             }
 
             return nodes;

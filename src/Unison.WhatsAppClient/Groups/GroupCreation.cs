@@ -1,0 +1,212 @@
+// =============================================================================
+// GroupCreation
+//
+// Creates a group or community from the New Conversation forms and applies the
+// follow-ups the form asked for. GroupFacade delegates here.
+//
+// Order matters: the picture and the disappearing timer are addressed to the
+// new JID, so they only run once the create came back. Either one failing
+// leaves a group that exists; that is reported, not rolled back.
+// =============================================================================
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.Threading.Tasks;
+using Unison.Core.Contracts;
+using Unison.Core.Models;
+using Unison.WhatsAppClient.Abstractions;
+
+namespace Unison.WhatsAppClient.Groups
+{
+    public sealed class GroupCreation
+    {
+        private const string ReasonEmptySubject = GroupCreateResult.ReasonEmptySubject;
+        private const string ReasonNotConnected = GroupCreateResult.ReasonNotConnected;
+        private const string ReasonNoGroup = GroupCreateResult.ReasonNoGroup;
+
+        private readonly IGroupWireActions _wire;
+        private readonly Func<string, string, Task> _nameGroup;
+        private readonly IProfilePictureEncoder _pictures;
+
+        /// <param name="nameGroup">Files (jid, subject) in the name caches the chat list reads.</param>
+        public GroupCreation(
+            IGroupWireActions wire,
+            Func<string, string, Task> nameGroup,
+            IProfilePictureEncoder pictures = null)
+        {
+            _wire = wire ?? throw new ArgumentNullException(nameof(wire));
+            _nameGroup = nameGroup ?? throw new ArgumentNullException(nameof(nameGroup));
+            _pictures = pictures;
+        }
+
+        public async Task<GroupCreateResult> CreateGroupAsync(GroupCreateRequest request)
+        {
+            string subject = request?.Subject?.Trim();
+            if (string.IsNullOrEmpty(subject))
+            {
+                return GroupCreateResult.Failed(ReasonEmptySubject);
+            }
+
+            // WhatsApp lets the creator start a group alone and add people later.
+            List<string> participants = DistinctJids(request.ParticipantJids);
+
+            if (!_wire.IsHandshakeComplete)
+            {
+                return GroupCreateResult.Failed(ReasonNotConnected);
+            }
+
+            Debug.WriteLine("[GroupCreation] create group with " + participants.Count + " participant(s)");
+            string jid;
+            try
+            {
+                jid = await _wire.CreateGroupAsync(subject, participants).ConfigureAwait(false);
+                Debug.WriteLine("[GroupCreation] created group " + (jid ?? "(none)"));
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[GroupCreation] CreateGroupAsync: " + ex.Message);
+                return GroupCreateResult.Failed(ex.Message);
+            }
+
+            if (string.IsNullOrWhiteSpace(jid))
+            {
+                return GroupCreateResult.Failed(ReasonNoGroup);
+            }
+
+            var result = new GroupCreateResult { GroupJid = jid };
+            await NameAsync(jid, subject).ConfigureAwait(false);
+            result.PhotoFailed = !await TrySetPictureAsync(jid, request.PhotoBytes).ConfigureAwait(false);
+            result.EphemeralFailed = !await TrySetEphemeralAsync(jid, request.Ephemeral.ToSeconds())
+                .ConfigureAwait(false);
+            return result;
+        }
+
+        public async Task<GroupCreateResult> CreateCommunityAsync(CommunityCreateRequest request)
+        {
+            string subject = request?.Subject?.Trim();
+            if (string.IsNullOrEmpty(subject))
+            {
+                return GroupCreateResult.Failed(ReasonEmptySubject);
+            }
+
+            if (!_wire.IsHandshakeComplete)
+            {
+                return GroupCreateResult.Failed(ReasonNotConnected);
+            }
+
+            string jid;
+            try
+            {
+                jid = await _wire
+                    .CreateCommunityAsync(subject, request.Description?.Trim() ?? string.Empty)
+                    .ConfigureAwait(false);
+                Debug.WriteLine("[GroupCreation] created community " + (jid ?? "(none)"));
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[GroupCreation] CreateCommunityAsync: " + ex.Message);
+                return GroupCreateResult.Failed(ex.Message);
+            }
+
+            if (string.IsNullOrWhiteSpace(jid))
+            {
+                return GroupCreateResult.Failed(ReasonNoGroup);
+            }
+
+            var result = new GroupCreateResult { GroupJid = jid };
+            await NameAsync(jid, subject).ConfigureAwait(false);
+            result.PhotoFailed = !await TrySetPictureAsync(jid, request.PhotoBytes).ConfigureAwait(false);
+            return result;
+        }
+
+        /// <summary>
+        /// The w:gp2 create notification names the group too, but only after a round trip; the
+        /// chat opened right after the create would show its JID until then.
+        /// </summary>
+        private async Task NameAsync(string jid, string subject)
+        {
+            try
+            {
+                await _nameGroup(jid, subject).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[GroupCreation] subject cache: " + ex.Message);
+            }
+        }
+
+        /// <returns>True when there was nothing to set or the picture went up.</returns>
+        private async Task<bool> TrySetPictureAsync(string jid, byte[] photo)
+        {
+            if (photo == null || photo.Length == 0)
+            {
+                return true;
+            }
+
+            if (_pictures == null)
+            {
+                Debug.WriteLine("[GroupCreation] picture skipped: no encoder");
+                return false;
+            }
+
+            try
+            {
+                byte[] jpeg = await _pictures.EncodeSquareJpegAsync(photo).ConfigureAwait(false);
+                if (jpeg == null || jpeg.Length == 0)
+                {
+                    Debug.WriteLine("[GroupCreation] picture skipped: could not decode");
+                    return false;
+                }
+
+                await _wire.UpdateGroupPictureAsync(jid, jpeg).ConfigureAwait(false);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[GroupCreation] picture: " + ex.Message);
+                return false;
+            }
+        }
+
+        /// <returns>True when the timer is off or the server took it.</returns>
+        private async Task<bool> TrySetEphemeralAsync(string jid, int seconds)
+        {
+            if (seconds <= 0)
+            {
+                return true;
+            }
+
+            try
+            {
+                await _wire.UpdateGroupEphemeralAsync(jid, seconds).ConfigureAwait(false);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[GroupCreation] ephemeral: " + ex.Message);
+                return false;
+            }
+        }
+
+        private static List<string> DistinctJids(IReadOnlyList<string> jids)
+        {
+            var list = new List<string>();
+            if (jids == null)
+            {
+                return list;
+            }
+
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            for (int i = 0; i < jids.Count; i++)
+            {
+                string jid = jids[i]?.Trim();
+                if (!string.IsNullOrEmpty(jid) && seen.Add(jid))
+                {
+                    list.Add(jid);
+                }
+            }
+
+            return list;
+        }
+    }
+}

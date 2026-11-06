@@ -1,4 +1,4 @@
-<UserControl
+﻿<UserControl
     x:Class="Unison.Uwp.Shell.WhatsAppLegacy.Controls.CreateConversationFlowView"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
@@ -86,6 +86,9 @@
     </UserControl.Resources>
 
     <Grid x:Name="LayoutRoot" Background="{ThemeResource ChatListBackgroundBrush}">
+        <!-- Collapses while IsCreating so only the centered ProgressRing remains. -->
+        <Grid x:Name="CreateContentHost"
+              Visibility="{Binding IsCreating, Converter={StaticResource InvertedBooleanToVisibilityConverter}}">
         <Grid.ColumnDefinitions>
             <ColumnDefinition x:Name="CreateFormColumn" Width="*"/>
             <ColumnDefinition x:Name="CreateExplainColumn" Width="0" MinWidth="0"/>
@@ -163,6 +166,10 @@
             </Button>
         </Grid>
 
+        <controls:CreateChannelIntroOverlay Grid.Row="1"
+                                            Grid.RowSpan="2"
+                                            Visibility="{Binding ShowChannelIntro, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+
         <!-- Form: emoji docks sit outside Pivot/community padding (full form width). -->
         <Grid Grid.Row="1"
               Grid.Column="0"
@@ -231,13 +238,16 @@
                 <PivotItem x:Uid="CreateGroup_InfoHeader" Header="Group details">
                         <ScrollViewer x:Name="GroupInfoScroll"
                                       VerticalScrollBarVisibility="Auto"
+                                      Padding="0,50,0,50"
                                       HorizontalScrollMode="Disabled"
                                       HorizontalScrollBarVisibility="Disabled">
-                            <Grid Padding="16,24" HorizontalAlignment="Stretch">
-                                <StackPanel MaxWidth="600" HorizontalAlignment="Stretch">
+                            <Grid Padding="16,24"
+                                  HorizontalAlignment="Stretch">
+                                <StackPanel MaxWidth="600"
+                                            HorizontalAlignment="Stretch">
                                 <!-- Camera on the right edge (same column as ephemeral status glyph). -->
-                                <Grid MinHeight="160" HorizontalAlignment="Stretch">
-                                    <toolkit:DropShadowPanel BlurRadius="24"
+                                <Grid MinHeight="160" HorizontalAlignment="Center" Margin="0,0,0,50">
+                                    <toolkit:DropShadowPanel BlurRadius="80"
                                                              OffsetX="0"
                                                              OffsetY="4"
                                                              ShadowOpacity="0.45"
@@ -281,7 +291,7 @@
                                     </toolkit:DropShadowPanel>
                                     <controls:ProfilePhotoButton x:Name="GroupPhotoButton"
                                                                  HorizontalAlignment="Right"
-                                                                 VerticalAlignment="Center"/>
+                                                                 VerticalAlignment="Bottom"/>
                                 </Grid>
 
                                 <local:LegacyEmojiLabeledTextBox x:Name="GroupNameField"
@@ -289,16 +299,16 @@
                                                            Margin="0,20,0,0"
                                                            Header="Group name"
                                                            PlaceholderText="Group name"
-                                                           Text="{Binding GroupName, Mode=TwoWay}"
+                                                           Text="{Binding GroupName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                                            AcceptsReturn="False"
                                                            TextWrapping="NoWrap"
                                                            MaxInputHeight="36"
-                                                           MinBoxHeight="36"
+                                                           MinBoxHeight="40"
                                                            HorizontalAlignment="Stretch"
                                                            EmojiInvoked="GroupField_EmojiInvoked"/>
 
                                 <Button Margin="0,20,0,0"
-                                        Padding="4,12"
+                                        Padding="10,12,20,12"
                                         HorizontalAlignment="Stretch"
                                         HorizontalContentAlignment="Stretch"
                                         Background="Transparent"
@@ -309,7 +319,8 @@
                                             <ColumnDefinition Width="*"/>
                                             <ColumnDefinition Width="Auto"/>
                                         </Grid.ColumnDefinitions>
-                                        <StackPanel VerticalAlignment="Center" HorizontalAlignment="Stretch">
+                                        <StackPanel VerticalAlignment="Center"
+                                                    HorizontalAlignment="Stretch">
                                             <TextBlock x:Uid="CreateGroup_EphemeralTitle"
                                                        Text="Temporary messages"
                                                        FontSize="16"
@@ -337,7 +348,8 @@
                                 </Button>
 
                                 <Button Margin="0,4,0,0"
-                                        Padding="4,12"
+                                        Height="65"
+                                        Padding="10,12,20,12"
                                         HorizontalAlignment="Stretch"
                                         HorizontalContentAlignment="Stretch"
                                         Background="Transparent"
@@ -372,7 +384,7 @@
                                         <ColumnDefinition Width="*"/>
                                         <ColumnDefinition Width="Auto"/>
                                     </Grid.ColumnDefinitions>
-                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                    <StackPanel Orientation="Horizontal" Margin="10" VerticalAlignment="Center">
                                         <TextBlock Text="{Binding SelectedMembersCount}"
                                                    FontSize="14"
                                                    FontFamily="{StaticResource MainFont}"
@@ -484,7 +496,7 @@
                                                      Margin="0,20,0,0"
                                                      Header="Community name"
                                                      PlaceholderText="Community name"
-                                                     Text="{Binding CommunityName, Mode=TwoWay}"
+                                                     Text="{Binding CommunityName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                                      MinBoxHeight="56"
                                                      EmojiInvoked="CommunityField_EmojiInvoked"/>
                         <local:LegacyEmojiLabeledTextBox x:Name="CommunityDescriptionField"
@@ -492,7 +504,7 @@
                                                    Margin="0,12,0,0"
                                                    Header="Community description"
                                                    PlaceholderText="Community description"
-                                                   Text="{Binding CommunityDescription, Mode=TwoWay}"
+                                                   Text="{Binding CommunityDescription, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                                    AcceptsReturn="True"
                                                    TextWrapping="Wrap"
                                                    InputVerticalContentAlignment="Top"
@@ -501,6 +513,11 @@
                                                    EmojiInvoked="CommunityField_EmojiInvoked"/>
                     </StackPanel>
             </ScrollViewer>
+
+            <controls:CreateChannelFormOverlay x:Name="ChannelFormOverlay"
+                                               Grid.Row="0"
+                                               Grid.RowSpan="2"
+                                               Visibility="{Binding IsCreateChannel, Converter={StaticResource BooleanToVisibilityConverter}}"/>
 
             <Border x:Name="GroupEmojiDock"
                     Grid.Row="1"
@@ -573,34 +590,39 @@
                 Background="{ThemeResource ChatListBackgroundBrush}"
                 BorderBrush="{ThemeResource ChatDetailInputBarTopBorderBrush}"
                 BorderThickness="1,0,0,0">
-            <StackPanel HorizontalAlignment="Center"
-                        VerticalAlignment="Center"
-                        MaxWidth="420"
-                        Margin="32,24">
-                <FontIcon Glyph="{Binding CreateExplainGlyph}"
-                          FontFamily="{StaticResource IconFont}"
-                          FontSize="100"
-                          HorizontalAlignment="Center"
-                          Margin="0,0,0,20"
-                          Foreground="{ThemeResource WhatsAppTextMediumBrush}"/>
-                <TextBlock Text="{Binding CreateExplainTitle}"
-                           HorizontalAlignment="Center"
-                           TextAlignment="Center"
-                           TextWrapping="WrapWholeWords"
-                           FontSize="28"
-                           FontWeight="SemiBold"
-                           FontFamily="{StaticResource MainFontSemibold}"
-                           Foreground="{ThemeResource WhatsAppTextHighBrush}"/>
-                <TextBlock Text="{Binding CreateExplainBody}"
-                           HorizontalAlignment="Center"
-                           TextAlignment="Center"
-                           TextWrapping="WrapWholeWords"
-                           Margin="0,12,0,0"
-                           FontSize="14"
-                           LineHeight="22"
-                           FontFamily="{StaticResource MainFont}"
-                           Foreground="{ThemeResource WhatsAppTextMediumBrush}"/>
-            </StackPanel>
+            <Grid>
+                <controls:CreateChannelExplainOverlay
+                    Visibility="{Binding IsCreateChannel, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                <StackPanel HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            MaxWidth="420"
+                            Margin="32,24"
+                            Visibility="{Binding IsCreateChannel, Converter={StaticResource InvertedBooleanToVisibilityConverter}}">
+                    <FontIcon Glyph="{Binding CreateExplainGlyph}"
+                              FontFamily="{StaticResource IconFont}"
+                              FontSize="100"
+                              HorizontalAlignment="Center"
+                              Margin="0,0,0,20"
+                              Foreground="{ThemeResource WhatsAppTextMediumBrush}"/>
+                    <TextBlock Text="{Binding CreateExplainTitle}"
+                               HorizontalAlignment="Center"
+                               TextAlignment="Center"
+                               TextWrapping="WrapWholeWords"
+                               FontSize="28"
+                               FontWeight="SemiBold"
+                               FontFamily="{StaticResource MainFontSemibold}"
+                               Foreground="{ThemeResource WhatsAppTextHighBrush}"/>
+                    <TextBlock Text="{Binding CreateExplainBody}"
+                               HorizontalAlignment="Center"
+                               TextAlignment="Center"
+                               TextWrapping="WrapWholeWords"
+                               Margin="0,12,0,0"
+                               FontSize="14"
+                               LineHeight="22"
+                               FontFamily="{StaticResource MainFont}"
+                               Foreground="{ThemeResource WhatsAppTextMediumBrush}"/>
+                </StackPanel>
+            </Grid>
         </Border>
 
         <!-- Legacy CommandBar: left form column only. Icon via Content — LegacyAppBarButtonStyle ignores Icon. -->
@@ -664,5 +686,20 @@
                 </StackPanel>
             </Border>
         </Border>
+
+        </Grid>
+
+        <!-- Replaces CreateContentHost: centered ProgressRing on the same page background. -->
+        <Grid x:Name="CreateBusyOverlay"
+              Canvas.ZIndex="20"
+              Background="{ThemeResource ChatListBackgroundBrush}"
+              IsHitTestVisible="True"
+              Visibility="{Binding IsCreating, Converter={StaticResource BooleanToVisibilityConverter}}">
+            <controls:ModernProgressRing Width="48"
+                                         Height="48"
+                                         IsActive="{Binding IsCreating}"
+                                         HorizontalAlignment="Center"
+                                         VerticalAlignment="Center"/>
+        </Grid>
     </Grid>
 </UserControl>

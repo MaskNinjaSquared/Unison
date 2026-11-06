@@ -131,5 +131,40 @@ namespace Unison.Uwp.Services.WhatsApp.Groups
 
             return socket.JoinGroupAsync(groupJid, inviteCode, cancellationToken);
         }
+
+        public Task<string> CreateGroupAsync(string subject, IReadOnlyList<string> participantJids)
+        {
+            IWhatsAppSocket socket = RequireSocket("group create");
+            return socket.CreateGroupAsync(subject, participantJids);
+        }
+
+        public Task<string> CreateCommunityAsync(string subject, string description)
+        {
+            IWhatsAppSocket socket = RequireSocket("community create");
+            return socket.CreateCommunityAsync(subject, description);
+        }
+
+        public Task UpdateGroupEphemeralAsync(string groupJid, int seconds)
+        {
+            IWhatsAppSocket socket = RequireSocket("group ephemeral");
+            return socket.UpdateGroupEphemeralAsync(groupJid, seconds);
+        }
+
+        public Task UpdateGroupPictureAsync(string groupJid, byte[] jpeg)
+        {
+            IWhatsAppSocket socket = RequireSocket("group picture");
+            return socket.UpdateGroupPictureAsync(groupJid, jpeg);
+        }
+
+        private IWhatsAppSocket RequireSocket(string operation)
+        {
+            IWhatsAppSocket socket = _sessions.Socket;
+            if (socket == null || !socket.IsHandshakeComplete)
+            {
+                throw new InvalidOperationException("Not connected: " + operation + " was not sent.");
+            }
+
+            return socket;
+        }
     }
 }

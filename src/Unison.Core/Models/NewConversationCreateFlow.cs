@@ -5,6 +5,7 @@ namespace Unison.Core.Models
     {
         None = 0,
         Group = 1,
-        Community = 2
+        Community = 2,
+        Channel = 3
     }
 }

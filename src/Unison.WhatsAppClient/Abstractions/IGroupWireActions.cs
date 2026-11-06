@@ -52,5 +52,17 @@ namespace Unison.WhatsAppClient.Abstractions
             string groupJid,
             string inviteCode = null,
             CancellationToken cancellationToken = default(CancellationToken));
+
+        /// <summary>Baileys <c>groupCreate</c>. Returns the new group's JID; throws when refused.</summary>
+        Task<string> CreateGroupAsync(string subject, IReadOnlyList<string> participantJids);
+
+        /// <summary>Baileys <c>communityCreate</c>. Returns the parent's JID; throws when refused.</summary>
+        Task<string> CreateCommunityAsync(string subject, string description);
+
+        /// <summary>Baileys <c>groupToggleEphemeral</c>; 0 turns it off.</summary>
+        Task UpdateGroupEphemeralAsync(string groupJid, int seconds);
+
+        /// <summary>Baileys <c>updateProfilePicture</c> addressed to a group. Square JPEG only.</summary>
+        Task UpdateGroupPictureAsync(string groupJid, byte[] jpeg);
     }
 }

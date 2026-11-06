@@ -33,9 +33,13 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Controls
         private bool _suppressPivotSync;
         private LegacyEmojiLabeledTextBox _emojiTarget;
         private bool _groupPhotoButtonHooked;
+
         public CreateConversationFlowView()
         {
             InitializeComponent();
+            // Break AppShell/ShellViewModel inheritance until ViewModel DP is set
+            // (avoids BindingExpression spam for create-flow paths on ShellViewModel).
+            DataContext = null;
             Loaded += OnLoaded;
             Unloaded += OnUnloaded;
         }
@@ -75,6 +79,7 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Controls
         private void AttachViewModel(NewConversationViewModel oldVm, NewConversationViewModel newVm)
         {
             DetachViewModel();
+            DataContext = newVm;
             LayoutRoot.DataContext = newVm;
             _hookedVm = newVm;
             if (_hookedVm != null)
@@ -97,6 +102,12 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Controls
             {
                 _hookedVm.PropertyChanged -= ViewModel_PropertyChanged;
                 _hookedVm = null;
+            }
+
+            DataContext = null;
+            if (LayoutRoot != null)
+            {
+                LayoutRoot.DataContext = null;
             }
         }
 
@@ -246,6 +257,11 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Controls
 
         public bool TryHandleMembersZoomBack()
         {
+            if (ChannelFormOverlay != null && ChannelFormOverlay.TryHandleBack())
+            {
+                return true;
+            }
+
             if (TryCloseEmojiDock(CommunityEmojiDock, CommunityEmojiPanel) ||
                 TryCloseEmojiDock(GroupEmojiDock, GroupEmojiPanel))
             {

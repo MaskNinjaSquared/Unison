@@ -310,8 +310,16 @@
                                                      Label="New community"
                                                      LocalizationUid="NewConversation_NewCommunity"
                                                      Command="{Binding NewCommunityCommand}"/>
-                                <controls:AttachTile x:Name="TilePhoneNumber"
+                                <controls:AttachTile x:Name="TileNewChannel"
                                                      Grid.Row="1" Grid.Column="0"
+                                                     HorizontalAlignment="Center"
+                                                     IconGlyph="&#xE8BD;"
+                                                     IconFontFamily="{StaticResource IconFont}"
+                                                     Label="New channel"
+                                                     LocalizationUid="NewConversation_NewChannel"
+                                                     Command="{Binding NewChannelCommand}"/>
+                                <controls:AttachTile x:Name="TilePhoneNumber"
+                                                     Grid.Row="1" Grid.Column="1"
                                                      HorizontalAlignment="Center"
                                                      IconGlyph="&#xE75F;"
                                                      IconFontFamily="{StaticResource IconFont}"
@@ -320,7 +328,7 @@
                                                      Command="{Binding PhoneNumberCommand}"/>
 
                                 <Button x:Name="SelfTile"
-                                        Grid.Row="1" Grid.Column="1"
+                                        Grid.Row="1" Grid.Column="2"
                                         HorizontalAlignment="Center"
                                         Margin="5"
                                         Style="{StaticResource NewConversationSelfTileButtonStyle}"
@@ -464,6 +472,41 @@
                                                        TextTrimming="CharacterEllipsis"/>
                                             <TextBlock x:Uid="NewConversation_NewCommunityDesc"
                                                        Text="Bring related groups together"
+                                                       FontSize="13"
+                                                       Foreground="{ThemeResource WhatsAppTextMediumBrush}"
+                                                       TextWrapping="NoWrap"
+                                                       TextTrimming="CharacterEllipsis"/>
+                                        </StackPanel>
+                                    </Grid>
+                                </Button>
+
+                                <Button Style="{StaticResource NewConversationOptionRowStyle}"
+                                        Command="{Binding NewChannelCommand}">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <Border Width="56" Height="56"
+                                                Background="{ThemeResource ChatDetailAccentBrush}">
+                                            <FontIcon Glyph="&#xE8BD;"
+                                                      FontFamily="{StaticResource IconFont}"
+                                                      FontSize="26"
+                                                      Foreground="White"
+                                                      HorizontalAlignment="Center"
+                                                      VerticalAlignment="Center"/>
+                                        </Border>
+                                        <StackPanel Grid.Column="1" Margin="12,0,0,0" VerticalAlignment="Center">
+                                            <TextBlock x:Uid="NewConversation_NewChannel"
+                                                       Text="New channel"
+                                                       FontSize="16"
+                                                       FontFamily="{StaticResource MainFontSemibold}"
+                                                       FontWeight="SemiBold"
+                                                       Foreground="{ThemeResource WhatsAppTextHighBrush}"
+                                                       TextWrapping="NoWrap"
+                                                       TextTrimming="CharacterEllipsis"/>
+                                            <TextBlock x:Uid="NewConversation_NewChannelDesc"
+                                                       Text="Reach an unlimited number of people"
                                                        FontSize="13"
                                                        Foreground="{ThemeResource WhatsAppTextMediumBrush}"
                                                        TextWrapping="NoWrap"

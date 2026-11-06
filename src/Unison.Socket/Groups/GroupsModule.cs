@@ -50,6 +50,7 @@ namespace Unison.Socket.Groups
             Metadata = new FetchGroupMetadataUseCase(connection);
             Participating = new FetchParticipatingGroupsUseCase(connection);
             Create = new CreateGroupUseCase(connection);
+            CreateCommunity = new CreateCommunityUseCase(connection, Metadata);
             Participants = new ModifyGroupParticipantsUseCase(connection);
             Invites = new GroupInviteUseCase(connection);
             LinkedGroups = new FetchCommunityLinkedGroupsUseCase(connection, Metadata);
@@ -75,6 +76,9 @@ namespace Unison.Socket.Groups
         public FetchParticipatingGroupsUseCase Participating { get; }
 
         public CreateGroupUseCase Create { get; }
+
+        /// <summary>Baileys <c>communityCreate</c> — parent group plus its general chat.</summary>
+        public CreateCommunityUseCase CreateCommunity { get; }
 
         /// <summary>Adding, removing, promoting, demoting, and join requests.</summary>
         public ModifyGroupParticipantsUseCase Participants { get; }

@@ -1,0 +1,31 @@
+<UserControl
+    x:Class="Unison.Uwp.UI.Controls.CreateChannelIntroOverlay"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:Unison.Uwp.UI.Controls"
+    Padding="24,16">
+
+    <!-- Minimal layout intro: title + three rows + Começar (same rules as community). -->
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+        <ScrollViewer VerticalScrollBarVisibility="Auto"
+                      VerticalAlignment="Center">
+            <controls:CreateChannelInfoContent HorizontalAlignment="Center"/>
+        </ScrollViewer>
+        <Button Grid.Row="1"
+                HorizontalAlignment="Stretch"
+                Margin="0,16,0,8"
+                MinHeight="44"
+                Background="{ThemeResource WhatsAppGreenFocusBrush}"
+                Foreground="White"
+                Command="{Binding StartChannelCreateCommand}">
+            <TextBlock x:Uid="CreateFlow_Start"
+                       Text="Get started"
+                       FontFamily="{StaticResource MainFontSemibold}"
+                       FontWeight="SemiBold"/>
+        </Button>
+    </Grid>
+</UserControl>

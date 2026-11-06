@@ -158,6 +158,20 @@ namespace Unison.Uwp.Client
             System.Threading.CancellationToken cancellationToken =
                 default(System.Threading.CancellationToken));
 
+        /// <summary>Baileys <c>groupCreate</c>. Returns the new group's JID.</summary>
+        Task<string> CreateGroupAsync(
+            string subject,
+            System.Collections.Generic.IReadOnlyList<string> participantJids);
+
+        /// <summary>Baileys <c>communityCreate</c>. Returns the parent's JID.</summary>
+        Task<string> CreateCommunityAsync(string subject, string description);
+
+        /// <summary>Baileys <c>groupToggleEphemeral</c>; 0 turns it off.</summary>
+        Task UpdateGroupEphemeralAsync(string groupJid, int seconds);
+
+        /// <summary>Baileys <c>updateProfilePicture</c> with a group as the target. Square JPEG.</summary>
+        Task UpdateGroupPictureAsync(string groupJid, byte[] jpeg);
+
         /// <summary>Baileys <c>updateBlockStatus</c> — block or unblock a direct JID.</summary>
         Task UpdateBlockStatusAsync(string jid, bool block);
 

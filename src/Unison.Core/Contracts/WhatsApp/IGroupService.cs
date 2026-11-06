@@ -208,5 +208,14 @@ namespace Unison.Core.Contracts.WhatsApp
             string groupJid,
             string inviteCode = null,
             CancellationToken cancellationToken = default);
+
+        /// <summary>
+        /// Baileys <c>groupCreate</c>, then the picture and the disappearing timer when asked for.
+        /// Never throws for a refused create; read <see cref="GroupCreateResult.FailureReason"/>.
+        /// </summary>
+        Task<GroupCreateResult> CreateGroupAsync(GroupCreateRequest request);
+
+        /// <summary>Baileys <c>communityCreate</c>, then the picture when asked for.</summary>
+        Task<GroupCreateResult> CreateCommunityAsync(CommunityCreateRequest request);
     }
 }

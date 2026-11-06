@@ -1,0 +1,114 @@
+<UserControl
+    x:Class="Unison.Uwp.UI.Controls.CreateChannelInfoContent"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- Title + three Fluent explain rows used by Minimal intro and Extended pane. -->
+    <StackPanel MaxWidth="420" HorizontalAlignment="Center">
+        <TextBlock Text="{Binding CreateExplainTitle}"
+                   FontSize="22"
+                   FontFamily="{StaticResource MainFontSemibold}"
+                   FontWeight="SemiBold"
+                   Foreground="{ThemeResource WhatsAppTextHighBrush}"
+                   TextWrapping="WrapWholeWords"/>
+
+        <Grid Margin="0,28,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+            <FontIcon Glyph="&#xE774;"
+                      FontFamily="{StaticResource IconFont}"
+                      FontSize="24"
+                      Margin="0,2,16,0"
+                      VerticalAlignment="Top"
+                      Foreground="{ThemeResource WhatsAppTextHighBrush}"/>
+            <StackPanel Grid.Column="1">
+                <TextBlock x:Uid="CreateChannel_PublicTitle"
+                           Text="Anyone can find your channel"
+                           FontSize="16"
+                           FontFamily="{StaticResource MainFontSemibold}"
+                           FontWeight="SemiBold"
+                           Foreground="{ThemeResource WhatsAppTextHighBrush}"
+                           TextWrapping="WrapWholeWords"/>
+                <TextBlock x:Uid="CreateChannel_PublicBody"
+                           Text="Channels are public. Anyone who uses WhatsApp can find channels and see activity from the last 30 days."
+                           Margin="0,6,0,0"
+                           FontSize="14"
+                           FontFamily="{StaticResource MainFont}"
+                           Foreground="{ThemeResource WhatsAppTextMediumBrush}"
+                           TextWrapping="WrapWholeWords"/>
+            </StackPanel>
+        </Grid>
+
+        <Grid Margin="0,20,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+            <FontIcon Glyph="&#xE7B3;"
+                      FontFamily="{StaticResource IconFont}"
+                      FontSize="24"
+                      Margin="0,2,16,0"
+                      VerticalAlignment="Top"
+                      Foreground="{ThemeResource WhatsAppTextHighBrush}"/>
+            <StackPanel Grid.Column="1">
+                <TextBlock x:Uid="CreateChannel_PrivacyTitle"
+                           Text="People only have access to the channel"
+                           FontSize="16"
+                           FontFamily="{StaticResource MainFontSemibold}"
+                           FontWeight="SemiBold"
+                           Foreground="{ThemeResource WhatsAppTextHighBrush}"
+                           TextWrapping="WrapWholeWords"/>
+                <TextBlock x:Uid="CreateChannel_PrivacyBody"
+                           Text="Your phone number, profile photo, and name are not shown to channel followers, but they are shown to other admins."
+                           Margin="0,6,0,0"
+                           FontSize="14"
+                           FontFamily="{StaticResource MainFont}"
+                           Foreground="{ThemeResource WhatsAppTextMediumBrush}"
+                           TextWrapping="WrapWholeWords"/>
+            </StackPanel>
+        </Grid>
+
+        <Grid Margin="0,20,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+            <FontIcon Glyph="&#xEA18;"
+                      FontFamily="{StaticResource IconFont}"
+                      FontSize="24"
+                      Margin="0,2,16,0"
+                      VerticalAlignment="Top"
+                      Foreground="{ThemeResource WhatsAppTextHighBrush}"/>
+            <StackPanel Grid.Column="1">
+                <TextBlock x:Uid="CreateChannel_ResponsibilityTitle"
+                           Text="You are responsible for your channel"
+                           FontSize="16"
+                           FontFamily="{StaticResource MainFontSemibold}"
+                           FontWeight="SemiBold"
+                           Foreground="{ThemeResource WhatsAppTextHighBrush}"
+                           TextWrapping="WrapWholeWords"/>
+                <RichTextBlock Margin="0,6,0,0"
+                               FontSize="14"
+                               FontFamily="{StaticResource MainFont}"
+                               Foreground="{ThemeResource WhatsAppTextMediumBrush}"
+                               TextWrapping="WrapWholeWords">
+                    <Paragraph>
+                        <Run x:Uid="CreateChannel_ResponsibilityBefore"
+                             Text="Your channel must follow our "/>
+                        <Hyperlink UnderlineStyle="None"
+                                   Foreground="{ThemeResource WhatsAppGreenFocusBrush}"
+                                   Click="GuidelinesHyperlink_Click">
+                            <Run x:Uid="CreateChannel_Guidelines"
+                                 FontWeight="Bold"
+                                 Text="guidelines"/>
+                        </Hyperlink>
+                        <Run x:Uid="CreateChannel_ResponsibilityAfter"
+                             Text=" and will be reviewed by WhatsApp."/>
+                    </Paragraph>
+                </RichTextBlock>
+            </StackPanel>
+        </Grid>
+    </StackPanel>
+</UserControl>

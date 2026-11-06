@@ -622,6 +622,12 @@ Disable after diagnosing: keeping it on slows the app.</value>
   <data name="NewConversation_NewCommunityDesc.Text" xml:space="preserve">
     <value>Bring related groups together</value>
   </data>
+  <data name="NewConversation_NewChannel.Text" xml:space="preserve">
+    <value>New channel</value>
+  </data>
+  <data name="NewConversation_NewChannelDesc.Text" xml:space="preserve">
+    <value>Reach an unlimited number of people</value>
+  </data>
   <data name="NewConversation_PhoneNumber.Text" xml:space="preserve">
     <value>Phone number</value>
   </data>
@@ -729,6 +735,75 @@ Disable after diagnosing: keeping it on slows the app.</value>
   </data>
   <data name="CreateCommunity_ExplainBody" xml:space="preserve">
     <value>Bring together people from your neighborhood, your school, and more in one place. Create groups for specific topics and send announcements to everyone easily.</value>
+  </data>
+  <data name="CreateGroup_Error_NameRequired" xml:space="preserve">
+    <value>Enter a group name.</value>
+  </data>
+  <data name="CreateGroup_Error_Failed" xml:space="preserve">
+    <value>Couldn't create the group. Try again.</value>
+  </data>
+  <data name="CreateCommunity_Error_NameRequired" xml:space="preserve">
+    <value>Enter a community name.</value>
+  </data>
+  <data name="CreateCommunity_Error_Failed" xml:space="preserve">
+    <value>Couldn't create the community. Try again.</value>
+  </data>
+  <data name="CreateFlow_Error_NotConnected" xml:space="preserve">
+    <value>You're not connected. Try again when the connection is back.</value>
+  </data>
+  <data name="CreateFlow_PartialFailure" xml:space="preserve">
+    <value>Created, but the photo or disappearing messages could not be applied. You can change them in the info screen.</value>
+  </data>
+  <data name="CreateFlow_GroupCreatedTitle" xml:space="preserve">
+    <value>Group created</value>
+  </data>
+  <data name="CreateFlow_GroupCreatedBody" xml:space="preserve">
+    <value>{0} created successfully.</value>
+  </data>
+  <data name="CreateFlow_CommunityCreatedTitle" xml:space="preserve">
+    <value>Community created</value>
+  </data>
+  <data name="CreateFlow_CommunityCreatedBody" xml:space="preserve">
+    <value>{0} created successfully.</value>
+  </data>
+  <data name="CreateChannel_ExplainTitle" xml:space="preserve">
+    <value>Create a channel to reach an unlimited number of people.</value>
+  </data>
+  <data name="CreateChannel_PublicTitle.Text" xml:space="preserve">
+    <value>Anyone can find your channel</value>
+  </data>
+  <data name="CreateChannel_PublicBody.Text" xml:space="preserve">
+    <value>Channels are public. Anyone who uses WhatsApp can find channels and see activity from the last 30 days.</value>
+  </data>
+  <data name="CreateChannel_PrivacyTitle.Text" xml:space="preserve">
+    <value>People only have access to the channel</value>
+  </data>
+  <data name="CreateChannel_PrivacyBody.Text" xml:space="preserve">
+    <value>Your phone number, profile photo, and name are not shown to channel followers, but they are shown to other admins.</value>
+  </data>
+  <data name="CreateChannel_ResponsibilityTitle.Text" xml:space="preserve">
+    <value>You are responsible for your channel</value>
+  </data>
+  <data name="CreateChannel_ResponsibilityBefore.Text" xml:space="preserve">
+    <value>Your channel must follow our </value>
+  </data>
+  <data name="CreateChannel_Guidelines.Text" xml:space="preserve">
+    <value>guidelines</value>
+  </data>
+  <data name="CreateChannel_ResponsibilityAfter.Text" xml:space="preserve">
+    <value> and will be reviewed by WhatsApp.</value>
+  </data>
+  <data name="CreateChannel_Name.Header" xml:space="preserve">
+    <value>Channel name</value>
+  </data>
+  <data name="CreateChannel_Description.Header" xml:space="preserve">
+    <value>Channel description</value>
+  </data>
+  <data name="CreateChannel_Description.PlaceholderText" xml:space="preserve">
+    <value>Enter a description for the channel and include useful information for your followers.</value>
+  </data>
+  <data name="CreateChannel_AddPhotoOverlay.Text" xml:space="preserve">
+    <value>Add channel image...</value>
   </data>
   <data name="CreateCommunity_Name.PlaceholderText" xml:space="preserve">
     <value>Community name</value>

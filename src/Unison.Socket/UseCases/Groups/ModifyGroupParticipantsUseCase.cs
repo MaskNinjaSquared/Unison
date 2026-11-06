@@ -69,7 +69,7 @@ namespace Unison.Socket.UseCases.Groups
             var node = new BinaryNode(
                 Tag(action),
                 null,
-                GroupQuery.Participants(participants));
+                GroupQuery.RequiredParticipants(participants));
 
             var response = await GroupQuery
                 .ExecuteAsync(_connection, groupJid, "set", new List<BinaryNode> { node }, timeout)
@@ -88,7 +88,7 @@ namespace Unison.Socket.UseCases.Groups
             var action = new BinaryNode(
                 approve ? "approve" : "reject",
                 null,
-                GroupQuery.Participants(participants));
+                GroupQuery.RequiredParticipants(participants));
 
             var node = new BinaryNode(
                 "membership_requests_action",

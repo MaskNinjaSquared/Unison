@@ -330,6 +330,7 @@ namespace Unison.Uwp.UI.Controls
             ApplyMinimalTileSide(TileNewGroup, side);
             ApplyMinimalTileSide(TileNewContact, side);
             ApplyMinimalTileSide(TileNewCommunity, side);
+            ApplyMinimalTileSide(TileNewChannel, side);
             ApplyMinimalTileSide(TilePhoneNumber, side);
             ApplyMinimalTileSide(SelfTile, side);
         }

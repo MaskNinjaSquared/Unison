@@ -910,7 +910,9 @@ namespace Unison.Uwp
                 sp.GetRequiredService<IChatCatalogPersistence>(),
                 sp.GetRequiredService<ChatNameRefresh>(),
                 sp.GetRequiredService<IRuntimeDiagnostics>(),
-                sp.GetRequiredService<IAppVisibility>()));
+                sp.GetRequiredService<IAppVisibility>(),
+                sp.GetRequiredService<IProfilePictureEncoder>()));
+            services.AddSingleton<IProfilePictureEncoder, ProfilePictureEncoder>();
             services.AddSingleton<ILiveTilesService>(_ => LiveTilesService.Instance);
             services.AddSingleton<IShortcutService, ShortcutService>();
             services.AddSingleton<INotificationService>(sp =>

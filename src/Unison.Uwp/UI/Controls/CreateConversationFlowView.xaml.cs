@@ -30,6 +30,7 @@ namespace Unison.Uwp.UI.Controls
         private bool _suppressPivotSync;
         private RichLabeledTextBox _emojiTarget;
         private bool _groupPhotoButtonHooked;
+
         public CreateConversationFlowView()
         {
             InitializeComponent();
@@ -239,6 +240,11 @@ namespace Unison.Uwp.UI.Controls
         /// <summary>Consumes back while members SemanticZoom is zoomed out.</summary>
         public bool TryHandleMembersZoomBack()
         {
+            if (ChannelFormOverlay != null && ChannelFormOverlay.TryHandleBack())
+            {
+                return true;
+            }
+
             if (TryCloseEmojiDock(CommunityEmojiDock, CommunityEmojiPanel) ||
                 TryCloseEmojiDock(GroupEmojiDock, GroupEmojiPanel))
             {

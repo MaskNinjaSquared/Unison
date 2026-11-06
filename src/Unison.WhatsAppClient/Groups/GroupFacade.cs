@@ -52,6 +52,7 @@ namespace Unison.WhatsAppClient.Groups
         private readonly SyncWorkloadStrategy _workload;
         private readonly IRuntimeDiagnostics _diagnostics;
         private readonly IAppVisibility _visibility;
+        private readonly GroupCreation _creation;
         private readonly GroupQueryWindow _queryWindow = new GroupQueryWindow();
 
         /// <summary>0 free / 1 busy — overlapping listings each burn a 60s IQ and starve chat open.</summary>
@@ -99,7 +100,8 @@ namespace Unison.WhatsAppClient.Groups
             IChatCatalogPersistence catalog,
             ChatNameRefresh nameRefresh,
             IRuntimeDiagnostics diagnostics = null,
-            IAppVisibility visibility = null)
+            IAppVisibility visibility = null,
+            IProfilePictureEncoder pictureEncoder = null)
         {
             _workload = workload ?? throw new ArgumentNullException(nameof(workload));
             _syncStatus = syncStatus ?? throw new ArgumentNullException(nameof(syncStatus));
@@ -122,6 +124,11 @@ namespace Unison.WhatsAppClient.Groups
             _diagnostics = diagnostics;
             _visibility = visibility;
             _reader = new GroupMetadataReader(jids);
+            _creation = new GroupCreation(
+                wire,
+                (jid, subject) => _contacts().ApplyRemoteGroupSubjectsAsync(
+                    new[] { new KeyValuePair<string, string>(jid, subject) }),
+                pictureEncoder);
             if (_visibility != null)
             {
                 _visibility.Changed += OnAppVisibilityChanged;
@@ -1090,5 +1097,11 @@ namespace Unison.WhatsAppClient.Groups
                 return false;
             }
         }
+
+        public Task<GroupCreateResult> CreateGroupAsync(GroupCreateRequest request) =>
+            _creation.CreateGroupAsync(request);
+
+        public Task<GroupCreateResult> CreateCommunityAsync(CommunityCreateRequest request) =>
+            _creation.CreateCommunityAsync(request);
     }
 }

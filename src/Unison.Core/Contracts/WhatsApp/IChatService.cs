@@ -72,8 +72,19 @@ namespace Unison.Core.Contracts.WhatsApp
         /// </summary>
         void SetActiveChatJid(string jid);
 
-        /// <summary>User action: makes sure a chat row exists for <paramref name="jid"/> (new-chat flow).</summary>
-        void StartNewChat(string jid);
+        /// <summary>
+        /// User action: makes sure a chat row exists for <paramref name="jid"/> (new-chat / group-create
+        /// flow). <paramref name="displayName"/> seeds the strip title when already known (group subject);
+        /// otherwise the contact resolver fills it. The row is stamped with UtcNow so it stays at the
+        /// top until a real tip arrives, and that single row is persisted.
+        /// </summary>
+        void StartNewChat(string jid, string displayName = null);
+
+        /// <summary>
+        /// Community-create flow: same as <see cref="StartNewChat"/> for the parent JID, but the
+        /// row is a community hub so the list projects it as one before the groups listing lands.
+        /// </summary>
+        void StartNewCommunity(string parentJid, string displayName);
 
         /// <summary>
         /// Zeroes the unread count locally, on every row that is the same conversation. PN and LID

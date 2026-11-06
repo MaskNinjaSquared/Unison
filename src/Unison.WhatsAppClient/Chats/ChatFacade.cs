@@ -27,6 +27,7 @@ using System.Threading.Tasks;
 using Unison.Core.Contracts;
 using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Helpers;
+using Unison.Core.Helpers.Chats;
 using Unison.Core.Mappers;
 using Unison.Core.Models;
 using Unison.Core.State;
@@ -959,7 +960,17 @@ namespace Unison.WhatsAppClient.Chats
         // to the client because that is still where the rows live (phase 3.9).
         // ---------------------------------------------------------------------
 
-        public void StartNewChat(string jid)
+        public void StartNewChat(string jid, string displayName = null)
+        {
+            SeedNewListRow(jid, displayName, communityHub: false);
+        }
+
+        public void StartNewCommunity(string parentJid, string displayName)
+        {
+            SeedNewListRow(parentJid, displayName, communityHub: true);
+        }
+
+        private void SeedNewListRow(string jid, string displayName, bool communityHub)
         {
             if (string.IsNullOrEmpty(jid))
             {
@@ -967,25 +978,35 @@ namespace Unison.WhatsAppClient.Chats
             }
 
             string normalized = JidHelper.Normalize(jid);
+            string resolvedName = !string.IsNullOrWhiteSpace(displayName)
+                ? displayName.Trim()
+                : _contacts.ResolveDisplayName(jid, "chat");
+            string yesterday = _strings.Get("Common_Yesterday", "Yesterday");
+            ChatKind kind = JidHelper.ResolveKind(normalized, _jids.IsSelfLinked(normalized));
+            DateTime now = DateTime.UtcNow;
+
             _ = _ui.RunAsync(() =>
             {
                 foreach (ChatItem chat in _chatState.Chats)
                 {
                     if (chat != null && string.Equals(JidHelper.Normalize(chat.JID), normalized, StringComparison.Ordinal))
                     {
+                        if (communityHub && !chat.IsCommunityParent)
+                        {
+                            chat.IsCommunityParent = true;
+                            PersistChatListRows(new[] { chat });
+                        }
+
                         return;
                     }
                 }
 
-                _chatState.Chats.Insert(0, new ChatItem
-                {
-                    JID = normalized,
-                    Name = _contacts.ResolveDisplayName(jid, "chat"),
-                    LastMessage = "",
-                    Timestamp = "",
-                    Kind = JidHelper.ResolveKind(normalized, _jids.IsSelfLinked(normalized))
-                });
-                RequestChatListDedup("start-new-chat");
+                ChatItem seeded = communityHub
+                    ? NewChatListSeed.BuildCommunityHub(normalized, resolvedName, kind, now, yesterday)
+                    : NewChatListSeed.Build(normalized, resolvedName, kind, now, yesterday);
+                _chatState.Chats.Insert(0, seeded);
+                PersistChatListRows(new[] { seeded });
+                RequestChatListDedup(communityHub ? "start-new-community" : "start-new-chat");
             });
         }
 

@@ -37,6 +37,8 @@ namespace Unison.Core.ViewModels
         private readonly IDispatcher _dispatcher;
         private readonly ILocalContactsService _localContacts;
         private readonly IFilePicker _filePicker;
+        private readonly IGroupService _groups;
+        private readonly INotificationService _notifications;
 
         private bool _isOpen;
         private bool _catalogHooked;
@@ -60,7 +62,9 @@ namespace Unison.Core.ViewModels
             IStringResources strings,
             IDispatcher dispatcher = null,
             ILocalContactsService localContacts = null,
-            IFilePicker filePicker = null)
+            IFilePicker filePicker = null,
+            IGroupService groups = null,
+            INotificationService notifications = null)
         {
             _chatState = chatState ?? throw new ArgumentNullException(nameof(chatState));
             _contacts = contacts ?? throw new ArgumentNullException(nameof(contacts));
@@ -73,11 +77,14 @@ namespace Unison.Core.ViewModels
             _dispatcher = dispatcher;
             _localContacts = localContacts;
             _filePicker = filePicker;
+            _groups = groups;
+            _notifications = notifications;
 
             CloseCommand = new RelayCommand(Close);
             NewGroupCommand = new RelayCommand(OpenCreateGroup);
             NewContactCommand = new RelayCommand(() => _ = OpenNewContactAsync());
             NewCommunityCommand = new RelayCommand(OpenCreateCommunity);
+            NewChannelCommand = new RelayCommand(OpenCreateChannel);
             PhoneNumberCommand = new RelayCommand(() => _ = OpenPhoneDialogAsync());
             NavigateToPrivateChatCommand = new RelayCommand(() => _ = NavigateToPrivateChatAsync());
             SelectContactCommand = new RelayCommand<ChatItem>(chat => _ = OpenContactAsync(chat));
@@ -187,6 +194,7 @@ namespace Unison.Core.ViewModels
         public ICommand NewGroupCommand { get; }
         public ICommand NewContactCommand { get; }
         public ICommand NewCommunityCommand { get; }
+        public ICommand NewChannelCommand { get; }
         public ICommand PhoneNumberCommand { get; }
 
         /// <summary>Opens the notes-to-self / personal chat (Message yourself).</summary>

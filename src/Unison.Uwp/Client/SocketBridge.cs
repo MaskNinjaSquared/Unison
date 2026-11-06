@@ -203,6 +203,18 @@ namespace Unison.Uwp.Client
                 {
                     RuntimeDiagnosticsService.Instance.Write("messages", "decrypt-failed", line);
                 }
+                // A refused send only shows as a bare code in the ack; without it a Status looks published.
+                else if (!string.IsNullOrEmpty(line) &&
+                         (line.IndexOf("[Ack] Server refused", StringComparison.Ordinal) >= 0 ||
+                          line.IndexOf("[Send] Status", StringComparison.Ordinal) >= 0))
+                {
+                    RuntimeDiagnosticsService.Instance.Write("send", "ack-refused-or-status", line);
+                }
+                else if (!string.IsNullOrEmpty(line) &&
+                         line.IndexOf("[Query]", StringComparison.Ordinal) >= 0)
+                {
+                    RuntimeDiagnosticsService.Instance.Write("protocol", "query", line);
+                }
             });
             _downloader = new HttpEncryptedMediaDownloader(_log);
             _events = new WaEventBuffer(_log);
@@ -1073,6 +1085,80 @@ namespace Unison.Uwp.Client
                 .JoinByJidAsync(groupJid, selfJid)
                 .ConfigureAwait(false);
             return joined != null && joined.Succeeded;
+        }
+
+        public Task<string> CreateGroupAsync(string subject, IReadOnlyList<string> participantJids)
+        {
+            GroupsModule groups = RequireGroups("group create");
+            return TraceCreateAsync(
+                "group",
+                "participants=" + (participantJids != null ? participantJids.Count : 0),
+                () => groups.Create.ExecuteAsync(subject, participantJids));
+        }
+
+        public Task<string> CreateCommunityAsync(string subject, string description)
+        {
+            GroupsModule groups = RequireGroups("community create");
+            return TraceCreateAsync(
+                "community",
+                "descriptionLen=" + (description != null ? description.Length : 0),
+                () => groups.CreateCommunity.ExecuteAsync(subject, description));
+        }
+
+        /// <summary>The VM only shows a generic failure; the server's answer lands in Runtime Health.</summary>
+        private static async Task<string> TraceCreateAsync(
+            string kind,
+            string detail,
+            Func<Task<GroupMetadata>> create)
+        {
+            RuntimeDiagnosticsService.Instance.Write("groups", kind + "-create-begin", detail);
+            try
+            {
+                GroupMetadata created = await create().ConfigureAwait(false);
+                RuntimeDiagnosticsService.Instance.Write(
+                    "groups",
+                    kind + "-create-ok",
+                    "jid=" + (created != null ? created.Id : "(none)") +
+                    "; isCommunity=" + (created != null && created.IsCommunity));
+                return created != null ? created.Id : null;
+            }
+            catch (Exception ex)
+            {
+                RuntimeDiagnosticsService.Instance.Write(
+                    "groups",
+                    kind + "-create-failed",
+                    ex.GetType().Name + ": " + ex.Message);
+                throw;
+            }
+        }
+
+        public Task UpdateGroupEphemeralAsync(string groupJid, int seconds)
+        {
+            GroupsModule groups = RequireGroups("group ephemeral");
+            return groups.Settings.UpdateEphemeralAsync(groupJid, seconds);
+        }
+
+        public Task UpdateGroupPictureAsync(string groupJid, byte[] jpeg)
+        {
+            var session = Require();
+            return new Unison.Socket.UseCases.Profile.UpdateProfileUseCase(session.Connection)
+                .UpdatePictureAsync(groupJid, jpeg);
+        }
+
+        private GroupsModule RequireGroups(string operation)
+        {
+            GroupsModule groups;
+            lock (_gate)
+            {
+                groups = _groups;
+            }
+
+            if (groups == null)
+            {
+                throw new InvalidOperationException("Not connected: " + operation + " was not sent.");
+            }
+
+            return groups;
         }
 
         public Task UpdateBlockStatusAsync(string jid, bool block)
