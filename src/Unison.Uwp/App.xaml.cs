@@ -846,7 +846,12 @@ namespace Unison.Uwp
                 sp.GetRequiredService<AttachedUiDispatcher>(),
                 sp.GetRequiredService<IContactService>(),
                 sp.GetRequiredService<IChatService>(),
-                timelinePriority: sp.GetRequiredService<ChatTimelineLoadPriorityGate>()));
+                timelinePriority: sp.GetRequiredService<ChatTimelineLoadPriorityGate>(),
+                preferFrugalUi: () =>
+                {
+                    IHistoryService history = sp.GetService<IHistoryService>();
+                    return history != null && history.PreferFrugalSyncBudget;
+                }));
             // The group apply and the roster restore live in Core and run from GroupFacade; they
             // label members and rows through the shared contact-name resolver.
             services.AddSingleton<IGroupNaming>(sp => new GroupNaming(

@@ -405,7 +405,9 @@ namespace Unison.Core.Helpers
         }
 
         /// <summary>
-        /// Chat-list author strip: contacts ranking with <c>withContactIndicator</c>, else unmarked.
+        /// Chat-list author strip: local hint/roster/1:1 first (cheap), then contacts with
+        /// <c>~</c>, then the shared ResolveDisplayName chain. Contacts used to run on every tip
+        /// during BeginSweep even when the roster already named the sender (Mobile open hang).
         /// </summary>
         public static string ResolveStripDisplayName(
             string participantJid,
@@ -416,9 +418,38 @@ namespace Unison.Core.Helpers
             IReadOnlyDictionary<string, string> directChatNames = null,
             IReadOnlyDictionary<string, GroupMember> rosterByCanonical = null)
         {
+            string canonical = string.IsNullOrWhiteSpace(participantJid)
+                ? null
+                : CanonicalJid(context, participantJid) ?? JidHelper.Normalize(participantJid);
+
+            if (UsableLabel(nameHint, canonical))
+            {
+                return DisplayNameResolution.StripContactIndicator(nameHint.Trim());
+            }
+
+            if (rosterMember != null && UsableLabel(rosterMember.DisplayName, canonical))
+            {
+                return DisplayNameResolution.StripContactIndicator(rosterMember.DisplayName.Trim());
+            }
+
+            if (!string.IsNullOrWhiteSpace(canonical))
+            {
+                GroupMember fromRoster = rosterMember
+                    ?? FindRosterMember(groupChat, canonical, context, rosterByCanonical);
+                if (fromRoster != null && UsableLabel(fromRoster.DisplayName, canonical))
+                {
+                    return DisplayNameResolution.StripContactIndicator(fromRoster.DisplayName.Trim());
+                }
+
+                string fromDirect = FindNameOnDirectChat(canonical, context, directChatNames);
+                if (UsableLabel(fromDirect, canonical))
+                {
+                    return DisplayNameResolution.StripContactIndicator(fromDirect.Trim());
+                }
+            }
+
             if (context?.Contacts != null && !string.IsNullOrWhiteSpace(participantJid))
             {
-                string canonical = CanonicalJid(context, participantJid) ?? JidHelper.Normalize(participantJid);
                 string marked = ResolveServiceName(context, participantJid, "strip");
                 if (UsableLabel(marked, canonical))
                 {

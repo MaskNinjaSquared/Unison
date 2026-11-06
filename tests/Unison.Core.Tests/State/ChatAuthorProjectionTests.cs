@@ -391,6 +391,169 @@ namespace Unison.Core.Tests.State
             await WaitForAsync(() => group.LastMessageSenderName == "Ana Souza");
         }
 
+        [Fact]
+        public async Task RefreshChat_without_Start_names_only_the_pending_group()
+        {
+            var jids = new AliasJids();
+            var people = new MemoryPersonStore();
+            var chatState = new ChatStateStore(new CountingDispatcher());
+
+            chatState.Chats.Add(new ChatItem
+            {
+                JID = Pn,
+                Name = "Ana Souza",
+                IsGroup = false
+            });
+
+            for (int i = 0; i < 120; i++)
+            {
+                chatState.Chats.Add(new ChatItem
+                {
+                    JID = "120399" + i + "@g.us",
+                    Name = "Decoy " + i,
+                    IsGroup = true,
+                    LastMessageIsFromMe = false,
+                    LastMessageParticipantJid = "551190000" + i.ToString("0000") + "@s.whatsapp.net"
+                });
+            }
+
+            var target = new ChatItem
+            {
+                JID = Group,
+                Name = "Família",
+                IsGroup = true,
+                LastMessageIsFromMe = false,
+                LastMessageParticipantJid = Pn
+            };
+            chatState.Chats.Add(target);
+
+            var dispatcher = new CountingDispatcher();
+            var projection = new ChatAuthorProjection(
+                chatState,
+                people,
+                jids,
+                strings: null,
+                dispatcher);
+
+            // No Start(): unnamed catalogue walk must not run — only RefreshChat pending.
+            projection.RefreshChat(Group);
+            await WaitForAsync(() => target.LastMessageSenderName == "Ana Souza");
+
+            Assert.Equal("Ana Souza: ", target.LastMessageAuthor);
+            Assert.True(dispatcher.MaxDepth <= 1, "nested depth=" + dispatcher.MaxDepth);
+            Assert.True(dispatcher.Passes <= 4, "passes=" + dispatcher.Passes);
+        }
+
+        [Fact]
+        public async Task DisplayNamesChanged_under_Hold_does_not_schedule_unnamed_until_Release()
+        {
+            var jids = new AliasJids();
+            jids.Pair(Lid, Pn);
+            var people = new MemoryPersonStore();
+            people.SeedDisk(new Person
+            {
+                Jid = Pn,
+                Name = "Ana Souza",
+                Phone = "5511988887777",
+                Source = PersonSource.Observed
+            });
+            // Warm the in-memory cache so the deferred unnamed pass resolves in one hop.
+            await people.GetAsync(Pn);
+
+            var gate = new ChatTimelineLoadPriorityGate();
+            gate.Hold("open");
+
+            var chatState = new ChatStateStore(new CountingDispatcher());
+            var unnamed = new ChatItem
+            {
+                JID = Group,
+                Name = "Família",
+                IsGroup = true,
+                LastMessageIsFromMe = false,
+                LastMessageParticipantJid = Lid
+            };
+            chatState.Chats.Add(unnamed);
+
+            var dispatcher = new CountingDispatcher();
+            var projection = new ChatAuthorProjection(
+                chatState,
+                people,
+                jids,
+                strings: null,
+                dispatcher,
+                timelinePriority: gate,
+                preferFrugalUi: () => true);
+
+            // Start under Hold+frugal: unnamed is deferred (no dispatcher hop yet).
+            projection.Start();
+            chatState.NotifyDisplayNamesChanged();
+            await Task.Delay(250);
+
+            Assert.Null(unnamed.LastMessageSenderName);
+            Assert.Equal(0, dispatcher.Passes);
+
+            gate.Release("open");
+            await WaitForAsync(() => unnamed.LastMessageSenderName == "Ana Souza");
+        }
+
+        [Fact]
+        public async Task RefreshChat_under_frugal_Hold_stays_pending_fast_path_after_DisplayNamesChanged()
+        {
+            var jids = new AliasJids();
+            var people = new MemoryPersonStore();
+            var gate = new ChatTimelineLoadPriorityGate();
+            gate.Hold("open");
+
+            var chatState = new ChatStateStore(new CountingDispatcher());
+            chatState.Chats.Add(new ChatItem
+            {
+                JID = Pn,
+                Name = "Ana Souza",
+                IsGroup = false
+            });
+
+            var decoy = new ChatItem
+            {
+                JID = "120364@g.us",
+                Name = "Outro",
+                IsGroup = true,
+                LastMessageIsFromMe = false,
+                LastMessageParticipantJid = Lid,
+                LastMessageAuthor = "199999999999: "
+            };
+            var target = new ChatItem
+            {
+                JID = Group,
+                Name = "Família",
+                IsGroup = true,
+                LastMessageIsFromMe = false,
+                LastMessageParticipantJid = Pn
+            };
+            chatState.Chats.Add(decoy);
+            chatState.Chats.Add(target);
+
+            var projection = new ChatAuthorProjection(
+                chatState,
+                people,
+                jids,
+                strings: null,
+                new CountingDispatcher(),
+                timelinePriority: gate,
+                preferFrugalUi: () => true);
+
+            projection.Start();
+            // Would have forced a full unnamed walk before the open RefreshChat.
+            chatState.NotifyDisplayNamesChanged();
+            projection.RefreshChat(Group);
+
+            gate.Release("open");
+            await WaitForAsync(() => target.LastMessageSenderName == "Ana Souza");
+
+            // Decoy still unnamed: DisplayNamesChanged was deferred and must not have ridden
+            // along inside the pending-chat pass (a later flushed unnamed walk may still touch it).
+            Assert.Null(decoy.LastMessageSenderName);
+        }
+
         private static async Task WaitForAsync(Func<bool> condition)
         {
             for (int i = 0; i < 100; i++)
