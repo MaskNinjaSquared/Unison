@@ -4,9 +4,10 @@
 // Creates a group or community from the New Conversation forms and applies the
 // follow-ups the form asked for. GroupFacade delegates here.
 //
-// Order matters: the picture and the disappearing timer are addressed to the
-// new JID, so they only run once the create came back. Either one failing
-// leaves a group that exists; that is reported, not rolled back.
+// Order matters: picture and disappearing timer address the new JID, so they
+// run only after create returns. Naming the subject hits the UI list rename
+// path (ApplyResolvedNameBatchAsync) and must not gate those wire follow-ups —
+// 85eeb434 stalled ~100s on the rename and never reached picture-set.
 // =============================================================================
 using System;
 using System.Collections.Generic;
@@ -74,10 +75,11 @@ namespace Unison.WhatsAppClient.Groups
             }
 
             var result = new GroupCreateResult { GroupJid = jid };
-            await NameAsync(jid, subject).ConfigureAwait(false);
             result.PhotoFailed = !await TrySetPictureAsync(jid, request.PhotoBytes).ConfigureAwait(false);
             result.EphemeralFailed = !await TrySetEphemeralAsync(jid, request.Ephemeral.ToSeconds())
                 .ConfigureAwait(false);
+            // StartNewChat already seeds the row subject; cache fill must not block the photo IQ.
+            ScheduleName(jid, subject);
             return result;
         }
 
@@ -114,8 +116,8 @@ namespace Unison.WhatsAppClient.Groups
             }
 
             var result = new GroupCreateResult { GroupJid = jid };
-            await NameAsync(jid, subject).ConfigureAwait(false);
             result.PhotoFailed = !await TrySetPictureAsync(jid, request.PhotoBytes).ConfigureAwait(false);
+            ScheduleName(jid, subject);
             return result;
         }
 
@@ -123,6 +125,11 @@ namespace Unison.WhatsAppClient.Groups
         /// The w:gp2 create notification names the group too, but only after a round trip; the
         /// chat opened right after the create would show its JID until then.
         /// </summary>
+        private void ScheduleName(string jid, string subject)
+        {
+            _ = NameAsync(jid, subject);
+        }
+
         private async Task NameAsync(string jid, string subject)
         {
             try

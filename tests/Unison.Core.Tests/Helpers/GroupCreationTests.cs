@@ -20,7 +20,7 @@ namespace Unison.Core.Tests.Helpers
         private const string NewGroup = "120363000000000002@g.us";
 
         [Fact]
-        public async Task Group_is_created_named_and_gets_picture_then_timer()
+        public async Task Group_is_created_gets_picture_then_timer_and_names_async()
         {
             var wire = new FakeWire { CreatedJid = NewGroup };
             var named = new List<string>();
@@ -42,8 +42,37 @@ namespace Unison.Core.Tests.Helpers
             Assert.Equal(NewGroup, result.GroupJid);
             Assert.Equal("Família", wire.Subject);
             Assert.Equal(new[] { "1@s.whatsapp.net", "2@lid" }, wire.Participants);
-            Assert.Equal(new[] { NewGroup + "=Família" }, named);
             Assert.Equal(new[] { "picture:" + NewGroup, "ephemeral:" + NewGroup + ":604800" }, wire.FollowUps);
+            Assert.True(SpinWait.SpinUntil(() => named.Count == 1, TimeSpan.FromSeconds(2)));
+            Assert.Equal(new[] { NewGroup + "=Família" }, named);
+        }
+
+        [Fact]
+        public async Task Slow_subject_cache_does_not_block_picture_upload()
+        {
+            var wire = new FakeWire { CreatedJid = NewGroup };
+            var nameBlock = new TaskCompletionSource<bool>();
+            var nameEntered = new TaskCompletionSource<bool>();
+            var creation = new GroupCreation(
+                wire,
+                async (jid, subject) =>
+                {
+                    nameEntered.TrySetResult(true);
+                    await nameBlock.Task.ConfigureAwait(false);
+                },
+                new FakeEncoder(new byte[] { 0xFF, 0xD8 }));
+
+            GroupCreateResult result = await creation.CreateGroupAsync(new GroupCreateRequest
+            {
+                Subject = "G",
+                PhotoBytes = new byte[] { 1 }
+            }).ConfigureAwait(false);
+
+            Assert.True(result.Succeeded);
+            Assert.Equal(new[] { "picture:" + NewGroup }, wire.FollowUps);
+            Assert.True(SpinWait.SpinUntil(() => nameEntered.Task.IsCompleted, TimeSpan.FromSeconds(2)));
+            Assert.False(nameBlock.Task.IsCompleted);
+            nameBlock.TrySetResult(true);
         }
 
         [Fact]
