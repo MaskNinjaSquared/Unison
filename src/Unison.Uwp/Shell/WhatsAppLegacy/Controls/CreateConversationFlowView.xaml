@@ -129,29 +129,42 @@
                        MaxLines="1"/>
         </Grid>
 
-        <!-- Community Minimal intro -->
+        <!-- Community Minimal intro (same empty layout as Status/Calls side content). -->
         <Grid Grid.Row="1"
               Grid.RowSpan="2"
               Visibility="{Binding ShowCommunityIntro, Converter={StaticResource BooleanToVisibilityConverter}}"
-              Padding="24,16">
+              Padding="32,24">
             <Grid.RowDefinitions>
                 <RowDefinition Height="*"/>
                 <RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
-            <StackPanel VerticalAlignment="Center" MaxWidth="420" HorizontalAlignment="Center">
-                <TextBlock Text="{Binding CreateExplainTitle}"
-                           FontSize="22"
-                           FontFamily="{StaticResource MainFontSemibold}"
-                           FontWeight="SemiBold"
-                           Foreground="{ThemeResource WhatsAppTextHighBrush}"
-                           TextWrapping="Wrap"/>
-                <TextBlock Text="{Binding CreateExplainBody}"
-                           Margin="0,12,0,0"
-                           FontSize="15"
-                           FontFamily="{StaticResource MainFont}"
-                           Foreground="{ThemeResource WhatsAppTextMediumBrush}"
-                           TextWrapping="Wrap"/>
-            </StackPanel>
+            <ScrollViewer VerticalScrollBarVisibility="Auto"
+                          VerticalAlignment="Center">
+                <StackPanel MaxWidth="420"
+                            HorizontalAlignment="Center"
+                            Margin="0,0,0,8">
+                    <FontIcon Glyph="{Binding CreateExplainGlyph}"
+                              FontFamily="{StaticResource IconFont}"
+                              FontSize="72"
+                              HorizontalAlignment="Center"
+                              Margin="0,0,0,16"
+                              Foreground="{ThemeResource WhatsAppTextMediumBrush}"/>
+                    <TextBlock Text="{Binding CreateExplainTitle}"
+                               FontSize="22"
+                               FontFamily="{StaticResource MainFontSemibold}"
+                               FontWeight="SemiBold"
+                               Foreground="{ThemeResource WhatsAppTextHighBrush}"
+                               TextAlignment="Center"
+                               TextWrapping="WrapWholeWords"/>
+                    <TextBlock Text="{Binding CreateExplainBody}"
+                               Margin="0,12,0,0"
+                               FontSize="15"
+                               FontFamily="{StaticResource MainFont}"
+                               Foreground="{ThemeResource WhatsAppTextMediumBrush}"
+                               TextAlignment="Center"
+                               TextWrapping="WrapWholeWords"/>
+                </StackPanel>
+            </ScrollViewer>
             <Button Grid.Row="1"
                     HorizontalAlignment="Stretch"
                     Margin="0,16,0,8"
@@ -414,7 +427,7 @@
             <ScrollViewer Grid.Row="0"
                           VerticalScrollBarVisibility="Auto"
                           Visibility="{Binding IsCreateCommunity, Converter={StaticResource BooleanToVisibilityConverter}}">
-                    <StackPanel Padding="16,24" MaxWidth="420" HorizontalAlignment="Center">
+                    <StackPanel Padding="32,24" MaxWidth="420" HorizontalAlignment="Center">
                         <Grid Width="160" Height="160" HorizontalAlignment="Center">
                             <toolkit:DropShadowPanel BlurRadius="24"
                                                      OffsetX="0"

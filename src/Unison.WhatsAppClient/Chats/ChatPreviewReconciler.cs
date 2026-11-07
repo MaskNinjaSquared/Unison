@@ -46,6 +46,7 @@ namespace Unison.WhatsAppClient.Chats
         private readonly ChatStateStore _chatState;
         private readonly ChatRowIndex _chatRows;
         private readonly IDispatcher _ui;
+        private readonly ILowPriorityDispatcher _uiLow;
         private readonly IStringResources _strings;
         private readonly IRuntimeDiagnostics _diagnostics;
         private readonly Func<bool> _preferFrugal;
@@ -66,13 +67,17 @@ namespace Unison.WhatsAppClient.Chats
             IStringResources strings,
             IRuntimeDiagnostics diagnostics = null,
             Func<bool> preferFrugal = null,
-            Func<bool> shouldPauseUiSlices = null)
+            Func<bool> shouldPauseUiSlices = null,
+            ILowPriorityDispatcher uiLow = null)
         {
             _historyMessages = historyMessages ?? throw new ArgumentNullException(nameof(historyMessages));
             _aliases = aliases ?? throw new ArgumentNullException(nameof(aliases));
             _chatState = chatState ?? throw new ArgumentNullException(nameof(chatState));
             _chatRows = chatRows ?? throw new ArgumentNullException(nameof(chatRows));
             _ui = ui ?? throw new ArgumentNullException(nameof(ui));
+            // Tip apply/reposition must not sit on Normal ahead of send / chat-open hops —
+            // Mobile journals showed list-chunk ReconcileAsync starving transport for minutes.
+            _uiLow = uiLow ?? (ui as ILowPriorityDispatcher);
             _strings = strings ?? throw new ArgumentNullException(nameof(strings));
             _diagnostics = diagnostics;
             _preferFrugal = preferFrugal ?? (() => false);
@@ -174,7 +179,7 @@ namespace Unison.WhatsAppClient.Chats
                     _chatState.MessagesByChat,
                     canonical,
                     keys,
-                    jid => _aliases.GetCanonicalJid(jid),
+                    jid => _aliases.PeekCanonicalJid(jid),
                     allowFullCacheScan: !frugal,
                     DateTime.UtcNow);
 
@@ -194,7 +199,8 @@ namespace Unison.WhatsAppClient.Chats
                 int sliceEnd = Math.Min(newestByCanonical.Count, start + uiSlice);
                 int sliceSwapped = 0;
                 int sliceKept = 0;
-                await _ui.RunAsync(() =>
+                var sliceWatch = Stopwatch.StartNew();
+                await RunTipUiAsync(() =>
                 {
                     for (int i = sliceStart; i < sliceEnd; i++)
                     {
@@ -212,6 +218,18 @@ namespace Unison.WhatsAppClient.Chats
                         sliceKept += kept;
                     }
                 }).ConfigureAwait(false);
+                sliceWatch.Stop();
+                if (sliceWatch.ElapsedMilliseconds >= 300)
+                {
+                    DiagWrite(
+                        "preview-tip",
+                        "ui-slice-slow",
+                        "reason=" + tag +
+                        "; slice=" + sliceStart + "-" + sliceEnd +
+                        "; ms=" + sliceWatch.ElapsedMilliseconds +
+                        "; swapped=" + sliceSwapped +
+                        "; kept=" + sliceKept);
+                }
 
                 if (sliceSwapped > 0)
                 {
@@ -241,7 +259,7 @@ namespace Unison.WhatsAppClient.Chats
                 // list-chunk: Reposition only bumped rows. Full SortInPlace on 250+ chats during
                 // replay-progressive tip storms caused Move cascades + refresh-visible hangs on
                 // Lumia 950 XL. Full walks (post-replay / deferred-startup) still SortInPlace.
-                await _ui.RunAsync(() =>
+                await RunTipUiAsync(() =>
                 {
                     if (bumpedRows != null && bumpedRows.Count > 0)
                     {
@@ -259,6 +277,20 @@ namespace Unison.WhatsAppClient.Chats
             }
 
             return updated;
+        }
+
+        /// <summary>
+        /// Tip mutations are Low when available so Normal send / open / name batches are not
+        /// queued behind a multi-minute ApplyTip hop on Mobile Low.
+        /// </summary>
+        private Task RunTipUiAsync(Action action)
+        {
+            if (_uiLow != null)
+            {
+                return _uiLow.RunLowAsync(action);
+            }
+
+            return _ui.RunAsync(action);
         }
 
         private async Task WaitWhileUiSlicesPausedAsync(string reason)
@@ -321,11 +353,13 @@ namespace Unison.WhatsAppClient.Chats
             }
 
             bool isGroup = canonical.EndsWith("@g.us", StringComparison.OrdinalIgnoreCase);
+            // Peek: GetCanonicalJid promotes LidMapping misses and can Invalidate ChatRowIndex
+            // mid-FindConversation (rebuild loop on Mobile).
             ChatListStrip strip = ChatListStrip.FromMessage(
                 best,
                 isGroup,
                 _strings.Get("Chat_SelfFallbackName", "You"),
-                _aliases.GetCanonicalJid(best.ParticipantJid));
+                _aliases.PeekCanonicalJid(best.ParticipantJid));
             string yesterday = _strings.Get("Common_Yesterday", "Yesterday");
 
             int updated = 0;

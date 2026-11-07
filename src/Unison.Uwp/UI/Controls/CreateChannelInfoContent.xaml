@@ -5,11 +5,19 @@
 
     <!-- Title + three Fluent explain rows used by Minimal intro and Extended pane. -->
     <StackPanel MaxWidth="420" HorizontalAlignment="Center">
+        <!-- Same empty-state hero glyph as Status/Calls side content (ChannelGlyph). -->
+        <FontIcon Glyph="{StaticResource ChannelGlyph}"
+                  FontFamily="{StaticResource LegacyIconFont}"
+                  FontSize="72"
+                  HorizontalAlignment="Center"
+                  Margin="0,0,0,16"
+                  Foreground="{ThemeResource WhatsAppTextMediumBrush}"/>
         <TextBlock Text="{Binding CreateExplainTitle}"
                    FontSize="22"
                    FontFamily="{StaticResource MainFontSemibold}"
                    FontWeight="SemiBold"
                    Foreground="{ThemeResource WhatsAppTextHighBrush}"
+                   TextAlignment="Center"
                    TextWrapping="WrapWholeWords"/>
 
         <Grid Margin="0,28,0,0">

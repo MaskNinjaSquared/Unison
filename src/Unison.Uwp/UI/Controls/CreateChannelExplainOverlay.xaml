@@ -7,7 +7,7 @@
     <!-- Extended right-pane channel explain (same body as Minimal intro, without Start). -->
     <ScrollViewer VerticalScrollBarVisibility="Auto"
                   VerticalAlignment="Center">
-        <controls:CreateChannelInfoContent Margin="32,24"
+        <controls:CreateChannelInfoContent Margin="32,24,32,24"
                                            HorizontalAlignment="Center"/>
     </ScrollViewer>
 </UserControl>

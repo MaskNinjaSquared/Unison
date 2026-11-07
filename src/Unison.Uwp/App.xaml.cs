@@ -398,7 +398,8 @@ namespace Unison.Uwp
                     sp.GetRequiredService<ChatListDeepLinkHoldGate>().IsHeld,
                     sp.GetRequiredService<ChatTimelineLoadPriorityGate>().IsHeld,
                     sp.GetRequiredService<IAppVisibility>().IsWindowVisible,
-                    sp.GetRequiredService<ChatListColdPopulateGate>().IsHeld)));
+                    sp.GetRequiredService<ChatListColdPopulateGate>().IsHeld),
+                sp.GetRequiredService<AttachedUiDispatcher>()));
             services.AddSingleton(sp => new ChatNameRefresh(
                 sp.GetRequiredService<AttachedUiDispatcher>(),
                 sp.GetRequiredService<IChatStateStore>(),
