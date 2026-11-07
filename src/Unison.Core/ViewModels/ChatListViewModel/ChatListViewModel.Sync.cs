@@ -275,11 +275,19 @@ namespace Unison.Core.ViewModels
                     _refreshDeferredForEnrichment = false;
                     if (_visibleOrderDirty)
                     {
+                        // Cold reattach deferred mid-enrichment: VisibleChats is still empty —
+                        // in-place reorder is a no-op; must full-refresh (fb466dc2).
+                        if (ChatListEnrichmentRefresh.RequiresFullRefreshAfterEnrichment(
+                                VisibleChats.Count,
+                                _visibleOrderDirty))
+                        {
+                            ScheduleRefreshVisibleChats(allowDuringEnrichment: true);
+                        }
                         // Frugal + unfiltered list: reorder painted rows only. ScheduleRefresh
                         // re-ran BuildVisibleRefreshSource (~10s on ARM with hubs) for pin/tip dirt.
                         // But a single hop of 250+ Moves leaves ListView layout running after Exit
                         // (cfb6fa4f: ~380s ui-stall active=none after SyncStatus hide).
-                        if (PreferFrugalUi &&
+                        else if (PreferFrugalUi &&
                             string.IsNullOrWhiteSpace(SearchQuery) &&
                             _activeFilter == ChatListFilter.All)
                         {

@@ -20,6 +20,7 @@
                  Width="48" Height="48"
                  Fill="{ThemeResource AvatarFallbackBackgroundBrush}"/>
 
+        <!-- FontSize is overwritten in ApplyVisual (28 contact / 42 channel at Size=48). -->
         <FontIcon x:Name="ContactFallbackIcon"
                   Glyph="&#xEA8C;"
                   FontFamily="{StaticResource IconFont}"

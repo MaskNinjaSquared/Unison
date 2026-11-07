@@ -15,8 +15,16 @@ namespace Unison.Core.Contracts
     {
         /// <summary>
         /// Canonical form of a JID. Returns the input unchanged when nothing is known about it.
+        /// May promote LidMapping misses into the alias table (raises Changed).
         /// </summary>
         string GetCanonicalJid(string jid);
+
+        /// <summary>
+        /// Same resolution rules as <see cref="GetCanonicalJid"/> but never promotes LidMapping
+        /// misses (no Changed). Use for bulk chat-list projection / indexes so a cold build
+        /// cannot flood alias invalidations on the UI thread.
+        /// </summary>
+        string PeekCanonicalJid(string jid);
 
         /// <summary>
         /// The other half of a PN/LID pair, when the session has seen both. The key is normalized

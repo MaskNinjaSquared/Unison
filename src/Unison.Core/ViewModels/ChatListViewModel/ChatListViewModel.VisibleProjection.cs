@@ -279,40 +279,48 @@ namespace Unison.Core.ViewModels
                 return source;
             }
 
-            source = _chatService.DeduplicateChatsByCanonicalJid(source, GetCanonical);
-            source = _chatService.ProjectCommunityList(
-                source,
-                ResolveCatalogByJid,
-                GetOrCreateSyntheticCommunity,
-                GetCanonical);
-            EnrichCommunityHubRows(source);
-
-            if (_activeFilter != ChatListFilter.All)
+            ArmCatalogByCanonicalScratch();
+            try
             {
-                source = source.Where(MatchesActiveFilter).ToList();
+                source = _chatService.DeduplicateChatsByCanonicalJid(source, GetCanonical);
+                source = _chatService.ProjectCommunityList(
+                    source,
+                    ResolveCatalogByJid,
+                    GetOrCreateSyntheticCommunity,
+                    GetCanonical);
+                EnrichCommunityHubRows(source);
+
+                if (_activeFilter != ChatListFilter.All)
+                {
+                    source = source.Where(MatchesActiveFilter).ToList();
+                }
+
+                source = _chatService.SortChatsForDisplay(source);
+
+                if (_activeCommunity != null)
+                {
+                    ChatItem stillOpen = FindProjectedCommunity(_activeCommunity.JID, source);
+                    if (stillOpen == null)
+                    {
+                        ActiveCommunity = null;
+                    }
+                    else if (!ReferenceEquals(stillOpen, _activeCommunity))
+                    {
+                        ActiveCommunity = stillOpen;
+                    }
+                    else
+                    {
+                        OnPropertyChanged(nameof(ActiveCommunitySubtitle));
+                        OnPropertyChanged(nameof(ActiveCommunityTitle));
+                    }
+                }
+
+                return source;
             }
-
-            source = _chatService.SortChatsForDisplay(source);
-
-            if (_activeCommunity != null)
+            finally
             {
-                ChatItem stillOpen = FindProjectedCommunity(_activeCommunity.JID, source);
-                if (stillOpen == null)
-                {
-                    ActiveCommunity = null;
-                }
-                else if (!ReferenceEquals(stillOpen, _activeCommunity))
-                {
-                    ActiveCommunity = stillOpen;
-                }
-                else
-                {
-                    OnPropertyChanged(nameof(ActiveCommunitySubtitle));
-                    OnPropertyChanged(nameof(ActiveCommunityTitle));
-                }
+                _catalogByCanonicalScratch = null;
             }
-
-            return source;
         }
 
         /// <summary>
@@ -491,7 +499,7 @@ namespace Unison.Core.ViewModels
                 return true;
             }
 
-            string canonical = _jids.GetCanonicalJid(chat.JID);
+            string canonical = _jids.PeekCanonicalJid(chat.JID);
             return !string.IsNullOrWhiteSpace(canonical) && names.ContainsKey(canonical);
         }
 
@@ -614,6 +622,20 @@ namespace Unison.Core.ViewModels
             }
 
             string key = GetCanonical(jid);
+            if (string.IsNullOrWhiteSpace(key))
+            {
+                return null;
+            }
+
+            // Prefer the scratch map built for one Project pass (O(1)). Fall back to a linear
+            // walk only when BuildVisibleRefreshSource did not arm it.
+            Dictionary<string, ChatItem> byCanonical = _catalogByCanonicalScratch;
+            if (byCanonical != null)
+            {
+                ChatItem hit;
+                return byCanonical.TryGetValue(key, out hit) ? hit : null;
+            }
+
             foreach (ChatItem chat in _chatState.Chats)
             {
                 if (chat == null || string.IsNullOrWhiteSpace(chat.JID))
@@ -628,6 +650,37 @@ namespace Unison.Core.ViewModels
             }
 
             return null;
+        }
+
+        /// <summary>
+        /// One canonical→row map for <see cref="ResolveCatalogByJid"/> during a single
+        /// <see cref="BuildVisibleRefreshSource"/> pass. Cleared when the build ends.
+        /// </summary>
+        private Dictionary<string, ChatItem> _catalogByCanonicalScratch;
+
+        private void ArmCatalogByCanonicalScratch()
+        {
+            var map = new Dictionary<string, ChatItem>(
+                Math.Max(16, _chatState.Chats.Count),
+                StringComparer.OrdinalIgnoreCase);
+            for (int i = 0; i < _chatState.Chats.Count; i++)
+            {
+                ChatItem chat = _chatState.Chats[i];
+                if (chat == null || string.IsNullOrWhiteSpace(chat.JID))
+                {
+                    continue;
+                }
+
+                string key = GetCanonical(chat.JID);
+                if (string.IsNullOrWhiteSpace(key) || map.ContainsKey(key))
+                {
+                    continue;
+                }
+
+                map[key] = chat;
+            }
+
+            _catalogByCanonicalScratch = map;
         }
 
         private ChatItem GetOrCreateSyntheticCommunity(string parentJid)
@@ -851,7 +904,9 @@ namespace Unison.Core.ViewModels
                 return jid;
             }
 
-            string canonical = _jids.GetCanonicalJid(jid);
+            // Peek: GetCanonicalJid promotes LidMapping misses and raises Alias.Changed mid-build
+            // (InvalidateChatRowIndex storm). List projection must stay read-only.
+            string canonical = _jids.PeekCanonicalJid(jid);
             return string.IsNullOrWhiteSpace(canonical) ? jid : canonical;
         }
 

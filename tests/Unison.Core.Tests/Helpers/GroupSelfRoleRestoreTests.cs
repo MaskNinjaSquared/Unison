@@ -97,6 +97,7 @@ namespace Unison.Core.Tests.Helpers
             public Profile Self => new Profile { Id = SelfDevicePn, Lid = SelfLid };
 
             public string GetCanonicalJid(string jid) => JidHelper.Normalize(jid) ?? jid;
+            public string PeekCanonicalJid(string jid) => GetCanonicalJid(jid);
 
             public bool TryGetAlias(string jid, out string alias)
             {

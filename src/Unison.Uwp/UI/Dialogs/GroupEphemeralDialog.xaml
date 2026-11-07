@@ -15,7 +15,7 @@
         <Thickness x:Key="ContentDialogPadding">16,12</Thickness>
     </ContentDialog.Resources>
 
-    <StackPanel>
+    <StackPanel Padding="0,0,0,10">
         <TextBlock x:Uid="CreateGroup_EphemeralDialogBody"
                    Text="All new messages in this chat will disappear after the selected duration."
                    TextWrapping="WrapWholeWords"

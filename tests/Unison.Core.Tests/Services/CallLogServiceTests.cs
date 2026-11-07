@@ -190,6 +190,7 @@ namespace Unison.Core.Tests.Services
                 new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
             public string GetCanonicalJid(string jid) => jid;
+            public string PeekCanonicalJid(string jid) => GetCanonicalJid(jid);
 
             public bool TryGetAlias(string jid, out string alias)
             {

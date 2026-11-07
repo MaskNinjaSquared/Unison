@@ -125,7 +125,11 @@ namespace Unison.Uwp.UI.Controls
             BorderEllipse.Height = size;
             BorderEllipse.Visibility = ShowBorder ? Visibility.Visible : Visibility.Collapsed;
 
-            ContactFallbackIcon.FontSize = size * (20d / 48d);
+            // XAML FontSize is only design-time — this hop owns the live scale. Channel
+            // glyphs (LegacyIconFont EB17) need a larger ratio than contact to fill the
+            // plate; contact keeps the prior XAML intent of ~28 at Size=48.
+            double glyphAt48 = IsChannel ? 35d : 28d;
+            ContactFallbackIcon.FontSize = size * (glyphAt48 / 48d);
             GroupFallbackHost.Width = size * 0.5;
             GroupFallbackHost.Height = size * 0.5;
 

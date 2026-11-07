@@ -140,6 +140,30 @@ namespace Unison.Core.Tests.ViewModels
         }
 
         [Fact]
+        public void Group_confirm_dismisses_busy_on_urgent_dispatcher()
+        {
+            // Normal name-batch hops must not keep CreateBusy painted after wire OK (e7f675d0).
+            var dispatcher = new CountingDispatcher();
+            var groups = new FakeGroups
+            {
+                NextResult = new GroupCreateResult { GroupJid = "120363000000000015@g.us" }
+            };
+            var vm = CreateVm(groups: groups, dispatcher: dispatcher);
+            string opened = null;
+            vm.ChatOpenRequested += (s, jid) => opened = jid;
+            vm.Open();
+            vm.NewGroupCommand.Execute(null);
+            vm.CreateNextCommand.Execute(null);
+            vm.GroupName = "Urgent dismiss";
+
+            vm.CreateNextCommand.Execute(null);
+
+            Assert.True(SpinWait.SpinUntil(() => opened != null && !vm.IsCreating, TimeSpan.FromSeconds(2)));
+            Assert.True(dispatcher.UrgentPasses > 0);
+            Assert.False(vm.IsOpen);
+        }
+
+        [Fact]
         public async Task Confirm_blocks_the_button_and_shows_busy_until_the_facade_answers()
         {
             var release = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -201,6 +225,58 @@ namespace Unison.Core.Tests.ViewModels
             Assert.True(SpinWait.SpinUntil(() => notifications.LastBody != null, TimeSpan.FromSeconds(2)));
             Assert.Equal("Community created", notifications.LastTitle);
             Assert.Equal("Bairro created successfully.", notifications.LastBody);
+        }
+
+        [Fact]
+        public void Community_confirm_with_photo_passes_bytes_and_dismisses_on_urgent()
+        {
+            // Same CreateBusy starvation as group: picture follow-up + name batch must not hold
+            // the overlay after wire create returns (e7f675d0 community-create timeout path).
+            var dispatcher = new CountingDispatcher();
+            var groups = new FakeGroups
+            {
+                NextResult = new GroupCreateResult { GroupJid = "120363000000000014@g.us" }
+            };
+            var chats = new RecordingChats();
+            var vm = CreateVm(groups: groups, chats: chats, dispatcher: dispatcher);
+            vm.Open();
+            vm.NewCommunityCommand.Execute(null);
+            vm.CommunityName = "Bairro";
+            vm.CommunityPhotoBytes = new byte[] { 9, 8, 7 };
+
+            vm.CreateNextCommand.Execute(null);
+
+            Assert.True(SpinWait.SpinUntil(
+                () => !vm.IsCreating && vm.CreateFlow == NewConversationCreateFlow.None,
+                TimeSpan.FromSeconds(2)));
+            Assert.Equal(new byte[] { 9, 8, 7 }, groups.LastCommunity.PhotoBytes);
+            Assert.Equal("120363000000000014@g.us", chats.LastCommunityJid);
+            Assert.True(dispatcher.UrgentPasses > 0);
+            Assert.False(vm.IsOpen);
+        }
+
+        [Fact]
+        public async Task Community_create_failure_clears_busy_on_urgent_before_dialog()
+        {
+            var dispatcher = new CountingDispatcher();
+            var dialogs = new FakeDialogs { IsOnUi = () => dispatcher.IsRunningAction };
+            var groups = new FakeGroups
+            {
+                NextResult = GroupCreateResult.Failed(GroupCreateResult.ReasonNotConnected)
+            };
+            var vm = CreateVm(dialogs, groups: groups, dispatcher: dispatcher);
+            vm.Open();
+            vm.NewCommunityCommand.Execute(null);
+            vm.CommunityName = "Bairro";
+            vm.CommunityPhotoBytes = new byte[] { 1 };
+
+            vm.CreateNextCommand.Execute(null);
+            await dialogs.WaitShownAsync().ConfigureAwait(true);
+
+            Assert.False(vm.IsCreating);
+            Assert.True(dispatcher.UrgentPasses > 0);
+            Assert.True(dialogs.ShownOnUi);
+            Assert.Equal(NewConversationCreateFlow.Community, vm.CreateFlow);
         }
 
         [Fact]
@@ -333,6 +409,35 @@ namespace Unison.Core.Tests.ViewModels
             Assert.True(SpinWait.SpinUntil(() => notifications.LastBody != null, TimeSpan.FromSeconds(2)));
             Assert.Equal("Channel created", notifications.LastTitle);
             Assert.Equal("News created successfully.", notifications.LastBody);
+        }
+
+        [Fact]
+        public void Channel_confirm_dismisses_busy_on_urgent_dispatcher()
+        {
+            var dispatcher = new CountingDispatcher();
+            var channels = new FakeChannels
+            {
+                NextResult = new ChannelCreateResult { ChannelJid = "120363000000000011@newsletter" }
+            };
+            var vm = CreateVm(
+                groups: new FakeGroups(),
+                chats: new RecordingChats(),
+                channels: channels,
+                dispatcher: dispatcher);
+            string opened = null;
+            vm.ChatOpenRequested += (s, jid) => opened = jid;
+            vm.Open();
+            vm.ReportLayoutMinimal(false);
+            vm.NewChannelCommand.Execute(null);
+            vm.ChannelName = "News";
+            vm.ChannelPhotoBytes = new byte[] { 3 };
+
+            vm.CreateNextCommand.Execute(null);
+
+            Assert.True(SpinWait.SpinUntil(() => opened != null && !vm.IsCreating, TimeSpan.FromSeconds(2)));
+            Assert.Equal(new byte[] { 3 }, channels.LastRequest.PhotoBytes);
+            Assert.True(dispatcher.UrgentPasses > 0);
+            Assert.False(vm.IsOpen);
         }
 
         [Fact]
@@ -1109,6 +1214,7 @@ namespace Unison.Core.Tests.ViewModels
             public Profile Self => null;
 
             public string GetCanonicalJid(string jid) => JidHelper.Normalize(jid) ?? jid;
+            public string PeekCanonicalJid(string jid) => GetCanonicalJid(jid);
 
             public bool TryGetAlias(string jid, out string alias)
             {

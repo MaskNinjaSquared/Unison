@@ -41,7 +41,7 @@
                                         AcceptsReturn="{Binding ElementName=Root, Path=AcceptsReturn}"
                                         TextWrapping="{Binding ElementName=Root, Path=TextWrapping}"
                                         BorderThickness="0"
-                                        Padding="0,2,4,2"
+                                        Padding="2,10,4,2"
                                         MinHeight="28"
                                         MaxHeight="{Binding ElementName=Root, Path=MaxInputHeight}"
                                         VerticalAlignment="Stretch"

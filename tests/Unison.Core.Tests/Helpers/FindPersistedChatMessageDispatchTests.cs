@@ -58,6 +58,7 @@ namespace Unison.Core.Tests.Helpers
             private sealed class FakeJids : IJidResolver
             {
                 public string GetCanonicalJid(string jid) => "b@x";
+            public string PeekCanonicalJid(string jid) => GetCanonicalJid(jid);
 
                 public bool TryGetAlias(string jid, out string alias)
                 {

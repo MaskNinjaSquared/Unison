@@ -667,10 +667,7 @@ namespace Unison.WhatsAppClient.Helpers
             string resolved = _naming.ResolveChatDisplayName(chat.JID);
             bool incomingMeaningful = _naming.IsMeaningfulGroupLabel(resolved, chat.JID);
             bool existingMeaningful = _naming.IsMeaningfulGroupLabel(chat.Name, chat.JID);
-            if (GroupNameSyncBlacklist.ShouldApplySyncedSubject(resolved, incomingMeaningful, existingMeaningful))
-            {
-                chat.Name = resolved;
-            }
+            GroupSubjectRowWrite.TryWrite(chat, resolved, incomingMeaningful, existingMeaningful);
         }
 
         private bool CacheIfAllowed(string groupJid, string subject, string rowName)

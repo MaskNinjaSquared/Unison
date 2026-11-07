@@ -596,6 +596,8 @@ namespace Unison.Core.Tests.State
                 return key;
             }
 
+            public string PeekCanonicalJid(string jid) => GetCanonicalJid(jid);
+
             public bool TryGetAlias(string jid, out string alias)
             {
                 string key = JidHelper.Normalize(jid);

@@ -8,9 +8,9 @@
         <!-- Same empty-state hero glyph as Status/Calls side content (ChannelGlyph). -->
         <FontIcon Glyph="{StaticResource ChannelGlyph}"
                   FontFamily="{StaticResource LegacyIconFont}"
-                  FontSize="72"
+                  FontSize="120"
                   HorizontalAlignment="Center"
-                  Margin="0,0,0,16"
+                  Margin="0,0,0,30"
                   Foreground="{ThemeResource WhatsAppTextMediumBrush}"/>
         <TextBlock Text="{Binding CreateExplainTitle}"
                    FontSize="22"

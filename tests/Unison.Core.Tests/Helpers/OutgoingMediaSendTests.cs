@@ -466,6 +466,8 @@ namespace Unison.Core.Tests.Helpers
                 return jid != null && Canonical.TryGetValue(jid, out value) ? value : jid;
             }
 
+            public string PeekCanonicalJid(string jid) => GetCanonicalJid(jid);
+
             public bool TryGetAlias(string jid, out string alias)
             {
                 alias = null;

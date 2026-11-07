@@ -2,6 +2,24 @@
 
 Newest first.
 
+## Groups — persist subject on chat.Name when it changes
+
+`ApplyRemoteGroupSubjects` / resolved-name batches and `ChatNameRefresh.Applied`
+now `_catalog.Schedule()` only when a row title actually moved. Subjects stay
+memory-only (`GroupSubjects`); durable titles ride on catalogue `Name` via
+`GroupSubjectRowWrite.TryWrite` (!= current + blacklist).
+
+## Mobile — chat-list cold build mid-enrichment freeze
+
+Attach no longer calls `RefreshVisibleChats` synchronously on the UI
+thread. On frugal devices, mid-names/avatars/groups attach only marks the
+list dirty and defers until enrichment ends; an empty deferred list then
+full-refreshes (reorder alone is a no-op). List projection uses
+`PeekCanonicalJid` and a one-shot catalog map so community resolve stays
+O(1) without LidMapping promote / `Alias.Changed` storms. Journal
+`fb466dc2`: `buildMs≈411s`, `ui-stall active=none` while groups 5/12
+starved.
+
 ## Favourites — app-state regular_low resilience
 
 Undecryptable syncd snapshot/patch records are skipped with a warning

@@ -35,6 +35,7 @@ namespace Unison.Core.ViewModels
         private readonly INewChatDialogViewModelFactory _newChatFactory;
         private readonly IStringResources _strings;
         private readonly IDispatcher _dispatcher;
+        private readonly IUrgentDispatcher _urgentUi;
         private readonly ILocalContactsService _localContacts;
         private readonly IFilePicker _filePicker;
         private readonly IGroupService _groups;
@@ -66,7 +67,8 @@ namespace Unison.Core.ViewModels
             IFilePicker filePicker = null,
             IGroupService groups = null,
             INotificationService notifications = null,
-            IChannelService channels = null)
+            IChannelService channels = null,
+            IUrgentDispatcher urgentDispatcher = null)
         {
             _chatState = chatState ?? throw new ArgumentNullException(nameof(chatState));
             _contacts = contacts ?? throw new ArgumentNullException(nameof(contacts));
@@ -77,6 +79,8 @@ namespace Unison.Core.ViewModels
             _newChatFactory = newChatFactory ?? throw new ArgumentNullException(nameof(newChatFactory));
             _strings = strings;
             _dispatcher = dispatcher;
+            // Create dismiss must beat Normal name-batch hops; AttachedUiDispatcher is both.
+            _urgentUi = urgentDispatcher ?? (dispatcher as IUrgentDispatcher);
             _localContacts = localContacts;
             _filePicker = filePicker;
             _groups = groups;

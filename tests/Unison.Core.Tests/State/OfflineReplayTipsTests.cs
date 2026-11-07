@@ -230,6 +230,8 @@ namespace Unison.Core.Tests.State
                 return key != null && Canonical.TryGetValue(key, out value) ? value : key;
             }
 
+            public string PeekCanonicalJid(string jid) => GetCanonicalJid(jid);
+
             public bool TryGetAlias(string jid, out string alias)
             {
                 alias = null;

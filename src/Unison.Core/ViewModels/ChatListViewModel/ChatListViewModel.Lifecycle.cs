@@ -113,7 +113,32 @@ namespace Unison.Core.ViewModels
 
             if (!_batchRendering)
             {
-                RefreshVisibleChats();
+                // Never BuildVisibleRefreshSource synchronously on Attach: page Loaded has no
+                // UiStallWatchdog hop (active=none), and frugal mid-enrichment cold builds have
+                // held the UI for minutes (fb466dc2: buildMs≈411s while groups 5/12 starved).
+                if (ChatListEnrichmentRefresh.ShouldDeferVisibleRefresh(
+                        PreferFrugalUi,
+                        _chatService.MatchesListEnrichmentPhase(_lastSyncPhaseToken)))
+                {
+                    _refreshDeferredForEnrichment = true;
+                    _visibleOrderDirty = true;
+                    TraceListLifecycle(
+                        "refresh-deferred-enrichment-attach",
+                        BuildListSnapshot("visible=" + VisibleChats.Count),
+                        flush: true);
+                }
+                else
+                {
+                    _ = _dispatcher.RunAsync(() =>
+                    {
+                        if (!_attached || _batchRendering || IsInSafeMode || IsListHeldForSync)
+                        {
+                            return;
+                        }
+
+                        RefreshVisibleChats();
+                    });
+                }
             }
         }
 

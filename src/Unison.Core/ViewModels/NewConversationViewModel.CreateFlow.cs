@@ -685,8 +685,8 @@ namespace Unison.Core.ViewModels
             }
             finally
             {
-                // Create answers on the thread pool; the overlay binding must clear on the UI.
-                await RunOnUiAsync(() => IsCreating = false).ConfigureAwait(false);
+                // Create answers on the thread pool; High so a Normal name-batch cannot hold the spinner.
+                await RunUrgentOnUiAsync(() => IsCreating = false).ConfigureAwait(false);
             }
         }
 
@@ -720,8 +720,10 @@ namespace Unison.Core.ViewModels
             _chats?.StartNewChat(result.GroupJid, createdName);
             // StartNewChat queues the row insert on the UI; opening before it lands finds no row.
             await Task.Delay(NewRowSettleMilliseconds).ConfigureAwait(false);
-            await RunOnUiAsync(() =>
+            // High: ApplyResolvedNameBatchAsync on Normal must not keep CreateBusy painted after wire OK.
+            await RunUrgentOnUiAsync(() =>
             {
+                IsCreating = false;
                 IsOpen = false;
                 ChatOpenRequested?.Invoke(this, result.GroupJid);
             }).ConfigureAwait(false);
@@ -749,7 +751,11 @@ namespace Unison.Core.ViewModels
             }
 
             _chats?.StartNewCommunity(result.GroupJid, createdName);
-            await RunOnUiAsync(Close).ConfigureAwait(false);
+            await RunUrgentOnUiAsync(() =>
+            {
+                IsCreating = false;
+                Close();
+            }).ConfigureAwait(false);
             // The listing brings the linked announce/general subgroups under the seeded hub.
             _ = _groups.QueryAllGroupsAsync(force: true);
             NotifyCreatedSuccessfully(isCommunity: true, createdName);
@@ -782,7 +788,7 @@ namespace Unison.Core.ViewModels
             }
             finally
             {
-                await RunOnUiAsync(() => IsCreating = false).ConfigureAwait(false);
+                await RunUrgentOnUiAsync(() => IsCreating = false).ConfigureAwait(false);
             }
         }
 
@@ -806,8 +812,9 @@ namespace Unison.Core.ViewModels
             _chats?.StartNewChat(result.ChannelJid, createdName);
             // StartNewChat queues the row insert on the UI; opening before it lands finds no row.
             await Task.Delay(NewRowSettleMilliseconds).ConfigureAwait(false);
-            await RunOnUiAsync(() =>
+            await RunUrgentOnUiAsync(() =>
             {
+                IsCreating = false;
                 IsOpen = false;
                 ChatOpenRequested?.Invoke(this, result.ChannelJid);
             }).ConfigureAwait(false);
@@ -894,9 +901,11 @@ namespace Unison.Core.ViewModels
             string close = _strings?.Get("Common_Close", "Close") ?? "Close";
             try
             {
-                // Create answers on the thread pool; a ContentDialog built there throws and the
-                // dialog service swallows it, so the user would see nothing at all.
-                await RunOnUiAsync(() => _dialogs.ShowMessageAsync(title, body, close)).ConfigureAwait(false);
+                // High: community create timeout (e7f675d0) left CreateBusy painted because the
+                // failure dialog waited on Normal behind ApplyResolvedNameBatchAsync, so finally
+                // never cleared IsCreating.
+                await RunUrgentOnUiAsync(() => _dialogs.ShowMessageAsync(title, body, close))
+                    .ConfigureAwait(false);
             }
             catch (Exception ex)
             {
@@ -913,6 +922,37 @@ namespace Unison.Core.ViewModels
 
             action();
             return Task.CompletedTask;
+        }
+
+        /// <summary>
+        /// Create overlay dismiss / open-chat must not wait behind Normal name-batch hops
+        /// (journal e7f675d0: picture-set-ok then ApplyResolvedNameBatchAsync held CreateBusy).
+        /// </summary>
+        private Task RunUrgentOnUiAsync(Action action)
+        {
+            if (_urgentUi != null)
+            {
+                return _urgentUi.RunUrgentAsync(action);
+            }
+
+            return RunOnUiAsync(action);
+        }
+
+        private async Task RunUrgentOnUiAsync(Func<Task> work)
+        {
+            if (_urgentUi != null)
+            {
+                Task started = null;
+                await _urgentUi.RunUrgentAsync(() => started = work()).ConfigureAwait(false);
+                if (started != null)
+                {
+                    await started.ConfigureAwait(false);
+                }
+
+                return;
+            }
+
+            await RunOnUiAsync(work).ConfigureAwait(false);
         }
 
         private async Task RunOnUiAsync(Func<Task> work)

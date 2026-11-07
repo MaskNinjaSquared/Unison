@@ -6,7 +6,7 @@
     Padding="32,24">
 
     <!-- Minimal layout intro: title + three rows + Começar (same rules as community). -->
-    <Grid>
+    <Grid Padding="10">
         <Grid.RowDefinitions>
             <RowDefinition Height="*"/>
             <RowDefinition Height="Auto"/>
@@ -17,7 +17,7 @@
         </ScrollViewer>
         <Button Grid.Row="1"
                 HorizontalAlignment="Stretch"
-                Margin="0,16,0,8"
+                Margin="10,16,10,8"
                 MinHeight="44"
                 Background="{ThemeResource WhatsAppGreenFocusBrush}"
                 Foreground="White"

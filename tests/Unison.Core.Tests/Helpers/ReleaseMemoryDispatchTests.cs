@@ -60,6 +60,7 @@ namespace Unison.Core.Tests.Helpers
             public IReadOnlyList<string> MessageCacheChatJids() => Keys;
 
             public string GetCanonicalJid(string jid) => jid;
+            public string PeekCanonicalJid(string jid) => GetCanonicalJid(jid);
 
             public void RemoveMessagesByChatKey(string key) => Removed.Add(key);
 

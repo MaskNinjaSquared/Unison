@@ -1003,7 +1003,24 @@ namespace Unison.Uwp
 
             services.AddTransient<LoginViewModel>();
             services.AddTransient<StartViewModel>();
-            services.AddSingleton<NewConversationViewModel>();
+            // AttachedUiDispatcher as IUrgentDispatcher: create-busy dismiss must beat Normal
+            // ContactFacade name-batch hops (DispatcherService alone has no High priority).
+            services.AddSingleton(sp => new NewConversationViewModel(
+                sp.GetRequiredService<IChatStateStore>(),
+                sp.GetRequiredService<IContactService>(),
+                sp.GetRequiredService<IChatService>(),
+                sp.GetRequiredService<IProfileService>(),
+                sp.GetRequiredService<IJidResolver>(),
+                sp.GetRequiredService<IDialogService>(),
+                sp.GetRequiredService<INewChatDialogViewModelFactory>(),
+                sp.GetRequiredService<IStringResources>(),
+                sp.GetRequiredService<IDispatcher>(),
+                sp.GetService<ILocalContactsService>(),
+                sp.GetService<IFilePicker>(),
+                sp.GetService<IGroupService>(),
+                sp.GetService<INotificationService>(),
+                sp.GetService<IChannelService>(),
+                sp.GetRequiredService<AttachedUiDispatcher>()));
             services.AddSingleton<ShellViewModel>();
             services.AddSingleton<IForwardMessagePicker>(sp =>
                 sp.GetRequiredService<ShellViewModel>());

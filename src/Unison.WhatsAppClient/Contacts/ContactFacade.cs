@@ -224,6 +224,12 @@ namespace Unison.WhatsAppClient.Contacts
                 _diagnostics.Write("names", "list-names-applied", "count=" + updated);
             }
 
+            // Titles ride on chat.Name in the catalogue; GroupSubjects is memory-only.
+            if (updated > 0)
+            {
+                _catalog.Schedule();
+            }
+
             NotifyDisplayNamesUpdated();
         }
 
@@ -670,8 +676,13 @@ namespace Unison.WhatsAppClient.Contacts
         /// <inheritdoc />
         public Task ApplyResolvedNamesToChatListAsync() => _nameRefresh.ApplyAsync();
 
+        // One UI hop with a full-catalogue walk starved create-busy dismiss for minutes
+        // (e7f675d0). Tiny subject post-create stays Normal; large batches go Low + sliced.
+        private const int ResolvedNameTinyBatchMax = 4;
+        private const int ResolvedNameUiSliceSize = 24;
+
         /// <summary>
-        /// Fills push / subject caches and relabels matching list rows once on the UI thread.
+        /// Fills push / subject caches and relabels matching list rows on the UI thread.
         /// </summary>
         public async Task ApplyResolvedNameBatchAsync(IList<ResolvedNameEntry> entries)
         {
@@ -680,6 +691,7 @@ namespace Unison.WhatsAppClient.Contacts
                 return;
             }
 
+            var unique = new List<ResolvedNameEntry>();
             var byCanonical = new Dictionary<string, ResolvedNameEntry>(StringComparer.OrdinalIgnoreCase);
             foreach (ResolvedNameEntry entry in entries)
             {
@@ -691,60 +703,124 @@ namespace Unison.WhatsAppClient.Contacts
                 byCanonical[entry.Canonical] = entry;
             }
 
-            await _ui.RunAsync(() =>
+            foreach (KeyValuePair<string, ResolvedNameEntry> pair in byCanonical)
             {
-                foreach (ResolvedNameEntry entry in entries)
+                unique.Add(pair.Value);
+            }
+
+            if (unique.Count == 0)
+            {
+                return;
+            }
+
+            ILowPriorityDispatcher lowUi = _ui as ILowPriorityDispatcher;
+            bool useLow = unique.Count > ResolvedNameTinyBatchMax && lowUi != null;
+            int namesUpdated = 0;
+
+            for (int offset = 0; offset < unique.Count; offset += ResolvedNameUiSliceSize)
+            {
+                int count = Math.Min(ResolvedNameUiSliceSize, unique.Count - offset);
+                List<ResolvedNameEntry> slice = unique.GetRange(offset, count);
+                int sliceUpdated = 0;
+                Action work = () => sliceUpdated = ApplyResolvedNameSliceOnUi(slice);
+                if (useLow)
                 {
-                    if (entry == null)
+                    await lowUi.RunLowAsync(work).ConfigureAwait(false);
+                }
+                else
+                {
+                    await _ui.RunAsync(work).ConfigureAwait(false);
+                }
+
+                namesUpdated += sliceUpdated;
+
+                // Let High create-dismiss hops run between slices; one monolithic hop cannot.
+                if (offset + count < unique.Count)
+                {
+                    await Task.Yield();
+                }
+            }
+
+            // Durable path is chat.Name (GroupSubjects is never written to disk).
+            if (namesUpdated > 0)
+            {
+                _catalog.Schedule();
+            }
+
+            NotifyDisplayNamesUpdated();
+            _chatState.NotifyDisplayNamesChanged();
+        }
+
+        /// <summary>
+        /// Cache fill + O(entries) row relabel via <see cref="ChatRowIndex.FindConversation"/> —
+        /// never walk the full chat catalogue per batch.
+        /// </summary>
+        /// <returns>How many row titles actually changed (catalogue Schedule only when &gt; 0).</returns>
+        private int ApplyResolvedNameSliceOnUi(IList<ResolvedNameEntry> slice)
+        {
+            if (slice == null || slice.Count == 0)
+            {
+                return 0;
+            }
+
+            for (int i = 0; i < slice.Count; i++)
+            {
+                ResolvedNameEntry entry = slice[i];
+                if (entry == null)
+                {
+                    continue;
+                }
+
+                if (entry.IsSubject)
+                {
+                    if (!GroupNameSyncBlacklist.ShouldCacheSyncedSubject(
+                            entry.Name,
+                            GroupMeaningfulLabel.Has(
+                                entry.Canonical,
+                                DuplicateChatRowPick.FirstNonBlankName(
+                                    _chatRows.FindConversation(entry.Canonical)),
+                                jid =>
+                                {
+                                    string cached;
+                                    return _pushNames.TryGetValue(jid, out cached) ? cached : null;
+                                },
+                                IsMeaningfulChatLabel)))
                     {
                         continue;
                     }
 
-                    if (entry.IsSubject)
-                    {
-                        if (!GroupNameSyncBlacklist.ShouldCacheSyncedSubject(
-                                entry.Name,
-                                GroupMeaningfulLabel.Has(
-                                    entry.Canonical,
-                                    DuplicateChatRowPick.FirstNonBlankName(
-                                        _chatRows.FindConversation(entry.Canonical)),
-                                    jid =>
-                                    {
-                                        string cached;
-                                        return _pushNames.TryGetValue(jid, out cached) ? cached : null;
-                                    },
-                                    IsMeaningfulChatLabel)))
-                        {
-                            continue;
-                        }
-
-                        _groupSubjects.Set(entry.Canonical, entry.Name);
-                        if (!string.IsNullOrEmpty(entry.Normalized) &&
-                            !string.Equals(entry.Normalized, entry.Canonical, StringComparison.OrdinalIgnoreCase))
-                        {
-                            _groupSubjects.Set(entry.Normalized, entry.Name);
-                        }
-
-                        continue;
-                    }
-
-                    _pushNames.Set(entry.Canonical, entry.Name);
+                    _groupSubjects.Set(entry.Canonical, entry.Name);
                     if (!string.IsNullOrEmpty(entry.Normalized) &&
                         !string.Equals(entry.Normalized, entry.Canonical, StringComparison.OrdinalIgnoreCase))
                     {
-                        _pushNames.Set(entry.Normalized, entry.Name);
+                        _groupSubjects.Set(entry.Normalized, entry.Name);
                     }
+
+                    continue;
                 }
 
-                foreach (ChatItem chat in _chatState.Chats)
+                _pushNames.Set(entry.Canonical, entry.Name);
+                if (!string.IsNullOrEmpty(entry.Normalized) &&
+                    !string.Equals(entry.Normalized, entry.Canonical, StringComparison.OrdinalIgnoreCase))
                 {
-                    if (chat == null)
-                    {
-                        continue;
-                    }
+                    _pushNames.Set(entry.Normalized, entry.Name);
+                }
+            }
 
-                    ResolvedNameEntry entry;
-                    if (!byCanonical.TryGetValue(_jids.GetCanonicalJid(chat.JID), out entry))
+            int updated = 0;
+            for (int i = 0; i < slice.Count; i++)
+            {
+                ResolvedNameEntry entry = slice[i];
+                if (entry == null || string.IsNullOrWhiteSpace(entry.Canonical))
+                {
+                    continue;
+                }
+
+                List<ChatItem> rows = _chatRows.FindConversation(entry.Canonical);
+                for (int r = 0; r < rows.Count; r++)
+                {
+                    ChatItem chat = rows[r];
+                    if (chat == null)
                     {
                         continue;
                     }
@@ -753,23 +829,28 @@ namespace Unison.WhatsAppClient.Contacts
                     {
                         bool incomingMeaningful = IsMeaningfulChatLabel(entry.Name, chat.JID, true);
                         bool existingMeaningful = IsMeaningfulChatLabel(chat.Name, chat.JID, true);
-                        if (GroupNameSyncBlacklist.ShouldApplySyncedSubject(
+                        if (GroupSubjectRowWrite.TryWrite(
+                                chat,
                                 entry.Name,
                                 incomingMeaningful,
                                 existingMeaningful))
                         {
-                            chat.Name = entry.Name;
+                            updated++;
                         }
                     }
                     else if (!chat.IsGroup)
                     {
+                        string before = chat.Name;
                         chat.Name = ResolveDisplayName(chat.JID, "chat");
+                        if (!string.Equals(before, chat.Name, StringComparison.Ordinal))
+                        {
+                            updated++;
+                        }
                     }
                 }
-            }).ConfigureAwait(false);
+            }
 
-            NotifyDisplayNamesUpdated();
-            _chatState.NotifyDisplayNamesChanged();
+            return updated;
         }
 
         private bool IsMeaningfulChatLabel(string label, string contextJid, bool isGroup) =>
