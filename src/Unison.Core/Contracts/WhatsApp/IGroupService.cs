@@ -110,10 +110,14 @@ namespace Unison.Core.Contracts.WhatsApp
 
         /// <summary>
         /// Writes a picture hit, a confirmed miss (<c>no-picture</c>), or a transient failure
-        /// onto every roster row that matches <paramref name="memberJid"/>. The caller is on the
-        /// UI thread.
+        /// onto roster rows that match <paramref name="memberJid"/>. When
+        /// <paramref name="limitToGroupJid"/> is set, only that group is touched (hydrate path).
+        /// The caller is on the UI thread.
         /// </summary>
-        void ApplyGroupMemberAvatarOutcome(string memberJid, GroupMemberAvatarFetchResult result);
+        void ApplyGroupMemberAvatarOutcome(
+            string memberJid,
+            GroupMemberAvatarFetchResult result,
+            string limitToGroupJid = null);
 
         /// <summary>
         /// Whether <paramref name="member"/> is the same person as <paramref name="candidateJid"/>

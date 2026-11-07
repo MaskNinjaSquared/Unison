@@ -499,43 +499,17 @@ namespace Unison.WhatsAppClient.Groups
             return attempt.Finish();
         }
 
-        public void ApplyGroupMemberAvatarOutcome(string memberJid, GroupMemberAvatarFetchResult result)
+        public void ApplyGroupMemberAvatarOutcome(
+            string memberJid,
+            GroupMemberAvatarFetchResult result,
+            string limitToGroupJid = null)
         {
-            if (string.IsNullOrWhiteSpace(memberJid) || result == null)
-            {
-                return;
-            }
-
-            DateTime nowUtc = DateTime.UtcNow;
-            string canonical = _jids.GetCanonicalJid(JidHelper.Normalize(memberJid));
-            foreach (var chat in _chats.Chats)
-            {
-                if (chat?.GroupMembers == null || chat.GroupMembers.Count == 0)
-                {
-                    continue;
-                }
-
-                foreach (var member in chat.GroupMembers)
-                {
-                    if (member == null || !GroupRosterRules.MemberMatches(member, canonical, _jids))
-                    {
-                        continue;
-                    }
-
-                    if (result.HasPicture)
-                    {
-                        ChatAvatarOutcome.RecordCached(member, result.LocalUri, nowUtc);
-                    }
-                    else if (result.IsNotFound)
-                    {
-                        ChatAvatarOutcome.RecordAbsent(member, "no-picture", nowUtc);
-                    }
-                    else
-                    {
-                        ChatAvatarOutcome.RecordFailure(member, result.FailureReason ?? "fetch-failed", nowUtc);
-                    }
-                }
-            }
+            GroupMemberAvatarApply.Apply(
+                _chats.Chats,
+                memberJid,
+                result,
+                _jids,
+                limitToGroupJid);
         }
 
         private static GroupMemberAvatarFetchResult NotReady()

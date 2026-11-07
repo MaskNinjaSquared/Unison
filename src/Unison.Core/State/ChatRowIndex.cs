@@ -22,6 +22,7 @@ namespace Unison.Core.State
     {
         private readonly Func<IEnumerable<ChatItem>> _rows;
         private readonly Func<string, string> _canonicalOf;
+        private readonly object _buildGate = new object();
         private Dictionary<string, List<ChatItem>> _byCanonical;
         private int _version;
 
@@ -33,6 +34,8 @@ namespace Unison.Core.State
 
         public void Invalidate()
         {
+            // Lock-free: Build may be walking _rows() under _buildGate; taking the same lock
+            // here would deadlock when a row enumerator invalidates mid-build.
             Interlocked.Increment(ref _version);
             _byCanonical = null;
         }
@@ -48,7 +51,7 @@ namespace Unison.Core.State
                 return new List<ChatItem>();
             }
 
-            Dictionary<string, List<ChatItem>> index = _byCanonical ?? Build();
+            Dictionary<string, List<ChatItem>> index = GetOrBuild();
 
             return index.TryGetValue(canonical, out List<ChatItem> rows)
                 ? new List<ChatItem>(rows)
@@ -70,40 +73,56 @@ namespace Unison.Core.State
             return Find(canonical);
         }
 
-        private Dictionary<string, List<ChatItem>> Build()
+        /// <summary>
+        /// One build shared by every Find until the next <see cref="Invalidate"/>. Dropping a
+        /// raced build used to leave the cache empty so the next Find rebuilt again — alias
+        /// follow-up × N targets rebuilt the map on every call (~22s on Mobile).
+        /// </summary>
+        private Dictionary<string, List<ChatItem>> GetOrBuild()
         {
-            int builtFrom = Volatile.Read(ref _version);
-            var index = new Dictionary<string, List<ChatItem>>(StringComparer.OrdinalIgnoreCase);
-            foreach (ChatItem chat in _rows())
+            Dictionary<string, List<ChatItem>> cached = _byCanonical;
+            if (cached != null)
             {
-                if (chat == null)
-                {
-                    continue;
-                }
-
-                string key = _canonicalOf(chat.JID);
-                if (string.IsNullOrWhiteSpace(key))
-                {
-                    continue;
-                }
-
-                if (!index.TryGetValue(key, out List<ChatItem> bucket))
-                {
-                    bucket = new List<ChatItem>();
-                    index[key] = bucket;
-                }
-
-                bucket.Add(chat);
+                return cached;
             }
 
-            // Kept only if nothing changed while it was being built. A build that raced an
-            // invalidation describes a list that no longer exists, and it would stay installed.
-            if (Volatile.Read(ref _version) == builtFrom)
+            lock (_buildGate)
             {
+                if (_byCanonical != null)
+                {
+                    return _byCanonical;
+                }
+
+                var index = new Dictionary<string, List<ChatItem>>(StringComparer.OrdinalIgnoreCase);
+                foreach (ChatItem chat in _rows())
+                {
+                    if (chat == null)
+                    {
+                        continue;
+                    }
+
+                    string key = _canonicalOf(chat.JID);
+                    if (string.IsNullOrWhiteSpace(key))
+                    {
+                        continue;
+                    }
+
+                    List<ChatItem> bucket;
+                    if (!index.TryGetValue(key, out bucket))
+                    {
+                        bucket = new List<ChatItem>();
+                        index[key] = bucket;
+                    }
+
+                    bucket.Add(chat);
+                }
+
+                // Always publish once. A mid-build Invalidate cleared _byCanonical; installing
+                // this snapshot still beats rebuilding on every subsequent Find until the next
+                // real list/alias change.
                 _byCanonical = index;
+                return index;
             }
-
-            return index;
         }
     }
 }

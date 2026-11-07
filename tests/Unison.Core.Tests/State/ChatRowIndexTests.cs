@@ -80,8 +80,10 @@ namespace Unison.Core.Tests.State
         }
 
         [Fact]
-        public void A_build_that_raced_an_invalidation_is_not_kept()
+        public void A_build_that_raced_an_invalidation_is_still_published_once()
         {
+            // Mid-build Invalidate used to discard the map so every later Find rebuilt —
+            // alias follow-up paid that cost per target on Mobile.
             int builds = 0;
             ChatRowIndex index = null;
             IEnumerable<ChatItem> Rows()
@@ -99,7 +101,7 @@ namespace Unison.Core.Tests.State
             Assert.Single(index.Find(Pn));
             index.Find(Pn);
 
-            Assert.Equal(2, builds);
+            Assert.Equal(1, builds);
         }
 
         [Fact]

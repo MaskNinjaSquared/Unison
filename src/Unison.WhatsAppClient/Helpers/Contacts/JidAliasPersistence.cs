@@ -172,17 +172,43 @@ namespace Unison.WhatsAppClient.Helpers
 
         async Task<IReadOnlyList<string>> IPersistJidAliasesHost.CollectDistinctChatJidsAsync()
         {
-            List<string> chatJids = null;
+            List<ChatItem> snapshot = null;
             await _ui.RunAsync(() =>
             {
-                chatJids = _chats.Chats
-                    .Where(c => c != null && !string.IsNullOrWhiteSpace(c.JID))
-                    .Select(c => JidHelper.Normalize(c.JID))
-                    .Where(j => !string.IsNullOrWhiteSpace(j))
-                    .Distinct(StringComparer.OrdinalIgnoreCase)
-                    .ToList();
+                snapshot = new List<ChatItem>(_chats.Chats.Count);
+                foreach (ChatItem chat in _chats.Chats)
+                {
+                    if (chat != null)
+                    {
+                        snapshot.Add(chat);
+                    }
+                }
             }).ConfigureAwait(false);
-            return chatJids ?? (IReadOnlyList<string>)Array.Empty<string>();
+
+            if (snapshot == null || snapshot.Count == 0)
+            {
+                return Array.Empty<string>();
+            }
+
+            // Normalize/Distinct off the UI hop — SaveJidAliases may wait on the store write
+            // lock for seconds while history is flushing; that must not ride the dispatcher.
+            return await Task.Run(() =>
+            {
+                var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                var list = new List<string>(snapshot.Count);
+                for (int i = 0; i < snapshot.Count; i++)
+                {
+                    string jid = JidHelper.Normalize(snapshot[i].JID);
+                    if (string.IsNullOrWhiteSpace(jid) || !set.Add(jid))
+                    {
+                        continue;
+                    }
+
+                    list.Add(jid);
+                }
+
+                return (IReadOnlyList<string>)list;
+            }).ConfigureAwait(false);
         }
 
         IReadOnlyDictionary<string, string> IPersistJidAliasesHost.SnapshotJidAliases() =>

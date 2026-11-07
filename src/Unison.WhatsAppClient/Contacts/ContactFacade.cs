@@ -775,14 +775,18 @@ namespace Unison.WhatsAppClient.Contacts
 
                 if (batch.AvatarTargets.Count > 0)
                 {
+                    IReadOnlyList<string> targets = batch.AvatarTargets;
+                    // One ChatRowIndex build for the whole burst — FindConversation per target
+                    // used to rebuild the map on every miss while aliases kept Invalidating
+                    // (~22s RunAliasFollowUpAsync on Mobile).
                     await _ui.RunAsync(() =>
                     {
                         List<ChatItem> rows = AliasFollowUpAvatarRows.CollectMissing(
-                            batch.AvatarTargets,
+                            targets,
                             jid => _chatRows.FindConversation(jid));
-                        foreach (ChatItem chat in rows)
+                        for (int i = 0; i < rows.Count; i++)
                         {
-                            RequestAvatarRefresh(chat, force: true);
+                            RequestAvatarRefresh(rows[i], force: true);
                         }
                     }).ConfigureAwait(false);
                 }

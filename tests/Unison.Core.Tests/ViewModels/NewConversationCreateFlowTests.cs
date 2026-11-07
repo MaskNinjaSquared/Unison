@@ -754,7 +754,10 @@ namespace Unison.Core.Tests.ViewModels
                 GroupMember member, CancellationToken token) =>
                 Task.FromResult<GroupMemberAvatarFetchResult>(null);
 
-            public void ApplyGroupMemberAvatarOutcome(string memberJid, GroupMemberAvatarFetchResult result) { }
+            public void ApplyGroupMemberAvatarOutcome(
+                string memberJid,
+                GroupMemberAvatarFetchResult result,
+                string limitToGroupJid = null) { }
 
             public bool MemberMatches(GroupMember member, string candidateJid) => false;
 
