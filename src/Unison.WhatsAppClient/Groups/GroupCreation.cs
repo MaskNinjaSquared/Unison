@@ -140,6 +140,7 @@ namespace Unison.WhatsAppClient.Groups
         {
             if (photo == null || photo.Length == 0)
             {
+                Debug.WriteLine("[GroupCreation] picture skipped: no bytes");
                 return true;
             }
 
@@ -154,10 +155,14 @@ namespace Unison.WhatsAppClient.Groups
                 byte[] jpeg = await _pictures.EncodeSquareJpegAsync(photo).ConfigureAwait(false);
                 if (jpeg == null || jpeg.Length == 0)
                 {
-                    Debug.WriteLine("[GroupCreation] picture skipped: could not decode");
+                    Debug.WriteLine("[GroupCreation] picture skipped: could not decode; rawBytes=" + photo.Length);
                     return false;
                 }
 
+                Debug.WriteLine(
+                    "[GroupCreation] picture upload jid=" + jid +
+                    "; rawBytes=" + photo.Length +
+                    "; jpegBytes=" + jpeg.Length);
                 await _wire.UpdateGroupPictureAsync(jid, jpeg).ConfigureAwait(false);
                 return true;
             }

@@ -57,7 +57,10 @@ namespace Unison.Socket.UseCases.Profile
             return _connection.QueryAsync(iq, timeout);
         }
 
-        /// <param name="jid">Our own JID, or a group's to change the group picture.</param>
+        /// <param name="jid">
+        /// Group (or other non-self) JID to change. Null/empty updates our own picture
+        /// (Baileys omits <c>target</c> for self).
+        /// </param>
         /// <param name="jpeg">A square JPEG. The server rejects anything else.</param>
         public Task UpdatePictureAsync(string jid, byte[] jpeg, TimeSpan? timeout = null)
         {
@@ -66,35 +69,46 @@ namespace Unison.Socket.UseCases.Profile
                 throw new ArgumentException("A picture is required", nameof(jpeg));
             }
 
-            var iq = new BinaryNode(
-                "iq",
-                new Dictionary<string, string>
-                {
-                    { "to", JidUtils.NormalizedUser(jid) },
-                    { "type", "set" },
-                    { "xmlns", "w:profile:picture" }
-                },
-                new List<BinaryNode>
-                {
-                    new BinaryNode("picture", new Dictionary<string, string> { { "type", "image" } }, jpeg)
-                });
-
-            return _connection.QueryAsync(iq, timeout);
+            return _connection.QueryAsync(BuildPictureSetQuery(jid, jpeg), timeout);
         }
 
         /// <summary>Removes the picture. The same query with nothing in it.</summary>
         public Task RemovePictureAsync(string jid, TimeSpan? timeout = null)
         {
-            var iq = new BinaryNode(
-                "iq",
-                new Dictionary<string, string>
-                {
-                    { "to", JidUtils.NormalizedUser(jid) },
-                    { "type", "set" },
-                    { "xmlns", "w:profile:picture" }
-                });
+            return _connection.QueryAsync(BuildPictureSetQuery(jid, jpeg: null), timeout);
+        }
 
-            return _connection.QueryAsync(iq, timeout);
+        /// <summary>
+        /// Baileys <c>updateProfilePicture</c>: <c>to</c> is always <c>s.whatsapp.net</c>;
+        /// the chat/group lives in <c>target</c> (omitted for self).
+        /// </summary>
+        public static BinaryNode BuildPictureSetQuery(string jid, byte[] jpeg)
+        {
+            var attrs = new Dictionary<string, string>
+            {
+                { "to", WA.S_WHATSAPP_NET },
+                { "type", "set" },
+                { "xmlns", "w:profile:picture" }
+            };
+
+            string target = string.IsNullOrWhiteSpace(jid) ? null : JidUtils.NormalizedUser(jid);
+            if (!string.IsNullOrEmpty(target))
+            {
+                attrs["target"] = target;
+            }
+
+            if (jpeg == null || jpeg.Length == 0)
+            {
+                return new BinaryNode("iq", attrs);
+            }
+
+            return new BinaryNode(
+                "iq",
+                attrs,
+                new List<BinaryNode>
+                {
+                    new BinaryNode("picture", new Dictionary<string, string> { { "type", "image" } }, jpeg)
+                });
         }
     }
 }

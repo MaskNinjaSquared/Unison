@@ -1138,11 +1138,32 @@ namespace Unison.Uwp.Client
             return groups.Settings.UpdateEphemeralAsync(groupJid, seconds);
         }
 
-        public Task UpdateGroupPictureAsync(string groupJid, byte[] jpeg)
+        public async Task UpdateGroupPictureAsync(string groupJid, byte[] jpeg)
         {
-            var session = Require();
-            return new Unison.Socket.UseCases.Profile.UpdateProfileUseCase(session.Connection)
-                .UpdatePictureAsync(groupJid, jpeg);
+            RuntimeDiagnosticsService.Instance.Write(
+                "groups",
+                "picture-set-begin",
+                "jid=" + (groupJid ?? "(none)") +
+                "; bytes=" + (jpeg != null ? jpeg.Length : 0));
+            try
+            {
+                var session = Require();
+                await new Unison.Socket.UseCases.Profile.UpdateProfileUseCase(session.Connection)
+                    .UpdatePictureAsync(groupJid, jpeg)
+                    .ConfigureAwait(false);
+                RuntimeDiagnosticsService.Instance.Write(
+                    "groups",
+                    "picture-set-ok",
+                    "jid=" + (groupJid ?? "(none)"));
+            }
+            catch (Exception ex)
+            {
+                RuntimeDiagnosticsService.Instance.Write(
+                    "groups",
+                    "picture-set-failed",
+                    ex.GetType().Name + ": " + ex.Message);
+                throw;
+            }
         }
 
         private GroupsModule RequireGroups(string operation)
