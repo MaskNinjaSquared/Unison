@@ -59,6 +59,8 @@ namespace Unison.WhatsAppClient.Contacts
         private readonly AliasFollowUpQueue _aliasFollowUps = new AliasFollowUpQueue();
         private readonly CoalescedDebounceScheduler _aliasFollowUpDebounce =
             new CoalescedDebounceScheduler(TimeSpan.FromMilliseconds(750));
+        private readonly ChatTimelineLoadPriorityGate _timelinePriority;
+        private int _aliasFollowUpDeferredDuringBulk;
 
         private readonly ContactDirectory _directory;
         private readonly AddressBookOverlay _addressBook;
@@ -115,6 +117,7 @@ namespace Unison.WhatsAppClient.Contacts
             IJidAliasPersistence aliasPersist,
             IChatIdentityPersistence identity,
             IResolvedNameApplyHost resolvedNames,
+            ChatTimelineLoadPriorityGate timelinePriority = null,
             IRuntimeDiagnostics diagnostics = null,
             IContactBlockActions blockActions = null)
         {
@@ -131,6 +134,7 @@ namespace Unison.WhatsAppClient.Contacts
             _syncStatus = syncStatus ?? throw new ArgumentNullException(nameof(syncStatus));
             _syncWork = syncWork ?? throw new ArgumentNullException(nameof(syncWork));
             _deferredAvatars = deferredAvatars ?? throw new ArgumentNullException(nameof(deferredAvatars));
+            _timelinePriority = timelinePriority;
             _diagnostics = diagnostics;
             _ui = ui ?? throw new ArgumentNullException(nameof(ui));
             _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
@@ -241,7 +245,28 @@ namespace Unison.WhatsAppClient.Contacts
             ClearAvatarAttempted(phoneJid);
             ClearAvatarAttempted(_jids.GetCanonicalJid(phoneJid));
             _aliasFollowUps.NoteAvatarTarget(phoneJid);
+            // Bulk history-sqlite LID dumps call this per pair; one Schedule after the import.
+            if (_aliases != null && _aliases.IsBulkImporting)
+            {
+                Interlocked.Exchange(ref _aliasFollowUpDeferredDuringBulk, 1);
+                return;
+            }
+
             ScheduleAliasFollowUp(source);
+        }
+
+        /// <summary>
+        /// Arms the coalesced follow-up once after <see cref="IJidAliasPersistence.RegisterAliasMappings"/>
+        /// finishes a bulk import that deferred per-pair notifies.
+        /// </summary>
+        public void FlushDeferredAliasFollowUp(string source)
+        {
+            if (Interlocked.Exchange(ref _aliasFollowUpDeferredDuringBulk, 0) == 0)
+            {
+                return;
+            }
+
+            ScheduleAliasFollowUp(source ?? "bulk-alias");
         }
 
         /// <inheritdoc />
@@ -771,6 +796,21 @@ namespace Unison.WhatsAppClient.Contacts
             string source = batch.Source;
             try
             {
+                // PersistAliases + Deduper must not race chat-open timeline paint / OnDemand merge.
+                if (_timelinePriority != null && _timelinePriority.IsHeld)
+                {
+                    _diagnostics?.Write(
+                        "contacts",
+                        "alias-follow-up-wait-timeline",
+                        "source=" + (source ?? "?"));
+                    await _timelinePriority.WaitWhileHeldAsync().ConfigureAwait(false);
+                }
+
+                _diagnostics?.Write(
+                    "contacts",
+                    "alias-follow-up-begin",
+                    "source=" + (source ?? "?") +
+                    "; avatars=" + batch.AvatarTargets.Count);
                 await _aliasPersist.PersistAliasesAsync("alias:" + source).ConfigureAwait(false);
 
                 if (batch.AvatarTargets.Count > 0)

@@ -203,6 +203,9 @@ namespace Unison.Core.ViewModels
         /// </summary>
         private bool _refreshDeferredForEnrichment;
 
+        /// <summary>Invalidates an in-flight frugal Move drain when a newer one starts.</summary>
+        private int _frugalReorderDrainSerial;
+
         /// <summary>
         /// Reattach started with VisibleChats empty — keep cold budget/Continue gaps until filled.
         /// </summary>

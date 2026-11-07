@@ -126,6 +126,9 @@ namespace Unison.WhatsAppClient.Helpers
                 return;
             }
 
+            // Snapshot + subject cache on one hop; flag apply is chunked below so a fat
+            // listing after the participating-groups IQ cannot hold the UI for seconds.
+            List<ChatItem> snapshot = null;
             await _ui.RunAsync(() =>
             {
                 foreach (var entry in listing.Values)
@@ -135,36 +138,65 @@ namespace Unison.WhatsAppClient.Helpers
                         continue;
                     }
 
-                    if (CacheIfAllowed(entry.Jid, entry.Subject, DuplicateChatRowPick.FirstNonBlankName(_rows.FindConversation(entry.Jid))))
+                    if (CacheIfAllowed(
+                            entry.Jid,
+                            entry.Subject,
+                            DuplicateChatRowPick.FirstNonBlankName(_rows.FindConversation(entry.Jid))))
                     {
-                        Debug.WriteLine($"[GroupMetadataApply] Group resolved: {entry.Jid} -> {entry.Subject}");
+                        Debug.WriteLine(
+                            "[GroupMetadataApply] Group resolved: " + entry.Jid + " -> " + entry.Subject);
                     }
                 }
 
-                foreach (var chat in _chats.Chats)
+                snapshot = new List<ChatItem>(_chats.Chats.Count);
+                foreach (ChatItem chat in _chats.Chats)
                 {
-                    if (chat == null)
+                    if (chat != null)
                     {
-                        continue;
+                        snapshot.Add(chat);
                     }
-
-                    GroupMetadataSnapshot entry;
-                    if (!listing.TryGetValue(_jids.GetCanonicalJid(chat.JID), out entry) || entry == null)
-                    {
-                        continue;
-                    }
-
-                    if (IsUsableSubject(entry.Subject, entry.Jid))
-                    {
-                        ApplySyncedLabel(chat);
-                    }
-
-                    // Listing never materializes full rosters — flags + count only.
-                    ApplyToRow(chat, entry, includeRoster: false);
                 }
+            }).ConfigureAwait(false);
 
-                _catalog.Schedule();
-            });
+            if (snapshot == null || snapshot.Count == 0)
+            {
+                return;
+            }
+
+            const int uiChunk = 24;
+            for (int start = 0; start < snapshot.Count; start += uiChunk)
+            {
+                int sliceStart = start;
+                int sliceEnd = Math.Min(snapshot.Count, start + uiChunk);
+                await _ui.RunAsync(() =>
+                {
+                    for (int i = sliceStart; i < sliceEnd; i++)
+                    {
+                        ChatItem chat = snapshot[i];
+                        GroupMetadataSnapshot entry;
+                        if (!listing.TryGetValue(_jids.GetCanonicalJid(chat.JID), out entry) ||
+                            entry == null)
+                        {
+                            continue;
+                        }
+
+                        if (IsUsableSubject(entry.Subject, entry.Jid))
+                        {
+                            ApplySyncedLabel(chat);
+                        }
+
+                        // Listing never materializes full rosters — flags + count only.
+                        ApplyToRow(chat, entry, includeRoster: false);
+                    }
+                }).ConfigureAwait(false);
+
+                if (sliceEnd < snapshot.Count)
+                {
+                    await Task.Delay(16).ConfigureAwait(false);
+                }
+            }
+
+            _catalog.Schedule();
         }
 
         /// <summary>

@@ -141,5 +141,16 @@ namespace Unison.Core.Tests.Helpers
                 ChatTimelineOpenPriority.ShouldScheduleVisibleRefreshOnTimelineRelease(
                     orderDirty: true));
         }
+
+        [Fact]
+        public void Tip_hydrate_skips_reorder_while_timeline_held()
+        {
+            Assert.False(
+                ChatTimelineOpenPriority.ShouldReorderVisibleOnTipHydrate(
+                    timelineLoadPriorityHeld: true));
+            Assert.True(
+                ChatTimelineOpenPriority.ShouldReorderVisibleOnTipHydrate(
+                    timelineLoadPriorityHeld: false));
+        }
     }
 }

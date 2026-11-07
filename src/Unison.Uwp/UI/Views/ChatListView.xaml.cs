@@ -417,6 +417,15 @@ namespace Unison.Uwp.UI.Views
 
         private void ChatList_Unloaded(object sender, RoutedEventArgs e)
         {
+            // Clear before teardown finishes — child Unloaded runs ahead of page Detach.
+            try
+            {
+                ViewModel?.PrepareListUnload();
+            }
+            catch
+            {
+            }
+
             TraceListUi(
                 "listview-unloaded",
                 "visibleVm=" + (ViewModel?.VisibleChats?.Count ?? 0),

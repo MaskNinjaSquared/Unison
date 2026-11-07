@@ -54,8 +54,19 @@ namespace Unison.WhatsAppClient.Helpers
         /// <inheritdoc />
         public void RegisterAliasMappings(
             IEnumerable<KeyValuePair<string, string>> lidToPn,
-            string source) =>
+            string source)
+        {
             RegisterAliasMappingsDispatch.Run(this, lidToPn, source);
+            try
+            {
+                _contacts()?.FlushDeferredAliasFollowUp(source);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine(
+                    "[JidAliasPersistence] FlushDeferredAliasFollowUp failed: " + ex.Message);
+            }
+        }
 
         /// <inheritdoc />
         public Task PersistAliasesAsync(string reason) =>

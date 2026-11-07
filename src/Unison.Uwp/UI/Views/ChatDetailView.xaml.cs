@@ -2763,7 +2763,9 @@ namespace Unison.Uwp.UI.Views
             try
             {
                 bool stickToBottom = IsFollowingTimelineEnd();
-                List<ChatMessage> serviceMessages = await MessagesFacade.LoadRecentMessagesForSyncAsync(requestedJid);
+                List<ChatMessage> serviceMessages = await MessagesFacade
+                    .LoadRecentMessagesForSyncAsync(requestedJid)
+                    .ConfigureAwait(false);
                 if (_activeChat == null ||
                     !string.Equals(Jids.GetCanonicalJid(_activeChat.JID), requestedJid, StringComparison.OrdinalIgnoreCase) ||
                     serviceMessages == null || serviceMessages.Count == 0)

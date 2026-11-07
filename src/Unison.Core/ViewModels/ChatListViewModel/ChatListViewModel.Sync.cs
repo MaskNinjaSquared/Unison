@@ -13,6 +13,7 @@ using Unison.Core.Contracts;
 using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Factories;
 using Unison.Core.Helpers;
+using Unison.Core.Helpers.Chats;
 using Unison.Core.Models;
 using Unison.Core.State;
 
@@ -276,11 +277,22 @@ namespace Unison.Core.ViewModels
                     {
                         // Frugal + unfiltered list: reorder painted rows only. ScheduleRefresh
                         // re-ran BuildVisibleRefreshSource (~10s on ARM with hubs) for pin/tip dirt.
+                        // But a single hop of 250+ Moves leaves ListView layout running after Exit
+                        // (cfb6fa4f: ~380s ui-stall active=none after SyncStatus hide).
                         if (PreferFrugalUi &&
                             string.IsNullOrWhiteSpace(SearchQuery) &&
                             _activeFilter == ChatListFilter.All)
                         {
-                            ReorderVisibleChatsInPlace();
+                            if (VisibleChatReorderPolicy.PreferAsyncDrain(
+                                    PreferFrugalUi,
+                                    VisibleChats.Count))
+                            {
+                                _ = DrainFrugalVisibleReorderAsync();
+                            }
+                            else
+                            {
+                                ReorderVisibleChatsInPlace();
+                            }
                         }
                         else
                         {
@@ -385,6 +397,19 @@ namespace Unison.Core.ViewModels
 
                 _ = PresentSyncStatusAsync(null, visible: false, source: "IHistoryService:HistorySyncReceived");
                 IsLoadingOverlayVisible = false;
+
+                // OnDemand is tip/timeline for chats already on screen — RefreshVisibleChats
+                // recycled ~250 list containers under an open detail (Mobile freeze).
+                bool onDemand = sync != null &&
+                    HistoryListUiRefresh.IsOnDemandSyncType(sync.SyncType.ToString());
+                if (!HistoryListUiRefresh.ShouldRefreshVisibleChatsOnHistorySync(onDemand))
+                {
+                    TraceListLifecycle(
+                        "history-sync-ondemand-skip-refresh",
+                        BuildListSnapshot("type=" + (sync?.SyncType.ToString() ?? "null")));
+                    return;
+                }
+
                 RefreshVisibleChats();
             });
         }
@@ -858,10 +883,22 @@ namespace Unison.Core.ViewModels
                 return;
             }
 
-            // Tip-only updates leave VisibleChats full; still re-pin order this turn.
-            if (updated > 0 && createdCount == 0 && VisibleChats.Count > 0)
+            // Tip-only updates leave VisibleChats full; still re-pin order this turn —
+            // unless chat-open owns the timeline gate (Moves recycle list under detail).
+            bool timelineHeld = _timelinePriority != null && _timelinePriority.IsHeld;
+            if (updated > 0 &&
+                createdCount == 0 &&
+                VisibleChats.Count > 0 &&
+                HistoryListUiRefresh.ShouldReorderVisibleOnTipHydrate(timelineHeld))
             {
                 ReorderVisibleChatsInPlace();
+            }
+            else if (updated > 0 && createdCount == 0 && timelineHeld)
+            {
+                _visibleOrderDirty = true;
+                TraceListLifecycle(
+                    "hydrate-tip-skip-reorder",
+                    BuildListSnapshot("updated=" + updated + "; reason=timeline-priority"));
             }
 
             // Painted list + tip-only hydrate (OnDemand 1 chat, live preview chunk): do not

@@ -13,6 +13,7 @@ using Unison.Core.Contracts;
 using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Factories;
 using Unison.Core.Helpers;
+using Unison.Core.Helpers.Chats;
 using Unison.Core.Models;
 using Unison.Core.State;
 
@@ -346,19 +347,29 @@ namespace Unison.Core.ViewModels
         }
 
         /// <summary>
-        /// Re-sorts <see cref="VisibleChats"/> during batch/sync without clearing the list â€”
+        /// Re-sorts <see cref="VisibleChats"/> during batch/sync without clearing the list —
         /// keeps pinned conversations at the top while tips keep arriving.
         /// </summary>
-        private void ReorderVisibleChatsInPlace()
+        private void ReorderVisibleChatsInPlace() =>
+            ReorderVisibleChatsInPlace(int.MaxValue);
+
+        /// <summary>
+        /// Applies up to <paramref name="maxMoves"/> Moves. Returns true when more Moves remain
+        /// (frugal drain chunks so ListView layout can run between hops).
+        /// </summary>
+        private bool ReorderVisibleChatsInPlace(int maxMoves)
         {
             // VisibleChats is already community-projected. Pin/recency reshuffle must not call
             // BuildVisibleRefreshSource just because a hub exists in the catalogue — that was the
             // Mobile Low ~10s buildMs hitch after enrichment (hubs present → full rebuild).
-            _visibleOrderDirty = false;
-
-            if (VisibleChats.Count < 2)
+            if (VisibleChats.Count < 2 || maxMoves <= 0)
             {
-                return;
+                if (VisibleChats.Count < 2)
+                {
+                    _visibleOrderDirty = false;
+                }
+
+                return false;
             }
 
             ApplyLocalChatFieldsToScopedChats();
@@ -368,6 +379,7 @@ namespace Unison.Core.ViewModels
                     VisibleChats.Where(c => c != null && !string.IsNullOrWhiteSpace(c.JID)))
                 : VisibleChats.Where(c => c != null && !string.IsNullOrWhiteSpace(c.JID)).ToList();
 
+            int moved = 0;
             IsRefreshing = true;
             try
             {
@@ -383,12 +395,52 @@ namespace Unison.Core.ViewModels
                     if (existingIndex >= 0 && existingIndex != i)
                     {
                         VisibleChats.Move(existingIndex, i);
+                        moved++;
+                        if (moved >= maxMoves)
+                        {
+                            _visibleOrderDirty = true;
+                            return true;
+                        }
                     }
                 }
             }
             finally
             {
                 IsRefreshing = false;
+            }
+
+            _visibleOrderDirty = false;
+            return false;
+        }
+
+        /// <summary>
+        /// Applies Move chunks on Low-priority hops so enrichment-end does not leave the
+        /// ListView measuring 250+ realized rows in one uninterrupted layout pass.
+        /// </summary>
+        private async Task DrainFrugalVisibleReorderAsync()
+        {
+            int serial = Interlocked.Increment(ref _frugalReorderDrainSerial);
+            await Task.Yield();
+
+            while (serial == Volatile.Read(ref _frugalReorderDrainSerial))
+            {
+                bool more = false;
+                await _dispatcher.RunAsync(() =>
+                {
+                    if (serial != _frugalReorderDrainSerial)
+                    {
+                        return;
+                    }
+
+                    more = ReorderVisibleChatsInPlace(VisibleChatReorderPolicy.FrugalDrainChunk);
+                }).ConfigureAwait(false);
+
+                if (!more || serial != Volatile.Read(ref _frugalReorderDrainSerial))
+                {
+                    return;
+                }
+
+                await Task.Delay(32).ConfigureAwait(false);
             }
         }
 

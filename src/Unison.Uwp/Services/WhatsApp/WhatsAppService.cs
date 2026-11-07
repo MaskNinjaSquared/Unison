@@ -174,6 +174,8 @@ namespace Unison.Uwp.Services.WhatsApp
         private readonly Func<IDeferredAvatarResolution> _resolveDeferredAvatars;
         private readonly IHistoryOnDemandSocket _historyOnDemandSocket;
         private readonly ChatCatalogDebounceTimer _catalogDebounce = new ChatCatalogDebounceTimer();
+        private readonly ChatCatalogDebounceTimer _rowPersistDebounce = new ChatCatalogDebounceTimer();
+        private readonly ChatCatalogRowPersistBuffer _rowPersistBuffer = new ChatCatalogRowPersistBuffer();
 
         private IMessageService Messages => _resolveMessages != null ? _resolveMessages() : null;
 

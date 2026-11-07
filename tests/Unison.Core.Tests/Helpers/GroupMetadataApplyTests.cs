@@ -85,7 +85,7 @@ namespace Unison.Core.Tests.Helpers
         }
 
         [Fact]
-        public async Task ApplyListing_caches_subjects_and_labels_rows_in_one_pass()
+        public async Task ApplyListing_caches_subjects_then_labels_rows_in_chunks()
         {
             var f = new Fixture();
             f.Jids.Canonical["alias@g.us"] = Group;
@@ -104,7 +104,8 @@ namespace Unison.Core.Tests.Helpers
             }));
 
             Assert.Equal("Família", f.Naming.CachedNames[Group]);
-            Assert.Equal(1, f.Ui.Passes);
+            // Snapshot/cache hop + one apply chunk (≤24 rows).
+            Assert.Equal(2, f.Ui.Passes);
             Assert.Equal(1, f.Catalog.Schedules);
             Assert.True(chat.IsGroup);
             Assert.True(chat.IsAnnounceOnly);

@@ -992,6 +992,8 @@ namespace Unison.Core.Tests.ViewModels
 
             public void NotifyJidAliasResolved(string phoneJid, string lidJid, string source) { }
 
+            public void FlushDeferredAliasFollowUp(string source) { }
+
             public string ResolveDisplayName(string jid, string context) => jid;
 
             public bool IsSelf(string jid) => false;

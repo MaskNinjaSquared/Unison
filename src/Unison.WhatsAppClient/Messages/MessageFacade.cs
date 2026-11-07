@@ -8,6 +8,7 @@ using Proto;
 using Unison.Core.Contracts;
 using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Helpers;
+using Unison.Core.Helpers.Chats;
 using Unison.Core.Helpers.Groups;
 using Unison.Core.Helpers.Messages;
 using Unison.Core.Helpers.Notifications;
@@ -608,18 +609,24 @@ namespace Unison.WhatsAppClient.Messages
                 Debug.WriteLine("[MessageFacade] History SQLite chunk persist failed: " + ex.Message);
             }
 
-            // Open chat detail listens to ChatMessagesChanged and reloads via LoadMessagesForChatAsync.
-            if (chunk?.MessageChatJids != null)
+            // Open chat detail listens to ChatMessagesChanged and merges the newest tail.
+            // OnDemand is older history for scroll-up — notifying here only churned the open
+            // timeline (esp. after LID mapping bursts) without prepending those older rows.
+            if (chunk?.MessageChatJids == null ||
+                !HistoryListUiRefresh.ShouldNotifyChatMessagesChangedAfterChunk(chunk.IsOnDemand))
             {
-                foreach (string jid in chunk.MessageChatJids)
-                {
-                    if (string.IsNullOrWhiteSpace(jid))
-                    {
-                        continue;
-                    }
+                return;
+            }
 
-                    NotifyChatMessagesChanged(jid);
+            for (int i = 0; i < chunk.MessageChatJids.Count; i++)
+            {
+                string jid = chunk.MessageChatJids[i];
+                if (string.IsNullOrWhiteSpace(jid))
+                {
+                    continue;
                 }
+
+                NotifyChatMessagesChanged(jid);
             }
         }
 
@@ -1054,6 +1061,9 @@ namespace Unison.WhatsAppClient.Messages
                 return new List<ChatMessage>();
             }
 
+            var clock = Stopwatch.StartNew();
+            WriteChatOpenLoadStage(jid, "sync-reload-begin", "t=0");
+
             List<ChatMessage> fromClient = null;
             try
             {
@@ -1075,7 +1085,15 @@ namespace Unison.WhatsAppClient.Messages
                 Debug.WriteLine("[MessageFacade] SQLite sync load failed: " + ex.Message);
             }
 
-            return OpenChatMessageMerge.Merge(MapHistoryRows(fromSql), fromClient);
+            List<ChatMessage> merged = OpenChatMessageMerge.Merge(MapHistoryRows(fromSql), fromClient);
+            WriteChatOpenLoadStage(
+                jid,
+                "sync-reload-end",
+                "ms=" + clock.ElapsedMilliseconds +
+                "; ram=" + (fromClient?.Count ?? 0) +
+                "; sql=" + (fromSql?.Count ?? 0) +
+                "; merged=" + (merged?.Count ?? 0));
+            return merged;
         }
 
         private static List<ChatMessage> MapHistoryRows(IReadOnlyList<HistoryMessage> fromSql)

@@ -122,6 +122,8 @@ namespace Unison.Core.Tests.Helpers
             {
             }
 
+            public void FlushDeferredAliasFollowUp(string source) { }
+
             public void NotifyJidAliasResolved(string phoneJid, string lidJid, string source)
             {
             }

@@ -26,6 +26,7 @@ using Unison.Core.Constants;
 using Unison.Core.Contracts;
 using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Helpers;
+using Unison.Core.Helpers.Chats;
 using Unison.Core.Models;
 using Unison.Core.State;
 using Unison.Socket.Events;
@@ -396,7 +397,13 @@ namespace Unison.WhatsAppClient.History
             }
 
             // Null payload: list UI must not treat this as "sync over" — finalize is debounced.
-            NotifyHistorySyncReceived(null);
+            // OnDemand must not raise it: History_SyncReceived would RefreshVisibleChats on a
+            // painted list (and under an open chat) for a tip/timeline chunk.
+            if (HistoryListUiRefresh.ShouldRaiseNullHistorySyncReceived(
+                    IsOnDemandSyncType(syncType)))
+            {
+                NotifyHistorySyncReceived(null);
+            }
         }
 
         /// <summary>

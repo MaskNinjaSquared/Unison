@@ -13,6 +13,7 @@ using Unison.Core.Contracts;
 using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Factories;
 using Unison.Core.Helpers;
+using Unison.Core.Helpers.Chats;
 using Unison.Core.Models;
 using Unison.Core.State;
 
@@ -172,11 +173,50 @@ namespace Unison.Core.ViewModels
             }).ConfigureAwait(false);
         }
 
+        /// <summary>
+        /// ListView Unloaded runs before page Detach. Drop painted rows so UWP does not
+        /// tear down hundreds of realized containers on the UI thread during resume /
+        /// navigation (Mobile hang with active=none after ClearRecordingUi).
+        /// </summary>
+        public void PrepareListUnload()
+        {
+            _refreshCts?.Cancel();
+            _refreshContinueCts?.Cancel();
+            _pendingVisibleRefreshSource = null;
+            if (_visibleColdPopulate)
+            {
+                _visibleColdPopulate = false;
+                _coldPopulateGate?.Release();
+            }
+
+            if (!ChatListUnloadPolicy.ShouldClearVisibleChats(VisibleChats.Count))
+            {
+                return;
+            }
+
+            IsRefreshing = true;
+            try
+            {
+                VisibleChats.Clear();
+            }
+            finally
+            {
+                IsRefreshing = false;
+            }
+
+            _visibleOrderDirty = false;
+            TraceListLifecycle(
+                "list-unload-cleared",
+                BuildListSnapshot("reason=listview-unloaded"),
+                flush: true);
+        }
+
         /// <summary>Mirror of <see cref="Attach"/>.</summary>
         public void Detach()
         {
             if (!_attached) return;
             _attached = false;
+            PrepareListUnload();
             ChatListVisiblePaintOwner.Release(this, _visiblePaintGeneration);
             _visiblePaintGeneration = 0;
 

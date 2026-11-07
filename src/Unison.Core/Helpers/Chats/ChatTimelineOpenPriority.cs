@@ -76,5 +76,12 @@ namespace Unison.Core.Helpers.Chats
         /// </summary>
         public static bool ShouldScheduleVisibleRefreshOnTimelineRelease(bool orderDirty) =>
             orderDirty;
+
+        /// <summary>
+        /// Tip-only hydrate must not Move VisibleChats while chat-open holds the gate —
+        /// those Moves recycle list containers under the detail and freeze Mobile.
+        /// </summary>
+        public static bool ShouldReorderVisibleOnTipHydrate(bool timelineLoadPriorityHeld) =>
+            HistoryListUiRefresh.ShouldReorderVisibleOnTipHydrate(timelineLoadPriorityHeld);
     }
 }

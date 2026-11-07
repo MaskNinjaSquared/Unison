@@ -1549,7 +1549,9 @@ namespace Unison.Uwp.Services.WhatsApp
 
         void IConnectionLifecycleHost.ResetPersistScheduler()
         {
+            FlushPendingCatalogRows();
             _catalogDebounce.Dispose();
+            _rowPersistDebounce.Dispose();
             _persistScheduler.Reset();
         }
 

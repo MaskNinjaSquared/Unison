@@ -784,6 +784,7 @@ namespace Unison.Uwp
                 sp.GetRequiredService<IJidAliasPersistence>(),
                 sp.GetRequiredService<IChatIdentityPersistence>(),
                 sp.GetRequiredService<IResolvedNameApplyHost>(),
+                sp.GetRequiredService<ChatTimelineLoadPriorityGate>(),
                 sp.GetRequiredService<IRuntimeDiagnostics>(),
                 sp.GetRequiredService<IContactBlockActions>()));
             services.AddSingleton<IJidAliasPersistence>(sp => new JidAliasPersistence(
