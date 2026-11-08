@@ -8,8 +8,7 @@
     xmlns:selectors="using:Unison.Uwp.UI.TemplateSelectors">
 
     <DataTemplate x:Key="MessageSentTemplate" x:DataType="vm:ChatMessageViewModel">
-        <Grid HorizontalAlignment="Stretch"
-              Visibility="{x:Bind ShowInTimeline, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}">
+        <Grid HorizontalAlignment="Stretch">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="Auto"/>
@@ -171,8 +170,8 @@
                                         HorizontalAlignment="Right"
                                         VerticalAlignment="Bottom"
                                         Margin="8"
-                                        x:Load="{x:Bind IsGalleryLead, Mode=OneWay}">
-                                    <TextBlock Text="{x:Bind GalleryCountLabel, Mode=OneWay}"
+                                        x:Load="{x:Bind IsGalleryItem, Mode=OneWay}">
+                                    <TextBlock Text="{x:Bind GalleryPositionLabel, Mode=OneWay}"
                                                Foreground="White"
                                                FontWeight="SemiBold"/>
                                 </Border>

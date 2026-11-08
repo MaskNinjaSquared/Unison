@@ -356,7 +356,7 @@ namespace Unison.Core.ViewModels
                 name == nameof(ChatMessage.LocalMediaBatchIndex) ||
                 name == nameof(ChatMessage.LocalMediaBatchCount))
             {
-                RaiseCore(nameof(ShowInTimeline), nameof(IsGalleryLead), nameof(GalleryCountLabel));
+                RaiseCore(nameof(IsGalleryItem), nameof(GalleryPositionLabel));
             }
         }
 
@@ -1085,23 +1085,16 @@ namespace Unison.Core.ViewModels
 
         public string ImageUri => Model.ImageUri;
 
-        /// <summary>
-        /// Followers in a locally-created image batch remain separate models for message actions,
-        /// but are visually represented by the batch lead.
-        /// </summary>
-        public bool ShowInTimeline =>
-            !Model.IsFromMe ||
-            string.IsNullOrWhiteSpace(Model.LocalMediaBatchId) ||
-            Model.LocalMediaBatchCount < 2 ||
-            Model.LocalMediaBatchIndex == 0;
-
-        public bool IsGalleryLead =>
+        public bool IsGalleryItem =>
             Model.IsFromMe &&
             !string.IsNullOrWhiteSpace(Model.LocalMediaBatchId) &&
             Model.LocalMediaBatchCount > 1 &&
-            Model.LocalMediaBatchIndex == 0;
+            Model.LocalMediaBatchIndex >= 0 &&
+            Model.LocalMediaBatchIndex < Model.LocalMediaBatchCount;
 
-        public string GalleryCountLabel => IsGalleryLead ? "+" + (Model.LocalMediaBatchCount - 1) : string.Empty;
+        public string GalleryPositionLabel => IsGalleryItem
+            ? (Model.LocalMediaBatchIndex + 1) + "/" + Model.LocalMediaBatchCount
+            : string.Empty;
 
         /// <summary>Local picture for a minimized reply chrome. Thumbnail when the full file is not here.</summary>
         public string PreviewImageUri
