@@ -240,6 +240,7 @@
         <!-- Share Target picker: full-bleed over SplitView (Mobile needs opaque cover). -->
         <controls:ContactsVisualizerControl
             x:Name="SharePickerOverlay"
+            x:Load="{x:Bind ViewModel.IsSharePickerOpen, Mode=OneWay}"
             Canvas.ZIndex="100"
             IsOpen="{x:Bind ViewModel.IsSharePickerOpen, Mode=TwoWay}"
             Title="{x:Bind ViewModel.SharePickerTitle, Mode=OneWay}"
@@ -247,7 +248,7 @@
             ItemClickCommand="{x:Bind ViewModel.SelectShareChatCommand}"
             BackCommand="{x:Bind ViewModel.CloseSharePickerCommand}"/>
 
-        <!-- New conversation: tiles + A–Z above the chat list (same cover model as Share). -->
+        <!-- New conversation: warm chrome; A–Z list x:Loads inside after first Open yield. -->
         <controls:NewConversationView
             x:Name="NewConversationOverlay"
             Canvas.ZIndex="101"
@@ -259,5 +260,12 @@
                Visibility="Collapsed"
                Background="{ThemeResource WhatsAppBackgroundBrush}"
                Navigated="FullScreenFrame_Navigated"/>
+
+        <!-- Shell camera (shared CameraPickView); deferred until IsCameraPickOpen. -->
+        <ContentPresenter
+            x:Name="CameraPickPresenter"
+            x:Load="{x:Bind ViewModel.IsCameraPickOpen, Mode=OneWay}"
+            Canvas.ZIndex="103"
+            Visibility="Collapsed"/>
     </Grid>
 </Page>

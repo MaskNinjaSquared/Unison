@@ -23,6 +23,7 @@ using System.Threading.Tasks;
 using Unison.Core.Contracts;
 using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Helpers;
+using Unison.Core.Helpers.Contacts;
 using Unison.Core.Helpers.Groups;
 using Unison.Core.Models;
 using Unison.Core.State;
@@ -568,11 +569,18 @@ namespace Unison.WhatsAppClient.Contacts
                 Debug.WriteLine(
                     "[ContactFacade] Captured pushname from notify: " +
                     targetNotifyJid + " -> " + sanitizedNotify);
+
+                if (_jids.IsSelfLinked(normalizedNotifyTarget))
+                {
+                    CaptureSelfPushName(sanitizedNotify, "stanza-notify");
+                }
             }
 
-            if (_jids.IsSelfLinked(normalizedNotifyTarget))
+            // Flood: same notify= on every message must not enqueue a Normal UI hop
+            // (Lumia 1520: ApplyStanzaNotifyPushName held the dispatcher for 20–30s).
+            if (!StanzaNotifyPushNameUiPolicy.ShouldSchedulePlaceholderNameUi(changed))
             {
-                CaptureSelfPushName(sanitizedNotify, "stanza-notify");
+                return;
             }
 
             string canonical = _jids.GetCanonicalJid(normalizedNotifyTarget);

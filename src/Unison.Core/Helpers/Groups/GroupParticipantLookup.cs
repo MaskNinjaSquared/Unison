@@ -123,8 +123,9 @@ namespace Unison.Core.Helpers
                 IndexParticipantKey(roster, names, avatars, member.Lid, member, name, avatar);
                 IndexParticipantKey(roster, names, avatars, member.PhoneNumber, member, name, avatar);
 
+                // Peek: bulk roster index must not promote LidMapping misses (Changed flood).
                 string canonical = jids != null
-                    ? jids.GetCanonicalJid(member.Jid)
+                    ? jids.PeekCanonicalJid(member.Jid)
                     : JidHelper.Normalize(member.Jid);
                 IndexParticipantKey(roster, names, avatars, canonical, member, name, avatar);
             }
@@ -580,8 +581,11 @@ namespace Unison.Core.Helpers
                 }
 
                 string raw = JidHelper.Normalize(chat.JID) ?? chat.JID;
+                // Peek — same rule as ChatRowIndex / list projection: GetCanonicalJid promotes
+                // LidMapping misses and raises Changed per row, which invalidates chat indexes
+                // and stalls EnrichActiveChatAfterPaint on Mobile (self / 1:1 open ~40s).
                 string canonical = jids != null
-                    ? jids.GetCanonicalJid(chat.JID)
+                    ? jids.PeekCanonicalJid(chat.JID)
                     : raw;
                 if (string.IsNullOrWhiteSpace(canonical))
                 {

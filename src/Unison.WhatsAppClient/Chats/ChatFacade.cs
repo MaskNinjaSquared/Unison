@@ -113,6 +113,22 @@ namespace Unison.WhatsAppClient.Chats
         private Task _inflightFullPreviewReconcile;
         private DateTime _lastFullPreviewReconcileUtc = DateTime.MinValue;
 
+        /// <summary>
+        /// Per-chat live strip coalesce. Flood of messages into one group used to
+        /// enqueue one urgent hop each; waiters share the final tip + summed unread.
+        /// </summary>
+        private readonly object _liveStripGate = new object();
+        private readonly Dictionary<string, LiveStripCoalesceSlot> _liveStripByJid =
+            new Dictionary<string, LiveStripCoalesceSlot>(StringComparer.OrdinalIgnoreCase);
+
+        private sealed class LiveStripCoalesceSlot
+        {
+            public LiveIncomingChatListApplyRequest Inflight;
+            public LiveIncomingChatListApplyRequest Queued;
+            public readonly List<TaskCompletionSource<LiveIncomingChatListApplyResult>> Waiters =
+                new List<TaskCompletionSource<LiveIncomingChatListApplyResult>>();
+        }
+
         public ChatFacade(
             IChatAccountActions account,
             IAppStateLocalHost localAppState,
@@ -1755,11 +1771,139 @@ namespace Unison.WhatsAppClient.Chats
                 return new LiveIncomingChatListApplyResult();
             }
 
-            int unreadDelta = request.UnreadDelta;
-            if (unreadDelta == 0 && request.CountsAsUnread)
+            // Normalize legacy CountsAsUnread onto UnreadDelta once so coalesce merge is stable.
+            if (request.UnreadDelta == 0 && request.CountsAsUnread)
             {
-                unreadDelta = 1;
+                request.UnreadDelta = 1;
             }
+
+            string key = _jids.GetCanonicalJid(request.ChatJid) ?? request.ChatJid;
+            TaskCompletionSource<LiveIncomingChatListApplyResult> waiter = null;
+            bool runPump;
+            lock (_liveStripGate)
+            {
+                LiveStripCoalesceSlot slot;
+                if (_liveStripByJid.TryGetValue(key, out slot))
+                {
+                    if (slot.Queued == null)
+                    {
+                        slot.Queued = request;
+                    }
+                    else
+                    {
+                        LiveIncomingStripCoalesce.Merge(slot.Queued, request);
+                    }
+
+                    waiter = new TaskCompletionSource<LiveIncomingChatListApplyResult>(
+                        TaskCreationOptions.RunContinuationsAsynchronously);
+                    slot.Waiters.Add(waiter);
+                    runPump = false;
+                }
+                else
+                {
+                    slot = new LiveStripCoalesceSlot { Inflight = request };
+                    _liveStripByJid[key] = slot;
+                    runPump = true;
+                }
+            }
+
+            if (!runPump)
+            {
+                return await waiter.Task.ConfigureAwait(false);
+            }
+
+            LiveIncomingChatListApplyResult last = new LiveIncomingChatListApplyResult();
+            try
+            {
+                while (true)
+                {
+                    LiveIncomingChatListApplyRequest toApply;
+                    lock (_liveStripGate)
+                    {
+                        LiveStripCoalesceSlot slot;
+                        if (!_liveStripByJid.TryGetValue(key, out slot) || slot.Inflight == null)
+                        {
+                            break;
+                        }
+
+                        toApply = slot.Inflight;
+                    }
+
+                    last = await ApplyLiveIncomingChatListCoreAsync(toApply).ConfigureAwait(false);
+
+                    List<TaskCompletionSource<LiveIncomingChatListApplyResult>> completedWaiters = null;
+                    bool more;
+                    lock (_liveStripGate)
+                    {
+                        LiveStripCoalesceSlot slot;
+                        if (!_liveStripByJid.TryGetValue(key, out slot))
+                        {
+                            break;
+                        }
+
+                        if (slot.Queued != null)
+                        {
+                            slot.Inflight = slot.Queued;
+                            slot.Queued = null;
+                            more = true;
+                        }
+                        else
+                        {
+                            completedWaiters = slot.Waiters.Count > 0
+                                ? new List<TaskCompletionSource<LiveIncomingChatListApplyResult>>(slot.Waiters)
+                                : null;
+                            _liveStripByJid.Remove(key);
+                            more = false;
+                        }
+                    }
+
+                    if (completedWaiters != null)
+                    {
+                        for (int i = 0; i < completedWaiters.Count; i++)
+                        {
+                            completedWaiters[i].TrySetResult(last);
+                        }
+                    }
+
+                    if (!more)
+                    {
+                        return last;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                List<TaskCompletionSource<LiveIncomingChatListApplyResult>> failedWaiters = null;
+                lock (_liveStripGate)
+                {
+                    LiveStripCoalesceSlot slot;
+                    if (_liveStripByJid.TryGetValue(key, out slot))
+                    {
+                        failedWaiters = slot.Waiters.Count > 0
+                            ? new List<TaskCompletionSource<LiveIncomingChatListApplyResult>>(slot.Waiters)
+                            : null;
+                        _liveStripByJid.Remove(key);
+                    }
+                }
+
+                if (failedWaiters != null)
+                {
+                    for (int i = 0; i < failedWaiters.Count; i++)
+                    {
+                        failedWaiters[i].TrySetException(ex);
+                    }
+                }
+
+                throw;
+            }
+
+            return last;
+        }
+
+        private async Task<LiveIncomingChatListApplyResult> ApplyLiveIncomingChatListCoreAsync(
+            LiveIncomingChatListApplyRequest request)
+        {
+            int unreadDelta = LiveIncomingStripCoalesce.EffectiveUnread(request);
 
             LiveIncomingChatListApplyResult result = new LiveIncomingChatListApplyResult();
             // Tip at High priority; Reposition (store Move → VisibleChats.Move) at Normal and

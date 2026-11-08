@@ -531,7 +531,8 @@ namespace Unison.Uwp
                 sp.GetRequiredService<AppSessionProvider>(),
                 sp.GetRequiredService<IConnectionService>(),
                 sp.GetRequiredService<SelfProfileState>(),
-                sp.GetRequiredService<IAvatarCache>()));
+                sp.GetRequiredService<IAvatarCache>(),
+                sp.GetRequiredService<IProfilePictureEncoder>()));
 
             // Falls back to the service's own resync when the socket is down and the session
             // provider has nothing to give it.
@@ -900,17 +901,29 @@ namespace Unison.Uwp
                 sp.GetRequiredService<IGroupRosterStore>(),
                 sp.GetRequiredService<IPersonStore>()));
             // Members land one by one from events; the full list only when @ / Members asks.
-            services.AddSingleton(sp => new GroupRosterDemand(
-                sp.GetRequiredService<GroupRosterIndex>(),
-                sp.GetRequiredService<AttachedUiDispatcher>(),
-                sp.GetRequiredService<IJidResolver>(),
-                sp.GetRequiredService<IChatStateStore>(),
-                sp.GetRequiredService<ChatRowIndex>(),
-                sp.GetRequiredService<IGroupNaming>(),
-                sp.GetRequiredService<IGroupRosterStore>(),
-                sp.GetRequiredService<GroupRosterWriter>(),
-                sp.GetRequiredService<ChatTimelineLoadPriorityGate>(),
-                sp.GetRequiredService<IRuntimeDiagnostics>()));
+            // Low: longer debounce so RoleChange storms (busy groups after days offline)
+            // coalesce into fewer low-priority UI flushes instead of hopping every 250ms.
+            services.AddSingleton(sp =>
+            {
+                SyncWorkloadStrategy workload = sp.GetRequiredService<SyncWorkloadStrategy>();
+                bool lowTier = workload.Category == DeviceCategory.Low ||
+                    workload.Category == DeviceCategory.Unsupported;
+                TimeSpan? flushDebounce = lowTier
+                    ? TimeSpan.FromMilliseconds(750)
+                    : (TimeSpan?)null;
+                return new GroupRosterDemand(
+                    sp.GetRequiredService<GroupRosterIndex>(),
+                    sp.GetRequiredService<AttachedUiDispatcher>(),
+                    sp.GetRequiredService<IJidResolver>(),
+                    sp.GetRequiredService<IChatStateStore>(),
+                    sp.GetRequiredService<ChatRowIndex>(),
+                    sp.GetRequiredService<IGroupNaming>(),
+                    sp.GetRequiredService<IGroupRosterStore>(),
+                    sp.GetRequiredService<GroupRosterWriter>(),
+                    sp.GetRequiredService<ChatTimelineLoadPriorityGate>(),
+                    sp.GetRequiredService<IRuntimeDiagnostics>(),
+                    flushDebounce: flushDebounce);
+            });
             services.AddSingleton<IGroupService>(sp => new GroupFacade(
                 sp.GetRequiredService<IGroupWireActions>(),
                 sp.GetRequiredService<IGroupNaming>(),
@@ -962,6 +975,7 @@ namespace Unison.Uwp
             services.AddSingleton<IUriLauncher, UriLauncherService>();
             services.AddSingleton<ICopyService, CopyService>();
             services.AddSingleton<IFilePicker, FilePickerService>();
+            services.AddSingleton<ICameraPickService, Unison.Core.Services.CameraPickService>();
             services.AddSingleton<IAudioExportService, AudioExportService>();
             services.AddSingleton<IShareService, ShareService>();
             services.AddSingleton<ShareTargetSession>();

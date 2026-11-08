@@ -29,13 +29,15 @@ namespace Unison.WhatsAppClient.Profiles
         private readonly IConnectionService _connection;
         private readonly SelfProfileState _self;
         private readonly IAvatarCache _avatarCache;
+        private readonly IProfilePictureEncoder _pictures;
 
         /// <param name="connection">EnsureConnected + SessionEstablished (post-handshake resync).</param>
         public ProfileFacade(
             IWhatsAppSessionProvider sessions,
             IConnectionService connection,
             SelfProfileState self,
-            IAvatarCache avatarCache)
+            IAvatarCache avatarCache,
+            IProfilePictureEncoder pictures = null)
         {
             if (sessions == null)
             {
@@ -51,6 +53,7 @@ namespace Unison.WhatsAppClient.Profiles
             _connection = connection;
             _self = self ?? throw new ArgumentNullException(nameof(self));
             _avatarCache = avatarCache ?? throw new ArgumentNullException(nameof(avatarCache));
+            _pictures = pictures;
 
             // Both live as long as the app does, so there is nothing to unhook from.
             _self.Changed += (s, e) =>
@@ -196,6 +199,60 @@ namespace Unison.WhatsAppClient.Profiles
             {
                 _self.Name = name;
             }
+        }
+
+        public async Task UpdateSelfPictureAsync(
+            byte[] imageBytes,
+            CancellationToken cancellationToken = default(CancellationToken))
+        {
+            if (imageBytes == null || imageBytes.Length == 0)
+            {
+                throw new ArgumentException("A picture is required", nameof(imageBytes));
+            }
+
+            if (_pictures == null)
+            {
+                throw new InvalidOperationException("Profile picture encoder is not available.");
+            }
+
+            byte[] jpeg = await _pictures.EncodeSquareJpegAsync(imageBytes).ConfigureAwait(false);
+            if (jpeg == null || jpeg.Length == 0)
+            {
+                throw new InvalidOperationException("Could not encode profile picture.");
+            }
+
+            cancellationToken.ThrowIfCancellationRequested();
+            var session = await EnsureSessionAsync().ConfigureAwait(false);
+            var useCase = new UpdateProfileUseCase(session.Connection);
+            await useCase.UpdatePictureAsync(jid: null, jpeg).ConfigureAwait(false);
+            await SyncCurrentProfileAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        public async Task RemoveSelfPictureAsync(
+            CancellationToken cancellationToken = default(CancellationToken))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var session = await EnsureSessionAsync().ConfigureAwait(false);
+            var useCase = new UpdateProfileUseCase(session.Connection);
+            await useCase.RemovePictureAsync(jid: null).ConfigureAwait(false);
+            _self.AvatarUrl = null;
+            await SyncCurrentProfileAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        private async Task<Unison.Socket.Session.WhatsAppSession> EnsureSessionAsync()
+        {
+            if (!_sessions.IsTransportReady)
+            {
+                await _connection.EnsureConnectedAsync().ConfigureAwait(false);
+            }
+
+            Unison.Socket.Session.WhatsAppSession session = _sessions.Current;
+            if (session == null || !_sessions.IsReady)
+            {
+                throw new InvalidOperationException("WhatsApp session is not connected.");
+            }
+
+            return session;
         }
 
         /// <summary>The account's push name, or null until one arrives — never the JID digits.</summary>

@@ -165,7 +165,8 @@
                                                                 HorizontalAlignment="Center"
                                                                 AvatarUrl="{Binding CurrentUserAvatar}"/>
                                 </toolkit:DropShadowPanel>
-                                <controls:ProfilePhotoButton HorizontalAlignment="Right"
+                                <controls:ProfilePhotoButton x:Name="MinimalProfilePhotoButton"
+                                                             HorizontalAlignment="Right"
                                                              VerticalAlignment="Bottom"
                                                              Canvas.ZIndex="1"
                                                              Visibility="{x:Bind ViewProfileState, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
@@ -189,10 +190,19 @@
                                     Background="Transparent"
                                     Foreground="{ThemeResource SettingsHeroForegroundBrush}"
                                     Visibility="{x:Bind ViewProfileState, Mode=OneWay, Converter={StaticResource InvertedBooleanToVisibilityConverter}}">
-                                <TextBlock x:Uid="Settings_YourProfile"
-                                           Text="Your Profile"
-                                           FontSize="14"
-                                           Foreground="{ThemeResource SettingsHeroForegroundBrush}"/>
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock x:Uid="Settings_YourProfile"
+                                               Text="Your Profile"
+                                               FontSize="14"
+                                               VerticalAlignment="Center"
+                                               Foreground="{ThemeResource SettingsHeroForegroundBrush}"/>
+                                    <FontIcon Glyph="&#xE76C;"
+                                              FontFamily="{StaticResource IconFont}"
+                                              FontSize="12"
+                                              Margin="4,0,0,0"
+                                              VerticalAlignment="Center"
+                                              Foreground="{ThemeResource SettingsHeroForegroundBrush}"/>
+                                </StackPanel>
                             </Button>
                         </StackPanel>
 
@@ -222,7 +232,8 @@
                                                                 VerticalAlignment="Center"
                                                                 AvatarUrl="{Binding CurrentUserAvatar}"/>
                                 </toolkit:DropShadowPanel>
-                                <controls:ProfilePhotoButton HorizontalAlignment="Right"
+                                <controls:ProfilePhotoButton x:Name="ExtendedProfilePhotoButton"
+                                                             HorizontalAlignment="Right"
                                                              VerticalAlignment="Bottom"
                                                              Canvas.ZIndex="1"
                                                              Visibility="{x:Bind ViewProfileState, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
@@ -244,10 +255,19 @@
                                         Padding="8,2"
                                         Background="Transparent"
                                         Foreground="{ThemeResource SettingsHeroForegroundBrush}">
-                                    <TextBlock x:Uid="Settings_YourProfile"
-                                               Text="Your Profile"
-                                               FontSize="16"
-                                               Foreground="{ThemeResource SettingsHeroForegroundBrush}"/>
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock x:Uid="Settings_YourProfile"
+                                                   Text="Your Profile"
+                                                   FontSize="16"
+                                                   VerticalAlignment="Center"
+                                                   Foreground="{ThemeResource SettingsHeroForegroundBrush}"/>
+                                        <FontIcon Glyph="&#xE76C;"
+                                                  FontFamily="{StaticResource IconFont}"
+                                                  FontSize="12"
+                                                  Margin="4,0,0,0"
+                                                  VerticalAlignment="Center"
+                                                  Foreground="{ThemeResource SettingsHeroForegroundBrush}"/>
+                                    </StackPanel>
                                 </Button>
                             </StackPanel>
                         </StackPanel>

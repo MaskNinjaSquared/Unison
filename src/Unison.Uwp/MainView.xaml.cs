@@ -14,6 +14,7 @@ using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.ViewModels;
 using Unison.Uwp.Services;
 using Unison.Uwp.Services.WhatsApp;
+using Unison.Uwp.UI.Helpers;
 using Unison.Uwp.UI.Views;
 
 namespace Unison.Uwp
@@ -34,6 +35,7 @@ namespace Unison.Uwp
         private bool _syncingPaneFromControl;
         private ShellViewModel _shellViewModel;
         private INavigator _navigator;
+        private ShellCameraPickHost _cameraPickHost;
 
         private ShellViewModel ViewModel => _shellViewModel;
 
@@ -187,6 +189,7 @@ namespace Unison.Uwp
                 _uiEventsAttached = false;
             }
 
+            DetachCameraPickHost();
             UnhookViewModel();
         }
 
@@ -209,6 +212,7 @@ namespace Unison.Uwp
                 return;
             }
 
+            AttachCameraPickHost();
             _navigator?.AttachShellFrame(ShellContentFrame);
             _navigator?.AttachFullScreenFrame(FullScreenFrame);
             ApplyFullScreenVisibility();
@@ -221,6 +225,33 @@ namespace Unison.Uwp
             ViewModel.RefreshUserInfo();
             EnsureOpenPendingProfileFromActivation();
             EnsureOpenPendingChatFromActivation();
+        }
+
+        private void AttachCameraPickHost()
+        {
+            if (_cameraPickHost != null || _shellViewModel == null || App.Services == null)
+            {
+                return;
+            }
+
+            ICameraPickService camera = App.Services.GetService<ICameraPickService>();
+            if (camera == null)
+            {
+                return;
+            }
+
+            _cameraPickHost = new ShellCameraPickHost(
+                _shellViewModel,
+                camera,
+                _navigator,
+                () => CameraPickPresenter);
+            _cameraPickHost.Attach();
+        }
+
+        private void DetachCameraPickHost()
+        {
+            _cameraPickHost?.Detach();
+            _cameraPickHost = null;
         }
 
         private void EnsureShellContent()

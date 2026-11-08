@@ -68,14 +68,23 @@ namespace Unison.Core.ViewModels
 
         public ICommand HeaderBackCommand { get; private set; }
 
-        /// <summary>Opens the image picker and stores optimized JPEG/PNG bytes for the community photo.</summary>
+        /// <summary>Gallery pick for the community photo.</summary>
         public ICommand PickCommunityPhotoCommand { get; private set; }
 
-        /// <summary>Opens the image picker for the create-channel avatar.</summary>
+        /// <summary>Shell camera pick for the community photo.</summary>
+        public ICommand PickCommunityPhotoFromCameraCommand { get; private set; }
+
+        /// <summary>Gallery pick for the create-channel avatar.</summary>
         public ICommand PickChannelPhotoCommand { get; private set; }
 
-        /// <summary>Opens the image picker for the create-group avatar.</summary>
+        /// <summary>Shell camera pick for the create-channel avatar.</summary>
+        public ICommand PickChannelPhotoFromCameraCommand { get; private set; }
+
+        /// <summary>Gallery pick for the create-group avatar.</summary>
         public ICommand PickGroupPhotoCommand { get; private set; }
+
+        /// <summary>Shell camera pick for the create-group avatar.</summary>
+        public ICommand PickGroupPhotoFromCameraCommand { get; private set; }
 
         /// <summary>Opens the disappearing-messages dialog for create-group.</summary>
         public ICommand EditGroupEphemeralCommand { get; private set; }
@@ -432,14 +441,23 @@ namespace Unison.Core.ViewModels
             StartChannelCreateCommand = new RelayCommand(() => HasStartedChannelCreate = true);
             HeaderBackCommand = new RelayCommand(HeaderBack, () => !_isCreating);
             PickCommunityPhotoCommand = new RelayCommand(
-                () => _ = PickCommunityPhotoAsync(),
+                () => _ = PickCommunityPhotoFromGalleryAsync(),
                 () => _filePicker != null);
+            PickCommunityPhotoFromCameraCommand = new RelayCommand(
+                () => _ = PickCommunityPhotoFromCameraAsync(),
+                () => _cameraPick != null);
             PickChannelPhotoCommand = new RelayCommand(
-                () => _ = PickChannelPhotoAsync(),
+                () => _ = PickChannelPhotoFromGalleryAsync(),
                 () => _filePicker != null);
+            PickChannelPhotoFromCameraCommand = new RelayCommand(
+                () => _ = PickChannelPhotoFromCameraAsync(),
+                () => _cameraPick != null);
             PickGroupPhotoCommand = new RelayCommand(
-                () => _ = PickGroupPhotoAsync(),
+                () => _ = PickGroupPhotoFromGalleryAsync(),
                 () => _filePicker != null);
+            PickGroupPhotoFromCameraCommand = new RelayCommand(
+                () => _ = PickGroupPhotoFromCameraAsync(),
+                () => _cameraPick != null);
             EditGroupEphemeralCommand = new RelayCommand(() => _ = EditGroupEphemeralAsync());
             OpenGroupPermissionsCommand = new RelayCommand(() => IsGroupPermissionsOpen = true);
             CloseGroupPermissionsCommand = new RelayCommand(() => IsGroupPermissionsOpen = false);
@@ -456,28 +474,25 @@ namespace Unison.Core.ViewModels
             OnPropertyChanged(nameof(SelectedMembersCount));
         }
 
-        private async Task PickCommunityPhotoAsync()
-        {
-            await PickPhotoIntoAsync(
-                bytes => CommunityPhotoBytes = bytes,
-                "PickCommunityPhoto").ConfigureAwait(false);
-        }
+        private Task PickCommunityPhotoFromGalleryAsync() =>
+            PickPhotoFromGalleryIntoAsync(bytes => CommunityPhotoBytes = bytes, "PickCommunityPhoto");
 
-        private async Task PickChannelPhotoAsync()
-        {
-            await PickPhotoIntoAsync(
-                bytes => ChannelPhotoBytes = bytes,
-                "PickChannelPhoto").ConfigureAwait(false);
-        }
+        private Task PickCommunityPhotoFromCameraAsync() =>
+            PickPhotoFromCameraIntoAsync(bytes => CommunityPhotoBytes = bytes, "PickCommunityPhotoCamera");
 
-        private async Task PickGroupPhotoAsync()
-        {
-            await PickPhotoIntoAsync(
-                bytes => GroupPhotoBytes = bytes,
-                "PickGroupPhoto").ConfigureAwait(false);
-        }
+        private Task PickChannelPhotoFromGalleryAsync() =>
+            PickPhotoFromGalleryIntoAsync(bytes => ChannelPhotoBytes = bytes, "PickChannelPhoto");
 
-        private async Task PickPhotoIntoAsync(Action<byte[]> assign, string logTag)
+        private Task PickChannelPhotoFromCameraAsync() =>
+            PickPhotoFromCameraIntoAsync(bytes => ChannelPhotoBytes = bytes, "PickChannelPhotoCamera");
+
+        private Task PickGroupPhotoFromGalleryAsync() =>
+            PickPhotoFromGalleryIntoAsync(bytes => GroupPhotoBytes = bytes, "PickGroupPhoto");
+
+        private Task PickGroupPhotoFromCameraAsync() =>
+            PickPhotoFromCameraIntoAsync(bytes => GroupPhotoBytes = bytes, "PickGroupPhotoCamera");
+
+        private async Task PickPhotoFromGalleryIntoAsync(Action<byte[]> assign, string logTag)
         {
             if (_filePicker == null || assign == null)
             {
@@ -492,18 +507,46 @@ namespace Unison.Core.ViewModels
                     return;
                 }
 
-                if (_dispatcher != null)
-                {
-                    await _dispatcher.RunAsync(() => assign(picked.Bytes)).ConfigureAwait(false);
-                }
-                else
-                {
-                    assign(picked.Bytes);
-                }
+                await AssignPhotoBytesAsync(assign, picked.Bytes).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
                 Debug.WriteLine("[NewConversation] " + logTag + ": " + ex.GetBaseException().Message);
+            }
+        }
+
+        private async Task PickPhotoFromCameraIntoAsync(Action<byte[]> assign, string logTag)
+        {
+            if (_cameraPick == null || assign == null)
+            {
+                return;
+            }
+
+            try
+            {
+                byte[] jpeg = await _cameraPick.PickJpegAsync().ConfigureAwait(true);
+                if (jpeg == null || jpeg.Length == 0)
+                {
+                    return;
+                }
+
+                await AssignPhotoBytesAsync(assign, jpeg).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[NewConversation] " + logTag + ": " + ex.GetBaseException().Message);
+            }
+        }
+
+        private async Task AssignPhotoBytesAsync(Action<byte[]> assign, byte[] bytes)
+        {
+            if (_dispatcher != null)
+            {
+                await _dispatcher.RunAsync(() => assign(bytes)).ConfigureAwait(false);
+            }
+            else
+            {
+                assign(bytes);
             }
         }
 

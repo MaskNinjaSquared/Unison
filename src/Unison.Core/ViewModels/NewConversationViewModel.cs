@@ -38,15 +38,24 @@ namespace Unison.Core.ViewModels
         private readonly IUrgentDispatcher _urgentUi;
         private readonly ILocalContactsService _localContacts;
         private readonly IFilePicker _filePicker;
+        private readonly ICameraPickService _cameraPick;
         private readonly IGroupService _groups;
         private readonly INotificationService _notifications;
         private readonly IChannelService _channels;
 
         private static readonly TimeSpan RebuildDebounce = TimeSpan.FromMilliseconds(400);
 
+        /// <summary>
+        /// First open only: leave chrome + spinner on screen for at least one paint before
+        /// <c>x:Load</c> of the A–Z host. Same-turn materialize finished in ~15ms and hid the ring.
+        /// </summary>
+        private static readonly TimeSpan FirstOpenPaintBudget = TimeSpan.FromMilliseconds(50);
+
         private bool _isOpen;
         private bool _catalogHooked;
         private bool _rebuildScheduled;
+        private bool _isCatalogLoading;
+        private bool _isContactsSurfaceReady;
         private string _searchQuery = string.Empty;
         private string _selfDisplayName = string.Empty;
         private string _selfAvatarUrl;
@@ -71,7 +80,8 @@ namespace Unison.Core.ViewModels
             IGroupService groups = null,
             INotificationService notifications = null,
             IChannelService channels = null,
-            IUrgentDispatcher urgentDispatcher = null)
+            IUrgentDispatcher urgentDispatcher = null,
+            ICameraPickService cameraPick = null)
         {
             _chatState = chatState ?? throw new ArgumentNullException(nameof(chatState));
             _contacts = contacts ?? throw new ArgumentNullException(nameof(contacts));
@@ -86,6 +96,7 @@ namespace Unison.Core.ViewModels
             _urgentUi = urgentDispatcher ?? (dispatcher as IUrgentDispatcher);
             _localContacts = localContacts;
             _filePicker = filePicker;
+            _cameraPick = cameraPick;
             _groups = groups;
             _notifications = notifications;
             _channels = channels;
@@ -120,15 +131,61 @@ namespace Unison.Core.ViewModels
                 {
                     RefreshSelfTile();
                     HookCatalog();
-                    RebuildCatalog();
                     RefreshCreateChrome();
+                    // First open: chrome paints with loading; contacts SemanticZoom materializes
+                    // after yield. Later opens keep the surface warm and only refresh catalog.
+                    if (!_isContactsSurfaceReady)
+                    {
+                        IsCatalogLoading = true;
+                    }
+
+                    ScheduleOpenRebuild();
                 }
                 else
                 {
                     UnhookCatalog();
                     SearchQuery = string.Empty;
                     ClearCreateFlow();
+                    IsCatalogLoading = false;
                 }
+            }
+        }
+
+        /// <summary>
+        /// True while the first contacts surface is still deferred (spinner over the list area).
+        /// Stays false on later opens once <see cref="IsContactsSurfaceReady"/> is sticky.
+        /// </summary>
+        public bool IsCatalogLoading
+        {
+            get => _isCatalogLoading;
+            private set
+            {
+                if (_isCatalogLoading == value)
+                {
+                    return;
+                }
+
+                _isCatalogLoading = value;
+                OnPropertyChanged(nameof(IsCatalogLoading));
+            }
+        }
+
+        /// <summary>
+        /// Sticky after the first deferred open: hosts x:Load the A–Z SemanticZoom once, then
+        /// subsequent <see cref="IsOpen"/> toggles only Visibility.
+        /// </summary>
+        public bool IsContactsSurfaceReady
+        {
+            get => _isContactsSurfaceReady;
+            private set
+            {
+                if (_isContactsSurfaceReady == value)
+                {
+                    return;
+                }
+
+                _isContactsSurfaceReady = value;
+                OnPropertyChanged(nameof(IsContactsSurfaceReady));
             }
         }
 
@@ -316,20 +373,43 @@ namespace Unison.Core.ViewModels
             }
 
             _rebuildScheduled = true;
-            _ = RunScheduledRebuildAsync();
+            _ = RunScheduledRebuildAsync(RebuildDebounce);
+        }
+
+        /// <summary>
+        /// First paint after Open: one yield so leave-chat / pane flip drains, then catalog.
+        /// </summary>
+        private void ScheduleOpenRebuild()
+        {
+            if (_rebuildScheduled)
+            {
+                return;
+            }
+
+            _rebuildScheduled = true;
+            _ = RunScheduledRebuildAsync(TimeSpan.Zero);
         }
 
         /// <summary>
         /// Awaited half of <see cref="ScheduleRebuild"/> — kept out of <c>async void</c> so a
         /// throw from rebuild lands in the catch below instead of the sync context.
         /// </summary>
-        private async Task RunScheduledRebuildAsync()
+        private async Task RunScheduledRebuildAsync(TimeSpan debounce)
         {
+            var sw = Stopwatch.StartNew();
             try
             {
                 try
                 {
-                    await Task.Delay(RebuildDebounce).ConfigureAwait(false);
+                    if (debounce > TimeSpan.Zero)
+                    {
+                        await Task.Delay(debounce).ConfigureAwait(false);
+                    }
+                    else
+                    {
+                        // Leave the Open/IsOpen turn before CollectionViewSource bind.
+                        await Task.Yield();
+                    }
                 }
                 finally
                 {
@@ -338,21 +418,55 @@ namespace Unison.Core.ViewModels
 
                 if (!_isOpen)
                 {
+                    IsCatalogLoading = false;
                     return;
+                }
+
+                // First open: IsCatalogLoading is already true — wait a frame so the ring paints
+                // before sticky x:Load + catalog bind clear it on the same hop.
+                if (!_isContactsSurfaceReady)
+                {
+                    await Task.Delay(FirstOpenPaintBudget).ConfigureAwait(false);
+                    if (!_isOpen)
+                    {
+                        IsCatalogLoading = false;
+                        return;
+                    }
                 }
 
                 if (_dispatcher != null)
                 {
-                    await _dispatcher.RunAsync(RebuildCatalog).ConfigureAwait(false);
-                    return;
+                    await _dispatcher.RunAsync(MaterializeContactsAndRebuild).ConfigureAwait(false);
+                }
+                else
+                {
+                    MaterializeContactsAndRebuild();
                 }
 
-                RebuildCatalog();
+                Debug.WriteLine(
+                    "[NewConversation] catalog-ready; groups=" + GroupedContacts.Count +
+                    "; surface=" + _isContactsSurfaceReady +
+                    "; ms=" + sw.ElapsedMilliseconds);
             }
             catch (Exception ex)
             {
+                IsCatalogLoading = false;
                 Debug.WriteLine("[NewConversation] Scheduled rebuild failed: " + ex.Message);
             }
+        }
+
+        /// <summary>
+        /// UI-thread half of open: flip sticky x:Load for the A–Z host, then bind catalog.
+        /// </summary>
+        private void MaterializeContactsAndRebuild()
+        {
+            if (!_isContactsSurfaceReady)
+            {
+                IsContactsSurfaceReady = true;
+            }
+
+            RebuildCatalog();
+            IsCatalogLoading = false;
         }
 
         private void RebuildCatalog()

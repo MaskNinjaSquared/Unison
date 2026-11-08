@@ -59,6 +59,9 @@ namespace Unison.Core.ViewModels
         /// <summary>File pickers — chat attach uses PickChatAttachmentAsync.</summary>
         private readonly IFilePicker _filePicker;
 
+        /// <summary>Shell-hosted camera (JPEG bytes); null when UI capture is not plugged.</summary>
+        private readonly ICameraPickService _cameraPick;
+
         /// <summary>Confirm dialogs (delete chat, call phone, …).</summary>
         private readonly IDialogService _dialogs;
 
@@ -196,8 +199,10 @@ namespace Unison.Core.ViewModels
             IChatExportService chatExport = null,
             IProfileService profile = null,
             IShareService share = null,
-            IChannelService channels = null)
+            IChannelService channels = null,
+            ICameraPickService cameraPick = null)
         {
+            _cameraPick = cameraPick;
             _channels = channels;
             _chatService = chatService;
             _connectionService = connectionService;
@@ -259,10 +264,10 @@ namespace Unison.Core.ViewModels
                 () => CanCompose);
 
             // Contact / location stay unavailable until each has a send route.
-            // Camera opens the in-chat CameraPickView; document attach is live.
+            // Camera uses Shell ICameraPickService; document attach is live.
             AttachCameraCommand = new RelayCommand(
-                () => CameraPickRequested?.Invoke(this, EventArgs.Empty),
-                () => CanCompose);
+                () => _ = RunSafeAsync(AttachCameraAsync, "attach-camera"),
+                () => CanCompose && _cameraPick != null);
             AttachFileCommand = new RelayCommand(
                 () => _ = RunSafeAsync(AttachDocumentAsync, "attach-file"),
                 () => CanCompose);
@@ -400,9 +405,6 @@ namespace Unison.Core.ViewModels
 
         public event EventHandler BackRequested;
         public event EventHandler MessageSent;
-
-        /// <summary>Chat detail should show <c>CameraPickView</c> over the conversation.</summary>
-        public event EventHandler CameraPickRequested;
 
         /// <summary>Raised after pin/unpin succeeds (view refreshes pinned banner).</summary>
         public event EventHandler MessagePinnedChanged;

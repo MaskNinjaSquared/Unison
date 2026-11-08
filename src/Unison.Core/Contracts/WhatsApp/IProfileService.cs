@@ -24,5 +24,13 @@ namespace Unison.Core.Contracts.WhatsApp
         /// Refreshes the current profile from WhatsApp (avatar IQ + cache) and persists.
         /// </summary>
         Task SyncCurrentProfileAsync(CancellationToken cancellationToken = default(CancellationToken));
+
+        /// <summary>
+        /// Encodes <paramref name="imageBytes"/> to a square JPEG and SETs our own profile picture.
+        /// </summary>
+        Task UpdateSelfPictureAsync(byte[] imageBytes, CancellationToken cancellationToken = default(CancellationToken));
+
+        /// <summary>Removes our own profile picture on the wire and clears the local avatar.</summary>
+        Task RemoveSelfPictureAsync(CancellationToken cancellationToken = default(CancellationToken));
     }
 }

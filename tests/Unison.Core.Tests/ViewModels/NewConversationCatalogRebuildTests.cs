@@ -36,6 +36,10 @@ namespace Unison.Core.Tests.ViewModels
             };
 
             vm.Open();
+            Assert.True(
+                SpinWait.SpinUntil(() => rebuilds >= 1, TimeSpan.FromSeconds(2)),
+                "Expected open catalog rebuild.");
+            await Task.Delay(50).ConfigureAwait(true);
             Assert.Equal(1, rebuilds);
             int passesAfterOpen = dispatcher.Passes;
 
@@ -72,6 +76,10 @@ namespace Unison.Core.Tests.ViewModels
             };
 
             vm.Open();
+            Assert.True(
+                SpinWait.SpinUntil(() => rebuilds >= 1, TimeSpan.FromSeconds(2)),
+                "Expected open catalog rebuild.");
+            await Task.Delay(50).ConfigureAwait(true);
             Assert.Equal(1, rebuilds);
 
             chats.NotifyDisplayNamesChanged();
@@ -84,7 +92,7 @@ namespace Unison.Core.Tests.ViewModels
         }
 
         [Fact]
-        public void Open_rebuilds_catalog_immediately()
+        public async Task Open_rebuilds_catalog_after_yielding_open_turn()
         {
             var dispatcher = new CountingDispatcher();
             var chats = new ChatStateStore(dispatcher);
@@ -106,13 +114,68 @@ namespace Unison.Core.Tests.ViewModels
 
             vm.Open();
 
+            // Open must not bind CollectionViewSource on the same UI turn as IsOpen.
+            Assert.Equal(0, rebuilds);
+            Assert.Equal(0, dispatcher.Passes);
+            Assert.True(vm.IsCatalogLoading);
+            Assert.False(vm.IsContactsSurfaceReady);
+
+            // First-open paint budget keeps loading true long enough for a frame.
+            await Task.Delay(20).ConfigureAwait(true);
+            Assert.True(vm.IsCatalogLoading);
+            Assert.False(vm.IsContactsSurfaceReady);
+
+            Assert.True(
+                SpinWait.SpinUntil(
+                    () => rebuilds >= 1 && vm.IsContactsSurfaceReady && !vm.IsCatalogLoading,
+                    TimeSpan.FromSeconds(2)),
+                "Expected catalog rebuild after Open yields.");
+            await Task.Delay(50).ConfigureAwait(true);
+
             Assert.Equal(1, rebuilds);
             Assert.True(vm.GroupedContacts.Count > 0);
-            Assert.Equal(0, dispatcher.Passes);
+            Assert.Equal(1, dispatcher.Passes);
+            Assert.True(vm.IsContactsSurfaceReady);
+            Assert.False(vm.IsCatalogLoading);
         }
 
         [Fact]
-        public void SearchQuery_rebuilds_catalog_immediately_while_open()
+        public async Task Second_open_keeps_contacts_surface_ready_without_loading()
+        {
+            var dispatcher = new CountingDispatcher();
+            var chats = new ChatStateStore(dispatcher);
+            chats.Chats.Add(new ChatItem
+            {
+                JID = "alice@s.whatsapp.net",
+                Name = "Alice",
+                Kind = ChatKind.Direct
+            });
+            var vm = CreateVm(chats, dispatcher);
+
+            vm.Open();
+            Assert.True(
+                SpinWait.SpinUntil(() => vm.IsContactsSurfaceReady && !vm.IsCatalogLoading, TimeSpan.FromSeconds(2)),
+                "Expected first open to materialize contacts surface.");
+            await Task.Delay(50).ConfigureAwait(true);
+
+            vm.Close();
+            Assert.False(vm.IsOpen);
+            Assert.True(vm.IsContactsSurfaceReady);
+
+            vm.Open();
+            Assert.True(vm.IsOpen);
+            Assert.True(vm.IsContactsSurfaceReady);
+            Assert.False(vm.IsCatalogLoading);
+
+            Assert.True(
+                SpinWait.SpinUntil(() => vm.GroupedContacts != null && vm.GroupedContacts.Count > 0, TimeSpan.FromSeconds(2)),
+                "Expected catalog refresh on second open.");
+            await Task.Delay(50).ConfigureAwait(true);
+            Assert.False(vm.IsCatalogLoading);
+        }
+
+        [Fact]
+        public async Task SearchQuery_rebuilds_catalog_immediately_while_open()
         {
             var dispatcher = new CountingDispatcher();
             var chats = new ChatStateStore(dispatcher);
@@ -130,6 +193,13 @@ namespace Unison.Core.Tests.ViewModels
             });
             var vm = CreateVm(chats, dispatcher);
             vm.Open();
+            Assert.True(
+                SpinWait.SpinUntil(
+                    () => vm.GroupedContacts != null && vm.GroupedContacts.Count > 0,
+                    TimeSpan.FromSeconds(2)),
+                "Expected open catalog rebuild before search.");
+            await Task.Delay(50).ConfigureAwait(true);
+
             int rebuilds = 0;
             vm.PropertyChanged += (s, e) =>
             {
@@ -139,10 +209,11 @@ namespace Unison.Core.Tests.ViewModels
                 }
             };
 
+            int passesBeforeSearch = dispatcher.Passes;
             vm.SearchQuery = "Alice";
 
             Assert.Equal(1, rebuilds);
-            Assert.Equal(0, dispatcher.Passes);
+            Assert.Equal(passesBeforeSearch, dispatcher.Passes);
         }
 
         private static NewConversationViewModel CreateVm(

@@ -110,7 +110,6 @@ namespace Unison.Uwp.UI.Views
         private List<ChatMessageViewModel> _activePinnedMessages = new List<ChatMessageViewModel>();
         private int _displayedPinnedIndex;
         /// <summary>Lazy camera overlay — not in XAML so Creators/Mobile chat open skips CaptureElement.</summary>
-        private CameraPickView _cameraPickOverlay;
         private DispatcherTimer _dateSeparatorTimer;
         private DateTime _dateSeparatorTimerDay;
         private bool _cancelRecordingAnimating;
@@ -202,7 +201,6 @@ namespace Unison.Uwp.UI.Views
             ViewModel.MessageSent += ViewModel_MessageSent;
             ViewModel.MessagePinnedChanged += ViewModel_MessagePinnedChanged;
             ViewModel.PresenceAnimationRequested += ViewModel_PresenceAnimationRequested;
-            ViewModel.CameraPickRequested += ViewModel_CameraPickRequested;
             ViewModel.PropertyChanged += ViewModel_PropertyChanged;
         }
 
@@ -218,7 +216,6 @@ namespace Unison.Uwp.UI.Views
             ViewModel.MessageSent -= ViewModel_MessageSent;
             ViewModel.MessagePinnedChanged -= ViewModel_MessagePinnedChanged;
             ViewModel.PresenceAnimationRequested -= ViewModel_PresenceAnimationRequested;
-            ViewModel.CameraPickRequested -= ViewModel_CameraPickRequested;
             ViewModel.PropertyChanged -= ViewModel_PropertyChanged;
         }
 
@@ -841,7 +838,7 @@ namespace Unison.Uwp.UI.Views
         /// <summary>Closes fullscreen media or the info pane; returns true if consumed.</summary>
         public bool TryConsumeBack()
         {
-            if (TryCloseCameraPick() || TryCloseVideoViewer() || TryCloseImageViewer())
+            if (TryCloseVideoViewer() || TryCloseImageViewer())
             {
                 return true;
             }
@@ -1410,80 +1407,6 @@ namespace Unison.Uwp.UI.Views
             return true;
         }
 
-        private void ViewModel_CameraPickRequested(object sender, EventArgs e)
-        {
-            OpenCameraPick();
-        }
-
-        private void OpenCameraPick()
-        {
-            if (CameraPickPresenter == null)
-            {
-                return;
-            }
-
-            SetAttachMenuOpen(false);
-            TryCloseVideoViewer();
-            TryCloseImageViewer();
-
-            CameraPickView overlay = EnsureCameraPickOverlay();
-            var pickVm = new CameraPickViewModel();
-            overlay.CloseRequested -= CameraPickOverlay_CloseRequested;
-            overlay.PhotoCaptured -= CameraPickOverlay_PhotoCaptured;
-            overlay.ViewModel = pickVm;
-            overlay.CloseRequested += CameraPickOverlay_CloseRequested;
-            overlay.PhotoCaptured += CameraPickOverlay_PhotoCaptured;
-            CameraPickPresenter.Visibility = Visibility.Visible;
-        }
-
-        private CameraPickView EnsureCameraPickOverlay()
-        {
-            if (_cameraPickOverlay != null)
-            {
-                return _cameraPickOverlay;
-            }
-
-            _cameraPickOverlay = new CameraPickView();
-            CameraPickPresenter.Content = _cameraPickOverlay;
-            return _cameraPickOverlay;
-        }
-
-        private void CameraPickOverlay_CloseRequested(object sender, EventArgs e)
-        {
-            TryCloseCameraPick();
-        }
-
-        private async void CameraPickOverlay_PhotoCaptured(object sender, CameraPhotoCapturedEventArgs e)
-        {
-            TryCloseCameraPick();
-            if (ViewModel == null || e?.Bytes == null)
-            {
-                return;
-            }
-
-            await ViewModel.AcceptCapturedPhotoAsync(e.Bytes);
-        }
-
-        private bool TryCloseCameraPick()
-        {
-            if (CameraPickPresenter == null || CameraPickPresenter.Visibility != Visibility.Visible)
-            {
-                return false;
-            }
-
-            if (_cameraPickOverlay != null)
-            {
-                _cameraPickOverlay.CloseRequested -= CameraPickOverlay_CloseRequested;
-                _cameraPickOverlay.PhotoCaptured -= CameraPickOverlay_PhotoCaptured;
-                _cameraPickOverlay.ViewModel = null;
-                CameraPickPresenter.Content = null;
-                _cameraPickOverlay = null;
-            }
-
-            CameraPickPresenter.Visibility = Visibility.Collapsed;
-            return true;
-        }
-
         /// <summary>Opens Imgur-style fullscreen video; stops bubble audio first.</summary>
         public async void OnVideoOpenButtonClick(object sender, RoutedEventArgs e)
         {
@@ -1732,7 +1655,6 @@ namespace Unison.Uwp.UI.Views
 
             // After the same-chat return: the list re-reports the open chat after every reorder,
             // and that must not close a picture the user is looking at.
-            TryCloseCameraPick();
             TryCloseVideoViewer();
             TryCloseImageViewer();
 

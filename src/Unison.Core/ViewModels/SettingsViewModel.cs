@@ -37,6 +37,9 @@ namespace Unison.Core.ViewModels
         private readonly IConnectionService _connectionService;
         private readonly IContactService _contacts;
         private readonly SyncStatusChannel _syncStatus;
+        private readonly IProfileService _profile;
+        private readonly IFilePicker _filePicker;
+        private readonly ICameraPickService _cameraPick;
 
         private readonly ShellViewModel _shell;
 
@@ -72,7 +75,10 @@ namespace Unison.Core.ViewModels
             ShellViewModel shell,
             IContactService contacts = null,
             SyncStatusChannel syncStatus = null,
-            IStartupLaunchService startupLaunch = null)
+            IStartupLaunchService startupLaunch = null,
+            IProfileService profile = null,
+            IFilePicker filePicker = null,
+            ICameraPickService cameraPick = null)
         {
             _localSettings = localSettings;
             _startupLaunch = startupLaunch;
@@ -89,10 +95,22 @@ namespace Unison.Core.ViewModels
             _shell = shell;
             _contacts = contacts;
             _syncStatus = syncStatus;
+            _profile = profile;
+            _filePicker = filePicker;
+            _cameraPick = cameraPick;
 
             _shell.PropertyChanged += OnShellPropertyChanged;
 
             LeaveCommand = new RelayCommand(() => LeaveRequested?.Invoke(this, EventArgs.Empty));
+            PickProfilePhotoFromCameraCommand = new RelayCommand(
+                () => _ = PickProfilePhotoFromCameraAsync(),
+                () => _profile != null && _cameraPick != null);
+            PickProfilePhotoFromGalleryCommand = new RelayCommand(
+                () => _ = PickProfilePhotoFromGalleryAsync(),
+                () => _profile != null && _filePicker != null);
+            RemoveProfilePhotoCommand = new RelayCommand(
+                () => _ = RemoveProfilePhotoAsync(),
+                () => _profile != null);
             ChooseStartTileCommand = new RelayCommand(() => { _ = ChooseStartTileAsync(); });
             ChooseNotificationFilterCommand = new RelayCommand(() => { _ = ChooseNotificationFilterAsync(); });
             CleanMediaCacheCommand = new RelayCommand(
@@ -595,6 +613,12 @@ namespace Unison.Core.ViewModels
         /// <summary>Leaves Settings and returns to the chats section.</summary>
         public ICommand LeaveCommand { get; }
 
+        public ICommand PickProfilePhotoFromCameraCommand { get; }
+
+        public ICommand PickProfilePhotoFromGalleryCommand { get; }
+
+        public ICommand RemoveProfilePhotoCommand { get; }
+
         /// <summary>Opens the Start-tile picker and pins the chosen glyph.</summary>
         public ICommand ChooseStartTileCommand { get; }
 
@@ -1060,6 +1084,75 @@ namespace Unison.Core.ViewModels
             {
                 _publishContactsBusy = false;
                 OnPropertyChanged(nameof(PublishContactsToWindowsEnabled));
+            }
+        }
+
+        private async Task PickProfilePhotoFromCameraAsync()
+        {
+            if (_cameraPick == null || _profile == null)
+            {
+                return;
+            }
+
+            try
+            {
+                byte[] jpeg = await _cameraPick.PickJpegAsync().ConfigureAwait(true);
+                if (jpeg == null || jpeg.Length == 0)
+                {
+                    return;
+                }
+
+                await _profile.UpdateSelfPictureAsync(jpeg).ConfigureAwait(false);
+                _shell.RefreshUserInfo();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine(
+                    "[SettingsViewModel] Profile camera photo failed: " + ex.Message);
+            }
+        }
+
+        private async Task PickProfilePhotoFromGalleryAsync()
+        {
+            if (_filePicker == null || _profile == null)
+            {
+                return;
+            }
+
+            try
+            {
+                PickedChatMedia picked = await _filePicker.PickChatImageAsync().ConfigureAwait(false);
+                if (picked?.Bytes == null || picked.Bytes.Length == 0)
+                {
+                    return;
+                }
+
+                await _profile.UpdateSelfPictureAsync(picked.Bytes).ConfigureAwait(false);
+                _shell.RefreshUserInfo();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine(
+                    "[SettingsViewModel] Profile gallery photo failed: " + ex.Message);
+            }
+        }
+
+        private async Task RemoveProfilePhotoAsync()
+        {
+            if (_profile == null)
+            {
+                return;
+            }
+
+            try
+            {
+                await _profile.RemoveSelfPictureAsync().ConfigureAwait(false);
+                _shell.RefreshUserInfo();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine(
+                    "[SettingsViewModel] Profile photo remove failed: " + ex.Message);
             }
         }
     }

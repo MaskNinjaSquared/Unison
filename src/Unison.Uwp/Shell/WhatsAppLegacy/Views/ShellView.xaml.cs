@@ -19,6 +19,7 @@ using Unison.Core.Helpers;
 using Unison.Core.Models;
 using Unison.Core.State;
 using Unison.Core.ViewModels;
+using Unison.Uwp.UI.Helpers;
 using Unison.Uwp.UI.Views;
 
 namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
@@ -40,6 +41,7 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
 
         private ShellViewModel _shell;
         private INavigator _navigator;
+        private ShellCameraPickHost _cameraPickHost;
         private IDialogService _dialogs;
         private INewChatDialogViewModelFactory _newChatFactory;
         private IChatService _chats;
@@ -106,6 +108,7 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                 _navigator.LocalBackChanged += Navigator_LocalBackChanged;
             }
 
+            AttachCameraPickHost();
             _pivotReady = true;
             ApplyPivotHeaders();
             EnsureBrandUppercase();
@@ -144,9 +147,37 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                 _navigator.LocalBackChanged -= Navigator_LocalBackChanged;
             }
 
+            DetachCameraPickHost();
             UnhookListChrome();
             UnhookDetail();
             SystemNavigationManager.GetForCurrentView().BackRequested -= ShellView_BackRequested;
+        }
+
+        private void AttachCameraPickHost()
+        {
+            if (_cameraPickHost != null || _shell == null || App.Services == null)
+            {
+                return;
+            }
+
+            ICameraPickService camera = App.Services.GetService<ICameraPickService>();
+            if (camera == null)
+            {
+                return;
+            }
+
+            _cameraPickHost = new ShellCameraPickHost(
+                _shell,
+                camera,
+                _navigator,
+                () => CameraPickPresenter);
+            _cameraPickHost.Attach();
+        }
+
+        private void DetachCameraPickHost()
+        {
+            _cameraPickHost?.Detach();
+            _cameraPickHost = null;
         }
 
         private void Navigator_FullScreenChanged(object sender, EventArgs e)

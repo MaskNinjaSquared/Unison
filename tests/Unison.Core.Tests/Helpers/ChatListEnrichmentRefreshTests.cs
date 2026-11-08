@@ -94,5 +94,19 @@ namespace Unison.Core.Tests.Helpers
                     visibleCount,
                     deferred));
         }
+
+        [Theory]
+        [InlineData(0, true)]
+        [InlineData(1, false)]
+        [InlineData(20, false)]
+        public void Empty_list_gets_one_shot_paint_during_enrichment_deferral(
+            int visibleCount,
+            bool expected)
+        {
+            Assert.Equal(
+                expected,
+                ChatListEnrichmentRefresh.ShouldPaintEmptyListDuringEnrichmentDeferral(
+                    visibleCount));
+        }
     }
 }

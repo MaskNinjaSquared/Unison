@@ -600,6 +600,7 @@
     <Compile Include="UI\Helpers\CommunityChatDetailHeader.cs" />
     <Compile Include="UI\Helpers\DesktopCursorKind.cs" />
     <Compile Include="UI\Helpers\RichTextBuilder.cs" />
+    <Compile Include="UI\Helpers\ShellCameraPickHost.cs" />
     <Compile Include="UI\Converters\StringToVisibilityConverter.cs" />
     <Compile Include="UI\Converters\StringToImageSourceConverter.cs" />
     <Compile Include="UI\Converters\BooleanToVisibilityConverter.cs" />

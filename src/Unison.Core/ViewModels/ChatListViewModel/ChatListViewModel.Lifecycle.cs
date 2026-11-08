@@ -131,6 +131,17 @@ namespace Unison.Core.ViewModels
                     _refreshDeferredForEnrichment = true;
                     _visibleOrderDirty = true;
                     EnsureDeferredEmptyListLoadingOverlay();
+                    // Keep the freio for mid-enrichment storms, but paint once when unload
+                    // left VisibleChats empty — otherwise Groups/Avatars stuck without
+                    // Raise(null) leave ChatList_Loading forever (f7af47e0).
+                    if (ChatListEnrichmentRefresh.ShouldPaintEmptyListDuringEnrichmentDeferral(
+                            VisibleChats.Count))
+                    {
+                        ScheduleRefreshVisibleChats(
+                            ChatListEnrichmentRefresh.EmptyDeferredListPaintDelay,
+                            allowDuringEnrichment: true);
+                    }
+
                     TraceListLifecycle(
                         "refresh-deferred-enrichment-attach",
                         BuildListSnapshot("visible=" + VisibleChats.Count),
@@ -217,6 +228,17 @@ namespace Unison.Core.ViewModels
                     _refreshDeferredForEnrichment = true;
                     _visibleOrderDirty = true;
                     EnsureDeferredEmptyListLoadingOverlay();
+                    // Attach may already have armed the empty paint; coalesce keeps it.
+                    // If only pins saw the empty deferral, arm the same one-shot paint.
+                    if (ChatListEnrichmentRefresh.ShouldPaintEmptyListDuringEnrichmentDeferral(
+                            VisibleChats.Count))
+                    {
+                        ScheduleRefreshVisibleChats(
+                            ChatListEnrichmentRefresh.EmptyDeferredListPaintDelay,
+                            allowDuringEnrichment: true,
+                            coalesceIfArmed: true);
+                    }
+
                     TraceListLifecycle(
                         "refresh-deferred-enrichment-pins",
                         BuildListSnapshot("visible=" + VisibleChats.Count),

@@ -109,7 +109,8 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Controls
                 return;
             }
 
-            if (string.Equals(e.PropertyName, nameof(NewConversationViewModel.GroupedContacts), StringComparison.Ordinal) ||
+            if (string.Equals(e.PropertyName, nameof(NewConversationViewModel.IsContactsSurfaceReady), StringComparison.Ordinal) ||
+                string.Equals(e.PropertyName, nameof(NewConversationViewModel.GroupedContacts), StringComparison.Ordinal) ||
                 string.Equals(e.PropertyName, nameof(NewConversationViewModel.JumpTiles), StringComparison.Ordinal))
             {
                 BindGroupedSource();
@@ -132,13 +133,14 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Controls
         private void BeginClose(bool animate)
         {
             UnhookBack();
-            _contactsZoom?.Clear();
+            // Keep the x:Load A–Z host warm; only hide the overlay.
             Opacity = 1;
             Visibility = Visibility.Collapsed;
         }
 
         private void EnsureContactsZoom()
         {
+            // ContactsZoom is x:Load'd — null until IsContactsSurfaceReady.
             if (_contactsZoom != null || ContactsZoom == null || ContactsList == null || JumpList == null)
             {
                 return;
@@ -149,7 +151,7 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Controls
 
         private void BindGroupedSource()
         {
-            if (ViewModel == null)
+            if (ViewModel == null || !ViewModel.IsContactsSurfaceReady)
             {
                 return;
             }
@@ -165,7 +167,21 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Controls
             Visibility catalog = isCreateFlowOpen ? Visibility.Collapsed : Visibility.Visible;
             CatalogHeader.Visibility = catalog;
             SearchBox.Visibility = catalog;
-            ContactsZoom.Visibility = catalog;
+            if (OptionsChromeHost != null)
+            {
+                OptionsChromeHost.Visibility = catalog;
+            }
+
+            if (ContactsAreaHost != null)
+            {
+                ContactsAreaHost.Visibility = catalog;
+            }
+
+            if (ContactsZoom != null)
+            {
+                ContactsZoom.Visibility = catalog;
+            }
+
             CreateFlowPart.Visibility = isCreateFlowOpen ? Visibility.Visible : Visibility.Collapsed;
         }
 

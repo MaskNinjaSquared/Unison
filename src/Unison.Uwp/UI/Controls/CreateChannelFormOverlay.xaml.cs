@@ -104,8 +104,8 @@ namespace Unison.Uwp.UI.Controls
                 return;
             }
 
-            ChannelPhotoButton.CameraRequested += PhotoButton_PickRequested;
-            ChannelPhotoButton.GalleryRequested += PhotoButton_PickRequested;
+            ChannelPhotoButton.CameraRequested += PhotoButton_CameraRequested;
+            ChannelPhotoButton.GalleryRequested += PhotoButton_GalleryRequested;
             ChannelPhotoButton.DeleteRequested += PhotoButton_DeleteRequested;
             _photoButtonHooked = true;
         }
@@ -117,13 +117,23 @@ namespace Unison.Uwp.UI.Controls
                 return;
             }
 
-            ChannelPhotoButton.CameraRequested -= PhotoButton_PickRequested;
-            ChannelPhotoButton.GalleryRequested -= PhotoButton_PickRequested;
+            ChannelPhotoButton.CameraRequested -= PhotoButton_CameraRequested;
+            ChannelPhotoButton.GalleryRequested -= PhotoButton_GalleryRequested;
             ChannelPhotoButton.DeleteRequested -= PhotoButton_DeleteRequested;
             _photoButtonHooked = false;
         }
 
-        private void PhotoButton_PickRequested(object sender, EventArgs e)
+        private void PhotoButton_CameraRequested(object sender, EventArgs e)
+        {
+            var vm = _hookedVm ?? DataContext as NewConversationViewModel;
+            if (vm?.PickChannelPhotoFromCameraCommand != null &&
+                vm.PickChannelPhotoFromCameraCommand.CanExecute(null))
+            {
+                vm.PickChannelPhotoFromCameraCommand.Execute(null);
+            }
+        }
+
+        private void PhotoButton_GalleryRequested(object sender, EventArgs e)
         {
             var vm = _hookedVm ?? DataContext as NewConversationViewModel;
             if (vm?.PickChannelPhotoCommand != null && vm.PickChannelPhotoCommand.CanExecute(null))

@@ -14,6 +14,7 @@ namespace Unison.Core.ViewModels
     public partial class ShellViewModel
     {
         private bool _isSharePickerOpen;
+        private bool _isCameraPickOpen;
         private bool _sharePickerCatalogHooked;
         private IncomingSharePayload _pendingShare;
         private IncomingSharePayload _shareAwaitingChatApply;
@@ -46,6 +47,25 @@ namespace Unison.Core.ViewModels
                     UnhookSharePickerCatalog();
                     ClearForwardPickerState();
                 }
+            }
+        }
+
+        /// <summary>
+        /// Shell camera overlay (<c>CameraPickView</c>) — drives <c>x:Load</c> on the host presenter.
+        /// Toggled by the Shell UI capture Func plugged into <c>ICameraPickService</c>.
+        /// </summary>
+        public bool IsCameraPickOpen
+        {
+            get => _isCameraPickOpen;
+            set
+            {
+                if (_isCameraPickOpen == value)
+                {
+                    return;
+                }
+
+                _isCameraPickOpen = value;
+                OnPropertyChanged(nameof(IsCameraPickOpen));
             }
         }
 

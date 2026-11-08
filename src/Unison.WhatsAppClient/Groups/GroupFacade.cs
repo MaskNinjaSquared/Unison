@@ -211,6 +211,21 @@ namespace Unison.WhatsAppClient.Groups
 
         private async Task RunBackgroundListingAsync()
         {
+            // Nested Notify while unresolved-metadata still runs: QueryAllGroups skips
+            // in-flight, but Raise(null) in finally used to clear the Groups banner and
+            // release frugal list deferral into a multi-minute cold BuildVisibleRefreshSource.
+            if (!GroupListingBannerOwnership.MayOwnSyncBanner(
+                    Volatile.Read(ref _listingInFlight) != 0))
+            {
+                TraceListingSkipped("in-flight");
+                _diagnostics?.Write("startup-phase", "background-groups:begin");
+                _diagnostics?.Write(
+                    "startup-phase",
+                    "background-groups:end",
+                    "elapsedMs=0");
+                return;
+            }
+
             _syncStatus.Raise(SyncPhaseStatus.Format(SyncPhaseStatus.Groups));
             _diagnostics?.Write("startup-phase", "background-groups:begin");
             var elapsed = Stopwatch.StartNew();
@@ -229,7 +244,13 @@ namespace Unison.WhatsAppClient.Groups
                     "startup-phase",
                     "background-groups:end",
                     "elapsedMs=" + elapsed.ElapsedMilliseconds);
-                _syncStatus.Raise(null);
+                // Race: two RunBackground saw in-flight=0, both Raised Groups; the loser
+                // skipped inside QueryAllGroups — must not clear while the winner still runs.
+                if (GroupListingBannerOwnership.ShouldClearSyncBannerAfterPass(
+                        Volatile.Read(ref _listingInFlight) != 0))
+                {
+                    _syncStatus.Raise(null);
+                }
             }
         }
 

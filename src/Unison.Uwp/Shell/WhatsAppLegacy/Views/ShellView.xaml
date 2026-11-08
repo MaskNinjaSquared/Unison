@@ -230,6 +230,7 @@
         <!-- Share Target picker: full-bleed over pivot + detail (Mobile opaque cover). -->
         <controls:ContactsVisualizerControl
             x:Name="SharePickerOverlay"
+            x:Load="{x:Bind ViewModel.IsSharePickerOpen, Mode=OneWay}"
             Grid.Column="0"
             Grid.ColumnSpan="2"
             Canvas.ZIndex="100"
@@ -239,11 +240,20 @@
             ItemClickCommand="{x:Bind ViewModel.SelectShareChatCommand}"
             BackCommand="{x:Bind ViewModel.CloseSharePickerCommand}"/>
 
+        <!-- Warm chrome; A–Z list x:Loads inside NewConversationView after first Open yield. -->
         <legacyControls:NewConversationView
             x:Name="NewConversationOverlay"
             Grid.Column="0"
             Grid.ColumnSpan="2"
             Canvas.ZIndex="101"
             ViewModel="{x:Bind ViewModel.NewConversation, Mode=OneWay}"/>
+
+        <ContentPresenter
+            x:Name="CameraPickPresenter"
+            x:Load="{x:Bind ViewModel.IsCameraPickOpen, Mode=OneWay}"
+            Grid.Column="0"
+            Grid.ColumnSpan="2"
+            Canvas.ZIndex="103"
+            Visibility="Collapsed"/>
     </Grid>
 </Page>

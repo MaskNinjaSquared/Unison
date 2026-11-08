@@ -5,6 +5,7 @@
 // UI thread while names/avatars/groups enrichment still owns the dispatcher.
 // Channels/Archived use the lean catalog path and never defer for enrichment.
 // =============================================================================
+using System;
 using Unison.Core.Models;
 
 namespace Unison.Core.Helpers.Chats
@@ -58,5 +59,20 @@ namespace Unison.Core.Helpers.Chats
             int visibleCount,
             bool refreshDeferredForEnrichment) =>
             refreshDeferredForEnrichment && visibleCount <= 0;
+
+        /// <summary>
+        /// Empty VisibleChats after unload: schedule one allowDuringEnrichment cold paint so
+        /// Settings go-back never spins forever when Groups/Avatars Raise(null) is delayed
+        /// or missed while Detached. Mid-enrichment ScheduleRefresh still defers (storm freio).
+        /// </summary>
+        public static bool ShouldPaintEmptyListDuringEnrichmentDeferral(int visibleCount) =>
+            visibleCount <= 0;
+
+        /// <summary>
+        /// Quiet window before the empty-deferral cold paint — long enough for ListView Loaded
+        /// to bind ItemsSource, short enough that the loading ring is only a flash.
+        /// </summary>
+        public static readonly TimeSpan EmptyDeferredListPaintDelay =
+            TimeSpan.FromMilliseconds(50);
     }
 }

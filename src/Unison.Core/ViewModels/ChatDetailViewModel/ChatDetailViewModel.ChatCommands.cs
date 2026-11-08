@@ -122,11 +122,14 @@ namespace Unison.Core.ViewModels
                 _ = SyncLocalStateAsync(chat);
             }
 
-            // EnsureFresh: 2nd open of the same group reuses the warm 1:1 index / roster maps.
-            RebuildParticipantLookup();
-
+            // Groups only: EnsureFresh walks every 1:1 row for the shared direct index.
+            // Self / personal open paid that walk on the UI turn after SyncLocalState and
+            // stalled ~40s under active=none while alias follow-up promoted LidMapping misses.
             if (LooksLikeGroupChat(chat))
             {
+                // EnsureFresh: 2nd open of the same group reuses the warm 1:1 index / roster maps.
+                RebuildParticipantLookup();
+
                 // Before the w:g2 refresh below: the stored self row answers the composer lock
                 // until the server does, and loses to it once it has.
                 if (_groupService != null)

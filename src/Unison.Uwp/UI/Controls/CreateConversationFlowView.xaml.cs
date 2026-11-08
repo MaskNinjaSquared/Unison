@@ -336,8 +336,8 @@ namespace Unison.Uwp.UI.Controls
                 return;
             }
 
-            GroupPhotoButton.CameraRequested += GroupPhotoButton_PickRequested;
-            GroupPhotoButton.GalleryRequested += GroupPhotoButton_PickRequested;
+            GroupPhotoButton.CameraRequested += GroupPhotoButton_CameraRequested;
+            GroupPhotoButton.GalleryRequested += GroupPhotoButton_GalleryRequested;
             GroupPhotoButton.DeleteRequested += GroupPhotoButton_DeleteRequested;
             _groupPhotoButtonHooked = true;
         }
@@ -349,13 +349,22 @@ namespace Unison.Uwp.UI.Controls
                 return;
             }
 
-            GroupPhotoButton.CameraRequested -= GroupPhotoButton_PickRequested;
-            GroupPhotoButton.GalleryRequested -= GroupPhotoButton_PickRequested;
+            GroupPhotoButton.CameraRequested -= GroupPhotoButton_CameraRequested;
+            GroupPhotoButton.GalleryRequested -= GroupPhotoButton_GalleryRequested;
             GroupPhotoButton.DeleteRequested -= GroupPhotoButton_DeleteRequested;
             _groupPhotoButtonHooked = false;
         }
 
-        private void GroupPhotoButton_PickRequested(object sender, EventArgs e)
+        private void GroupPhotoButton_CameraRequested(object sender, EventArgs e)
+        {
+            if (ViewModel?.PickGroupPhotoFromCameraCommand != null &&
+                ViewModel.PickGroupPhotoFromCameraCommand.CanExecute(null))
+            {
+                ViewModel.PickGroupPhotoFromCameraCommand.Execute(null);
+            }
+        }
+
+        private void GroupPhotoButton_GalleryRequested(object sender, EventArgs e)
         {
             if (ViewModel?.PickGroupPhotoCommand != null &&
                 ViewModel.PickGroupPhotoCommand.CanExecute(null))

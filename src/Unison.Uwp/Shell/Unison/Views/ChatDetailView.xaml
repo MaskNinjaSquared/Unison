@@ -1286,10 +1286,5 @@
                                Visibility="Collapsed"
                                Canvas.ZIndex="101"/>
 
-        <!-- Camera pick is created on demand — eager CameraPickView (CaptureElement) on every
-             chat open OOMs Creators / Mobile. -->
-        <ContentPresenter x:Name="CameraPickPresenter"
-                          Visibility="Collapsed"
-                          Canvas.ZIndex="102"/>
     </Grid>
 </UserControl>
