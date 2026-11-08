@@ -32,6 +32,7 @@ namespace Unison.Core.ViewModels
         private readonly IDispatcher _ui;
         private readonly IDialogService _dialogs;
         private readonly IContactService _contacts;
+        private readonly DebouncedUiRebuild _favoritesRebuildDebounce;
 
         private ObservableCollection<CallFavoriteItem> _favoritePreview =
             new ObservableCollection<CallFavoriteItem>();
@@ -69,6 +70,11 @@ namespace Unison.Core.ViewModels
             _jids = jids;
             _dialogs = dialogs;
             _contacts = contacts;
+            _favoritesRebuildDebounce = new DebouncedUiRebuild(
+                () => true,
+                RebuildFavorites,
+                _ui,
+                logTag: "CallsFavorites");
 
             OpenNewCallCommand = new RelayCommand(() => NewCallRequested?.Invoke(this, EventArgs.Empty));
             OpenMenuCommand = new RelayCommand(() => MenuRequested?.Invoke(this, EventArgs.Empty));
@@ -676,7 +682,7 @@ namespace Unison.Core.ViewModels
 
         private void ScheduleRebuildFavorites()
         {
-            _ = _ui.RunAsync(RebuildFavorites);
+            _favoritesRebuildDebounce.Schedule();
         }
 
         private void RebuildFavorites()

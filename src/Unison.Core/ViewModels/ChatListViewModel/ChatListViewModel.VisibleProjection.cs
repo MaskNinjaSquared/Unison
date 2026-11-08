@@ -63,13 +63,14 @@ namespace Unison.Core.ViewModels
                 return;
             }
 
-            // Frugal Mobile: hold reshuffles while background names/avatars/groups enrich so
-            // Move/Insert thrash does not stack on top of PropertyChanged storms. Search and
-            // explicit list-filter changes still refresh so the UI stays responsive.
+            // Frugal Active only: Channels/Archived stay immediate (lean catalog filter).
             if (!allowDuringEnrichment &&
-                PreferFrugalUi &&
                 string.IsNullOrWhiteSpace(SearchQuery) &&
-                _chatService.MatchesListEnrichmentPhase(_lastSyncPhaseToken))
+                ChatListEnrichmentRefresh.ShouldDeferVisibleRefresh(
+                    PreferFrugalUi,
+                    _chatService != null &&
+                    _chatService.MatchesListEnrichmentPhase(_lastSyncPhaseToken),
+                    _scope))
             {
                 _refreshDeferredForEnrichment = true;
                 _visibleOrderDirty = true;
@@ -220,6 +221,12 @@ namespace Unison.Core.ViewModels
 
             RestoreSelection();
 
+            // Deferred empty reattach showed ChatList_Loading; drop it as soon as rows land.
+            if (VisibleChats.Count > 0)
+            {
+                IsLoadingOverlayVisible = false;
+            }
+
             TraceListLifecycle(
                 "refresh-visible-exit",
                 BuildListSnapshot(
@@ -267,7 +274,7 @@ namespace Unison.Core.ViewModels
             ApplyLocalChatFieldsToScopedChats();
 
             string query = SearchQuery?.Trim() ?? string.Empty;
-            var source = _chatState.Chats.Where(MatchesScope).ToList();
+            List<ChatItem> source = ScopedCatalogueRows();
 
             if (!string.IsNullOrEmpty(query))
             {
@@ -279,10 +286,12 @@ namespace Unison.Core.ViewModels
                 return source;
             }
 
-            ArmCatalogByCanonicalScratch();
-            try
+            source = _chatService.DeduplicateChatsByCanonicalJid(source, GetCanonical);
+
+            // Channels/Archived: flat membership — skip community hubs (aefa3dfb: ArmCatalog
+            // over the full store during enrichment held Attach for minutes for source=2).
+            if (ChatListCatalogAccess.NeedsCommunityProjection(_scope))
             {
-                source = _chatService.DeduplicateChatsByCanonicalJid(source, GetCanonical);
                 source = _chatService.ProjectCommunityList(
                     source,
                     ResolveCatalogByJid,
@@ -294,33 +303,51 @@ namespace Unison.Core.ViewModels
                 {
                     source = source.Where(MatchesActiveFilter).ToList();
                 }
-
-                source = _chatService.SortChatsForDisplay(source);
-
-                if (_activeCommunity != null)
-                {
-                    ChatItem stillOpen = FindProjectedCommunity(_activeCommunity.JID, source);
-                    if (stillOpen == null)
-                    {
-                        ActiveCommunity = null;
-                    }
-                    else if (!ReferenceEquals(stillOpen, _activeCommunity))
-                    {
-                        ActiveCommunity = stillOpen;
-                    }
-                    else
-                    {
-                        OnPropertyChanged(nameof(ActiveCommunitySubtitle));
-                        OnPropertyChanged(nameof(ActiveCommunityTitle));
-                    }
-                }
-
-                return source;
             }
-            finally
+
+            source = _chatService.SortChatsForDisplay(source);
+
+            if (_activeCommunity != null && ChatListCatalogAccess.NeedsCommunityProjection(_scope))
             {
-                _catalogByCanonicalScratch = null;
+                ChatItem stillOpen = FindProjectedCommunity(_activeCommunity.JID, source);
+                if (stillOpen == null)
+                {
+                    ActiveCommunity = null;
+                }
+                else if (!ReferenceEquals(stillOpen, _activeCommunity))
+                {
+                    ActiveCommunity = stillOpen;
+                }
+                else
+                {
+                    OnPropertyChanged(nameof(ActiveCommunitySubtitle));
+                    OnPropertyChanged(nameof(ActiveCommunityTitle));
+                }
             }
+
+            return source;
+        }
+
+        /// <summary>Catalogue rows for the current scope — shared context when registered.</summary>
+        private List<ChatItem> ScopedCatalogueRows()
+        {
+            if (_catalog != null)
+            {
+                IReadOnlyList<ChatItem> scoped = _catalog.ForScope(_scope);
+                return scoped as List<ChatItem> ?? new List<ChatItem>(scoped);
+            }
+
+            var fallback = new List<ChatItem>();
+            for (int i = 0; i < _chatState.Chats.Count; i++)
+            {
+                ChatItem chat = _chatState.Chats[i];
+                if (MatchesScope(chat))
+                {
+                    fallback.Add(chat);
+                }
+            }
+
+            return fallback;
         }
 
         /// <summary>
@@ -455,27 +482,8 @@ namespace Unison.Core.ViewModels
             }
         }
 
-        private bool MatchesScope(ChatItem chat)
-        {
-            if (chat == null)
-            {
-                return false;
-            }
-
-            switch (_scope)
-            {
-                case ChatListScope.Archived:
-                    return chat.Status == ChatStatus.Archived;
-
-                case ChatListScope.Channels:
-                    return chat.Status == ChatStatus.Active && chat.IsChannel;
-
-                case ChatListScope.Active:
-                default:
-                    // Channels have their own tab — keep them out of the main list.
-                    return chat.Status == ChatStatus.Active && !chat.IsChannel;
-            }
-        }
+        private bool MatchesScope(ChatItem chat) =>
+            ChatListCatalogAccess.MatchesScope(chat, _scope);
 
         /// <summary>
         /// True when this JID (or its canonical form) is in the device address-book overlay â€”
@@ -621,19 +629,15 @@ namespace Unison.Core.ViewModels
                 return null;
             }
 
+            if (_catalog != null)
+            {
+                return _catalog.ResolveByCanonical(jid);
+            }
+
             string key = GetCanonical(jid);
             if (string.IsNullOrWhiteSpace(key))
             {
                 return null;
-            }
-
-            // Prefer the scratch map built for one Project pass (O(1)). Fall back to a linear
-            // walk only when BuildVisibleRefreshSource did not arm it.
-            Dictionary<string, ChatItem> byCanonical = _catalogByCanonicalScratch;
-            if (byCanonical != null)
-            {
-                ChatItem hit;
-                return byCanonical.TryGetValue(key, out hit) ? hit : null;
             }
 
             foreach (ChatItem chat in _chatState.Chats)
@@ -650,37 +654,6 @@ namespace Unison.Core.ViewModels
             }
 
             return null;
-        }
-
-        /// <summary>
-        /// One canonical→row map for <see cref="ResolveCatalogByJid"/> during a single
-        /// <see cref="BuildVisibleRefreshSource"/> pass. Cleared when the build ends.
-        /// </summary>
-        private Dictionary<string, ChatItem> _catalogByCanonicalScratch;
-
-        private void ArmCatalogByCanonicalScratch()
-        {
-            var map = new Dictionary<string, ChatItem>(
-                Math.Max(16, _chatState.Chats.Count),
-                StringComparer.OrdinalIgnoreCase);
-            for (int i = 0; i < _chatState.Chats.Count; i++)
-            {
-                ChatItem chat = _chatState.Chats[i];
-                if (chat == null || string.IsNullOrWhiteSpace(chat.JID))
-                {
-                    continue;
-                }
-
-                string key = GetCanonical(chat.JID);
-                if (string.IsNullOrWhiteSpace(key) || map.ContainsKey(key))
-                {
-                    continue;
-                }
-
-                map[key] = chat;
-            }
-
-            _catalogByCanonicalScratch = map;
         }
 
         private ChatItem GetOrCreateSyntheticCommunity(string parentJid)
@@ -904,8 +877,12 @@ namespace Unison.Core.ViewModels
                 return jid;
             }
 
-            // Peek: GetCanonicalJid promotes LidMapping misses and raises Alias.Changed mid-build
-            // (InvalidateChatRowIndex storm). List projection must stay read-only.
+            // Peek via shared catalog when registered; never promote mid-build.
+            if (_catalog != null)
+            {
+                return _catalog.PeekCanonical(jid);
+            }
+
             string canonical = _jids.PeekCanonicalJid(jid);
             return string.IsNullOrWhiteSpace(canonical) ? jid : canonical;
         }

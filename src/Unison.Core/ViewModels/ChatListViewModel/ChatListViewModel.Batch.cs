@@ -309,10 +309,14 @@ namespace Unison.Core.ViewModels
                 return;
             }
 
-            for (int i = 0; i < _chatState.Chats.Count; i++)
+            IReadOnlyList<ChatItem> scoped = _catalog != null
+                ? _catalog.ForScope(_scope)
+                : ScopedCatalogueRows();
+
+            for (int i = 0; i < scoped.Count; i++)
             {
-                ChatItem chat = _chatState.Chats[i];
-                if (chat == null || string.IsNullOrWhiteSpace(chat.JID) || !MatchesScope(chat))
+                ChatItem chat = scoped[i];
+                if (chat == null || string.IsNullOrWhiteSpace(chat.JID))
                 {
                     continue;
                 }

@@ -27,6 +27,7 @@ namespace Unison.Core.ViewModels
         private readonly IChatService _chats;
         private readonly IStringResources _strings;
         private readonly IDispatcher _ui;
+        private readonly DebouncedUiRebuild _rebuildDebounce;
         private bool _isPickerOpen;
         private bool _hasFavorites;
         private string _searchQuery = string.Empty;
@@ -47,6 +48,11 @@ namespace Unison.Core.ViewModels
             _chats = chats ?? throw new ArgumentNullException(nameof(chats));
             _strings = strings;
             _ui = ui ?? throw new ArgumentNullException(nameof(ui));
+            _rebuildDebounce = new DebouncedUiRebuild(
+                () => true,
+                Rebuild,
+                _ui,
+                logTag: "Favorites");
 
             OpenPickerCommand = new RelayCommand(() => IsPickerOpen = true);
             ClosePickerCommand = new RelayCommand(() => IsPickerOpen = false);
@@ -314,7 +320,7 @@ namespace Unison.Core.ViewModels
 
         private void ScheduleRebuild()
         {
-            _ = _ui.RunAsync(Rebuild);
+            _rebuildDebounce.Schedule();
         }
 
         private void Rebuild()

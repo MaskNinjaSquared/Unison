@@ -338,6 +338,16 @@ namespace Unison.Uwp
                     sp.GetRequiredService<ActiveChat>(),
                     () => settings.Get<bool>(LocalSettingsConstants.ShowSyncStatus));
             });
+            // Shared catalogue projection for every chat-list VM (Active / Channels / Archived).
+            // Frugal vs desktop only changes when callers defer/rebuild — not which API they use.
+            services.AddSingleton<IChatListCatalogContext>(sp =>
+            {
+                JidAliasTable aliases = sp.GetRequiredService<JidAliasTable>();
+                return new ChatListCatalogContext(
+                    sp.GetRequiredService<ChatStateStore>(),
+                    aliases.PeekCanonicalJid,
+                    () => aliases.ChangeGeneration);
+            });
             // The client publishes first-sync progress; HistoryFacade and the budget read it.
             services.AddSingleton<InitialSyncProgressState>();
             // The socket is read lazily: the client takes this gate in its constructor.

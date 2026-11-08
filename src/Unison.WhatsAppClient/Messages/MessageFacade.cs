@@ -621,10 +621,10 @@ namespace Unison.WhatsAppClient.Messages
             for (int i = 0; i < chunk.MessageChatJids.Count; i++)
             {
                 string jid = chunk.MessageChatJids[i];
-                if (string.IsNullOrWhiteSpace(jid))
-                {
-                    continue;
-                }
+                    if (string.IsNullOrWhiteSpace(jid))
+                    {
+                        continue;
+                    }
 
                 NotifyChatMessagesChanged(jid);
             }
@@ -3412,7 +3412,7 @@ namespace Unison.WhatsAppClient.Messages
                     jid,
                     isActuallyFromMe ? null : participantJid,
                     participantAltJid,
-                    senderName,
+                senderName,
                     quotedContext.QuotedParticipantJid,
                     quotedSender,
                     request.Timestamp);

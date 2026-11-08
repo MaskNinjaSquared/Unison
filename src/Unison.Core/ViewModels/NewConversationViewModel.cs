@@ -42,8 +42,11 @@ namespace Unison.Core.ViewModels
         private readonly INotificationService _notifications;
         private readonly IChannelService _channels;
 
+        private static readonly TimeSpan RebuildDebounce = TimeSpan.FromMilliseconds(400);
+
         private bool _isOpen;
         private bool _catalogHooked;
+        private bool _rebuildScheduled;
         private string _searchQuery = string.Empty;
         private string _selfDisplayName = string.Empty;
         private string _selfAvatarUrl;
@@ -249,6 +252,7 @@ namespace Unison.Core.ViewModels
 
         private void UnhookCatalog()
         {
+            _rebuildScheduled = false;
             if (!_catalogHooked)
             {
                 return;
@@ -300,15 +304,55 @@ namespace Unison.Core.ViewModels
             RefreshSelfTile();
         }
 
+        /// <summary>
+        /// Coalesces DisplayNamesChanged / Chats bursts: one A–Z rebuild per window instead of
+        /// one per enrich hop, so opening Nova Conversa does not starve the Normal UI queue.
+        /// </summary>
         private void ScheduleRebuild()
         {
-            if (_dispatcher != null)
+            if (_rebuildScheduled || !_isOpen)
             {
-                _ = _dispatcher.RunAsync(RebuildCatalog);
                 return;
             }
 
-            RebuildCatalog();
+            _rebuildScheduled = true;
+            _ = RunScheduledRebuildAsync();
+        }
+
+        /// <summary>
+        /// Awaited half of <see cref="ScheduleRebuild"/> — kept out of <c>async void</c> so a
+        /// throw from rebuild lands in the catch below instead of the sync context.
+        /// </summary>
+        private async Task RunScheduledRebuildAsync()
+        {
+            try
+            {
+                try
+                {
+                    await Task.Delay(RebuildDebounce).ConfigureAwait(false);
+                }
+                finally
+                {
+                    _rebuildScheduled = false;
+                }
+
+                if (!_isOpen)
+                {
+                    return;
+                }
+
+                if (_dispatcher != null)
+                {
+                    await _dispatcher.RunAsync(RebuildCatalog).ConfigureAwait(false);
+                    return;
+                }
+
+                RebuildCatalog();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[NewConversation] Scheduled rebuild failed: " + ex.Message);
+            }
         }
 
         private void RebuildCatalog()

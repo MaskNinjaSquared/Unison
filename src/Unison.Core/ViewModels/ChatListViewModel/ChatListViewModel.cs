@@ -43,6 +43,12 @@ namespace Unison.Core.ViewModels
         /// <summary>Which JIDs are the same person (PN vs LID).</summary>
         private readonly IJidResolver _jids;
 
+        /// <summary>App-wide catalogue filter + canonical scratch (singleton).</summary>
+        private readonly IChatListCatalogContext _catalog;
+
+        /// <summary>Shared sync banner channel — seeds enrichment deferral on Attach.</summary>
+        private readonly SyncStatusChannel _syncStatus;
+
         /// <summary>
         /// Where the chat list comes from. Read through the store rather than through the service,
         /// so this view model no longer depends on which class happens to be producing the data.
@@ -256,9 +262,13 @@ namespace Unison.Core.ViewModels
             ISystemInfoProvider systemInfo = null,
             IAppVisibility appVisibility = null,
             NewConversationViewModel newConversation = null,
-            ILocalContactsService localContacts = null)
+            ILocalContactsService localContacts = null,
+            IChatListCatalogContext catalog = null,
+            SyncStatusChannel syncStatus = null)
         {
             _jids = jids ?? throw new ArgumentNullException(nameof(jids));
+            _catalog = catalog;
+            _syncStatus = syncStatus;
             _chatService = chatService;
             _groups = groupService;
             _groupNaming = groupNaming;

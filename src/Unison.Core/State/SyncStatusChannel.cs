@@ -21,6 +21,7 @@ namespace Unison.Core.State
         private readonly ActiveChat _activeChat;
         private readonly Func<bool> _isShown;
         private int _historyCatchUpShown;
+        private string _lastEnrichmentStatus;
 
         public SyncStatusChannel(ActiveChat activeChat, Func<bool> isShown)
         {
@@ -33,18 +34,29 @@ namespace Unison.Core.State
 
         public bool IsHistoryCatchUpShown => Volatile.Read(ref _historyCatchUpShown) == 1;
 
+        /// <summary>
+        /// Last names/avatars/groups (etc.) token, even when the banner was suppressed for an
+        /// open chat. Transient chat-list VMs seed deferral from this on Attach.
+        /// </summary>
+        public string LastEnrichmentStatus => Volatile.Read(ref _lastEnrichmentStatus);
+
         /// <summary>Shows <paramref name="status"/> under the rules above; null or empty clears.</summary>
         public void Raise(string status)
         {
             if (string.IsNullOrEmpty(status))
             {
+                Volatile.Write(ref _lastEnrichmentStatus, null);
                 Publish(IsHistoryCatchUpShown ? HistoryCatchUpText() : null);
                 return;
             }
 
-            if (!string.IsNullOrWhiteSpace(_activeChat.Jid) && ListEnrichmentPhase.Matches(status))
+            if (ListEnrichmentPhase.Matches(status))
             {
-                return;
+                Volatile.Write(ref _lastEnrichmentStatus, status);
+                if (!string.IsNullOrWhiteSpace(_activeChat.Jid))
+                {
+                    return;
+                }
             }
 
             Publish(status);

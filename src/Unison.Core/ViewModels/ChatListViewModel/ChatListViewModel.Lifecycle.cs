@@ -113,15 +113,24 @@ namespace Unison.Core.ViewModels
 
             if (!_batchRendering)
             {
-                // Never BuildVisibleRefreshSource synchronously on Attach: page Loaded has no
-                // UiStallWatchdog hop (active=none), and frugal mid-enrichment cold builds have
-                // held the UI for minutes (fb466dc2: buildMs≈411s while groups 5/12 starved).
+                // Transient VMs miss SyncStatusChanged history — seed from the shared channel
+                // so Active+frugal still defers mid-groups (aefa3dfb Channels attach was fine
+                // to run; Active cold rebuild is what hung the UI for minutes).
+                if (string.IsNullOrWhiteSpace(_lastSyncPhaseToken) && _syncStatus != null)
+                {
+                    _lastSyncPhaseToken = _syncStatus.LastEnrichmentStatus;
+                }
+
+                // Frugal Active only: Channels/Archived use the lean catalog path and paint now.
                 if (ChatListEnrichmentRefresh.ShouldDeferVisibleRefresh(
                         PreferFrugalUi,
-                        _chatService.MatchesListEnrichmentPhase(_lastSyncPhaseToken)))
+                        _chatService != null &&
+                        _chatService.MatchesListEnrichmentPhase(_lastSyncPhaseToken),
+                        _scope))
                 {
                     _refreshDeferredForEnrichment = true;
                     _visibleOrderDirty = true;
+                    EnsureDeferredEmptyListLoadingOverlay();
                     TraceListLifecycle(
                         "refresh-deferred-enrichment-attach",
                         BuildListSnapshot("visible=" + VisibleChats.Count),
@@ -194,8 +203,53 @@ namespace Unison.Core.ViewModels
                     return;
                 }
 
+                // Settings go-back / list unload mid-groups: Attach already deferred the
+                // cold Active rebuild. Pins must not bypass that freio (c2ba3c60: ~285s
+                // buildMs inside EnsureLocalChatPinsAppliedAsync while enrichment ran).
+                bool enrichmentPhase = _chatService != null &&
+                    _chatService.MatchesListEnrichmentPhase(_lastSyncPhaseToken);
+                if (ChatListEnrichmentRefresh.ShouldDeferPinsVisibleRefresh(
+                        _refreshDeferredForEnrichment,
+                        PreferFrugalUi,
+                        enrichmentPhase,
+                        _scope))
+                {
+                    _refreshDeferredForEnrichment = true;
+                    _visibleOrderDirty = true;
+                    EnsureDeferredEmptyListLoadingOverlay();
+                    TraceListLifecycle(
+                        "refresh-deferred-enrichment-pins",
+                        BuildListSnapshot("visible=" + VisibleChats.Count),
+                        flush: true);
+                    return;
+                }
+
+                // Pin ApplyTo already mutated ChatItem refs — reshuffle painted rows.
+                // Full RefreshVisibleChats only when unload left the list empty.
+                if (ChatListEnrichmentRefresh.PreferInPlaceReorderAfterPins(VisibleChats.Count))
+                {
+                    ReorderVisibleChatsInPlace();
+                    return;
+                }
+
                 RefreshVisibleChats();
             }).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// Go-back mid-enrichment: store may already have chats (Attach would hide the
+        /// cold-start overlay) while VisibleChats is still empty after unload.
+        /// </summary>
+        private void EnsureDeferredEmptyListLoadingOverlay()
+        {
+            if (!ChatListEnrichmentRefresh.ShouldShowLoadingWhileDeferredEmpty(
+                    VisibleChats.Count,
+                    _refreshDeferredForEnrichment))
+            {
+                return;
+            }
+
+            ShowDeepLinkLoadingOverlay();
         }
 
         /// <summary>

@@ -46,6 +46,7 @@ namespace Unison.Core.ViewModels
             }
 
             _attached = false;
+            _authorLabelsRebuild?.Cancel();
         }
 
         public void Attach()

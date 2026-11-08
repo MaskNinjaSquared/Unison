@@ -131,6 +131,7 @@ namespace Unison.Core.ViewModels
         private readonly PresenceWatchGate _presenceWatch = new PresenceWatchGate();
         private string _composerWarmedGroupJid;
         private bool _attached;
+        private DebouncedUiRebuild _authorLabelsRebuild;
         private bool _presenceHandlerAttached;
         private bool _presenceReceived;
         private string _pendingPresenceText;
@@ -212,6 +213,11 @@ namespace Unison.Core.ViewModels
             _dialogs = dialogs;
             _uriLauncher = uriLauncher;
             _dispatcher = dispatcher;
+            _authorLabelsRebuild = new DebouncedUiRebuild(
+                () => _attached,
+                RefreshGroupAuthorLabelsAfterNamesChanged,
+                _dispatcher,
+                logTag: "ChatDetailAuthorLabels");
             _messageFactory = messageFactory ?? throw new ArgumentNullException(nameof(messageFactory));
             _infoFactory = infoFactory ?? throw new ArgumentNullException(nameof(infoFactory));
             _strings = strings;
@@ -1275,14 +1281,7 @@ namespace Unison.Core.ViewModels
         private void Contacts_DisplayNamesUpdated(object sender, EventArgs e)
         {
             _groupService?.InvalidateParticipantDirectChatIndex();
-
-            if (_dispatcher != null)
-            {
-                _ = _dispatcher.RunAsync(RefreshGroupAuthorLabelsAfterNamesChanged);
-                return;
-            }
-
-            RefreshGroupAuthorLabelsAfterNamesChanged();
+            _authorLabelsRebuild.Schedule();
         }
 
         /// <summary>

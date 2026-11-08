@@ -48,6 +48,25 @@ namespace Unison.Core.Tests.State
             channel.Raise(Names);
 
             Assert.Empty(_published);
+            Assert.Equal(Names, channel.LastEnrichmentStatus);
+        }
+
+        [Fact]
+        public void LastEnrichmentStatus_tracks_phase_even_when_banner_is_hidden()
+        {
+            SyncStatusChannel channel = Create();
+            string groups = SyncPhaseStatus.Format(SyncPhaseStatus.Groups, 4, 12);
+
+            channel.Raise(groups);
+            Assert.Equal(groups, channel.LastEnrichmentStatus);
+
+            _activeChat.Open(Chat);
+            channel.Raise(Names);
+            Assert.Equal(Names, channel.LastEnrichmentStatus);
+            Assert.Equal(new[] { groups }, _published);
+
+            channel.Raise(null);
+            Assert.Null(channel.LastEnrichmentStatus);
         }
 
         [Fact]

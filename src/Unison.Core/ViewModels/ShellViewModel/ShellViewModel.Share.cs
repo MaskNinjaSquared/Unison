@@ -21,6 +21,7 @@ namespace Unison.Core.ViewModels
         private string _forwardMessageId;
         private ObservableCollection<ChatItem> _sharePickerCandidates =
             new ObservableCollection<ChatItem>();
+        private DebouncedUiRebuild _sharePickerRebuild;
 
         /// <summary>Share Target / Forward contact picker overlay visibility.</summary>
         public bool IsSharePickerOpen
@@ -94,6 +95,11 @@ namespace Unison.Core.ViewModels
         {
             CloseSharePickerCommand = new RelayCommand(CloseSharePicker);
             SelectShareChatCommand = new RelayCommand<ChatItem>(SelectShareChat);
+            _sharePickerRebuild = new DebouncedUiRebuild(
+                () => _isSharePickerOpen,
+                RebuildSharePicker,
+                _dispatcher,
+                logTag: "SharePicker");
         }
 
         /// <inheritdoc />
@@ -373,6 +379,7 @@ namespace Unison.Core.ViewModels
 
         private void UnhookSharePickerCatalog()
         {
+            _sharePickerRebuild?.Cancel();
             if (!_sharePickerCatalogHooked)
             {
                 return;
@@ -390,7 +397,7 @@ namespace Unison.Core.ViewModels
                 return;
             }
 
-            RebuildSharePicker();
+            _sharePickerRebuild.Schedule();
         }
 
         private void OnSharePickerDisplayNamesChanged(object sender, EventArgs e)
@@ -400,7 +407,7 @@ namespace Unison.Core.ViewModels
                 return;
             }
 
-            RebuildSharePicker();
+            _sharePickerRebuild.Schedule();
         }
 
         private void RebuildSharePicker()
