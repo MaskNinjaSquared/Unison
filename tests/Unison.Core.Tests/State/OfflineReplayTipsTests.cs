@@ -78,6 +78,61 @@ namespace Unison.Core.Tests.State
         }
 
         [Fact]
+        public void IsBusy_while_a_tip_is_filed_and_clears_after_flush()
+        {
+            var tips = new OfflineReplayTips(
+                new FakeJids(),
+                new FakeHost(),
+                (batch, _) => Task.CompletedTask,
+                NoTimer);
+
+            Assert.False(tips.IsBusy);
+            tips.Record(Request("111@s.whatsapp.net", countUnread: false));
+            Assert.True(tips.IsBusy);
+            tips.FlushAsync("test").GetAwaiter().GetResult();
+            Assert.False(tips.IsBusy);
+        }
+
+        [Fact]
+        public void IsBusy_stays_true_during_post_flush_quiet()
+        {
+            var tips = new OfflineReplayTips(
+                new FakeJids(),
+                new FakeHost(),
+                (batch, _) => Task.CompletedTask,
+                NoTimer,
+                postFlushQuiet: () => TimeSpan.FromMilliseconds(200));
+
+            tips.Record(Request("111@s.whatsapp.net", countUnread: false));
+            tips.FlushAsync("test").GetAwaiter().GetResult();
+            Assert.True(tips.IsBusy);
+        }
+
+        [Fact]
+        public async Task IsBusy_while_apply_is_in_flight()
+        {
+            var applyStarted = new TaskCompletionSource<bool>();
+            var releaseApply = new TaskCompletionSource<bool>();
+            var tips = new OfflineReplayTips(
+                new FakeJids(),
+                new FakeHost(),
+                async (batch, _) =>
+                {
+                    applyStarted.TrySetResult(true);
+                    await releaseApply.Task.ConfigureAwait(true);
+                },
+                NoTimer);
+
+            tips.Record(Request("111@s.whatsapp.net", countUnread: false));
+            Task flush = tips.FlushAsync("in-flight");
+            await applyStarted.Task.ConfigureAwait(true);
+            Assert.True(tips.IsBusy);
+            releaseApply.TrySetResult(true);
+            await flush.ConfigureAwait(true);
+            Assert.False(tips.IsBusy);
+        }
+
+        [Fact]
         public void A_failed_flush_puts_the_tips_back_and_rethrows()
         {
             var host = new FakeHost();
@@ -180,6 +235,59 @@ namespace Unison.Core.Tests.State
             tips.FlushAsync("test").GetAwaiter().GetResult();
 
             Assert.Equal(0, applies);
+        }
+
+        [Fact]
+        public async Task PreferFrugal_defers_progressive_paint_until_settle_flush()
+        {
+            int applies = 0;
+            IReadOnlyList<OfflineReplayChatSummary> last = null;
+            var tips = new OfflineReplayTips(
+                new FakeJids(),
+                new FakeHost(),
+                (batch, _) =>
+                {
+                    applies++;
+                    last = batch;
+                    return Task.CompletedTask;
+                },
+                TimeSpan.FromMilliseconds(10),
+                deferTipPaintUntilSettle: () => true);
+
+            tips.Record(Request("111@s.whatsapp.net", countUnread: true));
+            tips.Record(Request("222@s.whatsapp.net", countUnread: false));
+            await Task.Delay(80);
+            Assert.Equal(0, applies);
+            Assert.True(tips.IsBusy);
+
+            await tips.FlushAsync("offline-complete:2");
+            Assert.Equal(1, applies);
+            Assert.Equal(2, last.Count);
+            Assert.False(tips.IsBusy);
+        }
+
+        [Fact]
+        public async Task PreferFrugal_progressive_FlushAsync_does_not_take_the_book()
+        {
+            int applies = 0;
+            var tips = new OfflineReplayTips(
+                new FakeJids(),
+                new FakeHost(),
+                (batch, _) =>
+                {
+                    applies++;
+                    return Task.CompletedTask;
+                },
+                NoTimer,
+                deferTipPaintUntilSettle: () => true);
+
+            tips.Record(Request("111@s.whatsapp.net", countUnread: false));
+            await tips.FlushAsync(OfflineReplayTips.ProgressiveReason);
+            Assert.Equal(0, applies);
+            Assert.True(tips.IsBusy);
+
+            await tips.FlushAsync("offline-complete:1");
+            Assert.Equal(1, applies);
         }
 
         private static OfflineReplayTipRequest Request(string jid, bool countUnread) =>

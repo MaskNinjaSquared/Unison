@@ -36,6 +36,12 @@ namespace Unison.Core.State
         event EventHandler DisplayNamesChanged;
 
         /// <summary>
+        /// Raised when group/community subjects landed in the name cache (listing/metadata)
+        /// without a broad display-name pass. Hub rows may restamp; author strips must not.
+        /// </summary>
+        event EventHandler CommunitySubjectsUpdated;
+
+        /// <summary>
         /// Raised once per roster apply or flush, with the group and the participants that changed
         /// (empty = the whole list), so listeners can repaint only those authors.
         /// </summary>
@@ -97,6 +103,12 @@ namespace Unison.Core.State
         /// existing name becomes reachable under a newly learned LID/PN alias.
         /// </summary>
         void NotifyDisplayNamesChanged();
+
+        /// <summary>
+        /// Subjects were cached for groups/communities; stamp unresolved hubs only — do not
+        /// treat this as a full DisplayNamesChanged (author-strip storm on Mobile).
+        /// </summary>
+        void NotifyCommunitySubjectsUpdated();
 
         /// <summary>
         /// Announces that a group's roster was applied, so labels resolved from participants can

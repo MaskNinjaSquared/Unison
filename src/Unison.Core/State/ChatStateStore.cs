@@ -78,6 +78,8 @@ namespace Unison.Core.State
 
         public event EventHandler DisplayNamesChanged;
 
+        public event EventHandler CommunitySubjectsUpdated;
+
         public event EventHandler<GroupRosterChangedEventArgs> GroupRosterChanged;
 
         // ---------------------------------------------------------------------
@@ -369,6 +371,15 @@ namespace Unison.Core.State
         public void NotifyDisplayNamesChanged()
         {
             RaiseDisplayNamesChanged();
+        }
+
+        public void NotifyCommunitySubjectsUpdated()
+        {
+            EventHandler handler = CommunitySubjectsUpdated;
+            if (handler != null)
+            {
+                handler(this, EventArgs.Empty);
+            }
         }
 
         public void NotifyGroupRosterChanged(string groupJid, IReadOnlyList<string> changedJids = null)

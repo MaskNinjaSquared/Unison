@@ -30,8 +30,8 @@ namespace Unison.WhatsAppClient.Helpers
         /// <param name="nowUtc">Clock for the decision.</param>
         /// <param name="coolDown">Skip window after <paramref name="lastFullCompletedUtc"/>.</param>
         /// <param name="listStructureChanged">
-        /// True when dedupe merged rows or legacy tip repair rewrote strips — those
-        /// invalidate the previous walk.
+        /// True when the caller forces a fresh walk (legacy tip repair). Mere dedupe
+        /// merge no longer forces — see TipUiPipelineGate.ShouldForceDeferredStartupFullHeal.
         /// </param>
         public static bool ShouldSkipDuplicateFull(
             DateTime lastFullCompletedUtc,

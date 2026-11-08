@@ -13,6 +13,7 @@ using Unison.Core.Contracts;
 using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Factories;
 using Unison.Core.Helpers;
+using Unison.Core.Helpers.Chats;
 using Unison.Core.Models;
 using Unison.Core.State;
 
@@ -184,8 +185,10 @@ namespace Unison.Core.ViewModels
         private static readonly TimeSpan PreviewHydrateInterval = TimeSpan.FromMilliseconds(40);
         private static readonly TimeSpan MessagePreviewReconcileDebounce = TimeSpan.FromMilliseconds(350);
         private readonly object _messagePreviewReconcileGate = new object();
-        private List<string> _messagePreviewReconcileQueue;
+        private readonly MessagePreviewReconcilePending _messagePreviewReconcilePending =
+            new MessagePreviewReconcilePending();
         private CancellationTokenSource _messagePreviewReconcileCts;
+        private bool _messagePreviewReconcileArmed;
 
         private bool _batchRendering;
         private bool _batchLoopRunning;

@@ -45,6 +45,12 @@ namespace Unison.Core.State
             get { lock (_sync) { return _pendingSource; } }
         }
 
+        /// <summary>True when avatar targets are still owed (including a capped remainder).</summary>
+        public bool HasPendingTargets
+        {
+            get { lock (_sync) { return _targets.Count > 0; } }
+        }
+
         public void NoteAvatarTarget(string pnJid)
         {
             if (string.IsNullOrWhiteSpace(pnJid))
@@ -71,10 +77,30 @@ namespace Unison.Core.State
         /// The debounce elapsed. Takes everything owed and marks a pass running, or refuses
         /// when one already is; what was owed stays for the next pass, which the host re-arms.
         /// </summary>
-        public bool TryBegin(out AliasFollowUpBatch batch)
+        public bool TryBegin(out AliasFollowUpBatch batch) =>
+            TryBegin(int.MaxValue, out batch, out _);
+
+        public bool TryBegin(out AliasFollowUpBatch batch, out bool hasMoreAvatarTargets) =>
+            TryBegin(int.MaxValue, out batch, out hasMoreAvatarTargets);
+
+        /// <summary>
+        /// Like <see cref="TryBegin(out AliasFollowUpBatch)"/> but keeps avatar targets beyond
+        /// <paramref name="maxAvatarTargets"/> queued (and the source) for the next pass.
+        /// </summary>
+        public bool TryBegin(int maxAvatarTargets, out AliasFollowUpBatch batch) =>
+            TryBegin(maxAvatarTargets, out batch, out _);
+
+        /// <summary>
+        /// <paramref name="hasMoreAvatarTargets"/> is true when a capped remainder stays queued.
+        /// </summary>
+        public bool TryBegin(
+            int maxAvatarTargets,
+            out AliasFollowUpBatch batch,
+            out bool hasMoreAvatarTargets)
         {
             lock (_sync)
             {
+                hasMoreAvatarTargets = false;
                 if (_running)
                 {
                     batch = null;
@@ -82,10 +108,29 @@ namespace Unison.Core.State
                 }
 
                 _running = true;
-                batch = new AliasFollowUpBatch(_pendingSource ?? DefaultSource, _targets.ToArray());
-                _pendingSource = null;
-                _targets.Clear();
-                _targetSet.Clear();
+                string source = _pendingSource ?? DefaultSource;
+                if (maxAvatarTargets <= 0 || _targets.Count <= maxAvatarTargets)
+                {
+                    batch = new AliasFollowUpBatch(source, _targets.ToArray());
+                    _pendingSource = null;
+                    _targets.Clear();
+                    _targetSet.Clear();
+                    return true;
+                }
+
+                var taken = new List<string>(maxAvatarTargets);
+                for (int i = 0; i < maxAvatarTargets; i++)
+                {
+                    string jid = _targets[i];
+                    taken.Add(jid);
+                    _targetSet.Remove(jid);
+                }
+
+                _targets.RemoveRange(0, maxAvatarTargets);
+                // Remainder keeps the same source so the host re-arms after End.
+                _pendingSource = source;
+                hasMoreAvatarTargets = true;
+                batch = new AliasFollowUpBatch(source, taken);
                 return true;
             }
         }

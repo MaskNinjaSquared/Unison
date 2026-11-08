@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using Unison.Core.Contracts;
 using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Helpers;
+using Unison.Core.Helpers.Chats;
 using Unison.Core.Models;
 using Unison.Core.State;
 
@@ -35,6 +36,8 @@ namespace Unison.WhatsAppClient.Helpers
         private readonly Func<DateTime> _utcNow;
         private readonly ChatTimelineLoadPriorityGate _timelinePriority;
         private readonly GroupRosterIndex _index;
+        private readonly Func<bool> _preferFrugalUi;
+        private readonly ILowPriorityDispatcher _uiLow;
 
         public GroupMetadataApply(
             IGroupNaming naming,
@@ -48,10 +51,12 @@ namespace Unison.WhatsAppClient.Helpers
             Func<DateTime> utcNow = null,
             ChatTimelineLoadPriorityGate timelinePriority = null,
             int rosterBuildChunkSize = int.MaxValue,
-            GroupRosterIndex rosterIndex = null)
+            GroupRosterIndex rosterIndex = null,
+            Func<bool> preferFrugalUi = null)
         {
             _naming = naming ?? throw new ArgumentNullException(nameof(naming));
             _ui = ui ?? throw new ArgumentNullException(nameof(ui));
+            _uiLow = ui as ILowPriorityDispatcher;
             _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
             _rosterWriter = rosterWriter ?? throw new ArgumentNullException(nameof(rosterWriter));
             _jids = jids ?? throw new ArgumentNullException(nameof(jids));
@@ -61,6 +66,7 @@ namespace Unison.WhatsAppClient.Helpers
             _utcNow = utcNow ?? (() => DateTime.UtcNow);
             _timelinePriority = timelinePriority;
             _index = rosterIndex ?? new GroupRosterIndex(_jids.GetCanonicalJid);
+            _preferFrugalUi = preferFrugalUi ?? (() => false);
             // rosterBuildChunkSize kept for call-site compatibility; BuildMembers now runs
             // as one Task.Run hop (chunking on the UI sync context stalled Lumia 950 XL).
             _ = rosterBuildChunkSize;
@@ -164,11 +170,12 @@ namespace Unison.WhatsAppClient.Helpers
             }
 
             const int uiChunk = 24;
+            bool frugal = _preferFrugalUi();
             for (int start = 0; start < snapshot.Count; start += uiChunk)
             {
                 int sliceStart = start;
                 int sliceEnd = Math.Min(snapshot.Count, start + uiChunk);
-                await _ui.RunAsync(() =>
+                Action paint = () =>
                 {
                     for (int i = sliceStart; i < sliceEnd; i++)
                     {
@@ -188,15 +195,27 @@ namespace Unison.WhatsAppClient.Helpers
                         // Listing never materializes full rosters — flags + count only.
                         ApplyToRow(chat, entry, includeRoster: false);
                     }
-                }).ConfigureAwait(false);
+                };
+
+                if (frugal && _uiLow != null)
+                {
+                    await _uiLow.RunLowAsync(paint).ConfigureAwait(false);
+                }
+                else
+                {
+                    await _ui.RunAsync(paint).ConfigureAwait(false);
+                }
 
                 if (sliceEnd < snapshot.Count)
                 {
-                    await Task.Delay(16).ConfigureAwait(false);
+                    await Task.Delay(frugal ? 32 : 16).ConfigureAwait(false);
                 }
             }
 
             _catalog.Schedule();
+            // Subjects are in GroupSubjects now; synthetic hubs are not in the catalogue walk.
+            // Hub-only signal — DisplayNamesChanged would wake ChatAuthorProjection (13s+ on Lumia).
+            _chats.NotifyCommunitySubjectsUpdated();
         }
 
         /// <summary>

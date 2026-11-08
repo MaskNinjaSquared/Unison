@@ -103,6 +103,7 @@ namespace Unison.WhatsAppClient.History
         /// </summary>
         private volatile bool _awaitingFirstHistorySync;
         private volatile bool _firstHistorySyncCompletedThisSession;
+        private readonly Func<IChatService> _resolveChats;
 
         public HistoryFacade(
             IWhatsAppSessionProvider sessions,
@@ -135,7 +136,8 @@ namespace Unison.WhatsAppClient.History
             IAppVisibility visibility = null,
             IHistoryMessageThumbnailMaterializer messageThumbs = null,
             IStatusThumbnailMaterializer statusThumbs = null,
-            ILidMappingDiskPersistGate lidDiskPersist = null)
+            ILidMappingDiskPersistGate lidDiskPersist = null,
+            Func<IChatService> resolveChats = null)
         {
             if (sessions == null)
             {
@@ -166,6 +168,7 @@ namespace Unison.WhatsAppClient.History
             _onDemandSocket = onDemandSocket ?? throw new ArgumentNullException(nameof(onDemandSocket));
             _resolveConnection = resolveConnection;
             _resolveMessages = resolveMessages;
+            _resolveChats = resolveChats;
             _resync = resync ?? throw new ArgumentNullException(nameof(resync));
             _historySync = historySync ?? throw new ArgumentNullException(nameof(historySync));
             _catchUpHost = catchUpHost ?? throw new ArgumentNullException(nameof(catchUpHost));
@@ -533,6 +536,16 @@ namespace Unison.WhatsAppClient.History
                 result.MessageChatJids = Array.Empty<string>();
             }
 
+            // Persist finished off-UI — one tip heal for chats in this block only (not full list).
+            try
+            {
+                await ApplyHistoryChunkTipFinalAsync(result).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[HistoryFacade] History chunk tip final failed: " + ex.Message);
+            }
+
             try
             {
                 await PersistStatusesAsync(sync).ConfigureAwait(false);
@@ -580,6 +593,34 @@ namespace Unison.WhatsAppClient.History
             }
 
             return result;
+        }
+
+        /// <summary>
+        /// After SQLite persist for this chunk, heal tips only for chats that landed in the block.
+        /// </summary>
+        private async Task ApplyHistoryChunkTipFinalAsync(HistorySqliteChunkResult result)
+        {
+            if (_resolveChats == null || result == null)
+            {
+                return;
+            }
+
+            IChatService chats = _resolveChats();
+            if (chats == null)
+            {
+                return;
+            }
+
+            IReadOnlyList<string> jids = result.MessageChatJids != null && result.MessageChatJids.Count > 0
+                ? result.MessageChatJids
+                : result.ConversationJids;
+            if (jids == null || jids.Count == 0)
+            {
+                return;
+            }
+
+            await chats.ReconcileChatPreviewsFromSqliteAsync(jids, "history-chunk-tip")
+                .ConfigureAwait(false);
         }
 
         private static IReadOnlyList<string> CollectConversationJids(HistorySync sync)

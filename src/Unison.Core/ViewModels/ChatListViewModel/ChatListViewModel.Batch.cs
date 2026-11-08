@@ -376,17 +376,20 @@ namespace Unison.Core.ViewModels
                 return false;
             }
 
-            ApplyLocalChatFieldsToScopedChats();
-
-            var desired = _chatService != null
-                ? _chatService.SortChatsForDisplay(
-                    VisibleChats.Where(c => c != null && !string.IsNullOrWhiteSpace(c.JID)))
-                : VisibleChats.Where(c => c != null && !string.IsNullOrWhiteSpace(c.JID)).ToList();
-
+            // Hold IsRefreshing across ApplyLocalChatFields: pin/mute PropertyChanged would
+            // otherwise nest another RequestVisibleOrderRepair (HasThreadAccess) inside this
+            // hop and stack full Visible Moves under ApplyOffline softOrder.
             int moved = 0;
             IsRefreshing = true;
             try
             {
+                ApplyLocalChatFieldsToScopedChats();
+
+                var desired = _chatService != null
+                    ? _chatService.SortChatsForDisplay(
+                        VisibleChats.Where(c => c != null && !string.IsNullOrWhiteSpace(c.JID)))
+                    : VisibleChats.Where(c => c != null && !string.IsNullOrWhiteSpace(c.JID)).ToList();
+
                 for (int i = 0; i < desired.Count; i++)
                 {
                     ChatItem item = desired[i];
@@ -425,11 +428,12 @@ namespace Unison.Core.ViewModels
         {
             int serial = Interlocked.Increment(ref _frugalReorderDrainSerial);
             await Task.Yield();
+            ILowPriorityDispatcher low = _dispatcher as ILowPriorityDispatcher;
 
             while (serial == Volatile.Read(ref _frugalReorderDrainSerial))
             {
                 bool more = false;
-                await _dispatcher.RunAsync(() =>
+                Action chunk = () =>
                 {
                     if (serial != _frugalReorderDrainSerial)
                     {
@@ -437,7 +441,17 @@ namespace Unison.Core.ViewModels
                     }
 
                     more = ReorderVisibleChatsInPlace(VisibleChatReorderPolicy.FrugalDrainChunk);
-                }).ConfigureAwait(false);
+                };
+
+                // Prefer Low so softOrder / push repair does not stack behind tip Urgent on Normal.
+                if (low != null)
+                {
+                    await low.RunLowAsync(chunk).ConfigureAwait(false);
+                }
+                else
+                {
+                    await _dispatcher.RunAsync(chunk).ConfigureAwait(false);
+                }
 
                 if (!more || serial != Volatile.Read(ref _frugalReorderDrainSerial))
                 {

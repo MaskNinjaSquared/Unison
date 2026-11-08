@@ -26,6 +26,12 @@ namespace Unison.Core.Contracts.WhatsApp
         event EventHandler FavoritesMembershipChanged;
 
         /// <summary>
+        /// Raised when tip/unread paint changed recency without a catalogue Move (frugal offline
+        /// apply). Chat list drains Visible order in place instead of rebuilding.
+        /// </summary>
+        event EventHandler VisibleOrderInvalidated;
+
+        /// <summary>
         /// Pins the conversation to the top of the list, for this account everywhere. Distinct
         /// from <see cref="ChatItem.IsWidgetPinned"/>, which is a tile on this device's Start
         /// screen and means nothing to WhatsApp.
@@ -142,6 +148,11 @@ namespace Unison.Core.Contracts.WhatsApp
         /// Applies every waiting offline replay tip to the list. A failure puts them back and rethrows.
         /// </summary>
         Task FlushOfflineReplayTipsAsync(string reason);
+
+        /// <summary>
+        /// True while offline tip book / flush owns list paint — silent alias/listing should wait.
+        /// </summary>
+        bool IsOfflineReplayTipBusy { get; }
 
         /// <summary>Updates list rows for one chat tip (duplicate/revoke/replay refresh).</summary>
         Task RefreshChatPreviewAsync(

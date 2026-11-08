@@ -21,6 +21,7 @@ using Unison.Baileys.Protocol;
 using Unison.Core.Contracts;
 using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Helpers;
+using Unison.Core.Helpers.Chats;
 using Unison.Core.Models;
 using Unison.Core.State;
 using Unison.WhatsAppClient.Abstractions;
@@ -58,6 +59,11 @@ namespace Unison.WhatsAppClient.Groups
 
         /// <summary>0 free / 1 busy — overlapping listings each burn a 60s IQ and starve chat open.</summary>
         private int _listingInFlight;
+
+        /// <summary>Participating-groups UI apply completed once this session.</summary>
+        private int _listingAppliedThisSession;
+
+        private readonly Func<bool> _isOfflineReplayTipBusy;
 
         /// <summary>
         /// Listing was skipped for catch-up / sync traffic; retry once the next due signal arrives.
@@ -103,9 +109,11 @@ namespace Unison.WhatsAppClient.Groups
             IRuntimeDiagnostics diagnostics = null,
             IAppVisibility visibility = null,
             IProfilePictureEncoder pictureEncoder = null,
-            GroupSelfRoleRestore selfRole = null)
+            GroupSelfRoleRestore selfRole = null,
+            Func<bool> isOfflineReplayTipBusy = null)
         {
             _selfRole = selfRole;
+            _isOfflineReplayTipBusy = isOfflineReplayTipBusy ?? (() => false);
             _workload = workload ?? throw new ArgumentNullException(nameof(workload));
             _syncStatus = syncStatus ?? throw new ArgumentNullException(nameof(syncStatus));
             _syncWork = syncWork ?? throw new ArgumentNullException(nameof(syncWork));
@@ -721,7 +729,25 @@ namespace Unison.WhatsAppClient.Groups
                         listingAnswered = true;
                         var groupNodes = response.FindAllDescendants("group");
                         Debug.WriteLine("[GroupFacade] QueryAllGroupsAsync found " + groupNodes.Count + " group nodes.");
-                        await _apply.ApplyListingAsync(_reader.ReadListing(groupNodes));
+                        bool alreadyApplied = Volatile.Read(ref _listingAppliedThisSession) != 0;
+                        if (!SessionListingApplyPolicy.ShouldApplyListing(alreadyApplied, force: false))
+                        {
+                            _diagnostics?.Write(
+                                "startup-phase",
+                                "background-groups:listing-skip",
+                                "reason=already-applied-this-session");
+                        }
+                        else
+                        {
+                            // Tip-first: do not hold the dispatcher with listing while offline tips flush.
+                            while (_isOfflineReplayTipBusy())
+                            {
+                                await Task.Delay(40).ConfigureAwait(false);
+                            }
+
+                            await _apply.ApplyListingAsync(_reader.ReadListing(groupNodes));
+                            Interlocked.Exchange(ref _listingAppliedThisSession, 1);
+                        }
                     }
                 }
                 catch (OperationCanceledException)

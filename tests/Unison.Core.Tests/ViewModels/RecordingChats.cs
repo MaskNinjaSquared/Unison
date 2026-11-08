@@ -22,6 +22,12 @@ namespace Unison.Core.Tests.ViewModels
             remove { }
         }
 
+        public event EventHandler VisibleOrderInvalidated
+        {
+            add { }
+            remove { }
+        }
+
         public void StartNewChat(string jid, string displayName = null)
         {
             LastStartJid = jid;
@@ -77,6 +83,8 @@ namespace Unison.Core.Tests.ViewModels
             Task.CompletedTask;
 
         public Task FlushOfflineReplayTipsAsync(string reason) => Task.CompletedTask;
+
+        public bool IsOfflineReplayTipBusy => false;
 
         public Task RefreshChatPreviewAsync(
             string chatJid,

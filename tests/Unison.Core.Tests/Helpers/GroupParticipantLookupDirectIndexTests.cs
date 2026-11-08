@@ -100,6 +100,12 @@ namespace Unison.Core.Tests.Helpers
                 remove { }
             }
 
+            public event EventHandler CommunitySubjectsUpdated
+            {
+                add { }
+                remove { }
+            }
+
             public event EventHandler<GroupRosterChangedEventArgs> GroupRosterChanged
             {
                 add { }
@@ -141,6 +147,10 @@ namespace Unison.Core.Tests.Helpers
                 Task.CompletedTask;
 
             public void NotifyDisplayNamesChanged()
+            {
+            }
+
+            public void NotifyCommunitySubjectsUpdated()
             {
             }
 

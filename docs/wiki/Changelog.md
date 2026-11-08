@@ -2,6 +2,46 @@
 
 Newest first.
 
+## Sync UI — PreferFrugal tip paint only on settle
+
+Offline open freeze: progressive tip flush painted the list every ~1s while the
+pump still drained. PreferFrugal now keeps tips in the book only (no progressive
+timer) and paints once on settle after persist (`offline-complete`). Name batches
+wait tip-busy and prefer Low; frugal Visible reorder drains on Low; live badge
+`RefreshUnreadState` moves off the Urgent strip path into the toast Task.Run.
+Package **2.4.43**.
+
+## Incoming pump — leave route:control without UI hop
+
+Journal `82908f3f`: ordinary envelopes sat at `route:control` because
+`TryApplyIncomingEnvelopeControlAsync` always awaited `BoundMutationGate` via
+reaction classify, while Urgent tip paint held the dispatcher for 20–50s —
+`health-stall` → requeue with `applied` frozen. Chat-control classify now
+detects reactions after proto unwrap; non-controls return immediately.
+`ApplyIncomingReactionAsync` maps off-thread and hops only to apply. Package
+**2.4.42**.
+
+## Tip-first — pause post-replay heal + Low name refresh
+
+Journal `82908f3f`: `ChatNameRefresh` on Normal (~44s for 3 names) starved
+`post-replay` Low slices (`ui-slice-slow` 18–86s, `swapped=0`) until the stream
+died (`428`). PreferFrugal name slices now run on Low, yield while offline tip
+flush is busy, and raise `Applied` outside the UI hop. Full post-replay wait
+for tip idle; tip-reconcile pause includes `IsOfflineReplayTipBusy`. Package
+**2.4.41**.
+
+## Offline softOrder — do not nest Visible repair in ApplyOffline hop
+
+PreferFrugal `ApplyOfflineReplayChatSummariesAsync` raised
+`VisibleOrderInvalidated` inside the same Normal UI hop as the badge/journal
+write. `AttachedUiDispatcher` runs inline on `HasThreadAccess`, so
+`RequestVisibleOrderRepair` (and ListView Moves) were billed as
+`sync:ChatFacade.ApplyOfflineReplayChatSummariesAsync` for 20–30s per tip
+(journal `82908f3f`). Soft-order notify now runs after that hop; the list VM
+`Task.Yield`s before repair; in-place reorder holds `IsRefreshing` across
+`ApplyLocalChatFields` so pin PropertyChanged cannot re-enter. Package
+**2.4.40**.
+
 ## Groups — persist subject on chat.Name when it changes
 
 `ApplyRemoteGroupSubjects` / resolved-name batches and `ChatNameRefresh.Applied`

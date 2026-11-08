@@ -101,6 +101,27 @@ namespace Unison.Core.Tests.Helpers
         }
 
         [Fact]
+        public void Tip_reconcile_ui_pauses_while_offline_tip_busy()
+        {
+            // Journal 82908f3f: post-replay Low slices waited behind tip/name Normal work;
+            // pause the full heal while offline tip flush owns the list.
+            Assert.True(
+                ChatTimelineOpenPriority.ShouldPauseTipReconcileUi(
+                    deepLinkListHeld: false,
+                    timelineLoadPriorityHeld: false,
+                    windowVisible: true,
+                    listColdPopulate: false,
+                    offlineTipBusy: true));
+            Assert.False(
+                ChatTimelineOpenPriority.ShouldPauseTipReconcileUi(
+                    deepLinkListHeld: false,
+                    timelineLoadPriorityHeld: false,
+                    windowVisible: true,
+                    listColdPopulate: false,
+                    offlineTipBusy: false));
+        }
+
+        [Fact]
         public void Mobile_scroll_settle_hold_covers_large_group_open_window()
         {
             // Must outlast the post-paint Continues storm on a ~250-row list after

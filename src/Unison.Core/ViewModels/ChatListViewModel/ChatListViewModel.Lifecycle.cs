@@ -44,6 +44,8 @@ namespace Unison.Core.ViewModels
             _history.ChatPreviewChunkPersisted += History_ChatPreviewChunkPersisted;
             _history.HistoryMessageChunkPersisted += History_MessageChunkPersisted;
             _contactService.DisplayNamesUpdated += Contacts_DisplayNamesUpdated;
+            _chatState.CommunitySubjectsUpdated += ChatState_CommunitySubjectsUpdated;
+            _chatService.VisibleOrderInvalidated += ChatService_VisibleOrderInvalidated;
             _chatState.Chats.CollectionChanged += ChatState_ChatsChanged;
 
             foreach (var chat in _chatState.Chats)
@@ -337,6 +339,8 @@ namespace Unison.Core.ViewModels
             _history.ChatPreviewChunkPersisted -= History_ChatPreviewChunkPersisted;
             _history.HistoryMessageChunkPersisted -= History_MessageChunkPersisted;
             _contactService.DisplayNamesUpdated -= Contacts_DisplayNamesUpdated;
+            _chatState.CommunitySubjectsUpdated -= ChatState_CommunitySubjectsUpdated;
+            _chatService.VisibleOrderInvalidated -= ChatService_VisibleOrderInvalidated;
             _chatState.Chats.CollectionChanged -= ChatState_ChatsChanged;
 
             if (_deepLinkHold != null)

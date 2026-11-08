@@ -40,19 +40,22 @@ namespace Unison.Core.Helpers.Chats
         /// Tip reconcile UI slices must wait while deep-link holds the list, while
         /// CompleteActiveChatLoadAsync owns the dispatcher for SQLite + bubble paint,
         /// while the window is hidden (location-keepalive — tip-swapped on a black
-        /// CoreWindow looks like a freeze), or while the chat list is cold-filling
-        /// VisibleChats from empty (Insert Continues + tip-swapped starved Mobile).
+        /// CoreWindow looks like a freeze), while the chat list is cold-filling
+        /// VisibleChats from empty (Insert Continues + tip-swapped starved Mobile),
+        /// or while offline tip flush owns the list (post-replay must not fight tips).
         /// </summary>
         public static bool ShouldPauseTipReconcileUi(
             bool deepLinkListHeld,
             bool timelineLoadPriorityHeld,
             bool windowVisible = true,
-            bool listColdPopulate = false)
+            bool listColdPopulate = false,
+            bool offlineTipBusy = false)
         {
             return deepLinkListHeld ||
                    timelineLoadPriorityHeld ||
                    !windowVisible ||
-                   listColdPopulate;
+                   listColdPopulate ||
+                   offlineTipBusy;
         }
 
         /// <summary>

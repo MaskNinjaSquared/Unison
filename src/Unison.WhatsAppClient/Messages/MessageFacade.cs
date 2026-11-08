@@ -1865,21 +1865,23 @@ namespace Unison.WhatsAppClient.Messages
                 return;
             }
 
-            try
-            {
-                _notifications.RefreshUnreadState(_chatState?.Chats);
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine("[MessageFacade] Badge refresh failed: " + ex.Message);
-            }
-
-            // Toast / Live Tile / Start-tile work is WinRT and must not hold stage=route.
-            // Strip+announce are already detached from the pump; this Task.Run keeps WinRT off UI.
+            // Toast / badge / Live Tile are WinRT and must not hitch the UI after Urgent tip.
+            // RefreshUnreadState walks the whole catalogue (O(n)) — keep it off the strip path.
+            IEnumerable<ChatItem> badgeSource = _chatState?.Chats;
             _ = Task.Run(() =>
             {
                 try
                 {
+                    try
+                    {
+                        _notifications.RefreshUnreadState(badgeSource);
+                    }
+                    catch (Exception badgeEx)
+                    {
+                        Debug.WriteLine("[MessageFacade] Badge refresh failed: " + badgeEx.Message);
+                        _notifications.UpdateBadge(payload.TotalUnread);
+                    }
+
                     _notifications.NotifyIncomingMessage(
                         payload.ChatJid,
                         payload.ChatName,
@@ -3260,6 +3262,14 @@ namespace Unison.WhatsAppClient.Messages
                 await ApplyIncomingPinInChatAsync(chatJid, pinTargetId, pin, senderTs, duration)
                     .ConfigureAwait(false);
                 return true;
+            }
+
+            // Ordinary chat content must not await the bound-mutation gate here: tip strip
+            // runs Urgent and used to park every envelope at route:control for 18s+
+            // (health-stall → requeue) while High UI work drained.
+            if (chatControl != IncomingEnvelopeKind.Reaction)
+            {
+                return false;
             }
 
             return await ApplyIncomingReactionFromEnvelopeAsync(
@@ -5118,6 +5128,15 @@ namespace Unison.WhatsAppClient.Messages
                 return false;
             }
 
+            // Classify off the UI thread. Non-reactions used to await BoundMutationGate
+            // just to discover TryMapReaction==false, and sat at route:control behind
+            // Urgent tip paint until health-stall reset the pump.
+            PendingReaction pending;
+            if (!_chatMessageMapper.TryMapReaction(message, context, out pending) || pending == null)
+            {
+                return false;
+            }
+
             string canonical = _jids.GetCanonicalJid(context.ChatJid)
                 ?? JidHelper.Normalize(context.ChatJid)
                 ?? context.ChatJid;
@@ -5129,17 +5148,9 @@ namespace Unison.WhatsAppClient.Messages
 
             ChatMessage reactionParent = null;
             string parentTimelineJid = canonical;
-            bool handled = false;
 
             await _boundMutations.RunAsync(() =>
             {
-                PendingReaction pending;
-                if (!_chatMessageMapper.TryMapReaction(message, context, out pending) || pending == null)
-                {
-                    handled = false;
-                    return;
-                }
-
                 ChatMessageCache cache = _chatState.MessagesByChat;
                 string foundKey;
                 ChatMessage foundParent;
@@ -5164,13 +5175,7 @@ namespace Unison.WhatsAppClient.Messages
 
                 _reactionMapper.TryApply(timeline, pending, out reactionParent);
                 _ = PersistLiveReactionAsync(canonical, pending);
-                handled = true;
             }).ConfigureAwait(false);
-
-            if (!handled)
-            {
-                return false;
-            }
 
             if (reactionParent != null)
             {

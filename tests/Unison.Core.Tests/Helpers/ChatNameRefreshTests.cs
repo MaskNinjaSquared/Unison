@@ -91,18 +91,20 @@ namespace Unison.Core.Tests.Helpers
         }
 
         [Fact]
-        public async Task The_announcement_happens_inside_the_ui_pass()
+        public async Task The_announcement_happens_outside_the_ui_pass()
         {
+            // Nested DisplayNamesUpdated / author sweep under HasThreadAccess was billed as
+            // ApplyCoreAsync for tens of seconds (82908f3f count=3 / ~44s).
             _chats.Chats.Add(new ChatItem { JID = Ana, Name = "5511988887777" });
             _addressBook.Set(Ana, "Ana Trabalho");
             var ui = new FlagDispatcher();
             var refresh = Build(ui);
-            bool raisedInPass = false;
+            bool raisedInPass = true;
             refresh.Applied += (s, count) => raisedInPass = ui.InPass;
 
             await refresh.ApplyAsync();
 
-            Assert.True(raisedInPass);
+            Assert.False(raisedInPass);
         }
 
         [Fact]

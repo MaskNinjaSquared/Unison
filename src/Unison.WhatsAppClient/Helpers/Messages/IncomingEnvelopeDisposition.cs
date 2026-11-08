@@ -20,7 +20,9 @@ namespace Unison.WhatsAppClient.Helpers
         Placeholder,
         StatusBroadcast,
         Revoke,
-        PinInChat
+        PinInChat,
+        /// <summary>Reaction payload (after proto unwrap). Needs UI only when applying.</summary>
+        Reaction
     }
 
     public static class IncomingEnvelopeDisposition
@@ -66,6 +68,8 @@ namespace Unison.WhatsAppClient.Helpers
 
         /// <summary>
         /// Chat-scoped controls that need a resolved conversation JID first.
+        /// Reaction is classified here (unwrap only) so the pump can leave
+        /// <c>route:control</c> without a UI hop when the envelope is ordinary chat content.
         /// </summary>
         public static IncomingEnvelopeKind ClassifyChatControl(Message message)
         {
@@ -77,6 +81,12 @@ namespace Unison.WhatsAppClient.Helpers
             if (message?.PinInChatMessage != null)
             {
                 return IncomingEnvelopeKind.PinInChat;
+            }
+
+            Message unwrapped = ProtoMessageUnwrap.Run(message);
+            if (unwrapped?.ReactionMessage != null)
+            {
+                return IncomingEnvelopeKind.Reaction;
             }
 
             return IncomingEnvelopeKind.Continue;

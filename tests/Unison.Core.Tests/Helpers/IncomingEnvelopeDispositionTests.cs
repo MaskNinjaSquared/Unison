@@ -94,5 +94,76 @@ namespace Unison.Core.Tests.Helpers
                 IncomingEnvelopeKind.PinInChat,
                 IncomingEnvelopeDisposition.ClassifyChatControl(message));
         }
+
+        [Fact]
+        public void Ordinary_chat_content_is_not_chat_control()
+        {
+            var message = new Message
+            {
+                Conversation = "hello"
+            };
+
+            Assert.Equal(
+                IncomingEnvelopeKind.Continue,
+                IncomingEnvelopeDisposition.ClassifyChatControl(message));
+        }
+
+        [Fact]
+        public void Reaction_is_a_chat_control()
+        {
+            var message = new Message
+            {
+                ReactionMessage = new Message.Types.ReactionMessage
+                {
+                    Text = "👍",
+                    Key = new MessageKey { Id = "target-1" }
+                }
+            };
+
+            Assert.Equal(
+                IncomingEnvelopeKind.Reaction,
+                IncomingEnvelopeDisposition.ClassifyChatControl(message));
+        }
+
+        [Fact]
+        public void Wrapped_reaction_is_classified_after_unwrap()
+        {
+            var message = new Message
+            {
+                EphemeralMessage = new Message.Types.FutureProofMessage
+                {
+                    Message = new Message
+                    {
+                        ReactionMessage = new Message.Types.ReactionMessage
+                        {
+                            Text = "❤️",
+                            Key = new MessageKey { Id = "target-2" }
+                        }
+                    }
+                }
+            };
+
+            Assert.Equal(
+                IncomingEnvelopeKind.Reaction,
+                IncomingEnvelopeDisposition.ClassifyChatControl(message));
+        }
+
+        [Fact]
+        public void Pin_beats_reaction_when_both_present()
+        {
+            var message = new Message
+            {
+                PinInChatMessage = new Message.Types.PinInChatMessage(),
+                ReactionMessage = new Message.Types.ReactionMessage
+                {
+                    Text = "👍",
+                    Key = new MessageKey { Id = "target-3" }
+                }
+            };
+
+            Assert.Equal(
+                IncomingEnvelopeKind.PinInChat,
+                IncomingEnvelopeDisposition.ClassifyChatControl(message));
+        }
     }
 }

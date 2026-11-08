@@ -31,7 +31,11 @@ namespace Unison.Core.State
         private readonly Func<IReadOnlyList<OfflineReplayChatSummary>, string, Task> _apply;
         private readonly TimeSpan _throttle;
         private readonly TimeSpan _steadyThrottle;
+        private readonly Func<TimeSpan> _postFlushQuiet;
+        private readonly Func<bool> _deferTipPaintUntilSettle;
         private int _progressiveFlushed;
+        private int _flushing;
+        private long _quietUntilUtcTicks;
 
         /// <param name="throttle">Window for the first progressive flush of a replay.</param>
         /// <param name="steadyThrottle">
@@ -39,18 +43,57 @@ namespace Unison.Core.State
         /// Replayed messages trickle in one by one, so a short window still moves one row per pass.
         /// Defaults to <paramref name="throttle"/>.
         /// </param>
+        /// <param name="postFlushQuiet">
+        /// Extra IsBusy window after a flush so silent UI cannot start between progressive batches.
+        /// Defaults to zero (tests).
+        /// </param>
+        /// <param name="deferTipPaintUntilSettle">
+        /// When true (PreferFrugal), Record keeps tips in the book and does not arm the
+        /// progressive timer — settle <see cref="FlushAsync"/> paints once after persist.
+        /// </param>
         public OfflineReplayTips(
             IJidResolver jids,
             IOfflineReplayHost host,
             Func<IReadOnlyList<OfflineReplayChatSummary>, string, Task> apply,
             TimeSpan throttle,
-            TimeSpan? steadyThrottle = null)
+            TimeSpan? steadyThrottle = null,
+            Func<TimeSpan> postFlushQuiet = null,
+            Func<bool> deferTipPaintUntilSettle = null)
         {
             _jids = jids ?? throw new ArgumentNullException(nameof(jids));
             _host = host ?? throw new ArgumentNullException(nameof(host));
             _apply = apply ?? throw new ArgumentNullException(nameof(apply));
             _throttle = throttle;
             _steadyThrottle = steadyThrottle ?? throttle;
+            _postFlushQuiet = postFlushQuiet ?? (() => TimeSpan.Zero);
+            _deferTipPaintUntilSettle = deferTipPaintUntilSettle ?? (() => false);
+        }
+
+        /// <summary>
+        /// Tips waiting in the book, a progressive timer armed, a flush apply in flight,
+        /// or the post-flush quiet that covers empty-book gaps between progressive batches.
+        /// </summary>
+        public bool IsBusy =>
+            _book.HasPending ||
+            Volatile.Read(ref _flushing) != 0 ||
+            IsInPostFlushQuiet();
+
+        private bool IsInPostFlushQuiet()
+        {
+            long until = Volatile.Read(ref _quietUntilUtcTicks);
+            return until != 0 && DateTime.UtcNow.Ticks < until;
+        }
+
+        private void ArmPostFlushQuiet()
+        {
+            TimeSpan quiet = _postFlushQuiet();
+            if (quiet <= TimeSpan.Zero)
+            {
+                Volatile.Write(ref _quietUntilUtcTicks, 0);
+                return;
+            }
+
+            Volatile.Write(ref _quietUntilUtcTicks, DateTime.UtcNow.Add(quiet).Ticks);
         }
 
         public void Record(OfflineReplayTipRequest request)
@@ -72,6 +115,14 @@ namespace Unison.Core.State
                     _host.IsActiveChat(canonical),
                     _host.IsWindowVisible).CountsAsUnread;
 
+            // PreferFrugal: no progressive timer — book only until settle flush.
+            bool deferPaint = _deferTipPaintUntilSettle();
+            Action onDue = null;
+            if (!deferPaint)
+            {
+                onDue = OnThrottleElapsed;
+            }
+
             _book.Record(
                 canonical,
                 request.Preview,
@@ -86,14 +137,22 @@ namespace Unison.Core.State
                 request.ParticipantJid,
                 request.SenderName,
                 Volatile.Read(ref _progressiveFlushed) == 0 ? _throttle : _steadyThrottle,
-                OnThrottleElapsed,
+                onDue,
                 request.HasCitation && incrementUnread);
         }
 
         public async Task FlushAsync(string reason)
         {
+            // Belt: progressive reason must not Take+paint while PreferFrugal defers to settle.
+            if (string.Equals(reason, ProgressiveReason, StringComparison.Ordinal) &&
+                _deferTipPaintUntilSettle())
+            {
+                return;
+            }
+
             await _flushLock.WaitAsync().ConfigureAwait(false);
             Dictionary<string, OfflineReplayChatSummary> snapshot = null;
+            Interlocked.Exchange(ref _flushing, 1);
             try
             {
                 Volatile.Write(
@@ -122,6 +181,8 @@ namespace Unison.Core.State
             }
             finally
             {
+                Interlocked.Exchange(ref _flushing, 0);
+                ArmPostFlushQuiet();
                 _flushLock.Release();
             }
         }

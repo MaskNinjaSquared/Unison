@@ -77,6 +77,21 @@ namespace Unison.Core.State
             }
         }
 
+        /// <summary>
+        /// True while a tip is filed or a progressive timer is armed — silent UI
+        /// (alias drain) should wait.
+        /// </summary>
+        public bool HasPending
+        {
+            get
+            {
+                lock (_gate)
+                {
+                    return _summaries.Count > 0 || _timer != null;
+                }
+            }
+        }
+
         /// <summary>The tips to apply, or null when there is nothing waiting.</summary>
         public Dictionary<string, OfflineReplayChatSummary> Take()
         {
