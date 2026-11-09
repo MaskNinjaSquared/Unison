@@ -1095,7 +1095,7 @@ namespace Unison.Uwp.UI.Views
             _isLoadingMoreFromScroll = true;
             try
             {
-                string requestedJid = Jids.GetCanonicalJid(_activeChat.JID);
+                string requestedJid = Jids.PeekCanonicalJid(_activeChat.JID);
                 Debug.WriteLine($"[ChatDetailView] Loading more messages for {requestedJid}. Current: {_messages.Count}");
                 WriteTimelineDiagnostics(
                     "load-more-start",
@@ -1111,7 +1111,7 @@ namespace Unison.Uwp.UI.Views
                     "; reachedStart=" + (result?.ReachedStart ?? false) +
                     "; detached=" + ViewModel.IsDetachedFromEnd);
                 if (_activeChat == null ||
-                    !string.Equals(Jids.GetCanonicalJid(_activeChat.JID), requestedJid, StringComparison.OrdinalIgnoreCase))
+                    !string.Equals(Jids.PeekCanonicalJid(_activeChat.JID), requestedJid, StringComparison.OrdinalIgnoreCase))
                 {
                     return;
                 }
@@ -1677,12 +1677,12 @@ namespace Unison.Uwp.UI.Views
             var contacts = Contacts;
             if (chat != null)
             {
-                string canonicalJid = Jids.GetCanonicalJid(chat.JID);
+                string canonicalJid = Jids.PeekCanonicalJid(chat.JID);
                 if (!string.IsNullOrWhiteSpace(canonicalJid) &&
                     !string.Equals(canonicalJid, chat.JID, StringComparison.OrdinalIgnoreCase))
                 {
                     var canonicalChat = ChatState?.Chats.FirstOrDefault(c =>
-                        string.Equals(Jids.GetCanonicalJid(c.JID), canonicalJid, StringComparison.OrdinalIgnoreCase));
+                        string.Equals(Jids.PeekCanonicalJid(c.JID), canonicalJid, StringComparison.OrdinalIgnoreCase));
                     if (canonicalChat != null)
                     {
                         chat = canonicalChat;
@@ -1697,8 +1697,8 @@ namespace Unison.Uwp.UI.Views
                 // List rebuilds often replace ChatItem instances; only rebind the reference.
                 if (_activeChat != null &&
                     string.Equals(
-                        Jids.GetCanonicalJid(_activeChat.JID),
-                        Jids.GetCanonicalJid(chat.JID),
+                        Jids.PeekCanonicalJid(_activeChat.JID),
+                        Jids.PeekCanonicalJid(chat.JID),
                         StringComparison.OrdinalIgnoreCase))
                 {
                     if (!ReferenceEquals(_activeChat, chat))
@@ -1889,7 +1889,7 @@ namespace Unison.Uwp.UI.Views
                     return;
                 }
 
-                string requestedJid = Jids.GetCanonicalJid(chat.JID);
+                string requestedJid = Jids.PeekCanonicalJid(chat.JID);
                 Debug.WriteLine($"[ChatDetailView] Loading messages for {requestedJid}");
 
                 List<ChatMessage> messages;
@@ -1906,7 +1906,7 @@ namespace Unison.Uwp.UI.Views
                 }
 
                 if (token.IsCancellationRequested || _activeChat == null ||
-                    !string.Equals(Jids.GetCanonicalJid(_activeChat.JID), requestedJid, StringComparison.OrdinalIgnoreCase))
+                    !string.Equals(Jids.PeekCanonicalJid(_activeChat.JID), requestedJid, StringComparison.OrdinalIgnoreCase))
                 {
                     WriteChatOpenDiagnostics(
                         "aborted",
@@ -1970,7 +1970,7 @@ namespace Unison.Uwp.UI.Views
                 // ChangeView needs scroll enabled; lock is cleared in finally above.
                 if (!token.IsCancellationRequested &&
                     _activeChat != null &&
-                    string.Equals(Jids.GetCanonicalJid(_activeChat.JID), requestedJid, StringComparison.OrdinalIgnoreCase))
+                    string.Equals(Jids.PeekCanonicalJid(_activeChat.JID), requestedJid, StringComparison.OrdinalIgnoreCase))
                 {
                     ScrollToBottom();
                     _ = StickScrollToBottomOnOpenAsync(token);
@@ -2036,8 +2036,8 @@ namespace Unison.Uwp.UI.Views
             }
 
             bool sameChat = string.Equals(
-                Jids.GetCanonicalJid(_activeChat.JID),
-                Jids.GetCanonicalJid(chat?.JID),
+                Jids.PeekCanonicalJid(_activeChat.JID),
+                Jids.PeekCanonicalJid(chat?.JID),
                 StringComparison.OrdinalIgnoreCase);
             return sameChat ? "same-chat-new-instance" : "chat-switched";
         }
@@ -2670,8 +2670,8 @@ namespace Unison.Uwp.UI.Views
                 return;
             }
 
-            string activeCanonical = Jids.GetCanonicalJid(_activeChat.JID);
-            string updatedCanonical = Jids.GetCanonicalJid(updatedJid);
+            string activeCanonical = Jids.PeekCanonicalJid(_activeChat.JID);
+            string updatedCanonical = Jids.PeekCanonicalJid(updatedJid);
             if (!string.Equals(activeCanonical, updatedCanonical, StringComparison.OrdinalIgnoreCase))
             {
                 return;
@@ -2749,7 +2749,7 @@ namespace Unison.Uwp.UI.Views
             }
 
             _isSyncingFromService = true;
-            string requestedJid = Jids.GetCanonicalJid(_activeChat.JID);
+            string requestedJid = Jids.PeekCanonicalJid(_activeChat.JID);
             try
             {
                 bool stickToBottom = IsFollowingTimelineEnd();
@@ -2757,7 +2757,7 @@ namespace Unison.Uwp.UI.Views
                     .LoadRecentMessagesForSyncAsync(requestedJid)
                     .ConfigureAwait(false);
                 if (_activeChat == null ||
-                    !string.Equals(Jids.GetCanonicalJid(_activeChat.JID), requestedJid, StringComparison.OrdinalIgnoreCase) ||
+                    !string.Equals(Jids.PeekCanonicalJid(_activeChat.JID), requestedJid, StringComparison.OrdinalIgnoreCase) ||
                     serviceMessages == null || serviceMessages.Count == 0)
                 {
                     return;
@@ -2766,7 +2766,7 @@ namespace Unison.Uwp.UI.Views
                 await Dispatcher.RunAsync(CoreDispatcherPriority.Normal, () =>
                 {
                     if (_activeChat == null ||
-                        !string.Equals(Jids.GetCanonicalJid(_activeChat.JID), requestedJid, StringComparison.OrdinalIgnoreCase))
+                        !string.Equals(Jids.PeekCanonicalJid(_activeChat.JID), requestedJid, StringComparison.OrdinalIgnoreCase))
                     {
                         return;
                     }

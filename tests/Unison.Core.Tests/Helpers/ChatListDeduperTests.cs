@@ -205,6 +205,41 @@ namespace Unison.Core.Tests.Helpers
         }
 
         [Fact]
+        public async Task Many_rows_with_alias_cache_keys_still_fold_and_merge()
+        {
+            // planMs path: memoized Peek + one ChatJids HashSet must not drop folds/merges.
+            const string pnB = "5511999990003@s.whatsapp.net";
+            const string lidB = "222@lid";
+            PairLidWithPn();
+            _aliases[lidB] = pnB;
+            _aliases[pnB] = lidB;
+
+            for (int i = 0; i < 12; i++)
+            {
+                _chats.Chats.Add(new ChatItem { JID = "5511888000" + i.ToString("00") + "@s.whatsapp.net" });
+            }
+
+            _chats.Chats.Add(new ChatItem { JID = Lid });
+            _chats.Chats.Add(new ChatItem { JID = Pn });
+            _chats.Chats.Add(new ChatItem { JID = lidB });
+            _chats.Chats.Add(new ChatItem { JID = pnB });
+            _chats.MessagesByChat.GetOrAdd(Lid).Add(new ChatMessage { Id = "L1" });
+            _chats.MessagesByChat.GetOrAdd(Pn).Add(new ChatMessage { Id = "P1" });
+            _chats.MessagesByChat.GetOrAdd(lidB).Add(new ChatMessage { Id = "LB1" });
+            _chats.MessagesByChat.GetOrAdd(pnB).Add(new ChatMessage { Id = "PB1" });
+
+            ChatListDeduperResult result = await Build().RunAsync("alias:app-state-contact");
+
+            // Two PN+LID pairs fold; timeline keys ride the fold (NormalizedKeys may be 0).
+            Assert.Equal(2, result.Merged);
+            Assert.False(_chats.MessagesByChat.Contains(Lid));
+            Assert.False(_chats.MessagesByChat.Contains(lidB));
+            Assert.Equal(2, _chats.MessagesByChat.CountFor(Pn));
+            Assert.Equal(2, _chats.MessagesByChat.CountFor(pnB));
+            Assert.Equal(14, _chats.Chats.Count);
+        }
+
+        [Fact]
         public async Task Applied_is_raised_only_when_something_changed()
         {
             _chats.Chats.Add(new ChatItem { JID = Pn });

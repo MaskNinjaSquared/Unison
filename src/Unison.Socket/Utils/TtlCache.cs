@@ -8,12 +8,19 @@
 // lifetime, a size cap, and whether reading an entry refreshes it. Rather than
 // re-implement that inline each time, it lives here once.
 //
+// A full cache trims down to a low-water mark in one pass. Evicting a single
+// entry per Set made every insert into a full cache an O(n log n) sort under the
+// same lock readers need (26b3431b: UI Peek stalled minutes behind a listing
+// import).
+//
 // Ports: the lru-cache usage in rc14 src/Signal/lid-mapping.ts and
 // src/Utils/message-retry-manager.ts
 // =============================================================================
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
+using System.Threading;
 
 namespace Unison.Socket.Utils
 {
@@ -23,7 +30,9 @@ namespace Unison.Socket.Utils
         private readonly object _gate = new object();
         private readonly TimeSpan _lifetime;
         private readonly int _maxEntries;
+        private readonly int _lowWater;
         private readonly bool _refreshOnRead;
+        private long _maxLockWaitTicks;
 
         /// <param name="maxEntries">Cap after which the entries closest to expiry are dropped.</param>
         /// <param name="refreshOnRead">
@@ -33,8 +42,29 @@ namespace Unison.Socket.Utils
         {
             _lifetime = lifetime;
             _maxEntries = maxEntries > 0 ? maxEntries : 1024;
+            _lowWater = _maxEntries - Math.Max(1, _maxEntries / 10);
             _refreshOnRead = refreshOnRead;
         }
+
+        public int Count
+        {
+            get
+            {
+                Enter();
+                try
+                {
+                    return _entries.Count;
+                }
+                finally
+                {
+                    Monitor.Exit(_gate);
+                }
+            }
+        }
+
+        /// <summary>Longest time any caller waited to take the cache lock, in milliseconds.</summary>
+        public long MaxLockWaitMs =>
+            Interlocked.Read(ref _maxLockWaitTicks) * 1000 / Stopwatch.Frequency;
 
         public bool TryGet(string key, out T value)
         {
@@ -44,7 +74,8 @@ namespace Unison.Socket.Utils
                 return false;
             }
 
-            lock (_gate)
+            Enter();
+            try
             {
                 Entry entry;
                 if (!_entries.TryGetValue(key, out entry))
@@ -52,7 +83,8 @@ namespace Unison.Socket.Utils
                     return false;
                 }
 
-                if (entry.ExpiresAtUtc <= DateTime.UtcNow)
+                DateTime now = DateTime.UtcNow;
+                if (entry.ExpiresAtUtc <= now)
                 {
                     _entries.Remove(key);
                     return false;
@@ -60,11 +92,15 @@ namespace Unison.Socket.Utils
 
                 if (_refreshOnRead)
                 {
-                    entry.ExpiresAtUtc = DateTime.UtcNow.Add(_lifetime);
+                    entry.ExpiresAtUtc = now.Add(_lifetime);
                 }
 
                 value = entry.Value;
                 return true;
+            }
+            finally
+            {
+                Monitor.Exit(_gate);
             }
         }
 
@@ -81,14 +117,40 @@ namespace Unison.Socket.Utils
                 return;
             }
 
-            lock (_gate)
+            Enter();
+            try
             {
-                if (!_entries.ContainsKey(key) && _entries.Count >= _maxEntries)
-                {
-                    Evict();
-                }
+                SetLocked(key, value, DateTime.UtcNow);
+            }
+            finally
+            {
+                Monitor.Exit(_gate);
+            }
+        }
 
-                _entries[key] = new Entry { Value = value, ExpiresAtUtc = DateTime.UtcNow.Add(_lifetime) };
+        /// <summary>Stores a batch under one lock; a full cache trims at most once per low-water gap.</summary>
+        public void SetMany(IEnumerable<KeyValuePair<string, T>> items)
+        {
+            if (items == null)
+            {
+                return;
+            }
+
+            Enter();
+            try
+            {
+                DateTime now = DateTime.UtcNow;
+                foreach (KeyValuePair<string, T> item in items)
+                {
+                    if (item.Key != null)
+                    {
+                        SetLocked(item.Key, item.Value, now);
+                    }
+                }
+            }
+            finally
+            {
+                Monitor.Exit(_gate);
             }
         }
 
@@ -99,17 +161,27 @@ namespace Unison.Socket.Utils
                 return false;
             }
 
-            lock (_gate)
+            Enter();
+            try
             {
                 return _entries.Remove(key);
+            }
+            finally
+            {
+                Monitor.Exit(_gate);
             }
         }
 
         public void Clear()
         {
-            lock (_gate)
+            Enter();
+            try
             {
                 _entries.Clear();
+            }
+            finally
+            {
+                Monitor.Exit(_gate);
             }
         }
 
@@ -117,20 +189,77 @@ namespace Unison.Socket.Utils
         {
             get
             {
-                lock (_gate)
+                Enter();
+                try
                 {
                     return _entries.Keys.ToList();
+                }
+                finally
+                {
+                    Monitor.Exit(_gate);
                 }
             }
         }
 
-        /// <summary>Drops expired entries, then the oldest ones if the cap is still exceeded.</summary>
-        private void Evict()
+        private void SetLocked(string key, T value, DateTime now)
         {
-            var now = DateTime.UtcNow;
-            foreach (var key in _entries.Where(e => e.Value.ExpiresAtUtc <= now).Select(e => e.Key).ToList())
+            Entry existing;
+            if (_entries.TryGetValue(key, out existing))
             {
-                _entries.Remove(key);
+                existing.Value = value;
+                existing.ExpiresAtUtc = now.Add(_lifetime);
+                return;
+            }
+
+            if (_entries.Count >= _maxEntries)
+            {
+                Evict(now);
+            }
+
+            _entries[key] = new Entry { Value = value, ExpiresAtUtc = now.Add(_lifetime) };
+        }
+
+        private void Enter()
+        {
+            if (Monitor.TryEnter(_gate))
+            {
+                return;
+            }
+
+            long started = Stopwatch.GetTimestamp();
+            Monitor.Enter(_gate);
+            long waited = Stopwatch.GetTimestamp() - started;
+            long seen = Interlocked.Read(ref _maxLockWaitTicks);
+            while (waited > seen)
+            {
+                long prior = Interlocked.CompareExchange(ref _maxLockWaitTicks, waited, seen);
+                if (prior == seen)
+                {
+                    break;
+                }
+
+                seen = prior;
+            }
+        }
+
+        /// <summary>Drops expired entries, then the ones closest to expiry down to the low-water mark.</summary>
+        private void Evict(DateTime now)
+        {
+            List<string> expired = null;
+            foreach (KeyValuePair<string, Entry> e in _entries)
+            {
+                if (e.Value.ExpiresAtUtc <= now)
+                {
+                    (expired ?? (expired = new List<string>())).Add(e.Key);
+                }
+            }
+
+            if (expired != null)
+            {
+                foreach (string key in expired)
+                {
+                    _entries.Remove(key);
+                }
             }
 
             if (_entries.Count < _maxEntries)
@@ -138,8 +267,8 @@ namespace Unison.Socket.Utils
                 return;
             }
 
-            var overflow = _entries.Count - _maxEntries + 1;
-            foreach (var key in _entries.OrderBy(e => e.Value.ExpiresAtUtc).Take(overflow).Select(e => e.Key).ToList())
+            int overflow = _entries.Count - _lowWater;
+            foreach (string key in _entries.OrderBy(e => e.Value.ExpiresAtUtc).Take(overflow).Select(e => e.Key).ToList())
             {
                 _entries.Remove(key);
             }

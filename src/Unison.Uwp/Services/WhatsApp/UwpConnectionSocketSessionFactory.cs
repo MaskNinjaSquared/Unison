@@ -20,13 +20,16 @@ namespace Unison.Uwp.Services.WhatsApp
     {
         private readonly IWhatsAppTransportFactory _transports;
         private readonly ISystemInfoProvider _systemInfo;
+        private readonly ProfilePictureQueryCache _pictureCache;
 
         public UwpConnectionSocketSessionFactory(
             IWhatsAppTransportFactory transports,
-            ISystemInfoProvider systemInfo)
+            ISystemInfoProvider systemInfo,
+            ProfilePictureQueryCache pictureCache)
         {
             _transports = transports ?? throw new ArgumentNullException(nameof(transports));
             _systemInfo = systemInfo ?? throw new ArgumentNullException(nameof(systemInfo));
+            _pictureCache = pictureCache ?? throw new ArgumentNullException(nameof(pictureCache));
         }
 
         public object CreateAndWire(ConnectionSocketSessionRequest request)
@@ -48,7 +51,8 @@ namespace Unison.Uwp.Services.WhatsApp
                 request.AuthState,
                 request.SharedKeyStore as FileKeyStore,
                 request.ReuseLoadedKeyState,
-                request.LidMappings as LidMappingStore);
+                request.LidMappings as LidMappingStore,
+                _pictureCache);
 
             SocketBridgeRemoteHooks.Attach(
                 bridge,

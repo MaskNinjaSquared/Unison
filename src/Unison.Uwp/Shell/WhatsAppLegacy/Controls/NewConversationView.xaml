@@ -190,8 +190,10 @@
 
     <!--
       Full-bleed overlay above the chat list (SharePicker pattern).
-      Title + search + action tiles stay fixed; A–Z SemanticZoom x:Loads after first Open yield.
-      Minimal (&lt;560): 3+2 WP tiles sized to available width. Extended (=560): icon + text rows.
+      Title + search stay sticky; action tiles paint in row 2 on first open, then promote into
+      ContactsList.Header so short viewports can scroll past tiles to the A-Z list.
+      SemanticZoom x:Loads after first Open yield.
+      Minimal (&lt;560): 3+2 WP tiles sized to available width. Extended (>=560): icon + text rows.
     -->
     <Grid x:Name="LayoutRoot" Background="{ThemeResource ChatListBackgroundBrush}">
         <VisualStateManager.VisualStateGroups>
@@ -258,7 +260,7 @@
                  PlaceholderText="Search name or number"
                  Text="{Binding SearchQuery, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
 
-        <!-- Sticky chrome: tiles paint with Open; A–Z list x:Loads after yield. -->
+        <!-- First-open chrome (row 2); after catalog ready, code-behind moves this into ContactsList.Header. -->
         <Grid x:Name="OptionsChromeHost" Grid.Row="2">
             <!-- Minimal / mobile: always 3+2; side scaled to host width (=150). -->
             <Grid x:Name="OptionsTilesHost"

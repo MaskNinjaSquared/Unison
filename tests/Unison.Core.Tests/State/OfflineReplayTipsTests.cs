@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Threading;
 using System.Threading.Tasks;
 using Unison.Core.Contracts;
 using Unison.Core.Contracts.WhatsApp;
@@ -288,6 +289,134 @@ namespace Unison.Core.Tests.State
 
             await tips.FlushAsync("offline-complete:1");
             Assert.Equal(1, applies);
+        }
+
+        [Fact]
+        public async Task PreferFrugal_late_record_with_no_settle_is_painted_by_the_backstop()
+        {
+            var reasons = new List<string>();
+            var tips = new OfflineReplayTips(
+                new FakeJids(),
+                new FakeHost(),
+                (batch, reason) => { lock (reasons) { reasons.Add(reason); } return Task.CompletedTask; },
+                NoTimer,
+                deferTipPaintUntilSettle: () => true,
+                deferredBackstop: TimeSpan.FromMilliseconds(60));
+
+            tips.Record(Request("111@s.whatsapp.net", countUnread: true));
+            Assert.True(tips.IsBusy);
+
+            await WaitUntilAsync(() => !tips.IsBusy, TimeSpan.FromSeconds(3));
+            Assert.Equal(new[] { OfflineReplayTips.BackstopReason }, reasons);
+        }
+
+        [Fact]
+        public async Task PreferFrugal_settle_flush_before_backstop_paints_once()
+        {
+            int applies = 0;
+            var tips = new OfflineReplayTips(
+                new FakeJids(),
+                new FakeHost(),
+                (batch, _) => { Interlocked.Increment(ref applies); return Task.CompletedTask; },
+                NoTimer,
+                deferTipPaintUntilSettle: () => true,
+                deferredBackstop: TimeSpan.FromMilliseconds(120));
+
+            tips.Record(Request("111@s.whatsapp.net", countUnread: true));
+            await tips.FlushAsync("offline-complete:1");
+            await Task.Delay(250);
+
+            Assert.Equal(1, applies);
+            Assert.False(tips.IsBusy);
+        }
+
+        [Fact]
+        public async Task PreferFrugal_backstop_keeps_first_deadline_under_record_flood()
+        {
+            int applies = 0;
+            var firstApply = new TaskCompletionSource<bool>();
+            var tips = new OfflineReplayTips(
+                new FakeJids(),
+                new FakeHost(),
+                (batch, _) =>
+                {
+                    if (Interlocked.Increment(ref applies) == 1)
+                    {
+                        firstApply.TrySetResult(true);
+                    }
+
+                    return Task.CompletedTask;
+                },
+                NoTimer,
+                deferTipPaintUntilSettle: () => true,
+                deferredBackstop: TimeSpan.FromMilliseconds(120));
+
+            var watch = System.Diagnostics.Stopwatch.StartNew();
+            tips.Record(Request("111@s.whatsapp.net", countUnread: false));
+            Task flood = Task.Run(async () =>
+            {
+                for (int i = 0; i < 8; i++)
+                {
+                    tips.Record(Request("111@s.whatsapp.net", countUnread: false));
+                    await Task.Delay(40);
+                }
+            });
+
+            Assert.Same(firstApply.Task, await Task.WhenAny(firstApply.Task, Task.Delay(3000)));
+            // First deadline (~120ms) must win: a pushable debounce would still be arming past ~400ms.
+            Assert.True(watch.ElapsedMilliseconds < 280, "elapsedMs=" + watch.ElapsedMilliseconds);
+            Assert.True(Volatile.Read(ref applies) >= 1);
+            await flood;
+        }
+
+        [Fact]
+        public async Task PreferFrugal_post_settle_records_paint_progressively_without_backstop()
+        {
+            var reasons = new List<string>();
+            bool drainActive = true;
+            var tips = new OfflineReplayTips(
+                new FakeJids(),
+                new FakeHost(),
+                (batch, reason) => { lock (reasons) { reasons.Add(reason); } return Task.CompletedTask; },
+                TimeSpan.FromMilliseconds(20),
+                deferTipPaintUntilSettle: () => drainActive,
+                deferredBackstop: TimeSpan.FromMilliseconds(500));
+
+            tips.Record(Request("111@s.whatsapp.net", countUnread: false));
+            await tips.FlushAsync("offline-complete:1");
+            drainActive = false;
+
+            tips.Record(Request("222@s.whatsapp.net", countUnread: false));
+            await WaitUntilAsync(
+                () =>
+                {
+                    lock (reasons)
+                    {
+                        return reasons.Count >= 2;
+                    }
+                },
+                TimeSpan.FromSeconds(3));
+
+            lock (reasons)
+            {
+                Assert.Equal(
+                    new[] { "offline-complete:1", OfflineReplayTips.ProgressiveReason },
+                    reasons);
+            }
+        }
+
+        private static async Task WaitUntilAsync(Func<bool> condition, TimeSpan timeout)
+        {
+            var watch = System.Diagnostics.Stopwatch.StartNew();
+            while (!condition())
+            {
+                if (watch.Elapsed > timeout)
+                {
+                    throw new TimeoutException("condition not met");
+                }
+
+                await Task.Delay(10);
+            }
         }
 
         private static OfflineReplayTipRequest Request(string jid, bool countUnread) =>

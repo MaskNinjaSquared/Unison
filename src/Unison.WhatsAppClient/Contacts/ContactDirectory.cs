@@ -139,7 +139,8 @@ namespace Unison.WhatsAppClient.Contacts
                     return;
                 }
 
-                await _lidMappings.StoreMappingsAsync(result.Mappings).ConfigureAwait(false);
+                await _lidMappings.StoreMappingsAsync(result.Mappings, cacheInMemory: false)
+                    .ConfigureAwait(false);
                 Debug.WriteLine("[ContactDirectory] Harvested " + result.Mappings.Count +
                                 " LID mapping(s) from " + result.Groups.Count + " group(s)");
             }

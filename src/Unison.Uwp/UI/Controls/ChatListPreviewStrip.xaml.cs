@@ -338,7 +338,7 @@ namespace Unison.Uwp.UI.Controls
             EmojiRichRuns.SetTextBlock(
                 PreviewTextBlock,
                 CommentRichService.FormatMentionsPlain(
-                    Text,
+                    Unison.Core.Helpers.ChatPreviewNormalizer.CapForPreviewScan(Text),
                     MentionedJids as IEnumerable<string>,
                     MentionLookup as IReadOnlyDictionary<string, string>));
         }

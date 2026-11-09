@@ -187,6 +187,8 @@ Do not grow the compatibility client for UI features. Add the member on the faç
 
 Core rules lifted out of the client live in `Unison.Core/Helpers/<Domain>/`, with the same folder names as `Services/WhatsApp/` (`Chats`, `Contacts`, `Groups`, `Messages`, `History`, `Connection`, `Status`, plus `Diagnostics`). The namespace stays `Unison.Core.Helpers`: the folders are for finding a rule, not module boundaries, because the rules call across domains. Generic helpers (`RelayCommand`, `Observable`, `JidHelper`, `UnixTime`, …) stay at the root.
 
+Background work that touches the UI waits through `IUiWorkHolds.BeginRun(...).WaitAsync(kind)`. Do not add a new `while (gate) await Task.Delay(...)` loop; per-key update storms go through `KeyedLatestCoalescer`. Spec: [UI work scheduling](Ui-Work-Scheduling).
+
 Text normalization: `ChatPreviewNormalizer.Normalize` is the **chat-list preview** (one line, 50-char cap). Message bodies and media captions — anything persisted or shown in a bubble — use `NormalizeBody`, which keeps the text whole and keeps line breaks.
 
 ---
@@ -270,4 +272,5 @@ When touching these files, move a slice **toward** the spec (VM + façade), do n
 - [Application layer](Application-Layer) — façades, DI order, ViewModels
 - [UI and shell](UI-and-Shell) — navigation, themes, chat surface
 - [Socket stack](Socket-Stack) — use cases and handler split
+- [UI work scheduling](Ui-Work-Scheduling) — UI waits and storm coalescing
 - [Migration](Migration) — remaining work

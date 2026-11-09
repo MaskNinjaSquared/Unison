@@ -175,7 +175,13 @@ namespace Unison.Uwp.Client
         /// <summary>Baileys <c>updateBlockStatus</c> — block or unblock a direct JID.</summary>
         Task UpdateBlockStatusAsync(string jid, bool block);
 
-        Task<ProfilePictureResult> GetProfilePictureUrlResultAsync(string jid, string type = "preview");
+        /// <param name="revalidate">
+        /// Skip the cached answer, ask the server and keep the fresh one (chat open, broken image).
+        /// </param>
+        Task<ProfilePictureResult> GetProfilePictureUrlResultAsync(
+            string jid,
+            string type = "preview",
+            bool revalidate = false);
 
         /// <summary>
         /// Channel (@newsletter) metadata via WMex — name + picture id/path.

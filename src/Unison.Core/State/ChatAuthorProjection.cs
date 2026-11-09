@@ -235,7 +235,7 @@ namespace Unison.Core.State
                 }
 
                 keys.Add(normalized);
-                string canonical = _jids.GetCanonicalJid(normalized);
+                string canonical = _jids.PeekCanonicalJid(normalized);
                 if (!string.IsNullOrWhiteSpace(canonical))
                 {
                     keys.Add(canonical);
@@ -372,7 +372,7 @@ namespace Unison.Core.State
             lock (_gate)
             {
                 _pendingChatJids.Add(key);
-                string canonical = _jids.GetCanonicalJid(key);
+                string canonical = _jids.PeekCanonicalJid(key);
                 if (!string.IsNullOrWhiteSpace(canonical))
                 {
                     _pendingChatJids.Add(canonical);
@@ -393,7 +393,7 @@ namespace Unison.Core.State
             lock (_gate)
             {
                 _pendingParticipantJids.Add(key);
-                string canonical = _jids.GetCanonicalJid(key);
+                string canonical = _jids.PeekCanonicalJid(key);
                 if (!string.IsNullOrWhiteSpace(canonical))
                 {
                     _pendingParticipantJids.Add(canonical);
@@ -681,7 +681,7 @@ namespace Unison.Core.State
                 return true;
             }
 
-            string canonical = _jids.GetCanonicalJid(chat.JID);
+            string canonical = _jids.PeekCanonicalJid(chat.JID);
             return !string.IsNullOrWhiteSpace(canonical) && pendingChats.Contains(canonical);
         }
 
@@ -700,7 +700,7 @@ namespace Unison.Core.State
                 return true;
             }
 
-            string canonical = _jids.GetCanonicalJid(participantJid);
+            string canonical = _jids.PeekCanonicalJid(participantJid);
             if (!string.IsNullOrWhiteSpace(canonical) && pendingParticipants.Contains(canonical))
             {
                 return true;
@@ -868,7 +868,7 @@ namespace Unison.Core.State
                 (_sweepWarm ?? (_sweepWarm = new List<string>())).Add(participant);
             }
 
-            string canonical = _jids.GetCanonicalJid(participant);
+            string canonical = _jids.PeekCanonicalJid(participant);
             string number = ParticipantStripLabel.ForParticipant(participant, canonical);
 
             switch (ChatAuthorStripDecision.Decide(
@@ -990,7 +990,7 @@ namespace Unison.Core.State
 
             string phone = ParticipantStripLabel.ForParticipant(
                 participantJid,
-                _jids?.GetCanonicalJid(participantJid));
+                _jids?.PeekCanonicalJid(participantJid));
             if (string.IsNullOrEmpty(phone))
             {
                 return false;
@@ -1037,7 +1037,7 @@ namespace Unison.Core.State
             }
 
             Add(participantJid);
-            string canonical = _jids?.GetCanonicalJid(participantJid);
+            string canonical = _jids?.PeekCanonicalJid(participantJid);
             Add(canonical);
 
             string alias;
@@ -1068,7 +1068,7 @@ namespace Unison.Core.State
             lock (_gate)
             {
                 _warmAttempted.Remove(jid);
-                string canonical = _jids?.GetCanonicalJid(jid);
+                string canonical = _jids?.PeekCanonicalJid(jid);
                 if (!string.IsNullOrWhiteSpace(canonical))
                 {
                     _warmAttempted.Remove(canonical);
@@ -1132,7 +1132,7 @@ namespace Unison.Core.State
                 return false;
             }
 
-            string canonical = _jids?.GetCanonicalJid(jid);
+            string canonical = _jids?.PeekCanonicalJid(jid);
             if (!string.IsNullOrWhiteSpace(canonical) &&
                 !string.Equals(canonical, jid, StringComparison.OrdinalIgnoreCase) &&
                 !GroupParticipantResolver.IsUsableDisplayLabel(candidate, canonical))

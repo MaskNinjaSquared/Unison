@@ -42,6 +42,9 @@ namespace Unison.Core.State
         private ILidMappingMemory _lidMemory;
         private int _bulkImportDepth;
         private bool _bulkImportDirty;
+
+        /// <summary>Pairs set inside the open bulk scope; only these are remembered on close.</summary>
+        private Dictionary<string, string> _bulkImportPairs;
         private long _changeGeneration;
 
         /// <summary>
@@ -95,7 +98,7 @@ namespace Unison.Core.State
 
         /// <summary>
         /// Coalesces dual-write + <see cref="Changed"/> across many sets (persistence restore).
-        /// Dispose flushes one <c>RememberPairs</c> of the snapshot and one change notify.
+        /// Dispose flushes one <c>RememberPairs</c> of the pairs set in the scope and one change notify.
         /// </summary>
         public IDisposable BeginBulkImport()
         {
@@ -620,6 +623,16 @@ namespace Unison.Core.State
                 if (_bulkImportDepth > 0)
                 {
                     _bulkImportDirty = true;
+                    if (key != null)
+                    {
+                        if (_bulkImportPairs == null)
+                        {
+                            _bulkImportPairs = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                        }
+
+                        _bulkImportPairs[key] = value;
+                    }
+
                     return;
                 }
             }
@@ -643,7 +656,10 @@ namespace Unison.Core.State
                 if (flush)
                 {
                     _bulkImportDirty = false;
-                    snapshot = new Dictionary<string, string>(_inner, StringComparer.OrdinalIgnoreCase);
+                    // Only this scope's pairs: re-sending the whole table on every import
+                    // re-read thousands of pairs per listing / history chunk.
+                    snapshot = _bulkImportPairs;
+                    _bulkImportPairs = null;
                 }
             }
 
@@ -653,7 +669,11 @@ namespace Unison.Core.State
             }
 
             ILidMappingMemory memory = _lidMemory;
-            memory?.RememberPairs(snapshot);
+            if (snapshot != null && snapshot.Count > 0)
+            {
+                memory?.RememberPairs(snapshot);
+            }
+
             RaiseChanged();
         }
 

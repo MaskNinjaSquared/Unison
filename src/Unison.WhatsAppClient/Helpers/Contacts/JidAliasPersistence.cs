@@ -183,20 +183,34 @@ namespace Unison.WhatsAppClient.Helpers
 
         async Task<IReadOnlyList<string>> IPersistJidAliasesHost.CollectDistinctChatJidsAsync()
         {
-            List<ChatItem> snapshot = null;
-            await _ui.RunAsync(() =>
+            // Strings only on the UI hop — ChatItem copies + Normal priority competed with tip
+            // paint (ui-stall lastFinished=CollectDistinctChatJidsAsync ~3s on Mobile).
+            List<string> rawJids = null;
+            Action collect = () =>
             {
-                snapshot = new List<ChatItem>(_chats.Chats.Count);
+                rawJids = new List<string>(_chats.Chats.Count);
                 foreach (ChatItem chat in _chats.Chats)
                 {
-                    if (chat != null)
+                    if (chat == null || string.IsNullOrWhiteSpace(chat.JID))
                     {
-                        snapshot.Add(chat);
+                        continue;
                     }
-                }
-            }).ConfigureAwait(false);
 
-            if (snapshot == null || snapshot.Count == 0)
+                    rawJids.Add(chat.JID);
+                }
+            };
+
+            ILowPriorityDispatcher lowUi = _ui as ILowPriorityDispatcher;
+            if (lowUi != null)
+            {
+                await lowUi.RunLowAsync(collect).ConfigureAwait(false);
+            }
+            else
+            {
+                await _ui.RunAsync(collect).ConfigureAwait(false);
+            }
+
+            if (rawJids == null || rawJids.Count == 0)
             {
                 return Array.Empty<string>();
             }
@@ -206,10 +220,10 @@ namespace Unison.WhatsAppClient.Helpers
             return await Task.Run(() =>
             {
                 var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                var list = new List<string>(snapshot.Count);
-                for (int i = 0; i < snapshot.Count; i++)
+                var list = new List<string>(rawJids.Count);
+                for (int i = 0; i < rawJids.Count; i++)
                 {
-                    string jid = JidHelper.Normalize(snapshot[i].JID);
+                    string jid = JidHelper.Normalize(rawJids[i]);
                     if (string.IsNullOrWhiteSpace(jid) || !set.Add(jid))
                     {
                         continue;

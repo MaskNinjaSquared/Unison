@@ -18,6 +18,7 @@ using System.Threading.Tasks;
 using Unison.Core.Contracts;
 using Unison.Core.Helpers;
 using Unison.Core.Helpers.Chats;
+using Unison.Core.Helpers.Ui;
 using Unison.Core.Models;
 using Unison.Core.State;
 using Unison.WhatsAppClient.Helpers;
@@ -51,14 +52,13 @@ namespace Unison.WhatsAppClient.Chats
         private readonly IStringResources _strings;
         private readonly IRuntimeDiagnostics _diagnostics;
         private readonly Func<bool> _preferFrugal;
-        private readonly Func<bool> _shouldPauseUiSlices;
+        private readonly IUiWorkHolds _uiHolds;
+        private readonly IUiWorkStage _uiStage;
 
-        /// <summary>
-        /// Poll while toast/deep-link or active chat-open owns the dispatcher so
-        /// tip-swapped PropertyChanged does not starve LoadMessages.
-        /// </summary>
-        private const int UiPausePollMs = 40;
-
+        /// <param name="uiHolds">
+        /// Gates for <see cref="UiWorkKind.TipSlice"/>: toast/deep-link, chat-open timeline,
+        /// hidden window, cold populate and offline tips. Null means never held.
+        /// </param>
         public ChatPreviewReconciler(
             IHistoryMessageStore historyMessages,
             JidAliasTable aliases,
@@ -68,8 +68,9 @@ namespace Unison.WhatsAppClient.Chats
             IStringResources strings,
             IRuntimeDiagnostics diagnostics = null,
             Func<bool> preferFrugal = null,
-            Func<bool> shouldPauseUiSlices = null,
-            ILowPriorityDispatcher uiLow = null)
+            IUiWorkHolds uiHolds = null,
+            ILowPriorityDispatcher uiLow = null,
+            IUiWorkStage uiStage = null)
         {
             _historyMessages = historyMessages ?? throw new ArgumentNullException(nameof(historyMessages));
             _aliases = aliases ?? throw new ArgumentNullException(nameof(aliases));
@@ -82,7 +83,8 @@ namespace Unison.WhatsAppClient.Chats
             _strings = strings ?? throw new ArgumentNullException(nameof(strings));
             _diagnostics = diagnostics;
             _preferFrugal = preferFrugal ?? (() => false);
-            _shouldPauseUiSlices = shouldPauseUiSlices ?? (() => false);
+            _uiHolds = uiHolds ?? new UiWorkHolds(() => UiHoldSnapshot.Clear);
+            _uiStage = uiStage;
         }
 
         /// <summary>
@@ -152,9 +154,11 @@ namespace Unison.WhatsAppClient.Chats
             }
 
             bool frugal = _preferFrugal();
-            // Item1=canonical, Item2=keys, Item3=sqlite page, Item4=memory tip (resolved off UI).
-            var newestByCanonical =
-                new List<Tuple<string, List<string>, List<HistoryMessage>, ChatMessage>>(work.Count);
+            string selfName = _strings.Get("Chat_SelfFallbackName", "You");
+            string yesterday = _strings.Get("Common_Yesterday", "Yesterday");
+            // Pick + strip are pure and resolve aliases: built here, off the dispatcher, so the
+            // UI hop only finds rows and applies (26b3431b: strip:* held Low for minutes).
+            var newestByCanonical = new List<TipPlan>(work.Count);
             for (int i = 0; i < work.Count; i++)
             {
                 string canonical = work[i].Item1;
@@ -185,8 +189,10 @@ namespace Unison.WhatsAppClient.Chats
                     DateTime.UtcNow);
 
                 // Always enqueue: memory tip alone can still fix the strip.
-                newestByCanonical.Add(Tuple.Create(canonical, keys, page, memoryTip));
+                newestByCanonical.Add(BuildPlan(canonical, page, memoryTip, selfName));
             }
+
+            IUiWaitRun holds = _uiHolds.BeginRun(tag);
 
             int uiSlice = frugal ? UiSliceSizeFrugal : UiSliceSizeGenerous;
             int updated = 0;
@@ -197,25 +203,32 @@ namespace Unison.WhatsAppClient.Chats
                 newestByCanonical.Count);
             for (int start = 0; start < newestByCanonical.Count; start += uiSlice)
             {
-                await WaitWhileUiSlicesPausedAsync(tag).ConfigureAwait(false);
+                await holds.WaitAsync(UiWorkKind.TipSlice).ConfigureAwait(false);
 
                 int sliceStart = start;
                 int sliceEnd = Math.Min(newestByCanonical.Count, start + uiSlice);
                 int sliceSwapped = 0;
                 int sliceKept = 0;
+                string sliceLabel = "reason=" + tag + "; slice=" + sliceStart + "-" + sliceEnd;
+                DiagWrite(
+                    "preview-tip",
+                    "ui-slice-posted",
+                    sliceLabel + "; priority=" + (preferNormalUi || _uiLow == null ? "normal" : "low"));
                 var sliceWatch = Stopwatch.StartNew();
                 await RunTipUiAsync(
                         () =>
                         {
+                            DiagWrite(
+                                "preview-tip",
+                                "ui-slice-enter",
+                                sliceLabel + "; queuedMs=" + sliceWatch.ElapsedMilliseconds);
                             for (int i = sliceStart; i < sliceEnd; i++)
                             {
                                 int swapped;
                                 int kept;
                                 updated += ApplyTip(
-                                    newestByCanonical[i].Item1,
-                                    newestByCanonical[i].Item2,
-                                    newestByCanonical[i].Item3,
-                                    newestByCanonical[i].Item4,
+                                    newestByCanonical[i],
+                                    yesterday,
                                     out swapped,
                                     out kept,
                                     bumpedRows);
@@ -269,6 +282,7 @@ namespace Unison.WhatsAppClient.Chats
                 await RunTipUiAsync(
                         () =>
                         {
+                            MarkStage(bumpedRows != null && bumpedRows.Count > 0 ? "reposition" : "sort");
                             if (bumpedRows != null && bumpedRows.Count > 0)
                             {
                                 for (int i = 0; i < bumpedRows.Count; i++)
@@ -303,34 +317,9 @@ namespace Unison.WhatsAppClient.Chats
             return _ui.RunAsync(action);
         }
 
-        private async Task WaitWhileUiSlicesPausedAsync(string reason)
+        private void MarkStage(string stage)
         {
-            if (!_shouldPauseUiSlices())
-            {
-                return;
-            }
-
-            DiagWrite(
-                "preview-tip",
-                "ui-slice-paused",
-                "reason=" + reason + "; waiting=priority-or-hidden");
-
-            DateTime deadline = DateTime.UtcNow + ChatTimelineOpenPriority.UiSlicePauseMaxWait;
-            while (_shouldPauseUiSlices())
-            {
-                if (DateTime.UtcNow >= deadline)
-                {
-                    DiagWrite(
-                        "preview-tip",
-                        "ui-slice-pause-timeout",
-                        "reason=" + reason +
-                        "; budgetMs=" +
-                        (int)ChatTimelineOpenPriority.UiSlicePauseMaxWait.TotalMilliseconds);
-                    return;
-                }
-
-                await Task.Delay(UiPausePollMs).ConfigureAwait(false);
-            }
+            _uiStage?.Mark(stage);
         }
 
         private async Task<List<HistoryMessage>> ReadStoredPageAsync(string canonical, List<string> keys)
@@ -355,23 +344,20 @@ namespace Unison.WhatsAppClient.Chats
         /// Returns how many rows changed; <paramref name="swapped"/> / <paramref name="kept"/>
         /// feed the aggregated slice diagnostics.
         /// </summary>
-        private int ApplyTip(
+        /// <summary>
+        /// Off the dispatcher. Picks the newest tip (SQLite page vs memory) and builds its strip.
+        /// </summary>
+        private TipPlan BuildPlan(
             string canonical,
-            List<string> keys,
             List<HistoryMessage> page,
             ChatMessage memoryTip,
-            out int swapped,
-            out int kept,
-            List<ChatItem> bumpedRows = null)
+            string selfName)
         {
-            swapped = 0;
-            kept = 0;
             ChatMessage stored = ChatPreviewTip.PickStoredTip(page, DateTime.UtcNow);
-            // memoryTip resolved off the UI thread (see ReconcileAsync).
             ChatMessage best = ChatPreviewTip.PickNewer(stored, memoryTip);
             if (best == null)
             {
-                return 0;
+                return new TipPlan(canonical, null, null, false);
             }
 
             bool isGroup = canonical.EndsWith("@g.us", StringComparison.OrdinalIgnoreCase);
@@ -380,19 +366,44 @@ namespace Unison.WhatsAppClient.Chats
             ChatListStrip strip = ChatListStrip.FromMessage(
                 best,
                 isGroup,
-                _strings.Get("Chat_SelfFallbackName", "You"),
+                selfName,
                 _aliases.PeekCanonicalJid(best.ParticipantJid));
-            string yesterday = _strings.Get("Common_Yesterday", "Yesterday");
+            return new TipPlan(canonical, best, strip, isGroup);
+        }
 
+        private int ApplyTip(
+            TipPlan plan,
+            string yesterday,
+            out int swapped,
+            out int kept,
+            List<ChatItem> bumpedRows = null)
+        {
+            swapped = 0;
+            kept = 0;
+            string canonical = plan.Canonical;
+            string maskedJid = DiagnosticJidMask.Apply(canonical);
+            MarkStage("tip:" + maskedJid);
+            ChatMessage best = plan.Best;
+            ChatListStrip strip = plan.Strip;
+            if (best == null || strip == null)
+            {
+                return 0;
+            }
+
+            bool isGroup = plan.IsGroup;
             int updated = 0;
+            int rowIndex = 0;
+            MarkStage("find:" + maskedJid);
             foreach (var chat in _chatRows.FindConversation(canonical))
             {
+                rowIndex++;
                 // Tip from DB/memory by TimestampUtc; swap when MessageId differs (or body).
                 if (ChatPreviewTip.IsAlreadyShowing(chat, best, strip.Preview))
                 {
                     // Same tip body — still promote a bubble-resolved author onto the strip.
                     if (isGroup)
                     {
+                        MarkStage("author-parts:" + maskedJid + "#" + rowIndex);
                         LiveChatPreviewApplier.ApplyAuthorParts(
                             chat,
                             strip.ParticipantJid,
@@ -406,6 +417,7 @@ namespace Unison.WhatsAppClient.Chats
                 // force: tip was already chosen as newest by TimestampUtc (DB+RAM).
                 // A strip poisoned by Unspecified→ToUniversalTime (+3h in Brazil) must
                 // not win the stale gate and keep an older Last Message.
+                MarkStage("apply:" + maskedJid + "#" + rowIndex);
                 bool applied = LiveChatPreviewApplier.ApplyIfNewer(
                     chat,
                     strip.Preview,
@@ -425,6 +437,7 @@ namespace Unison.WhatsAppClient.Chats
                 // history_message without a WhatsApp history resync when the tip already matches.
                 if (!applied && ChatPreviewTip.ShouldStampMissingMessageId(chat, best))
                 {
+                    MarkStage("stamp:" + maskedJid + "#" + rowIndex);
                     chat.LastMessageId = best.Id;
                     applied = true;
                 }
@@ -442,8 +455,11 @@ namespace Unison.WhatsAppClient.Chats
                 {
                     kept++;
                 }
+
+                MarkStage("find-next:" + maskedJid + "#" + rowIndex);
             }
 
+            MarkStage("done:" + maskedJid);
             return updated;
         }
 
@@ -465,6 +481,25 @@ namespace Unison.WhatsAppClient.Chats
             }
 
             return new List<string>(ChatPinStoreKeys.For(jid, _aliases.GetCanonicalJid(jid), alias));
+        }
+
+        private sealed class TipPlan
+        {
+            public TipPlan(string canonical, ChatMessage best, ChatListStrip strip, bool isGroup)
+            {
+                Canonical = canonical;
+                Best = best;
+                Strip = strip;
+                IsGroup = isGroup;
+            }
+
+            public string Canonical { get; }
+
+            public ChatMessage Best { get; }
+
+            public ChatListStrip Strip { get; }
+
+            public bool IsGroup { get; }
         }
     }
 }

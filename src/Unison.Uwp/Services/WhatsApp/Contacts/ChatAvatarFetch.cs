@@ -58,7 +58,11 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             _reader = new GroupMetadataReader(jids);
         }
 
-        public async Task FetchAndApplyAsync(ChatItem chat, CancellationToken token, bool fetchHighQuality)
+        public async Task FetchAndApplyAsync(
+            ChatItem chat,
+            CancellationToken token,
+            bool fetchHighQuality,
+            bool revalidate = false)
         {
             if (chat == null)
             {
@@ -75,7 +79,8 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             _jids.TryGetAlias(chat.JID, out alias);
             var result = await _avatars.FetchPreviewAsync(
                 ChatPinStoreKeys.For(chat.JID, _jids.GetCanonicalJid(chat.JID), alias),
-                token);
+                token,
+                revalidate);
             await ApplyAsync(chat, result, token);
             if (fetchHighQuality)
             {

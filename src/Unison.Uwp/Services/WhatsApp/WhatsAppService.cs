@@ -597,6 +597,24 @@ namespace Unison.Uwp.Services.WhatsApp
                 snapshot.DecodedNodeCount = socket.DecodedNodeCount;
             }
 
+            LidMappingStore lidStore = _lidMappings;
+            if (lidStore != null)
+            {
+                snapshot.LidCacheEntries = lidStore.MemoryCacheCount;
+                snapshot.LidCacheMaxLockWaitMs = lidStore.MemoryCacheMaxLockWaitMs;
+            }
+
+            snapshot.UiHoldTimeoutCount = RuntimeDiagnosticsService.Instance.UiHoldTimeoutCount;
+            try
+            {
+                IChatService chatsFacade = ChatFacade;
+                snapshot.OfflineTipBusy = chatsFacade != null && chatsFacade.IsOfflineReplayTipBusy;
+            }
+            catch
+            {
+                snapshot.OfflineTipBusy = false;
+            }
+
             try
             {
                 snapshot.LoadedChatCount = Chats.Count;

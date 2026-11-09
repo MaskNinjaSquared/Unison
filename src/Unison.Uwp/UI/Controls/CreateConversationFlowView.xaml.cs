@@ -310,7 +310,7 @@ namespace Unison.Uwp.UI.Controls
             _emojiTarget = field;
             ensureCatalog?.Invoke();
             dock.Visibility = Visibility.Visible;
-            field.FocusInput();
+            field.DismissSoftKeyboard();
         }
 
         private void CommunityEmojiPanel_GlyphPicked(object sender, string glyph) =>

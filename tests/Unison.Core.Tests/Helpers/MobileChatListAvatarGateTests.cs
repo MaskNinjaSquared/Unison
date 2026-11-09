@@ -39,9 +39,9 @@ namespace Unison.Core.Tests.Helpers
         }
 
         [Fact]
-        public void Desktop_does_not_use_open_chat_refresh_gate()
+        public void Desktop_also_revalidates_when_opening_another_chat()
         {
-            Assert.False(MobileChatListAvatarGate.AllowRefreshOnChatOpen(
+            Assert.True(MobileChatListAvatarGate.AllowRefreshOnChatOpen(
                 isMobile: false,
                 chatChanged: true,
                 hasChat: true));

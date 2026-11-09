@@ -2,6 +2,20 @@
 
 Newest first.
 
+## Unsupported (512 MB) — mild pacing retune
+
+`UnsupportedSyncWorkload` quiet floors match Low (4s/7s) with the longer
+catch-up abort (50s/3); avatar/roster/name delays and enrich quiet step toward
+Low without raising batch sizes, caches, or `MaxFullHistoryCatchUpRounds`.
+Always-frugal for `DeviceCategory.Unsupported` stays. Dump `01c59887` (~79/185).
+
+## Offline tip — PreferFrugal gate only during replay drain
+
+Defer + post-flush quiet apply only while `SyncWorkGate.IsReplayDrainActive`.
+After settle, late Append paints progressively; backstop keeps its first
+deadline under flood; send echo (`Append` + from-me) uses the live tip path.
+Health shows `UI hold timeouts / offline-tip busy`. Wiki: [UI work scheduling](Ui-Work-Scheduling).
+
 ## Logout — QR without cold-loading SignalKeys
 
 `ClearSession` called `FileKeyStore.InitializeAsync` before wipe, scanning ~1k

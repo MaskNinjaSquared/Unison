@@ -5,6 +5,7 @@
 // Hosts that own an emoji dock subscribe to EmojiInvoked.
 // =============================================================================
 using System;
+using Windows.UI.ViewManagement;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
 
@@ -144,11 +145,13 @@ namespace Unison.Uwp.UI.Controls
                 caret = current.Length;
             }
 
+            // Drop composer focus before SetText — Mobile reopens SIP if the box stays focused.
+            DismissSoftKeyboard(EmojiButton);
+
             string next = current.Insert(caret, emoji);
             Text = next;
             InputBox.BoundText = next;
             InputBox.CaretIndex = caret + emoji.Length;
-            InputBox.FocusProgrammatic();
         }
 
         public void FocusInput()
@@ -156,9 +159,30 @@ namespace Unison.Uwp.UI.Controls
             InputBox?.FocusProgrammatic();
         }
 
+        /// <summary>Drops composer focus and hides the Mobile SIP (emoji dock hosts).</summary>
+        public void DismissSoftKeyboard()
+        {
+            DismissSoftKeyboard(EmojiButton);
+        }
+
         private void EmojiButton_Click(object sender, RoutedEventArgs e)
         {
+            DismissSoftKeyboard(sender as Control);
             EmojiInvoked?.Invoke(this, EventArgs.Empty);
+        }
+
+        private static void DismissSoftKeyboard(Control focusTarget)
+        {
+            // TryHide alone fails while a RichEditBox still has focus on Mobile.
+            focusTarget?.Focus(FocusState.Programmatic);
+            try
+            {
+                InputPane.GetForCurrentView()?.TryHide();
+            }
+            catch
+            {
+                // View may be tearing down.
+            }
         }
     }
 }

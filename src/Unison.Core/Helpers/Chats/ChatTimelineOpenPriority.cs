@@ -5,6 +5,7 @@
 // and pause tip-reconcile UI slices while the conversation timeline loads.
 // =============================================================================
 using System;
+using Unison.Core.Helpers.Ui;
 
 namespace Unison.Core.Helpers.Chats
 {
@@ -65,11 +66,36 @@ namespace Unison.Core.Helpers.Chats
             bool listColdPopulate = false,
             bool offlineTipBusy = false)
         {
-            return deepLinkListHeld ||
-                   timelineLoadPriorityHeld ||
-                   !windowVisible ||
-                   listColdPopulate ||
-                   offlineTipBusy;
+            return DescribeTipReconcilePause(
+                       deepLinkListHeld,
+                       timelineLoadPriorityHeld,
+                       windowVisible,
+                       listColdPopulate,
+                       offlineTipBusy) != null;
+        }
+
+        /// <summary>
+        /// Same rule as <see cref="ShouldPauseTipReconcileUi"/>, naming the gate that holds
+        /// tip slices for the journal. Null when nothing pauses them.
+        /// Delegates to <see cref="UiWorkHoldPolicy"/> (<see cref="UiWorkKind.TipSlice"/>).
+        /// </summary>
+        public static string DescribeTipReconcilePause(
+            bool deepLinkListHeld,
+            bool timelineLoadPriorityHeld,
+            bool windowVisible = true,
+            bool listColdPopulate = false,
+            bool offlineTipBusy = false)
+        {
+            return UiWorkHoldPolicy.Describe(
+                UiWorkKind.TipSlice,
+                new UiHoldSnapshot
+                {
+                    DeepLinkHeld = deepLinkListHeld,
+                    TimelineHeld = timelineLoadPriorityHeld,
+                    WindowVisible = windowVisible,
+                    ColdPopulate = listColdPopulate,
+                    OfflineTipBusy = offlineTipBusy,
+                });
         }
 
         /// <summary>

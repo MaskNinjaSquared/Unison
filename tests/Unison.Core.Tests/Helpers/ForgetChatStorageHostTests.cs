@@ -175,12 +175,9 @@ namespace Unison.Core.Tests.Helpers
                 string beforeMessageId = null) =>
                 Task.FromResult<IReadOnlyList<HistoryMessage>>(Array.Empty<HistoryMessage>());
 
-            public Task<IReadOnlyList<HistoryMessage>> GetPinnedForChatAsync(
-                string chatJid,
-                int maxCount = 3) =>
-                Task.FromResult<IReadOnlyList<HistoryMessage>>(Array.Empty<HistoryMessage>());
-
-            public Task<IReadOnlyList<HistoryMessage>> GetPendingOutgoingAsync(string chatJid) =>
+            public Task<IReadOnlyList<HistoryMessage>> GetTimelineExtrasForChatKeysAsync(
+                IReadOnlyList<string> chatJids,
+                int maxPinned = 3) =>
                 Task.FromResult<IReadOnlyList<HistoryMessage>>(Array.Empty<HistoryMessage>());
 
             public Task<IReadOnlyList<HistoryMessage>> GetMediaForChatAsync(

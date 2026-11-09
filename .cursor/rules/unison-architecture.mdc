@@ -14,4 +14,6 @@ Read `docs/wiki/Home.md` + `docs/wiki/Architecture.md` before editing. Coding sp
 - `ConnectionHandler` never calls use cases and never holds chats. Reconnect stays in the host.
 - Broker transfer on `SocketBridge` goes through `ConnectionHandler` and answers true only when ownership moved. No cold restore. Never fake a handoff.
 
+UI waits: `IUiWorkHolds.BeginRun(...).WaitAsync(kind)`, never a new `while (gate) Task.Delay` loop; storms via `KeyedLatestCoalescer` (`docs/wiki/Ui-Work-Scheduling.md`).
+
 DI: register in `App.ConfigureServices`. New services are interface (Core) + implementation (UWP) + constructor injection. No new `Foo.Instance`.

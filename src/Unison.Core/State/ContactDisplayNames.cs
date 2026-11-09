@@ -44,6 +44,9 @@ namespace Unison.Core.State
         private readonly ContactLabelSanitizer _labels;
         private readonly PushNameLookup _pushNames;
 
+        private const int MaxWarmedRemembered = 4096;
+
+        private readonly HashSet<string> _warmed = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         private Func<SelfNameInputs> _self = () => default(SelfNameInputs);
         private Action<ContactLabelResult, string> _onLabelDecision;
         private string _lastSelfNameForLog;
@@ -62,6 +65,7 @@ namespace Unison.Core.State
             _selfMarkers = selfMarkers ?? throw new ArgumentNullException(nameof(selfMarkers));
             _labels = new ContactLabelSanitizer(selfMarkers);
             _pushNames = new PushNameLookup(pushNames, aliases, _labels, (result, jid) => _onLabelDecision?.Invoke(result, jid));
+            _people.PersonChanged += OnPersonChanged;
         }
 
         /// <summary>
@@ -230,11 +234,28 @@ namespace Unison.Core.State
             }
         }
 
+        /// <summary>
+        /// One disk read per address until the person changes: every render of an unknown
+        /// contact used to queue another lookup for a row the store had already answered.
+        /// </summary>
         private async Task WarmPersonAsync(string jid)
         {
             if (string.IsNullOrWhiteSpace(jid))
             {
                 return;
+            }
+
+            lock (_warmed)
+            {
+                if (_warmed.Count >= MaxWarmedRemembered)
+                {
+                    _warmed.Clear();
+                }
+
+                if (!_warmed.Add(jid))
+                {
+                    return;
+                }
             }
 
             try
@@ -243,7 +264,30 @@ namespace Unison.Core.State
             }
             catch (Exception ex)
             {
+                lock (_warmed)
+                {
+                    _warmed.Remove(jid);
+                }
+
                 Debug.WriteLine("[ContactDisplayNames] Person warm failed for " + jid + ": " + ex.Message);
+            }
+        }
+
+        private void OnPersonChanged(object sender, string jid)
+        {
+            if (string.IsNullOrWhiteSpace(jid))
+            {
+                return;
+            }
+
+            lock (_warmed)
+            {
+                _warmed.Remove(jid);
+                string normalized = JidHelper.Normalize(jid);
+                if (!string.IsNullOrEmpty(normalized))
+                {
+                    _warmed.Remove(normalized);
+                }
             }
         }
 

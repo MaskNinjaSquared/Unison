@@ -74,6 +74,69 @@ namespace Unison.WhatsAppClient.Helpers
         }
 
         /// <summary>
+        /// Stamps list order for a group that has no tip yet (join / create notify).
+        /// Creates a catalogue row when missing so the chat does not sink to MinValue.
+        /// </summary>
+        public Task SeedEmptyListOrderAsync(
+            string groupJid,
+            long creationUnixSeconds = 0,
+            string displayName = null,
+            bool createIfMissing = true)
+        {
+            if (string.IsNullOrWhiteSpace(groupJid))
+            {
+                return Task.CompletedTask;
+            }
+
+            string canonical = _jids.GetCanonicalJid(groupJid);
+            return _ui.RunAsync(() =>
+            {
+                List<ChatItem> rows = _rows.FindConversation(canonical);
+                ChatItem chat = rows != null && rows.Count > 0 ? rows[0] : null;
+                DateTime now = _utcNow();
+                DateTime? order = EmptyChatOrderTimestamp.Resolve(
+                    chat?.LastMessageTimestampUtc,
+                    groupCreationUnixSeconds: creationUnixSeconds,
+                    fallbackUtc: now);
+
+                if (chat == null)
+                {
+                    if (!createIfMissing || !order.HasValue)
+                    {
+                        return;
+                    }
+
+                    string name = !string.IsNullOrWhiteSpace(displayName)
+                        ? displayName.Trim()
+                        : canonical;
+                    chat = NewChatListSeed.Build(
+                        canonical,
+                        name,
+                        ChatKind.Group,
+                        order.Value,
+                        yesterdayLabel: "Yesterday");
+                    AddCatalogueRow(chat);
+                    _rows.Invalidate();
+                    _catalog.Schedule();
+                    return;
+                }
+
+                if (chat.LastMessageTimestampUtc.HasValue || !order.HasValue)
+                {
+                    return;
+                }
+
+                chat.LastMessageTimestampUtc = order;
+                if (chat.LeftGroup)
+                {
+                    chat.LeftGroup = false;
+                }
+
+                _catalog.Schedule();
+            });
+        }
+
+        /// <summary>
         /// Baileys <c>chat.readOnly</c>: the account left or was removed, or joined again.
         /// </summary>
         public Task SetNoLongerParticipantAsync(string groupJid, bool left)
@@ -879,6 +942,15 @@ namespace Unison.WhatsAppClient.Helpers
             if (metadata.MemberCount > 0)
             {
                 chat.GroupMemberCount = metadata.MemberCount;
+            }
+
+            if (!chat.LastMessageTimestampUtc.HasValue && metadata.CreationUnixSeconds > 0)
+            {
+                DateTime? order = EmptyChatOrderTimestamp.FromUnixSeconds(metadata.CreationUnixSeconds);
+                if (order.HasValue)
+                {
+                    chat.LastMessageTimestampUtc = order;
+                }
             }
 
             if (includeRoster)

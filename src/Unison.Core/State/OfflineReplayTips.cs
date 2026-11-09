@@ -24,6 +24,9 @@ namespace Unison.Core.State
     {
         public const string ProgressiveReason = "replay-progressive";
 
+        /// <summary>Settle-like flush when deferred tips saw no settle flush.</summary>
+        public const string BackstopReason = "replay-backstop";
+
         private readonly OfflineReplaySummaryBook _book = new OfflineReplaySummaryBook();
         private readonly SemaphoreSlim _flushLock = new SemaphoreSlim(1, 1);
         private readonly IJidResolver _jids;
@@ -33,6 +36,9 @@ namespace Unison.Core.State
         private readonly TimeSpan _steadyThrottle;
         private readonly Func<TimeSpan> _postFlushQuiet;
         private readonly Func<bool> _deferTipPaintUntilSettle;
+        private readonly TimeSpan? _deferredBackstop;
+        private readonly object _backstopGate = new object();
+        private Timer _backstop;
         private int _progressiveFlushed;
         private int _flushing;
         private long _quietUntilUtcTicks;
@@ -51,6 +57,12 @@ namespace Unison.Core.State
         /// When true (PreferFrugal), Record keeps tips in the book and does not arm the
         /// progressive timer — settle <see cref="FlushAsync"/> paints once after persist.
         /// </param>
+        /// <param name="deferredBackstop">
+        /// Quiet window after the last deferred Record before the book is painted anyway.
+        /// A late offline batch (after the settle flush already ran) otherwise stayed pending
+        /// until the next connection and held the offline-tip gate (26b3431b: ~16 min).
+        /// Null disables it (tests).
+        /// </param>
         public OfflineReplayTips(
             IJidResolver jids,
             IOfflineReplayHost host,
@@ -58,8 +70,12 @@ namespace Unison.Core.State
             TimeSpan throttle,
             TimeSpan? steadyThrottle = null,
             Func<TimeSpan> postFlushQuiet = null,
-            Func<bool> deferTipPaintUntilSettle = null)
+            Func<bool> deferTipPaintUntilSettle = null,
+            TimeSpan? deferredBackstop = null)
         {
+            _deferredBackstop = deferredBackstop.HasValue && deferredBackstop.Value > TimeSpan.Zero
+                ? deferredBackstop
+                : null;
             _jids = jids ?? throw new ArgumentNullException(nameof(jids));
             _host = host ?? throw new ArgumentNullException(nameof(host));
             _apply = apply ?? throw new ArgumentNullException(nameof(apply));
@@ -139,6 +155,57 @@ namespace Unison.Core.State
                 Volatile.Read(ref _progressiveFlushed) == 0 ? _throttle : _steadyThrottle,
                 onDue,
                 request.HasCitation && incrementUnread);
+
+            if (deferPaint)
+            {
+                ArmBackstop();
+            }
+        }
+
+        /// <summary>
+        /// First deferred Record arms the backstop. Later Records join the book but do not
+        /// push the deadline — a continuous Append flood must not hold IsBusy forever
+        /// (7a57ffb9: replay-backstop + quiet cycling the offline-tip gate).
+        /// </summary>
+        private void ArmBackstop()
+        {
+            if (!_deferredBackstop.HasValue)
+            {
+                return;
+            }
+
+            int dueMs = (int)_deferredBackstop.Value.TotalMilliseconds;
+            lock (_backstopGate)
+            {
+                if (_backstop == null)
+                {
+                    _backstop = new Timer(_ => OnBackstopElapsed(), null, dueMs, Timeout.Infinite);
+                }
+            }
+        }
+
+        private void DisarmBackstop()
+        {
+            lock (_backstopGate)
+            {
+                if (_backstop != null)
+                {
+                    _backstop.Dispose();
+                    _backstop = null;
+                }
+            }
+        }
+
+        private void OnBackstopElapsed()
+        {
+            DisarmBackstop();
+            FlushAsync(BackstopReason).ContinueWith(finished =>
+            {
+                if (finished.Exception != null)
+                {
+                    _host.ReportFlushFailure(BackstopReason, finished.Exception.GetBaseException());
+                }
+            });
         }
 
         public async Task FlushAsync(string reason)
@@ -159,6 +226,7 @@ namespace Unison.Core.State
                     ref _progressiveFlushed,
                     string.Equals(reason, ProgressiveReason, StringComparison.Ordinal) ? 1 : 0);
                 snapshot = _book.Take();
+                DisarmBackstop();
                 if (snapshot == null)
                 {
                     return;
@@ -175,6 +243,10 @@ namespace Unison.Core.State
                 if (snapshot != null)
                 {
                     _book.Restore(snapshot);
+                    if (_deferTipPaintUntilSettle())
+                    {
+                        ArmBackstop();
+                    }
                 }
 
                 throw;

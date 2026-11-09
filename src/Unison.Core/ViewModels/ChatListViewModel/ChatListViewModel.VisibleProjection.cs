@@ -86,6 +86,19 @@ namespace Unison.Core.ViewModels
                 return;
             }
 
+            // Frugal: a budgeted Continue is draining Moves with a cached projection. Alias /
+            // name storms used to cancel it here, force BuildVisibleRefreshSource again, and
+            // stall (~3s lastFinished=ScheduleRefreshVisibleChatsContinue). Mark dirty; the
+            // Incomplete=false exit already schedules one coalesced rebuild.
+            if (PreferFrugalUi &&
+                _pendingVisibleRefreshSource != null &&
+                _refreshContinueCts != null &&
+                !_refreshContinueCts.IsCancellationRequested)
+            {
+                _visibleOrderDirty = true;
+                return;
+            }
+
             _refreshCts?.Cancel();
             _refreshContinueCts?.Cancel();
             // A fresh schedule invalidates any in-flight continue; drop the cached order so the

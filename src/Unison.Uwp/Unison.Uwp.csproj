@@ -298,6 +298,7 @@
     <Compile Include="Client\SocketBridge.cs" />
     <Compile Include="Client\QuotedMessageStub.cs" />
     <Compile Include="Client\SocketContracts.cs" />
+    <Compile Include="Client\ProfilePictureQueryCache.cs" />
     <Compile Include="Client\AuthStore.cs" />
     <Compile Include="Client\FileKeyStore.cs" />
     <Compile Include="Client\SessionLogger.cs" />

@@ -12,9 +12,10 @@
 // (ea23bb7b: offline-tip-heal often swapped=0 while still occupying Normal for
 // hundreds of ms under alias load). PreferFrugal skips heal until settle.
 //
-// PreferFrugal also defers all tip UI until settle (persist → quiet → one chunked
-// paint). Progressive mid-replay paint was the open-app freeze: list hops every
-// ~1s while the pump still drained offline.
+// PreferFrugal defers tip UI only while the offline replay drain is active
+// (persist → quiet → one chunked paint). Mid-replay progressive was the open-app
+// freeze. After settle, late Append must not keep the offline-tip gate busy via
+// backstop+quiet (7a57ffb9): progressive / live tip paths take over.
 // =============================================================================
 using System;
 
@@ -30,10 +31,33 @@ namespace Unison.Core.Helpers.Chats
         public static bool SkipCatalogueReposition(bool preferFrugal) => preferFrugal;
 
         /// <summary>
-        /// PreferFrugal: keep tips in the book only; paint once on settle
-        /// (<c>offline-complete</c> / explicit flush), not on the progressive timer.
+        /// PreferFrugal + active replay drain: keep tips in the book only; paint once on
+        /// settle (<c>offline-complete</c> / explicit flush), not on the progressive timer.
+        /// After drain ends, late Append paints progressively / live.
         /// </summary>
-        public static bool DeferTipPaintUntilSettle(bool preferFrugal) => preferFrugal;
+        public static bool DeferTipPaintUntilSettle(bool preferFrugal, bool replayDrainActive) =>
+            preferFrugal && replayDrainActive;
+
+        /// <summary>
+        /// Post-flush IsBusy quiet. Zero after PreferFrugal settle so SilentNames /
+        /// GroupListing are not parked by every late Append tip flush.
+        /// </summary>
+        public static TimeSpan TipBusyQuietAfterFlush(bool preferFrugal, bool replayDrainActive)
+        {
+            if (preferFrugal && !replayDrainActive)
+            {
+                return TimeSpan.Zero;
+            }
+
+            return TipUiPipelineGate.PostFlushQuiet(preferFrugal);
+        }
+
+        /// <summary>
+        /// Wire Append is offline backlog; send echo also uses Append but must take the
+        /// live tip path (not the offline tip book).
+        /// </summary>
+        public static bool IsOfflineEnvelope(bool upsertIsAppend, bool fromMe) =>
+            upsertIsAppend && !fromMe;
 
         /// <summary>
         /// PreferFrugal progressive flushes already painted the tip; settle still heals.

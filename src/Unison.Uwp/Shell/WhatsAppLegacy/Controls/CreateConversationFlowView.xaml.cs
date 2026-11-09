@@ -326,7 +326,7 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Controls
             _emojiTarget = field;
             ensureCatalog?.Invoke();
             dock.Visibility = Visibility.Visible;
-            field.FocusInput();
+            field.DismissSoftKeyboard();
         }
 
         private void CommunityEmojiPanel_GlyphPicked(object sender, string glyph) =>

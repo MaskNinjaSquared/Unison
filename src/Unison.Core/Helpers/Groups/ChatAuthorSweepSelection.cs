@@ -50,7 +50,7 @@ namespace Unison.Core.Helpers
                     continue;
                 }
 
-                string canonical = jids != null ? jids.GetCanonicalJid(chat.JID) : null;
+                string canonical = jids != null ? jids.PeekCanonicalJid(chat.JID) : null;
                 if (!string.IsNullOrWhiteSpace(canonical))
                 {
                     seen.Add(canonical);
@@ -86,7 +86,7 @@ namespace Unison.Core.Helpers
 
                 IndexDirectIfPresent(names, findChat, tip, jids);
 
-                string canonical = jids != null ? jids.GetCanonicalJid(tip) : null;
+                string canonical = jids != null ? jids.PeekCanonicalJid(tip) : null;
                 if (!string.IsNullOrWhiteSpace(canonical) &&
                     !string.Equals(canonical, tip, StringComparison.OrdinalIgnoreCase))
                 {
@@ -128,7 +128,7 @@ namespace Unison.Core.Helpers
             string raw = JidHelper.Normalize(chat.JID) ?? chat.JID;
             IndexName(names, raw, label);
 
-            string canonical = jids != null ? jids.GetCanonicalJid(chat.JID) : raw;
+            string canonical = jids != null ? jids.PeekCanonicalJid(chat.JID) : raw;
             if (!string.IsNullOrWhiteSpace(canonical))
             {
                 IndexName(names, canonical, label);

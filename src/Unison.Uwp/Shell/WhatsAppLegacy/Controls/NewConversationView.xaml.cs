@@ -109,6 +109,12 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Controls
                 return;
             }
 
+            if (string.Equals(e.PropertyName, nameof(NewConversationViewModel.IsCatalogLoading), StringComparison.Ordinal))
+            {
+                TryPromoteOptionsIntoListHeader();
+                return;
+            }
+
             if (string.Equals(e.PropertyName, nameof(NewConversationViewModel.IsContactsSurfaceReady), StringComparison.Ordinal) ||
                 string.Equals(e.PropertyName, nameof(NewConversationViewModel.GroupedContacts), StringComparison.Ordinal) ||
                 string.Equals(e.PropertyName, nameof(NewConversationViewModel.JumpTiles), StringComparison.Ordinal))
@@ -158,6 +164,37 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Controls
 
             EnsureContactsZoom();
             _contactsZoom?.Bind(ViewModel.GroupedContacts, ViewModel.JumpTiles);
+            TryPromoteOptionsIntoListHeader();
+        }
+
+        /// <summary>
+        /// After the A–Z host is warm, move the action tiles into the list header so short
+        /// viewports can scroll past the tiles and reach contacts (keeps search sticky).
+        /// </summary>
+        private void TryPromoteOptionsIntoListHeader()
+        {
+            if (ViewModel == null || ViewModel.IsCatalogLoading)
+            {
+                return;
+            }
+
+            if (ContactsList == null || OptionsChromeHost == null)
+            {
+                return;
+            }
+
+            if (ReferenceEquals(ContactsList.Header, OptionsChromeHost))
+            {
+                return;
+            }
+
+            var parent = OptionsChromeHost.Parent as Panel;
+            if (parent != null)
+            {
+                parent.Children.Remove(OptionsChromeHost);
+            }
+
+            ContactsList.Header = OptionsChromeHost;
         }
 
         /// <summary>Catalog (search + tiles + contacts) and the create wizard never share the screen.</summary>

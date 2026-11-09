@@ -8,13 +8,15 @@ using SQLite;
 using Unison.Core.Contracts;
 using Unison.Core.Helpers;
 using Unison.Core.Models;
+using Unison.Core.State;
 using Unison.Uwp.Data.Entities;
 using Windows.Storage;
 
 namespace Unison.Uwp.Data
 {
     /// <summary>
-    /// SQLite group roster cache (same <c>unison.db</c> as Person / previews).
+    /// SQLite group roster cache (same <c>unison.db</c> as Person / previews), with the
+    /// last read roster of recently used groups held in RAM until that group is written.
     /// </summary>
     public sealed class GroupRosterStore : IGroupRosterStore
     {
@@ -22,9 +24,17 @@ namespace Unison.Uwp.Data
 
         private readonly SemaphoreSlim _initLock = new SemaphoreSlim(1, 1);
         private readonly SemaphoreSlim _writeLock = new SemaphoreSlim(1, 1);
+        private readonly VersionedSnapshotCache<List<GroupRosterMemberRow>> _rosters;
 
         private SQLiteAsyncConnection _connection;
         private bool _initialized;
+
+        public GroupRosterStore(SyncWorkloadStrategy workload)
+        {
+            _rosters = new VersionedSnapshotCache<List<GroupRosterMemberRow>>(
+                workload?.GroupRosterMemoryMaxGroups ?? 16,
+                rows => new List<GroupRosterMemberRow>(rows));
+        }
 
         public async Task InitializeAsync()
         {
@@ -79,6 +89,7 @@ namespace Unison.Uwp.Data
             }
             finally
             {
+                _rosters.Invalidate(groupKey);
                 _writeLock.Release();
             }
         }
@@ -99,6 +110,7 @@ namespace Unison.Uwp.Data
             }
             finally
             {
+                _rosters.Invalidate(groupKey);
                 _writeLock.Release();
             }
         }
@@ -140,6 +152,7 @@ namespace Unison.Uwp.Data
             }
             finally
             {
+                _rosters.Invalidate(groupKey);
                 _writeLock.Release();
             }
         }
@@ -150,6 +163,21 @@ namespace Unison.Uwp.Data
             string memberKey = NormalizeJid(memberJid);
             if (string.IsNullOrEmpty(groupKey) || string.IsNullOrEmpty(memberKey))
             {
+                return null;
+            }
+
+            List<GroupRosterMemberRow> cached;
+            if (_rosters.TryGet(groupKey, out cached))
+            {
+                string id = GroupRosterMemberRow.MakeId(groupKey, memberKey);
+                for (int i = 0; i < cached.Count; i++)
+                {
+                    if (string.Equals(cached[i].Id, id, StringComparison.Ordinal))
+                    {
+                        return ToMember(cached[i]);
+                    }
+                }
+
                 return null;
             }
 
@@ -238,14 +266,32 @@ namespace Unison.Uwp.Data
                 return Array.Empty<GroupMember>();
             }
 
-            await EnsureInitializedAsync().ConfigureAwait(false);
+            List<GroupRosterMemberRow> rows;
+            if (!_rosters.TryGet(groupKey, out rows))
+            {
+                await EnsureInitializedAsync().ConfigureAwait(false);
+                long ticket = _rosters.BeginRead(groupKey);
+                List<GroupRosterMemberRow> stored = await _connection.Table<GroupRosterMemberRow>()
+                    .Where(r => r.GroupJid == groupKey)
+                    .ToListAsync()
+                    .ConfigureAwait(false);
 
-            List<GroupRosterMemberRow> rows = await _connection.Table<GroupRosterMemberRow>()
-                .Where(r => r.GroupJid == groupKey)
-                .ToListAsync()
-                .ConfigureAwait(false);
+                rows = new List<GroupRosterMemberRow>(stored?.Count ?? 0);
+                if (stored != null)
+                {
+                    for (int i = 0; i < stored.Count; i++)
+                    {
+                        if (stored[i] != null && !string.IsNullOrWhiteSpace(stored[i].MemberJid))
+                        {
+                            rows.Add(stored[i]);
+                        }
+                    }
+                }
 
-            if (rows == null || rows.Count == 0)
+                _rosters.Store(groupKey, ticket, rows);
+            }
+
+            if (rows.Count == 0)
             {
                 return Array.Empty<GroupMember>();
             }
@@ -253,13 +299,7 @@ namespace Unison.Uwp.Data
             var list = new List<GroupMember>(rows.Count);
             for (int i = 0; i < rows.Count; i++)
             {
-                GroupRosterMemberRow row = rows[i];
-                if (row == null || string.IsNullOrWhiteSpace(row.MemberJid))
-                {
-                    continue;
-                }
-
-                list.Add(ToMember(row));
+                list.Add(ToMember(rows[i]));
             }
 
             return list;
@@ -275,6 +315,7 @@ namespace Unison.Uwp.Data
             }
             finally
             {
+                _rosters.Clear();
                 _writeLock.Release();
             }
         }

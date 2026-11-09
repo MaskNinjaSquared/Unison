@@ -44,7 +44,7 @@ namespace Unison.Core.Helpers
                 IndexName(names, raw, label);
 
                 string canonical = jids != null
-                    ? jids.GetCanonicalJid(chat.JID)
+                    ? jids.PeekCanonicalJid(chat.JID)
                     : raw;
                 if (!string.IsNullOrWhiteSpace(canonical))
                 {
@@ -107,7 +107,7 @@ namespace Unison.Core.Helpers
                 return hit;
             }
 
-            string tipCanonical = jids.GetCanonicalJid(participantJid);
+            string tipCanonical = jids.PeekCanonicalJid(participantJid);
             if (!string.IsNullOrWhiteSpace(tipCanonical) &&
                 !string.Equals(tipCanonical, tip, StringComparison.OrdinalIgnoreCase))
             {
@@ -147,7 +147,7 @@ namespace Unison.Core.Helpers
             }
 
             string canonical = jids != null
-                ? jids.GetCanonicalJid(participantJid)
+                ? jids.PeekCanonicalJid(participantJid)
                 : tip;
             if (!string.IsNullOrWhiteSpace(canonical) &&
                 directChatNames.TryGetValue(canonical, out name) &&
@@ -191,7 +191,7 @@ namespace Unison.Core.Helpers
             }
 
             string canonical = jids != null
-                ? jids.GetCanonicalJid(key)
+                ? jids.PeekCanonicalJid(key)
                 : normalized;
             if (!string.IsNullOrWhiteSpace(canonical) && !roster.ContainsKey(canonical))
             {

@@ -63,9 +63,13 @@ namespace Unison.Core.Contracts
             DateTime? beforeUtc = null,
             string beforeMessageId = null);
 
-        Task<IReadOnlyList<HistoryMessage>> GetPinnedForChatAsync(string chatJid, int maxCount = 3);
-
-        Task<IReadOnlyList<HistoryMessage>> GetPendingOutgoingAsync(string chatJid);
+        /// <summary>
+        /// Pins and unsent outgoing rows across every alias key of a chat in one read;
+        /// selection follows <c>TimelineExtrasSelector</c>.
+        /// </summary>
+        Task<IReadOnlyList<HistoryMessage>> GetTimelineExtrasForChatKeysAsync(
+            IReadOnlyList<string> chatJids,
+            int maxPinned = 3);
 
         /// <summary>
         /// Media and document rows only (no text / reactions / stickers), newest first.

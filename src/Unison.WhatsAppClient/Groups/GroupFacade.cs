@@ -22,6 +22,7 @@ using Unison.Core.Contracts;
 using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Helpers;
 using Unison.Core.Helpers.Chats;
+using Unison.Core.Helpers.Ui;
 using Unison.Core.Models;
 using Unison.Core.State;
 using Unison.WhatsAppClient.Abstractions;
@@ -63,7 +64,7 @@ namespace Unison.WhatsAppClient.Groups
         /// <summary>Participating-groups UI apply completed once this session.</summary>
         private int _listingAppliedThisSession;
 
-        private readonly Func<bool> _isOfflineReplayTipBusy;
+        private readonly IUiWorkHolds _uiHolds;
 
         /// <summary>
         /// Listing was skipped for catch-up / sync traffic; retry once the next due signal arrives.
@@ -115,10 +116,14 @@ namespace Unison.WhatsAppClient.Groups
             IAppVisibility visibility = null,
             IProfilePictureEncoder pictureEncoder = null,
             GroupSelfRoleRestore selfRole = null,
-            Func<bool> isOfflineReplayTipBusy = null)
+            Func<bool> isOfflineReplayTipBusy = null,
+            IUiWorkHolds uiHolds = null)
         {
             _selfRole = selfRole;
-            _isOfflineReplayTipBusy = isOfflineReplayTipBusy ?? (() => false);
+            Func<bool> tipBusy = isOfflineReplayTipBusy ?? (() => false);
+            _uiHolds = uiHolds ?? new UiWorkHolds(
+                () => new UiHoldSnapshot { WindowVisible = true, OfflineTipBusy = tipBusy() },
+                diagnostics);
             _workload = workload ?? throw new ArgumentNullException(nameof(workload));
             _syncStatus = syncStatus ?? throw new ArgumentNullException(nameof(syncStatus));
             _syncWork = syncWork ?? throw new ArgumentNullException(nameof(syncWork));
@@ -323,13 +328,21 @@ namespace Unison.WhatsAppClient.Groups
             }
 
             // Tip-first: do not hold the dispatcher with listing while offline tips flush.
-            while (_isOfflineReplayTipBusy())
-            {
-                await Task.Delay(40).ConfigureAwait(false);
-            }
+            // Capped: a stuck offline-tip gate parked the listing for a whole session (26b3431b).
+            var waited = System.Diagnostics.Stopwatch.StartNew();
+            await _uiHolds.BeginRun("listing").WaitAsync(UiWorkKind.GroupListing).ConfigureAwait(false);
 
+            var applyWatch = System.Diagnostics.Stopwatch.StartNew();
+            _diagnostics?.Write(
+                "startup-phase",
+                "background-groups:listing-apply-begin",
+                "groups=" + (groupNodes != null ? groupNodes.Count : 0) + "; waitedMs=" + waited.ElapsedMilliseconds);
             await _apply.ApplyListingAsync(_reader.ReadListing(groupNodes)).ConfigureAwait(false);
             Interlocked.Exchange(ref _listingAppliedThisSession, 1);
+            _diagnostics?.Write(
+                "startup-phase",
+                "background-groups:listing-apply-end",
+                "ms=" + applyWatch.ElapsedMilliseconds);
         }
 
         public Task RefreshGroupSendPermissionsAsync(
@@ -1295,6 +1308,10 @@ namespace Unison.WhatsAppClient.Groups
                 if (ok)
                 {
                     await _apply.SetNoLongerParticipantAsync(canonical, left: false)
+                        .ConfigureAwait(false);
+                    // Empty join must not land under DateTime.MinValue — stamp join clock
+                    // (wire creation arrives later via metadata / ChatsUpsert when present).
+                    await _apply.SeedEmptyListOrderAsync(canonical, createIfMissing: true)
                         .ConfigureAwait(false);
                 }
 

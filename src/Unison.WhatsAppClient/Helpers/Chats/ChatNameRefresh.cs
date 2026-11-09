@@ -6,6 +6,7 @@ using Unison.Core.Contracts;
 using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Helpers;
 using Unison.Core.Helpers.Chats;
+using Unison.Core.Helpers.Ui;
 using Unison.Core.Models;
 using Unison.Core.State;
 
@@ -35,8 +36,6 @@ namespace Unison.WhatsAppClient.Helpers
 
         private static readonly TimeSpan FrugalSliceGap = TimeSpan.FromMilliseconds(24);
 
-        private const int TipBusyPollMs = 40;
-
         private readonly IDispatcher _ui;
         private readonly ILowPriorityDispatcher _uiLow;
         private readonly IChatStateStore _chats;
@@ -44,7 +43,7 @@ namespace Unison.WhatsAppClient.Helpers
         private readonly IGroupNaming _groupNaming;
         private readonly ISelfMarkerNaming _markers;
         private readonly Func<bool> _preferFrugal;
-        private readonly Func<bool> _isOfflineReplayTipBusy;
+        private readonly IUiWorkHolds _uiHolds;
         private readonly SemaphoreSlim _applyGate = new SemaphoreSlim(1, 1);
         private readonly object _pendingLock = new object();
         private int _applyTickets;
@@ -59,7 +58,8 @@ namespace Unison.WhatsAppClient.Helpers
             ISelfMarkerNaming markers,
             IGroupNaming groupNaming,
             Func<bool> preferFrugal = null,
-            Func<bool> isOfflineReplayTipBusy = null)
+            Func<bool> isOfflineReplayTipBusy = null,
+            IUiWorkHolds uiHolds = null)
         {
             _ui = ui ?? throw new ArgumentNullException(nameof(ui));
             _uiLow = ui as ILowPriorityDispatcher;
@@ -68,7 +68,12 @@ namespace Unison.WhatsAppClient.Helpers
             _markers = markers ?? throw new ArgumentNullException(nameof(markers));
             _groupNaming = groupNaming ?? throw new ArgumentNullException(nameof(groupNaming));
             _preferFrugal = preferFrugal ?? (() => false);
-            _isOfflineReplayTipBusy = isOfflineReplayTipBusy ?? (() => false);
+            Func<bool> tipBusy = isOfflineReplayTipBusy ?? (() => false);
+            _uiHolds = uiHolds ?? new UiWorkHolds(() => new UiHoldSnapshot
+            {
+                WindowVisible = true,
+                OfflineTipBusy = tipBusy(),
+            });
         }
 
         /// <summary>Raised with how many titles and member names changed; never with zero.</summary>
@@ -173,10 +178,11 @@ namespace Unison.WhatsAppClient.Helpers
             int start = 0;
             List<ChatItem> targets = null;
             bool announce = false;
+            IUiWaitRun holds = _uiHolds.BeginRun("chat-names");
 
             while (true)
             {
-                await WaitWhileTipBusyAsync().ConfigureAwait(false);
+                await holds.WaitAsync(UiWorkKind.SilentNames).ConfigureAwait(false);
 
                 int sliceStart = start;
                 bool done = false;
@@ -248,19 +254,6 @@ namespace Unison.WhatsAppClient.Helpers
             }
 
             return _ui.RunAsync(action);
-        }
-
-        private async Task WaitWhileTipBusyAsync()
-        {
-            if (TipUiPipelineGate.AllowSilentUi(_isOfflineReplayTipBusy()))
-            {
-                return;
-            }
-
-            while (!TipUiPipelineGate.AllowSilentUi(_isOfflineReplayTipBusy()))
-            {
-                await Task.Delay(TipBusyPollMs).ConfigureAwait(false);
-            }
         }
 
         private List<ChatItem> CollectTargets(HashSet<string> affectedJids)

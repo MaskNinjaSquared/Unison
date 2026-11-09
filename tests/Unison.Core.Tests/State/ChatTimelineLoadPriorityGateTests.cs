@@ -58,5 +58,25 @@ namespace Unison.Core.Tests.State
 
             gate.Release("test-timeout");
         }
+
+        [Fact]
+        public async Task WaitWhileHeldAsync_without_max_wait_stops_at_the_default_ceiling()
+        {
+            var gate = new ChatTimelineLoadPriorityGate(defaultMaxWait: TimeSpan.FromMilliseconds(120));
+            gate.Hold("stuck-open");
+
+            await gate.WaitWhileHeldAsync().WaitAsync(TimeSpan.FromSeconds(3));
+
+            Assert.True(gate.IsHeld);
+            gate.Release("stuck-open");
+        }
+
+        [Fact]
+        public void Default_ceiling_is_the_timeline_hold_budget()
+        {
+            Assert.Equal(
+                Unison.Core.Helpers.Chats.ChatTimelineOpenPriority.TimelineHoldWaitMax,
+                ChatTimelineLoadPriorityGate.DefaultMaxWait);
+        }
     }
 }

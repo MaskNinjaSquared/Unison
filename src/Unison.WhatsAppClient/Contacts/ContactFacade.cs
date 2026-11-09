@@ -26,6 +26,7 @@ using Unison.Core.Helpers;
 using Unison.Core.Helpers.Chats;
 using Unison.Core.Helpers.Contacts;
 using Unison.Core.Helpers.Groups;
+using Unison.Core.Helpers.Ui;
 using Unison.Core.Models;
 using Unison.Core.State;
 using Unison.Core.Constants;
@@ -82,7 +83,7 @@ namespace Unison.WhatsAppClient.Contacts
         private readonly BackgroundResolutionPass _backgroundResolution;
         private readonly IRuntimeDiagnostics _diagnostics;
         private readonly IContactBlockActions _blockActions;
-        private readonly Func<bool> _isOfflineReplayTipBusy;
+        private readonly IUiWorkHolds _uiHolds;
         private DateTime _lastWindowsPublishUtc = DateTime.MinValue;
         private int _lastWindowsPublishCount;
         private int _windowsPublishBusy;
@@ -127,10 +128,12 @@ namespace Unison.WhatsAppClient.Contacts
             ChatTimelineLoadPriorityGate timelinePriority = null,
             IRuntimeDiagnostics diagnostics = null,
             IContactBlockActions blockActions = null,
-            Func<bool> isOfflineReplayTipBusy = null)
+            Func<bool> isOfflineReplayTipBusy = null,
+            IUiWorkHolds uiHolds = null)
         {
             _blockActions = blockActions;
-            _isOfflineReplayTipBusy = isOfflineReplayTipBusy ?? (() => false);
+            Func<bool> tipBusy = isOfflineReplayTipBusy ?? (() => false);
+            _uiHolds = uiHolds ?? new UiWorkHolds(() => new UiHoldSnapshot { WindowVisible = true, OfflineTipBusy = tipBusy() }, diagnostics);
             _displayNames = displayNames ?? throw new ArgumentNullException(nameof(displayNames));
             _nameRefresh = nameRefresh ?? throw new ArgumentNullException(nameof(nameRefresh));
             _deduper = deduper ?? throw new ArgumentNullException(nameof(deduper));
@@ -770,6 +773,9 @@ namespace Unison.WhatsAppClient.Contacts
         private const int ResolvedNameTinyBatchMax = 4;
         private const int ResolvedNameUiSliceSize = 24;
 
+        /// <summary>Alias follow-up steps slower than this are journaled.</summary>
+        private const int AliasFollowUpSlowStepMs = 500;
+
         /// <summary>
         /// Fills push / subject caches and relabels matching list rows on the UI thread.
         /// </summary>
@@ -803,10 +809,8 @@ namespace Unison.WhatsAppClient.Contacts
             }
 
             // Tip-first: do not relabel rows while offline tip flush owns the list.
-            while (!TipUiPipelineGate.AllowSilentUi(_isOfflineReplayTipBusy()))
-            {
-                await Task.Delay(50).ConfigureAwait(false);
-            }
+            IUiWaitRun holds = _uiHolds.BeginRun("resolved-names");
+            await holds.WaitAsync(UiWorkKind.SilentNames).ConfigureAwait(false);
 
             ILowPriorityDispatcher lowUi = _ui as ILowPriorityDispatcher;
             bool useLow = lowUi != null &&
@@ -832,13 +836,7 @@ namespace Unison.WhatsAppClient.Contacts
                 namesUpdated += sliceUpdated;
 
                 // Tip may have re-armed between slices — yield the list back.
-                if (!TipUiPipelineGate.AllowSilentUi(_isOfflineReplayTipBusy()))
-                {
-                    while (!TipUiPipelineGate.AllowSilentUi(_isOfflineReplayTipBusy()))
-                    {
-                        await Task.Delay(50).ConfigureAwait(false);
-                    }
-                }
+                await holds.WaitAsync(UiWorkKind.SilentNames).ConfigureAwait(false);
 
                 // Let High create-dismiss hops run between slices; one monolithic hop cannot.
                 if (offset + count < unique.Count)
@@ -966,6 +964,8 @@ namespace Unison.WhatsAppClient.Contacts
                 isGroup,
                 _selfMarkers.IsMarkerLabel(label));
 
+        private bool IsSilentUiHeld => _uiHolds.Describe(UiWorkKind.SilentNames) != null;
+
         private void ScheduleAliasFollowUp(string source)
         {
             _aliasFollowUps.Request(source);
@@ -975,7 +975,7 @@ namespace Unison.WhatsAppClient.Contacts
         private async Task RunAliasFollowUpAsync()
         {
             // Tip-first: do not take the avatar batch while offline tip flush owns the list.
-            if (!TipUiPipelineGate.AllowSilentUi(_isOfflineReplayTipBusy()))
+            if (IsSilentUiHeld)
             {
                 if (AliasFollowUpPassPolicy.ShouldRearmAfterPass(_aliasFollowUps.HasPendingTargets))
                 {
@@ -1033,7 +1033,7 @@ namespace Unison.WhatsAppClient.Contacts
                 }
 
                 // Tip may have armed while we waited on timeline — yield before Normal work.
-                if (!TipUiPipelineGate.AllowSilentUi(_isOfflineReplayTipBusy()))
+                if (IsSilentUiHeld)
                 {
                     _aliasFollowUps.Restore(batch);
                     yieldedToTip = true;
@@ -1051,7 +1051,15 @@ namespace Unison.WhatsAppClient.Contacts
                         "source=" + (source ?? "?") +
                         "; avatars=" + batch.AvatarTargets.Count +
                         "; more=" + hasMoreAvatarTargets);
+                    var persistWatch = System.Diagnostics.Stopwatch.StartNew();
                     await _aliasPersist.PersistAliasesAsync("alias:" + source).ConfigureAwait(false);
+                    if (persistWatch.ElapsedMilliseconds >= AliasFollowUpSlowStepMs)
+                    {
+                        _diagnostics?.Write(
+                            "contacts",
+                            "alias-follow-up-persist-slow",
+                            "source=" + (source ?? "?") + "; ms=" + persistWatch.ElapsedMilliseconds);
+                    }
 
                     if (batch.AvatarTargets.Count > 0)
                     {
@@ -1081,7 +1089,7 @@ namespace Unison.WhatsAppClient.Contacts
                         {
                             for (int start = 0; start < rows.Count; start += ResolvedNameUiSliceSize)
                             {
-                                if (!TipUiPipelineGate.AllowSilentUi(_isOfflineReplayTipBusy()))
+                                if (IsSilentUiHeld)
                                 {
                                     _aliasFollowUps.Restore(batch);
                                     yieldedToTip = true;

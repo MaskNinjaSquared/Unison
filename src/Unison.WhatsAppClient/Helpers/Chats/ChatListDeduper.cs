@@ -189,12 +189,15 @@ namespace Unison.WhatsAppClient.Helpers
         private DedupePlan BuildPlan(List<RowAddress> rows)
         {
             var plan = new DedupePlan();
+            // One PeekCanonical / Normalize per distinct JID — GroupBy + cache pass used to
+            // re-resolve the same addresses under JidAliasTable._sync (planMs ~8s on Mobile).
+            var peekMemo = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
             if (rows.Count < 2)
             {
                 foreach (RowAddress row in rows)
                 {
-                    string canonical = _aliases.PeekCanonicalJid(row.Jid);
+                    string canonical = PeekMemo(row.Jid, peekMemo);
                     if (!string.Equals(canonical, row.Jid, StringComparison.Ordinal))
                     {
                         plan.Readdress.Add(new KeyValuePair<RowAddress, string>(row, canonical));
@@ -203,38 +206,59 @@ namespace Unison.WhatsAppClient.Helpers
             }
             else
             {
-                plan.Groups.AddRange(rows
-                    .GroupBy(
-                        row => _aliases.PeekCanonicalJid(JidHelper.Normalize(row.Jid)),
-                        StringComparer.OrdinalIgnoreCase)
-                    .Where(group => group.Count() > 1)
-                    .Select(group => group.ToList()));
+                var byCanonical = new Dictionary<string, List<RowAddress>>(
+                    StringComparer.OrdinalIgnoreCase);
+                for (int i = 0; i < rows.Count; i++)
+                {
+                    RowAddress row = rows[i];
+                    string key = PeekMemo(JidHelper.Normalize(row.Jid), peekMemo);
+                    List<RowAddress> group;
+                    if (!byCanonical.TryGetValue(key, out group))
+                    {
+                        group = new List<RowAddress>();
+                        byCanonical[key] = group;
+                    }
+
+                    group.Add(row);
+                }
+
+                foreach (KeyValuePair<string, List<RowAddress>> pair in byCanonical)
+                {
+                    if (pair.Value.Count > 1)
+                    {
+                        plan.Groups.Add(pair.Value);
+                    }
+                }
             }
 
             // Cache-key fold: only keys tied to snapshot rows (row JID, peek canonical, and
             // the reverse alias). A full MessagesByChat.ChatJids() × PeekCanonical on every
             // alias:app-state-contact follow-up ran 20–50s on Lumia 950 XL (267 rows, fat cache).
+            // ChatJids() once into a HashSet: Contains used to lock per candidate.
             if (_aliases.Count > 0 && rows.Count > 0)
             {
+                var cacheKeys = new HashSet<string>(
+                    _chats.MessagesByChat.ChatJids(),
+                    StringComparer.OrdinalIgnoreCase);
                 var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 for (int i = 0; i < rows.Count; i++)
                 {
                     string jid = rows[i].Jid;
-                    PlanCacheKeyIfAlias(jid, plan, seen);
+                    PlanCacheKeyIfAlias(jid, plan, seen, peekMemo, cacheKeys);
 
-                    string canonical = _aliases.PeekCanonicalJid(jid);
-                    PlanCacheKeyIfAlias(canonical, plan, seen);
+                    string canonical = PeekMemo(jid, peekMemo);
+                    PlanCacheKeyIfAlias(canonical, plan, seen, peekMemo, cacheKeys);
 
                     string paired;
                     if (_aliases.TryGetValue(jid, out paired))
                     {
-                        PlanCacheKeyIfAlias(paired, plan, seen);
+                        PlanCacheKeyIfAlias(paired, plan, seen, peekMemo, cacheKeys);
                     }
 
                     if (!string.IsNullOrWhiteSpace(canonical) &&
                         _aliases.TryGetValue(canonical, out paired))
                     {
-                        PlanCacheKeyIfAlias(paired, plan, seen);
+                        PlanCacheKeyIfAlias(paired, plan, seen, peekMemo, cacheKeys);
                     }
                 }
             }
@@ -242,19 +266,42 @@ namespace Unison.WhatsAppClient.Helpers
             return plan;
         }
 
-        private void PlanCacheKeyIfAlias(string key, DedupePlan plan, HashSet<string> seen)
+        private string PeekMemo(string jid, Dictionary<string, string> memo)
+        {
+            if (string.IsNullOrWhiteSpace(jid))
+            {
+                return jid;
+            }
+
+            string cached;
+            if (memo.TryGetValue(jid, out cached))
+            {
+                return cached;
+            }
+
+            string canonical = _aliases.PeekCanonicalJid(jid);
+            memo[jid] = canonical;
+            return canonical;
+        }
+
+        private void PlanCacheKeyIfAlias(
+            string key,
+            DedupePlan plan,
+            HashSet<string> seen,
+            Dictionary<string, string> peekMemo,
+            HashSet<string> cacheKeys)
         {
             if (string.IsNullOrWhiteSpace(key) || !seen.Add(key))
             {
                 return;
             }
 
-            if (!_chats.MessagesByChat.Contains(key))
+            if (!cacheKeys.Contains(key))
             {
                 return;
             }
 
-            string canonical = _aliases.PeekCanonicalJid(key);
+            string canonical = PeekMemo(key, peekMemo);
             if (!string.IsNullOrWhiteSpace(canonical) &&
                 !string.Equals(canonical, key, StringComparison.OrdinalIgnoreCase))
             {

@@ -636,66 +636,51 @@ namespace Unison.Uwp.Data
             return list;
         }
 
-        public async Task<IReadOnlyList<HistoryMessage>> GetPinnedForChatAsync(string chatJid, int maxCount = 3)
+        public async Task<IReadOnlyList<HistoryMessage>> GetTimelineExtrasForChatKeysAsync(
+            IReadOnlyList<string> chatJids,
+            int maxPinned = 3)
         {
-            string key = JidHelper.Normalize(chatJid);
-            if (string.IsNullOrWhiteSpace(key))
+            var keys = NormalizeChatKeys(chatJids);
+            if (keys.Count == 0)
             {
                 return Array.Empty<HistoryMessage>();
             }
 
             await EnsureInitializedAsync().ConfigureAwait(false);
-            int take = Math.Max(1, maxCount);
-            DateTime now = DateTime.UtcNow;
-            List<HistoryMessageRow> rows = await _connection.QueryAsync<HistoryMessageRow>(
-                    TimelineSelectSql +
-                    "WHERE ChatJid = ? AND IsPinned = 1 " +
-                    "ORDER BY PinnedAtUtc DESC LIMIT ?",
-                    key, take * 3)
-                .ConfigureAwait(false);
-
-            var list = new List<HistoryMessage>();
-            for (int i = 0; i < rows.Count && list.Count < take; i++)
+            var sql = new StringBuilder(TimelineSelectSql);
+            sql.Append("WHERE ChatJid IN (");
+            var args = new List<object>(keys.Count + 2);
+            for (int i = 0; i < keys.Count; i++)
             {
-                HistoryMessageRow row = rows[i];
-                if (row.PinExpiresAtUtc.HasValue && row.PinExpiresAtUtc.Value <= now)
+                if (i > 0)
                 {
-                    continue;
+                    sql.Append(',');
                 }
 
-                list.Add(ToModel(row));
+                sql.Append('?');
+                args.Add(keys[i]);
             }
 
-            await AttachReactionsSafeAsync(key, list).ConfigureAwait(false);
-            return list;
-        }
+            sql.Append(") AND (IsPinned = 1 OR (IsFromMe = 1 AND SendState IN (?, ?)))");
+            args.Add((int)MessageSendState.Pending);
+            args.Add((int)MessageSendState.Failed);
 
-        public async Task<IReadOnlyList<HistoryMessage>> GetPendingOutgoingAsync(string chatJid)
-        {
-            string key = JidHelper.Normalize(chatJid);
-            if (string.IsNullOrWhiteSpace(key))
+            List<HistoryMessageRow> rows =
+                await _connection.QueryAsync<HistoryMessageRow>(sql.ToString(), args.ToArray())
+                    .ConfigureAwait(false);
+
+            var candidates = new List<HistoryMessage>(rows.Count);
+            for (int i = 0; i < rows.Count; i++)
             {
-                return Array.Empty<HistoryMessage>();
+                if (rows[i] != null)
+                {
+                    candidates.Add(ToModel(rows[i]));
+                }
             }
 
-            await EnsureInitializedAsync().ConfigureAwait(false);
-            int pending = (int)MessageSendState.Pending;
-            int failed = (int)MessageSendState.Failed;
-            List<HistoryMessageRow> rows = await _connection.Table<HistoryMessageRow>()
-                .Where(r => r.ChatJid == key &&
-                            r.IsFromMe &&
-                            (r.SendState == pending || r.SendState == failed))
-                .OrderBy(r => r.TimestampUtc)
-                .ToListAsync()
-                .ConfigureAwait(false);
-
-            var list = new List<HistoryMessage>(rows.Count);
-            foreach (var row in rows)
-            {
-                list.Add(ToModel(row));
-            }
-
-            await AttachReactionsSafeAsync(key, list).ConfigureAwait(false);
+            var list = new List<HistoryMessage>(
+                TimelineExtrasSelector.Select(candidates, maxPinned, DateTime.UtcNow));
+            await AttachReactionsForKeysSafeAsync(keys, list).ConfigureAwait(false);
             return list;
         }
 

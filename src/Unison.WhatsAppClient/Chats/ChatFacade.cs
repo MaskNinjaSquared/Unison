@@ -28,6 +28,7 @@ using Unison.Core.Contracts;
 using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Helpers;
 using Unison.Core.Helpers.Chats;
+using Unison.Core.Helpers.Ui;
 using Unison.Core.Mappers;
 using Unison.Core.Models;
 using Unison.Core.State;
@@ -103,6 +104,12 @@ namespace Unison.WhatsAppClient.Chats
         private static readonly TimeSpan OfflineReplayTipSteadyThrottle = TimeSpan.FromMilliseconds(1000);
 
         /// <summary>
+        /// Quiet after the last deferred (frugal) tip before the book paints without a settle
+        /// flush. Long enough that a live replay still paints once at settle.
+        /// </summary>
+        private static readonly TimeSpan OfflineReplayTipDeferredBackstop = TimeSpan.FromMilliseconds(3000);
+
+        /// <summary>
         /// Offline tip rows per UI hop. Each row can cascade into preview reconcile / list moves;
         /// 12 still held Lumia for ~17s on a 2-chat flush. Keep the hop tiny on every device.
         /// </summary>
@@ -132,6 +139,12 @@ namespace Unison.WhatsAppClient.Chats
             public readonly List<TaskCompletionSource<LiveIncomingChatListApplyResult>> Waiters =
                 new List<TaskCompletionSource<LiveIncomingChatListApplyResult>>();
         }
+
+        private readonly IUiWorkHolds _uiHolds;
+        private readonly Func<bool> _isReplayDrainActive;
+        private readonly KeyedLatestCoalescer<string, RemoteChatSettings> _remoteChatSettings;
+        private const int RemoteChatSettingsTraceMin = 10;
+        private const int ChatFlagUiSliceSize = 32;
 
         public ChatFacade(
             IChatAccountActions account,
@@ -164,8 +177,15 @@ namespace Unison.WhatsAppClient.Chats
             IDialogService dialogs = null,
             IRuntimeDiagnostics diagnostics = null,
             SessionTipAuthorCache tipAuthorCache = null,
-            IPersonStore people = null)
+            IPersonStore people = null,
+            IUiWorkHolds uiHolds = null,
+            Func<bool> isReplayDrainActive = null)
         {
+            // Null → assume drain active so PreferFrugal still defers when tests omit the gate.
+            _isReplayDrainActive = isReplayDrainActive ?? (() => true);
+            _uiHolds = uiHolds ?? new UiWorkHolds(
+                () => new UiHoldSnapshot { WindowVisible = true, OfflineTipBusy = IsOfflineReplayTipBusy },
+                diagnostics);
             _account = account ?? throw new ArgumentNullException(nameof(account));
             _localAppState = localAppState ?? throw new ArgumentNullException(nameof(localAppState));
             _jids = jids ?? throw new ArgumentNullException(nameof(jids));
@@ -209,12 +229,37 @@ namespace Unison.WhatsAppClient.Chats
                 ApplyOfflineReplayChatSummariesAsync,
                 OfflineReplayTipThrottle,
                 OfflineReplayTipSteadyThrottle,
-                () => TipUiPipelineGate.PostFlushQuiet(PreferFrugalSyncBudget),
-                () => OfflineReplayUiPolicy.DeferTipPaintUntilSettle(PreferFrugalSyncBudget));
+                () => OfflineReplayUiPolicy.TipBusyQuietAfterFlush(
+                    PreferFrugalSyncBudget,
+                    IsReplayDrainActive),
+                () => OfflineReplayUiPolicy.DeferTipPaintUntilSettle(
+                    PreferFrugalSyncBudget,
+                    IsReplayDrainActive),
+                OfflineReplayTipDeferredBackstop);
+            _remoteChatSettings = new KeyedLatestCoalescer<string, RemoteChatSettings>(
+                ApplyRemoteChatSettingsBatchAsync,
+                () => StormWindowPolicy.For(PreferFrugalSyncBudget),
+                RemoteChatSettings.Merge,
+                StringComparer.OrdinalIgnoreCase);
         }
 
         private bool PreferFrugalSyncBudget =>
             _resolveHistory != null && _resolveHistory().PreferFrugalSyncBudget;
+
+        private bool IsReplayDrainActive
+        {
+            get
+            {
+                try
+                {
+                    return _isReplayDrainActive();
+                }
+                catch (Exception)
+                {
+                    return true;
+                }
+            }
+        }
 
         private void OnTipAuthorPersonChanged(object sender, string jid)
         {
@@ -347,12 +392,24 @@ namespace Unison.WhatsAppClient.Chats
 
         /// <summary>
         /// Account-side chat settings from socket app-state (archive / pin / mute / unread).
+        /// Returns once queued: the bridge awaits each mutation of a sync burst in turn, so
+        /// waiting for the storm window here would serialise the whole burst behind it.
         /// </summary>
-        public async Task ApplyRemoteChatSettingsAsync(ChatUpdate update)
+        public Task ApplyRemoteChatSettingsAsync(ChatUpdate update)
         {
             if (update == null || string.IsNullOrEmpty(update.Id))
             {
-                return;
+                return Task.CompletedTask;
+            }
+
+            // Group create notify (ChatsUpsert) carries ConversationTimestamp = creation so an
+            // empty row sorts by birth / join activity instead of MinValue.
+            if (update.ConversationTimestamp.HasValue && update.ConversationTimestamp.Value > 0)
+            {
+                _ = SeedEmptyListOrderFromRemoteAsync(
+                    update.Id,
+                    update.ConversationTimestamp.Value,
+                    update.Name);
             }
 
             AppStateMuteMapping.Result mute = AppStateMuteMapping.FromChatUpdate(
@@ -363,22 +420,143 @@ namespace Unison.WhatsAppClient.Chats
                 update.Pinned,
                 DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
 
-            if (update.Archived.HasValue || pin.AppliesPin || mute.AppliesMute)
+            var settings = new RemoteChatSettings
             {
-                await ApplyLocalChatFlagsAsync(
-                    update.Id,
-                    archived: update.Archived,
-                    pinned: pin.AppliesPin ? pin.IsPinned : (bool?)null,
-                    muteEndTimestamp: mute.MutedUntilUnixSeconds,
-                    pinnedTimestamp: pin.AppliesPin ? pin.PinnedTimestampUnixSeconds : (long?)null,
-                    applyMute: mute.AppliesMute).ConfigureAwait(false);
+                Archived = update.Archived,
+                AppliesPin = pin.AppliesPin,
+                IsPinned = pin.AppliesPin && pin.IsPinned,
+                PinnedTimestamp = pin.AppliesPin ? pin.PinnedTimestampUnixSeconds : (long?)null,
+                AppliesMute = mute.AppliesMute,
+                MutedUntil = mute.MutedUntilUnixSeconds,
+                Read = update.UnreadCount.HasValue ? update.UnreadCount.Value == 0 : (bool?)null,
+            };
+            if (!settings.TouchesFlags && !settings.Read.HasValue)
+            {
+                return Task.CompletedTask;
             }
 
-            if (update.UnreadCount.HasValue)
+            _ = _remoteChatSettings.Post(update.Id, settings);
+            return Task.CompletedTask;
+        }
+
+        /// <summary>
+        /// Seeds <see cref="ChatItem.LastMessageTimestampUtc"/> for a chat that has no tip yet
+        /// (create / join notify). Creates the catalogue row when missing.
+        /// </summary>
+        public Task SeedEmptyListOrderFromRemoteAsync(
+            string jid,
+            long conversationTimestampUnix,
+            string displayName = null)
+        {
+            if (string.IsNullOrWhiteSpace(jid) || conversationTimestampUnix <= 0)
             {
-                await ApplyLocalChatReadStateAsync(
-                    update.Id,
-                    read: update.UnreadCount.Value == 0).ConfigureAwait(false);
+                return Task.CompletedTask;
+            }
+
+            DateTime? order = EmptyChatOrderTimestamp.FromUnixSeconds(conversationTimestampUnix);
+            if (!order.HasValue)
+            {
+                return Task.CompletedTask;
+            }
+
+            string normalized = JidHelper.Normalize(jid);
+            string yesterday = _strings.Get("Common_Yesterday", "Yesterday");
+            string resolvedName = !string.IsNullOrWhiteSpace(displayName)
+                ? displayName.Trim()
+                : _contacts.ResolveDisplayName(jid, "chat");
+            ChatKind kind = JidHelper.ResolveKind(normalized, _jids.IsSelfLinked(normalized));
+
+            return _ui.RunAsync(() =>
+            {
+                foreach (ChatItem chat in _chatState.Chats)
+                {
+                    if (chat == null ||
+                        !string.Equals(
+                            JidHelper.Normalize(chat.JID),
+                            normalized,
+                            StringComparison.Ordinal))
+                    {
+                        continue;
+                    }
+
+                    if (!chat.LastMessageTimestampUtc.HasValue)
+                    {
+                        chat.LastMessageTimestampUtc = order;
+                        chat.Timestamp = WhatsAppMapper.FormatTimestamp(order, yesterday);
+                        if (!string.IsNullOrWhiteSpace(resolvedName) &&
+                            string.IsNullOrWhiteSpace(chat.Name))
+                        {
+                            chat.Name = resolvedName;
+                        }
+
+                        PersistChatListRows(new[] { chat });
+                    }
+
+                    return;
+                }
+
+                ChatItem seeded = NewChatListSeed.Build(
+                    normalized,
+                    resolvedName,
+                    kind,
+                    order.Value,
+                    yesterday);
+                _chatState.Chats.Insert(0, seeded);
+                PersistChatListRows(new[] { seeded });
+                RequestChatListDedup("empty-order-seed");
+            });
+        }
+
+        private async Task ApplyRemoteChatSettingsBatchAsync(
+            IReadOnlyList<KeyValuePair<string, RemoteChatSettings>> batch)
+        {
+            try
+            {
+                var flags = new List<KeyValuePair<string, ChatFlagChange>>(batch.Count);
+                for (int i = 0; i < batch.Count; i++)
+                {
+                    RemoteChatSettings settings = batch[i].Value;
+                    if (!settings.TouchesFlags)
+                    {
+                        continue;
+                    }
+
+                    flags.Add(new KeyValuePair<string, ChatFlagChange>(batch[i].Key, new ChatFlagChange
+                    {
+                        Archived = settings.Archived,
+                        Pinned = settings.AppliesPin ? settings.IsPinned : (bool?)null,
+                        PinnedTimestamp = settings.PinnedTimestamp,
+                        MuteEndTimestamp = settings.MutedUntil,
+                        AppliesMute = settings.AppliesMute
+                    }));
+                }
+
+                if (flags.Count > 0)
+                {
+                    await ApplyLocalChatFlagsBatchAsync(flags).ConfigureAwait(false);
+                }
+
+                for (int i = 0; i < batch.Count; i++)
+                {
+                    if (batch[i].Value.Read.HasValue)
+                    {
+                        await ApplyLocalChatReadStateAsync(batch[i].Key, batch[i].Value.Read.Value)
+                            .ConfigureAwait(false);
+                    }
+                }
+
+                if (batch.Count > RemoteChatSettingsTraceMin)
+                {
+                    _diagnostics?.Write(
+                        "app-state",
+                        "chat-settings-batch",
+                        "chats=" + batch.Count + "; flags=" + flags.Count);
+                }
+            }
+            catch (Exception ex)
+            {
+                DiagRecordException("app-state", "chat-settings-batch-failed", ex, "chats=" + batch.Count);
+                throw;
             }
         }
 
@@ -723,7 +901,7 @@ namespace Unison.WhatsAppClient.Chats
         /// <summary>
         /// Archive / pin / mute onto rows and durable mirrors. Null fields are left alone.
         /// </summary>
-        private async Task ApplyLocalChatFlagsAsync(
+        private Task ApplyLocalChatFlagsAsync(
             string jid,
             bool? archived = null,
             bool? pinned = null,
@@ -731,12 +909,6 @@ namespace Unison.WhatsAppClient.Chats
             long? pinnedTimestamp = null,
             bool applyMute = false)
         {
-            string canonical = _jids.GetCanonicalJid(jid);
-            if (string.IsNullOrWhiteSpace(canonical))
-            {
-                return;
-            }
-
             var change = new ChatFlagChange
             {
                 Archived = archived,
@@ -746,32 +918,86 @@ namespace Unison.WhatsAppClient.Chats
                 AppliesMute = applyMute
             };
 
-            List<ChatItem> touched = null;
-            await _ui.RunAsync(() =>
+            return ApplyLocalChatFlagsBatchAsync(new[] { new KeyValuePair<string, ChatFlagChange>(jid, change) });
+        }
+
+        /// <summary>
+        /// One UI hop and one list sort for the whole batch; durable mirrors per chat afterwards.
+        /// </summary>
+        private async Task ApplyLocalChatFlagsBatchAsync(IReadOnlyList<KeyValuePair<string, ChatFlagChange>> changes)
+        {
+            var work = new List<ChatFlagWork>(changes.Count);
+            for (int i = 0; i < changes.Count; i++)
             {
-                var rows = AppStateChatRows.GetOrAdd(
-                    _chatState.Chats,
-                    _chatRows.FindConversation(canonical),
-                    canonical,
-                    address => _contacts.ResolveDisplayName(address, "app-state-flags"),
-                    address => JidHelper.ResolveKind(address, _jids.IsSelfLinked(address)),
-                    out _);
-
-                long nowUnixMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-
-                touched = new List<ChatItem>();
-                foreach (ChatItem chat in rows)
+                string canonical = _jids.GetCanonicalJid(changes[i].Key);
+                if (!string.IsNullOrWhiteSpace(canonical))
                 {
-                    AppStateChatMutation.ApplyFlags(chat, change, nowUnixMs);
-                    touched.Add(chat);
+                    work.Add(new ChatFlagWork(changes[i].Key, canonical, changes[i].Value));
                 }
+            }
 
-                ChatDisplayOrder.SortInPlace(_chatState.Chats);
-            }).ConfigureAwait(false);
-
-            if (touched != null && change.TouchesAnything)
+            if (work.Count == 0)
             {
-                foreach (ChatItem chat in touched)
+                return;
+            }
+
+            ILowPriorityDispatcher lowUi = PreferFrugalSyncBudget ? _ui as ILowPriorityDispatcher : null;
+            for (int start = 0; start < work.Count; start += ChatFlagUiSliceSize)
+            {
+                int from = start;
+                int end = Math.Min(work.Count, start + ChatFlagUiSliceSize);
+                bool last = end == work.Count;
+                Action slice = () =>
+                {
+                    long nowUnixMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+                    for (int w = from; w < end; w++)
+                    {
+                        ChatFlagWork item = work[w];
+                        var rows = AppStateChatRows.GetOrAdd(
+                            _chatState.Chats,
+                            _chatRows.FindConversation(item.Canonical),
+                            item.Canonical,
+                            address => _contacts.ResolveDisplayName(address, "app-state-flags"),
+                            address => JidHelper.ResolveKind(address, _jids.IsSelfLinked(address)),
+                            out _);
+
+                        foreach (ChatItem chat in rows)
+                        {
+                            AppStateChatMutation.ApplyFlags(chat, item.Change, nowUnixMs);
+                            item.Touched.Add(chat);
+                        }
+                    }
+
+                    if (last)
+                    {
+                        ChatDisplayOrder.SortInPlace(_chatState.Chats);
+                    }
+                };
+
+                if (lowUi != null)
+                {
+                    await lowUi.RunLowAsync(slice).ConfigureAwait(false);
+                }
+                else
+                {
+                    await _ui.RunAsync(slice).ConfigureAwait(false);
+                }
+            }
+
+            for (int w = 0; w < work.Count; w++)
+            {
+                await PersistChatFlagsAsync(work[w]).ConfigureAwait(false);
+            }
+
+            _catalog.Schedule();
+        }
+
+        private async Task PersistChatFlagsAsync(ChatFlagWork item)
+        {
+            ChatFlagChange change = item.Change;
+            if (change.TouchesAnything)
+            {
+                foreach (ChatItem chat in item.Touched)
                 {
                     try
                     {
@@ -786,7 +1012,7 @@ namespace Unison.WhatsAppClient.Chats
 
                             IReadOnlyList<string> pinKeys = ChatPinStoreKeys.Merge(
                                 ChatPinStoreKeys.For(chat.JID, _jids.GetCanonicalJid(chat.JID), alias),
-                                ChatPinStoreKeys.For(jid, _jids));
+                                ChatPinStoreKeys.For(item.Jid, _jids));
                             for (int i = 0; i < pinKeys.Count; i++)
                             {
                                 await _chatStore.SetChatPinnedAsync(
@@ -816,24 +1042,40 @@ namespace Unison.WhatsAppClient.Chats
                 }
             }
 
-            if (archived.HasValue && touched != null && touched.Count > 0)
+            if (change.Archived.HasValue && item.Touched.Count > 0)
             {
-                ChatStatus status = archived.Value ? ChatStatus.Archived : ChatStatus.Active;
+                ChatStatus status = change.Archived.Value ? ChatStatus.Archived : ChatStatus.Active;
                 try
                 {
                     await _chatPreviews.SetStatusAsync(
-                            new List<string>(ChatPinStoreKeys.For(canonical, _jids)),
+                            new List<string>(ChatPinStoreKeys.For(item.Canonical, _jids)),
                             status)
                         .ConfigureAwait(false);
-                    _catalog.PersistRows(touched);
+                    _catalog.PersistRows(item.Touched);
                 }
                 catch (Exception ex)
                 {
                     Debug.WriteLine("[ChatFacade] Archive status persist failed: " + ex.Message);
                 }
             }
+        }
 
-            _catalog.Schedule();
+        private sealed class ChatFlagWork
+        {
+            public ChatFlagWork(string jid, string canonical, ChatFlagChange change)
+            {
+                Jid = jid;
+                Canonical = canonical;
+                Change = change;
+            }
+
+            public string Jid { get; }
+
+            public string Canonical { get; }
+
+            public ChatFlagChange Change { get; }
+
+            public List<ChatItem> Touched { get; } = new List<ChatItem>();
         }
 
         public async Task MarkReadAsync(ChatItem chat)
@@ -1512,11 +1754,10 @@ namespace Unison.WhatsAppClient.Chats
             cancellationToken.ThrowIfCancellationRequested();
             // Full heal waits out progressive tip flush + post-flush quiet so Low slices
             // do not queue behind tip/name Normal (82908f3f: ui-slice-slow swapped=0 for 18–86s).
-            while (_offlineReplayTips.IsBusy)
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                await Task.Delay(40, cancellationToken).ConfigureAwait(false);
-            }
+            await _uiHolds.BeginRun("post-replay")
+                .WaitAsync(UiWorkKind.SilentNames, cancellationToken)
+                .ConfigureAwait(false);
+            cancellationToken.ThrowIfCancellationRequested();
 
             try
             {
@@ -2590,22 +2831,73 @@ namespace Unison.WhatsAppClient.Chats
 
                 if (!HistoryChatPreviewApplier.IsListable(preview))
                 {
-                    if (preview.IsChatPinned.HasValue || preview.AppliesMute)
+                    bool hasFlags = preview.IsChatPinned.HasValue || preview.AppliesMute;
+                    bool emptyOrder = HistoryChatPreviewApplier.IsEmptyOrderSeed(preview);
+                    if (!hasFlags && !emptyOrder)
                     {
-                        ChatItem flagTarget = FindInHydrateIndex(index, preview);
-                        if (flagTarget != null)
+                        continue;
+                    }
+
+                    ChatItem flagTarget = FindInHydrateIndex(index, preview);
+                    if (flagTarget == null && emptyOrder)
+                    {
+                        ChatItem row = HistoryChatPreviewApplier.ToChatItemForCatalog(
+                            preview,
+                            yesterday,
+                            selfLabel);
+                        if (row != null)
+                        {
+                            try
+                            {
+                                _chatStore.ApplyTo(row);
+                                HistoryChatPreviewApplier.ApplyLocalFlags(preview, row);
+                                if (hasFlags)
+                                {
+                                    PersistHistoryLocalFlags(row, preview);
+                                }
+
+                                TryApplyCanonicalPinFallback(row);
+                            }
+                            catch (Exception ex)
+                            {
+                                Debug.WriteLine(
+                                    "[ChatFacade] ApplyTo (empty-order create) failed: " + ex.Message);
+                            }
+
+                            _chatState.Chats.Add(row);
+                            created.Add(row);
+                            IndexHydrateChat(index, row);
+                        }
+                    }
+                    else if (flagTarget != null)
+                    {
+                        bool changed = false;
+                        if (HistoryChatPreviewApplier.TryApplyEmptyOrderSeed(
+                                preview,
+                                flagTarget,
+                                yesterday))
+                        {
+                            changed = true;
+                        }
+
+                        if (hasFlags)
                         {
                             HistoryChatPreviewApplier.ApplyLocalFlags(preview, flagTarget);
                             PersistHistoryLocalFlags(flagTarget, preview);
                             TryApplyCanonicalPinFallback(flagTarget);
+                            changed = true;
+                        }
+
+                        if (changed)
+                        {
                             updated++;
                         }
-                        else
-                        {
-                            PersistHistoryLocalFlags(
-                                new ChatItem { JID = preview.Jid },
-                                preview);
-                        }
+                    }
+                    else if (hasFlags)
+                    {
+                        PersistHistoryLocalFlags(
+                            new ChatItem { JID = preview.Jid },
+                            preview);
                     }
 
                     continue;

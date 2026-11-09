@@ -145,6 +145,18 @@ namespace Unison.Core.State
         public abstract int LidMappingWarmMaxPairs { get; }
 
         /// <summary>
+        /// Profile-picture IQ answers kept in RAM (key = jid + query type), so list batches,
+        /// alias follow-ups and roster passes do not ask the server again for the same JID.
+        /// </summary>
+        public abstract int ProfilePictureQueryCacheMaxEntries { get; }
+
+        /// <summary>
+        /// Groups whose SQLite roster stays in RAM between writes (mention lookups, sender
+        /// labels and the info pane read the same roster many times per open).
+        /// </summary>
+        public abstract int GroupRosterMemoryMaxGroups { get; }
+
+        /// <summary>
         /// Cache key budget for <see cref="LidMappingMemoryCacheMaxPairs"/> (pair × 2).
         /// </summary>
         public int LidMappingMemoryCacheMaxEntries =>
@@ -216,14 +228,15 @@ namespace Unison.Core.State
 
         public override int AvatarFetchBatchSize => 1;
 
-        // Aligned with Low pre-retune: hold + off-UI apply made the old 1500 ms extreme.
-        public override int AvatarFetchInterRequestDelayMs => 1200;
+        // Mild step toward Low: dump 01c59887 held ~79/185 with headroom; batch stays 1.
+        public override int AvatarFetchInterRequestDelayMs => 900;
 
         public override uint HistoryStorageQuotaMb => 256;
 
         public override bool SerializePostSyncEnrichment => true;
 
-        public override int PostSyncEnrichmentQuietSeconds => 12;
+        // Still above Low's 6s — decorate later than 1 GB, earlier than the old 12s crawl.
+        public override int PostSyncEnrichmentQuietSeconds => 9;
 
         public override int MaxFullHistoryCatchUpRounds => 0;
 
@@ -242,15 +255,15 @@ namespace Unison.Core.State
 
         public override int GroupRosterBatchSize => 4;
 
-        public override int GroupRosterInterRequestDelayMs => 1200;
+        public override int GroupRosterInterRequestDelayMs => 900;
 
-        public override int GroupRosterNextBatchDelaySeconds => 40;
+        public override int GroupRosterNextBatchDelaySeconds => 35;
 
         public override int NameResolveMaxPerPass => 4;
 
         public override int NameResolveChunkSize => 2;
 
-        public override int NameResolveInterChunkDelayMs => 1000;
+        public override int NameResolveInterChunkDelayMs => 700;
 
         // Smallest disk lots: 512 MB class cannot afford large SQLite LID batches.
         public override int LidMappingPersistBatchSize => 8;
@@ -258,7 +271,11 @@ namespace Unison.Core.State
         public override int LidMappingPersistDelayMs => 3000;
 
         // On-demand only; tight LRU so warm dumps cannot pin RAM.
-        public override int LidMappingMemoryCacheMaxPairs => 512;
+        public override int LidMappingMemoryCacheMaxPairs => 1024;
+
+        public override int ProfilePictureQueryCacheMaxEntries => 512;
+
+        public override int GroupRosterMemoryMaxGroups => 16;
 
         public override int LidMappingWarmMaxPairs => 0;
 
@@ -267,9 +284,11 @@ namespace Unison.Core.State
 
         public override int DeferredAvatarMaxRetries => 0;
 
-        protected override SyncPacing FrugalPacing { get; } = new SyncPacing(5000, 10000, 50, 3);
+        // Match Low quiet floors; keep the longer catch-up abort (50/3) so empty ghosts
+        // on 185 MB do not race the way Low's 30/2 can.
+        protected override SyncPacing FrugalPacing { get; } = new SyncPacing(4000, 7000, 50, 3);
 
-        protected override SyncPacing GenerousPacing { get; } = new SyncPacing(1500, 2500, 40, 2);
+        protected override SyncPacing GenerousPacing { get; } = new SyncPacing(1200, 2000, 40, 2);
     }
 
     /// <summary>1 GB class (~390 MB app limit): economical, not extreme.</summary>
@@ -346,8 +365,13 @@ namespace Unison.Core.State
 
         public override int LidMappingPersistDelayMs => 1500;
 
-        // Mobile 1 GB: on-demand only; larger LRU than Unsupported.
-        public override int LidMappingMemoryCacheMaxPairs => 1024;
+        // Mobile 1 GB: on-demand only; larger LRU than Unsupported. A full 1024 cap evicted on
+        // every insert during listing imports (26b3431b); bulk discovery now skips RAM.
+        public override int LidMappingMemoryCacheMaxPairs => 4096;
+
+        public override int ProfilePictureQueryCacheMaxEntries => 1024;
+
+        public override int GroupRosterMemoryMaxGroups => 32;
 
         public override int LidMappingWarmMaxPairs => 0;
 
@@ -429,7 +453,11 @@ namespace Unison.Core.State
         public override int LidMappingPersistDelayMs => 400;
 
         // Desktop: larger LRU only — still on-demand (no boot seed).
-        public override int LidMappingMemoryCacheMaxPairs => 2048;
+        public override int LidMappingMemoryCacheMaxPairs => 8192;
+
+        public override int ProfilePictureQueryCacheMaxEntries => 4096;
+
+        public override int GroupRosterMemoryMaxGroups => 128;
 
         public override int LidMappingWarmMaxPairs => 0;
 

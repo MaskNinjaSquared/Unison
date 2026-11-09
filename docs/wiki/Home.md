@@ -31,6 +31,7 @@ The **Unison.Socket** stack (Baileys **7.0.0-rc14**) is now the foundation for W
 | [Background broker](Background-Broker) | Out-of-process socket, journal, toasts |
 | [UI and shell](UI-and-Shell) | Navigation, themes, i18n, chat surface |
 | [Coding standards](Coding-Standards) | Spec: MVVM, DI, folders, façades — how to write new code |
+| [UI work scheduling](Ui-Work-Scheduling) | Waits behind chat open / offline tips (`IUiWorkHolds`) and storm coalescing |
 | [Adding languages](Adding-Languages) | Tutorial: new `.resw` pack, package registration, `AppLanguage` enum |
 | [Migration](Migration) | What moved, what is still legacy (history SQLite, broker, SocketClient) |
 | [WhatsAppService extraction](WhatsAppService-Extraction) | Phase 0 done; plan to move the client into façades |

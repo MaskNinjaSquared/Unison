@@ -152,8 +152,8 @@ namespace Unison.Core.ViewModels
             if (_contactService != null &&
                 MobileChatListAvatarGate.AllowRefreshOnChatOpen(isMobile, chatChanged, chat != null))
             {
-                // Force past the 7-day interval: Mobile revalidates on every open; Apply skips
-                // the CDN download when picture id/url matches what we already cached.
+                // Force = revalidate: past the 7-day interval and the IQ cache (60s cooldown per
+                // JID); Apply skips the CDN download when picture id/url matches what we cached.
                 _contactService.RequestAvatarRefresh(chat, force: true);
             }
         }

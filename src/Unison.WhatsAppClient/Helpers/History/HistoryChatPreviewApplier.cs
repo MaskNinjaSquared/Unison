@@ -121,9 +121,13 @@ namespace Unison.WhatsAppClient.Helpers
                 LastMessageId = preview.LastMessageId,
                 UnreadCount = Math.Max(0, preview.UnreadCount),
                 HasCitation = preview.HasCitation,
-                Status = preview.Status
+                Status = preview.Status,
+                Timestamp = preview.LastMessageTimestampUtc.HasValue
+                    ? WhatsAppMapper.FormatTimestamp(preview.LastMessageTimestampUtc, yesterdayLabel)
+                    : null
             };
             ApplyCommunityFields(preview, chat);
+            ApplyLocalFlags(preview, chat);
             return chat;
         }
         /// <summary>
@@ -146,6 +150,36 @@ namespace Unison.WhatsAppClient.Helpers
             return HistorySyncContentFilter.HasRenderableContent(
                 preview.LastMessage,
                 preview.LastMessageKind);
+        }
+
+        /// <summary>
+        /// Empty conversation with an activity timestamp for list order (no tip body).
+        /// </summary>
+        public static bool IsEmptyOrderSeed(HistoryChatPreview preview)
+        {
+            return preview != null &&
+                !string.IsNullOrWhiteSpace(preview.Jid) &&
+                preview.LastMessageTimestampUtc.HasValue &&
+                !IsListable(preview);
+        }
+
+        /// <summary>
+        /// Stamps order on a row that still has no tip. Never overwrites an existing timestamp.
+        /// </summary>
+        public static bool TryApplyEmptyOrderSeed(
+            HistoryChatPreview preview,
+            ChatItem target,
+            string yesterdayLabel = null)
+        {
+            if (!IsEmptyOrderSeed(preview) || target == null || target.LastMessageTimestampUtc.HasValue)
+            {
+                return false;
+            }
+
+            DateTime seed = WhatsAppMapper.ToUtc(preview.LastMessageTimestampUtc.Value);
+            target.LastMessageTimestampUtc = seed;
+            target.Timestamp = WhatsAppMapper.FormatTimestamp(seed, yesterdayLabel);
+            return true;
         }
 
         public static ChatItem ToChatItem(

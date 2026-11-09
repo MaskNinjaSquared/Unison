@@ -52,7 +52,9 @@
                                         ScrollViewer.VerticalScrollBarVisibility="Auto"
                                         ScrollViewer.HorizontalScrollBarVisibility="Disabled"/>
 
-            <Button Grid.Column="1"
+            <!-- Named so InsertEmoji can steal focus off the composer (Mobile SIP). -->
+            <Button x:Name="EmojiButton"
+                    Grid.Column="1"
                     Grid.Row="1"
                     Style="{StaticResource ModernIconButtonStyle}"
                     Width="36"

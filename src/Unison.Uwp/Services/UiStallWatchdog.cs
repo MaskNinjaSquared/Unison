@@ -17,12 +17,14 @@ using Windows.UI.Core;
 
 namespace Unison.Uwp.Services
 {
-    public sealed class UiStallWatchdog
+    public sealed class UiStallWatchdog : IUiWorkStage
     {
         private const int ProbeIntervalMs = 1000;
         private const int StallThresholdMs = 2000;
         private const int OngoingReportEveryMs = 10000;
         private const int SlowWorkThresholdMs = 300;
+        private const int HiddenLongHopThresholdMs = 10000;
+        private const int HiddenLongHopReportEveryMs = 30000;
         private const string Category = "ui-watchdog";
 
         private readonly IRuntimeDiagnostics _diagnostics;
@@ -40,6 +42,7 @@ namespace Unison.Uwp.Services
         private int _stallReported;
         private long _stallLastReportAt;
         private string _stallFirstWork;
+        private long _hiddenLongHopLastReportAt;
 
         public UiStallWatchdog(IRuntimeDiagnostics diagnostics, IAppVisibility visibility)
         {
@@ -70,6 +73,25 @@ namespace Unison.Uwp.Services
             ActiveWork previous = _active;
             _active = new ActiveWork(kind, caller, callerFile, Stopwatch.GetTimestamp());
             return previous;
+        }
+
+        /// <summary>
+        /// Tags the hop that is running now. Off the UI thread the mark is dropped: shared
+        /// helpers (ChatRowIndex builds) mark from pool threads too and must not relabel the hop.
+        /// </summary>
+        public void Mark(string stage)
+        {
+            CoreDispatcher dispatcher = _dispatcher;
+            if (dispatcher == null || !dispatcher.HasThreadAccess)
+            {
+                return;
+            }
+
+            ActiveWork active = _active;
+            if (active != null)
+            {
+                active.MarkStage(stage, Stopwatch.GetTimestamp());
+            }
         }
 
         /// <summary>UI thread only.</summary>
@@ -123,6 +145,7 @@ namespace Unison.Uwp.Services
                     Interlocked.Increment(ref _probeSequence);
                     Interlocked.Exchange(ref _probePostedAt, 0);
                     Interlocked.Exchange(ref _stallReported, 0);
+                    ReportLongHopWhileHidden();
                     return;
                 }
 
@@ -162,6 +185,29 @@ namespace Unison.Uwp.Services
             }
         }
 
+        /// <summary>
+        /// Hidden windows get no probes, so a hop stuck in the background would otherwise
+        /// never reach the journal.
+        /// </summary>
+        private void ReportLongHopWhileHidden()
+        {
+            ActiveWork active = _active;
+            if (active == null || ElapsedMs(active.StartedAt) < HiddenLongHopThresholdMs)
+            {
+                return;
+            }
+
+            long lastReport = Interlocked.Read(ref _hiddenLongHopLastReportAt);
+            if (lastReport != 0 && ElapsedMs(lastReport) < HiddenLongHopReportEveryMs)
+            {
+                return;
+            }
+
+            Interlocked.Exchange(ref _hiddenLongHopLastReportAt, Stopwatch.GetTimestamp());
+            _diagnostics.Write(Category, "ui-hop-long-hidden", DescribeActive());
+            _ = _diagnostics.FlushAsync("ui-hop-long-hidden");
+        }
+
         private void PostProbe(CoreDispatcher dispatcher)
         {
             long sequence = Interlocked.Increment(ref _probeSequence);
@@ -192,8 +238,20 @@ namespace Unison.Uwp.Services
             ActiveWork active = _active;
             ActiveWork last = _lastFinished;
             return
-                "active=" + (active != null ? active.Describe() + "; activeMs=" + ElapsedMs(active.StartedAt) : "none") +
+                "active=" + (active != null ? DescribeRunning(active) : "none") +
                 "; lastFinished=" + (last != null ? last.Describe() : "none");
+        }
+
+        private static string DescribeRunning(ActiveWork active)
+        {
+            string text = active.Describe() + "; activeMs=" + ElapsedMs(active.StartedAt);
+            StageMark stage = active.Stage;
+            if (stage != null)
+            {
+                text += "; stage=" + stage.Name + "; stageMs=" + ElapsedMs(stage.At);
+            }
+
+            return text;
         }
 
         private static long ElapsedMs(long startedAt)
@@ -221,6 +279,16 @@ namespace Unison.Uwp.Services
             public string CallerFile { get; }
             public long StartedAt { get; }
 
+            // Name and timestamp travel together so the timer never reads a torn pair.
+            private volatile StageMark _stage;
+
+            public StageMark Stage => _stage;
+
+            public void MarkStage(string name, long at)
+            {
+                _stage = new StageMark(name, at);
+            }
+
             public string Describe()
             {
                 string file = string.Empty;
@@ -237,6 +305,18 @@ namespace Unison.Uwp.Services
 
                 return (Kind ?? "?") + ":" + file + "." + (Caller ?? "?");
             }
+        }
+
+        private sealed class StageMark
+        {
+            public StageMark(string name, long at)
+            {
+                Name = name ?? "?";
+                At = at;
+            }
+
+            public string Name { get; }
+            public long At { get; }
         }
     }
 }

@@ -100,7 +100,9 @@ namespace Unison.Socket.Messages
 
             if (lidMappings != null)
             {
-                GroupMetadata.MappingsDiscovered = mappings => lidMappings.StoreMappingsAsync(mappings);
+                // Bulk discovery (a whole roster per group): storage only, read into RAM on demand.
+                GroupMetadata.MappingsDiscovered = mappings =>
+                    lidMappings.StoreMappingsAsync(mappings, cacheInMemory: false);
             }
 
             Relay = new RelayMessageUseCase(

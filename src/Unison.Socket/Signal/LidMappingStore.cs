@@ -59,6 +59,12 @@ namespace Unison.Socket.Signal
         private readonly Dictionary<string, string> _pendingDisk =
             new Dictionary<string, string>(StringComparer.Ordinal);
 
+        /// <summary>LID user → PN user mirror of <see cref="_pendingDisk"/> for reverse reads.</summary>
+        private readonly Dictionary<string, string> _pendingDiskReverse =
+            new Dictionary<string, string>(StringComparer.Ordinal);
+
+        private const int BulkLogThresholdPairs = 50;
+
         private bool _diskPersistSuppressed;
         private readonly object _flushGate = new object();
         private Task _flushInFlight = Task.CompletedTask;
@@ -104,7 +110,12 @@ namespace Unison.Socket.Signal
         /// Records pairs, ignoring anything that is not one LID and one phone number, and anything
         /// already stored. Only the user parts are persisted; devices are re-attached on read.
         /// </summary>
-        public async Task StoreMappingsAsync(IEnumerable<LidMapping> pairs)
+        /// <param name="cacheInMemory">
+        /// False for bulk discovery (group listing / metadata, alias snapshots): pairs go to
+        /// storage only and enter the memory cache when an async read asks for them. Pairs
+        /// still waiting on the write-behind queue stay visible to sync peeks.
+        /// </param>
+        public async Task StoreMappingsAsync(IEnumerable<LidMapping> pairs, bool cacheInMemory = true)
         {
             if (pairs == null)
             {
@@ -151,7 +162,8 @@ namespace Unison.Socket.Signal
                 return;
             }
 
-            var known = await ReadExistingLidUsersAsync(validated.Select(p => p.Key)).ConfigureAwait(false);
+            var known = await ReadExistingLidUsersAsync(validated.Select(p => p.Key), cacheInMemory)
+                .ConfigureAwait(false);
 
             var toWrite = new Dictionary<string, string>(StringComparer.Ordinal);
             foreach (var pair in validated)
@@ -172,14 +184,14 @@ namespace Unison.Socket.Signal
 
             if (!UsesWriteBehind)
             {
-                await WriteThroughAsync(toWrite).ConfigureAwait(false);
+                await WriteThroughAsync(toWrite, cacheInMemory).ConfigureAwait(false);
                 return;
             }
 
             // Decrypt/send need the pair before history releases disk; cache first, flush later.
-            foreach (var pair in toWrite)
+            if (cacheInMemory)
             {
-                CachePair(pair.Key, pair.Value);
+                CachePairs(toWrite);
             }
 
             int pendingCount;
@@ -188,7 +200,7 @@ namespace Unison.Socket.Signal
             {
                 foreach (var pair in toWrite)
                 {
-                    _pendingDisk[pair.Key] = pair.Value;
+                    AddPendingLocked(pair.Key, pair.Value);
                 }
 
                 pendingCount = _pendingDisk.Count;
@@ -291,6 +303,7 @@ namespace Unison.Socket.Signal
 
                 toWrite = new Dictionary<string, string>(_pendingDisk, StringComparer.Ordinal);
                 _pendingDisk.Clear();
+                _pendingDiskReverse.Clear();
             }
 
             try
@@ -306,7 +319,7 @@ namespace Unison.Socket.Signal
                     {
                         if (!_pendingDisk.ContainsKey(pair.Key))
                         {
-                            _pendingDisk[pair.Key] = pair.Value;
+                            AddPendingLocked(pair.Key, pair.Value);
                         }
                     }
                 }
@@ -316,15 +329,15 @@ namespace Unison.Socket.Signal
             }
         }
 
-        private async Task WriteThroughAsync(Dictionary<string, string> toWrite)
+        private async Task WriteThroughAsync(Dictionary<string, string> toWrite, bool cacheInMemory)
         {
             await WriteBatchAsync(toWrite).ConfigureAwait(false);
 
             // Cache only after the write succeeded, so a failed write is retried instead of
             // being masked by a memory hit.
-            foreach (var pair in toWrite)
+            if (cacheInMemory)
             {
-                CachePair(pair.Key, pair.Value);
+                CachePairs(toWrite);
             }
 
             _log.Trace("[LidMapping] Stored " + toWrite.Count + " mapping(s)");
@@ -411,7 +424,7 @@ namespace Unison.Socket.Signal
                 return;
             }
 
-            int warmed = 0;
+            var forward = new List<KeyValuePair<string, string>>();
             foreach (KeyValuePair<string, string> entry in rows)
             {
                 if (string.IsNullOrEmpty(entry.Key) ||
@@ -421,9 +434,11 @@ namespace Unison.Socket.Signal
                     continue;
                 }
 
-                CachePair(entry.Key, entry.Value);
-                warmed++;
+                forward.Add(entry);
             }
+
+            CachePairs(forward);
+            int warmed = forward.Count;
 
             if (warmed > 0)
             {
@@ -444,6 +459,14 @@ namespace Unison.Socket.Signal
             }
 
             lidUser = _cache.Get(PnKey(pnUser));
+            if (string.IsNullOrEmpty(lidUser))
+            {
+                lock (_pendingGate)
+                {
+                    _pendingDisk.TryGetValue(pnUser, out lidUser);
+                }
+            }
+
             return !string.IsNullOrEmpty(lidUser);
         }
 
@@ -460,8 +483,22 @@ namespace Unison.Socket.Signal
             }
 
             pnUser = _cache.Get(LidKey(lidUser));
+            if (string.IsNullOrEmpty(pnUser))
+            {
+                lock (_pendingGate)
+                {
+                    _pendingDiskReverse.TryGetValue(lidUser, out pnUser);
+                }
+            }
+
             return !string.IsNullOrEmpty(pnUser);
         }
+
+        /// <summary>Keys currently held by the memory cache (two per pair).</summary>
+        public int MemoryCacheCount => _cache.Count;
+
+        /// <summary>Longest wait to enter the memory cache lock this process, in ms.</summary>
+        public long MemoryCacheMaxLockWaitMs => _cache.MaxLockWaitMs;
 
         /// <summary>
         /// Sync paired JID for a full query address: looks up by user part, then re-attaches
@@ -522,8 +559,8 @@ namespace Unison.Socket.Signal
                     continue;
                 }
 
-                var cached = _cache.Get(PnKey(pnUser));
-                if (!string.IsNullOrEmpty(cached))
+                string cached;
+                if (TryGetCachedLidUserForPn(pnUser, out cached))
                 {
                     AddLidPair(resolved, pn, cached);
                     continue;
@@ -538,13 +575,7 @@ namespace Unison.Socket.Signal
                 var stored = await _storage.GetAsync(pendingUsers.ToList()).ConfigureAwait(false);
                 if (stored != null)
                 {
-                    foreach (var entry in stored)
-                    {
-                        if (!string.IsNullOrEmpty(entry.Value))
-                        {
-                            CachePair(entry.Key, entry.Value);
-                        }
-                    }
+                    CachePairs(stored.Where(entry => !string.IsNullOrEmpty(entry.Value)));
                 }
 
                 // Grouped by the JID usync will be asked about, keeping the devices each caller
@@ -554,7 +585,13 @@ namespace Unison.Socket.Signal
                 foreach (var pn in pending)
                 {
                     var pnUser = JidUtils.GetUser(pn);
-                    var cached = pnUser != null ? _cache.Get(PnKey(pnUser)) : null;
+                    string cached = null;
+                    if (pnUser != null &&
+                        (stored == null || !stored.TryGetValue(pnUser, out cached) || string.IsNullOrEmpty(cached)))
+                    {
+                        TryGetCachedLidUserForPn(pnUser, out cached);
+                    }
+
                     if (!string.IsNullOrEmpty(cached))
                     {
                         AddLidPair(resolved, pn, cached);
@@ -654,8 +691,8 @@ namespace Unison.Socket.Signal
                     continue;
                 }
 
-                var cached = _cache.Get(LidKey(lidUser));
-                if (!string.IsNullOrEmpty(cached))
+                string cached;
+                if (TryGetCachedPnUserForLid(lidUser, out cached))
                 {
                     AddPnPair(resolved, lid, cached);
                     continue;
@@ -683,7 +720,8 @@ namespace Unison.Socket.Signal
                         continue;
                     }
 
-                    var pnUser = _cache.Get(LidKey(lidUser));
+                    string pnUser;
+                    TryGetCachedPnUserForLid(lidUser, out pnUser);
                     if (string.IsNullOrEmpty(pnUser) && stored != null &&
                         stored.TryGetValue(lidUser + ReverseKeySuffix, out var storedPnUser) &&
                         !string.IsNullOrEmpty(storedPnUser))
@@ -708,29 +746,19 @@ namespace Unison.Socket.Signal
         /// <summary>
         /// Reads the LID currently stored for each phone-number user, consulting the cache first.
         /// </summary>
-        private async Task<Dictionary<string, string>> ReadExistingLidUsersAsync(IEnumerable<string> pnUsers)
+        private async Task<Dictionary<string, string>> ReadExistingLidUsersAsync(
+            IEnumerable<string> pnUsers,
+            bool cacheInMemory)
         {
             var existing = new Dictionary<string, string>(StringComparer.Ordinal);
             var misses = new List<string>();
 
             foreach (var pnUser in pnUsers.Distinct(StringComparer.Ordinal))
             {
-                var cached = _cache.Get(PnKey(pnUser));
-                if (!string.IsNullOrEmpty(cached))
+                string cached;
+                if (TryGetCachedLidUserForPn(pnUser, out cached))
                 {
                     existing[pnUser] = cached;
-                    continue;
-                }
-
-                string pendingLid;
-                lock (_pendingGate)
-                {
-                    _pendingDisk.TryGetValue(pnUser, out pendingLid);
-                }
-
-                if (!string.IsNullOrEmpty(pendingLid))
-                {
-                    existing[pnUser] = pendingLid;
                 }
                 else
                 {
@@ -751,13 +779,15 @@ namespace Unison.Socket.Signal
 
             foreach (var entry in stored)
             {
-                if (string.IsNullOrEmpty(entry.Value))
+                if (!string.IsNullOrEmpty(entry.Value))
                 {
-                    continue;
+                    existing[entry.Key] = entry.Value;
                 }
+            }
 
-                existing[entry.Key] = entry.Value;
-                CachePair(entry.Key, entry.Value);
+            if (cacheInMemory)
+            {
+                CachePairs(stored.Where(entry => !string.IsNullOrEmpty(entry.Value)));
             }
 
             return existing;
@@ -902,8 +932,50 @@ namespace Unison.Socket.Signal
 
         private void CachePair(string pnUser, string lidUser)
         {
-            _cache.Set(PnKey(pnUser), lidUser);
-            _cache.Set(LidKey(lidUser), pnUser);
+            _cache.SetMany(new[]
+            {
+                new KeyValuePair<string, string>(PnKey(pnUser), lidUser),
+                new KeyValuePair<string, string>(LidKey(lidUser), pnUser),
+            });
+        }
+
+        /// <summary>PN user → LID user pairs written to the memory cache under one lock.</summary>
+        private void CachePairs(IEnumerable<KeyValuePair<string, string>> pnToLid)
+        {
+            var entries = new List<KeyValuePair<string, string>>();
+            foreach (KeyValuePair<string, string> pair in pnToLid)
+            {
+                entries.Add(new KeyValuePair<string, string>(PnKey(pair.Key), pair.Value));
+                entries.Add(new KeyValuePair<string, string>(LidKey(pair.Value), pair.Key));
+            }
+
+            if (entries.Count == 0)
+            {
+                return;
+            }
+
+            long started = System.Diagnostics.Stopwatch.GetTimestamp();
+            _cache.SetMany(entries);
+            int pairs = entries.Count / 2;
+            if (pairs > BulkLogThresholdPairs)
+            {
+                long ms = (System.Diagnostics.Stopwatch.GetTimestamp() - started) * 1000 /
+                          System.Diagnostics.Stopwatch.Frequency;
+                _log.Trace("[LidMapping] lid-cache-bulk|pairs=" + pairs + "; ms=" + ms);
+            }
+        }
+
+        private void AddPendingLocked(string pnUser, string lidUser)
+        {
+            string previousLid;
+            if (_pendingDisk.TryGetValue(pnUser, out previousLid) &&
+                !string.Equals(previousLid, lidUser, StringComparison.Ordinal))
+            {
+                _pendingDiskReverse.Remove(previousLid);
+            }
+
+            _pendingDisk[pnUser] = lidUser;
+            _pendingDiskReverse[lidUser] = pnUser;
         }
 
         private static string PnKey(string pnUser)

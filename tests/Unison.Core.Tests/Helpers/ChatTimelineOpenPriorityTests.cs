@@ -121,6 +121,30 @@ namespace Unison.Core.Tests.Helpers
                     offlineTipBusy: false));
         }
 
+        [Theory]
+        [InlineData(true, false, true, false, false, "deeplink")]
+        [InlineData(false, true, true, false, false, "timeline")]
+        [InlineData(false, false, false, false, false, "hidden")]
+        [InlineData(false, false, true, true, false, "cold-populate")]
+        [InlineData(false, false, true, false, true, "offline-tip")]
+        [InlineData(false, false, true, false, false, null)]
+        public void Tip_reconcile_pause_names_the_holding_gate(
+            bool deepLink,
+            bool timeline,
+            bool visible,
+            bool cold,
+            bool offline,
+            string? expected)
+        {
+            string gate = ChatTimelineOpenPriority.DescribeTipReconcilePause(
+                deepLink, timeline, visible, cold, offline);
+
+            Assert.Equal(expected, gate);
+            Assert.Equal(
+                expected != null,
+                ChatTimelineOpenPriority.ShouldPauseTipReconcileUi(deepLink, timeline, visible, cold, offline));
+        }
+
         [Fact]
         public void Mobile_scroll_settle_hold_covers_large_group_open_window()
         {

@@ -13,6 +13,7 @@ using System;
 using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
+using Unison.Core.Helpers.Chats;
 
 namespace Unison.Core.State
 {
@@ -23,10 +24,28 @@ namespace Unison.Core.State
         /// <summary>Minimum gap between post-release admits (milliseconds).</summary>
         public const int PostReleaseAdmitGapMs = 80;
 
+        /// <summary>
+        /// Ceiling for callers that pass no <c>maxWait</c>: a leaked Hold must not park
+        /// author projection / roster demand for the rest of the session.
+        /// </summary>
+        public static readonly TimeSpan DefaultMaxWait = ChatTimelineOpenPriority.TimelineHoldWaitMax;
+
+        // Monotonic: a wall-clock jump (NTP / time zone sync on resume) must not stretch or skip waits.
+        private static readonly Stopwatch Clock = Stopwatch.StartNew();
+
+        private readonly TimeSpan _defaultMaxWait;
         private int _held;
-        private long _nextAdmitUtcTicks;
+        private long _nextAdmitTicks;
+
+        /// <param name="defaultMaxWait">Test seam; production uses <see cref="DefaultMaxWait"/>.</param>
+        public ChatTimelineLoadPriorityGate(TimeSpan? defaultMaxWait = null)
+        {
+            _defaultMaxWait = defaultMaxWait ?? DefaultMaxWait;
+        }
 
         public bool IsHeld => Volatile.Read(ref _held) > 0;
+
+        private static long NowTicks => Clock.Elapsed.Ticks;
 
         public event EventHandler Changed;
 
@@ -59,20 +78,16 @@ namespace Unison.Core.State
         /// <summary>
         /// Spins until no hold remains, then takes a staggered admit slot so concurrent
         /// waiters do not all hit the dispatcher on the same turn after Release.
-        /// When <paramref name="maxWait"/> elapses while still held, returns without admit
-        /// so listing / ApplyMetadata cannot hang forever behind a stuck open Hold.
+        /// When <paramref name="maxWait"/> (default <see cref="DefaultMaxWait"/>) elapses while
+        /// still held, returns without admit so no caller hangs behind a stuck open Hold.
         /// </summary>
         public async Task WaitWhileHeldAsync(TimeSpan? maxWait = null)
         {
-            long? deadlineTicks = null;
-            if (maxWait.HasValue)
-            {
-                deadlineTicks = DateTime.UtcNow.Add(maxWait.Value).Ticks;
-            }
+            long deadlineTicks = NowTicks + (maxWait ?? _defaultMaxWait).Ticks;
 
             while (IsHeld)
             {
-                if (deadlineTicks.HasValue && DateTime.UtcNow.Ticks >= deadlineTicks.Value)
+                if (NowTicks >= deadlineTicks)
                 {
                     Debug.WriteLine("[ChatTimelineLoadPriorityGate] WaitWhileHeld timed out; proceeding");
                     return;
@@ -84,12 +99,12 @@ namespace Unison.Core.State
             await AdmitAfterReleaseAsync(deadlineTicks).ConfigureAwait(false);
         }
 
-        private async Task AdmitAfterReleaseAsync(long? deadlineTicks)
+        private async Task AdmitAfterReleaseAsync(long deadlineTicks)
         {
             long gapTicks = TimeSpan.FromMilliseconds(PostReleaseAdmitGapMs).Ticks;
             while (true)
             {
-                if (deadlineTicks.HasValue && DateTime.UtcNow.Ticks >= deadlineTicks.Value)
+                if (NowTicks >= deadlineTicks)
                 {
                     Debug.WriteLine("[ChatTimelineLoadPriorityGate] Admit timed out; proceeding");
                     return;
@@ -100,7 +115,7 @@ namespace Unison.Core.State
                 {
                     while (IsHeld)
                     {
-                        if (deadlineTicks.HasValue && DateTime.UtcNow.Ticks >= deadlineTicks.Value)
+                        if (NowTicks >= deadlineTicks)
                         {
                             Debug.WriteLine("[ChatTimelineLoadPriorityGate] WaitWhileHeld timed out; proceeding");
                             return;
@@ -112,12 +127,12 @@ namespace Unison.Core.State
                     continue;
                 }
 
-                long now = DateTime.UtcNow.Ticks;
-                long next = Interlocked.Read(ref _nextAdmitUtcTicks);
+                long now = NowTicks;
+                long next = Interlocked.Read(ref _nextAdmitTicks);
                 if (now >= next)
                 {
                     long candidate = now + gapTicks;
-                    if (Interlocked.CompareExchange(ref _nextAdmitUtcTicks, candidate, next) == next)
+                    if (Interlocked.CompareExchange(ref _nextAdmitTicks, candidate, next) == next)
                     {
                         return;
                     }

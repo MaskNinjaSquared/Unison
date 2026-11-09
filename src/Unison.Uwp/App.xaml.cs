@@ -213,6 +213,7 @@ namespace Unison.Uwp
             var services = new ServiceCollection();
 
             services.AddSingleton<UiStallWatchdog>();
+            services.AddSingleton<IUiWorkStage>(sp => sp.GetRequiredService<UiStallWatchdog>());
             services.AddSingleton<IDispatcher, DispatcherService>();
             // Not the IDispatcher above: before a window exists this one drops work instead of
             // running it inline. The client and its façades marshal bound-list edits through it.
@@ -284,6 +285,7 @@ namespace Unison.Uwp
             // Host owns WinRT transport construction; SocketBridge only asks the factory.
             services.AddSingleton<IWhatsAppTransportFactory, UwpWhatsAppTransportFactory>();
             // Host owns SocketBridge build + wire + transport open; portable connect-open only calls this.
+            services.AddSingleton(sp => new ProfilePictureQueryCache(sp.GetRequiredService<SyncWorkloadStrategy>()));
             services.AddSingleton<IConnectionSocketSessionFactory, UwpConnectionSocketSessionFactory>();
             services.AddSingleton<ILidMappingMemory>(sp =>
                 new LidMappingMemoryAdapter(sp.GetRequiredService<LidMappingStore>()));
@@ -322,7 +324,10 @@ namespace Unison.Uwp
                 // Peek only: GetCanonicalJid promotes misses and can fire Alias.Changed mid-Build,
                 // which Invalidates the index and turns ClearUnread / FindConversation into a
                 // multi-second rebuild loop on Mobile (267 rows × alias flood).
-                return new ChatRowIndex(() => chatState.Chats, aliases.PeekCanonicalJid);
+                return new ChatRowIndex(
+                    () => chatState.Chats,
+                    aliases.PeekCanonicalJid,
+                    sp.GetRequiredService<IUiWorkStage>());
             });
             // One roster index for every device; Peek for the same reason as ChatRowIndex.
             services.AddSingleton(sp => new GroupRosterIndex(
@@ -404,17 +409,23 @@ namespace Unison.Uwp
                 sp.GetRequiredService<IStringResources>(),
                 sp.GetRequiredService<IRuntimeDiagnostics>(),
                 () => sp.GetRequiredService<SyncBudget>().IsFrugal,
+                sp.GetRequiredService<IUiWorkHolds>(),
+                sp.GetRequiredService<AttachedUiDispatcher>(),
+                sp.GetRequiredService<IUiWorkStage>()));
+            services.AddSingleton<IUiWorkHolds>(sp => new UiWorkHolds(
                 () =>
                 {
                     IChatService chats = sp.GetService<IChatService>();
-                    return Unison.Core.Helpers.Chats.ChatTimelineOpenPriority.ShouldPauseTipReconcileUi(
-                        sp.GetRequiredService<ChatListDeepLinkHoldGate>().IsHeld,
-                        sp.GetRequiredService<ChatTimelineLoadPriorityGate>().IsHeld,
-                        sp.GetRequiredService<IAppVisibility>().IsWindowVisible,
-                        sp.GetRequiredService<ChatListColdPopulateGate>().IsHeld,
-                        chats != null && chats.IsOfflineReplayTipBusy);
+                    return new Unison.Core.Helpers.Ui.UiHoldSnapshot
+                    {
+                        DeepLinkHeld = sp.GetRequiredService<ChatListDeepLinkHoldGate>().IsHeld,
+                        TimelineHeld = sp.GetRequiredService<ChatTimelineLoadPriorityGate>().IsHeld,
+                        WindowVisible = sp.GetRequiredService<IAppVisibility>().IsWindowVisible,
+                        ColdPopulate = sp.GetRequiredService<ChatListColdPopulateGate>().IsHeld,
+                        OfflineTipBusy = chats != null && chats.IsOfflineReplayTipBusy,
+                    };
                 },
-                sp.GetRequiredService<AttachedUiDispatcher>()));
+                sp.GetRequiredService<IRuntimeDiagnostics>()));
             services.AddSingleton(sp => new ChatNameRefresh(
                 sp.GetRequiredService<AttachedUiDispatcher>(),
                 sp.GetRequiredService<IChatStateStore>(),
@@ -422,11 +433,7 @@ namespace Unison.Uwp
                 sp.GetRequiredService<ISelfMarkerNaming>(),
                 sp.GetRequiredService<IGroupNaming>(),
                 () => sp.GetRequiredService<SyncBudget>().IsFrugal,
-                () =>
-                {
-                    IChatService chats = sp.GetService<IChatService>();
-                    return chats != null && chats.IsOfflineReplayTipBusy;
-                }));
+                uiHolds: sp.GetRequiredService<IUiWorkHolds>()));
             services.AddSingleton(sp => new StoredChatPreviewRefresh(
                 sp.GetRequiredService<AttachedUiDispatcher>(),
                 sp.GetRequiredService<ChatStateStore>(),
@@ -810,11 +817,7 @@ namespace Unison.Uwp
                 sp.GetRequiredService<ChatTimelineLoadPriorityGate>(),
                 sp.GetRequiredService<IRuntimeDiagnostics>(),
                 sp.GetRequiredService<IContactBlockActions>(),
-                () =>
-                {
-                    IChatService chats = sp.GetService<IChatService>();
-                    return chats != null && chats.IsOfflineReplayTipBusy;
-                }));
+                uiHolds: sp.GetRequiredService<IUiWorkHolds>()));
             services.AddSingleton<IJidAliasPersistence>(sp => new JidAliasPersistence(
                 sp.GetRequiredService<JidAliasTable>(),
                 sp.GetRequiredService<ISocketAliasRegistrar>(),
@@ -865,7 +868,9 @@ namespace Unison.Uwp
                 sp.GetRequiredService<IDialogService>(),
                 sp.GetRequiredService<IRuntimeDiagnostics>(),
                 sp.GetRequiredService<SessionTipAuthorCache>(),
-                sp.GetRequiredService<IPersonStore>()));
+                sp.GetRequiredService<IPersonStore>(),
+                sp.GetRequiredService<IUiWorkHolds>(),
+                () => sp.GetRequiredService<SyncWorkGate>().IsReplayDrainActive));
             // After IChatService: the projection persists resolved strip rows so cold start keeps names.
             // AttachedUiDispatcher (not IDispatcher/DispatcherService): same live frame as
             // GroupMetadataApply / ChatFacade so strip passes share the pump; DispatcherService
@@ -972,11 +977,7 @@ namespace Unison.Uwp
                     sp.GetRequiredService<IGroupRosterStore>(),
                     sp.GetRequiredService<IJidResolver>(),
                     sp.GetRequiredService<AttachedUiDispatcher>()),
-                () =>
-                {
-                    IChatService chats = sp.GetService<IChatService>();
-                    return chats != null && chats.IsOfflineReplayTipBusy;
-                }));
+                uiHolds: sp.GetRequiredService<IUiWorkHolds>()));
             services.AddSingleton<IProfilePictureEncoder, ProfilePictureEncoder>();
             services.AddSingleton<IChannelWireActions>(sp => new BridgeChannelWireActions(
                 sp.GetRequiredService<UwpSessionProvider>()));

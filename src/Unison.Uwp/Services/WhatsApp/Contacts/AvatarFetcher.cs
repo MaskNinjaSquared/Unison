@@ -46,9 +46,11 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
         /// Asks each candidate in turn and stops at the first one with a picture. The result is
         /// returned rather than applied: only the caller knows what a miss means for its row.
         /// </summary>
+        /// <param name="revalidate">Past the IQ cache (chat open, broken image); the answer is kept.</param>
         public async Task<ProfilePictureResult> FetchPreviewAsync(
             IEnumerable<string> candidates,
-            CancellationToken token)
+            CancellationToken token,
+            bool revalidate = false)
         {
             ProfilePictureResult lastResult = null;
             foreach (var candidate in candidates ?? Enumerable.Empty<string>())
@@ -70,7 +72,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
 
                 using (await _gate.AcquireAsync(token).ConfigureAwait(false))
                 {
-                    lastResult = await socket.GetProfilePictureUrlResultAsync(candidate, PreviewQueryType);
+                    lastResult = await socket.GetProfilePictureUrlResultAsync(candidate, PreviewQueryType, revalidate);
                 }
 
                 Debug.WriteLine(

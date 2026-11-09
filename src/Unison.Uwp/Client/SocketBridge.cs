@@ -35,6 +35,7 @@ using Unison.Baileys.Crypto;
 using Unison.Baileys.Protocol;
 using Unison.Core.Contracts;
 using Unison.Core.Helpers;
+using Unison.Core.Helpers.Chats;
 using Unison.Core.Helpers.Groups;
 using Unison.Core.Models;
 using Unison.Socket.Abstractions;
@@ -86,6 +87,7 @@ namespace Unison.Uwp.Client
         private readonly bool _reuseLoadedKeyState;
         private readonly SignalHandler _signal;
         private readonly LidMappingStore _lidMappings;
+        private readonly ProfilePictureQueryCache _pictureCache;
         private readonly IEncryptedMediaDownloader _downloader;
         private readonly SocketConfig _config = CreateSocketConfig();
 
@@ -160,12 +162,15 @@ namespace Unison.Uwp.Client
             AuthState authState,
             FileKeyStore sharedKeyStore,
             bool reuseLoadedKeyState,
-            LidMappingStore lidMappings = null)
+            LidMappingStore lidMappings = null,
+            ProfilePictureQueryCache pictureCache = null)
         {
             if (authState == null)
             {
                 throw new ArgumentNullException(nameof(authState));
             }
+
+            _pictureCache = pictureCache;
 
             _authState = authState;
             _appStateKeyId = authState.MyAppStateKeyId;
@@ -1232,11 +1237,15 @@ namespace Unison.Uwp.Client
                 return;
             }
 
-            Store(mappings, source, true);
+            // Whole rosters: bulk discovery stays in storage until an async read asks for it.
+            Store(mappings, source, true, cacheInMemory: false);
             await ForwardMappingsAsync(mappings, source).ConfigureAwait(false);
         }
 
-        public async Task<ProfilePictureResult> GetProfilePictureUrlResultAsync(string jid, string type = "preview")
+        public async Task<ProfilePictureResult> GetProfilePictureUrlResultAsync(
+            string jid,
+            string type = "preview",
+            bool revalidate = false)
         {
             if (string.IsNullOrEmpty(jid))
             {
@@ -1249,6 +1258,18 @@ namespace Unison.Uwp.Client
                 return await GetNewsletterProfilePictureResultAsync(jid).ConfigureAwait(false);
             }
 
+            if (_pictureCache == null)
+            {
+                return await QueryProfilePictureAsync(jid, type).ConfigureAwait(false);
+            }
+
+            return await _pictureCache
+                .GetAsync(jid, type, revalidate, () => QueryProfilePictureAsync(jid, type))
+                .ConfigureAwait(false);
+        }
+
+        private async Task<ProfilePictureResult> QueryProfilePictureAsync(string jid, string type)
+        {
             var session = Require();
 
             try
@@ -1961,7 +1982,7 @@ namespace Unison.Uwp.Client
                 return;
             }
 
-            Store(new List<LidMapping> { mapping }, source, writeLog);
+            Store(new List<LidMapping> { mapping }, source, writeLog, cacheInMemory: true);
         }
 
         public void RegisterJidAliases(IDictionary<string, string> aliases, string source)
@@ -1981,10 +2002,11 @@ namespace Unison.Uwp.Client
                 }
             }
 
-            Store(mappings, source, true);
+            // Alias-table snapshot: the table already holds these in RAM; storage only here.
+            Store(mappings, source, true, cacheInMemory: false);
         }
 
-        private void Store(List<LidMapping> mappings, string source, bool writeLog)
+        private void Store(List<LidMapping> mappings, string source, bool writeLog, bool cacheInMemory)
         {
             if (mappings.Count == 0)
             {
@@ -1996,7 +2018,7 @@ namespace Unison.Uwp.Client
             // Not awaited is not the same as not watched, though - GC.KeepAlive observes
             // nothing, so a failed write took the pairing with it in silence and the contact
             // went back to showing a bare number.
-            _ = ReportIfStoreFailsAsync(_lidMappings.StoreMappingsAsync(mappings), source);
+            _ = ReportIfStoreFailsAsync(_lidMappings.StoreMappingsAsync(mappings, cacheInMemory), source);
 
             if (writeLog)
             {
@@ -2485,7 +2507,9 @@ namespace Unison.Uwp.Client
                 VerifiedName = envelope.VerifiedBusinessName,
                 SenderLid = JidUtils.IsLidUser(key.ParticipantAlt) ? key.ParticipantAlt : null,
                 RecipientJid = key.RemoteJidAlt,
-                IsOffline = reason == MessageUpsertReason.Append
+                IsOffline = OfflineReplayUiPolicy.IsOfflineEnvelope(
+                    reason == MessageUpsertReason.Append,
+                    key.FromMe)
             };
         }
 
@@ -2534,24 +2558,18 @@ namespace Unison.Uwp.Client
         /// </summary>
         private async Task ApplyAppStateAsync(WaEventBatch batch)
         {
+            // Upsert (group create notify) and update (app-state flags) share one host callback.
+            // Upsert carries ConversationTimestamp for empty-list order; update carries pin/mute.
+            IList<ChatUpdate> upsertedChats;
+            if (batch.TryGet(WaEventKind.ChatsUpsert, out upsertedChats))
+            {
+                await ForwardChatUpdatesAsync(upsertedChats).ConfigureAwait(false);
+            }
+
             IList<ChatUpdate> chats;
             if (batch.TryGet(WaEventKind.ChatsUpdate, out chats))
             {
-                foreach (var chat in chats)
-                {
-                    await StoreTcTokenAsync(
-                        chat.Id,
-                        chat.TcToken,
-                        chat.TcTokenTimestamp,
-                        chat.TcTokenSenderTimestamp,
-                        "app-state privacy token").ConfigureAwait(false);
-
-                    var chatChanged = ChatSettingsChanged;
-                    if (chatChanged != null)
-                    {
-                        await chatChanged(chat).ConfigureAwait(false);
-                    }
-                }
+                await ForwardChatUpdatesAsync(chats).ConfigureAwait(false);
             }
 
             // Two events, one handler. An upsert is the address book arriving from app state and
@@ -2567,6 +2585,7 @@ namespace Unison.Uwp.Client
             IList<ContactUpdate> contacts;
             if (batch.TryGet(WaEventKind.ContactsUpdate, out contacts))
             {
+                InvalidateChangedPictures(contacts);
                 await ForwardContactsAsync(contacts).ConfigureAwait(false);
             }
 
@@ -2594,6 +2613,66 @@ namespace Unison.Uwp.Client
                 foreach (var key in deletedMessages)
                 {
                     await messageDeleted(key).ConfigureAwait(false);
+                }
+            }
+        }
+
+        private async Task ForwardChatUpdatesAsync(IList<ChatUpdate> chats)
+        {
+            if (chats == null || chats.Count == 0)
+            {
+                return;
+            }
+
+            foreach (var chat in chats)
+            {
+                if (chat == null)
+                {
+                    continue;
+                }
+
+                await StoreTcTokenAsync(
+                    chat.Id,
+                    chat.TcToken,
+                    chat.TcTokenTimestamp,
+                    chat.TcTokenSenderTimestamp,
+                    "app-state privacy token").ConfigureAwait(false);
+
+                var chatChanged = ChatSettingsChanged;
+                if (chatChanged != null)
+                {
+                    await chatChanged(chat).ConfigureAwait(false);
+                }
+            }
+        }
+
+        /// <summary>
+        /// A <c>picture</c> notification carries a sentinel, never the new URL: drop the cached
+        /// IQ answer so the next fetch asks the server.
+        /// </summary>
+        private void InvalidateChangedPictures(IList<ContactUpdate> updates)
+        {
+            if (_pictureCache == null || updates == null)
+            {
+                return;
+            }
+
+            for (int i = 0; i < updates.Count; i++)
+            {
+                ContactUpdate update = updates[i];
+                if (update != null &&
+                    (update.ImgUrl == ContactImageState.Changed || update.ImgUrl == ContactImageState.Removed))
+                {
+                    _pictureCache.Invalidate(update.Id);
+                    if (!string.IsNullOrEmpty(update.Lid))
+                    {
+                        _pictureCache.Invalidate(update.Lid);
+                    }
+
+                    if (!string.IsNullOrEmpty(update.PhoneNumber))
+                    {
+                        _pictureCache.Invalidate(update.PhoneNumber);
+                    }
                 }
             }
         }

@@ -1,10 +1,9 @@
 // =============================================================================
 // MobileChatListAvatarGate
 //
-// Mobile: first pictures come from the post-history avatar batch + disk hydrate.
-// List scroll must not hit the wire. Opening a chat revalidates once; Apply
-// skips the CDN download when the picture id/url is unchanged.
-// Desktop keeps the existing row-realize refresh path.
+// Mobile list scroll stays offline (no IQ per realized row); desktop keeps the
+// row-realize refresh path. Opening another chat revalidates on every device:
+// one IQ per open, served past the profile-picture cache and written back.
 // =============================================================================
 namespace Unison.Core.Helpers
 {
@@ -13,6 +12,6 @@ namespace Unison.Core.Helpers
         public static bool AllowRefreshOnRowRealized(bool isMobile) => !isMobile;
 
         public static bool AllowRefreshOnChatOpen(bool isMobile, bool chatChanged, bool hasChat) =>
-            isMobile && chatChanged && hasChat;
+            chatChanged && hasChat;
     }
 }

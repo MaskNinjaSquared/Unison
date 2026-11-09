@@ -31,12 +31,16 @@ namespace Unison.Core.Tests.State
             Assert.Equal(900, s.HistoryFullFinalizeDelayMs);
             Assert.Equal(8, s.LidMappingPersistBatchSize);
             Assert.Equal(3000, s.LidMappingPersistDelayMs);
-            Assert.Equal(512, s.LidMappingMemoryCacheMaxPairs);
+            Assert.Equal(1024, s.LidMappingMemoryCacheMaxPairs);
             Assert.Equal(0, s.LidMappingWarmMaxPairs);
-            Assert.Equal(1024, s.LidMappingMemoryCacheMaxEntries);
+            Assert.Equal(2048, s.LidMappingMemoryCacheMaxEntries);
             Assert.Equal(0, s.DeferredAvatarMaxRetries);
             Assert.Equal(60, s.DeferredAvatarRetryDelaySeconds);
-            Assert.Equal(12, s.PostSyncEnrichmentQuietSeconds);
+            Assert.Equal(9, s.PostSyncEnrichmentQuietSeconds);
+            Assert.Equal(900, s.AvatarFetchInterRequestDelayMs);
+            Assert.Equal(700, s.NameResolveInterChunkDelayMs);
+            Assert.Equal(900, s.GroupRosterInterRequestDelayMs);
+            Assert.Equal(35, s.GroupRosterNextBatchDelaySeconds);
         }
 
         [Fact]
@@ -68,9 +72,9 @@ namespace Unison.Core.Tests.State
             Assert.Equal(0, high.LidMappingWarmMaxPairs);
             Assert.True(unsupported.LidMappingMemoryCacheMaxPairs < low.LidMappingMemoryCacheMaxPairs);
             Assert.True(low.LidMappingMemoryCacheMaxPairs < high.LidMappingMemoryCacheMaxPairs);
-            Assert.Equal(512, unsupported.LidMappingMemoryCacheMaxPairs);
-            Assert.Equal(1024, low.LidMappingMemoryCacheMaxPairs);
-            Assert.Equal(2048, high.LidMappingMemoryCacheMaxPairs);
+            Assert.Equal(1024, unsupported.LidMappingMemoryCacheMaxPairs);
+            Assert.Equal(4096, low.LidMappingMemoryCacheMaxPairs);
+            Assert.Equal(8192, high.LidMappingMemoryCacheMaxPairs);
         }
 
         [Fact]
@@ -118,7 +122,7 @@ namespace Unison.Core.Tests.State
             Assert.True(s.AllowStagnantHistoryRepairCascade);
             Assert.Equal(1000, s.HistoryFinalizeQuietMs);
             Assert.Equal(700, s.HistoryFullFinalizeDelayMs);
-            Assert.Equal(2048, s.LidMappingMemoryCacheMaxPairs);
+            Assert.Equal(8192, s.LidMappingMemoryCacheMaxPairs);
             Assert.Equal(0, s.LidMappingWarmMaxPairs);
             Assert.Equal(6, s.DeferredAvatarMaxRetries);
             Assert.Equal(20, s.DeferredAvatarRetryDelaySeconds);
@@ -194,7 +198,7 @@ namespace Unison.Core.Tests.State
         }
 
         [Fact]
-        public void Unsupported_frugal_pacing_matches_former_Low_not_the_new_Low_retune()
+        public void Unsupported_frugal_pacing_matches_Low_floors_with_longer_catch_up_abort()
         {
             SyncPacing unsupported = UnsupportedSyncWorkload.Instance.PacingFor(frugal: true);
             SyncPacing low = LowSyncWorkload.Instance.PacingFor(frugal: true);
@@ -205,6 +209,8 @@ namespace Unison.Core.Tests.State
             Assert.Equal(low.DeferredStartupQuietMs, unsupported.DeferredStartupQuietMs);
             Assert.Equal(0, UnsupportedSyncWorkload.Instance.MaxFullHistoryCatchUpRounds);
             Assert.Equal(1, UnsupportedSyncWorkload.Instance.AvatarFetchBatchSize);
+            Assert.Equal(50, unsupported.CatchUpIdleAbortSeconds);
+            Assert.Equal(3, unsupported.CatchUpStagnantCyclesBeforeStop);
             Assert.True(unsupported.CatchUpIdleAbortSeconds > low.CatchUpIdleAbortSeconds);
         }
 

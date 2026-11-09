@@ -13,13 +13,22 @@ namespace Unison.Core.Helpers
         private const int MaxLength = 50;
 
         /// <summary>
+        /// Longest prefix of a raw body the one-line preview ever scans. The strip shows
+        /// <see cref="MaxLength"/> characters; Replace / Collapse / mention regex over a whole
+        /// long body ran inside UI hops for nothing.
+        /// </summary>
+        public const int RawScanCap = 512;
+
+        /// <summary>
         /// One-line preview for chat lists and quotes: single line, collapsed spaces, capped at
         /// <see cref="MaxLength"/>. Never use this on text that gets persisted or shown in a
         /// bubble — that is <see cref="NormalizeBody"/>.
         /// </summary>
         public static void Normalize(string raw, ChatPreviewKind? kindHint, out ChatPreviewKind kind, out string text)
         {
-            string s = (raw ?? string.Empty)
+            string scanned = CapForPreviewScan(raw);
+            bool capped = scanned.Length < (raw?.Length ?? 0);
+            string s = scanned
                 .Replace("\r\n", " ")
                 .Replace("\n", " ")
                 .Replace("\r", " ");
@@ -28,6 +37,32 @@ namespace Unison.Core.Helpers
             kind = kindHint ?? ChatPreviewKind.Text;
             StripPlaceholders(ref s, kind);
             text = Truncate(CollapseSpaces(s).Trim());
+            if (capped && text.Length > 0 && !text.EndsWith("...", StringComparison.Ordinal))
+            {
+                text += "...";
+            }
+        }
+
+        /// <summary>First <see cref="RawScanCap"/> characters of a preview source; never null.</summary>
+        public static string CapForPreviewScan(string raw)
+        {
+            if (string.IsNullOrEmpty(raw))
+            {
+                return string.Empty;
+            }
+
+            if (raw.Length <= RawScanCap)
+            {
+                return raw;
+            }
+
+            int cut = RawScanCap;
+            if (char.IsHighSurrogate(raw[cut - 1]))
+            {
+                cut--;
+            }
+
+            return raw.Substring(0, cut);
         }
 
         /// <summary>

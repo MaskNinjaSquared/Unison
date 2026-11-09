@@ -1,8 +1,9 @@
 using System;
 using System.Collections.Generic;
 using Proto;
-using Unison.Core.Models;
 using Unison.Core.Helpers;
+using Unison.Core.Helpers.Chats;
+using Unison.Core.Models;
 
 namespace Unison.WhatsAppClient.Helpers
 {
@@ -43,9 +44,9 @@ namespace Unison.WhatsAppClient.Helpers
                 WebMessageInfo newest = HistorySyncContentFilter.FindNewestListable(conv);
                 if (newest == null)
                 {
-                    // Pin/mute can arrive on a Conversation with no listable tip yet. Skipping
-                    // the whole row dropped IsChatPinned before ChatStore ever saw it.
-                    if (!flags.Pinned.HasValue && !flags.AppliesMute)
+                    // Pin/mute, or an empty chat with ConversationTimestamp / CreatedAt so the
+                    // list can order a newly joined / created group instead of dropping it.
+                    if (!ShouldKeepEmptyConversation(conv, flags))
                     {
                         continue;
                     }
@@ -63,7 +64,7 @@ namespace Unison.WhatsAppClient.Helpers
                         out kind,
                         out ts))
                 {
-                    if (!flags.Pinned.HasValue && !flags.AppliesMute)
+                    if (!ShouldKeepEmptyConversation(conv, flags))
                     {
                         continue;
                     }
@@ -75,7 +76,7 @@ namespace Unison.WhatsAppClient.Helpers
                 ChatPreviewNormalizer.Normalize(lastMessage, kind, out kind, out string normalizedText);
                 if (!HistorySyncContentFilter.HasRenderableContent(normalizedText, kind))
                 {
-                    if (!flags.Pinned.HasValue && !flags.AppliesMute)
+                    if (!ShouldKeepEmptyConversation(conv, flags))
                     {
                         continue;
                     }
@@ -151,6 +152,39 @@ namespace Unison.WhatsAppClient.Helpers
             return results;
         }
 
+        /// <summary>
+        /// Keep an empty Conversation when pin/mute must reach ChatStore, or when history
+        /// carries an activity timestamp for list order (empty group / just-joined).
+        /// </summary>
+        internal static bool ShouldKeepEmptyConversation(
+            Conversation conv,
+            HistoryConversationFlags flags)
+        {
+            if (flags.Pinned.HasValue || flags.AppliesMute)
+            {
+                return true;
+            }
+
+            return ResolveEmptyOrderTimestamp(conv).HasValue;
+        }
+
+        internal static DateTime? ResolveEmptyOrderTimestamp(Conversation conv)
+        {
+            if (conv == null)
+            {
+                return null;
+            }
+
+            return EmptyChatOrderTimestamp.Resolve(
+                existingTipUtc: null,
+                conversationTimestampUnix: conv.HasConversationTimestamp
+                    ? (long)conv.ConversationTimestamp
+                    : 0L,
+                hasConversationTimestamp: conv.HasConversationTimestamp,
+                createdAtUnix: conv.HasCreatedAt ? (long)conv.CreatedAt : 0L,
+                hasCreatedAt: conv.HasCreatedAt);
+        }
+
         private static HistoryChatPreview BuildFlagOnlyPreview(
             Conversation conv,
             string jid,
@@ -187,6 +221,7 @@ namespace Unison.WhatsAppClient.Helpers
                 MutedUntil = flags.MutedUntil,
                 LastMessage = string.Empty,
                 LastMessageKind = ChatPreviewKind.Text,
+                LastMessageTimestampUtc = ResolveEmptyOrderTimestamp(conv),
                 SyncId = syncId ?? string.Empty,
                 SyncType = syncType,
                 UpdatedAtUtc = now

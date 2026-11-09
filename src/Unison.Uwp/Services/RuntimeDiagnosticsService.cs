@@ -55,6 +55,7 @@ namespace Unison.Uwp.Services
         private int _healthSamplingStarted;
         private int _flushRequested;
         private int _droppedLineCount;
+        private long _uiHoldTimeoutCount;
         private string _lastHealthFingerprint;
         private IRuntimeSnapshotSource _snapshotSource;
 
@@ -110,10 +111,18 @@ namespace Unison.Uwp.Services
             Write("health", "sampling-start", "intervalSeconds=" + (int)HealthInterval.TotalSeconds);
         }
 
+        public long UiHoldTimeoutCount => Interlocked.Read(ref _uiHoldTimeoutCount);
+
         public void Write(string category, string eventName, string details = null)
         {
             try
             {
+                if (string.Equals(category, "ui-hold", StringComparison.Ordinal) &&
+                    string.Equals(eventName, "ui-hold-timeout", StringComparison.Ordinal))
+                {
+                    Interlocked.Increment(ref _uiHoldTimeoutCount);
+                }
+
                 string line = string.Format(
                     "{0:O}|run={1}|tid={2}|{3}|{4}|{5}",
                     DateTime.UtcNow,

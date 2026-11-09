@@ -7,6 +7,7 @@
 * [Background broker](Background-Broker)
 * [UI and shell](UI-and-Shell)
 * [Coding standards](Coding-Standards)
+* [UI work scheduling](Ui-Work-Scheduling)
 * [Adding languages](Adding-Languages)
 * [Migration](Migration)
 * [WhatsAppService extraction](WhatsAppService-Extraction)

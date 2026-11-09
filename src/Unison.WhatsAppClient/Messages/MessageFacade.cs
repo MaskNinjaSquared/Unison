@@ -79,6 +79,8 @@ namespace Unison.WhatsAppClient.Messages
         private readonly Func<bool> _isAwaitingInitialSync;
         private readonly ReceiptReader _receipts;
         private readonly GroupReceiptTally _groupReceipts = new GroupReceiptTally();
+        private readonly KeyedLatestCoalescer<string, string> _receiptStatuses;
+        private const int ReceiptBatchTraceMin = 10;
         private readonly IRuntimeDiagnostics _diagnostics;
         private readonly ICallLogService _callLog;
         private readonly int _sqlOpenPageSize;
@@ -189,6 +191,11 @@ namespace Unison.WhatsAppClient.Messages
             // Optional: older hosts omit it; group toast titles then fall back to chat.Name.
             _groupNaming = groupNaming;
             _receipts = new ReceiptReader(jids);
+            _receiptStatuses = new KeyedLatestCoalescer<string, string>(
+                ApplyOutgoingStatusBatchAsync,
+                () => StormWindowPolicy.For(_history.PreferFrugalSyncBudget),
+                StrongerStatus,
+                StringComparer.Ordinal);
 
             _textSend = new OutgoingTextSend(
                 _outgoingHost,
@@ -406,14 +413,16 @@ namespace Unison.WhatsAppClient.Messages
             }
 
             // A "sender" receipt is our own echo — whole-message status, not per-participant.
+            var posted = new List<Task>();
             if (!receipt.IsGroup ||
                 string.Equals(receipt.Status, ChatMessage.StatusSent, StringComparison.OrdinalIgnoreCase))
             {
                 foreach (string id in receipt.MessageIds)
                 {
-                    await ApplyOutgoingStatusAsync(id, receipt.Status).ConfigureAwait(false);
+                    posted.Add(PostReceiptStatus(id, receipt.Status));
                 }
 
+                await Task.WhenAll(posted).ConfigureAwait(false);
                 return;
             }
 
@@ -440,9 +449,11 @@ namespace Unison.WhatsAppClient.Messages
                     DateTime.UtcNow);
                 if (!string.IsNullOrWhiteSpace(aggregateStatus))
                 {
-                    await ApplyOutgoingStatusAsync(id, aggregateStatus).ConfigureAwait(false);
+                    posted.Add(PostReceiptStatus(id, aggregateStatus));
                 }
             }
+
+            await Task.WhenAll(posted).ConfigureAwait(false);
         }
 
         private async Task<int> ResolveExpectedGroupRecipientCountAsync(string groupJid)
@@ -511,41 +522,85 @@ namespace Unison.WhatsAppClient.Messages
                 return;
             }
 
+            await ApplyOutgoingStatusBatchAsync(
+                new[] { new KeyValuePair<string, string>(messageId, status) }).ConfigureAwait(false);
+
+            if (!string.IsNullOrWhiteSpace(error))
+            {
+                Debug.WriteLine(
+                    "[MessageFacade] Outgoing message " + messageId +
+                    " status=" + status + ", error=" + error);
+            }
+        }
+
+        /// <summary>
+        /// Receipt storms (group reads, offline replay) fold into one UI hop per window,
+        /// keeping the strongest status per message id.
+        /// </summary>
+        private Task PostReceiptStatus(string messageId, string status)
+        {
+            if (string.IsNullOrWhiteSpace(messageId) || string.IsNullOrWhiteSpace(status))
+            {
+                return Task.CompletedTask;
+            }
+
+            return _receiptStatuses.Post(messageId, status);
+        }
+
+        private static string StrongerStatus(string pending, string incoming) =>
+            MessageStatusProgression.ShouldApply(pending, incoming) ? incoming : pending;
+
+        private async Task ApplyOutgoingStatusBatchAsync(IReadOnlyList<KeyValuePair<string, string>> statuses)
+        {
+            if (statuses == null || statuses.Count == 0)
+            {
+                return;
+            }
+
             var changedChats = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            var changedMessages = new List<KeyValuePair<string, ChatMessage>>();
+            var changedById = new List<List<KeyValuePair<string, ChatMessage>>>(statuses.Count);
 
             await _boundMutations.RunAsync(() =>
             {
-                changedMessages = _chatState.MessagesByChat.ApplyOutgoingStatus(
-                    messageId,
-                    status,
-                    (chatJid, wireStatus) => SelfChatStatusPolicy.Resolve(
-                        wireStatus,
-                        _jids.IsSelfLinked(chatJid)));
-                for (int i = 0; i < changedMessages.Count; i++)
+                for (int s = 0; s < statuses.Count; s++)
                 {
-                    KeyValuePair<string, ChatMessage> change = changedMessages[i];
-                    changedChats.Add(change.Key);
-                    string canonical = _jids.GetCanonicalJid(JidHelper.Normalize(change.Key));
-                    ListPreviewOutgoingSendState.Apply(
-                        _chatRows.FindConversation(canonical),
-                        change.Value,
-                        change.Value.Status);
+                    List<KeyValuePair<string, ChatMessage>> changedMessages =
+                        _chatState.MessagesByChat.ApplyOutgoingStatus(
+                            statuses[s].Key,
+                            statuses[s].Value,
+                            (chatJid, wireStatus) => SelfChatStatusPolicy.Resolve(
+                                wireStatus,
+                                _jids.IsSelfLinked(chatJid)));
+                    changedById.Add(changedMessages);
+                    for (int i = 0; i < changedMessages.Count; i++)
+                    {
+                        KeyValuePair<string, ChatMessage> change = changedMessages[i];
+                        changedChats.Add(change.Key);
+                        string canonical = _jids.GetCanonicalJid(JidHelper.Normalize(change.Key));
+                        ListPreviewOutgoingSendState.Apply(
+                            _chatRows.FindConversation(canonical),
+                            change.Value,
+                            change.Value.Status);
+                    }
                 }
             }).ConfigureAwait(false);
 
-            if (changedMessages.Count == 0)
+            for (int s = 0; s < changedById.Count; s++)
             {
-                _pendingMessageState.HoldStatus(messageId, status);
-            }
-            else
-            {
-                _pendingMessageState.ForgetStatus(messageId);
-            }
+                List<KeyValuePair<string, ChatMessage>> changedMessages = changedById[s];
+                if (changedMessages.Count == 0)
+                {
+                    _pendingMessageState.HoldStatus(statuses[s].Key, statuses[s].Value);
+                }
+                else
+                {
+                    _pendingMessageState.ForgetStatus(statuses[s].Key);
+                }
 
-            for (int i = 0; i < changedMessages.Count; i++)
-            {
-                QueueIncomingPersist(changedMessages[i].Key, changedMessages[i].Value);
+                for (int i = 0; i < changedMessages.Count; i++)
+                {
+                    QueueIncomingPersist(changedMessages[i].Key, changedMessages[i].Value);
+                }
             }
 
             foreach (string chat in changedChats)
@@ -553,11 +608,12 @@ namespace Unison.WhatsAppClient.Messages
                 NotifyChatMessagesChanged(chat);
             }
 
-            if (!string.IsNullOrWhiteSpace(error))
+            if (statuses.Count > ReceiptBatchTraceMin)
             {
-                Debug.WriteLine(
-                    "[MessageFacade] Outgoing message " + messageId +
-                    " status=" + status + ", error=" + error);
+                _diagnostics?.Write(
+                    "receipts",
+                    "receipt-batch",
+                    "ids=" + statuses.Count + "; chats=" + changedChats.Count);
             }
         }
 
@@ -617,6 +673,7 @@ namespace Unison.WhatsAppClient.Messages
                 return;
             }
 
+            var notify = new List<string>(chunk.MessageChatJids.Count);
             for (int i = 0; i < chunk.MessageChatJids.Count; i++)
             {
                 string jid = chunk.MessageChatJids[i];
@@ -631,15 +688,45 @@ namespace Unison.WhatsAppClient.Messages
                     claimed = TryConsumeSessionOpenOnDemandClaim(jid);
                 }
 
-                if (!HistoryListUiRefresh.ShouldNotifyChatMessagesChangedForJid(
+                if (HistoryListUiRefresh.ShouldNotifyChatMessagesChangedForJid(
                         chunk.IsOnDemand,
                         claimed))
                 {
-                    continue;
+                    notify.Add(jid);
                 }
-
-                NotifyChatMessagesChanged(jid);
             }
+
+            NotifyChatMessagesChanged(notify);
+        }
+
+        /// <summary>One UI hop for every chat a history chunk touched.</summary>
+        private void NotifyChatMessagesChanged(IReadOnlyList<string> chatJids)
+        {
+            if (chatJids == null || chatJids.Count == 0)
+            {
+                return;
+            }
+
+            if (chatJids.Count == 1)
+            {
+                NotifyChatMessagesChanged(chatJids[0]);
+                return;
+            }
+
+            _ = _ui.RunAsync(() =>
+            {
+                for (int i = 0; i < chatJids.Count; i++)
+                {
+                    string chatJid = chatJids[i];
+                    Relay(
+                        () =>
+                        {
+                            ChatMessagesChanged?.Invoke(this, chatJid);
+                            _chatState.NotifyMessagesChanged(chatJid);
+                        },
+                        "ChatMessagesChanged");
+                }
+            });
         }
 
         /// <summary>
@@ -1202,10 +1289,7 @@ namespace Unison.WhatsAppClient.Messages
                 }
             }
 
-            foreach (string key in keys)
-            {
-                await MergeSqlExtrasAsync(key, pageById, ordered).ConfigureAwait(false);
-            }
+            await MergeSqlExtrasAsync(keys, pageById, ordered).ConfigureAwait(false);
 
             return ordered
                 .OrderBy(r => r.TimestampUtc ?? DateTime.MinValue)
@@ -1214,49 +1298,38 @@ namespace Unison.WhatsAppClient.Messages
         }
 
         private async Task MergeSqlExtrasAsync(
-            string key,
+            IReadOnlyList<string> keys,
             Dictionary<string, HistoryMessage> byId,
             List<HistoryMessage> ordered)
         {
-            IReadOnlyList<HistoryMessage> pinned = null;
-            IReadOnlyList<HistoryMessage> pending = null;
+            IReadOnlyList<HistoryMessage> extras;
             try
             {
-                pinned = await _historyMessageStore.GetPinnedForChatAsync(key, 3).ConfigureAwait(false);
-                pending = await _historyMessageStore.GetPendingOutgoingAsync(key).ConfigureAwait(false);
+                extras = await _historyMessageStore.GetTimelineExtrasForChatKeysAsync(keys, 3)
+                    .ConfigureAwait(false);
             }
             catch (Exception ex)
             {
                 Debug.WriteLine("[MessageFacade] SQLite extras load failed: " + ex.Message);
+                return;
             }
 
-            void Add(IReadOnlyList<HistoryMessage> extra)
+            if (extras == null)
             {
-                if (extra == null)
-                {
-                    return;
-                }
-
-                for (int i = 0; i < extra.Count; i++)
-                {
-                    HistoryMessage row = extra[i];
-                    if (row == null || string.IsNullOrWhiteSpace(row.MessageId))
-                    {
-                        continue;
-                    }
-
-                    if (byId.ContainsKey(row.MessageId))
-                    {
-                        continue;
-                    }
-
-                    byId[row.MessageId] = row;
-                    ordered.Add(row);
-                }
+                return;
             }
 
-            Add(pinned);
-            Add(pending);
+            for (int i = 0; i < extras.Count; i++)
+            {
+                HistoryMessage row = extras[i];
+                if (row == null || string.IsNullOrWhiteSpace(row.MessageId) || byId.ContainsKey(row.MessageId))
+                {
+                    continue;
+                }
+
+                byId[row.MessageId] = row;
+                ordered.Add(row);
+            }
         }
 
         public async Task<List<ChatMessage>> LoadMoreMessagesAsync(

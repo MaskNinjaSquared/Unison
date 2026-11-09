@@ -175,7 +175,7 @@ namespace Unison.Uwp.UI.Controls
 
             _emojiTarget = field;
             ChannelEmojiDock.Visibility = Visibility.Visible;
-            field.FocusInput();
+            field.DismissSoftKeyboard();
         }
 
         private void ChannelEmojiPanel_GlyphPicked(object sender, string glyph)
