@@ -59,6 +59,8 @@ namespace Unison.Core.Tests.Helpers
             public string GetCanonicalJid(string jid) =>
                 string.Equals(jid, Lid, StringComparison.OrdinalIgnoreCase) ? Pn : jid;
 
+            public string PeekCanonicalJid(string jid) => GetCanonicalJid(jid);
+
             public bool TryGetAlias(string jid, out string alias)
             {
                 alias = string.Equals(jid, Pn, StringComparison.OrdinalIgnoreCase) ? Lid
