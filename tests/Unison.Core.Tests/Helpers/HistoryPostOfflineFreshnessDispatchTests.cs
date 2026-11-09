@@ -42,6 +42,20 @@ namespace Unison.Core.Tests.Helpers
         }
 
         [Fact]
+        public async Task Pairing_bootstrap_skips_stale_full_history_request()
+        {
+            var host = new FakeHost
+            {
+                Stale = true,
+                StaleReason = "no-stored-messages",
+                PairingBootstrapActive = true
+            };
+            await HistoryPostOfflineFreshnessDispatch.RunAsync(host, offlineCount: 0);
+            Assert.Null(host.RequestedReason);
+            Assert.False(host.MarkedAwaiting);
+        }
+
+        [Fact]
         public async Task Skips_retry_empty_when_tip_fresh_and_offline_empty()
         {
             var host = new FakeHost
@@ -61,6 +75,7 @@ namespace Unison.Core.Tests.Helpers
             public bool Stale { get; set; }
             public string StaleReason { get; set; }
             public bool CatchUpActive { get; set; }
+            public bool PairingBootstrapActive { get; set; }
             public HistoryCatchUpDrainAction DrainAction { get; set; } =
                 HistoryCatchUpDrainAction.Finish;
             public string FinishReason { get; private set; }
@@ -71,6 +86,7 @@ namespace Unison.Core.Tests.Helpers
             public DateTime LastHistorySyncReceivedUtc => DateTime.MinValue;
             public string LastHistorySyncTypeOrUnknown => "<unknown>";
             public bool IsHistoryCatchUpActive => CatchUpActive;
+            public bool IsPairingBootstrapActive => PairingBootstrapActive;
             public int CatchUpStagnantCyclesBeforeStop => 3;
 
             public void NoteCatchUpProgress(string reason) => NotedProgress = true;

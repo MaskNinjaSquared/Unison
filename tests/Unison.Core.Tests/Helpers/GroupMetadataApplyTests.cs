@@ -104,8 +104,8 @@ namespace Unison.Core.Tests.Helpers
             }));
 
             Assert.Equal("Família", f.Naming.CachedNames[Group]);
-            // Snapshot/cache hop + one apply chunk (≤24 rows).
-            Assert.Equal(2, f.Ui.Passes);
+            // Subject cache + snapshot + hub ensure (+ optional invalidate) + flag chunk(s).
+            Assert.True(f.Ui.Passes >= 3, "passes=" + f.Ui.Passes);
             Assert.Equal(1, f.Catalog.Schedules);
             Assert.True(chat.IsGroup);
             Assert.True(chat.IsAnnounceOnly);
@@ -183,6 +183,35 @@ namespace Unison.Core.Tests.Helpers
             Assert.Equal(30, chat.GroupMemberCount);
         }
 
+        [Fact]
+        public async Task ApplyListing_materializes_missing_community_parent_into_catalogue()
+        {
+            const string hub = "120363888888888888@g.us";
+            var f = new Fixture();
+            f.AddChat(Group, "Subgrupo").LinkedParentJid = hub;
+
+            await f.Apply.ApplyListingAsync(Listing(
+                new GroupMetadataSnapshot
+                {
+                    Jid = Group,
+                    Subject = "Subgrupo",
+                    LinkedParentJid = hub
+                },
+                new GroupMetadataSnapshot
+                {
+                    Jid = hub,
+                    Subject = "Comunidade Truckpag",
+                    IsCommunityParent = true
+                }));
+
+            ChatItem parent = Assert.Single(
+                f.Chats.Chats,
+                c => string.Equals(c.JID, hub, StringComparison.OrdinalIgnoreCase));
+            Assert.True(parent.IsCommunityParent);
+            Assert.Equal("Comunidade Truckpag", parent.Name);
+            Assert.True(f.Catalog.Schedules >= 1);
+        }
+
         // ---- single-group metadata -----------------------------------------
 
         [Fact]
@@ -210,6 +239,32 @@ namespace Unison.Core.Tests.Helpers
             Assert.True(chat.IsMyGroupRoleFromServer);
             Assert.Equal(7, chat.GroupMemberCount);
             Assert.Single(chat.GroupMembers);
+            Assert.Equal(1, f.Catalog.Schedules);
+        }
+
+        [Fact]
+        public async Task ApplyMetadata_materializes_missing_community_parent()
+        {
+            const string hub = "120363777777777777@g.us";
+            var f = new Fixture();
+
+            await f.Apply.ApplyMetadataAsync(
+                hub,
+                new GroupMetadataSnapshot
+                {
+                    Jid = hub,
+                    Subject = "Hub Persistido",
+                    IsCommunityParent = true,
+                    MemberCount = 3
+                },
+                includeRoster: false,
+                wireSubject: "Hub Persistido");
+
+            ChatItem parent = Assert.Single(f.Chats.Chats);
+            Assert.Equal(hub, parent.JID);
+            Assert.True(parent.IsCommunityParent);
+            Assert.Equal("Hub Persistido", parent.Name);
+            Assert.Equal(3, parent.GroupMemberCount);
             Assert.Equal(1, f.Catalog.Schedules);
         }
 

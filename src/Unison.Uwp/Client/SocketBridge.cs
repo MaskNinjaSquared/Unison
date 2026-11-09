@@ -651,7 +651,15 @@ namespace Unison.Uwp.Client
 
             var messages = BuildMessageModule(session);
 
-            var offline = new OfflineSyncCoordinator(session.Connection, session.Events, _authState, _log);
+            var offline = new OfflineSyncCoordinator(
+                session.Connection,
+                session.Events,
+                _authState,
+                _log,
+                detail => RuntimeDiagnosticsService.Instance.Write(
+                    "connection",
+                    "offline-buffer-safety",
+                    detail));
             offline.Attach();
 
             session.Connection.NodeReceived += OnNodeReceived;
@@ -2398,7 +2406,21 @@ namespace Unison.Uwp.Client
             switch (update.Connection.Value)
             {
                 case ConnectionStatus.Open:
+                    // Raise open first so the host resets the first-release latch / arms the
+                    // synced watchdog before a deferred safety claim can fire release.
                     Raise(OnConnectionUpdate, "open");
+
+                    OfflineSyncCoordinator offlineOnOpen;
+                    lock (_gate)
+                    {
+                        offlineOnOpen = _offline;
+                    }
+
+                    if (offlineOnOpen != null)
+                    {
+                        await offlineOnOpen.NotifyConnectedAsync().ConfigureAwait(false);
+                    }
+
                     break;
 
                 case ConnectionStatus.Close:

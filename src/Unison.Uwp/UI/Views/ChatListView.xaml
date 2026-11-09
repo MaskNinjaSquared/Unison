@@ -35,6 +35,19 @@
             </Grid.ColumnDefinitions>
             
             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+            <Button x:Name="ScopeBackButton"
+                    Click="ScopeBackButton_Click"
+                    Style="{StaticResource ModernIconButtonStyle}"
+                    Width="40" Height="40"
+                    Margin="0,0,4,0"
+                    VerticalAlignment="Center"
+                    Visibility="Collapsed"
+                    AutomationProperties.Name="Back">
+                <TextBlock Text="&#xE72B;"
+                           FontFamily="{StaticResource IconFont}"
+                           FontSize="18"
+                           Foreground="{ThemeResource WhatsAppTextHighBrush}"/>
+            </Button>
             <TextBlock x:Name="HeaderTitle" 
                        x:Uid="ChatList_Header"
                        Text="Chats" 
@@ -49,7 +62,8 @@
                        IsRightTapEnabled="True"
                        Holding="HeaderTitle_Holding"
                        RightTapped="HeaderTitle_RightTapped"/>
-            <TextBlock Text="{x:Bind ViewModel.NotificationCounterBadgeText, Mode=OneWay}"
+            <TextBlock x:Name="HeaderBadge"
+                       Text="{x:Bind ViewModel.NotificationCounterBadgeText, Mode=OneWay}"
                        Margin="8,0,0,0"
                        FontSize="24"
                        FontFamily="{StaticResource MainFontSemibold}"

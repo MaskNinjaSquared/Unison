@@ -153,6 +153,17 @@ namespace Unison.WhatsAppClient.Helpers
 
             host.ClearSyncStatus();
             host.NotifyGroupListingDue();
+
+            if (!await WaitReadyAsync(
+                    host,
+                    quiet,
+                    "post-message-enrich-titles",
+                    token).ConfigureAwait(false))
+            {
+                return;
+            }
+
+            await host.ReconcileGroupCommunityTitlesAsync(token).ConfigureAwait(false);
         }
 
         private static async Task<bool> WaitReadyAsync(

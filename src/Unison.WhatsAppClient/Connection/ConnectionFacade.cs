@@ -37,6 +37,7 @@ namespace Unison.WhatsAppClient.Connection
         private readonly IConnectionEventSource _events;
         private readonly IConnectionSessionHost _session;
         private int _handlingRelink;
+        private int _logoutBusy;
 
         public ConnectionFacade(
             ILocalSettings localSettings,
@@ -188,28 +189,51 @@ namespace Unison.WhatsAppClient.Connection
             }
         }
 
-        public async Task LogoutAsync(string reason = null)
+        public Task LogoutAsync(string reason = null)
         {
             _diagnostics?.Write(
                 "connection",
                 "logout-requested",
                 "reason=" + (reason ?? "user-initiated"));
 
-            await _session.NotifyServerLogoutAsync(reason).ConfigureAwait(false);
-            await _session.ClearSessionAsync().ConfigureAwait(false);
-            if (_localContacts != null)
+            var owner = new UserLogoutOwner(
+                TryBeginLogout,
+                EndLogout,
+                JournalLogout,
+                logoutReason => _session.NotifyServerLogoutAsync(logoutReason),
+                () => _session.ClearSessionAsync(),
+                ClearPublishedContactsBestEffortAsync,
+                AutoRestoreDefaultAsync);
+
+            return owner.RunAsync(reason);
+        }
+
+        private bool TryBeginLogout() =>
+            Interlocked.Exchange(ref _logoutBusy, 1) == 0;
+
+        private void EndLogout() =>
+            Interlocked.Exchange(ref _logoutBusy, 0);
+
+        private void JournalLogout(string eventName, string detail)
+        {
+            _diagnostics?.Write("connection", eventName, detail);
+        }
+
+        private async Task ClearPublishedContactsBestEffortAsync()
+        {
+            if (_localContacts == null)
             {
-                try
-                {
-                    await _localContacts.ClearPublishedAppContactsAsync().ConfigureAwait(false);
-                }
-                catch (Exception ex)
-                {
-                    Debug.WriteLine("[ConnectionFacade] Clearing Windows People list failed: " + ex.Message);
-                }
+                return;
             }
 
-            await AutoRestoreDefaultAsync().ConfigureAwait(false);
+            try
+            {
+                await _localContacts.ClearPublishedAppContactsAsync().ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[ConnectionFacade] Clearing Windows People list failed: " + ex.Message);
+            }
         }
 
         /// <summary>

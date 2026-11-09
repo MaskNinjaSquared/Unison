@@ -27,8 +27,8 @@ namespace Unison.Core.Tests.State
             Assert.Equal(256u, s.HistoryStorageQuotaMb);
             Assert.Equal(0, s.MaxFullHistoryCatchUpRounds);
             Assert.False(s.AllowStagnantHistoryRepairCascade);
-            Assert.Equal(6000, s.HistoryFinalizeQuietMs);
-            Assert.Equal(2000, s.HistoryFullFinalizeDelayMs);
+            Assert.Equal(1600, s.HistoryFinalizeQuietMs);
+            Assert.Equal(900, s.HistoryFullFinalizeDelayMs);
             Assert.Equal(8, s.LidMappingPersistBatchSize);
             Assert.Equal(3000, s.LidMappingPersistDelayMs);
             Assert.Equal(512, s.LidMappingMemoryCacheMaxPairs);
@@ -36,7 +36,7 @@ namespace Unison.Core.Tests.State
             Assert.Equal(1024, s.LidMappingMemoryCacheMaxEntries);
             Assert.Equal(0, s.DeferredAvatarMaxRetries);
             Assert.Equal(60, s.DeferredAvatarRetryDelaySeconds);
-            Assert.Equal(15, s.PostSyncEnrichmentQuietSeconds);
+            Assert.Equal(12, s.PostSyncEnrichmentQuietSeconds);
         }
 
         [Fact]
@@ -84,23 +84,26 @@ namespace Unison.Core.Tests.State
             Assert.True(low.MaxMessagesPerConversation < high.MaxMessagesPerConversation);
             Assert.True(low.MaterializeHistoryThumbsDuringSync);
             Assert.True(high.MaterializeHistoryThumbsDuringSync);
-            Assert.Equal(1, low.AvatarFetchBatchSize);
+            Assert.Equal(3, low.AvatarFetchBatchSize);
+            Assert.Equal(1, unsupported.AvatarFetchBatchSize);
             Assert.Equal(4, low.MaxFullHistoryCatchUpRounds);
             Assert.Equal(0, unsupported.MaxFullHistoryCatchUpRounds);
             Assert.True(high.MaxFullHistoryCatchUpRounds > low.MaxFullHistoryCatchUpRounds);
             Assert.False(low.AllowStagnantHistoryRepairCascade);
             Assert.False(unsupported.AllowStagnantHistoryRepairCascade);
             Assert.True(high.AllowStagnantHistoryRepairCascade);
-            Assert.Equal(2500, low.HistoryFinalizeQuietMs);
-            Assert.Equal(1200, low.HistoryFullFinalizeDelayMs);
+            Assert.Equal(1600, low.HistoryFinalizeQuietMs);
+            Assert.Equal(900, low.HistoryFullFinalizeDelayMs);
             Assert.Equal(220, low.HistoryPersistSubBatchSize);
-            Assert.True(low.HistoryFinalizeQuietMs < unsupported.HistoryFinalizeQuietMs);
+            // Unsupported matched Low finalize quiet; Low stay equal and above High.
+            Assert.Equal(unsupported.HistoryFinalizeQuietMs, low.HistoryFinalizeQuietMs);
             Assert.True(low.HistoryFinalizeQuietMs > high.HistoryFinalizeQuietMs);
             Assert.True(low.HistoryPersistSubBatchSize > unsupported.HistoryPersistSubBatchSize);
             Assert.True(low.HistoryPersistSubBatchSize < high.HistoryPersistSubBatchSize);
             Assert.Equal(2, low.DeferredAvatarMaxRetries);
             Assert.Equal(40, low.DeferredAvatarRetryDelaySeconds);
-            Assert.Equal(12, low.PostSyncEnrichmentQuietSeconds);
+            Assert.Equal(6, low.PostSyncEnrichmentQuietSeconds);
+            Assert.True(low.PostSyncEnrichmentQuietSeconds < unsupported.PostSyncEnrichmentQuietSeconds);
         }
 
         [Fact]
@@ -150,7 +153,7 @@ namespace Unison.Core.Tests.State
             Assert.True(unsupported.GroupMetadataBatchSize < low.GroupMetadataBatchSize);
             Assert.True(low.GroupMetadataBatchSize < high.GroupMetadataBatchSize);
             Assert.True(unsupported.GroupMetadataPauseMs > low.GroupMetadataPauseMs);
-            Assert.True(low.GroupMetadataPauseMs > high.GroupMetadataPauseMs);
+            Assert.True(low.GroupMetadataPauseMs >= high.GroupMetadataPauseMs);
             Assert.True(unsupported.GroupListingResumeSettleMs >= low.GroupListingResumeSettleMs);
             Assert.True(low.GroupListingResumeSettleMs > high.GroupListingResumeSettleMs);
             Assert.True(unsupported.GroupRosterBatchSize < low.GroupRosterBatchSize);
@@ -175,7 +178,7 @@ namespace Unison.Core.Tests.State
         }
 
         [Fact]
-        public void Low_waits_longer_than_High_when_frugal()
+        public void Low_frugal_pacing_stays_above_High_floor_with_tighter_catch_up_abort()
         {
             SyncPacing low = LowSyncWorkload.Instance.PacingFor(frugal: true);
             SyncPacing high = HighSyncWorkload.Instance.PacingFor(frugal: true);
@@ -186,20 +189,23 @@ namespace Unison.Core.Tests.State
             Assert.Equal(30, low.CatchUpIdleAbortSeconds);
             Assert.Equal(2, low.CatchUpStagnantCyclesBeforeStop);
             Assert.True(low.CatchUpIdleAbortSeconds < high.CatchUpIdleAbortSeconds);
-            Assert.True(low.StartupQuietFloorMs > high.StartupQuietFloorMs);
-            Assert.True(low.DeferredStartupQuietMs > high.DeferredStartupQuietMs);
+            Assert.True(low.StartupQuietFloorMs >= high.StartupQuietFloorMs);
+            Assert.True(low.DeferredStartupQuietMs >= high.DeferredStartupQuietMs);
         }
 
         [Fact]
-        public void Unsupported_waits_longer_when_frugal()
+        public void Unsupported_frugal_pacing_matches_former_Low_not_the_new_Low_retune()
         {
             SyncPacing unsupported = UnsupportedSyncWorkload.Instance.PacingFor(frugal: true);
             SyncPacing low = LowSyncWorkload.Instance.PacingFor(frugal: true);
 
-            Assert.Equal(5000, unsupported.StartupQuietFloorMs);
-            Assert.Equal(10000, unsupported.DeferredStartupQuietMs);
-            Assert.True(unsupported.StartupQuietFloorMs > low.StartupQuietFloorMs);
-            Assert.True(unsupported.DeferredStartupQuietMs > low.DeferredStartupQuietMs);
+            Assert.Equal(4000, unsupported.StartupQuietFloorMs);
+            Assert.Equal(7000, unsupported.DeferredStartupQuietMs);
+            Assert.Equal(low.StartupQuietFloorMs, unsupported.StartupQuietFloorMs);
+            Assert.Equal(low.DeferredStartupQuietMs, unsupported.DeferredStartupQuietMs);
+            Assert.Equal(0, UnsupportedSyncWorkload.Instance.MaxFullHistoryCatchUpRounds);
+            Assert.Equal(1, UnsupportedSyncWorkload.Instance.AvatarFetchBatchSize);
+            Assert.True(unsupported.CatchUpIdleAbortSeconds > low.CatchUpIdleAbortSeconds);
         }
 
         [Fact]
@@ -250,8 +256,9 @@ namespace Unison.Core.Tests.State
                 < HighSyncWorkload.Instance.NameResolveChunkSize);
             Assert.True(LowSyncWorkload.Instance.NameResolveInterChunkDelayMs
                 > HighSyncWorkload.Instance.NameResolveInterChunkDelayMs);
-            Assert.Equal(4, LowSyncWorkload.Instance.NameResolveMaxPerPass);
-            Assert.Equal(2, LowSyncWorkload.Instance.NameResolveChunkSize);
+            Assert.Equal(8, LowSyncWorkload.Instance.NameResolveMaxPerPass);
+            Assert.Equal(4, LowSyncWorkload.Instance.NameResolveChunkSize);
+            Assert.Equal(350, LowSyncWorkload.Instance.NameResolveInterChunkDelayMs);
         }
     }
 }

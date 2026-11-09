@@ -12,7 +12,7 @@ namespace Unison.Core.Helpers.Contacts
 {
     public static class AliasFollowUpAvatarCap
     {
-        public const int MaxTargetsPerFrugalPass = 48;
+        public const int MaxTargetsPerFrugalPass = 72;
 
         public static int MaxTargets(bool preferFrugal) =>
             preferFrugal ? MaxTargetsPerFrugalPass : int.MaxValue;

@@ -196,6 +196,8 @@ namespace Unison.Core.Tests.ViewModels
                 ChatMessageOrder.FindInsertIndex(count, getTimestamp, getId, timestamp, id);
             public Task<bool> EnsureHistoryOnDemandAsync(string jid, int count) => throw new NotImplementedException();
             public bool IsHistoryOnDemandPending(string jid) => false;
+            public bool TryClaimSessionOpenOnDemand(string jid) => true;
+            public bool TryConsumeSessionOpenOnDemandClaim(string jid) => false;
             public Task<ChatMessage> SendTextMessageAsync(string jid, string text) => throw new NotImplementedException();
             public Task<ChatMessage> SendTextMessageAsync(string jid, OutgoingTextMentions message) => throw new NotImplementedException();
             public Task<ChatMessage> ForwardMessageAsync(

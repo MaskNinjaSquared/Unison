@@ -5,6 +5,7 @@ using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Helpers;
 using Unison.Core.Models;
 using Unison.Core.State;
+using Unison.WhatsAppClient.Helpers;
 
 namespace Unison.Core.Tests.Helpers
 {
@@ -37,6 +38,6 @@ namespace Unison.Core.Tests.Helpers
         }
 
         public bool IsMeaningfulGroupLabel(string label, string groupJid) =>
-            !GroupIdPlaceholder.IsIdPlaceholder(label, groupJid);
+            MeaningfulChatLabel.IsMeaningful(label, groupJid, isGroup: true);
     }
 }

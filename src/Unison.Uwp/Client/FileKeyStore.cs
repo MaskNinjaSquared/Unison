@@ -73,6 +73,7 @@ namespace Unison.Uwp.Client
         private System.Threading.Timer _tcTokenDeltaTimer;
         private readonly object _secondaryWarmupLock = new object();
         private Task _secondaryWarmupTask;
+        private int _storeEpoch;
         private bool _criticalInitialized = false;
         private bool _fullInitialized = false;
         private bool _initialized = false;
@@ -107,6 +108,7 @@ namespace Unison.Uwp.Client
                     return;
                 }
 
+                var epoch = Volatile.Read(ref _storeEpoch);
                 var started = Stopwatch.StartNew();
                 var localFolder = ApplicationData.Current.LocalFolder;
                 _rootFolder = await localFolder.CreateFolderAsync(ROOT_FOLDER, CreationCollisionOption.OpenIfExists);
@@ -121,6 +123,11 @@ namespace Unison.Uwp.Client
                     LoadSessionsIntoCacheAsync(),
                     LoadPreKeysIntoCacheAsync(),
                     LoadAccountIntoCacheAsync());
+
+                if (epoch != Volatile.Read(ref _storeEpoch))
+                {
+                    return;
+                }
 
                 // Folder references and the critical caches are now safe for on-demand
                 // reads even while the secondary warm-up continues.
@@ -171,7 +178,13 @@ namespace Unison.Uwp.Client
 
         private async Task WarmSecondaryCachesCoreAsync()
         {
+            var epoch = Volatile.Read(ref _storeEpoch);
             await InitializeCriticalAsync();
+            if (epoch != Volatile.Read(ref _storeEpoch))
+            {
+                return;
+            }
+
             var started = Stopwatch.StartNew();
 
             await Task.WhenAll(
@@ -179,6 +192,11 @@ namespace Unison.Uwp.Client
                 LoadTcTokensIntoCacheAsync(),
                 LoadAppStateSyncKeysIntoCacheAsync(),
                 LoadAppStateCollectionStateIntoCacheAsync());
+
+            if (epoch != Volatile.Read(ref _storeEpoch))
+            {
+                return;
+            }
 
             _fullInitialized = true;
             RuntimeDiagnosticsService.Instance.Write(
@@ -229,6 +247,10 @@ namespace Unison.Uwp.Client
 
         public async Task ClearAllAsync()
         {
+            // Bump epoch so any in-flight critical/secondary warm abandons before
+            // rewriting caches after the on-disk wipe.
+            Interlocked.Increment(ref _storeEpoch);
+
             try
             {
                 var localFolder = ApplicationData.Current.LocalFolder;
@@ -250,6 +272,18 @@ namespace Unison.Uwp.Client
                 _preKeySnapshotTimer = null;
             }
 
+            lock (_tcTokenSnapshotTimerLock)
+            {
+                _tcTokenSnapshotTimer?.Dispose();
+                _tcTokenSnapshotTimer = null;
+            }
+
+            lock (_tcTokenDeltaTimerLock)
+            {
+                _tcTokenDeltaTimer?.Dispose();
+                _tcTokenDeltaTimer = null;
+            }
+
             _sessionCache.Clear();
             _preKeyCache.Clear();
             _senderKeyCache.Clear();
@@ -258,6 +292,9 @@ namespace Unison.Uwp.Client
             _appStateCollectionStateCache.Clear();
             _accountCache = null;
             _fileLocks.Clear();
+            while (_tcTokenDeltaQueue.TryDequeue(out _))
+            {
+            }
 
             _rootFolder = null;
             _sessionsFolder = null;
@@ -274,8 +311,59 @@ namespace Unison.Uwp.Client
                 _secondaryWarmupTask = null;
             }
 
-            await InitializeAsync();
-            Debug.WriteLine("[KeyStore] Reinitialized after full clear");
+            // Empty folder tree only — do not scan/load key files (logout path).
+            await EnsureEmptyFolderTreeAsync().ConfigureAwait(false);
+
+            // Drop anything an in-flight warm may have written after the first clear.
+            _sessionCache.Clear();
+            _preKeyCache.Clear();
+            _senderKeyCache.Clear();
+            _tcTokenCache.Clear();
+            _appStateSyncKeyCache.Clear();
+            _appStateCollectionStateCache.Clear();
+            _accountCache = null;
+
+            RuntimeDiagnosticsService.Instance.Write(
+                "connection",
+                "key-store-cleared",
+                "sessions=0; prekeys=0; senderKeys=0");
+            Debug.WriteLine("[KeyStore] Empty folder tree ready after full clear");
+        }
+
+        /// <summary>
+        /// Creates the SignalKeys folder layout with empty in-memory caches.
+        /// Used after <see cref="ClearAllAsync"/> so pairing can start without a
+        /// cold load of the (now deleted) key files.
+        /// </summary>
+        private async Task EnsureEmptyFolderTreeAsync()
+        {
+            await _initializeLock.WaitAsync().ConfigureAwait(false);
+            try
+            {
+                var localFolder = ApplicationData.Current.LocalFolder;
+                _rootFolder = await localFolder.CreateFolderAsync(
+                    ROOT_FOLDER, CreationCollisionOption.OpenIfExists);
+                _sessionsFolder = await _rootFolder.CreateFolderAsync(
+                    SESSIONS_FOLDER, CreationCollisionOption.OpenIfExists);
+                _prekeysFolder = await _rootFolder.CreateFolderAsync(
+                    PREKEYS_FOLDER, CreationCollisionOption.OpenIfExists);
+                _senderKeysFolder = await _rootFolder.CreateFolderAsync(
+                    SENDER_KEYS_FOLDER, CreationCollisionOption.OpenIfExists);
+                _tcTokensFolder = await _rootFolder.CreateFolderAsync(
+                    TC_TOKENS_FOLDER, CreationCollisionOption.OpenIfExists);
+                _appStateSyncKeysFolder = await _rootFolder.CreateFolderAsync(
+                    APP_STATE_SYNC_KEYS_FOLDER, CreationCollisionOption.OpenIfExists);
+                _appStateSyncStateFolder = await _rootFolder.CreateFolderAsync(
+                    APP_STATE_SYNC_STATE_FOLDER, CreationCollisionOption.OpenIfExists);
+
+                _initialized = true;
+                _criticalInitialized = true;
+                _fullInitialized = true;
+            }
+            finally
+            {
+                _initializeLock.Release();
+            }
         }
 
         private SemaphoreSlim GetFileLock(string key)

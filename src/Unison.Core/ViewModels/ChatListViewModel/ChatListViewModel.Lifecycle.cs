@@ -45,6 +45,7 @@ namespace Unison.Core.ViewModels
             _history.HistoryMessageChunkPersisted += History_MessageChunkPersisted;
             _contactService.DisplayNamesUpdated += Contacts_DisplayNamesUpdated;
             _chatState.CommunitySubjectsUpdated += ChatState_CommunitySubjectsUpdated;
+            _chatState.BulkCatalogueMutationEnded += ChatState_BulkCatalogueMutationEnded;
             _chatService.VisibleOrderInvalidated += ChatService_VisibleOrderInvalidated;
             _chatState.Chats.CollectionChanged += ChatState_ChatsChanged;
 
@@ -70,7 +71,10 @@ namespace Unison.Core.ViewModels
                 _appVisibility.Changed += AppVisibility_Changed;
             }
 
-            _notificationCounter = new NotificationCounterWatch(_chatState.Chats);
+            // Scope-filtered badge: Channels/Archived show their own unread count, not Active's.
+            _notificationCounter = new NotificationCounterWatch(
+                _chatState.Chats,
+                MatchesScope);
             _notificationCounter.Changed += NotificationCounter_Changed;
             RaiseProperties(nameof(NotificationCounterBadge), nameof(NotificationCounterBadgeText));
 
@@ -97,10 +101,19 @@ namespace Unison.Core.ViewModels
             }
             else if (IsInSafeMode)
             {
-                BeginBatchRendering(
-                    _history.InitialSyncProcessedConversations,
-                    _history.InitialSyncTotalConversations,
-                    _chatState.Chats.Count);
+                // Resume/reattach while a trailing empty chunk re-armed safe mode — the list
+                // is already painted; do not restart BeginBatch (release-tick hang).
+                if (IsChatListMaterialized)
+                {
+                    NotifyListPaintReleased("attach-safe-mode-already-materialized");
+                }
+                else
+                {
+                    BeginBatchRendering(
+                        _history.InitialSyncProcessedConversations,
+                        _history.InitialSyncTotalConversations,
+                        _chatState.Chats.Count);
+                }
             }
             else
             {
@@ -292,6 +305,8 @@ namespace Unison.Core.ViewModels
                 _coldPopulateGate?.Release();
             }
 
+            ReleaseBatchColdPopulateGate();
+
             if (!ChatListUnloadPolicy.ShouldClearVisibleChats(VisibleChats.Count))
             {
                 return;
@@ -340,6 +355,7 @@ namespace Unison.Core.ViewModels
             _history.HistoryMessageChunkPersisted -= History_MessageChunkPersisted;
             _contactService.DisplayNamesUpdated -= Contacts_DisplayNamesUpdated;
             _chatState.CommunitySubjectsUpdated -= ChatState_CommunitySubjectsUpdated;
+            _chatState.BulkCatalogueMutationEnded -= ChatState_BulkCatalogueMutationEnded;
             _chatService.VisibleOrderInvalidated -= ChatService_VisibleOrderInvalidated;
             _chatState.Chats.CollectionChanged -= ChatState_ChatsChanged;
 
@@ -379,7 +395,7 @@ namespace Unison.Core.ViewModels
                 _coldPopulateGate?.Release();
             }
 
-            _batchRendering = false;
+            ReleaseBatchColdPopulateGate();
             lock (_previewHydrateGate)
             {
                 _previewHydrateQueue?.Clear();

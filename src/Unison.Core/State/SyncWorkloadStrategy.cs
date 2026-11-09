@@ -216,27 +216,29 @@ namespace Unison.Core.State
 
         public override int AvatarFetchBatchSize => 1;
 
-        public override int AvatarFetchInterRequestDelayMs => 1500;
+        // Aligned with Low pre-retune: hold + off-UI apply made the old 1500 ms extreme.
+        public override int AvatarFetchInterRequestDelayMs => 1200;
 
         public override uint HistoryStorageQuotaMb => 256;
 
         public override bool SerializePostSyncEnrichment => true;
 
-        public override int PostSyncEnrichmentQuietSeconds => 15;
+        public override int PostSyncEnrichmentQuietSeconds => 12;
 
         public override int MaxFullHistoryCatchUpRounds => 0;
 
         public override bool AllowStagnantHistoryRepairCascade => false;
 
-        public override int HistoryFinalizeQuietMs => 6000;
+        // Still above High (1000/700): late Mobile chunks must not look like end-of-wave.
+        public override int HistoryFinalizeQuietMs => 1600;
 
-        public override int HistoryFullFinalizeDelayMs => 2000;
+        public override int HistoryFullFinalizeDelayMs => 900;
 
-        public override int GroupMetadataBatchSize => 5;
+        public override int GroupMetadataBatchSize => 12;
 
-        public override int GroupMetadataPauseMs => 400;
+        public override int GroupMetadataPauseMs => 200;
 
-        public override int GroupListingResumeSettleMs => 3000;
+        public override int GroupListingResumeSettleMs => 2500;
 
         public override int GroupRosterBatchSize => 4;
 
@@ -300,15 +302,15 @@ namespace Unison.Core.State
 
         public override int PreviewHydrateBatchSize => 10;
 
-        public override int AvatarFetchBatchSize => 1;
+        public override int AvatarFetchBatchSize => 3;
 
-        public override int AvatarFetchInterRequestDelayMs => 1200;
+        public override int AvatarFetchInterRequestDelayMs => 600;
 
         public override uint HistoryStorageQuotaMb => 1024;
 
         public override bool SerializePostSyncEnrichment => true;
 
-        public override int PostSyncEnrichmentQuietSeconds => 12;
+        public override int PostSyncEnrichmentQuietSeconds => 6;
 
         // A few adjacent FULL_HISTORY pages — enough for Meta's near days, not the old
         // 12-round idle-continue burn while signals stay 0. Catch-up still defers usync
@@ -317,14 +319,15 @@ namespace Unison.Core.State
 
         public override bool AllowStagnantHistoryRepairCascade => false;
 
-        // Slightly longer than High so a late chunk on slow Mobile is not mistaken for end.
-        public override int HistoryFinalizeQuietMs => 2500;
+        // Above High (1000/700) for late Mobile chunks; tightened from 2500/1200 so
+        // idle gaps between Bootstrap/Recent/Full waves cost less wall time on Low.
+        public override int HistoryFinalizeQuietMs => 1600;
 
-        public override int HistoryFullFinalizeDelayMs => 1200;
+        public override int HistoryFullFinalizeDelayMs => 900;
 
-        public override int GroupMetadataBatchSize => 12;
+        public override int GroupMetadataBatchSize => 16;
 
-        public override int GroupMetadataPauseMs => 200;
+        public override int GroupMetadataPauseMs => 120;
 
         public override int GroupListingResumeSettleMs => 2500;
 
@@ -334,12 +337,11 @@ namespace Unison.Core.State
 
         public override int GroupRosterNextBatchDelaySeconds => 35;
 
-        public override int NameResolveMaxPerPass => 4;
+        public override int NameResolveMaxPerPass => 8;
 
-        public override int NameResolveChunkSize => 2;
+        public override int NameResolveChunkSize => 4;
 
-        public override int NameResolveInterChunkDelayMs => 700;
-
+        public override int NameResolveInterChunkDelayMs => 350;
         public override int LidMappingPersistBatchSize => 40;
 
         public override int LidMappingPersistDelayMs => 1500;

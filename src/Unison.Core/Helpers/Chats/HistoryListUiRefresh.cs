@@ -47,5 +47,38 @@ namespace Unison.Core.Helpers.Chats
         /// </summary>
         public static bool ShouldNotifyChatMessagesChangedAfterChunk(bool syncIsOnDemand) =>
             !syncIsOnDemand;
+
+        /// <summary>
+        /// Session-open OnDemand is claimed before the phone page lands so tip-only /
+        /// thin open chats can absorb the SQLite page once. Scroll-up OnDemand stays
+        /// silent (claim already consumed).
+        /// </summary>
+        public static bool ShouldNotifyChatMessagesChangedForJid(
+            bool syncIsOnDemand,
+            bool sessionOpenOnDemandClaimed)
+        {
+            if (!syncIsOnDemand)
+            {
+                return true;
+            }
+
+            return sessionOpenOnDemandClaimed;
+        }
+
+        /// <summary>
+        /// Tip-only / thin open timelines cannot Merge older OnDemand rows (insert
+        /// skips older-than-tip). Replace the window from a full open page instead.
+        /// </summary>
+        public static bool ShouldReplaceTimelineOnHistorySync(
+            int visibleMessageCount,
+            int initialUiMessageWindow)
+        {
+            if (initialUiMessageWindow <= 0)
+            {
+                return visibleMessageCount <= 1;
+            }
+
+            return visibleMessageCount < initialUiMessageWindow;
+        }
     }
 }

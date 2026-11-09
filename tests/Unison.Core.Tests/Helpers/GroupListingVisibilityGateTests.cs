@@ -26,6 +26,18 @@ namespace Unison.Core.Tests.Helpers
                 abortRequested: false));
         }
 
+        [Theory]
+        [InlineData(true, true)]
+        [InlineData(false, false)]
+        public void Listing_subjects_apply_whenever_the_iq_answered(
+            bool hasListingResponse,
+            bool expectApply)
+        {
+            Assert.Equal(
+                expectApply,
+                GroupListingVisibilityGate.ShouldApplyListingSubjects(hasListingResponse));
+        }
+
         [Fact]
         public void Resume_retry_only_when_settle_generation_still_current()
         {

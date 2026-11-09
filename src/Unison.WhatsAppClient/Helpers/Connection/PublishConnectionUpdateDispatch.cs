@@ -27,6 +27,7 @@ namespace Unison.WhatsAppClient.Helpers
             host.StampLastConnectionEventUtc();
             host.WriteConnectionStatusJournal(host.CurrentConnectionStatus);
             host.LogConnectionStatus(host.CurrentConnectionStatus);
+            host.SyncOfflineSyncedWatchdog(host.CurrentConnectionStatus);
             host.RaiseConnectionUpdate(host.CurrentConnectionStatus);
         }
     }

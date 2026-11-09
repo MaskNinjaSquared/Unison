@@ -15,6 +15,7 @@ namespace Unison.Core.Tests.Helpers
             Assert.True(host.MarkedReceived);
             Assert.Equal(0, host.Accumulated);
             Assert.False(host.FinalizeCalled);
+            Assert.False(host.ProgressPublished);
             Assert.Contains("HistorySyncOnDemand", host.ProgressReason ?? string.Empty);
         }
 
@@ -26,7 +27,33 @@ namespace Unison.Core.Tests.Helpers
 
             Assert.Equal(2, host.Accumulated);
             Assert.True(host.FinalizeCalled);
+            Assert.True(host.ProgressPublished);
             Assert.True(host.EnrichmentReleased);
+            Assert.True(host.UserResyncCompleted);
+        }
+
+        [Fact]
+        public void Empty_after_list_released_skips_publish_and_finalize()
+        {
+            var host = new FakeHost { AlreadyReleased = true };
+            HistorySqliteChunkAppliedDispatch.Run(host, "PushName", 0);
+
+            Assert.True(host.MarkedReceived);
+            Assert.Equal(0, host.Accumulated);
+            Assert.False(host.FinalizeCalled);
+            Assert.False(host.ProgressPublished);
+            Assert.True(host.Logged);
+        }
+
+        [Fact]
+        public void Non_empty_after_list_released_skips_publish_but_still_finalizes()
+        {
+            var host = new FakeHost { AlreadyReleased = true };
+            HistorySqliteChunkAppliedDispatch.Run(host, "Recent", 30);
+
+            Assert.Equal(30, host.Accumulated);
+            Assert.True(host.FinalizeCalled);
+            Assert.False(host.ProgressPublished);
             Assert.True(host.UserResyncCompleted);
         }
 
@@ -38,12 +65,16 @@ namespace Unison.Core.Tests.Helpers
             public bool EnrichmentReleased;
             public bool UserResyncCompleted;
             public bool AwaitingEnrichment;
+            public bool AlreadyReleased;
+            public bool ProgressPublished;
+            public bool Logged;
             public string ProgressReason;
 
             public int SqliteHistoryFullFinalizeDelayMs => 1000;
             public int SqliteHistoryFinalizeQuietMs => 500;
             public bool IsEnrichmentAwaitingHeavyHistory => AwaitingEnrichment;
             public int SqliteHistoryConversationsAccumulated => Accumulated;
+            public bool FirstSyncListAlreadyReleased => AlreadyReleased;
 
             public void MarkHistorySyncReceivedNow() => MarkedReceived = true;
 
@@ -62,6 +93,7 @@ namespace Unison.Core.Tests.Helpers
                 int total,
                 string stage)
             {
+                ProgressPublished = true;
             }
 
             public int NextSqliteHistoryFinalizeGeneration() => 1;
@@ -79,9 +111,8 @@ namespace Unison.Core.Tests.Helpers
             public void ReleaseEnrichmentAfterHeavyHistory(string type) =>
                 EnrichmentReleased = true;
 
-            public void LogHistorySqliteChunkApplied(string type, int count, int accumulated)
-            {
-            }
+            public void LogHistorySqliteChunkApplied(string type, int count, int accumulated) =>
+                Logged = true;
         }
     }
 }

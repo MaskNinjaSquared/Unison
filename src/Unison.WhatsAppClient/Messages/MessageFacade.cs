@@ -609,11 +609,10 @@ namespace Unison.WhatsAppClient.Messages
                 Debug.WriteLine("[MessageFacade] History SQLite chunk persist failed: " + ex.Message);
             }
 
-            // Open chat detail listens to ChatMessagesChanged and merges the newest tail.
-            // OnDemand is older history for scroll-up — notifying here only churned the open
-            // timeline (esp. after LID mapping bursts) without prepending those older rows.
-            if (chunk?.MessageChatJids == null ||
-                !HistoryListUiRefresh.ShouldNotifyChatMessagesChangedAfterChunk(chunk.IsOnDemand))
+            // Open chat detail listens to ChatMessagesChanged. Non-OnDemand always notifies.
+            // Session-open OnDemand (claimed on thin / tip-only open) notifies once so the
+            // timeline can Replace; scroll-up OnDemand stays silent after the claim is gone.
+            if (chunk?.MessageChatJids == null)
             {
                 return;
             }
@@ -621,10 +620,23 @@ namespace Unison.WhatsAppClient.Messages
             for (int i = 0; i < chunk.MessageChatJids.Count; i++)
             {
                 string jid = chunk.MessageChatJids[i];
-                    if (string.IsNullOrWhiteSpace(jid))
-                    {
-                        continue;
-                    }
+                if (string.IsNullOrWhiteSpace(jid))
+                {
+                    continue;
+                }
+
+                bool claimed = false;
+                if (chunk.IsOnDemand)
+                {
+                    claimed = TryConsumeSessionOpenOnDemandClaim(jid);
+                }
+
+                if (!HistoryListUiRefresh.ShouldNotifyChatMessagesChangedForJid(
+                        chunk.IsOnDemand,
+                        claimed))
+                {
+                    continue;
+                }
 
                 NotifyChatMessagesChanged(jid);
             }
@@ -795,10 +807,8 @@ namespace Unison.WhatsAppClient.Messages
             }
         }
 
-        /// <summary>
-        /// One HISTORY_SYNC_ON_DEMAND probe per chat per process session (after paint).
-        /// </summary>
-        private bool TryClaimSessionOpenOnDemand(string jid)
+        /// <inheritdoc />
+        public bool TryClaimSessionOpenOnDemand(string jid)
         {
             string key = _jids.GetCanonicalJid(JidHelper.Normalize(jid)) ?? JidHelper.Normalize(jid);
             if (string.IsNullOrWhiteSpace(key))
@@ -809,6 +819,45 @@ namespace Unison.WhatsAppClient.Messages
             lock (_sessionOpenOnDemandGate)
             {
                 return _sessionOpenOnDemandClaimed.Add(key);
+            }
+        }
+
+        /// <inheritdoc />
+        public bool TryConsumeSessionOpenOnDemandClaim(string jid)
+        {
+            if (string.IsNullOrWhiteSpace(jid))
+            {
+                return false;
+            }
+
+            List<string> keys = ResolveChatKeys(jid);
+            lock (_sessionOpenOnDemandGate)
+            {
+                bool removed = false;
+                for (int i = 0; i < keys.Count; i++)
+                {
+                    string key = keys[i];
+                    if (string.IsNullOrWhiteSpace(key))
+                    {
+                        continue;
+                    }
+
+                    string canonical = _jids.GetCanonicalJid(JidHelper.Normalize(key))
+                        ?? JidHelper.Normalize(key);
+                    if (!string.IsNullOrWhiteSpace(canonical) &&
+                        _sessionOpenOnDemandClaimed.Remove(canonical))
+                    {
+                        removed = true;
+                    }
+
+                    if (!string.Equals(key, canonical, StringComparison.OrdinalIgnoreCase) &&
+                        _sessionOpenOnDemandClaimed.Remove(key))
+                    {
+                        removed = true;
+                    }
+                }
+
+                return removed;
             }
         }
 
@@ -1249,9 +1298,53 @@ namespace Unison.WhatsAppClient.Messages
             return result;
         }
 
-        public Task<bool> EnsureHistoryOnDemandAsync(string jid, int count)
+        public async Task<bool> EnsureHistoryOnDemandAsync(string jid, int count)
         {
-            return _history.EnsureChatPageAsync(jid, count);
+            bool requested = await _history.EnsureChatPageAsync(jid, count).ConfigureAwait(false);
+            if (requested && IsSessionOpenOnDemandClaimed(jid))
+            {
+                try
+                {
+                    _history.ArmSessionOpenOnDemandPending(jid);
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine(
+                        "[MessageFacade] ArmSessionOpenOnDemandPending failed: " + ex.Message);
+                }
+            }
+
+            return requested;
+        }
+
+        private bool IsSessionOpenOnDemandClaimed(string jid)
+        {
+            string key = _jids.GetCanonicalJid(JidHelper.Normalize(jid)) ?? JidHelper.Normalize(jid);
+            if (string.IsNullOrWhiteSpace(key))
+            {
+                return false;
+            }
+
+            lock (_sessionOpenOnDemandGate)
+            {
+                if (_sessionOpenOnDemandClaimed.Contains(key))
+                {
+                    return true;
+                }
+
+                List<string> keys = ResolveChatKeys(jid);
+                for (int i = 0; i < keys.Count; i++)
+                {
+                    string alias = keys[i];
+                    if (!string.IsNullOrWhiteSpace(alias) &&
+                        _sessionOpenOnDemandClaimed.Contains(alias))
+                    {
+                        return true;
+                    }
+                }
+
+                return false;
+            }
         }
 
         public bool IsHistoryOnDemandPending(string jid)

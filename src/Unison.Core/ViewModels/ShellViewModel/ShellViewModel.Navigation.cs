@@ -41,23 +41,24 @@ namespace Unison.Core.ViewModels
                 }
                 else if (string.Equals(section, NavigationRoutes.Status, StringComparison.OrdinalIgnoreCase))
                 {
-                    _navigator.NavigateInShellAndClear(NavigationDestination.Status);
+                    // Keep Chats (or prior section) under Status so Settings → back returns here.
+                    _navigator.NavigateInShell(NavigationDestination.Status);
                 }
                 else if (string.Equals(section, NavigationRoutes.Calls, StringComparison.OrdinalIgnoreCase))
                 {
-                    _navigator.NavigateInShellAndClear(NavigationDestination.Calls);
+                    _navigator.NavigateInShell(NavigationDestination.Calls);
                 }
                 else if (string.Equals(section, NavigationRoutes.Favorites, StringComparison.OrdinalIgnoreCase))
                 {
-                    _navigator.NavigateInShellAndClear(NavigationDestination.Favorites);
+                    _navigator.NavigateInShell(NavigationDestination.Favorites);
                 }
                 else if (string.Equals(section, NavigationRoutes.Archived, StringComparison.OrdinalIgnoreCase))
                 {
-                    _navigator.NavigateInShellAndClear(NavigationDestination.Archived);
+                    _navigator.NavigateInShell(NavigationDestination.Archived);
                 }
                 else if (string.Equals(section, NavigationRoutes.Channels, StringComparison.OrdinalIgnoreCase))
                 {
-                    _navigator.NavigateInShellAndClear(NavigationDestination.Channels);
+                    _navigator.NavigateInShell(NavigationDestination.Channels);
                 }
                 else if (string.Equals(section, NavigationRoutes.Profile, StringComparison.OrdinalIgnoreCase))
                 {
@@ -66,8 +67,8 @@ namespace Unison.Core.ViewModels
                 }
                 else
                 {
-                    // Legacy pivot shells throw here (chats live in the pivot). ActiveSection
-                    // below still updates; Legacy ShellView dismisses the overlay on that change.
+                    // Home: clear the shell stack. Legacy pivot shells throw here (chats live
+                    // in the pivot); ActiveSection below still updates.
                     _navigator.NavigateInShellAndClear(NavigationDestination.Chats);
                 }
             }
@@ -81,8 +82,35 @@ namespace Unison.Core.ViewModels
         }
 
         /// <summary>
-        /// Hardware / system back for shell sections (Settings / Debug → previous shell page).
-        /// Chat list/detail back is handled by ChatsView before this is called.
+        /// Open the Chats page to show a conversation. From a secondary Unison/WhatsApp
+        /// section, push without clearing so <see cref="ShowChatListBackButton"/> can return.
+        /// Home / Legacy still use <see cref="NavigateToSection"/> (AndClear).
+        /// </summary>
+        private void NavigateToChatsForOpenChat()
+        {
+            if (!IsWhatsAppLegacyShell() && IsSecondaryListSection(ActiveSection))
+            {
+                try
+                {
+                    _navigator.NavigateInShell(NavigationDestination.Chats);
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine("[ShellViewModel] NavigateInShell Chats for open-chat failed: " + ex.Message);
+                }
+
+                ActiveSection = NavigationRoutes.Chats;
+                RaiseSystemBackButtonChanged();
+                return;
+            }
+
+            NavigateToSection(NavigationRoutes.Chats);
+        }
+
+        /// <summary>
+        /// Hardware / system / header back for shell sections.
+        /// Prefers the Frame stack (Archived → Settings → back = Archived); only falls back
+        /// to Chats when the stack is empty. Chat detail back is handled before this.
         /// </summary>
         public bool TryHandleShellBack()
         {
@@ -100,13 +128,43 @@ namespace Unison.Core.ViewModels
             }
 
             if (string.Equals(ActiveSection, NavigationRoutes.Settings, StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(ActiveSection, NavigationRoutes.Debug, StringComparison.OrdinalIgnoreCase))
+                string.Equals(ActiveSection, NavigationRoutes.Debug, StringComparison.OrdinalIgnoreCase) ||
+                ShouldHandleSecondaryListBack())
             {
                 NavigateToSection(NavigationRoutes.Chats);
                 return true;
             }
 
             return false;
+        }
+
+        /// <summary>
+        /// Status / Channels / Archived / Calls / Favorites — secondary list sections that
+        /// show a header back control on Unison/WhatsApp (not Legacy pivot).
+        /// </summary>
+        internal static bool IsSecondaryListSection(string section)
+        {
+            return string.Equals(section, NavigationRoutes.Status, StringComparison.OrdinalIgnoreCase) ||
+                   string.Equals(section, NavigationRoutes.Channels, StringComparison.OrdinalIgnoreCase) ||
+                   string.Equals(section, NavigationRoutes.Archived, StringComparison.OrdinalIgnoreCase) ||
+                   string.Equals(section, NavigationRoutes.Calls, StringComparison.OrdinalIgnoreCase) ||
+                   string.Equals(section, NavigationRoutes.Favorites, StringComparison.OrdinalIgnoreCase);
+        }
+
+        private bool ShouldHandleSecondaryListBack() =>
+            !IsWhatsAppLegacyShell() && IsSecondaryListSection(ActiveSection);
+
+        private bool IsWhatsAppLegacyShell()
+        {
+            try
+            {
+                int raw = _localSettings.Get<int>(LocalSettingsConstants.SelectedShell);
+                return raw == (int)AppShell.WhatsAppLegacy;
+            }
+            catch
+            {
+                return false;
+            }
         }
 
         public void ReportWindowNarrow(bool isNarrow)

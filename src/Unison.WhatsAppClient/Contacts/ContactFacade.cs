@@ -611,25 +611,75 @@ namespace Unison.WhatsAppClient.Contacts
                 return;
             }
 
-            _ = _ui.RunAsync(() =>
+            // PreferFrugal: Low + sliced hops so push-name cannot monopolize Normal while
+            // ReleaseNextBatch paints VisibleChats (ad243a19: FlushPendingPushNameUi ~24s).
+            _ = DrainPendingPushNameUiAsync(batch);
+        }
+
+        private async Task DrainPendingPushNameUiAsync(
+            IReadOnlyList<KeyValuePair<string, string>> batch)
+        {
+            if (batch == null || batch.Count == 0)
             {
-                for (int i = 0; i < batch.Count; i++)
+                return;
+            }
+
+            ILowPriorityDispatcher lowUi = _ui as ILowPriorityDispatcher;
+            bool useLow = lowUi != null && _syncBudget.IsFrugal;
+            int sliceSize = useLow ? ResolvedNameUiSliceSize : batch.Count;
+
+            for (int offset = 0; offset < batch.Count; offset += sliceSize)
+            {
+                int count = Math.Min(sliceSize, batch.Count - offset);
+                IReadOnlyList<KeyValuePair<string, string>> slice =
+                    offset == 0 && count == batch.Count
+                        ? batch
+                        : TakePushNameSlice(batch, offset, count);
+
+                Action work = () => ApplyPushNameUiSlice(slice);
+                if (useLow)
                 {
-                    KeyValuePair<string, string> entry = batch[i];
-                    foreach (ChatItem chat in _chatRows.FindConversation(entry.Key))
+                    await lowUi.RunLowAsync(work).ConfigureAwait(false);
+                }
+                else
+                {
+                    await _ui.RunAsync(work).ConfigureAwait(false);
+                }
+            }
+        }
+
+        private static IReadOnlyList<KeyValuePair<string, string>> TakePushNameSlice(
+            IReadOnlyList<KeyValuePair<string, string>> batch,
+            int offset,
+            int count)
+        {
+            var slice = new List<KeyValuePair<string, string>>(count);
+            for (int i = 0; i < count; i++)
+            {
+                slice.Add(batch[offset + i]);
+            }
+
+            return slice;
+        }
+
+        private void ApplyPushNameUiSlice(IReadOnlyList<KeyValuePair<string, string>> slice)
+        {
+            for (int i = 0; i < slice.Count; i++)
+            {
+                KeyValuePair<string, string> entry = slice[i];
+                foreach (ChatItem chat in _chatRows.FindConversation(entry.Key))
+                {
+                    if (chat != null &&
+                        PlaceholderChatLabel.IsPlaceholder(
+                            chat.Name,
+                            chat.JID,
+                            SelfChatNaming.IsSelfMarkerLabel(chat.Name) ||
+                            (_selfMarkers != null && _selfMarkers.IsMarkerLabel(chat.Name))))
                     {
-                        if (chat != null &&
-                            PlaceholderChatLabel.IsPlaceholder(
-                                chat.Name,
-                                chat.JID,
-                                SelfChatNaming.IsSelfMarkerLabel(chat.Name) ||
-                                (_selfMarkers != null && _selfMarkers.IsMarkerLabel(chat.Name))))
-                        {
-                            chat.Name = entry.Value;
-                        }
+                        chat.Name = entry.Value;
                     }
                 }
-            });
+            }
         }
 
         private async Task PersistObservedPersonNameAsync(string jid, string displayName)
@@ -930,6 +980,26 @@ namespace Unison.WhatsAppClient.Contacts
                 if (AliasFollowUpPassPolicy.ShouldRearmAfterPass(_aliasFollowUps.HasPendingTargets))
                 {
                     ScheduleAliasFollowUp(_aliasFollowUps.PendingSource ?? "tip-busy");
+                }
+
+                return;
+            }
+
+            // Listing hub ensure Owns Low/UI — defer avatar collect until bulk ends.
+            if (AliasFollowUpPassPolicy.ShouldDeferForBulkCatalogue(_chatState.IsBulkCatalogueMutating))
+            {
+                if (AliasFollowUpPassPolicy.ShouldRearmAfterPass(_aliasFollowUps.HasPendingTargets))
+                {
+                    TimeSpan gap = AliasFollowUpPassPolicy.RearmGapBeforeSchedule(
+                        _syncBudget.IsFrugal,
+                        hasMoreAvatarTargets: true,
+                        bulkCatalogueMutating: true);
+                    if (gap > TimeSpan.Zero)
+                    {
+                        await Task.Delay(gap).ConfigureAwait(false);
+                    }
+
+                    ScheduleAliasFollowUp(_aliasFollowUps.PendingSource ?? "bulk-catalogue");
                 }
 
                 return;

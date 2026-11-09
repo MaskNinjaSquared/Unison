@@ -24,6 +24,12 @@ namespace Unison.WhatsAppClient.Abstractions
         /// </summary>
         bool IsListAwaitingFirstHistorySync { get; }
 
+        /// <summary>
+        /// PairingBootstrap already observed or is applying a non-on-demand history
+        /// chunk — catch-up finish must not unlock the list.
+        /// </summary>
+        bool IsPairingBootstrapChunkSeenOrApplying { get; }
+
         int SqliteHistoryConversationsAccumulated { get; }
 
         int InitialSyncProcessedConversations { get; }

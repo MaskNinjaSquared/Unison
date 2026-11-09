@@ -34,6 +34,15 @@ namespace Unison.WhatsAppClient.Helpers
                 return;
             }
 
+            if (!HistorySyncFlowDecision.ShouldSolicitPostInitFullHistory(
+                    host.IsPairingBootstrapActive))
+            {
+                host.LogForceHistoryRepair(
+                    "MessageStoreForceHistoryRepair deferred — PairingBootstrap active (" +
+                    reason + ")");
+                return;
+            }
+
             host.LogForceHistoryRepair(
                 "MessageStoreForceHistoryRepair pending — requesting full history (" +
                 reason + ")");

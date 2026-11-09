@@ -149,21 +149,21 @@
                               HorizontalAlignment="Center"
                               Margin="0,0,0,16"
                               Foreground="{ThemeResource WhatsAppTextMediumBrush}"/>
-                    <TextBlock Text="{Binding CreateExplainTitle}"
-                               FontSize="22"
-                               FontFamily="{StaticResource MainFontSemibold}"
-                               FontWeight="SemiBold"
-                               Foreground="{ThemeResource WhatsAppTextHighBrush}"
+                <TextBlock Text="{Binding CreateExplainTitle}"
+                           FontSize="22"
+                           FontFamily="{StaticResource MainFontSemibold}"
+                           FontWeight="SemiBold"
+                           Foreground="{ThemeResource WhatsAppTextHighBrush}"
                                TextAlignment="Center"
                                TextWrapping="WrapWholeWords"/>
-                    <TextBlock Text="{Binding CreateExplainBody}"
-                               Margin="0,12,0,0"
-                               FontSize="15"
-                               FontFamily="{StaticResource MainFont}"
-                               Foreground="{ThemeResource WhatsAppTextMediumBrush}"
+                <TextBlock Text="{Binding CreateExplainBody}"
+                           Margin="0,12,0,0"
+                           FontSize="15"
+                           FontFamily="{StaticResource MainFont}"
+                           Foreground="{ThemeResource WhatsAppTextMediumBrush}"
                                TextAlignment="Center"
                                TextWrapping="WrapWholeWords"/>
-                </StackPanel>
+            </StackPanel>
             </ScrollViewer>
             <Button Grid.Row="1"
                     HorizontalAlignment="Stretch"
@@ -384,7 +384,7 @@
                                                    Foreground="{ThemeResource WhatsAppTextHighBrush}"/>
                                         <FontIcon Grid.Column="1"
                                                   Glyph="&#xE713;"
-                                                  FontFamily="{StaticResource IconFont}"
+                                          FontFamily="{StaticResource IconFont}"
                                                   FontSize="20"
                                                   VerticalAlignment="Center"
                                                   Margin="12,0,0,0"
@@ -408,8 +408,8 @@
                                                    Margin="4,0,0,0"
                                                    FontSize="14"
                                                    FontFamily="{StaticResource MainFont}"
-                                                   Foreground="{ThemeResource WhatsAppTextMediumBrush}"
-                                                   VerticalAlignment="Center"/>
+                                          Foreground="{ThemeResource WhatsAppTextMediumBrush}"
+                                          VerticalAlignment="Center"/>
                                     </StackPanel>
                                     <HyperlinkButton Grid.Column="1"
                                                      x:Uid="CreateGroup_ManageMembers"
@@ -418,9 +418,9 @@
                                                      VerticalAlignment="Center"
                                                      Command="{Binding ManageGroupMembersCommand}"/>
                                 </Grid>
-                                </StackPanel>
+                        </StackPanel>
                             </Grid>
-                        </ScrollViewer>
+                    </ScrollViewer>
                 </PivotItem>
             </Pivot>
 
@@ -464,7 +464,7 @@
                                                 Visibility="{Binding HasCommunityPhoto, Converter={StaticResource InvertedBooleanToVisibilityConverter}}">
                                             <TextBlock x:Uid="CreateCommunity_AddPhotoOverlay"
                                                        Text="Add community image..."
-                                                       HorizontalAlignment="Center"
+                                  HorizontalAlignment="Center"
                                                        VerticalAlignment="Center"
                                                        TextAlignment="Center"
                                                        TextWrapping="WrapWholeWords"
@@ -474,35 +474,35 @@
                                                        Foreground="White"/>
                                         </Border>
                                     </Grid>
-                                </Border>
+                    </Border>
                             </toolkit:DropShadowPanel>
                             <Button Width="36" Height="36"
-                                    HorizontalAlignment="Right"
-                                    VerticalAlignment="Bottom"
+                    HorizontalAlignment="Right"
+                    VerticalAlignment="Bottom"
                                     Margin="0,0,-4,-4"
-                                    Padding="0"
-                                    MinWidth="0"
-                                    MinHeight="0"
-                                    BorderThickness="0"
+                    Padding="0"
+                    MinWidth="0"
+                    MinHeight="0"
+                    BorderThickness="0"
                                     Background="{ThemeResource WhatsAppGreenFocusBrush}"
                                     Command="{Binding PickCommunityPhotoCommand}"
                                     AutomationProperties.Name="Change community photo"
                                     Canvas.ZIndex="1">
-                                <Button.Template>
-                                    <ControlTemplate TargetType="Button">
+                <Button.Template>
+                    <ControlTemplate TargetType="Button">
                                         <Grid>
                                             <Ellipse Fill="{TemplateBinding Background}"/>
                                             <ContentPresenter HorizontalAlignment="Center"
                                                               VerticalAlignment="Center"/>
-                                        </Grid>
-                                    </ControlTemplate>
-                                </Button.Template>
-                                <FontIcon Glyph="&#xE72C;"
-                                          FontFamily="{StaticResource IconFont}"
-                                          FontSize="14"
-                                          Foreground="White"/>
-                            </Button>
                         </Grid>
+                    </ControlTemplate>
+                </Button.Template>
+                                <FontIcon Glyph="&#xE72C;"
+                          FontFamily="{StaticResource IconFont}"
+                                          FontSize="14"
+                          Foreground="White"/>
+            </Button>
+        </Grid>
 
                         <local:LegacyEmojiLabeledTextBox x:Name="CommunityNameField"
                                                      x:Uid="CreateCommunity_Name"
@@ -640,7 +640,7 @@
 
         <!-- Legacy CommandBar: left form column only. Icon via Content — LegacyAppBarButtonStyle ignores Icon. -->
         <Grid Grid.Row="2"
-              Grid.Column="0"
+                Grid.Column="0"
               MinHeight="{StaticResource LegacyCommandBarCompactHeight}"
               VerticalAlignment="Bottom"
               Background="{ThemeResource LegacyCommandBarBackgroundBrush}"
@@ -688,7 +688,7 @@
             <Border x:Name="CreateSplitterChrome"
                     Background="{ThemeResource ChatPaneSplitterBackgroundBrush}"
                     Opacity="0"
-                    IsHitTestVisible="False">
+                IsHitTestVisible="False">
                 <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
                     <Ellipse Width="3" Height="3" Margin="0,2"
                              Fill="{ThemeResource ChatPaneSplitterGripBrush}"/>
@@ -705,7 +705,7 @@
         <!-- Replaces CreateContentHost: centered ProgressRing on the same page background. -->
         <Grid x:Name="CreateBusyOverlay"
               Canvas.ZIndex="20"
-              Background="{ThemeResource ChatListBackgroundBrush}"
+                Background="{ThemeResource ChatListBackgroundBrush}"
               IsHitTestVisible="True"
               Visibility="{Binding IsCreating, Converter={StaticResource BooleanToVisibilityConverter}}">
             <controls:ModernProgressRing Width="48"

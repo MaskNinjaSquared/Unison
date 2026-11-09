@@ -14,6 +14,7 @@ namespace Unison.Core.Tests.Helpers
             Assert.True(host.HoldOwned);
             Assert.True(host.ChannelPublished);
             Assert.False(host.FlushFired);
+            Assert.True(host.LastChannelActive);
         }
 
         [Fact]
@@ -27,6 +28,18 @@ namespace Unison.Core.Tests.Helpers
             Assert.True(host.FlushFired);
         }
 
+        [Fact]
+        public void Post_release_active_progress_is_clamped_inactive()
+        {
+            var host = new FakeHost { AlreadyReleased = true };
+            PublishInitialSyncProgressDispatch.Run(host, true, false, 10, 0, "sqlite-started");
+            Assert.True(host.ChannelPublished);
+            Assert.False(host.LastChannelActive);
+            Assert.False(host.HoldOwned);
+            Assert.Contains("clamped=post-release", host.LastStage);
+            Assert.False(host.FlushFired);
+        }
+
         private sealed class FakeHost : IPublishInitialSyncProgressHost
         {
             public bool AlreadyReleased;
@@ -34,6 +47,8 @@ namespace Unison.Core.Tests.Helpers
             public bool Deferred;
             public bool ChannelPublished;
             public bool FlushFired;
+            public bool LastChannelActive;
+            public string LastStage;
 
             public bool FirstSyncListAlreadyReleased
             {
@@ -60,6 +75,8 @@ namespace Unison.Core.Tests.Helpers
                 int total,
                 string stage)
             {
+                LastChannelActive = active;
+                LastStage = stage;
             }
 
             public void PublishInitialSyncChannel(
@@ -67,8 +84,12 @@ namespace Unison.Core.Tests.Helpers
                 bool completed,
                 int processed,
                 int total,
-                string stage) =>
+                string stage)
+            {
                 ChannelPublished = true;
+                LastChannelActive = active;
+                LastStage = stage;
+            }
 
             public void FireAndForgetFlushDiagnosticsOnComplete() => FlushFired = true;
         }

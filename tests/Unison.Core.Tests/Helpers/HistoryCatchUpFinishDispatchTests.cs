@@ -64,10 +64,27 @@ namespace Unison.Core.Tests.Helpers
             Assert.True(host.AvatarsScheduled);
         }
 
+        [Fact]
+        public void Pairing_bootstrap_chunk_seen_does_not_release_list()
+        {
+            var host = new FakeHost
+            {
+                FirstSyncHold = true,
+                AwaitingFirstHistory = true,
+                BootstrapChunkSeenOrApplying = true
+            };
+            HistoryCatchUpFinishDispatch.Run(host, "stagnant-progress", releaseEnrichment: true);
+
+            Assert.False(host.ListReleaseRequested);
+            Assert.False(host.EnrichmentScheduled);
+            Assert.True(host.BannerEnded);
+        }
+
         private sealed class FakeHost : IHistoryCatchUpFinishHost
         {
             public bool FirstSyncHold;
             public bool AwaitingFirstHistory;
+            public bool BootstrapChunkSeenOrApplying;
             public int Accumulated;
             public int InitialProcessed;
             public bool Finished;
@@ -82,6 +99,7 @@ namespace Unison.Core.Tests.Helpers
 
             public bool IsFirstSyncListHoldInProgress => FirstSyncHold;
             public bool IsListAwaitingFirstHistorySync => AwaitingFirstHistory;
+            public bool IsPairingBootstrapChunkSeenOrApplying => BootstrapChunkSeenOrApplying;
             public int SqliteHistoryConversationsAccumulated => Accumulated;
             public int InitialSyncProcessedConversations => InitialProcessed;
 

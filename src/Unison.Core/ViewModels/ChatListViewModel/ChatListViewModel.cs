@@ -183,6 +183,13 @@ namespace Unison.Core.ViewModels
         /// <summary>Empty VisibleChats → full store: fewer Continue rounds on reattach.</summary>
         private const int VisibleRefreshMoveBudgetFrugalCold = 20;
         private static readonly TimeSpan PreviewHydrateInterval = TimeSpan.FromMilliseconds(40);
+
+        /// <summary>
+        /// On Low/frugal (or while the batch drain owns Normal), hydrate must not outpace
+        /// ReleaseNextBatch — 40ms Normal slices starved visible adds (ad243a19).
+        /// </summary>
+        private TimeSpan CurrentPreviewHydrateInterval =>
+            PreferFrugalUi || _batchRendering ? BatchInterval : PreviewHydrateInterval;
         private static readonly TimeSpan MessagePreviewReconcileDebounce = TimeSpan.FromMilliseconds(350);
         private readonly object _messagePreviewReconcileGate = new object();
         private readonly MessagePreviewReconcilePending _messagePreviewReconcilePending =
@@ -219,6 +226,7 @@ namespace Unison.Core.ViewModels
         /// Reattach started with VisibleChats empty — keep cold budget/Continue gaps until filled.
         /// </summary>
         private bool _visibleColdPopulate;
+        private bool _batchColdPopulateHeld;
 
         private bool _previewHydrateLoopRunning;
         private readonly object _previewHydrateGate = new object();

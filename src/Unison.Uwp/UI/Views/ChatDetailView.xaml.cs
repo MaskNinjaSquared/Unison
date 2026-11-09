@@ -135,6 +135,9 @@ namespace Unison.Uwp.UI.Views
         /// <summary>The slide in flight, kept so a fast second tap can cut the first one short.</summary>
         private Storyboard _attachMenuStoryboard;
 
+        private ShellViewModel _shellForBack;
+        private bool _shellBackHooked;
+
         public ChatDetailView()
         {
             _strings = App.Services?.GetService<IStringResources>();
@@ -182,6 +185,7 @@ namespace Unison.Uwp.UI.Views
             HookLayoutStateChanges();
             StartDateSeparatorTimer();
             ViewModel?.AttachAudioPlaybackUi(AudioPlayer);
+            AttachShellBackVisibility();
         }
 
         /// <summary>
@@ -405,6 +409,7 @@ namespace Unison.Uwp.UI.Views
                 _serviceEventsAttached = false;
             }
 
+            DetachShellBackVisibility();
             _chatLoadCts?.Cancel();
             _chatLoadCts?.Dispose();
             _chatLoadCts = null;
@@ -1262,24 +1267,90 @@ namespace Unison.Uwp.UI.Views
             }
         }
 
-        private void UpdateEmptyBackButtonVisibility()
+        private void AttachShellBackVisibility()
         {
-            if (EmptyBackButton == null)
+            if (_shellBackHooked)
             {
                 return;
             }
 
-            bool narrow = false;
             try
             {
-                var shell = App.Services?.GetService<ShellViewModel>();
-                narrow = shell != null && shell.IsNarrowWindow;
+                _shellForBack = App.Services?.GetService<ShellViewModel>();
+            }
+            catch
+            {
+                _shellForBack = null;
+            }
+
+            if (_shellForBack == null)
+            {
+                UpdateChatBackButtonsVisibility();
+                return;
+            }
+
+            _shellForBack.PropertyChanged += Shell_PropertyChangedForBack;
+            _shellBackHooked = true;
+            UpdateChatBackButtonsVisibility();
+        }
+
+        private void DetachShellBackVisibility()
+        {
+            if (!_shellBackHooked)
+            {
+                return;
+            }
+
+            if (_shellForBack != null)
+            {
+                _shellForBack.PropertyChanged -= Shell_PropertyChangedForBack;
+            }
+
+            _shellForBack = null;
+            _shellBackHooked = false;
+        }
+
+        private void Shell_PropertyChangedForBack(object sender, PropertyChangedEventArgs e)
+        {
+            if (string.IsNullOrEmpty(e.PropertyName) ||
+                e.PropertyName == nameof(ShellViewModel.ShowChatDetailBackButton) ||
+                e.PropertyName == nameof(ShellViewModel.IsNarrowWindow))
+            {
+                UpdateChatBackButtonsVisibility();
+            }
+        }
+
+        /// <summary>
+        /// Header + empty-state back: only when <see cref="ShellViewModel.ShowChatDetailBackButton"/>
+        /// (narrow / handset). Wide dual-pane keeps the list visible — no arrow.
+        /// </summary>
+        private void UpdateChatBackButtonsVisibility()
+        {
+            bool show = false;
+            try
+            {
+                var shell = _shellForBack ?? App.Services?.GetService<ShellViewModel>();
+                show = shell != null && shell.ShowChatDetailBackButton;
             }
             catch
             {
             }
 
-            EmptyBackButton.Visibility = narrow ? Visibility.Visible : Visibility.Collapsed;
+            bool hasChat = ActiveChatGrid != null &&
+                           ActiveChatGrid.Visibility == Visibility.Visible;
+            if (BackButton != null)
+            {
+                BackButton.Visibility = show && hasChat
+                    ? Visibility.Visible
+                    : Visibility.Collapsed;
+            }
+
+            if (EmptyBackButton != null)
+            {
+                EmptyBackButton.Visibility = show && !hasChat
+                    ? Visibility.Visible
+                    : Visibility.Collapsed;
+            }
         }
 
         /// <summary>Invoked from <see cref="Templates.MessageTemplates"/> when a loaded image is tapped.</summary>
@@ -1695,7 +1766,7 @@ namespace Unison.Uwp.UI.Views
                 ClearTimelineMessages();
                 ActiveChatGrid.Visibility = Visibility.Collapsed;
                 EmptyStateGrid.Visibility = Visibility.Visible;
-                UpdateEmptyBackButtonVisibility();
+                UpdateChatBackButtonsVisibility();
                 PinnedMessageButton.Visibility = Visibility.Collapsed;
                 _displayedPinnedMessage = null;
                 _activePinnedMessages.Clear();
@@ -1720,10 +1791,7 @@ namespace Unison.Uwp.UI.Views
             _activeChat.PropertyChanged += ActiveChat_PropertyChanged;
             ActiveChatGrid.Visibility = Visibility.Visible;
             EmptyStateGrid.Visibility = Visibility.Collapsed;
-            if (EmptyBackButton != null)
-            {
-                EmptyBackButton.Visibility = Visibility.Collapsed;
-            }
+            UpdateChatBackButtonsVisibility();
 
             ChatStatusText.Text = "";
             ChatStatusText.Opacity = 0;
@@ -2706,7 +2774,27 @@ namespace Unison.Uwp.UI.Views
                     try
                     {
                         bool followingEnd = stickToBottom || IsFollowingTimelineEnd();
-                        bool changed = ViewModel.MergeTimelineFromService(serviceMessages, requestedJid, followingEnd);
+                        bool changed;
+                        if (HistoryListUiRefresh.ShouldReplaceTimelineOnHistorySync(
+                                _messages.Count,
+                                ViewModel.InitialUiMessageWindow))
+                        {
+                            var window = ChatDetailViewModel.TakeLastWindow(
+                                serviceMessages,
+                                ViewModel.InitialUiMessageWindow);
+                            ViewModel.StampGroupRemoteJid(window, requestedJid);
+                            ViewModel.ReplaceTimelineWindow(window);
+                            changed = true;
+                            followingEnd = true;
+                        }
+                        else
+                        {
+                            changed = ViewModel.MergeTimelineFromService(
+                                serviceMessages,
+                                requestedJid,
+                                followingEnd);
+                        }
+
                         UpdatePinnedBanner();
 
                         if (changed)

@@ -29,6 +29,21 @@ namespace Unison.Core.State
         /// <summary>True while the saved chat rows are being read back into <see cref="Chats"/> at startup.</summary>
         bool IsLoadingPersistedChats { get; }
 
+        /// <summary>
+        /// True while a bulk catalogue mutation (e.g. group listing hub ensure) is adding rows
+        /// without wanting a full visible refresh per Add.
+        /// </summary>
+        bool IsBulkCatalogueMutating { get; }
+
+        /// <summary>
+        /// Suppresses per-Add list refresh while hubs/rows land; dispose raises
+        /// <see cref="BulkCatalogueMutationEnded"/> so the list can rebuild once.
+        /// </summary>
+        IDisposable BeginBulkCatalogueMutation();
+
+        /// <summary>Raised when a <see cref="BeginBulkCatalogueMutation"/> scope ends.</summary>
+        event EventHandler BulkCatalogueMutationEnded;
+
         /// <summary>Raised with the chat JID whose message list changed.</summary>
         event EventHandler<string> MessagesChanged;
 

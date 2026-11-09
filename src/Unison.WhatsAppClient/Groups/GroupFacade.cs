@@ -71,6 +71,11 @@ namespace Unison.WhatsAppClient.Groups
         private int _listingRetryPending;
 
         /// <summary>
+        /// Title reconcile was deferred because listing was in flight or the window hid.
+        /// </summary>
+        private int _titleReconcilePending;
+
+        /// <summary>
         /// Bumped when the window hides (or a newer resume settle arms) so a delayed
         /// post-keepalive listing retry does not fire after the user left again.
         /// </summary>
@@ -160,6 +165,33 @@ namespace Unison.WhatsAppClient.Groups
             }
 
             _ = RunBackgroundListingAsync();
+        }
+
+        /// <inheritdoc />
+        public Task ReconcileGroupCommunityTitlesAsync(CancellationToken cancellationToken = default)
+        {
+            if (GroupListingVisibilityGate.ShouldDeferStart(IsWindowVisible))
+            {
+                Interlocked.Exchange(ref _titleReconcilePending, 1);
+                Interlocked.Exchange(ref _listingRetryPending, 1);
+                _diagnostics?.Write(
+                    "names",
+                    "post-sync-titles",
+                    "deferred=window-hidden");
+                return Task.CompletedTask;
+            }
+
+            if (Volatile.Read(ref _listingInFlight) != 0)
+            {
+                Interlocked.Exchange(ref _titleReconcilePending, 1);
+                _diagnostics?.Write(
+                    "names",
+                    "post-sync-titles",
+                    "deferred=listing-in-flight");
+                return Task.CompletedTask;
+            }
+
+            return RunTitleReconcileAsync(cancellationToken);
         }
 
         private bool IsWindowVisible =>
@@ -268,6 +300,36 @@ namespace Unison.WhatsAppClient.Groups
                 "startup-phase",
                 "background-groups:skipped",
                 "reason=" + (reason ?? "?"));
+        }
+
+        /// <summary>
+        /// First pass: cache subjects + row flags via <see cref="GroupMetadataApply.ApplyListingAsync"/>.
+        /// Later passes this session: only restamp community hubs from GroupSubjects (resume /
+        /// already-applied) so placeholders do not stick after a hidden apply.
+        /// </summary>
+        private async Task ApplyParticipatingListingOrRestampAsync(
+            List<BinaryNode> groupNodes,
+            bool force)
+        {
+            bool alreadyApplied = Volatile.Read(ref _listingAppliedThisSession) != 0;
+            if (!SessionListingApplyPolicy.ShouldApplyListing(alreadyApplied, force))
+            {
+                _diagnostics?.Write(
+                    "startup-phase",
+                    "background-groups:listing-skip",
+                    "reason=already-applied-this-session;restamp=True");
+                _chats.NotifyCommunitySubjectsUpdated();
+                return;
+            }
+
+            // Tip-first: do not hold the dispatcher with listing while offline tips flush.
+            while (_isOfflineReplayTipBusy())
+            {
+                await Task.Delay(40).ConfigureAwait(false);
+            }
+
+            await _apply.ApplyListingAsync(_reader.ReadListing(groupNodes)).ConfigureAwait(false);
+            Interlocked.Exchange(ref _listingAppliedThisSession, 1);
         }
 
         public Task RefreshGroupSendPermissionsAsync(
@@ -713,41 +775,31 @@ namespace Unison.WhatsAppClient.Groups
                         "background-groups:iq-end",
                         "elapsedMs=" + iqClock.ElapsedMilliseconds +
                         "; hasResponse=" + (response != null));
-                    if (GroupListingVisibilityGate.ShouldAbortInFlight(
-                            IsWindowVisible,
-                            listingToken.IsCancellationRequested))
+
+                    // Subjects always — even when the window hid after the IQ. Journal 82908f3f
+                    // aborted before ApplyListing and left community hubs on the fallback label.
+                    bool windowHiddenAfterIq = GroupListingVisibilityGate.ShouldAbortInFlight(
+                        IsWindowVisible,
+                        listingToken.IsCancellationRequested);
+                    if (GroupListingVisibilityGate.ShouldApplyListingSubjects(response != null))
+                    {
+                        listingAnswered = true;
+                        var groupNodes = response.FindAllDescendants("group");
+                        Debug.WriteLine(
+                            "[GroupFacade] QueryAllGroupsAsync found " + groupNodes.Count + " group nodes.");
+                        await ApplyParticipatingListingOrRestampAsync(groupNodes, force: false)
+                            .ConfigureAwait(false);
+                    }
+
+                    if (windowHiddenAfterIq)
                     {
                         abortedForVisibility = true;
                         Interlocked.Exchange(ref _listingRetryPending, 1);
                         _diagnostics?.Write(
                             "startup-phase",
                             "background-groups:aborted",
-                            "reason=window-hidden;stage=after-listing-iq");
-                    }
-                    else if (response != null)
-                    {
-                        listingAnswered = true;
-                        var groupNodes = response.FindAllDescendants("group");
-                        Debug.WriteLine("[GroupFacade] QueryAllGroupsAsync found " + groupNodes.Count + " group nodes.");
-                        bool alreadyApplied = Volatile.Read(ref _listingAppliedThisSession) != 0;
-                        if (!SessionListingApplyPolicy.ShouldApplyListing(alreadyApplied, force: false))
-                        {
-                            _diagnostics?.Write(
-                                "startup-phase",
-                                "background-groups:listing-skip",
-                                "reason=already-applied-this-session");
-                        }
-                        else
-                        {
-                            // Tip-first: do not hold the dispatcher with listing while offline tips flush.
-                            while (_isOfflineReplayTipBusy())
-                            {
-                                await Task.Delay(40).ConfigureAwait(false);
-                            }
-
-                            await _apply.ApplyListingAsync(_reader.ReadListing(groupNodes));
-                            Interlocked.Exchange(ref _listingAppliedThisSession, 1);
-                        }
+                            "reason=window-hidden;stage=after-listing-iq" +
+                            (listingAnswered ? ";subjects=cached" : string.Empty));
                     }
                 }
                 catch (OperationCanceledException)
@@ -813,7 +865,135 @@ namespace Unison.WhatsAppClient.Groups
             finally
             {
                 Interlocked.Exchange(ref _listingInFlight, 0);
+
+                if (Interlocked.Exchange(ref _titleReconcilePending, 0) == 1 &&
+                    !GroupListingVisibilityGate.ShouldDeferStart(IsWindowVisible))
+                {
+                    try
+                    {
+                        await RunTitleReconcileAsync(CancellationToken.None).ConfigureAwait(false);
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.WriteLine(
+                            "[GroupFacade] Deferred title reconcile failed: " + ex.Message);
+                    }
+                }
             }
+        }
+
+        /// <summary>
+        /// Persist community hubs that still only live as synthetic rows, restamp labels, and
+        /// ask metadata for catalogue rows whose Name is still a stand-in.
+        /// </summary>
+        private async Task RunTitleReconcileAsync(CancellationToken cancellationToken)
+        {
+            int ensured = 0;
+            int renamed = 0;
+            bool catalogDirty = false;
+
+            await _ui.RunAsync(() =>
+            {
+                var parents = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                var byCanonical = new Dictionary<string, ChatItem>(StringComparer.OrdinalIgnoreCase);
+
+                foreach (ChatItem chat in _chats.Chats)
+                {
+                    if (chat == null || string.IsNullOrWhiteSpace(chat.JID))
+                    {
+                        continue;
+                    }
+
+                    string key = _jids.GetCanonicalJid(chat.JID);
+                    if (string.IsNullOrWhiteSpace(key))
+                    {
+                        continue;
+                    }
+
+                    if (!byCanonical.ContainsKey(key))
+                    {
+                        byCanonical[key] = chat;
+                    }
+
+                    if (chat.IsCommunityParent || chat.Kind == ChatKind.Community)
+                    {
+                        parents.Add(key);
+                    }
+
+                    if (!string.IsNullOrWhiteSpace(chat.LinkedParentJid))
+                    {
+                        string parentKey = _jids.GetCanonicalJid(chat.LinkedParentJid);
+                        if (!string.IsNullOrWhiteSpace(parentKey))
+                        {
+                            parents.Add(parentKey);
+                        }
+                    }
+                }
+
+                foreach (string parentKey in parents)
+                {
+                    string subject = _naming.ResolveChatDisplayName(parentKey);
+                    bool beforeExists = byCanonical.ContainsKey(parentKey);
+                    string beforeName = beforeExists ? byCanonical[parentKey].Name : null;
+
+                    if (!CommunityHubCatalogEnsure.TryEnsure(
+                            parentKey,
+                            subject,
+                            jid =>
+                            {
+                                ChatItem row;
+                                return byCanonical.TryGetValue(jid, out row) ? row : null;
+                            },
+                            hub =>
+                            {
+                                _chats.Chats.Add(hub);
+                                byCanonical[parentKey] = hub;
+                                ensured++;
+                                catalogDirty = true;
+                            },
+                            _naming.IsMeaningfulGroupLabel))
+                    {
+                        continue;
+                    }
+
+                    catalogDirty = true;
+                    ChatItem after;
+                    if (beforeExists &&
+                        byCanonical.TryGetValue(parentKey, out after) &&
+                        !string.Equals(beforeName, after?.Name, StringComparison.Ordinal))
+                    {
+                        renamed++;
+                    }
+                }
+            }).ConfigureAwait(false);
+
+            if (catalogDirty)
+            {
+                _catalog.Schedule();
+            }
+
+            _chats.NotifyCommunitySubjectsUpdated();
+
+            int metadataQueued = 0;
+            if (!GroupListingVisibilityGate.ShouldDeferStart(IsWindowVisible) &&
+                !cancellationToken.IsCancellationRequested)
+            {
+                bool aborted = await QueryUnresolvedGroupMetadataAsync(
+                    _workload.GroupMetadataBatchSize,
+                    cancellationToken).ConfigureAwait(false);
+                if (!aborted)
+                {
+                    metadataQueued = _workload.GroupMetadataBatchSize;
+                }
+            }
+
+            _diagnostics?.Write(
+                "names",
+                "post-sync-titles",
+                "ensured=" + ensured +
+                "; renamed=" + renamed +
+                "; metadataQueued=" + metadataQueued +
+                "; catalogDirty=" + catalogDirty);
         }
 
         /// <returns>True when aborted because the window hid mid-pass.</returns>

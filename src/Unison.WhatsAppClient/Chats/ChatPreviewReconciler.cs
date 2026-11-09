@@ -17,6 +17,7 @@ using System.Diagnostics;
 using System.Threading.Tasks;
 using Unison.Core.Contracts;
 using Unison.Core.Helpers;
+using Unison.Core.Helpers.Chats;
 using Unison.Core.Models;
 using Unison.Core.State;
 using Unison.WhatsAppClient.Helpers;
@@ -191,6 +192,9 @@ namespace Unison.WhatsAppClient.Chats
             int updated = 0;
             bool chunked = chatJids != null && chatJids.Count > 0;
             var bumpedRows = chunked ? new List<ChatItem>() : null;
+            bool preferNormalUi = ChatTimelineOpenPriority.ShouldUseNormalTipUiLane(
+                tag,
+                newestByCanonical.Count);
             for (int start = 0; start < newestByCanonical.Count; start += uiSlice)
             {
                 await WaitWhileUiSlicesPausedAsync(tag).ConfigureAwait(false);
@@ -200,24 +204,27 @@ namespace Unison.WhatsAppClient.Chats
                 int sliceSwapped = 0;
                 int sliceKept = 0;
                 var sliceWatch = Stopwatch.StartNew();
-                await RunTipUiAsync(() =>
-                {
-                    for (int i = sliceStart; i < sliceEnd; i++)
-                    {
-                        int swapped;
-                        int kept;
-                        updated += ApplyTip(
-                            newestByCanonical[i].Item1,
-                            newestByCanonical[i].Item2,
-                            newestByCanonical[i].Item3,
-                            newestByCanonical[i].Item4,
-                            out swapped,
-                            out kept,
-                            bumpedRows);
-                        sliceSwapped += swapped;
-                        sliceKept += kept;
-                    }
-                }).ConfigureAwait(false);
+                await RunTipUiAsync(
+                        () =>
+                        {
+                            for (int i = sliceStart; i < sliceEnd; i++)
+                            {
+                                int swapped;
+                                int kept;
+                                updated += ApplyTip(
+                                    newestByCanonical[i].Item1,
+                                    newestByCanonical[i].Item2,
+                                    newestByCanonical[i].Item3,
+                                    newestByCanonical[i].Item4,
+                                    out swapped,
+                                    out kept,
+                                    bumpedRows);
+                                sliceSwapped += swapped;
+                                sliceKept += kept;
+                            }
+                        },
+                        preferNormalUi)
+                    .ConfigureAwait(false);
                 sliceWatch.Stop();
                 if (sliceWatch.ElapsedMilliseconds >= 300)
                 {
@@ -259,20 +266,23 @@ namespace Unison.WhatsAppClient.Chats
                 // list-chunk: Reposition only bumped rows. Full SortInPlace on 250+ chats during
                 // replay-progressive tip storms caused Move cascades + refresh-visible hangs on
                 // Lumia 950 XL. Full walks (post-replay / deferred-startup) still SortInPlace.
-                await RunTipUiAsync(() =>
-                {
-                    if (bumpedRows != null && bumpedRows.Count > 0)
-                    {
-                        for (int i = 0; i < bumpedRows.Count; i++)
+                await RunTipUiAsync(
+                        () =>
                         {
-                            ChatDisplayOrder.Reposition(_chatState.Chats, bumpedRows[i]);
-                        }
-                    }
-                    else
-                    {
-                        ChatDisplayOrder.SortInPlace(_chatState.Chats);
-                    }
-                }).ConfigureAwait(false);
+                            if (bumpedRows != null && bumpedRows.Count > 0)
+                            {
+                                for (int i = 0; i < bumpedRows.Count; i++)
+                                {
+                                    ChatDisplayOrder.Reposition(_chatState.Chats, bumpedRows[i]);
+                                }
+                            }
+                            else
+                            {
+                                ChatDisplayOrder.SortInPlace(_chatState.Chats);
+                            }
+                        },
+                        preferNormalUi)
+                    .ConfigureAwait(false);
                 Debug.WriteLine("[ChatPreviewReconciler] updated=" + updated + " reason=" + tag);
             }
 
@@ -280,12 +290,12 @@ namespace Unison.WhatsAppClient.Chats
         }
 
         /// <summary>
-        /// Tip mutations are Low when available so Normal send / open / name batches are not
-        /// queued behind a multi-minute ApplyTip hop on Mobile Low.
+        /// Hot tips (chat-open / history-chunk-tip) use Normal so listing Low hops cannot
+        /// starve OnDemand apply. Full catalogue heals stay on Low when available.
         /// </summary>
-        private Task RunTipUiAsync(Action action)
+        private Task RunTipUiAsync(Action action, bool preferNormal)
         {
-            if (_uiLow != null)
+            if (!preferNormal && _uiLow != null)
             {
                 return _uiLow.RunLowAsync(action);
             }
@@ -305,8 +315,20 @@ namespace Unison.WhatsAppClient.Chats
                 "ui-slice-paused",
                 "reason=" + reason + "; waiting=priority-or-hidden");
 
+            DateTime deadline = DateTime.UtcNow + ChatTimelineOpenPriority.UiSlicePauseMaxWait;
             while (_shouldPauseUiSlices())
             {
+                if (DateTime.UtcNow >= deadline)
+                {
+                    DiagWrite(
+                        "preview-tip",
+                        "ui-slice-pause-timeout",
+                        "reason=" + reason +
+                        "; budgetMs=" +
+                        (int)ChatTimelineOpenPriority.UiSlicePauseMaxWait.TotalMilliseconds);
+                    return;
+                }
+
                 await Task.Delay(UiPausePollMs).ConfigureAwait(false);
             }
         }

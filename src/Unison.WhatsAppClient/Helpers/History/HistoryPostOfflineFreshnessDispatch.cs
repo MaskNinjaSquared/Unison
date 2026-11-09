@@ -59,6 +59,15 @@ namespace Unison.WhatsAppClient.Helpers
                         out int stagnantCycles);
                     if (drain == HistoryCatchUpDrainAction.Continue)
                     {
+                        if (!HistorySyncFlowDecision.ShouldSolicitPostInitFullHistory(
+                                host.IsPairingBootstrapActive))
+                        {
+                            host.FinishHistoryCatchUpContinue(
+                                "pairing-bootstrap-defer-offline-continue",
+                                releaseEnrichment: true);
+                            return;
+                        }
+
                         await host.RequestReconnectHistoryCatchUpAsync(
                                 "catch-up-continue-offline:" + offlineCount)
                             .ConfigureAwait(false);
@@ -119,6 +128,13 @@ namespace Unison.WhatsAppClient.Helpers
             }
 
             host.LogFreshnessStillStaleRequest(staleReason, newestText, offlineCount);
+            if (!HistorySyncFlowDecision.ShouldSolicitPostInitFullHistory(
+                    host.IsPairingBootstrapActive))
+            {
+                // PairingBootstrap: phone pushes InitialBootstrap — do not start PostInitCatchUp.
+                return;
+            }
+
             host.MarkEnrichmentAwaitingHeavyHistory();
             await host.RequestReconnectHistoryCatchUpAsync(
                     "offline-stale:" + offlineCount + ":" + staleReason)

@@ -131,7 +131,9 @@ namespace Unison.Core.Tests.Helpers
                     "defer-avatars:replay",
                     "quiet:post-message-enrich-groups",
                     "clear-status",
-                    "group-listing"
+                    "group-listing",
+                    "quiet:post-message-enrich-titles",
+                    "reconcile-titles"
                 },
                 host.Log);
         }
@@ -247,6 +249,12 @@ namespace Unison.Core.Tests.Helpers
             }
 
             public void NotifyGroupListingDue() => Log.Add("group-listing");
+
+            public Task ReconcileGroupCommunityTitlesAsync(CancellationToken token)
+            {
+                Log.Add("reconcile-community-titles");
+                return Task.CompletedTask;
+            }
 
             public void WriteComplete(string reason, bool serialized) =>
                 Log.Add("complete:" + reason + ":" + serialized);

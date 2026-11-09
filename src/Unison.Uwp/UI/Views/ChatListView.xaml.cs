@@ -1,7 +1,9 @@
 using System;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
+using Unison.Core.Constants;
 using Unison.Core.Contracts;
 using Unison.Core.Models;
 using Unison.Core.ViewModels;
@@ -69,6 +71,10 @@ namespace Unison.Uwp.UI.Views
         private bool _suppressSelectionChanged;
         private int _containerChangingCount;
 
+        private ChatListScope _scope = ChatListScope.Active;
+        private ShellViewModel _shellForBack;
+        private bool _shellBackHooked;
+
         public ChatListView()
         {
             if (App.Services != null)
@@ -92,10 +98,13 @@ namespace Unison.Uwp.UI.Views
 
         private void ApplyScopeChrome(ChatListScope scope)
         {
+            _scope = scope;
             if (HeaderTitle == null || FilterButton == null)
             {
                 return;
             }
+
+            UpdateScopeBackButtonVisibility();
 
             var strings = App.Services?.GetService<IStringResources>();
             if (scope == ChatListScope.Archived)
@@ -112,8 +121,103 @@ namespace Unison.Uwp.UI.Views
             }
         }
 
+        private void UpdateScopeBackButtonVisibility()
+        {
+            if (ScopeBackButton == null)
+            {
+                return;
+            }
+
+            // Archived/Channels pages always show section back.
+            if (_scope == ChatListScope.Archived || _scope == ChatListScope.Channels)
+            {
+                ScopeBackButton.Visibility = Visibility.Visible;
+                return;
+            }
+
+            // Active Chats (Unison/WhatsApp only): back when shell Frame can return
+            // (e.g. Favorites → chat → close → list still under Favorites).
+            bool show = false;
+            try
+            {
+                var shell = _shellForBack ?? App.Services?.GetService<ShellViewModel>();
+                show = shell != null && shell.ShowChatListBackButton;
+            }
+            catch
+            {
+            }
+
+            ScopeBackButton.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        private void AttachShellBackVisibility()
+        {
+            if (_shellBackHooked)
+            {
+                return;
+            }
+
+            try
+            {
+                _shellForBack = App.Services?.GetService<ShellViewModel>();
+            }
+            catch
+            {
+                _shellForBack = null;
+            }
+
+            if (_shellForBack == null)
+            {
+                UpdateScopeBackButtonVisibility();
+                return;
+            }
+
+            _shellForBack.PropertyChanged += Shell_PropertyChangedForBack;
+            _shellBackHooked = true;
+            UpdateScopeBackButtonVisibility();
+        }
+
+        private void DetachShellBackVisibility()
+        {
+            if (!_shellBackHooked)
+            {
+                return;
+            }
+
+            if (_shellForBack != null)
+            {
+                _shellForBack.PropertyChanged -= Shell_PropertyChangedForBack;
+            }
+
+            _shellForBack = null;
+            _shellBackHooked = false;
+        }
+
+        private void Shell_PropertyChangedForBack(object sender, PropertyChangedEventArgs e)
+        {
+            if (string.IsNullOrEmpty(e.PropertyName) ||
+                e.PropertyName == nameof(ShellViewModel.ShowChatListBackButton) ||
+                e.PropertyName == nameof(ShellViewModel.ShowSystemBackButton) ||
+                e.PropertyName == nameof(ShellViewModel.ActiveSection))
+            {
+                UpdateScopeBackButtonVisibility();
+            }
+        }
+
+        private void ScopeBackButton_Click(object sender, RoutedEventArgs e)
+        {
+            var shell = App.Services?.GetService<ShellViewModel>();
+            if (shell != null && shell.TryHandleShellBack())
+            {
+                return;
+            }
+
+            shell?.NavigateToSectionCommand?.Execute(NavigationRoutes.Chats);
+        }
+
         private void ChatListView_Loaded(object sender, RoutedEventArgs e)
         {
+            AttachShellBackVisibility();
             TryAttach();
         }
 
@@ -131,10 +235,12 @@ namespace Unison.Uwp.UI.Views
             ViewModel.SelectionRestored += ViewModel_SelectionRestored;
             ViewModel.PropertyChanged += ViewModel_PropertyChanged;
             ViewModel.Attach();
+            AttachShellBackVisibility();
         }
 
         private void ChatListView_Unloaded(object sender, RoutedEventArgs e)
         {
+            DetachShellBackVisibility();
             if (ViewModel == null || !_hooked)
             {
                 return;

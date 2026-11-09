@@ -88,6 +88,16 @@ namespace Unison.Core.Tests.Helpers
 
             public bool IsLoadingPersistedChats => false;
 
+            public bool IsBulkCatalogueMutating => false;
+
+            public event EventHandler BulkCatalogueMutationEnded
+            {
+                add { }
+                remove { }
+            }
+
+            public IDisposable BeginBulkCatalogueMutation() => new NoopBulk();
+
             public event EventHandler<string> MessagesChanged
             {
                 add { }
@@ -104,6 +114,13 @@ namespace Unison.Core.Tests.Helpers
             {
                 add { }
                 remove { }
+            }
+
+            private sealed class NoopBulk : IDisposable
+            {
+                public void Dispose()
+                {
+                }
             }
 
             public event EventHandler<GroupRosterChangedEventArgs> GroupRosterChanged

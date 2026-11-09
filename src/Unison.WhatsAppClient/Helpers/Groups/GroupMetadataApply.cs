@@ -8,6 +8,7 @@ using Unison.Core.Contracts;
 using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Helpers;
 using Unison.Core.Helpers.Chats;
+using Unison.Core.Helpers.Groups;
 using Unison.Core.Models;
 using Unison.Core.State;
 
@@ -122,8 +123,10 @@ namespace Unison.WhatsAppClient.Helpers
         }
 
         /// <summary>
-        /// Applies a participating-groups listing, keyed by canonical JID, in a single UI pass,
-        /// then asks once for the chat-list save.
+        /// Applies a participating-groups listing in Low/UI chunks so subjects + hub ensure
+        /// cannot hold the dispatcher for tens of seconds (journal 089b69a2). Catalogue Adds
+        /// run under <see cref="IChatStateStore.BeginBulkCatalogueMutation"/> so the list
+        /// refreshes once at the end.
         /// </summary>
         public async Task ApplyListingAsync(IReadOnlyDictionary<string, GroupMetadataSnapshot> listing)
         {
@@ -132,90 +135,275 @@ namespace Unison.WhatsAppClient.Helpers
                 return;
             }
 
-            // Snapshot + subject cache on one hop; flag apply is chunked below so a fat
-            // listing after the participating-groups IQ cannot hold the UI for seconds.
-            List<ChatItem> snapshot = null;
-            await _ui.RunAsync(() =>
+            bool frugal = _preferFrugalUi();
+            TimeSpan delay = GroupListingApplyChunks.InterChunkDelay(frugal);
+            int subjectChunk = GroupListingApplyChunks.SubjectCacheChunk(frugal);
+            int hubChunk = GroupListingApplyChunks.HubEnsureChunk(frugal);
+            int flagChunk = GroupListingApplyChunks.FlagPaintChunk;
+
+            var entries = new List<GroupMetadataSnapshot>(listing.Count);
+            foreach (GroupMetadataSnapshot entry in listing.Values)
             {
-                foreach (var entry in listing.Values)
+                if (entry != null)
                 {
-                    if (entry == null || !IsUsableSubject(entry.Subject, entry.Jid))
-                    {
-                        continue;
-                    }
-
-                    if (CacheIfAllowed(
-                            entry.Jid,
-                            entry.Subject,
-                            DuplicateChatRowPick.FirstNonBlankName(_rows.FindConversation(entry.Jid))))
-                    {
-                        Debug.WriteLine(
-                            "[GroupMetadataApply] Group resolved: " + entry.Jid + " -> " + entry.Subject);
-                    }
+                    entries.Add(entry);
                 }
-
-                snapshot = new List<ChatItem>(_chats.Chats.Count);
-                foreach (ChatItem chat in _chats.Chats)
-                {
-                    if (chat != null)
-                    {
-                        snapshot.Add(chat);
-                    }
-                }
-            }).ConfigureAwait(false);
-
-            if (snapshot == null || snapshot.Count == 0)
-            {
-                return;
             }
 
-            const int uiChunk = 24;
-            bool frugal = _preferFrugalUi();
-            for (int start = 0; start < snapshot.Count; start += uiChunk)
+            using (_chats.BeginBulkCatalogueMutation())
             {
-                int sliceStart = start;
-                int sliceEnd = Math.Min(snapshot.Count, start + uiChunk);
-                Action paint = () =>
+                for (int start = 0; start < entries.Count; start += subjectChunk)
                 {
-                    for (int i = sliceStart; i < sliceEnd; i++)
+                    int sliceStart = start;
+                    int sliceEnd = Math.Min(entries.Count, start + subjectChunk);
+                    await RunListingUiHopAsync(
+                            frugal,
+                            () =>
+                            {
+                                for (int i = sliceStart; i < sliceEnd; i++)
+                                {
+                                    GroupMetadataSnapshot entry = entries[i];
+                                    if (!IsUsableSubject(entry.Subject, entry.Jid))
+                                    {
+                                        continue;
+                                    }
+
+                                    if (CacheIfAllowed(
+                                            entry.Jid,
+                                            entry.Subject,
+                                            DuplicateChatRowPick.FirstNonBlankName(
+                                                _rows.FindConversation(entry.Jid))))
+                                    {
+                                        Debug.WriteLine(
+                                            "[GroupMetadataApply] Group resolved: " +
+                                            entry.Jid +
+                                            " -> " +
+                                            entry.Subject);
+                                    }
+                                }
+                            })
+                        .ConfigureAwait(false);
+
+                    if (sliceEnd < entries.Count)
                     {
-                        ChatItem chat = snapshot[i];
-                        GroupMetadataSnapshot entry;
-                        if (!listing.TryGetValue(_jids.GetCanonicalJid(chat.JID), out entry) ||
-                            entry == null)
-                        {
-                            continue;
-                        }
-
-                        if (IsUsableSubject(entry.Subject, entry.Jid))
-                        {
-                            ApplySyncedLabel(chat);
-                        }
-
-                        // Listing never materializes full rosters — flags + count only.
-                        ApplyToRow(chat, entry, includeRoster: false);
+                        await Task.Delay(delay).ConfigureAwait(false);
                     }
-                };
-
-                if (frugal && _uiLow != null)
-                {
-                    await _uiLow.RunLowAsync(paint).ConfigureAwait(false);
-                }
-                else
-                {
-                    await _ui.RunAsync(paint).ConfigureAwait(false);
                 }
 
-                if (sliceEnd < snapshot.Count)
+                List<ChatItem> snapshot = null;
+                await RunListingUiHopAsync(frugal, () => snapshot = SnapshotChats())
+                    .ConfigureAwait(false);
+
+                List<string> parentKeys = CollectParentKeys(listing, snapshot);
+                bool hubsChanged = false;
+                for (int start = 0; start < parentKeys.Count; start += hubChunk)
                 {
-                    await Task.Delay(frugal ? 32 : 16).ConfigureAwait(false);
+                    int sliceStart = start;
+                    int sliceEnd = Math.Min(parentKeys.Count, start + hubChunk);
+                    await RunListingUiHopAsync(
+                            frugal,
+                            () =>
+                            {
+                                for (int i = sliceStart; i < sliceEnd; i++)
+                                {
+                                    string parentKey = parentKeys[i];
+                                    string subject = ResolveEnsureSubject(parentKey, listing);
+                                    if (CommunityHubCatalogEnsure.TryEnsure(
+                                            parentKey,
+                                            subject,
+                                            FindCatalogueRow,
+                                            AddCatalogueRow,
+                                            _naming.IsMeaningfulGroupLabel))
+                                    {
+                                        hubsChanged = true;
+                                    }
+                                }
+                            })
+                        .ConfigureAwait(false);
+
+                    if (sliceEnd < parentKeys.Count)
+                    {
+                        await Task.Delay(delay).ConfigureAwait(false);
+                    }
+                }
+
+                if (hubsChanged)
+                {
+                    await RunListingUiHopAsync(
+                            frugal,
+                            () =>
+                            {
+                                _rows.Invalidate();
+                                snapshot = SnapshotChats();
+                            })
+                        .ConfigureAwait(false);
+                }
+
+                if (snapshot == null || snapshot.Count == 0)
+                {
+                    return;
+                }
+
+                for (int start = 0; start < snapshot.Count; start += flagChunk)
+                {
+                    int sliceStart = start;
+                    int sliceEnd = Math.Min(snapshot.Count, start + flagChunk);
+                    List<ChatItem> rows = snapshot;
+                    await RunListingUiHopAsync(
+                            frugal,
+                            () =>
+                            {
+                                for (int i = sliceStart; i < sliceEnd; i++)
+                                {
+                                    ChatItem chat = rows[i];
+                                    GroupMetadataSnapshot entry;
+                                    if (!listing.TryGetValue(
+                                            _jids.GetCanonicalJid(chat.JID),
+                                            out entry) ||
+                                        entry == null)
+                                    {
+                                        continue;
+                                    }
+
+                                    if (IsUsableSubject(entry.Subject, entry.Jid))
+                                    {
+                                        ApplySyncedLabel(chat);
+                                    }
+
+                                    // Listing never materializes full rosters — flags + count only.
+                                    ApplyToRow(chat, entry, includeRoster: false);
+                                }
+                            })
+                        .ConfigureAwait(false);
+
+                    if (sliceEnd < snapshot.Count)
+                    {
+                        await Task.Delay(delay).ConfigureAwait(false);
+                    }
                 }
             }
 
             _catalog.Schedule();
-            // Subjects are in GroupSubjects now; synthetic hubs are not in the catalogue walk.
-            // Hub-only signal — DisplayNamesChanged would wake ChatAuthorProjection (13s+ on Lumia).
+            // Subjects are in GroupSubjects; hubs missing from the catalogue are materialized
+            // above so Name reaches SQLite. Hub-only signal — DisplayNamesChanged would wake
+            // ChatAuthorProjection (13s+ on Lumia).
             _chats.NotifyCommunitySubjectsUpdated();
+        }
+
+        private async Task RunListingUiHopAsync(bool frugal, Action work)
+        {
+            // Yield while chat-open holds the gate so Normal tip hops (OnDemand) are not
+            // queued forever behind listing Low. Soft ceiling avoids a stuck Hold hang.
+            if (_timelinePriority != null)
+            {
+                await _timelinePriority
+                    .WaitWhileHeldAsync(ChatTimelineOpenPriority.TimelineHoldWaitMax)
+                    .ConfigureAwait(false);
+            }
+
+            if (frugal && _uiLow != null)
+            {
+                await _uiLow.RunLowAsync(work).ConfigureAwait(false);
+                return;
+            }
+
+            await _ui.RunAsync(work).ConfigureAwait(false);
+        }
+
+        private List<ChatItem> SnapshotChats()
+        {
+            var snapshot = new List<ChatItem>(_chats.Chats.Count);
+            foreach (ChatItem chat in _chats.Chats)
+            {
+                if (chat != null)
+                {
+                    snapshot.Add(chat);
+                }
+            }
+
+            return snapshot;
+        }
+
+        private List<string> CollectParentKeys(
+            IReadOnlyDictionary<string, GroupMetadataSnapshot> listing,
+            List<ChatItem> snapshot)
+        {
+            var parentKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (GroupMetadataSnapshot entry in listing.Values)
+            {
+                if (entry == null || !entry.IsCommunityParent)
+                {
+                    continue;
+                }
+
+                string key = _jids.GetCanonicalJid(entry.Jid);
+                if (!string.IsNullOrWhiteSpace(key))
+                {
+                    parentKeys.Add(key);
+                }
+            }
+
+            if (snapshot != null)
+            {
+                for (int i = 0; i < snapshot.Count; i++)
+                {
+                    ChatItem chat = snapshot[i];
+                    if (chat == null || string.IsNullOrWhiteSpace(chat.LinkedParentJid))
+                    {
+                        continue;
+                    }
+
+                    string parentKey = _jids.GetCanonicalJid(chat.LinkedParentJid);
+                    if (!string.IsNullOrWhiteSpace(parentKey))
+                    {
+                        parentKeys.Add(parentKey);
+                    }
+                }
+            }
+
+            return parentKeys.Count == 0
+                ? new List<string>()
+                : new List<string>(parentKeys);
+        }
+
+        private string ResolveEnsureSubject(
+            string parentKey,
+            IReadOnlyDictionary<string, GroupMetadataSnapshot> listing)
+        {
+            GroupMetadataSnapshot entry;
+            if (listing != null &&
+                listing.TryGetValue(parentKey, out entry) &&
+                entry != null &&
+                IsUsableSubject(entry.Subject, entry.Jid))
+            {
+                return entry.Subject;
+            }
+
+            string cached;
+            if (_subjects.TryGetValue(parentKey, out cached) &&
+                _naming.IsMeaningfulGroupLabel(cached, parentKey))
+            {
+                return cached;
+            }
+
+            return null;
+        }
+
+        private ChatItem FindCatalogueRow(string jid)
+        {
+            List<ChatItem> rows = _rows.FindConversation(jid);
+            return rows != null && rows.Count > 0 ? rows[0] : null;
+        }
+
+        private void AddCatalogueRow(ChatItem hub)
+        {
+            if (hub == null)
+            {
+                return;
+            }
+
+            _chats.Chats.Add(hub);
         }
 
         /// <summary>
@@ -242,7 +430,9 @@ namespace Unison.WhatsAppClient.Helpers
             string canonical = _jids.GetCanonicalJid(groupJid);
             if (_timelinePriority != null)
             {
-                await _timelinePriority.WaitWhileHeldAsync().ConfigureAwait(false);
+                await _timelinePriority
+                    .WaitWhileHeldAsync(ChatTimelineOpenPriority.TimelineHoldWaitMax)
+                    .ConfigureAwait(false);
             }
 
             cancellationToken.ThrowIfCancellationRequested();
@@ -259,12 +449,28 @@ namespace Unison.WhatsAppClient.Helpers
                 // Community synthetic hubs are not in the catalogue. Still file the wire
                 // subject so GroupNaming / hub EnrichCommunityHubLabel can leave the
                 // localized “Community” fallback after RefreshGroupSendPermissionsAsync.
-                if (!string.IsNullOrWhiteSpace(wireSubject))
+                string subjectForCache = !string.IsNullOrWhiteSpace(wireSubject)
+                    ? wireSubject
+                    : metadata.Subject;
+                if (!string.IsNullOrWhiteSpace(subjectForCache))
                 {
                     TryCacheSyncedSubject(
                         canonical,
-                        wireSubject,
+                        subjectForCache,
                         DuplicateChatRowPick.FirstNonBlankName(rows));
+                }
+
+                if (chat == null && metadata.IsCommunityParent)
+                {
+                    CommunityHubCatalogEnsure.TryEnsure(
+                        canonical,
+                        subjectForCache,
+                        FindCatalogueRow,
+                        AddCatalogueRow,
+                        _naming.IsMeaningfulGroupLabel);
+                    // AddCatalogueRow bypasses ChatRowIndex — refresh before re-lookup.
+                    _rows.Invalidate();
+                    chat = FindCatalogueRow(canonical);
                 }
 
                 if (chat == null)

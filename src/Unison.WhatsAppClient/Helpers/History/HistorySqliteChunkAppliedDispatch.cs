@@ -34,15 +34,32 @@ namespace Unison.WhatsAppClient.Helpers
 
             if (!isOnDemand)
             {
+                // Empty trailing chunks after list unlock: note only. Republishing active
+                // progress (or arming quiet-finalize) re-enters safe mode and leaves the
+                // chat-list batch loop spinning release-ticks for minutes on Low memory.
+                if (count == 0 && host.FirstSyncListAlreadyReleased)
+                {
+                    host.LogHistorySqliteChunkApplied(
+                        type,
+                        count,
+                        host.SqliteHistoryConversationsAccumulated);
+                    return;
+                }
+
                 int processed = host.AddSqliteHistoryConversations(count);
                 int total = HistorySqliteChunkClassify.ProgressTotal(isFull, processed);
 
-                host.PublishInitialSyncProgress(
-                    true,
-                    false,
-                    processed,
-                    total,
-                    HistorySqliteChunkClassify.AppliedProgressReason(isFull));
+                // Non-empty Recent/etc. after unlock still accumulate + quiet-finalize, but
+                // must not flip channelActive back to true (clamp is belt; skip is braces).
+                if (!host.FirstSyncListAlreadyReleased)
+                {
+                    host.PublishInitialSyncProgress(
+                        true,
+                        false,
+                        processed,
+                        total,
+                        HistorySqliteChunkClassify.AppliedProgressReason(isFull));
+                }
 
                 int generation = host.NextSqliteHistoryFinalizeGeneration();
                 int delayMs = HistorySqliteChunkClassify.FinalizeDelayMs(

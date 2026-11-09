@@ -59,27 +59,53 @@ namespace Unison.Core.State
         /// <summary>
         /// Spins until no hold remains, then takes a staggered admit slot so concurrent
         /// waiters do not all hit the dispatcher on the same turn after Release.
+        /// When <paramref name="maxWait"/> elapses while still held, returns without admit
+        /// so listing / ApplyMetadata cannot hang forever behind a stuck open Hold.
         /// </summary>
-        public async Task WaitWhileHeldAsync()
+        public async Task WaitWhileHeldAsync(TimeSpan? maxWait = null)
         {
+            long? deadlineTicks = null;
+            if (maxWait.HasValue)
+            {
+                deadlineTicks = DateTime.UtcNow.Add(maxWait.Value).Ticks;
+            }
+
             while (IsHeld)
             {
+                if (deadlineTicks.HasValue && DateTime.UtcNow.Ticks >= deadlineTicks.Value)
+                {
+                    Debug.WriteLine("[ChatTimelineLoadPriorityGate] WaitWhileHeld timed out; proceeding");
+                    return;
+                }
+
                 await Task.Delay(WaitPollMs).ConfigureAwait(false);
             }
 
-            await AdmitAfterReleaseAsync().ConfigureAwait(false);
+            await AdmitAfterReleaseAsync(deadlineTicks).ConfigureAwait(false);
         }
 
-        private async Task AdmitAfterReleaseAsync()
+        private async Task AdmitAfterReleaseAsync(long? deadlineTicks)
         {
             long gapTicks = TimeSpan.FromMilliseconds(PostReleaseAdmitGapMs).Ticks;
             while (true)
             {
+                if (deadlineTicks.HasValue && DateTime.UtcNow.Ticks >= deadlineTicks.Value)
+                {
+                    Debug.WriteLine("[ChatTimelineLoadPriorityGate] Admit timed out; proceeding");
+                    return;
+                }
+
                 // Re-check hold: another open can land while we wait for an admit slot.
                 if (IsHeld)
                 {
                     while (IsHeld)
                     {
+                        if (deadlineTicks.HasValue && DateTime.UtcNow.Ticks >= deadlineTicks.Value)
+                        {
+                            Debug.WriteLine("[ChatTimelineLoadPriorityGate] WaitWhileHeld timed out; proceeding");
+                            return;
+                        }
+
                         await Task.Delay(WaitPollMs).ConfigureAwait(false);
                     }
 

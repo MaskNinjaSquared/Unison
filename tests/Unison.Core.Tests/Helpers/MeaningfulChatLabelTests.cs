@@ -81,6 +81,15 @@ namespace Unison.Core.Tests.Helpers
                 "120363000000000000@g.us",
                 isGroup: true));
         }
+
+        [Fact]
+        public void Group_Owner_stand_in_is_not_meaningful_for_groups()
+        {
+            Assert.False(MeaningfulChatLabel.IsMeaningful(
+                "Group Owner",
+                "120363000000000000@g.us",
+                isGroup: true));
+        }
     }
 
     public class GroupIdPlaceholderTests

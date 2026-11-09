@@ -193,6 +193,12 @@ namespace Unison.Core.Contracts.WhatsApp
         void NotifyGroupListingDue();
 
         /// <summary>
+        /// Post-sync: materialize community hubs into the catalogue and re-query rows still
+        /// lacking a meaningful title. Safe to call while listing is in flight (arms a deferred pass).
+        /// </summary>
+        Task ReconcileGroupCommunityTitlesAsync(CancellationToken cancellationToken = default);
+
+        /// <summary>
         /// Leaves the group on the server (Baileys <c>groupLeave</c>). Does not delete the chat.
         /// </summary>
         Task LeaveGroupAsync(string groupJid);

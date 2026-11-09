@@ -2894,7 +2894,27 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                     try
                     {
                         bool followingEnd = stickToBottom || IsFollowingTimelineEnd();
-                        bool changed = ViewModel.MergeTimelineFromService(serviceMessages, requestedJid, followingEnd);
+                        bool changed;
+                        if (HistoryListUiRefresh.ShouldReplaceTimelineOnHistorySync(
+                                _messages.Count,
+                                ViewModel.InitialUiMessageWindow))
+                        {
+                            var window = ChatDetailViewModel.TakeLastWindow(
+                                serviceMessages,
+                                ViewModel.InitialUiMessageWindow);
+                            ViewModel.StampGroupRemoteJid(window, requestedJid);
+                            ViewModel.ReplaceTimelineWindow(window);
+                            changed = true;
+                            followingEnd = true;
+                        }
+                        else
+                        {
+                            changed = ViewModel.MergeTimelineFromService(
+                                serviceMessages,
+                                requestedJid,
+                                followingEnd);
+                        }
+
                         UpdatePinnedBanner();
 
                         if (changed)

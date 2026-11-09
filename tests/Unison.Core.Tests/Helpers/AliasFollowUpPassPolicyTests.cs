@@ -31,7 +31,7 @@ namespace Unison.Core.Tests.Helpers
         }
 
         [Theory]
-        [InlineData(true, true, 2500)]
+        [InlineData(true, true, 2000)]
         [InlineData(true, false, 0)]
         [InlineData(false, true, 0)]
         public void RearmGapBeforeSchedule_spaces_frugal_more_passes(
@@ -42,6 +42,19 @@ namespace Unison.Core.Tests.Helpers
             Assert.Equal(
                 TimeSpan.FromMilliseconds(expectMs),
                 AliasFollowUpPassPolicy.RearmGapBeforeSchedule(preferFrugal, hasMore));
+        }
+
+        [Fact]
+        public void RearmGapBeforeSchedule_defers_while_bulk_catalogue_mutates()
+        {
+            Assert.Equal(
+                AliasFollowUpPassPolicy.BulkCatalogueBusyRearmDebounce,
+                AliasFollowUpPassPolicy.RearmGapBeforeSchedule(
+                    preferFrugal: false,
+                    hasMoreAvatarTargets: false,
+                    bulkCatalogueMutating: true));
+            Assert.True(AliasFollowUpPassPolicy.ShouldDeferForBulkCatalogue(true));
+            Assert.False(AliasFollowUpPassPolicy.ShouldDeferForBulkCatalogue(false));
         }
     }
 }

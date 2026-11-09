@@ -472,6 +472,17 @@ namespace Unison.Uwp.UI.Views
             ApplyChatPaneState();
         }
 
+        private void SectionBackButton_Click(object sender, RoutedEventArgs e)
+        {
+            var shell = App.Services?.GetService<ShellViewModel>();
+            if (shell != null && shell.TryHandleShellBack())
+            {
+                return;
+            }
+
+            shell?.NavigateToSectionCommand?.Execute(NavigationRoutes.Chats);
+        }
+
         private void MenuButton_Click(object sender, RoutedEventArgs e)
         {
             MenuClicked?.Invoke(this, EventArgs.Empty);

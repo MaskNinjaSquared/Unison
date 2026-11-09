@@ -1,6 +1,7 @@
 using System;
 using System.ComponentModel;
 using Microsoft.Extensions.DependencyInjection;
+using Unison.Core.Constants;
 using Unison.Core.Models;
 using Unison.Core.ViewModels;
 using Windows.UI.Xaml;
@@ -81,6 +82,17 @@ namespace Unison.Uwp.UI.Views
             SortChip.Visibility = has ? Visibility.Visible : Visibility.Collapsed;
             AddFavoriteHeaderButton.Visibility = has ? Visibility.Visible : Visibility.Collapsed;
             SortLabelText.Text = ViewModel?.SortLabel ?? "A-Z";
+        }
+
+        private void SectionBackButton_Click(object sender, RoutedEventArgs e)
+        {
+            var shell = App.Services?.GetService<ShellViewModel>();
+            if (shell != null && shell.TryHandleShellBack())
+            {
+                return;
+            }
+
+            shell?.NavigateToSectionCommand?.Execute(NavigationRoutes.Chats);
         }
 
         private void MenuButton_Click(object sender, RoutedEventArgs e)

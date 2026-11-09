@@ -2,6 +2,66 @@
 
 Newest first.
 
+## Logout — QR without cold-loading SignalKeys
+
+`ClearSession` called `FileKeyStore.InitializeAsync` before wipe, scanning ~1k
+sessions + sender-keys (~1 min) only to delete them. Wipe now deletes the folder
+and rebuilds an empty tree (`key-store-cleared`); pairing starts immediately.
+Package **2.4.53**.
+
+## Shell — preserve Frame back stack for secondary sections
+
+Status/Channels/Archived/Calls/Favorites use `NavigateInShell` (not AndClear) so
+Chats → Archived → Settings → back returns to Archived. Header back calls
+`TryHandleShellBack` (stack first, Chats only when empty). Package **2.4.52**.
+
+## Shell — header back on Calls and Favorites
+
+Unison/WhatsApp Calls and Favorites get the same header back arrow to Chats
+(system back was already wired). Package **2.4.51**.
+
+## Shell — back on Status/Channels/Archived + scoped badges + lean Attach
+
+Unison/WhatsApp (not Legacy): Status, Channels and Archived show a header back
+arrow (and system back) that returns to Chats — `NavigateInShellAndClear` left
+no Frame stack. Chat-list badges count unread in the current scope only.
+`ChatPinStoreKeys` peeks canonical JIDs (no promote) so Archived Attach no longer
+stalls ~14s under alias-follow-up. Out-of-scope `PropertyChanged` is ignored on
+Channels/Archived VMs. Package **2.4.50**.
+
+## Chat list — incremental group listing without UI monopoly
+
+Journal `089b69a2`: `GroupMetadataApply.ApplyListingAsync` held `sync:` ~40s while
+hub Adds triggered refresh cascades and alias-follow-up (`more=True`) stacked on
+Low. Listing now caches subjects / ensures hubs / paints flags in Low chunks with
+yields; catalogue Adds run under `BeginBulkCatalogueMutation` so the list rebuilds
+once; alias follow-up defers during bulk and spaces frugal remainder to 5s.
+Package **2.4.48**.
+
+## Sync UI — open stuck on Updating… without offline release
+
+`status=open` could never reach `synced` when `ib,,offline` never arrived and the
+20s buffer safety timed out before TLS finished (claim discarded, no retry). Safety
+now defers the claim until connected; a 30s per-open host watchdog forces
+`offline-replay-release` if still missing; first-release latch resets on each open.
+Journal: `offline-buffer-safety`, `offline-synced-watchdog`. Package **2.4.47**.
+
+## Communities — persist hub titles + post-sync reconcile
+
+Cold open showed `Comunidade` because synthetic hubs never entered the catalogue
+(`GroupSubjects` is RAM-only). Listing/metadata now materialize community parents
+into `Chats` so `Name` reaches SQLite like groups. PreferFrugal enrichment adds
+`post-message-enrich-titles` after group listing. `Group Owner` is no longer a
+meaningful group label so unresolved metadata can replace it. Package **2.4.46**.
+
+## Groups — cache listing subjects even when window hidden
+
+Journal `82908f3f`: `background-groups` aborted after the participating-groups
+IQ when CoreWindow was hidden, so `ApplyListing` never ran and community hubs
+stayed on `Comunidade`. Subjects now cache whenever the IQ answers; unresolved
+metadata still defers. Resume / already-applied passes restamp hubs via
+`NotifyCommunitySubjectsUpdated`. Package **2.4.45**.
+
 ## Sync UI — PreferFrugal tip paint only on settle
 
 Offline open freeze: progressive tip flush painted the list every ~1s while the

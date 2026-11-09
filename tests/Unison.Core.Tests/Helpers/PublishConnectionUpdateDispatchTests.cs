@@ -15,6 +15,7 @@ namespace Unison.Core.Tests.Helpers
             Assert.True(host.Raised);
             Assert.True(host.Stamped);
             Assert.False(host.ToastCleared);
+            Assert.Equal("open", host.LastWatchdogStatus);
         }
 
         [Fact]
@@ -52,6 +53,11 @@ namespace Unison.Core.Tests.Helpers
             }
 
             public void RaiseConnectionUpdate(string status) => Raised = true;
+
+            public void SyncOfflineSyncedWatchdog(string status) =>
+                LastWatchdogStatus = status;
+
+            public string LastWatchdogStatus { get; private set; }
         }
     }
 }

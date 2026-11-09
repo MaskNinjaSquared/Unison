@@ -65,6 +65,12 @@ namespace Unison.Core.Contracts.WhatsApp
 
         void NotifyGroupListingDue();
 
+        /// <summary>
+        /// After listing is due: persist community hub titles and refresh rows still on
+        /// placeholder / stand-in names (PreferFrugal serial enrichment only).
+        /// </summary>
+        Task ReconcileGroupCommunityTitlesAsync(CancellationToken token);
+
         void WriteComplete(string reason, bool serialized);
 
         void RecordFailed(Exception ex, string reason);

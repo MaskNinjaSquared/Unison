@@ -127,7 +127,13 @@ namespace Unison.Uwp.Shell.Unison.Views
 
         private void ViewModel_LeaveRequested(object sender, EventArgs e)
         {
-            App.Services?.GetService<ShellViewModel>()?.NavigateToSectionCommand.Execute(NavigationRoutes.Chats);
+            var shell = App.Services?.GetService<ShellViewModel>();
+            if (shell != null && shell.TryHandleShellBack())
+            {
+                return;
+            }
+
+            shell?.NavigateToSectionCommand?.Execute(NavigationRoutes.Chats);
         }
 
         private void SettingsView_Loaded(object sender, RoutedEventArgs e)

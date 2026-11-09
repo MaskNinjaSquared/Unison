@@ -56,6 +56,14 @@ namespace Unison.Core.ViewModels
             _batchTotal = Math.Max(_batchTotal, total);
             }
 
+            // Same contract as RefreshVisibleChats cold fill: tip-swapped must not fight
+            // ReleaseNextBatch on Low (ad243a19: tip + push-name starved visible drain).
+            if (!_batchColdPopulateHeld)
+            {
+                _batchColdPopulateHeld = true;
+                _coldPopulateGate?.Hold();
+            }
+
             // Never clamped to the store count: this event is raised before the chunk's previews
             // are persisted, so on the first chunk the store is still empty and clamping pinned
             // the target at zero - which left the list frozen at one batch until the whole sync
@@ -69,6 +77,17 @@ namespace Unison.Core.ViewModels
                 BuildListSnapshot("fresh=" + fresh + "; argTarget=" + visibleTarget),
                 flush: true);
             EnsureBatchLoop();
+        }
+
+        private void ReleaseBatchColdPopulateGate()
+        {
+            if (!_batchColdPopulateHeld)
+            {
+                return;
+            }
+
+            _batchColdPopulateHeld = false;
+            _coldPopulateGate?.Release();
         }
 
         /// <summary>
@@ -159,7 +178,10 @@ namespace Unison.Core.ViewModels
                 ReorderVisibleChatsInPlace();
                 // Hydrate can stall with pending=True forever; once every scoped row is on
                 // screen after the hold, open the enrich gate and finish the batch next tick.
-                if (!IsListHeldForSync && !IsInSafeMode)
+                // Do not wait for IsInSafeMode to clear — trailing StatusV3/PushName can keep
+                // safe mode true for minutes while VisibleChats is already caught up, which
+                // leaves release-tick spinning forever on Low memory.
+                if (!IsListHeldForSync)
                 {
                     if (!HasPendingPreviewHydrate())
                     {
@@ -273,6 +295,7 @@ namespace Unison.Core.ViewModels
             TraceListLifecycle("batch-complete-before-refresh", BuildListSnapshot(), flush: true);
             _batchRendering = false;
             _batchCompleted = false;
+            ReleaseBatchColdPopulateGate();
             RefreshVisibleChats();
             TraceListLifecycle("batch-complete-after-refresh", BuildListSnapshot(), flush: true);
 

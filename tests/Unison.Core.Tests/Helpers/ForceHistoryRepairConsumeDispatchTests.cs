@@ -32,14 +32,31 @@ namespace Unison.Core.Tests.Helpers
             Assert.True(host.Cleared);
         }
 
+        [Fact]
+        public async Task Pairing_bootstrap_defers_request_and_keeps_latch()
+        {
+            var host = new FakeHost
+            {
+                Pending = true,
+                RequestOk = true,
+                PairingBootstrapActive = true
+            };
+            await ForceHistoryRepairConsumeDispatch.RunAsync(host, "offline-complete:0");
+            Assert.False(host.Requested);
+            Assert.False(host.Cleared);
+        }
+
         private sealed class FakeHost : IForceHistoryRepairConsumeHost
         {
             public bool Pending;
             public bool RequestOk;
             public bool Requested;
             public bool Cleared;
+            public bool PairingBootstrapActive;
 
             public bool TryReadForceHistoryRepairPending() => Pending;
+
+            public bool IsPairingBootstrapActive => PairingBootstrapActive;
 
             public void LogForceHistoryRepair(string message)
             {

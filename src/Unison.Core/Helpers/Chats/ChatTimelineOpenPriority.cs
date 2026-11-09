@@ -19,6 +19,20 @@ namespace Unison.Core.Helpers.Chats
         public static readonly TimeSpan MobileScrollSettleHold = TimeSpan.FromMilliseconds(5000);
 
         /// <summary>
+        /// Soft gates (timeline settle / cold populate / window hidden) must not
+        /// block tip UI forever — HistoryFacade awaits history-chunk-tip reconcile
+        /// before finishing OnDemand apply (journals 8b7b5612 / 68543091: ~72s).
+        /// Settle hold is 5s; 8s covers one settle + buffer.
+        /// </summary>
+        public static readonly TimeSpan UiSlicePauseMaxWait = TimeSpan.FromMilliseconds(8000);
+
+        /// <summary>
+        /// ApplyMetadata / listing hops: two Mobile settle holds + buffer, then proceed
+        /// so a stuck Hold cannot freeze group apply or starve Normal tip hops.
+        /// </summary>
+        public static readonly TimeSpan TimelineHoldWaitMax = TimeSpan.FromMilliseconds(12000);
+
+        /// <summary>
         /// Mobile's 2s post-ProgressBar pause was meant for list→detail paint breathing
         /// room. Legacy always skips it via PreferFast; Unison/WhatsApp now do the same
         /// on list tap. Toast / deep-link also skip so tip-swapped cannot starve LoadMessages.
@@ -86,5 +100,27 @@ namespace Unison.Core.Helpers.Chats
         /// </summary>
         public static bool ShouldReorderVisibleOnTipHydrate(bool timelineLoadPriorityHeld) =>
             HistoryListUiRefresh.ShouldReorderVisibleOnTipHydrate(timelineLoadPriorityHeld);
+
+        /// <summary>
+        /// Hot tip work that blocks chat-open / OnDemand apply must use the Normal UI
+        /// lane — listing and alias follow-up sit on Low and starved tip slices for ~72s
+        /// (ui-slice-slow after pause cleared). Full catalogue heals stay on Low.
+        /// </summary>
+        public static bool ShouldUseNormalTipUiLane(string reason, int workCount)
+        {
+            if (workCount <= 0)
+            {
+                return true;
+            }
+
+            if (string.Equals(reason, "chat-open", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(reason, "history-chunk-tip", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            // Live strip / single-row bumps — same size as a frugal tip slice.
+            return workCount <= 10;
+        }
     }
 }

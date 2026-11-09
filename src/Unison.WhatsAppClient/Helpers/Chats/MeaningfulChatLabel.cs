@@ -61,6 +61,13 @@ namespace Unison.WhatsAppClient.Helpers
                     return false;
                 }
 
+                // Wire/history sometimes sticks this stand-in after a failed member-name pass.
+                // Treat as non-meaningful so NeedsMetadata can re-query a real subject.
+                if (string.Equals(trimmed, "Group Owner", StringComparison.OrdinalIgnoreCase))
+                {
+                    return false;
+                }
+
                 return !GroupIdPlaceholder.IsIdPlaceholder(trimmed, contextJid);
             }
 

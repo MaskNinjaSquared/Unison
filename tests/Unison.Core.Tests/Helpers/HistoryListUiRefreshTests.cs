@@ -53,5 +53,39 @@ namespace Unison.Core.Tests.Helpers
             Assert.True(
                 HistoryListUiRefresh.ShouldNotifyChatMessagesChangedAfterChunk(syncIsOnDemand: false));
         }
+
+        [Fact]
+        public void Session_open_claim_allows_OnDemand_chat_messages_changed()
+        {
+            Assert.True(
+                HistoryListUiRefresh.ShouldNotifyChatMessagesChangedForJid(
+                    syncIsOnDemand: true,
+                    sessionOpenOnDemandClaimed: true));
+            Assert.False(
+                HistoryListUiRefresh.ShouldNotifyChatMessagesChangedForJid(
+                    syncIsOnDemand: true,
+                    sessionOpenOnDemandClaimed: false));
+            Assert.True(
+                HistoryListUiRefresh.ShouldNotifyChatMessagesChangedForJid(
+                    syncIsOnDemand: false,
+                    sessionOpenOnDemandClaimed: false));
+        }
+
+        [Theory]
+        [InlineData(0, 30, true)]
+        [InlineData(1, 30, true)]
+        [InlineData(29, 30, true)]
+        [InlineData(30, 30, false)]
+        [InlineData(1, 0, true)]
+        [InlineData(2, 0, false)]
+        public void Thin_timeline_replaces_on_history_sync(
+            int visibleCount,
+            int initialWindow,
+            bool expected)
+        {
+            Assert.Equal(
+                expected,
+                HistoryListUiRefresh.ShouldReplaceTimelineOnHistorySync(visibleCount, initialWindow));
+        }
     }
 }

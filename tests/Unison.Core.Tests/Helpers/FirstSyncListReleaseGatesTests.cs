@@ -6,7 +6,7 @@ namespace Unison.Core.Tests.Helpers
     public sealed class FirstSyncListReleaseGatesTests
     {
         [Fact]
-        public void Completes_now_when_names_not_required()
+        public void No_names_pass_completes_now()
         {
             Assert.Equal(
                 FirstSyncListReleaseAction.CompleteNow,
@@ -14,7 +14,7 @@ namespace Unison.Core.Tests.Helpers
         }
 
         [Fact]
-        public void Skips_when_already_in_flight()
+        public void Names_pass_already_in_flight_skips()
         {
             Assert.Equal(
                 FirstSyncListReleaseAction.SkipAlreadyInFlight,
@@ -22,10 +22,10 @@ namespace Unison.Core.Tests.Helpers
         }
 
         [Fact]
-        public void Starts_names_pass()
+        public void Names_pass_unlocks_then_schedules_names()
         {
             Assert.Equal(
-                FirstSyncListReleaseAction.StartNamesThenUnlock,
+                FirstSyncListReleaseAction.UnlockThenScheduleNames,
                 FirstSyncListReleaseGates.Decide(true, false));
         }
     }

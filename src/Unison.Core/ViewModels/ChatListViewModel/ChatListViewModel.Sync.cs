@@ -384,9 +384,19 @@ namespace Unison.Core.ViewModels
                     // The burst is over, but the rows already queued still have to be released at
                     // the same pace, so this only marks the end and lets the loop drain.
                     // SQLite path raises this with a null payload on every chunk while progress is
-                    // still debouncing â€” do not force-complete or the banner vanishes mid-import.
+                    // still debouncing — do not force-complete or the banner vanishes mid-import.
+                    // After first unlock, trailing StatusV3/PushName can keep IsInSafeMode true
+                    // with a painted list; force-complete so release-tick does not spin forever.
                     if (sync == null && (IsInSafeMode || HasPendingPreviewHydrate()))
                     {
+                        if (IsChatListMaterialized
+                            && !HasPendingPreviewHydrate()
+                            && VisibleChats.Count > 0)
+                        {
+                            _batchCompleted = true;
+                            RaiseVisibleTarget(_chatState.Chats.Count);
+                        }
+
                         EnsureBatchLoop();
                         return;
                     }
@@ -445,7 +455,7 @@ namespace Unison.Core.ViewModels
                 // Safe mode gates the menu actions, and it flips with this event.
                 RaiseMenuCommandsCanExecuteChanged();
                 // HistoryFacade clears the first-sync flag before relaying a completed event.
-                // This flips IsChatListMaterialized â†’ x:Load creates the ListView.
+                // This flips IsChatListMaterialized → x:Load creates the ListView.
                 RaiseChatListMaterialized();
                 if (e.IsCompleted)
                 {
@@ -457,8 +467,15 @@ namespace Unison.Core.ViewModels
                     if (IsListHeldForSync)
                     {
                         ShowSyncProgressOnly(e.ProcessedConversations, e.TotalConversations);
-                    return;
-                }
+                        return;
+                    }
+
+                    // List already unlocked — trailing StatusV3/PushName/Recent must not
+                    // restart the release loop (hundreds of empty release-ticks on Low).
+                    if (IsChatListMaterialized)
+                    {
+                        return;
+                    }
 
                     BeginBatchRendering(
                         e.ProcessedConversations,
@@ -467,7 +484,15 @@ namespace Unison.Core.ViewModels
                     return;
                 }
 
-                // Persist quiet-finalize: release rows against the store we actually have â€”
+                // Trailing quiet-finalize after the list is already painted must not restart
+                // the release loop (StatusV3/PushName/Recent after first unlock).
+                if (VisibleChats.Count > 0 && !_batchRendering)
+                {
+                    NotifyListPaintReleased("initial-sync-completed-already-painted");
+                    return;
+                }
+
+                // Persist quiet-finalize: release rows against the store we actually have —
                 // e.VisibleChatTarget tracks sync conversation count (can be 400) and must not
                 // become the UI release ceiling while hydrate is still filling the store.
                 int storeCount = _chatState.Chats.Count;
@@ -794,7 +819,7 @@ namespace Unison.Core.ViewModels
 
                     if (more)
                     {
-                        await Task.Delay(PreviewHydrateInterval).ConfigureAwait(false);
+                        await Task.Delay(CurrentPreviewHydrateInterval).ConfigureAwait(false);
                     }
                     else
                     {
@@ -1000,6 +1025,20 @@ namespace Unison.Core.ViewModels
             await _dispatcher.RunAsync(RestampCommunityHubLabelsFromCache).ConfigureAwait(false);
         }
 
+        private void ChatState_BulkCatalogueMutationEnded(object sender, EventArgs e)
+        {
+            // Hubs/rows landed under IsBulkCatalogueMutating without per-Add refresh.
+            _visibleOrderDirty = true;
+            if (IsListHeldForSync || _batchRendering || IsInSafeMode)
+            {
+                return;
+            }
+
+            ScheduleRefreshVisibleChats(
+                PreferFrugalUi ? MoveMissRefreshDebounceFrugal : (TimeSpan?)null,
+                coalesceIfArmed: true);
+        }
+
         private void RestampCommunityHubLabelsFromCache()
         {
             var hubs = new List<ChatItem>();
@@ -1060,6 +1099,14 @@ namespace Unison.Core.ViewModels
             if (_history.IsLoadingPersistedChats)
             {
                 TrackItems(args);
+                return;
+            }
+
+            // Group listing hub ensure Adds many rows; refresh once when the bulk scope ends.
+            if (_chatState.IsBulkCatalogueMutating)
+            {
+                TrackItems(args);
+                _visibleOrderDirty = true;
                 return;
             }
 
@@ -1237,6 +1284,18 @@ namespace Unison.Core.ViewModels
 
         private void ChatItem_PropertyChanged(object sender, PropertyChangedEventArgs e)
         {
+            // Out-of-scope rows still raise PropertyChanged (we hook the whole catalogue).
+            // Ignore reorder noise from Active chats while this VM is Channels/Archived —
+            // except Status/IsChannel, which can move a row into or out of this scope.
+            var chat = sender as ChatItem;
+            if (chat != null &&
+                !string.Equals(e.PropertyName, nameof(ChatItem.Status), StringComparison.Ordinal) &&
+                !string.Equals(e.PropertyName, nameof(ChatItem.IsChannel), StringComparison.Ordinal) &&
+                !MatchesScope(chat))
+            {
+                return;
+            }
+
             // Favourites membership (not order): refresh only while the Favorites filter is active.
             if (string.Equals(e.PropertyName, nameof(ChatItem.IsFavorite), StringComparison.Ordinal))
             {

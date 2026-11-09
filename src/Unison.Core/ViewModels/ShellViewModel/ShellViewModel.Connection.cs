@@ -290,8 +290,11 @@ namespace Unison.Core.ViewModels
                 Math.Min(ChatPaneLayoutConstants.MaxListWidth, value));
         }
 
-        private void RaiseSystemBackButtonChanged() =>
+        private void RaiseSystemBackButtonChanged()
+        {
             OnPropertyChanged(nameof(ShowSystemBackButton));
+            OnPropertyChanged(nameof(ShowChatListBackButton));
+        }
 
         private void RaisePendingOpenChatChanged() =>
             OnPropertyChanged(nameof(PendingOpenChatJid));

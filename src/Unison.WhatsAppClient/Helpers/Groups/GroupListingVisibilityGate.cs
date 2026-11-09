@@ -4,6 +4,11 @@
 // Pure visibility rules for participating-groups listing. 1.8 aborted enrichment
 // phases when the window hid, but QueryAllGroups already in flight kept burning
 // IQs under location-keepalive. Start and mid-pass abort both defer here.
+//
+// Subjects from a completed listing IQ are the exception: they must land in
+// GroupSubjects even when the window hid (journal 82908f3f: after-listing-iq
+// abort left hubs on "Comunidade"). Unresolved-metadata IQs stay gated; resume
+// restamps hubs from the cache.
 // =============================================================================
 
 namespace Unison.WhatsAppClient.Helpers
@@ -17,8 +22,16 @@ namespace Unison.WhatsAppClient.Helpers
         public static bool ShouldDeferStart(bool isWindowVisible) => !isWindowVisible;
 
         /// <summary>
+        /// Listing IQ already answered — cache subjects even if the window hid.
+        /// Only the heavier unresolved-metadata follow-up stays visibility-gated.
+        /// </summary>
+        public static bool ShouldApplyListingSubjects(bool hasListingResponse) =>
+            hasListingResponse;
+
+        /// <summary>
         /// Stop unresolved metadata IQs and leave a retry armed once the window
         /// hides mid-pass (or an abort flag was raised from visibility Changed).
+        /// Does not block subject apply after a successful listing IQ.
         /// </summary>
         public static bool ShouldAbortInFlight(
             bool isWindowVisible,

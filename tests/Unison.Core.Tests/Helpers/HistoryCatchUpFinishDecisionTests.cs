@@ -52,5 +52,41 @@ namespace Unison.Core.Tests.Helpers
                 HistoryCatchUpFinishNext.None,
                 HistoryCatchUpFinishDecision.Decide(false, false, listAwaitingFirstHistory: true));
         }
+
+        [Fact]
+        public void Pairing_bootstrap_with_chunk_seen_does_not_unlock_list()
+        {
+            Assert.Equal(
+                HistoryCatchUpFinishNext.None,
+                HistoryCatchUpFinishDecision.Decide(
+                    true,
+                    firstSyncListHoldInProgress: false,
+                    listAwaitingFirstHistory: true,
+                    pairingBootstrapChunkSeenOrApplying: true));
+        }
+
+        [Fact]
+        public void Pairing_bootstrap_hold_with_chunk_applying_does_not_unlock_list()
+        {
+            Assert.Equal(
+                HistoryCatchUpFinishNext.None,
+                HistoryCatchUpFinishDecision.Decide(
+                    true,
+                    firstSyncListHoldInProgress: true,
+                    listAwaitingFirstHistory: true,
+                    pairingBootstrapChunkSeenOrApplying: true));
+        }
+
+        [Fact]
+        public void Pairing_awaiting_without_chunk_still_releases_then_enriches()
+        {
+            Assert.Equal(
+                HistoryCatchUpFinishNext.ReleaseListThenEnrichment,
+                HistoryCatchUpFinishDecision.Decide(
+                    true,
+                    firstSyncListHoldInProgress: false,
+                    listAwaitingFirstHistory: true,
+                    pairingBootstrapChunkSeenOrApplying: false));
+        }
     }
 }

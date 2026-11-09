@@ -173,5 +173,35 @@ namespace Unison.Core.Tests.Helpers
                 ChatTimelineOpenPriority.ShouldReorderVisibleOnTipHydrate(
                     timelineLoadPriorityHeld: false));
         }
+
+        [Fact]
+        public void Hot_tip_reasons_use_normal_ui_lane()
+        {
+            Assert.True(
+                ChatTimelineOpenPriority.ShouldUseNormalTipUiLane("chat-open", workCount: 1));
+            Assert.True(
+                ChatTimelineOpenPriority.ShouldUseNormalTipUiLane("history-chunk-tip", workCount: 1));
+            Assert.True(
+                ChatTimelineOpenPriority.ShouldUseNormalTipUiLane("list-chunk", workCount: 10));
+            Assert.False(
+                ChatTimelineOpenPriority.ShouldUseNormalTipUiLane("persisted-ui-loaded", workCount: 257));
+            Assert.True(
+                ChatTimelineOpenPriority.ShouldUseNormalTipUiLane("post-replay", workCount: 0));
+        }
+
+        [Fact]
+        public void Soft_wait_budgets_cover_settle_without_hanging_forever()
+        {
+            Assert.True(
+                ChatTimelineOpenPriority.UiSlicePauseMaxWait >=
+                ChatTimelineOpenPriority.MobileScrollSettleHold);
+            Assert.True(
+                ChatTimelineOpenPriority.TimelineHoldWaitMax >
+                ChatTimelineOpenPriority.UiSlicePauseMaxWait);
+            Assert.True(
+                ChatTimelineOpenPriority.UiSlicePauseMaxWait.TotalSeconds <= 15);
+            Assert.True(
+                ChatTimelineOpenPriority.TimelineHoldWaitMax.TotalSeconds <= 20);
+        }
     }
 }

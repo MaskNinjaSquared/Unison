@@ -903,6 +903,9 @@ namespace Unison.Core.Tests.ViewModels
 
             public void NotifyGroupListingDue() { }
 
+            public Task ReconcileGroupCommunityTitlesAsync(CancellationToken cancellationToken = default) =>
+                Task.CompletedTask;
+
             public Task LeaveGroupAsync(string groupJid) => Task.CompletedTask;
 
             public Task<string> TryGetCreatedByYouCaptionAsync(

@@ -16,28 +16,29 @@ namespace Unison.Core.Tests.Helpers
 
             Assert.True(host.CompletedPublished);
             Assert.False(host.FireAndForgetCalled);
+            Assert.False(host.NamesResolved);
         }
 
         [Fact]
-        public void Hold_claims_and_fires_names_pass()
+        public void Hold_unlocks_immediately_and_fires_names_after()
         {
             var host = new FakeHost { HoldInProgress = true };
             FirstSyncListReleaseDispatch.Schedule(host, "stage", 3, 10);
 
             Assert.True(host.Claimed);
-            Assert.True(host.Deferred);
+            Assert.True(host.CompletedPublished);
             Assert.True(host.FireAndForgetCalled);
-            Assert.False(host.CompletedPublished);
+            Assert.True(host.EnrichmentScheduled);
+            Assert.False(host.NamesResolved);
         }
 
         [Fact]
-        public async Task Names_pass_unlocks_and_clears_inflight()
+        public async Task Names_after_unlock_clears_inflight_without_republishing()
         {
-            var host = new FakeHost { HoldInProgress = true, Claimed = true };
-            await FirstSyncListReleaseDispatch.RunNamesThenUnlockAsync(host, "stage", 3);
+            var host = new FakeHost { HoldInProgress = true, Claimed = true, CompletedPublished = true };
+            await FirstSyncListReleaseDispatch.RunNamesAfterUnlockAsync(host, "stage");
 
-            Assert.True(host.CompletedPublished);
-            Assert.True(host.EnrichmentScheduled);
+            Assert.True(host.NamesResolved);
             Assert.False(host.Claimed);
         }
 
@@ -45,10 +46,10 @@ namespace Unison.Core.Tests.Helpers
         {
             public bool HoldInProgress;
             public bool Claimed;
-            public bool Deferred;
             public bool CompletedPublished;
             public bool FireAndForgetCalled;
             public bool EnrichmentScheduled;
+            public bool NamesResolved;
 
             public bool IsFirstSyncListHoldInProgress => HoldInProgress;
             public bool IsFirstSyncUnlockInFlight => Claimed;
@@ -64,7 +65,9 @@ namespace Unison.Core.Tests.Helpers
                 return true;
             }
 
-            public void MarkFirstSyncListReleaseDeferred() => Deferred = true;
+            public void MarkFirstSyncListReleaseDeferred()
+            {
+            }
 
             public void PublishInitialSyncProgress(
                 bool isActive,
@@ -87,7 +90,11 @@ namespace Unison.Core.Tests.Helpers
             {
             }
 
-            public Task ResolveNamesBeforeListReleaseAsync() => Task.CompletedTask;
+            public Task ResolveNamesBeforeListReleaseAsync()
+            {
+                NamesResolved = true;
+                return Task.CompletedTask;
+            }
 
             public void RecordFirstSyncNamesException(Exception error, string stage)
             {

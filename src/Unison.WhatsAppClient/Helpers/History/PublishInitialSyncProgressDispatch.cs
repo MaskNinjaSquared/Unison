@@ -23,9 +23,18 @@ namespace Unison.WhatsAppClient.Helpers
                 throw new ArgumentNullException(nameof(host));
             }
 
-            host.WriteInitialSyncProgressJournal(active, completed, processed, total, stage);
+            // Trailing history after list unlock must not re-arm IsInitialSyncSafeMode /
+            // batch loops (empty StatusV3/PushName, then Recent/NonBlocking).
+            bool channelActive = active;
+            if (host.FirstSyncListAlreadyReleased && active && !completed)
+            {
+                channelActive = false;
+                stage = (stage ?? string.Empty) + ";clamped=post-release";
+            }
 
-            if (active && !completed && !host.FirstSyncListAlreadyReleased)
+            host.WriteInitialSyncProgressJournal(channelActive, completed, processed, total, stage);
+
+            if (channelActive && !completed && !host.FirstSyncListAlreadyReleased)
             {
                 host.FirstSyncListHoldOwned = true;
             }
@@ -37,7 +46,7 @@ namespace Unison.WhatsAppClient.Helpers
                 host.FirstSyncListReleaseDeferred = false;
             }
 
-            host.PublishInitialSyncChannel(active, completed, processed, total, stage);
+            host.PublishInitialSyncChannel(channelActive, completed, processed, total, stage);
 
             if (completed)
             {

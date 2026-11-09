@@ -4,10 +4,14 @@
 // After FinishHistoryCatchUpContinue writes the journal and ends the banner:
 // unlock first-sync list via names, or schedule enrichment.
 //
-// A fresh pairing arms the list hold before any chunk exists. When the phone
-// never sends history, no chunk ever completes the first sync, so catch-up
-// finish is the only point left to release the list (live chats) — otherwise
-// the list waits on history and enrichment waits on the list paint.
+// PairingBootstrap owns list unlock via SQLite quiet-finalize once a history
+// chunk has been seen or is applying. Catch-up finish must not paint the list
+// in that window (ad243a19: empty-ack stagnant released during InitialBootstrap).
+//
+// Escape: a fresh pairing arms the list hold before any chunk exists. When the
+// phone never sends history, catch-up finish is still the only point left to
+// release the list (live chats) — otherwise list waits on history and
+// enrichment waits on the list paint.
 // =============================================================================
 
 namespace Unison.WhatsAppClient.Helpers
@@ -35,9 +39,17 @@ namespace Unison.WhatsAppClient.Helpers
         public static HistoryCatchUpFinishNext Decide(
             bool releaseEnrichment,
             bool firstSyncListHoldInProgress,
-            bool listAwaitingFirstHistory = false)
+            bool listAwaitingFirstHistory = false,
+            bool pairingBootstrapChunkSeenOrApplying = false)
         {
             if (!releaseEnrichment)
+            {
+                return HistoryCatchUpFinishNext.None;
+            }
+
+            // PairingBootstrap already received/is applying history — quiet-finalize owns unlock.
+            if (pairingBootstrapChunkSeenOrApplying &&
+                (listAwaitingFirstHistory || firstSyncListHoldInProgress))
             {
                 return HistoryCatchUpFinishNext.None;
             }

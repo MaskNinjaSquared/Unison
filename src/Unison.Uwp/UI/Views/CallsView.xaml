@@ -73,16 +73,30 @@
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
 
-                <TextBlock x:Uid="Calls_Header"
-                           Text="Calls"
-                           FontSize="24"
-                           Foreground="{ThemeResource WhatsAppTextHighBrush}"
-                           FontFamily="{StaticResource MainFontSemibold}"
-                           FontWeight="SemiBold"
-                           VerticalAlignment="Center"
-                           TextWrapping="NoWrap"
-                           TextTrimming="CharacterEllipsis"
-                           MaxLines="1"/>
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <Button x:Name="SectionBackButton"
+                            Click="SectionBackButton_Click"
+                            Style="{StaticResource ModernIconButtonStyle}"
+                            Width="40" Height="40"
+                            Margin="0,0,4,0"
+                            VerticalAlignment="Center"
+                            AutomationProperties.Name="Back">
+                        <TextBlock Text="&#xE72B;"
+                                   FontFamily="{StaticResource IconFont}"
+                                   FontSize="18"
+                                   Foreground="{ThemeResource WhatsAppTextHighBrush}"/>
+                    </Button>
+                    <TextBlock x:Uid="Calls_Header"
+                               Text="Calls"
+                               FontSize="24"
+                               Foreground="{ThemeResource WhatsAppTextHighBrush}"
+                               FontFamily="{StaticResource MainFontSemibold}"
+                               FontWeight="SemiBold"
+                               VerticalAlignment="Center"
+                               TextWrapping="NoWrap"
+                               TextTrimming="CharacterEllipsis"
+                               MaxLines="1"/>
+                </StackPanel>
 
                 <Button x:Name="NewCallHeaderButton"
                         Grid.Column="1"

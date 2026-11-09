@@ -1,6 +1,7 @@
 using System;
 using System.ComponentModel;
 using System.Diagnostics;
+using Unison.Core.Constants;
 using Unison.Core.Contracts;
 using Microsoft.Extensions.DependencyInjection;
 using Unison.Core.Models;
@@ -54,6 +55,8 @@ namespace Unison.Uwp.UI.Views
 
         private void StatusListView_Loaded(object sender, RoutedEventArgs e)
         {
+            ApplySectionBackVisibility();
+
             if (ViewModel == null || _hooked)
             {
                 return;
@@ -65,6 +68,35 @@ namespace Unison.Uwp.UI.Views
             ViewModel.Attach();
             SyncSelectionFromViewModel();
             ApplySelfStatusRow();
+        }
+
+        /// <summary>
+        /// Frame shells (Unison / WhatsApp) show a header back to Chats. Legacy pivot keeps
+        /// section switching in the pivot — hide the arrow there.
+        /// </summary>
+        private void ApplySectionBackVisibility()
+        {
+            if (StatusSectionBackButton == null)
+            {
+                return;
+            }
+
+            bool legacy = false;
+            try
+            {
+                var settings = App.Services?.GetService<ILocalSettings>();
+                if (settings != null)
+                {
+                    int raw = settings.Get<int>(LocalSettingsConstants.SelectedShell);
+                    legacy = raw == (int)AppShell.WhatsAppLegacy;
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[StatusListView] ApplySectionBackVisibility: " + ex.Message);
+            }
+
+            StatusSectionBackButton.Visibility = legacy ? Visibility.Collapsed : Visibility.Visible;
         }
 
         private void ApplySelfStatusRow()
@@ -95,6 +127,17 @@ namespace Unison.Uwp.UI.Views
         private void MyStatusBackButton_Click(object sender, RoutedEventArgs e)
         {
             ViewModel?.CloseMyStatus();
+        }
+
+        private void StatusSectionBackButton_Click(object sender, RoutedEventArgs e)
+        {
+            var shell = App.Services?.GetService<ShellViewModel>();
+            if (shell != null && shell.TryHandleShellBack())
+            {
+                return;
+            }
+
+            shell?.NavigateToSectionCommand?.Execute(NavigationRoutes.Chats);
         }
 
         private void OwnStatusList_ItemClick(object sender, ItemClickEventArgs e)

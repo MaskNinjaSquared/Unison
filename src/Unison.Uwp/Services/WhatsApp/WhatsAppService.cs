@@ -48,7 +48,7 @@ using Unison.WhatsAppClient.Helpers;
 
 namespace Unison.Uwp.Services.WhatsApp
 {
-    public partial class WhatsAppService : INotifyPropertyChanged, IConnectionEventSource, IConnectionSessionHost, IOfflineReplayHost, IOfflineReplayFlushIoHost, IChatCatalogPersistHost, IPostReplayMaintenanceHost, IPostMessageEnrichmentHost, IPlaceholderResendSocket, IRuntimeSnapshotSource, IBackgroundResolutionGate, IConversationResyncHost, IHistorySyncHost, IHistoryCatchUpHost, IConnectionEnsureHost, IConnectionResumeHost, IConnectionPairingStage2Host, IConnectionBrokerTransferHost, IConnectionSoftReconnectHost, IConnectionLifecycleHost, IConnectionConnectGateSource, IConnectionConnectPrepareHost, IConnectionSocketAssignment, IConnectionAssignedSocketClearHost, ISelfIdentityHealHost, IStartupUiHost, IResolvedNameApplyHost, IHistoryHydrationBackfillHost, ISqliteHistoryQuietFinalizeHost, IHistoryPostOfflineFreshnessHost, IHistoryCatchUpFinishHost, IUserResyncFullHistoryHost, IFreshnessReconnectFallbackHost, ICatchUpContinueReconnectHost, IFirstSyncListReleaseHost, IFullHistoryCatchUpProgressHost, IHistorySqliteChunkAppliedHost, IAcceptedHistoryRequestTimeoutHost, IAutoReconnectLoopHost, IConversationResyncWaitHost, IFullHistoryOnDemandClearHost, IInitializeConnectionStateHost, IHistorySqliteChunkStartedHost, IFullHistoryCatchUpWatchdogHost, IPeriodicFullHistorySafetyHost, IReconnectHistoryCatchUpHost, IHydrationFallbackPipelineHost, IHydrationDayRetryIoHost, ISoftReconnectIoHost, IRequestFullHistoryOnDemandTrackedHost, IBrokerReconnectConsumeHost, IForceHistoryRepairConsumeHost, IForceHistoryRepairPendingHost, IPublishConnectionUpdateHost, ICompleteUserResyncHistoryWaitHost, ITearDownSocketForSoftReconnectHost, IMarkPairingRestartPendingHost, IDropCurrentSocketForFastResumeHost, IPersistAuthStateHost, IWaitForSessionEstablishedHost, IConnectionHealthMonitorIoHost, ITryStartPairingStage2ReconnectHost, IIsCurrentSocketHealthyHost, IConnectAsyncHost, IResyncConversationsHost, IPostSyncMaintenanceIoHost, IBuildHistoryHydrationCandidatesHost, IPeriodicFullHistorySafetyLoopHost, IWaitForHistoryHydrationSettleHost, ISilentFullHistoryChainHost
+    public partial class WhatsAppService : INotifyPropertyChanged, IConnectionEventSource, IConnectionSessionHost, IOfflineReplayHost, IOfflineReplayFlushIoHost, IChatCatalogPersistHost, IPostReplayMaintenanceHost, IPostMessageEnrichmentHost, IPlaceholderResendSocket, IRuntimeSnapshotSource, IBackgroundResolutionGate, IConversationResyncHost, IHistorySyncHost, IHistoryCatchUpHost, IConnectionEnsureHost, IConnectionResumeHost, IConnectionPairingStage2Host, IConnectionBrokerTransferHost, IConnectionSoftReconnectHost, IConnectionLifecycleHost, IConnectionConnectGateSource, IConnectionConnectPrepareHost, IConnectionSocketAssignment, IConnectionAssignedSocketClearHost, ISelfIdentityHealHost, IStartupUiHost, IResolvedNameApplyHost, IHistoryHydrationBackfillHost, ISqliteHistoryQuietFinalizeHost, IHistoryPostOfflineFreshnessHost, IHistoryCatchUpFinishHost, IUserResyncFullHistoryHost, IFreshnessReconnectFallbackHost, ICatchUpContinueReconnectHost, IFirstSyncListReleaseHost, IFullHistoryCatchUpProgressHost, IHistorySqliteChunkAppliedHost, IAcceptedHistoryRequestTimeoutHost, IAutoReconnectLoopHost, IConversationResyncWaitHost, IFullHistoryOnDemandClearHost, IInitializeConnectionStateHost, IHistorySqliteChunkStartedHost, IFullHistoryCatchUpWatchdogHost, IPeriodicFullHistorySafetyHost, IReconnectHistoryCatchUpHost, IHydrationFallbackPipelineHost, IHydrationDayRetryIoHost, ISoftReconnectIoHost, IRequestFullHistoryOnDemandTrackedHost, IBrokerReconnectConsumeHost, IForceHistoryRepairConsumeHost, IForceHistoryRepairPendingHost, ISessionOpenOnDemandPendingConsumeHost, IPublishConnectionUpdateHost, ICompleteUserResyncHistoryWaitHost, ITearDownSocketForSoftReconnectHost, IMarkPairingRestartPendingHost, IDropCurrentSocketForFastResumeHost, IPersistAuthStateHost, IWaitForSessionEstablishedHost, IConnectionHealthMonitorIoHost, ITryStartPairingStage2ReconnectHost, IIsCurrentSocketHealthyHost, IConnectAsyncHost, IResyncConversationsHost, IPostSyncMaintenanceIoHost, IBuildHistoryHydrationCandidatesHost, IPeriodicFullHistorySafetyLoopHost, IWaitForHistoryHydrationSettleHost, ISilentFullHistoryChainHost
     {
         public event PropertyChangedEventHandler PropertyChanged;
         protected void OnPropertyChanged([CallerMemberName] string propertyName = null)
@@ -211,7 +211,11 @@ namespace Unison.Uwp.Services.WhatsApp
         /// <summary>Startup and enrichment timings; the rule is <see cref="SyncBudget"/>.</summary>
         private bool UseFrugalSyncBudget => _syncBudget.IsFrugal;
 
-        private SyncPacing CurrentSyncPacing => _workload.PacingFor(UseFrugalSyncBudget);
+        private SyncPacing CurrentSyncPacing =>
+            SyncPhasePacing.For(
+                _workload,
+                UseFrugalSyncBudget,
+                IsFirstSyncListHoldInProgress);
 
         private async Task WarmPersonStoreAsync()
         {
@@ -354,7 +358,9 @@ namespace Unison.Uwp.Services.WhatsApp
         /// </summary>
         private volatile bool _qrDeliveredThisConnection = false;
         private readonly SyncWorkGate _syncWork;
-        private int _offlineReplayReleased;
+        private readonly OfflineReplayFirstReleaseLatch _offlineReplayLatch =
+            new OfflineReplayFirstReleaseLatch();
+        private OfflineSyncedWatchdog _offlineSyncedWatchdog;
         private readonly HistoryFreshnessRepairPersistence _freshnessRepair;
         private readonly LiveMessagePersist _liveMessages;
         private PersistedMessageLookup _persistedLookup;
@@ -1085,8 +1091,13 @@ namespace Unison.Uwp.Services.WhatsApp
                         "; gcMb=" + (GC.GetTotalMemory(false) / (1024 * 1024))),
                 (active, completed, processed, total, stage) =>
                     _initialSync.Publish(active, completed, processed, total, stage),
-                () => _ = RuntimeDiagnosticsService.Instance.FlushAsync(
-                    "history:initial-sync-complete"));
+                () =>
+                {
+                    _ = RuntimeDiagnosticsService.Instance.FlushAsync(
+                        "history:initial-sync-complete");
+                    // PairingBootstrap may have deferred message-store-epoch; retry as PostInitCatchUp.
+                    _ = TryConsumeMessageStoreForceHistoryRepairAsync("after-pairing-bootstrap");
+                });
             _catchUpBanner = new HistoryCatchUpBannerOwner(
                 () => _syncStatus.BeginHistoryCatchUp(),
                 NoteFullHistoryCatchUpProgress,
@@ -1283,9 +1294,11 @@ namespace Unison.Uwp.Services.WhatsApp
                 {
                     try
                     {
+                        // ClearAllAsync deletes SignalKeys on disk — never InitializeAsync
+                        // first (that cold-loads thousands of session/sender-key files and
+                        // delayed QR by ~1 minute after logout).
                         IKeyStore keyStore = _pendingClearSessionKeyStore ?? new FileKeyStore();
                         _pendingClearSessionKeyStore = null;
-                        await keyStore.InitializeAsync().ConfigureAwait(false);
                         await keyStore.ClearAllAsync().ConfigureAwait(false);
                         Log("[WhatsAppService] Cleared FileKeyStore / SignalKeys.");
                     }
@@ -1535,8 +1548,23 @@ namespace Unison.Uwp.Services.WhatsApp
                         "sync-apply-end",
                         "conversations=" + conversations + "; elapsedMs=" + elapsedMs),
                 ApplyHistorySyncFromWireAsync);
+            _offlineSyncedWatchdog = new OfflineSyncedWatchdog(
+                IsOfflineSyncedWatchdogTransportReady,
+                () => _offlineReplayLatch.HasReleased,
+                generation =>
+                {
+                    RuntimeDiagnosticsService.Instance.Write(
+                        "connection",
+                        "offline-synced-watchdog",
+                        "fired|generation=" + generation);
+                    _ = OfflineReplayReleaseWire.RunAsync(0);
+                },
+                detail => RuntimeDiagnosticsService.Instance.Write(
+                    "connection",
+                    "offline-synced-watchdog",
+                    detail));
             _offlineReplayRelease = new OfflineReplayReleaseOwner(
-                () => Interlocked.Exchange(ref _offlineReplayReleased, 1) == 0,
+                () => _offlineReplayLatch.TryMarkFirstRelease(),
                 (offlineCount, firstRelease) =>
                 {
                     Debug.WriteLine(
@@ -1546,6 +1574,7 @@ namespace Unison.Uwp.Services.WhatsApp
                         "connection",
                         "offline-replay-release",
                         "count=" + offlineCount + "; first=" + firstRelease);
+                    _offlineSyncedWatchdog?.Cancel("offline-replay-release");
                 },
                 () => _syncWork.SetReplayDrainPending(false),
                 FlushOfflineReplayFromWireAsync,
@@ -2109,6 +2138,17 @@ namespace Unison.Uwp.Services.WhatsApp
                 () => GroupFacade?.NotifyGroupListingDue(),
                 nameof(IGroupService.NotifyGroupListingDue));
 
+        Task IPostMessageEnrichmentHost.ReconcileGroupCommunityTitlesAsync(CancellationToken token)
+        {
+            IGroupService groups = GroupFacade;
+            if (groups == null)
+            {
+                return Task.CompletedTask;
+            }
+
+            return groups.ReconcileGroupCommunityTitlesAsync(token);
+        }
+
         void IPostMessageEnrichmentHost.WriteComplete(string reason, bool serialized) =>
                     RuntimeDiagnosticsService.Instance.Write(
                         "startup",
@@ -2296,6 +2336,9 @@ namespace Unison.Uwp.Services.WhatsApp
         int IHistorySqliteChunkAppliedHost.SqliteHistoryConversationsAccumulated =>
             _sqliteHistoryConversationsAccumulated;
 
+        bool IHistorySqliteChunkAppliedHost.FirstSyncListAlreadyReleased =>
+            _firstSyncListAlreadyReleased;
+
         void IHistorySqliteChunkAppliedHost.MarkHistorySyncReceivedNow() =>
             _lastHistorySyncReceivedUtc = DateTime.UtcNow;
 
@@ -2367,6 +2410,9 @@ namespace Unison.Uwp.Services.WhatsApp
 
         int IHistorySqliteChunkStartedHost.SqliteHistoryConversationsAccumulated =>
             _sqliteHistoryConversationsAccumulated;
+
+        bool IHistorySqliteChunkStartedHost.FirstSyncListAlreadyReleased =>
+            _firstSyncListAlreadyReleased;
 
         void IHistorySqliteChunkStartedHost.NoteFullHistoryCatchUpProgress(string reason) =>
             NoteFullHistoryCatchUpProgress(reason);
@@ -2682,6 +2728,9 @@ namespace Unison.Uwp.Services.WhatsApp
         bool IHistoryCatchUpFinishHost.IsListAwaitingFirstHistorySync =>
             History?.IsAwaitingFirstHistorySync ?? false;
 
+        bool IHistoryCatchUpFinishHost.IsPairingBootstrapChunkSeenOrApplying =>
+            History?.IsPairingBootstrapChunkSeenOrApplying ?? false;
+
         int IHistoryCatchUpFinishHost.SqliteHistoryConversationsAccumulated =>
             _sqliteHistoryConversationsAccumulated;
 
@@ -2919,9 +2968,12 @@ namespace Unison.Uwp.Services.WhatsApp
 
         async Task IFirstSyncListReleaseHost.ResolveNamesBeforeListReleaseAsync()
         {
-            // force: SyncWorkGate would skip names while first-sync hold / replay is up.
-            await (Contacts?.ResolveMissingNamesAsync(force: true) ?? Task.CompletedTask)
-                .ConfigureAwait(false);
+            // Runs after list unlock. force: gate would otherwise skip during replay.
+            // includeGroupListing: false — QueryAllGroups belongs to the groups phase
+            // (embedding it here starved Mobile ~200s). Placeholders resolve in usync lots;
+            // group subjects follow the dedicated listing pass.
+            await (Contacts?.ResolveMissingNamesAsync(force: true, includeGroupListing: false)
+                ?? Task.CompletedTask).ConfigureAwait(false);
             await (Contacts?.RefreshContactNamesAsync(includeGroups: false, force: true)
                 ?? Task.CompletedTask).ConfigureAwait(false);
         }
@@ -3424,14 +3476,21 @@ namespace Unison.Uwp.Services.WhatsApp
         /// After MessageStore epoch upgrade (legacy JSON abandoned), request a one-shot
         /// full history sync instead of migrating old LocalFolder files.
         /// </summary>
-        private Task TryConsumeMessageStoreForceHistoryRepairAsync(string reason) =>
-            ForceHistoryRepairConsumeDispatch.RunAsync(this, reason);
+        private async Task TryConsumeMessageStoreForceHistoryRepairAsync(string reason)
+        {
+            await ForceHistoryRepairConsumeDispatch.RunAsync(this, reason).ConfigureAwait(false);
+            await SessionOpenOnDemandPendingConsumeDispatch.RunAsync(this, reason)
+                .ConfigureAwait(false);
+        }
 
         // --- IForceHistoryRepairConsumeHost ----------------------------------
 
         bool IForceHistoryRepairConsumeHost.TryReadForceHistoryRepairPending() =>
             LocalSettingsAccess.Current.Get<bool>(
                 LocalSettingsConstants.MessageStoreForceHistoryRepair);
+
+        bool IForceHistoryRepairConsumeHost.IsPairingBootstrapActive =>
+            History?.IsPairingBootstrapActive ?? false;
 
         void IForceHistoryRepairConsumeHost.LogForceHistoryRepair(string message) =>
             Debug.WriteLine("[WhatsAppService] " + message);
@@ -3445,6 +3504,36 @@ namespace Unison.Uwp.Services.WhatsApp
                 LocalSettingsAccess.Current.Set(
                     LocalSettingsConstants.MessageStoreForceHistoryRepair,
                     false);
+
+        // --- ISessionOpenOnDemandPendingConsumeHost --------------------------
+
+        bool ISessionOpenOnDemandPendingConsumeHost.IsPairingBootstrapActive =>
+            History?.IsPairingBootstrapActive ?? false;
+
+        int ISessionOpenOnDemandPendingConsumeHost.PeekSessionOpenOnDemandPendingCount() =>
+            History?.PeekSessionOpenOnDemandPendingCount() ?? 0;
+
+        IReadOnlyList<string> ISessionOpenOnDemandPendingConsumeHost.TakeSessionOpenOnDemandPending() =>
+            History?.TakeSessionOpenOnDemandPending() ?? Array.Empty<string>();
+
+        void ISessionOpenOnDemandPendingConsumeHost.LogSessionOpenOnDemandPending(string message) =>
+            Debug.WriteLine("[WhatsAppService] " + message);
+
+        void ISessionOpenOnDemandPendingConsumeHost.ClaimSessionOpenOnDemand(string jid) =>
+            Messages?.TryClaimSessionOpenOnDemand(jid);
+
+        Task ISessionOpenOnDemandPendingConsumeHost.EnsureHistoryOnDemandAsync(string jid)
+        {
+            IHistoryService history = History;
+            if (history == null || string.IsNullOrWhiteSpace(jid))
+            {
+                return Task.CompletedTask;
+            }
+
+            // History.EnsureChatPageAsync — not Messages.EnsureHistoryOnDemandAsync —
+            // so consume does not re-arm the crash latch.
+            return history.EnsureChatPageAsync(jid, count: 80);
+        }
 
         private void LogHistoryFreshnessAfterOfflineDrain(int offlineCount) =>
             _ = HistoryPostOfflineFreshnessDispatch.RunAsync(this, offlineCount);
@@ -3461,6 +3550,9 @@ namespace Unison.Uwp.Services.WhatsApp
 
         bool IHistoryPostOfflineFreshnessHost.IsHistoryCatchUpActive =>
             IsHistoryCatchUpActive();
+
+        bool IHistoryPostOfflineFreshnessHost.IsPairingBootstrapActive =>
+            History?.IsPairingBootstrapActive ?? false;
 
         int IHistoryPostOfflineFreshnessHost.CatchUpStagnantCyclesBeforeStop =>
             CatchUpStagnantCyclesBeforeStop;

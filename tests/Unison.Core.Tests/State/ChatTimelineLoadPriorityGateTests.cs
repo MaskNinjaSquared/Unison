@@ -41,5 +41,22 @@ namespace Unison.Core.Tests.State
             sw.Stop();
             Assert.True(sw.ElapsedMilliseconds < 200);
         }
+
+        [Fact]
+        public async Task WaitWhileHeldAsync_times_out_while_still_held()
+        {
+            var gate = new ChatTimelineLoadPriorityGate();
+            gate.Hold("test-timeout");
+
+            var sw = Stopwatch.StartNew();
+            await gate.WaitWhileHeldAsync(TimeSpan.FromMilliseconds(120));
+            sw.Stop();
+
+            Assert.True(gate.IsHeld);
+            Assert.True(sw.ElapsedMilliseconds >= 100);
+            Assert.True(sw.ElapsedMilliseconds < 2000);
+
+            gate.Release("test-timeout");
+        }
     }
 }
