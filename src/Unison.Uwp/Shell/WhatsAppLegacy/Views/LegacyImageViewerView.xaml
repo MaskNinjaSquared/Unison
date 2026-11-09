@@ -56,6 +56,35 @@
                   VerticalAlignment="Top"
                   Canvas.ZIndex="2"
                   Tapped="Chrome_Tapped">
+                <!-- Media canvas is always black — keep WP8 ring/glyph white even in Light theme
+                     (app-wide LegacyBackButton* brushes go black on light pages). -->
+                <Grid.Resources>
+                    <ResourceDictionary>
+                        <ResourceDictionary.ThemeDictionaries>
+                            <ResourceDictionary x:Key="Default">
+                                <SolidColorBrush x:Key="LegacyBackButtonFillBrush" Color="Transparent"/>
+                                <SolidColorBrush x:Key="LegacyBackButtonRingBrush" Color="#FFFFFFFF"/>
+                                <SolidColorBrush x:Key="LegacyBackButtonGlyphBrush" Color="#FFFFFFFF"/>
+                                <SolidColorBrush x:Key="LegacyBackButtonHoverFillBrush" Color="#FFFFFFFF"/>
+                                <SolidColorBrush x:Key="LegacyBackButtonHoverGlyphBrush" Color="#FF000000"/>
+                            </ResourceDictionary>
+                            <ResourceDictionary x:Key="Light">
+                                <SolidColorBrush x:Key="LegacyBackButtonFillBrush" Color="Transparent"/>
+                                <SolidColorBrush x:Key="LegacyBackButtonRingBrush" Color="#FFFFFFFF"/>
+                                <SolidColorBrush x:Key="LegacyBackButtonGlyphBrush" Color="#FFFFFFFF"/>
+                                <SolidColorBrush x:Key="LegacyBackButtonHoverFillBrush" Color="#FFFFFFFF"/>
+                                <SolidColorBrush x:Key="LegacyBackButtonHoverGlyphBrush" Color="#FF000000"/>
+                            </ResourceDictionary>
+                            <ResourceDictionary x:Key="Dark">
+                                <SolidColorBrush x:Key="LegacyBackButtonFillBrush" Color="Transparent"/>
+                                <SolidColorBrush x:Key="LegacyBackButtonRingBrush" Color="#FFFFFFFF"/>
+                                <SolidColorBrush x:Key="LegacyBackButtonGlyphBrush" Color="#FFFFFFFF"/>
+                                <SolidColorBrush x:Key="LegacyBackButtonHoverFillBrush" Color="#FFFFFFFF"/>
+                                <SolidColorBrush x:Key="LegacyBackButtonHoverGlyphBrush" Color="#FF000000"/>
+                            </ResourceDictionary>
+                        </ResourceDictionary.ThemeDictionaries>
+                    </ResourceDictionary>
+                </Grid.Resources>
                 <Grid.Background>
                     <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
                         <GradientStop Color="#CC000000" Offset="0"/>

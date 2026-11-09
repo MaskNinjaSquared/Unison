@@ -188,6 +188,8 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             StartDateSeparatorTimer();
             ApplyLegacyComposerChrome();
             ViewModel?.AttachAudioPlaybackUi(AudioPlayer);
+            // Legacy has no dual-pane chat list beside detail — back is always on.
+            UpdateChatBackButtonsVisibility();
         }
 
         /// <summary>
@@ -1513,24 +1515,28 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             }
         }
 
-        private void UpdateEmptyBackButtonVisibility()
+        /// <summary>
+        /// Legacy never keeps the chat list beside the detail, so the arrow is always on —
+        /// header when a chat is open, empty-state otherwise. (Unison/WhatsApp still hide it
+        /// on wide dual-pane via <see cref="ShellViewModel.ShowChatDetailBackButton"/>.)
+        /// </summary>
+        private void UpdateChatBackButtonsVisibility()
         {
-            if (EmptyBackButton == null)
+            bool hasChat = ActiveChatGrid != null &&
+                           ActiveChatGrid.Visibility == Visibility.Visible;
+            if (BackButton != null)
             {
-                return;
+                BackButton.Visibility = hasChat
+                    ? Visibility.Visible
+                    : Visibility.Collapsed;
             }
 
-            bool narrow = false;
-            try
+            if (EmptyBackButton != null)
             {
-                var shell = App.Services?.GetService<ShellViewModel>();
-                narrow = shell != null && shell.IsNarrowWindow;
+                EmptyBackButton.Visibility = hasChat
+                    ? Visibility.Collapsed
+                    : Visibility.Visible;
             }
-            catch
-            {
-            }
-
-            EmptyBackButton.Visibility = narrow ? Visibility.Visible : Visibility.Collapsed;
         }
 
         /// <summary>Invoked from <see cref="Templates.MessageTemplates"/> when a loaded image is tapped.</summary>
@@ -1942,7 +1948,7 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                 ClearTimelineMessages();
                 ActiveChatGrid.Visibility = Visibility.Collapsed;
                 EmptyStateGrid.Visibility = Visibility.Visible;
-                UpdateEmptyBackButtonVisibility();
+                UpdateChatBackButtonsVisibility();
                 PinnedMessageButton.Visibility = Visibility.Collapsed;
                 _displayedPinnedMessage = null;
                 _activePinnedMessages.Clear();
@@ -1959,10 +1965,7 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             _activeChat.PropertyChanged += ActiveChat_PropertyChanged;
             ActiveChatGrid.Visibility = Visibility.Visible;
             EmptyStateGrid.Visibility = Visibility.Collapsed;
-            if (EmptyBackButton != null)
-            {
-                EmptyBackButton.Visibility = Visibility.Collapsed;
-            }
+            UpdateChatBackButtonsVisibility();
 
             ChatStatusText.Text = "";
             ChatStatusText.Opacity = 0;

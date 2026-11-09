@@ -236,7 +236,7 @@
                     <Button x:Name="BackButton" Grid.Column="0" Click="BackButton_Click"
                             Style="{StaticResource WhatsAppIconButtonStyle}"
                             Width="40" Height="40" VerticalAlignment="Center" Margin="0,0,4,0"
-                            Visibility="Collapsed"
+                            Visibility="Visible"
                             Foreground="{ThemeResource ChatDetailHeaderTitleBrush}">
                         <TextBlock Text="&#xE72B;" FontFamily="{StaticResource IconFont}" FontSize="18"/>
                     </Button>
@@ -1321,7 +1321,7 @@
                         Width="40" Height="40"
                         Margin="0,0,0,16"
                         HorizontalAlignment="Center"
-                        Visibility="Collapsed"
+                        Visibility="Visible"
                         Click="BackButton_Click"
                         ToolTipService.ToolTip="Back">
                     <FontIcon Glyph="&#xE72B;" FontFamily="{StaticResource IconFont}" FontSize="16"/>
