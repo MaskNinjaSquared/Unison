@@ -2173,6 +2173,9 @@ Desative depois de diagnosticar: manter ligado deixa o app lento.</value>
   <data name="StatusComposer_PublishFailedBody" xml:space="preserve">
     <value>Não foi possível publicar seu status. Verifique sua conexão e tente novamente.</value>
   </data>
+  <data name="StatusComposer_PublishRefusedBody" xml:space="preserve">
+    <value>O WhatsApp recusou este status (erro {0}), então ninguém o recebeu. Seu texto foi mantido.</value>
+  </data>
   <data name="StatusComposer_PublishedTitle" xml:space="preserve">
     <value>Status Publicado</value>
   </data>

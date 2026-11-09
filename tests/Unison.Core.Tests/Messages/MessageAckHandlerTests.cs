@@ -71,6 +71,68 @@ namespace Unison.Core.Tests.Messages
             Assert.Contains(expected, MessageAckHandler.Describe(code));
         }
 
+        [Fact]
+        public async Task An_expected_send_is_told_the_refusal_code()
+        {
+            var handler = new MessageAckHandler(new RecordingBus(), new RecordingLog());
+
+            using (SentAckWait wait = handler.Expect("3EB0AC"))
+            {
+                await handler.HandleAsync(Ack("message", "status@broadcast", "3EB0AC", error: "400"));
+
+                Assert.Equal("400", await wait.WaitAsync(TimeSpan.FromSeconds(5)));
+            }
+        }
+
+        [Fact]
+        public async Task An_expected_send_the_server_took_is_not_a_refusal()
+        {
+            var handler = new MessageAckHandler(new RecordingBus(), new RecordingLog());
+
+            using (SentAckWait wait = handler.Expect("3EB0AD"))
+            {
+                await handler.HandleAsync(Ack("message", "status@broadcast", "3EB0AD"));
+
+                Assert.Null(await wait.WaitAsync(TimeSpan.FromSeconds(5)));
+            }
+        }
+
+        [Fact]
+        public async Task Silence_is_read_as_taken_rather_than_refused()
+        {
+            var handler = new MessageAckHandler(new RecordingBus(), new RecordingLog());
+
+            using (SentAckWait wait = handler.Expect("3EB0AE"))
+            {
+                Assert.Null(await wait.WaitAsync(TimeSpan.FromMilliseconds(20)));
+            }
+        }
+
+        [Fact]
+        public async Task An_ack_for_another_message_leaves_the_wait_alone()
+        {
+            var handler = new MessageAckHandler(new RecordingBus(), new RecordingLog());
+
+            using (SentAckWait wait = handler.Expect("3EB0AF"))
+            {
+                await handler.HandleAsync(Ack("message", "status@broadcast", "3EB0B0", error: "479"));
+
+                Assert.Null(await wait.WaitAsync(TimeSpan.FromMilliseconds(20)));
+            }
+        }
+
+        [Fact]
+        public async Task A_disposed_wait_is_no_longer_answered()
+        {
+            var handler = new MessageAckHandler(new RecordingBus(), new RecordingLog());
+            SentAckWait wait = handler.Expect("3EB0B1");
+            wait.Dispose();
+
+            await handler.HandleAsync(Ack("message", "status@broadcast", "3EB0B1", error: "400"));
+
+            Assert.Null(await wait.WaitAsync(TimeSpan.FromMilliseconds(20)));
+        }
+
         private static BinaryNode Ack(string cls, string from, string id, string error = null, string phash = null)
         {
             var attrs = new Dictionary<string, string> { { "class", cls }, { "from", from }, { "id", id } };

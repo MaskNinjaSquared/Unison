@@ -117,9 +117,22 @@ namespace Unison.WhatsAppClient.Status
             }
 
             List<string> recipients = StatusRecipientList.Build(post.RecipientJids, self);
-            string id = await _wire
-                .SendTextStatusAsync(post.Text, post.BackgroundArgb, post.TextArgb, post.Font, recipients)
-                .ConfigureAwait(false);
+            string id;
+            try
+            {
+                id = await _wire
+                    .SendTextStatusAsync(post.Text, post.BackgroundArgb, post.TextArgb, post.Font, recipients)
+                    .ConfigureAwait(false);
+            }
+            catch (StatusPublishRefusedException refused)
+            {
+                _diagnostics?.Write(
+                    "status",
+                    "refused",
+                    "error=" + refused.ErrorCode + "; reason=" + refused.Reason +
+                    "; recipients=" + recipients.Count);
+                throw;
+            }
 
             _diagnostics?.Write(
                 "status",
