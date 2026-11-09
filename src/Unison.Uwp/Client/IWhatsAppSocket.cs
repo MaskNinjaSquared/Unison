@@ -210,6 +210,12 @@ namespace Unison.Uwp.Client
 
         Task PresenceSubscribeAsync(string toJid);
 
+        /// <summary>
+        /// Account-wide online state. The server only forwards contacts' presence to a device
+        /// that is available.
+        /// </summary>
+        Task SendAvailabilityAsync(bool available);
+
         /// <summary>Pins or unpins a conversation for the whole account.</summary>
         Task SetChatPinnedAsync(string jid, bool pinned);
 

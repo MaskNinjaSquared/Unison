@@ -52,6 +52,17 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
             return socket.PresenceSubscribeAsync(jid);
         }
 
+        public Task SendOwnAvailabilityAsync(bool available)
+        {
+            IWhatsAppSocket socket = _sessions.Socket;
+            if (socket == null || !socket.IsConnected)
+            {
+                return Task.CompletedTask;
+            }
+
+            return socket.SendAvailabilityAsync(available);
+        }
+
         public Task SendPinInChatMessageAsync(
             string chatJid,
             MessageKey targetKey,

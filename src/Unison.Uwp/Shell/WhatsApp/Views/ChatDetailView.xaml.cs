@@ -1776,7 +1776,7 @@ namespace Unison.Uwp.Shell.WhatsApp.Views
                 {
                     ViewModel.StopPresenceWatch();
                 }
-                else if (!_isWindowsMobile)
+                else
                 {
                     ViewModel.StartPresenceWatch(chat.JID);
                 }

@@ -1516,18 +1516,53 @@ namespace Unison.Uwp.Client
             }
         }
 
-        public Task PresenceSubscribeAsync(string toJid)
+        /// <summary>
+        /// rc14 presenceSubscribe: user JIDs carry their trusted-contact token, without which a
+        /// contact who limits last seen to people they talk to never answers.
+        /// </summary>
+        public async Task PresenceSubscribeAsync(string toJid)
         {
             var session = Require();
+            var token = await GetPresenceTokenAsync(toJid).ConfigureAwait(false);
+            await CreatePresence(session)
+                .SubscribeAsync(toJid, token != null ? token.Token : null)
+                .ConfigureAwait(false);
+        }
 
-            return session.Connection.SendNodeAsync(new BinaryNode(
-                "presence",
-                new Dictionary<string, string>
-                {
-                    { "to", toJid },
-                    { "id", session.Connection.GenerateMessageTag() },
-                    { "type", "subscribe" }
-                }));
+        public Task SendAvailabilityAsync(bool available)
+        {
+            return CreatePresence(Require()).ExecuteAsync(
+                available ? PresenceState.Available : PresenceState.Unavailable);
+        }
+
+        private SendPresenceUseCase CreatePresence(WhatsAppSession session)
+        {
+            return new SendPresenceUseCase(
+                session.Connection,
+                () => _authState.Me != null ? _authState.Me.Id : null,
+                () => _authState.Me != null ? _authState.Me.Lid : null,
+                () => _authState.Me != null ? _authState.Me.Name : null);
+        }
+
+        /// <summary>Tokens are filed under whichever address the chat used, so try the LID too.</summary>
+        private async Task<TcTokenData> GetPresenceTokenAsync(string jid)
+        {
+            var token = await GetValidProfilePictureTokenAsync(jid).ConfigureAwait(false);
+            if (token != null)
+            {
+                return token;
+            }
+
+            var normalized = JidUtils.NormalizedUser(jid);
+            if (!JidUtils.IsAnyPn(normalized))
+            {
+                return null;
+            }
+
+            var lid = await _lidMappings.GetLidForPnAsync(normalized).ConfigureAwait(false);
+            return string.IsNullOrEmpty(lid)
+                ? null
+                : await GetValidProfilePictureTokenAsync(lid).ConfigureAwait(false);
         }
 
         /// <summary>

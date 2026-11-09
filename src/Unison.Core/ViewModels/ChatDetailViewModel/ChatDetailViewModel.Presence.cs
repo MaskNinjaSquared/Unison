@@ -43,6 +43,8 @@ namespace Unison.Core.ViewModels
             _presenceOpenedUtc = DateTime.UtcNow;
             _presenceReceived = false;
             _pendingPresenceText = null;
+            _presenceAnnounced = false;
+            _presenceShownText = null;
 
             EnsurePresenceHandlerAttached();
 
@@ -85,6 +87,8 @@ namespace Unison.Core.ViewModels
             _presenceWatch.Stop();
             _presenceReceived = false;
             _pendingPresenceText = null;
+            _presenceAnnounced = false;
+            _presenceShownText = null;
             DetachPresenceHandler();
         }
 
@@ -113,13 +117,42 @@ namespace Unison.Core.ViewModels
 
         private void MessageService_PresenceUpdated(object sender, PresenceUpdateEventArgs e)
         {
-            if (_presenceCts == null || _presenceCts.IsCancellationRequested)
+            var cts = _presenceCts;
+            if (cts == null || cts.IsCancellationRequested || e == null ||
+                !IsWatchedPresenceJid(e.Jid))
             {
                 return;
             }
 
+            string text = FormatPresenceText(e.Presence, e.LastSeen);
+            _pendingPresenceText = text;
             _presenceReceived = true;
-            _pendingPresenceText = FormatPresenceText(e?.Presence, e?.LastSeen);
+
+            // The first answer can land after the opening window (history sync holds the socket
+            // queue on Mobile), and later ones are changes the header should follow.
+            if (!_presenceAnnounced || string.Equals(text, _presenceShownText, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            _presenceShownText = text;
+            var ct = cts.Token;
+            _ = _dispatcher.RunAsync(() =>
+            {
+                if (!ct.IsCancellationRequested)
+                {
+                    PresenceAnimationRequested?.Invoke(this, text);
+                }
+            });
+        }
+
+        /// <summary>
+        /// Presence arrives for every subscribed contact and for typists in groups; only the open
+        /// one-to-one counts, under either of its addresses (phone number or LID).
+        /// </summary>
+        private bool IsWatchedPresenceJid(string jid)
+        {
+            return PresenceJidMatch.IsWatched(jid, _presenceWatch.WatchingJid, _jids);
         }
 
         private async Task RunPresenceTimerAsync(CancellationToken ct, string subscribeJid)
@@ -181,6 +214,14 @@ namespace Unison.Core.ViewModels
                         return;
                     }
 
+                    // A late answer may have landed between the read above and this hop.
+                    if (!string.IsNullOrEmpty(subscribeJid) && !string.IsNullOrEmpty(_pendingPresenceText))
+                    {
+                        text = _pendingPresenceText;
+                    }
+
+                    _presenceShownText = text;
+                    _presenceAnnounced = true;
                     PresenceAnimationRequested?.Invoke(this, text);
                 });
             }
@@ -198,11 +239,15 @@ namespace Unison.Core.ViewModels
 
         private string FormatPresenceText(string presence, long? lastSeenEpoch)
         {
-            if (presence == "available" || presence == "composing")
+            if (presence == "composing" || presence == "recording")
             {
-                return presence == "composing"
-                    ? _strings.Get("ChatDetail_PresenceTyping", "typing...")
-                    : _strings.Get("ChatDetail_PresenceOnline", "online");
+                return _strings.Get("ChatDetail_PresenceTyping", "typing...");
+            }
+
+            // Paused is a chatstate (stopped typing), not going offline.
+            if (presence == "available" || presence == "paused")
+            {
+                return _strings.Get("ChatDetail_PresenceOnline", "online");
             }
 
             if (lastSeenEpoch.HasValue && lastSeenEpoch.Value > 0)

@@ -138,6 +138,8 @@ namespace Unison.Core.ViewModels
         private bool _presenceHandlerAttached;
         private bool _presenceReceived;
         private string _pendingPresenceText;
+        private bool _presenceAnnounced;
+        private string _presenceShownText;
         private DateTime _presenceOpenedUtc;
         private bool _hasReachedStart;
         private int _emptyLoadAttempts;

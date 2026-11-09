@@ -2099,7 +2099,7 @@ namespace Unison.Uwp.Shell.Unison.Views
                 {
                     ViewModel.StopPresenceWatch();
                 }
-                else if (!_isWindowsMobile)
+                else
                 {
                     ViewModel.StartPresenceWatch(chat.JID);
                 }
