@@ -1,8 +1,12 @@
 <UserControl
     x:Class="Unison.Uwp.UI.Controls.Reply.ReplyTextChrome"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
-    <TextBlock Text="{Binding Content}"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:helpers="using:Unison.Uwp.UI.Helpers">
+    <TextBlock helpers:EmojiTextBlock.Text="{Binding Content}"
+               helpers:EmojiTextBlock.MentionedJids="{Binding MentionedJids}"
+               helpers:EmojiTextBlock.MentionLookup="{Binding MentionLookup}"
+               helpers:EmojiTextBlock.RefreshKey="{Binding MentionRefreshKey}"
                MaxLines="2"
                TextTrimming="CharacterEllipsis"
                TextWrapping="Wrap"
