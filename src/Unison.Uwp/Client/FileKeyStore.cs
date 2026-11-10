@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Windows.Storage;
@@ -602,6 +603,43 @@ namespace Unison.Uwp.Client
             }
         }
 
+        public async Task SetPreKeysAsync(IReadOnlyList<PreKeyData> keys)
+        {
+            EnsureInitialized();
+
+            if (keys == null || keys.Count == 0)
+            {
+                return;
+            }
+
+            // An upload batch is hundreds of keys; a file plus a delta append per key is
+            // thousands of storage calls on a phone. The delta and its snapshot carry them.
+            var deltas = new List<PreKeyDeltaRecord>(keys.Count);
+            foreach (PreKeyData key in keys)
+            {
+                if (key == null)
+                {
+                    continue;
+                }
+
+                _preKeyCache[key.Id] = key;
+                deltas.Add(new PreKeyDeltaRecord
+                {
+                    Operation = "set",
+                    Id = key.Id,
+                    Data = new PreKeyFileData
+                    {
+                        Id = key.Id,
+                        PrivateKey = Convert.ToBase64String(key.KeyPair.Private),
+                        PublicKey = Convert.ToBase64String(key.KeyPair.Public)
+                    }
+                });
+            }
+
+            await AppendPreKeyDeltasAsync(deltas);
+            SchedulePreKeySnapshotCompaction();
+        }
+
         public async Task RemovePreKeyAsync(int id)
         {
             EnsureInitialized();
@@ -800,11 +838,27 @@ namespace Unison.Uwp.Client
             }
         }
 
-        private async Task AppendPreKeyDeltaAsync(PreKeyDeltaRecord delta)
+        private Task AppendPreKeyDeltaAsync(PreKeyDeltaRecord delta)
         {
-            if (delta == null || _rootFolder == null)
+            if (delta == null)
+            {
+                return Task.CompletedTask;
+            }
+
+            return AppendPreKeyDeltasAsync(new[] { delta });
+        }
+
+        private async Task AppendPreKeyDeltasAsync(IReadOnlyList<PreKeyDeltaRecord> deltas)
+        {
+            if (deltas == null || deltas.Count == 0 || _rootFolder == null)
             {
                 return;
+            }
+
+            var lines = new StringBuilder();
+            foreach (PreKeyDeltaRecord delta in deltas)
+            {
+                lines.Append(JsonConvert.SerializeObject(delta, Formatting.None)).Append('\n');
             }
 
             await _preKeySnapshotLock.WaitAsync();
@@ -813,32 +867,37 @@ namespace Unison.Uwp.Client
                 var file = await _rootFolder.CreateFileAsync(
                     PREKEYS_DELTA_FILE,
                     CreationCollisionOption.OpenIfExists);
-                await FileIO.AppendTextAsync(
-                    file,
-                    JsonConvert.SerializeObject(delta, Formatting.None) + "\n");
+                await FileIO.AppendTextAsync(file, lines.ToString());
             }
             catch (Exception ex)
             {
-                // The individual pre-key file remains the source of truth. Invalidate
-                // the aggregate snapshot so the next cold start repairs it from the
-                // legacy per-key files rather than trusting stale data.
+                // The cache already holds the change, so rewrite the snapshot from it. Batched
+                // keys have no per-key file, so dropping the snapshot would lose them; only
+                // when the rewrite fails too is it invalidated for a legacy-file repair.
                 try
                 {
-                    var snapshotFile = await _rootFolder.TryGetItemAsync(PREKEYS_CACHE_FILE) as StorageFile;
-                    if (snapshotFile != null)
-                    {
-                        await snapshotFile.DeleteAsync(StorageDeleteOption.PermanentDelete);
-                    }
+                    await WritePreKeySnapshotLockedAsync();
                 }
                 catch
                 {
+                    try
+                    {
+                        var snapshotFile = await _rootFolder.TryGetItemAsync(PREKEYS_CACHE_FILE) as StorageFile;
+                        if (snapshotFile != null)
+                        {
+                            await snapshotFile.DeleteAsync(StorageDeleteOption.PermanentDelete);
+                        }
+                    }
+                    catch
+                    {
+                    }
                 }
 
                 RuntimeDiagnosticsService.Instance.RecordException(
                     "connection",
                     "prekey-delta-append-failed",
                     ex,
-                    "id=" + delta.Id + "; operation=" + delta.Operation);
+                    "count=" + deltas.Count + "; firstId=" + deltas[0].Id + "; operation=" + deltas[0].Operation);
             }
             finally
             {
@@ -893,38 +952,44 @@ namespace Unison.Uwp.Client
             await _preKeySnapshotLock.WaitAsync();
             try
             {
-                var snapshot = _preKeyCache
-                    .OrderBy(pair => pair.Key)
-                    .Select(pair => new PreKeyFileData
-                    {
-                        Id = pair.Key,
-                        PrivateKey = Convert.ToBase64String(pair.Value.KeyPair.Private),
-                        PublicKey = Convert.ToBase64String(pair.Value.KeyPair.Public)
-                    })
-                    .ToList();
-
-                var file = await _rootFolder.CreateFileAsync(
-                    PREKEYS_CACHE_FILE,
-                    CreationCollisionOption.ReplaceExisting);
-                await FileIO.WriteTextAsync(
-                    file,
-                    JsonConvert.SerializeObject(snapshot, Formatting.None));
-
-                var deltaFile = await _rootFolder.TryGetItemAsync(PREKEYS_DELTA_FILE) as StorageFile;
-                if (deltaFile != null)
-                {
-                    await deltaFile.DeleteAsync(StorageDeleteOption.PermanentDelete);
-                }
-
-                RuntimeDiagnosticsService.Instance.Write(
-                    "connection",
-                    "prekey-snapshot-written",
-                    "count=" + snapshot.Count);
+                await WritePreKeySnapshotLockedAsync();
             }
             finally
             {
                 _preKeySnapshotLock.Release();
             }
+        }
+
+        /// <summary>Snapshot from the cache, then drop the delta it now covers. Caller holds the snapshot lock.</summary>
+        private async Task WritePreKeySnapshotLockedAsync()
+        {
+            var snapshot = _preKeyCache
+                .OrderBy(pair => pair.Key)
+                .Select(pair => new PreKeyFileData
+                {
+                    Id = pair.Key,
+                    PrivateKey = Convert.ToBase64String(pair.Value.KeyPair.Private),
+                    PublicKey = Convert.ToBase64String(pair.Value.KeyPair.Public)
+                })
+                .ToList();
+
+            var file = await _rootFolder.CreateFileAsync(
+                PREKEYS_CACHE_FILE,
+                CreationCollisionOption.ReplaceExisting);
+            await FileIO.WriteTextAsync(
+                file,
+                JsonConvert.SerializeObject(snapshot, Formatting.None));
+
+            var deltaFile = await _rootFolder.TryGetItemAsync(PREKEYS_DELTA_FILE) as StorageFile;
+            if (deltaFile != null)
+            {
+                await deltaFile.DeleteAsync(StorageDeleteOption.PermanentDelete);
+            }
+
+            RuntimeDiagnosticsService.Instance.Write(
+                "connection",
+                "prekey-snapshot-written",
+                "count=" + snapshot.Count);
         }
 
         #endregion

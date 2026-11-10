@@ -27,6 +27,9 @@ namespace Unison.Baileys.Client
         // Pre-keys
         Task<PreKeyData> GetPreKeyAsync(int id);
         Task SetPreKeyAsync(int id, PreKeyData data);
+
+        /// <summary>Persists a whole upload batch in one write instead of one per key.</summary>
+        Task SetPreKeysAsync(IReadOnlyList<PreKeyData> keys);
         Task RemovePreKeyAsync(int id);
         Task<Dictionary<int, PreKeyData>> GetAllPreKeysAsync();
 

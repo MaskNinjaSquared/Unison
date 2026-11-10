@@ -170,11 +170,17 @@ namespace Unison.Uwp.Client
             FileKeyStore sharedKeyStore,
             bool reuseLoadedKeyState,
             LidMappingStore lidMappings = null,
-            ProfilePictureQueryCache pictureCache = null)
+            ProfilePictureQueryCache pictureCache = null,
+            int initialPreKeyUploadCount = 0)
         {
             if (authState == null)
             {
                 throw new ArgumentNullException(nameof(authState));
+            }
+
+            if (initialPreKeyUploadCount > 0)
+            {
+                _config.InitialPreKeyCount = initialPreKeyUploadCount;
             }
 
             _pictureCache = pictureCache;
@@ -2297,19 +2303,20 @@ namespace Unison.Uwp.Client
         /// Publishes prekeys when the server is running out of them.
         /// </summary>
         /// <remarks>
-        /// The provider here is deliberately built without the "credentials moved" callback the
-        /// retry path uses. A batch is over eight hundred keys, and a host that saves the whole
-        /// auth state on each one would write it eight hundred times - which, on the receive
-        /// path, is enough to starve the socket. The batch reports once, at the end.
+        /// The batch path raises the credentials callback once after minting and once after the
+        /// ack, never per key: a host that saved the auth state on each of hundreds of keys would
+        /// starve the receive path. Minted ids are saved even when the upload fails, so the next
+        /// connect re-announces them instead of minting a fresh batch on top.
         /// </remarks>
         private async Task UploadPreKeysAsync(WhatsAppSession session)
         {
             var upload = new UploadPreKeysUseCase(
                 session.Connection,
                 _authState,
-                new AuthStatePreKeyProvider(_authState, _keyStore),
+                new AuthStatePreKeyProvider(_authState, _keyStore, RaiseAuthStateUpdate),
                 _log);
 
+            var started = Stopwatch.StartNew();
             var uploaded = await new UploadPreKeysIfRequiredUseCase(
                     session.Connection,
                     upload,
@@ -2320,7 +2327,13 @@ namespace Unison.Uwp.Client
 
             if (uploaded > 0)
             {
-                RaiseAuthStateUpdate();
+                RuntimeDiagnosticsService.Instance.Write(
+                    "connection",
+                    "prekey-upload",
+                    "uploaded=" + uploaded +
+                    "; batch=" + _config.InitialPreKeyCount +
+                    "; firstUnuploaded=" + _authState.FirstUnuploadedPreKeyId +
+                    "; milliseconds=" + started.ElapsedMilliseconds);
             }
         }
 

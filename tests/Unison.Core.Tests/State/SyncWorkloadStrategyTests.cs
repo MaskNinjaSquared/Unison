@@ -44,6 +44,14 @@ namespace Unison.Core.Tests.State
         }
 
         [Fact]
+        public void Prekey_upload_batch_fits_the_unsupported_tier_and_keeps_rc14_elsewhere()
+        {
+            Assert.Equal(100, UnsupportedSyncWorkload.Instance.InitialPreKeyUploadCount);
+            Assert.Equal(812, LowSyncWorkload.Instance.InitialPreKeyUploadCount);
+            Assert.Equal(812, HighSyncWorkload.Instance.InitialPreKeyUploadCount);
+        }
+
+        [Fact]
         public void Lid_mapping_disk_batches_shrink_with_the_device()
         {
             SyncWorkloadStrategy unsupported = UnsupportedSyncWorkload.Instance;

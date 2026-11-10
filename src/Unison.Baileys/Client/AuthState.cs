@@ -55,6 +55,12 @@ namespace Unison.Baileys.Client
         public int NextPreKeyId;
 
         /// <summary>
+        /// Lowest one-time prekey id the server has not acked yet. Zero on installs written
+        /// before the watermark existed; every stored key then counts as unannounced.
+        /// </summary>
+        public int FirstUnuploadedPreKeyId;
+
+        /// <summary>
         /// User info (JID, name, phone) after successful login
         /// </summary>
         public UserInfo Me { get; set; }

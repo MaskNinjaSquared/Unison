@@ -52,6 +52,13 @@ namespace Unison.Core.State
         public abstract uint HistoryStorageQuotaMb { get; }
 
         /// <summary>
+        /// One-time prekeys minted and announced when the server runs low (post-login and the
+        /// low-count notification). Until one batch is acked the phone cannot encrypt the
+        /// history sync to this device, so the batch must fit inside the server's patience.
+        /// </summary>
+        public abstract int InitialPreKeyUploadCount { get; }
+
+        /// <summary>
         /// After the first sync, run names → contacts → one avatar pass → groups one after
         /// another with quiet gaps, instead of firing the background resolution cascade.
         /// </summary>
@@ -233,6 +240,10 @@ namespace Unison.Core.State
 
         public override uint HistoryStorageQuotaMb => 256;
 
+        // 812 keys outlived the socket (8e31b77c: 428 before the ack, three times). The
+        // low-count notification refills, so a small first batch costs nothing in reach.
+        public override int InitialPreKeyUploadCount => 100;
+
         public override bool SerializePostSyncEnrichment => true;
 
         // Still above Low's 6s — decorate later than 1 GB, earlier than the old 12s crawl.
@@ -327,6 +338,9 @@ namespace Unison.Core.State
 
         public override uint HistoryStorageQuotaMb => 1024;
 
+        // rc14 INITIAL_PREKEY_COUNT; 1 GB Lumias finish it before the server gives up.
+        public override int InitialPreKeyUploadCount => 812;
+
         public override bool SerializePostSyncEnrichment => true;
 
         public override int PostSyncEnrichmentQuietSeconds => 6;
@@ -417,6 +431,8 @@ namespace Unison.Core.State
         public override int AvatarFetchInterRequestDelayMs => 900;
 
         public override uint HistoryStorageQuotaMb => 10240;
+
+        public override int InitialPreKeyUploadCount => 812;
 
         public override bool SerializePostSyncEnrichment => false;
 
