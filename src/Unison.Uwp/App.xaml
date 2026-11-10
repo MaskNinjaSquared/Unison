@@ -79,6 +79,12 @@
             <SolidColorBrush x:Key="StatusRecentRingBrush" Color="#FF25D366"/>
             <!-- Fallback only; each shell ThemeDictionaries defines BootSurfaceBrush. -->
             <SolidColorBrush x:Key="BootSurfaceBrush" Color="#FF20C064"/>
+            <!-- Full-screen media viewers paint their caption on a near-black scrim in every shell,
+                 so links/mentions there cannot use the theme's ChatDetail* pair (dark-on-dark in
+                 light theme). CommentRichService derives the mention key from the link key by
+                 swapping the "LinkBrush" suffix — keep both names in step. -->
+            <SolidColorBrush x:Key="ImageViewerCaptionLinkBrush" Color="#FF53BDEB"/>
+            <SolidColorBrush x:Key="ImageViewerCaptionMentionBrush" Color="#FF25D366"/>
             <SolidColorBrush x:Key="TextBoxBackgroundThemeBrush" Color="Transparent"/>
             <SolidColorBrush x:Key="TextBoxFocusedBackgroundThemeBrush" Color="Transparent"/>
             <SolidColorBrush x:Key="TextBoxButtonBackgroundThemeBrush" Color="Transparent"/>

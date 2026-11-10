@@ -105,6 +105,17 @@ namespace Unison.WhatsAppClient.Helpers
             bool preserveAuthor = string.IsNullOrEmpty(author) &&
                                   !string.IsNullOrEmpty(chat.LastMessageAuthor) &&
                                   sameTip;
+
+            // ...and never *downgrade* one either. A stored message carries no push name, so the
+            // strip it builds is the sender's digits — a stand-in, not an improvement. Writing it
+            // here would beat ApplyAuthorParts to the field: that method does decide to keep the
+            // resolved name, but its restore only fills a *blank* prefix, so a prefix already
+            // overwritten above is never put back. post-replay reconcile after a resume swaps the
+            // tip, lands here, and undoes what ChatAuthorProjection resolved.
+            if (!preserveAuthor && IsAuthorDowngrade(chat, participantJid, senderName, author))
+            {
+                preserveAuthor = true;
+            }
             if (!preserveAuthor)
             {
                 chat.LastMessageAuthor = author ?? string.Empty;
@@ -152,6 +163,70 @@ namespace Unison.WhatsAppClient.Helpers
 
             ApplyAuthorParts(chat, participantJid, senderName, authorPrefix);
             return true;
+        }
+
+        /// <summary>
+        /// True when the incoming strip would replace a resolved author prefix with a digits
+        /// stand-in for the same person.
+        /// </summary>
+        /// <remarks>
+        /// Only fires when the incoming tip names the *same* participant the row already carries.
+        /// On a move from A to B the stored name is A's and the incoming prefix is B's digits:
+        /// the two describe different people, so keeping A's prefix would caption B's message
+        /// with A's name. Digits are unhelpful; a confident wrong name is worse.
+        /// All reads are fields already on the row — no lookup, no allocation, no I/O.
+        /// </remarks>
+        private static bool IsAuthorDowngrade(
+            ChatItem chat,
+            string participantJid,
+            string senderName,
+            string incomingAuthor)
+        {
+            if (chat == null ||
+                string.IsNullOrEmpty(incomingAuthor) ||
+                string.IsNullOrEmpty(chat.LastMessageAuthor))
+            {
+                return false;
+            }
+
+            // Something the incoming tip can stand on means this is not a downgrade.
+            if (GroupParticipantResolver.IsUsableDisplayLabel(
+                    senderName,
+                    participantJid ?? chat.LastMessageParticipantJid))
+            {
+                return false;
+            }
+
+            // The row must already hold a real name, and the prefix must be showing it.
+            if (!GroupParticipantResolver.IsUsableDisplayLabel(
+                    chat.LastMessageSenderName,
+                    chat.LastMessageParticipantJid))
+            {
+                return false;
+            }
+
+            if (ChatAuthorStripDecision.AuthorPrefixDisagrees(
+                    chat.LastMessageAuthor,
+                    chat.LastMessageSenderName))
+            {
+                return false;
+            }
+
+            // Same person, or we have no right to keep the old caption.
+            return SameParticipant(participantJid, chat.LastMessageParticipantJid);
+        }
+
+        private static bool SameParticipant(string incoming, string existing)
+        {
+            if (string.IsNullOrWhiteSpace(incoming) || string.IsNullOrWhiteSpace(existing))
+            {
+                return false;
+            }
+
+            return string.Equals(
+                JidHelper.Normalize(incoming),
+                JidHelper.Normalize(existing),
+                StringComparison.OrdinalIgnoreCase);
         }
 
         /// <summary>
