@@ -164,15 +164,6 @@
                                VerticalAlignment="Center"/>
                 </AppBarButton>
 
-                <CommandBar.SecondaryCommands>
-                    <AppBarButton x:Uid="Shell_LegacyMenu_StatusMoreProbe"
-                                  Label="More probe"
-                                  Command="{Binding DataContext.PrivacyCommand, ElementName=Root}">
-                        <AppBarButton.Icon>
-                            <FontIcon FontFamily="{StaticResource IconFont}" Glyph="&#xE710;"/>
-                        </AppBarButton.Icon>
-                    </AppBarButton>
-                </CommandBar.SecondaryCommands>
             </CommandBar>
         </Grid>
 

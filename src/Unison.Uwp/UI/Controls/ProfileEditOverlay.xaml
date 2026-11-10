@@ -1,0 +1,140 @@
+<UserControl
+    x:Class="Unison.Uwp.UI.Controls.ProfileEditOverlay"
+    x:Name="Root"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:Unison.Uwp.UI.Controls"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d"
+    d:DesignHeight="640"
+    d:DesignWidth="400"
+    Background="{ThemeResource SettingsPageBackgroundBrush}">
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <Grid Padding="4,8,16,8"
+              BorderBrush="{ThemeResource ChatDetailPaneSeparatorBrush}"
+              BorderThickness="0,0,0,1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <Button Style="{StaticResource ModernIconButtonStyle}"
+                    VerticalAlignment="Center"
+                    Margin="4,0,8,0"
+                    Command="{Binding CancelProfileEditCommand}"
+                    AutomationProperties.Name="Back">
+                <FontIcon Glyph="&#xE72B;" FontFamily="{StaticResource IconFont}" FontSize="18"/>
+            </Button>
+            <TextBlock Grid.Column="1"
+                       Text="{Binding ProfileEditTitle}"
+                       FontSize="20"
+                       FontFamily="{StaticResource MainFontSemibold}"
+                       FontWeight="SemiBold"
+                       Foreground="{ThemeResource WhatsAppTextHighBrush}"
+                       VerticalAlignment="Center"
+                       TextWrapping="NoWrap"
+                       TextTrimming="CharacterEllipsis"
+                       MaxLines="1"/>
+            <Button Grid.Column="2"
+                    Style="{StaticResource ModernIconButtonStyle}"
+                    VerticalAlignment="Center"
+                    Command="{Binding ToggleProfileEmojiCommand}"
+                    Visibility="{Binding IsLegacyChrome, ElementName=Root, Converter={StaticResource InvertedBooleanToVisibilityConverter}}"
+                    AutomationProperties.Name="Emoji">
+                <FontIcon Glyph="&#xE76E;" FontFamily="{StaticResource IconFont}" FontSize="18"/>
+            </Button>
+        </Grid>
+
+        <TextBox Grid.Row="1"
+                 Margin="16,16,16,16"
+                 AcceptsReturn="True"
+                 TextWrapping="Wrap"
+                 MaxLength="139"
+                 FontSize="18"
+                 FontFamily="{StaticResource MainFont}"
+                 Text="{Binding ProfileEditText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                 VerticalAlignment="Top"
+                 MinHeight="120"/>
+
+        <!-- Unison / WhatsApp: round confirm FAB. -->
+        <Button Grid.Row="1"
+                HorizontalAlignment="Right"
+                VerticalAlignment="Bottom"
+                Margin="0,0,16,16"
+                Width="56"
+                Height="56"
+                BorderThickness="0"
+                Background="Transparent"
+                AutomationProperties.Name="Save"
+                Command="{Binding SaveProfileEditCommand}"
+                Visibility="{Binding IsLegacyChrome, ElementName=Root, Converter={StaticResource InvertedBooleanToVisibilityConverter}}">
+            <Button.Template>
+                <ControlTemplate TargetType="Button">
+                    <Grid x:Name="FabRoot" Width="56" Height="56">
+                        <Ellipse Fill="{ThemeResource WhatsAppGreenFocusBrush}"/>
+                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        <VisualStateManager.VisualStateGroups>
+                            <VisualStateGroup x:Name="CommonStates">
+                                <VisualState x:Name="Normal"/>
+                                <VisualState x:Name="PointerOver"/>
+                                <VisualState x:Name="Pressed">
+                                    <VisualState.Setters>
+                                        <Setter Target="FabRoot.Opacity" Value="0.8"/>
+                                    </VisualState.Setters>
+                                </VisualState>
+                                <VisualState x:Name="Disabled">
+                                    <VisualState.Setters>
+                                        <Setter Target="FabRoot.Opacity" Value="0.5"/>
+                                    </VisualState.Setters>
+                                </VisualState>
+                            </VisualStateGroup>
+                        </VisualStateManager.VisualStateGroups>
+                    </Grid>
+                </ControlTemplate>
+            </Button.Template>
+            <FontIcon Glyph="&#xE73E;"
+                      FontFamily="{StaticResource IconFont}"
+                      FontSize="20"
+                      Foreground="White"/>
+        </Button>
+
+        <Border Grid.Row="2"
+                Height="280"
+                Visibility="{Binding IsProfileEmojiOpen, Converter={StaticResource BooleanToVisibilityConverter}}"
+                Background="{ThemeResource ChatDetailInputBarBackgroundBrush}"
+                BorderBrush="{ThemeResource ChatDetailPaneSeparatorBrush}"
+                BorderThickness="0,1,0,0">
+            <controls:EmojiPickerPanel x:Name="ProfileEmojiPanel"
+                                       GlyphPicked="ProfileEmojiPanel_GlyphPicked"/>
+        </Border>
+
+        <!-- Legacy: CommandBar (commands are local stubs — no websocket). -->
+        <CommandBar Grid.Row="3"
+                    Visibility="{Binding IsLegacyChrome, ElementName=Root, Converter={StaticResource BooleanToVisibilityConverter}}">
+            <AppBarButton x:Uid="Settings_ProfileEditSave"
+                          Label="Save"
+                          Icon="Accept"
+                          Command="{Binding SaveProfileEditCommand}"/>
+            <AppBarButton x:Uid="Settings_ProfileEditEmoji"
+                          Label="Emoji"
+                          Command="{Binding ToggleProfileEmojiCommand}">
+                <AppBarButton.Icon>
+                    <FontIcon Glyph="&#xE76E;" FontFamily="{StaticResource IconFont}"/>
+                </AppBarButton.Icon>
+            </AppBarButton>
+            <AppBarButton x:Uid="Settings_ProfileEditCancel"
+                          Label="Cancel"
+                          Icon="Cancel"
+                          Command="{Binding CancelProfileEditCommand}"/>
+        </CommandBar>
+    </Grid>
+</UserControl>

@@ -589,7 +589,8 @@ namespace Unison.Core.ViewModels
 
                 if (IsSelf(author.Jid))
                 {
-                    self = author;
+                    // PN and LID can appear as two author keys — keep the newest and sum counts.
+                    self = MergeSelfAuthor(self, author);
                     continue;
                 }
 
@@ -683,6 +684,42 @@ namespace Unison.Core.ViewModels
         }
 
         /// <summary>
+        /// PN and LID author keys for the same account must collapse to one SelfStatus row.
+        /// </summary>
+        private static StatusAuthorItem MergeSelfAuthor(StatusAuthorItem current, StatusAuthorItem next)
+        {
+            if (next == null)
+            {
+                return current;
+            }
+
+            if (current == null)
+            {
+                return next;
+            }
+
+            bool nextNewer = next.LatestTimestampUtc > current.LatestTimestampUtc;
+            StatusAuthorItem newer = nextNewer ? next : current;
+            return new StatusAuthorItem
+            {
+                Jid = nextNewer ? next.Jid : current.Jid,
+                DisplayName = nextNewer ? next.DisplayName : current.DisplayName,
+                AvatarUrl = nextNewer
+                    ? (!string.IsNullOrWhiteSpace(next.AvatarUrl) ? next.AvatarUrl : current.AvatarUrl)
+                    : (!string.IsNullOrWhiteSpace(current.AvatarUrl) ? current.AvatarUrl : next.AvatarUrl),
+                ViewState = next.ViewState == StatusViewState.Recent || current.ViewState == StatusViewState.Recent
+                    ? StatusViewState.Recent
+                    : StatusViewState.Viewed,
+                LatestTimestampUtc = nextNewer ? next.LatestTimestampUtc : current.LatestTimestampUtc,
+                ItemCount = current.ItemCount + next.ItemCount,
+                LatestKind = newer.LatestKind,
+                BackgroundArgb = newer.BackgroundArgb,
+                TextArgb = newer.TextArgb,
+                PreviewBody = newer.PreviewBody
+            };
+        }
+
+        /// <summary>
         /// Copy of the store row with "My status" as the title (and in the viewer header),
         /// the status thumb (account photo as fallback), and the update count as caption.
         /// </summary>
@@ -708,7 +745,11 @@ namespace Unison.Core.ViewModels
                 ViewState = source.ViewState,
                 ViewStateCaption = caption,
                 LatestTimestampUtc = source.LatestTimestampUtc,
-                ItemCount = source.ItemCount
+                ItemCount = source.ItemCount,
+                LatestKind = source.LatestKind,
+                BackgroundArgb = source.BackgroundArgb,
+                TextArgb = source.TextArgb,
+                PreviewBody = source.PreviewBody
             };
         }
 

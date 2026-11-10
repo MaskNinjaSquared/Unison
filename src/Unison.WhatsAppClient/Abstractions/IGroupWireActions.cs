@@ -64,5 +64,17 @@ namespace Unison.WhatsAppClient.Abstractions
 
         /// <summary>Baileys <c>updateProfilePicture</c> addressed to a group. Square JPEG only.</summary>
         Task UpdateGroupPictureAsync(string groupJid, byte[] jpeg);
+
+        /// <summary>True = only admins may edit subject/picture/description (locked).</summary>
+        Task UpdateGroupLockedAsync(string groupJid, bool adminsOnly);
+
+        /// <summary>True = only admins may send messages (announcement).</summary>
+        Task UpdateGroupAnnouncementAsync(string groupJid, bool adminsOnly);
+
+        /// <summary>True = only admins may add members (admin_add).</summary>
+        Task UpdateGroupMemberAddModeAsync(string groupJid, bool adminsOnly);
+
+        /// <summary>True = join-by-link requires admin approval.</summary>
+        Task UpdateGroupJoinApprovalAsync(string groupJid, bool required);
     }
 }

@@ -26,6 +26,19 @@ namespace Unison.Core.Models
 
         public ChatPreviewKind Kind { get; set; }
 
+        /// <summary>
+        /// ExtendedTextMessage background (ARGB). 0 means viewer uses the composer default teal.
+        /// </summary>
+        public uint BackgroundArgb { get; set; }
+
+        /// <summary>
+        /// ExtendedTextMessage text color (ARGB). 0 means white in the viewer.
+        /// </summary>
+        public uint TextArgb { get; set; }
+
+        /// <summary>Wire <c>ExtendedTextMessage.FontType</c> value; 0 is SYSTEM.</summary>
+        public int Font { get; set; }
+
         public string MediaUrl { get; set; }
 
         public string MediaDirectPath { get; set; }

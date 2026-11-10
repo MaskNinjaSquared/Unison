@@ -7,6 +7,7 @@ using Unison.Core.ViewModels;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
 using Windows.UI.Xaml.Input;
+using Windows.UI.Xaml.Media;
 using Windows.UI.Xaml.Media.Imaging;
 
 namespace Unison.Uwp.UI.Views
@@ -15,6 +16,8 @@ namespace Unison.Uwp.UI.Views
     {
         private bool _hooked;
         private bool _pendingVideoPlay;
+        private Image _viewerImage;
+        private MediaElement _viewerVideo;
 
         public StatusDetailViewModel ViewModel { get; private set; }
 
@@ -36,6 +39,11 @@ namespace Unison.Uwp.UI.Views
             if (ViewerRoot != null)
             {
                 ViewerRoot.SizeChanged += ViewerRoot_SizeChanged;
+            }
+
+            if (KindHost != null)
+            {
+                KindHost.DataContextChanged += KindHost_DataContextChanged;
             }
         }
 
@@ -71,6 +79,8 @@ namespace Unison.Uwp.UI.Views
             ViewModel.Closed += ViewModel_Closed;
             ViewModel.PropertyChanged += ViewModel_PropertyChanged;
             ViewModel.Segments.CollectionChanged += Segments_CollectionChanged;
+            ResolveMediaHosts();
+            ApplyMedia();
         }
 
         private void StatusDetailView_Unloaded(object sender, RoutedEventArgs e)
@@ -85,7 +95,14 @@ namespace Unison.Uwp.UI.Views
             ViewModel.PropertyChanged -= ViewModel_PropertyChanged;
             ViewModel.Segments.CollectionChanged -= Segments_CollectionChanged;
             ViewModel.Pause();
+            DetachVideoHandlers();
             StopVideo();
+        }
+
+        private void KindHost_DataContextChanged(FrameworkElement sender, DataContextChangedEventArgs args)
+        {
+            ResolveMediaHosts();
+            ApplyMedia();
         }
 
         private void ViewModel_Closed(object sender, EventArgs e)
@@ -96,6 +113,17 @@ namespace Unison.Uwp.UI.Views
 
         private void ViewModel_PropertyChanged(object sender, PropertyChangedEventArgs e)
         {
+            if (e.PropertyName == nameof(StatusDetailViewModel.CurrentKind))
+            {
+                // Template swap is async to the visual tree; resolve hosts on next tick.
+                Dispatcher.RunAsync(Windows.UI.Core.CoreDispatcherPriority.Normal, () =>
+                {
+                    ResolveMediaHosts();
+                    ApplyMedia();
+                });
+                return;
+            }
+
             if (e.PropertyName == nameof(StatusDetailViewModel.MediaUri) ||
                 e.PropertyName == nameof(StatusDetailViewModel.IsVideo) ||
                 e.PropertyName == nameof(StatusDetailViewModel.IsImage))
@@ -135,15 +163,46 @@ namespace Unison.Uwp.UI.Views
             }
         }
 
+        private void ResolveMediaHosts()
+        {
+            DetachVideoHandlers();
+            _viewerImage = FindDescendant<Image>(KindHost);
+            _viewerVideo = FindDescendant<MediaElement>(KindHost);
+            if (_viewerVideo != null)
+            {
+                _viewerVideo.MediaOpened += ViewerVideo_MediaOpened;
+                _viewerVideo.MediaEnded += ViewerVideo_MediaEnded;
+            }
+        }
+
+        private void DetachVideoHandlers()
+        {
+            if (_viewerVideo == null)
+            {
+                return;
+            }
+
+            _viewerVideo.MediaOpened -= ViewerVideo_MediaOpened;
+            _viewerVideo.MediaEnded -= ViewerVideo_MediaEnded;
+        }
+
         private void ApplyMedia()
         {
             _pendingVideoPlay = false;
             StopVideo();
-            ViewerImage.Source = null;
+            if (_viewerImage != null)
+            {
+                _viewerImage.Source = null;
+            }
 
             if (ViewModel == null)
             {
                 return;
+            }
+
+            if (_viewerImage == null && _viewerVideo == null)
+            {
+                ResolveMediaHosts();
             }
 
             string uri = ViewModel.MediaUri;
@@ -158,33 +217,37 @@ namespace Unison.Uwp.UI.Views
                 return;
             }
 
-            if (ViewModel.IsVideo)
+            if (ViewModel.IsVideo && _viewerVideo != null)
             {
-                ViewerVideo.Source = parsed;
+                _viewerVideo.Source = parsed;
                 if (HasMeasuredVideoViewport())
                 {
                     RemeasureVideo();
-                    ViewerVideo.Play();
+                    _viewerVideo.Play();
                 }
                 else
                 {
-                    // NarrowDetail / reopen: pane may still be width 0 — play on next SizeChanged.
                     _pendingVideoPlay = true;
                 }
             }
-            else if (ViewModel.IsImage)
+            else if (ViewModel.IsImage && _viewerImage != null)
             {
-                ViewerImage.Source = new BitmapImage(parsed);
+                _viewerImage.Source = new BitmapImage(parsed);
             }
         }
 
         private void StopVideo()
         {
             _pendingVideoPlay = false;
+            if (_viewerVideo == null)
+            {
+                return;
+            }
+
             try
             {
-                ViewerVideo.Stop();
-                ViewerVideo.Source = null;
+                _viewerVideo.Stop();
+                _viewerVideo.Source = null;
             }
             catch
             {
@@ -198,13 +261,13 @@ namespace Unison.Uwp.UI.Views
                 return;
             }
 
-            if (_pendingVideoPlay && ViewModel != null && ViewModel.IsVideo && ViewerVideo.Source != null)
+            if (_pendingVideoPlay && ViewModel != null && ViewModel.IsVideo && _viewerVideo != null && _viewerVideo.Source != null)
             {
                 _pendingVideoPlay = false;
                 RemeasureVideo();
                 try
                 {
-                    ViewerVideo.Play();
+                    _viewerVideo.Play();
                 }
                 catch
                 {
@@ -213,7 +276,7 @@ namespace Unison.Uwp.UI.Views
                 return;
             }
 
-            if (ViewModel != null && ViewModel.IsVideo && ViewerVideo.Source != null)
+            if (ViewModel != null && ViewModel.IsVideo && _viewerVideo != null && _viewerVideo.Source != null)
             {
                 RemeasureVideo();
             }
@@ -228,10 +291,15 @@ namespace Unison.Uwp.UI.Views
 
         private void RemeasureVideo()
         {
+            if (_viewerVideo == null)
+            {
+                return;
+            }
+
             try
             {
-                ViewerVideo.InvalidateMeasure();
-                ViewerVideo.InvalidateArrange();
+                _viewerVideo.InvalidateMeasure();
+                _viewerVideo.InvalidateArrange();
                 ViewerRoot?.UpdateLayout();
             }
             catch
@@ -255,8 +323,8 @@ namespace Unison.Uwp.UI.Views
                 _pendingVideoPlay = true;
             }
 
-            double seconds = ViewerVideo.NaturalDuration.HasTimeSpan
-                ? ViewerVideo.NaturalDuration.TimeSpan.TotalSeconds
+            double seconds = _viewerVideo != null && _viewerVideo.NaturalDuration.HasTimeSpan
+                ? _viewerVideo.NaturalDuration.TimeSpan.TotalSeconds
                 : 0d;
             ViewModel.ApplyVideoNaturalDuration(seconds);
         }
@@ -276,6 +344,33 @@ namespace Unison.Uwp.UI.Views
         {
             e.Handled = true;
             ViewModel?.GoNext();
+        }
+
+        private static T FindDescendant<T>(DependencyObject root) where T : DependencyObject
+        {
+            if (root == null)
+            {
+                return null;
+            }
+
+            int count = VisualTreeHelper.GetChildrenCount(root);
+            for (int i = 0; i < count; i++)
+            {
+                DependencyObject child = VisualTreeHelper.GetChild(root, i);
+                T match = child as T;
+                if (match != null)
+                {
+                    return match;
+                }
+
+                match = FindDescendant<T>(child);
+                if (match != null)
+                {
+                    return match;
+                }
+            }
+
+            return null;
         }
     }
 }

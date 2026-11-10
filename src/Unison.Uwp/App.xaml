@@ -3,6 +3,7 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:local="using:Unison.Uwp"
+    xmlns:controls="using:Unison.Uwp.UI.Controls"
     xmlns:converters="using:Unison.Uwp.UI.Converters"
     xmlns:helpers="using:Unison.Uwp.UI.Helpers">
 
@@ -102,6 +103,43 @@
             </Style>
             <Style TargetType="TextBox">
                 <Setter Property="FontFamily" Value="{StaticResource MainFont}"/>
+            </Style>
+
+            <!--
+              Narrow composers (4" phones) clip "Digite uma mensagem" under the mic/send
+              chrome. A TextBlock placeholder can ellipsize; the stock RichEditBox ContentControl
+              cannot. StatusComposer overrides Style with its own template.
+            -->
+            <Style x:Key="ChatComposerInputStyle" TargetType="controls:ChatComposerInput">
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="controls:ChatComposerInput">
+                            <Grid Background="{TemplateBinding Background}">
+                                <TextBlock x:Name="PlaceholderTextContentPresenter"
+                                           Text="{TemplateBinding PlaceholderText}"
+                                           Foreground="{ThemeResource TextControlPlaceholderForeground}"
+                                           Margin="{TemplateBinding BorderThickness}"
+                                           Padding="{TemplateBinding Padding}"
+                                           FontSize="{TemplateBinding FontSize}"
+                                           FontFamily="{TemplateBinding FontFamily}"
+                                           TextWrapping="NoWrap"
+                                           TextTrimming="CharacterEllipsis"
+                                           VerticalAlignment="Center"
+                                           IsHitTestVisible="False"/>
+                                <ScrollViewer x:Name="ContentElement"
+                                              Margin="{TemplateBinding BorderThickness}"
+                                              Padding="{TemplateBinding Padding}"
+                                              HorizontalScrollMode="{TemplateBinding ScrollViewer.HorizontalScrollMode}"
+                                              HorizontalScrollBarVisibility="{TemplateBinding ScrollViewer.HorizontalScrollBarVisibility}"
+                                              VerticalScrollMode="{TemplateBinding ScrollViewer.VerticalScrollMode}"
+                                              VerticalScrollBarVisibility="{TemplateBinding ScrollViewer.VerticalScrollBarVisibility}"
+                                              IsTabStop="False"
+                                              AutomationProperties.AccessibilityView="Raw"
+                                              ZoomMode="Disabled"/>
+                            </Grid>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
             </Style>
         </ResourceDictionary>
     </Application.Resources>

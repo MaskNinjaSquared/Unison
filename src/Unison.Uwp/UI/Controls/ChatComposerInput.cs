@@ -41,6 +41,15 @@ namespace Unison.Uwp.UI.Controls
             VerticalContentAlignment = VerticalAlignment.Center;
             IsColorFontEnabled = true;
 
+            // Ellipsizing placeholder for narrow chat composers. An explicit Style in XAML
+            // (StatusComposer) still wins over this default.
+            object composerStyle;
+            if (Style == null &&
+                Application.Current.Resources.TryGetValue("ChatComposerInputStyle", out composerStyle))
+            {
+                Style = composerStyle as Style;
+            }
+
             var font = Application.Current.Resources["ComposerEmojiFont"] as FontFamily;
             if (font != null)
             {

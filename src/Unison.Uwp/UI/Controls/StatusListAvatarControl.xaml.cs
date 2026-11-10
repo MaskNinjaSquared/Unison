@@ -4,14 +4,12 @@ using Windows.UI;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
 using Windows.UI.Xaml.Media;
-using Windows.UI.Xaml.Media.Imaging;
 
 namespace Unison.Uwp.UI.Controls
 {
     /// <summary>
-    /// Status list circle: thumb/avatar with a green (Recent) or gray (Viewed) ring.
-    /// Photo path mirrors <see cref="ChatAvatarControl"/> (Ellipse + ImageBrush UniformToFill)
-    /// so landscape video thumbs cover and crop on Creators Update the same way chat avatars do.
+    /// Status list circle: ring + face selected by kind (text color plate vs
+    /// <see cref="ChatAvatarControl"/> photo thumb).
     /// </summary>
     public sealed partial class StatusListAvatarControl : UserControl
     {
@@ -22,12 +20,14 @@ namespace Unison.Uwp.UI.Controls
         private static readonly SolidColorBrush ViewedRingBrush =
             new SolidColorBrush(Color.FromArgb(0xFF, 0x9E, 0x9E, 0x9E));
 
+        private double _innerSize = 48d;
+
         public static readonly DependencyProperty AvatarUrlProperty =
             DependencyProperty.Register(
                 nameof(AvatarUrl),
                 typeof(string),
                 typeof(StatusListAvatarControl),
-                new PropertyMetadata(null, OnAvatarUrlChanged));
+                new PropertyMetadata(null, OnFaceChanged));
 
         public static readonly DependencyProperty ViewStateProperty =
             DependencyProperty.Register(
@@ -43,9 +43,40 @@ namespace Unison.Uwp.UI.Controls
                 typeof(StatusListAvatarControl),
                 new PropertyMetadata(56d, OnSizeChanged));
 
-        /// <summary>What the brush is showing, so an unchanged picture is not decoded again.</summary>
-        private string _appliedUrl;
-        private int _appliedDecodeWidth;
+        public static readonly DependencyProperty ShowRingProperty =
+            DependencyProperty.Register(
+                nameof(ShowRing),
+                typeof(bool),
+                typeof(StatusListAvatarControl),
+                new PropertyMetadata(true, OnSizeChanged));
+
+        public static readonly DependencyProperty KindProperty =
+            DependencyProperty.Register(
+                nameof(Kind),
+                typeof(ChatPreviewKind),
+                typeof(StatusListAvatarControl),
+                new PropertyMetadata(ChatPreviewKind.Image, OnFaceChanged));
+
+        public static readonly DependencyProperty BackgroundArgbProperty =
+            DependencyProperty.Register(
+                nameof(BackgroundArgb),
+                typeof(uint),
+                typeof(StatusListAvatarControl),
+                new PropertyMetadata(0u, OnFaceChanged));
+
+        public static readonly DependencyProperty TextArgbProperty =
+            DependencyProperty.Register(
+                nameof(TextArgb),
+                typeof(uint),
+                typeof(StatusListAvatarControl),
+                new PropertyMetadata(0u, OnFaceChanged));
+
+        public static readonly DependencyProperty PreviewTextProperty =
+            DependencyProperty.Register(
+                nameof(PreviewText),
+                typeof(string),
+                typeof(StatusListAvatarControl),
+                new PropertyMetadata(null, OnFaceChanged));
 
         public StatusListAvatarControl()
         {
@@ -71,12 +102,43 @@ namespace Unison.Uwp.UI.Controls
             set { SetValue(SizeProperty, value); }
         }
 
-        private static void OnAvatarUrlChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+        /// <summary>False for the own-status strip (no Recent/Viewed ring).</summary>
+        public bool ShowRing
+        {
+            get { return (bool)GetValue(ShowRingProperty); }
+            set { SetValue(ShowRingProperty, value); }
+        }
+
+        public ChatPreviewKind Kind
+        {
+            get { return (ChatPreviewKind)GetValue(KindProperty); }
+            set { SetValue(KindProperty, value); }
+        }
+
+        public uint BackgroundArgb
+        {
+            get { return (uint)GetValue(BackgroundArgbProperty); }
+            set { SetValue(BackgroundArgbProperty, value); }
+        }
+
+        public uint TextArgb
+        {
+            get { return (uint)GetValue(TextArgbProperty); }
+            set { SetValue(TextArgbProperty, value); }
+        }
+
+        public string PreviewText
+        {
+            get { return (string)GetValue(PreviewTextProperty); }
+            set { SetValue(PreviewTextProperty, value); }
+        }
+
+        private static void OnFaceChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
         {
             var control = d as StatusListAvatarControl;
             if (control != null)
             {
-                control.ApplyPhoto();
+                control.ApplyFace();
             }
         }
 
@@ -102,85 +164,26 @@ namespace Unison.Uwp.UI.Controls
         {
             ApplySize();
             ApplyRing();
-            ApplyPhoto();
+            ApplyFace();
         }
 
-        private void ApplyPhoto()
+        private void ApplyFace()
         {
-            if (PhotoBrush == null || PhotoEllipse == null)
+            if (FaceHost == null)
             {
                 return;
             }
 
-            // Glyph fallback only — do not route status thumbs through ChatAvatarControl
-            // (keeps one photo path: Ellipse/ImageBrush, same as the chat list).
-            if (InnerAvatar != null)
+            // New instance so ContentControl re-runs the template selector when Kind flips.
+            FaceHost.Content = new StatusListAvatarFace
             {
-                InnerAvatar.AvatarUrl = null;
-            }
-
-            string url = AvatarUrl;
-            if (string.IsNullOrWhiteSpace(url))
-            {
-                _appliedUrl = null;
-                PhotoBrush.ImageSource = null;
-                PhotoEllipse.Visibility = Visibility.Collapsed;
-                return;
-            }
-
-            // Ellipse must already be sized (ApplySize) before the brush measures UniformToFill.
-            double inner = PhotoEllipse.Width > 0 ? PhotoEllipse.Width : 48d;
-            int decodeWidth = Math.Max(48, (int)Math.Round(inner));
-
-            if (string.Equals(_appliedUrl, url, StringComparison.Ordinal) &&
-                _appliedDecodeWidth == decodeWidth &&
-                PhotoBrush.ImageSource != null)
-            {
-                PhotoBrush.Stretch = Stretch.UniformToFill;
-                PhotoBrush.AlignmentX = AlignmentX.Center;
-                PhotoBrush.AlignmentY = AlignmentY.Center;
-                PhotoEllipse.Visibility = Visibility.Visible;
-                return;
-            }
-
-            try
-            {
-                // Same order as ChatAvatarControl: DecodePixel* before UriSource, then Stretch.
-                var bitmap = new BitmapImage
-                {
-                    DecodePixelType = DecodePixelType.Logical,
-                    DecodePixelWidth = decodeWidth
-                };
-                bitmap.UriSource = new Uri(url);
-
-                PhotoBrush.Stretch = Stretch.UniformToFill;
-                PhotoBrush.AlignmentX = AlignmentX.Center;
-                PhotoBrush.AlignmentY = AlignmentY.Center;
-                PhotoBrush.ImageSource = bitmap;
-                PhotoEllipse.Visibility = Visibility.Visible;
-                _appliedUrl = url;
-                _appliedDecodeWidth = decodeWidth;
-            }
-            catch
-            {
-                _appliedUrl = null;
-                PhotoBrush.ImageSource = null;
-                PhotoEllipse.Visibility = Visibility.Collapsed;
-            }
-        }
-
-        private void PhotoBrush_ImageFailed(object sender, ExceptionRoutedEventArgs e)
-        {
-            _appliedUrl = null;
-            if (PhotoBrush != null)
-            {
-                PhotoBrush.ImageSource = null;
-            }
-
-            if (PhotoEllipse != null)
-            {
-                PhotoEllipse.Visibility = Visibility.Collapsed;
-            }
+                Kind = Kind,
+                AvatarUrl = AvatarUrl,
+                BackgroundArgb = BackgroundArgb,
+                TextArgb = TextArgb,
+                PreviewText = PreviewText,
+                Size = _innerSize
+            };
         }
 
         private void ApplyRing()
@@ -198,7 +201,9 @@ namespace Unison.Uwp.UI.Controls
         private void ApplySize()
         {
             double outer = Size > 0 ? Size : 56d;
-            double inner = Math.Max(24d, outer - 8d);
+            bool showRing = ShowRing;
+            double inner = showRing ? Math.Max(24d, outer - 8d) : outer;
+
             if (RootGrid != null)
             {
                 RootGrid.Width = outer;
@@ -209,24 +214,20 @@ namespace Unison.Uwp.UI.Controls
             {
                 Ring.Width = outer;
                 Ring.Height = outer;
+                Ring.Visibility = showRing ? Visibility.Visible : Visibility.Collapsed;
             }
 
-            if (InnerAvatar != null)
+            _innerSize = inner;
+            if (FaceHost != null)
             {
-                InnerAvatar.Width = inner;
-                InnerAvatar.Height = inner;
-                InnerAvatar.Size = inner;
+                FaceHost.Width = inner;
+                FaceHost.Height = inner;
             }
 
-            if (PhotoEllipse != null)
+            // Restamp face Size when the hole diameter changes.
+            if (FaceHost != null && FaceHost.Content != null)
             {
-                PhotoEllipse.Width = inner;
-                PhotoEllipse.Height = inner;
-            }
-
-            if (!string.IsNullOrWhiteSpace(AvatarUrl))
-            {
-                ApplyPhoto();
+                ApplyFace();
             }
         }
     }

@@ -568,9 +568,7 @@
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="*"/>
             </Grid.RowDefinitions>
-            <Grid Padding="4,8,16,8"
-                  BorderBrush="{ThemeResource ChatDetailInputBarTopBorderBrush}"
-                  BorderThickness="0,0,0,1">
+            <Grid Padding="4,8,16,8">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="*"/>
@@ -593,6 +591,72 @@
                            TextTrimming="CharacterEllipsis"
                            MaxLines="1"/>
             </Grid>
+            <ScrollViewer Grid.Row="1"
+                          VerticalScrollBarVisibility="Auto"
+                          HorizontalScrollMode="Disabled"
+                          Padding="10,20,5,0"
+                          HorizontalScrollBarVisibility="Disabled">
+                <StackPanel MaxWidth="800"
+                            HorizontalAlignment="Stretch"
+                            Padding="15,0,15,24">
+                    <controls:SettingsSectionHeader x:Uid="CreateGroup_PermMembersSection"
+                                                    Text="Members can"
+                                                    Glyph="&#xE716;"
+                                                    Margin="0,12,0,5"/>
+                    <controls:SettingBox LocalizationUid="CreateGroup_PermEditSettings"
+                                         Header="Edit group settings"
+                                         Text="Includes the name, photo, description, disappearing messages, pin, unpin, and starred messages."
+                                         Glyph="&#xE70F;"
+                                         Margin="0,0,0,8">
+                        <controls:SettingBox.Control>
+                            <ToggleSwitch OnContent="" OffContent="" MinWidth="0" Margin="0"
+                                          IsOn="{Binding MembersCanEditGroupSettings, Mode=TwoWay}"/>
+                        </controls:SettingBox.Control>
+                    </controls:SettingBox>
+                    <controls:SettingBox LocalizationUid="CreateGroup_PermSendMessages"
+                                         Header="Send new messages"
+                                         Glyph="&#xE8BD;"
+                                         Margin="0,0,0,8">
+                        <controls:SettingBox.Control>
+                            <ToggleSwitch OnContent="" OffContent="" MinWidth="0" Margin="0"
+                                          IsOn="{Binding MembersCanSendMessages, Mode=TwoWay}"/>
+                        </controls:SettingBox.Control>
+                    </controls:SettingBox>
+                    <controls:SettingBox LocalizationUid="CreateGroup_PermAddMembers"
+                                         Header="Add members"
+                                         Glyph="&#xE8FA;"
+                                         Margin="0,0,0,8">
+                        <controls:SettingBox.Control>
+                            <ToggleSwitch OnContent="" OffContent="" MinWidth="0" Margin="0"
+                                          IsOn="{Binding MembersCanAddMembers, Mode=TwoWay}"/>
+                        </controls:SettingBox.Control>
+                    </controls:SettingBox>
+                    <controls:SettingBox LocalizationUid="CreateGroup_PermInviteLink"
+                                         Header="Invite via link or QR code"
+                                         Glyph="&#xE71B;"
+                                         Margin="0,0,0,8">
+                        <controls:SettingBox.Control>
+                            <ToggleSwitch OnContent="" OffContent="" MinWidth="0" Margin="0"
+                                          IsOn="{Binding MembersCanInviteViaLink, Mode=TwoWay}"/>
+                        </controls:SettingBox.Control>
+                    </controls:SettingBox>
+
+                    <controls:SettingsSectionHeader x:Uid="CreateGroup_PermAdminsSection"
+                                                    Text="Admins can"
+                                                    Glyph="&#xE7EE;"
+                                                    Margin="0,16,0,5"/>
+                    <controls:SettingBox LocalizationUid="CreateGroup_PermApproveMembers"
+                                         Header="Approve new members"
+                                         Text="When enabled, admins must approve people who join the group."
+                                         Glyph="&#xE73E;"
+                                         Margin="0,0,0,8">
+                        <controls:SettingBox.Control>
+                            <ToggleSwitch OnContent="" OffContent="" MinWidth="0" Margin="0"
+                                          IsOn="{Binding AdminsMustApproveNewMembers, Mode=TwoWay}"/>
+                        </controls:SettingBox.Control>
+                    </controls:SettingBox>
+                </StackPanel>
+            </ScrollViewer>
         </Grid>
 
         <!-- Same empty layout as CallsEmpty / chat empty: 1px divider + centered icon + title + body. -->

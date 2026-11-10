@@ -92,6 +92,34 @@ namespace Unison.Core.Tests.Helpers
         }
 
         [Fact]
+        public async Task Restrictive_permissions_send_post_create_updates()
+        {
+            var wire = new FakeWire { CreatedJid = NewGroup };
+            var creation = new GroupCreation(wire, (j, s) => Task.CompletedTask);
+
+            GroupCreateResult result = await creation.CreateGroupAsync(new GroupCreateRequest
+            {
+                Subject = "G",
+                ParticipantJids = new[] { "1@s.whatsapp.net" },
+                MembersCanEditGroupSettings = false,
+                MembersCanSendMessages = false,
+                MembersCanAddMembers = false,
+                AdminsMustApproveNewMembers = true
+            });
+
+            Assert.True(result.Succeeded);
+            Assert.Equal(
+                new[]
+                {
+                    "locked:" + NewGroup + ":True",
+                    "announcement:" + NewGroup + ":True",
+                    "member-add:" + NewGroup + ":True",
+                    "join-approval:" + NewGroup + ":True"
+                },
+                wire.FollowUps);
+        }
+
+        [Fact]
         public async Task Empty_subject_is_refused_before_the_wire()
         {
             var wire = new FakeWire { CreatedJid = NewGroup };
@@ -300,6 +328,30 @@ namespace Unison.Core.Tests.Helpers
             public Task UpdateGroupPictureAsync(string groupJid, byte[] jpeg)
             {
                 FollowUps.Add("picture:" + groupJid);
+                return Task.CompletedTask;
+            }
+
+            public Task UpdateGroupLockedAsync(string groupJid, bool adminsOnly)
+            {
+                FollowUps.Add("locked:" + groupJid + ":" + adminsOnly);
+                return Task.CompletedTask;
+            }
+
+            public Task UpdateGroupAnnouncementAsync(string groupJid, bool adminsOnly)
+            {
+                FollowUps.Add("announcement:" + groupJid + ":" + adminsOnly);
+                return Task.CompletedTask;
+            }
+
+            public Task UpdateGroupMemberAddModeAsync(string groupJid, bool adminsOnly)
+            {
+                FollowUps.Add("member-add:" + groupJid + ":" + adminsOnly);
+                return Task.CompletedTask;
+            }
+
+            public Task UpdateGroupJoinApprovalAsync(string groupJid, bool required)
+            {
+                FollowUps.Add("join-approval:" + groupJid + ":" + required);
                 return Task.CompletedTask;
             }
 

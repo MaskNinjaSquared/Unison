@@ -172,6 +172,18 @@ namespace Unison.Uwp.Client
         /// <summary>Baileys <c>updateProfilePicture</c> with a group as the target. Square JPEG.</summary>
         Task UpdateGroupPictureAsync(string groupJid, byte[] jpeg);
 
+        /// <summary>True = only admins may edit group info (locked).</summary>
+        Task UpdateGroupLockedAsync(string groupJid, bool adminsOnly);
+
+        /// <summary>True = only admins may send messages (announcement).</summary>
+        Task UpdateGroupAnnouncementAsync(string groupJid, bool adminsOnly);
+
+        /// <summary>True = only admins may add members.</summary>
+        Task UpdateGroupMemberAddModeAsync(string groupJid, bool adminsOnly);
+
+        /// <summary>True = join-by-link requires admin approval.</summary>
+        Task UpdateGroupJoinApprovalAsync(string groupJid, bool required);
+
         /// <summary>Baileys <c>updateBlockStatus</c> — block or unblock a direct JID.</summary>
         Task UpdateBlockStatusAsync(string jid, bool block);
 

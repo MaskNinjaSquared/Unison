@@ -1,0 +1,76 @@
+<UserControl
+    x:Class="Unison.Uwp.Shell.WhatsAppLegacy.Controls.NewStatusPickerOverlay"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:Unison.Uwp.UI.Controls"
+    Visibility="Collapsed">
+
+    <!--
+      Shell-root New Status dock (Legacy). Covers pivot + detail; opened via
+      StatusListView events, not hosted inside the Status pivot item.
+    -->
+    <Grid>
+        <Border x:Name="NewStatusScrim"
+                Background="#99000000"
+                Opacity="0"
+                Visibility="Collapsed"
+                Tapped="NewStatusScrim_Tapped"/>
+
+        <Grid x:Name="NewStatusDock"
+              VerticalAlignment="Bottom"
+              Visibility="Collapsed"
+              Background="{ThemeResource LegacyCommandBarBackgroundBrush}">
+            <Grid.RenderTransform>
+                <TranslateTransform x:Name="NewStatusDockTranslate" Y="1000"/>
+            </Grid.RenderTransform>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="54"/>
+            </Grid.RowDefinitions>
+
+            <TextBlock x:Uid="StatusList_NewStatusDockTitle"
+                       Text="NEW STATUS"
+                       Margin="10,14,10,4"
+                       FontFamily="{StaticResource MainFont}"
+                       FontSize="13"
+                       Foreground="{ThemeResource ChatDetailMutedTextBrush}"/>
+
+            <Grid x:Name="NewStatusTilesGrid"
+                  Grid.Row="1"
+                  Padding="5,5,5,0"
+                  HorizontalAlignment="Center">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <controls:AttachTile Grid.Column="0"
+                                     IconGlyph="&#xEB10;"
+                                     IconFontFamily="{StaticResource LegacyIconFont}"
+                                     Label="Photo &amp; video"
+                                     LocalizationUid="StatusList_NewMediaStatusTile"
+                                     Command="{Binding StartMediaStatusCommand}"/>
+
+                <controls:AttachTile Grid.Column="1"
+                                     IconGlyph="&#xE8D2;"
+                                     IconFontFamily="{StaticResource IconFont}"
+                                     Label="Text"
+                                     LocalizationUid="StatusList_NewTextStatusTile"
+                                     Command="{Binding StartTextStatusCommand}"/>
+            </Grid>
+
+            <Grid Grid.Row="2" Padding="12,0">
+                <Button Style="{StaticResource WhatsAppIconButtonStyle}"
+                        Width="40" Height="40"
+                        HorizontalAlignment="Left"
+                        VerticalAlignment="Center"
+                        Command="{Binding CloseNewStatusPickerCommand}"
+                        AutomationProperties.Name="Close">
+                    <TextBlock Text="&#xE70D;" FontFamily="{StaticResource IconFont}" FontSize="16"
+                               Foreground="{ThemeResource ChatDetailMutedTextBrush}"/>
+                </Button>
+            </Grid>
+        </Grid>
+    </Grid>
+</UserControl>

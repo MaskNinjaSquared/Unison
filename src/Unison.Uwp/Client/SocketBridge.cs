@@ -1171,6 +1171,30 @@ namespace Unison.Uwp.Client
             return groups.Settings.UpdateEphemeralAsync(groupJid, seconds);
         }
 
+        public Task UpdateGroupLockedAsync(string groupJid, bool adminsOnly)
+        {
+            GroupsModule groups = RequireGroups("group locked");
+            return groups.Settings.UpdateLockedAsync(groupJid, adminsOnly);
+        }
+
+        public Task UpdateGroupAnnouncementAsync(string groupJid, bool adminsOnly)
+        {
+            GroupsModule groups = RequireGroups("group announcement");
+            return groups.Settings.UpdateAnnouncementAsync(groupJid, adminsOnly);
+        }
+
+        public Task UpdateGroupMemberAddModeAsync(string groupJid, bool adminsOnly)
+        {
+            GroupsModule groups = RequireGroups("group member-add");
+            return groups.Settings.UpdateMemberAddModeAsync(groupJid, adminsOnly);
+        }
+
+        public Task UpdateGroupJoinApprovalAsync(string groupJid, bool required)
+        {
+            GroupsModule groups = RequireGroups("group join-approval");
+            return groups.Settings.UpdateJoinApprovalAsync(groupJid, required);
+        }
+
         public async Task UpdateGroupPictureAsync(string groupJid, byte[] jpeg)
         {
             RuntimeDiagnosticsService.Instance.Write(

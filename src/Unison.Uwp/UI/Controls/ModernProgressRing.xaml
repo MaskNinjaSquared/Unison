@@ -19,6 +19,6 @@
                       HorizontalAlignment="Stretch"
                       VerticalAlignment="Stretch"
                       IsActive="{x:Bind IsActive, Mode=OneWay}"
-                      Foreground="{x:Bind Foreground, Mode=OneWay}"/>
+                      Foreground="{ThemeResource SystemControlHighlightAccentBrush}"/>
     </Grid>
 </UserControl>

@@ -31,6 +31,10 @@ namespace Unison.Uwp.UI.Views
             {
                 ring.AvatarUrl = self.AvatarUrl;
                 ring.ViewState = self.ViewState;
+                ring.Kind = self.LatestKind;
+                ring.BackgroundArgb = self.BackgroundArgb;
+                ring.TextArgb = self.TextArgb;
+                ring.PreviewText = self.PreviewBody;
             }
 
             caption.Text = hasSelf

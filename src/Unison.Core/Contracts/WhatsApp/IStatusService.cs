@@ -63,8 +63,9 @@ namespace Unison.Core.Contracts.WhatsApp
 
         /// <summary>
         /// Publishes a text Status to <see cref="StatusTextPost.RecipientJids"/> plus the
-        /// account's own devices. Throws when not connected or when there is nobody to send to;
-        /// the sent item reaches "My status" through the normal live ingest.
+        /// account's own devices. Throws when not connected or when there is nobody to send to.
+        /// On success, persists the item locally (status@broadcast does not echo own posts on
+        /// this companion) and raises <see cref="StatusUpdated"/> so the list refreshes.
         /// </summary>
         Task<string> PublishTextStatusAsync(StatusTextPost post);
     }

@@ -39,7 +39,8 @@ namespace Unison.WhatsAppClient.Status
         {
             _store = store ?? throw new ArgumentNullException(nameof(store));
             _people = people ?? throw new ArgumentNullException(nameof(people));
-            _messages = messages ?? throw new ArgumentNullException(nameof(messages));
+            // Media download only — publish / list / ingest tolerate a null (tests + early boot).
+            _messages = messages;
             _thumbs = thumbs ?? throw new ArgumentNullException(nameof(thumbs));
             _diagnostics = diagnostics;
             _wire = wire;
@@ -88,6 +89,11 @@ namespace Unison.WhatsAppClient.Status
                 return Task.CompletedTask;
             }
 
+            if (row.IsFromMe)
+            {
+                StampSelfAuthorAliases(row);
+            }
+
             _diagnostics?.Write(
                 "status",
                 "live-built",
@@ -132,18 +138,102 @@ namespace Unison.WhatsAppClient.Status
                     "error=" + refused.ErrorCode + "; reason=" + refused.Reason +
                     "; recipients=" + recipients.Count);
 
-                // The local echo ingested this into "My status" within a few ms of the send,
-                // well before the refusal arrived. Leaving it there would show a Status that
-                // nobody received as though it had gone out.
+                // Optimistic local write (or a rare live echo) may already be in "My status".
+                // Leaving it there would show a Status nobody received.
                 await RollbackOwnItemAsync(refused.MessageId).ConfigureAwait(false);
                 throw;
             }
+
+            // status@broadcast does not echo our own post back on this companion — persist
+            // locally so StatusUpdated reloads "My status" / the author row.
+            await PersistOwnPublishedTextAsync(id, post, self).ConfigureAwait(false);
 
             _diagnostics?.Write(
                 "status",
                 "published",
                 "id=" + id + "; recipients=" + recipients.Count);
             return id;
+        }
+
+        /// <summary>
+        /// Writes the published text Status into <see cref="IHistoryStatusStore"/> and raises
+        /// <see cref="StatusUpdated"/> via store <c>Changed</c>. Safe to call when a later
+        /// echo also upserts the same id (merge).
+        /// </summary>
+        private async Task PersistOwnPublishedTextAsync(string messageId, StatusTextPost post, string selfJid)
+        {
+            if (string.IsNullOrWhiteSpace(messageId) || post == null)
+            {
+                return;
+            }
+
+            // PN vs LID: list SelfStatus is often the LID author row while Self.Id is PN.
+            // Stamp both aliases so GetActiveForAuthor / GetOwnStatuses (IsFromMe) never miss.
+            string authorPn = JidHelper.Normalize(selfJid);
+            string authorLid = JidHelper.Normalize(_jids?.Self?.Lid);
+            if (string.IsNullOrWhiteSpace(authorPn) && string.IsNullOrWhiteSpace(authorLid))
+            {
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(authorPn) ||
+                authorPn.IndexOf("@lid", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                authorPn = JidHelper.Normalize(_jids?.Self?.Id);
+                if (JidHelper.TryPhoneFromJid(authorPn) == null)
+                {
+                    string phone = _jids?.Self?.Phone;
+                    if (!string.IsNullOrWhiteSpace(phone))
+                    {
+                        authorPn = JidHelper.Normalize(phone.Trim() + "@s.whatsapp.net");
+                    }
+                }
+            }
+
+            // Prefer LID as AuthorJid when present — matches existing "My status" rows on companions.
+            string author = !string.IsNullOrWhiteSpace(authorLid) ? authorLid : authorPn;
+            if (string.IsNullOrWhiteSpace(author))
+            {
+                return;
+            }
+
+            DateTime now = DateTime.UtcNow;
+            var row = new HistoryStatus
+            {
+                AuthorJid = author,
+                AuthorLid = authorLid,
+                AuthorPn = JidHelper.TryPhoneFromJid(authorPn) != null ? authorPn : null,
+                MessageId = messageId.Trim(),
+                IsFromMe = true,
+                Body = post.Text?.Trim() ?? string.Empty,
+                Kind = ChatPreviewKind.Text,
+                BackgroundArgb = post.BackgroundArgb,
+                TextArgb = post.TextArgb,
+                Font = post.Font,
+                TimestampUtc = now,
+                ExpiresAtUtc = now.Add(HistoryStatus.Ttl),
+                SyncId = string.Empty,
+                SyncType = "local-publish",
+                UpdatedAtUtc = now,
+                IsViewed = true
+            };
+
+            try
+            {
+                await TryIngestLiveAsync(row).ConfigureAwait(false);
+                _diagnostics?.Write(
+                    "status",
+                    "local-publish-persisted",
+                    "id=" + row.MessageId + "; author=" + author);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[StatusFacade] Local publish persist failed id=" + messageId + ": " + ex.Message);
+                _diagnostics?.Write(
+                    "status",
+                    "local-publish-persist-failed",
+                    "id=" + messageId + "; error=" + ex.Message);
+            }
         }
 
         /// <summary>
@@ -255,6 +345,7 @@ namespace Unison.WhatsAppClient.Status
                 // profile avatar is only the fallback (Baileys/proto jpegThumbnail → MediaLocalUri /
                 // MediaPosterUri after materialize).
                 string listThumb = ResolveListThumbUri(latest);
+                bool isText = latest.Kind == ChatPreviewKind.Text;
                 authors.Add(new StatusAuthorItem
                 {
                     Jid = pair.Key,
@@ -266,7 +357,11 @@ namespace Unison.WhatsAppClient.Status
                         ? StatusViewState.Recent
                         : StatusViewState.Viewed,
                     LatestTimestampUtc = latest.TimestampUtc,
-                    ItemCount = itemCount
+                    ItemCount = itemCount,
+                    LatestKind = latest.Kind,
+                    BackgroundArgb = isText ? latest.BackgroundArgb : 0u,
+                    TextArgb = isText ? latest.TextArgb : 0u,
+                    PreviewBody = isText ? TruncateListPreview(latest.Body) : null
                 });
             }
 
@@ -333,7 +428,14 @@ namespace Unison.WhatsAppClient.Status
             string downloaded = null;
             try
             {
-                if (message.Kind == ChatMessageKind.Video)
+                if (_messages == null)
+                {
+                    _diagnostics?.Write(
+                        "status",
+                        "ensure-media-no-messages",
+                        StatusItemDiagnostics.DescribeItem(status));
+                }
+                else if (message.Kind == ChatMessageKind.Video)
                 {
                     downloaded = await _messages.EnsureVideoAvailableAsync(message).ConfigureAwait(false);
                 }
@@ -434,14 +536,39 @@ namespace Unison.WhatsAppClient.Status
         /// <inheritdoc />
         public async Task<IReadOnlyList<OwnStatusItem>> GetOwnStatusesAsync(string selfJid)
         {
-            if (string.IsNullOrWhiteSpace(selfJid))
+            // Own posts may be keyed by PN or LID across devices — do not rely on a single author key.
+            IReadOnlyList<HistoryStatus> active =
+                await _store.GetActiveAsync().ConfigureAwait(false);
+            if (active == null || active.Count == 0)
             {
                 return Array.Empty<OwnStatusItem>();
             }
 
-            IReadOnlyList<HistoryStatus> newestFirst =
-                await _store.GetActiveForAuthorAsync(selfJid).ConfigureAwait(false);
-            if (newestFirst == null || newestFirst.Count == 0)
+            var newestFirst = new List<HistoryStatus>();
+            var seenIds = new HashSet<string>(StringComparer.Ordinal);
+            for (int i = 0; i < active.Count; i++)
+            {
+                HistoryStatus row = active[i];
+                if (row == null || string.IsNullOrWhiteSpace(row.MessageId))
+                {
+                    continue;
+                }
+
+                // IsFromMe, or author stored under a self PN/LID key (split aliases).
+                bool mine = row.IsFromMe ||
+                    IsOwnAuthor(row.AuthorJid, selfJid) ||
+                    IsOwnAuthor(row.AuthorLid, selfJid) ||
+                    IsOwnAuthor(row.AuthorPn, selfJid);
+                if (!mine || !seenIds.Add(row.MessageId.Trim()))
+                {
+                    continue;
+                }
+
+                newestFirst.Add(row);
+            }
+
+            newestFirst.Sort((a, b) => CompareTimestamp(b.TimestampUtc, a.TimestampUtc));
+            if (newestFirst.Count == 0)
             {
                 return Array.Empty<OwnStatusItem>();
             }
@@ -465,17 +592,84 @@ namespace Unison.WhatsAppClient.Status
                     viewCount = 0;
                 }
 
+                bool isText = status.Kind == ChatPreviewKind.Text;
                 items.Add(new OwnStatusItem
                 {
                     MessageId = status.MessageId,
                     AuthorJid = status.AuthorJid,
+                    Kind = status.Kind,
                     ThumbnailUri = ResolveListThumbUri(status),
+                    Body = isText ? TruncateListPreview(status.Body) : null,
+                    BackgroundArgb = isText ? status.BackgroundArgb : 0u,
+                    TextArgb = isText ? status.TextArgb : 0u,
                     TimestampUtc = status.TimestampUtc,
                     ViewCount = viewCount
                 });
             }
 
             return items;
+        }
+
+        private bool IsOwnAuthor(string authorJid, string selfJid)
+        {
+            if (string.IsNullOrWhiteSpace(authorJid))
+            {
+                return false;
+            }
+
+            if (_jids != null && _jids.IsSelfLinked(authorJid))
+            {
+                return true;
+            }
+
+            string key = JidHelper.Normalize(authorJid);
+            string self = JidHelper.Normalize(selfJid);
+            if (!string.IsNullOrWhiteSpace(self) &&
+                string.Equals(key, self, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            string lid = JidHelper.Normalize(_jids?.Self?.Lid);
+            string pn = JidHelper.Normalize(_jids?.Self?.Id);
+            return (!string.IsNullOrWhiteSpace(lid) &&
+                    string.Equals(key, lid, StringComparison.OrdinalIgnoreCase)) ||
+                   (!string.IsNullOrWhiteSpace(pn) &&
+                    string.Equals(key, pn, StringComparison.OrdinalIgnoreCase));
+        }
+
+        /// <summary>Fills AuthorLid / AuthorPn so PN-keyed own posts still resolve via the LID self row.</summary>
+        private void StampSelfAuthorAliases(HistoryStatus row)
+        {
+            if (row == null || _jids?.Self == null)
+            {
+                return;
+            }
+
+            string lid = JidHelper.Normalize(_jids.Self.Lid);
+            string pn = JidHelper.Normalize(_jids.Self.Id);
+            if (JidHelper.TryPhoneFromJid(pn) == null)
+            {
+                string phone = _jids.Self.Phone;
+                if (!string.IsNullOrWhiteSpace(phone))
+                {
+                    pn = JidHelper.Normalize(phone.Trim() + "@s.whatsapp.net");
+                }
+                else
+                {
+                    pn = null;
+                }
+            }
+
+            if (string.IsNullOrWhiteSpace(row.AuthorLid) && !string.IsNullOrWhiteSpace(lid))
+            {
+                row.AuthorLid = lid;
+            }
+
+            if (string.IsNullOrWhiteSpace(row.AuthorPn) && !string.IsNullOrWhiteSpace(pn))
+            {
+                row.AuthorPn = pn;
+            }
         }
 
         public async Task MarkViewedAsync(string authorJid, string messageId)
@@ -578,9 +772,31 @@ namespace Unison.WhatsAppClient.Status
         /// Protocol thumb already on disk (poster for video, local thumb for image/sticker).
         /// Full media URIs are not used for the list circle.
         /// </summary>
+        private static string TruncateListPreview(string body)
+        {
+            if (string.IsNullOrWhiteSpace(body))
+            {
+                return string.Empty;
+            }
+
+            string trimmed = body.Trim();
+            const int maxChars = 80;
+            if (trimmed.Length <= maxChars)
+            {
+                return trimmed;
+            }
+
+            return trimmed.Substring(0, maxChars).TrimEnd() + "…";
+        }
+
         private static string ResolveListThumbUri(HistoryStatus latest)
         {
             if (latest == null)
+            {
+                return null;
+            }
+
+            if (latest.Kind == ChatPreviewKind.Text)
             {
                 return null;
             }

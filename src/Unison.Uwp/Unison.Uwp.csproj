@@ -410,6 +410,9 @@
     <Compile Include="UI\Controls\ProfileSettingsControl.xaml.cs">
       <DependentUpon>ProfileSettingsControl.xaml</DependentUpon>
     </Compile>
+    <Compile Include="UI\Controls\ProfileEditOverlay.xaml.cs">
+      <DependentUpon>ProfileEditOverlay.xaml</DependentUpon>
+    </Compile>
     <Compile Include="UI\Controls\WhatsAppProfileControl.xaml.cs">
       <DependentUpon>WhatsAppProfileControl.xaml</DependentUpon>
     </Compile>
@@ -558,6 +561,9 @@
     <Compile Include="Shell\WhatsAppLegacy\Controls\NewConversationView.xaml.cs">
       <DependentUpon>NewConversationView.xaml</DependentUpon>
     </Compile>
+    <Compile Include="Shell\WhatsAppLegacy\Controls\NewStatusPickerOverlay.xaml.cs">
+      <DependentUpon>NewStatusPickerOverlay.xaml</DependentUpon>
+    </Compile>
     <Compile Include="UI\Controls\FavoritesEmptyControl.xaml.cs">
       <DependentUpon>FavoritesEmptyControl.xaml</DependentUpon>
     </Compile>
@@ -572,6 +578,9 @@
     </Compile>
     <Compile Include="UI\TemplateSelectors\MessageTemplateSelector.cs" />
     <Compile Include="UI\TemplateSelectors\ChatPreviewKindTemplateSelector.cs" />
+    <Compile Include="UI\TemplateSelectors\StatusKindTemplateSelector.cs" />
+    <Compile Include="UI\TemplateSelectors\StatusListAvatarKindTemplateSelector.cs" />
+    <Compile Include="UI\TemplateSelectors\SettingBoxLayoutTemplateSelector.cs" />
     <Compile Include="UI\Templates\ChatItemTemplates.xaml.cs">
       <DependentUpon>ChatItemTemplates.xaml</DependentUpon>
     </Compile>
@@ -628,6 +637,10 @@
     </Compile>
     <Compile Include="UI\Controls\ChatAvatarControl.xaml.cs">
       <DependentUpon>ChatAvatarControl.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="UI\Controls\StatusListAvatarFace.cs" />
+    <Compile Include="UI\Controls\StatusTextListAvatarControl.xaml.cs">
+      <DependentUpon>StatusTextListAvatarControl.xaml</DependentUpon>
     </Compile>
     <Compile Include="UI\Controls\StatusListAvatarControl.xaml.cs">
       <DependentUpon>StatusListAvatarControl.xaml</DependentUpon>
@@ -970,6 +983,10 @@
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </Page>
+    <Page Include="UI\Controls\StatusTextListAvatarControl.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
     <Page Include="UI\Controls\StatusListAvatarControl.xaml">
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
@@ -1099,6 +1116,10 @@
       <SubType>Designer</SubType>
     </Page>
     <Page Include="UI\Controls\ProfilePhotoButton.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Include="UI\Controls\ProfileEditOverlay.xaml">
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </Page>
@@ -1355,6 +1376,10 @@
       <SubType>Designer</SubType>
     </Page>
     <Page Include="Shell\WhatsAppLegacy\Controls\NewConversationView.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Include="Shell\WhatsAppLegacy\Controls\NewStatusPickerOverlay.xaml">
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </Page>

@@ -12,9 +12,13 @@ namespace Unison.Core.Models
         private string _displayName;
         private string _avatarUrl;
         private string _viewStateCaption;
+        private string _previewBody;
         private DateTime? _latestTimestampUtc;
         private int _itemCount;
         private StatusViewState _viewState;
+        private ChatPreviewKind _latestKind;
+        private uint _backgroundArgb;
+        private uint _textArgb;
 
         public string Jid
         {
@@ -32,6 +36,38 @@ namespace Unison.Core.Models
         {
             get => _avatarUrl;
             set => Set(ref _avatarUrl, value);
+        }
+
+        /// <summary>Kind of the author's newest unexpired Status (drives list avatar face).</summary>
+        public ChatPreviewKind LatestKind
+        {
+            get => _latestKind;
+            set => Set(ref _latestKind, value);
+        }
+
+        /// <summary>
+        /// Text-status background (ARGB). 0 means the list avatar uses the composer teal default.
+        /// </summary>
+        public uint BackgroundArgb
+        {
+            get => _backgroundArgb;
+            set => Set(ref _backgroundArgb, value);
+        }
+
+        /// <summary>
+        /// Text-status foreground (ARGB). 0 means white in the list avatar.
+        /// </summary>
+        public uint TextArgb
+        {
+            get => _textArgb;
+            set => Set(ref _textArgb, value);
+        }
+
+        /// <summary>Newest text Status body for the colored list avatar (null for media).</summary>
+        public string PreviewBody
+        {
+            get => _previewBody;
+            set => Set(ref _previewBody, value);
         }
 
         /// <summary><see cref="StatusViewState.Recent"/> or <see cref="StatusViewState.Viewed"/>.</summary>

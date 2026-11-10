@@ -5,12 +5,10 @@ using Microsoft.Extensions.DependencyInjection;
 using Unison.Core.Contracts;
 using Unison.Core.Models;
 using Unison.Core.ViewModels;
-using Unison.Uwp.UI.Controls;
 using Unison.Uwp.UI.Views;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
 using Windows.UI.Xaml.Input;
-using Windows.UI.Xaml.Media.Animation;
 
 namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
 {
@@ -33,14 +31,6 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
         private bool _hooked;
         private bool _suppressSelectionChanged;
         private ShellViewModel _shell;
-        private Storyboard _newStatusDockStoryboard;
-        private bool _newStatusDockOpen;
-
-        /// <summary>Same slide and fade as the chat attachment bar.</summary>
-        private static readonly TimeSpan NewStatusDockDuration = TimeSpan.FromMilliseconds(220);
-
-        /// <summary>Attachment-bar tile ceiling (Windows Phone 8 size), three across.</summary>
-        private const double NewStatusTileMaxSize = 150;
 
         public StatusListViewModel ViewModel { get; private set; }
 
@@ -58,6 +48,11 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
 
         public event EventHandler SettingsRequested;
 
+        /// <summary>
+        /// Shell hosts the fullscreen New Status dock; the list only signals open/close.
+        /// </summary>
+        public event EventHandler<bool> NewStatusPickerOpenChanged;
+
         public StatusListView()
         {
             if (App.Services != null)
@@ -68,7 +63,6 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             }
 
             InitializeComponent();
-            SizeChanged += (_, e) => ApplyNewStatusTileSize(e.NewSize.Width);
             MyStatusItem.AddHandler(TappedEvent, new TappedEventHandler(MyStatusRow_Tapped), true);
             Loaded += StatusListView_Loaded;
             Unloaded += StatusListView_Unloaded;
@@ -298,7 +292,7 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             }
             else if (e.PropertyName == nameof(StatusListViewModel.IsNewStatusPickerOpen))
             {
-                SetNewStatusDockOpen(ViewModel.IsNewStatusPickerOpen);
+                NewStatusPickerOpenChanged?.Invoke(this, ViewModel.IsNewStatusPickerOpen);
             }
         }
 
@@ -348,98 +342,6 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
 
             ViewModel.SelectedAuthor = author;
             AuthorSelected?.Invoke(this, new StatusAuthorSelectedEventArgs(author));
-        }
-
-        private void NewStatusScrim_Tapped(object sender, TappedRoutedEventArgs e)
-        {
-            e.Handled = true;
-            ViewModel?.CloseNewStatusPicker();
-        }
-
-        /// <summary>Scrim fades, dock slides its own measured height (attachment bar pattern).</summary>
-        private void SetNewStatusDockOpen(bool open)
-        {
-            if (_newStatusDockOpen == open)
-            {
-                return;
-            }
-
-            _newStatusDockOpen = open;
-            _newStatusDockStoryboard?.Stop();
-
-            if (open)
-            {
-                NewStatusScrim.Visibility = Visibility.Visible;
-                NewStatusDock.Visibility = Visibility.Visible;
-                ApplyNewStatusTileSize(ActualWidth);
-                NewStatusDock.UpdateLayout();
-            }
-
-            double distance = NewStatusDock.ActualHeight > 0 ? NewStatusDock.ActualHeight : 320;
-            var easing = new CubicEase { EasingMode = open ? EasingMode.EaseOut : EasingMode.EaseIn };
-            var slide = new DoubleAnimation
-            {
-                From = open ? distance : 0,
-                To = open ? 0 : distance,
-                Duration = new Duration(NewStatusDockDuration),
-                EasingFunction = easing
-            };
-            Storyboard.SetTarget(slide, NewStatusDock);
-            Storyboard.SetTargetProperty(slide, "(UIElement.RenderTransform).(TranslateTransform.Y)");
-
-            var fade = new DoubleAnimation
-            {
-                To = open ? 1 : 0,
-                Duration = new Duration(NewStatusDockDuration)
-            };
-            Storyboard.SetTarget(fade, NewStatusScrim);
-            Storyboard.SetTargetProperty(fade, "Opacity");
-
-            var storyboard = new Storyboard();
-            storyboard.Children.Add(slide);
-            storyboard.Children.Add(fade);
-            if (!open)
-            {
-                storyboard.Completed += NewStatusDockHide_Completed;
-            }
-
-            _newStatusDockStoryboard = storyboard;
-            storyboard.Begin();
-        }
-
-        private void NewStatusDockHide_Completed(object sender, object e)
-        {
-            // A reopen during the slide out leaves this queued; it must not collapse the dock.
-            if (_newStatusDockOpen)
-            {
-                return;
-            }
-
-            NewStatusScrim.Visibility = Visibility.Collapsed;
-            NewStatusDock.Visibility = Visibility.Collapsed;
-        }
-
-        /// <summary>Tiles sized as in the attachment bar (three across), so both docks match.</summary>
-        private void ApplyNewStatusTileSize(double width)
-        {
-            if (NewStatusTilesGrid == null || width <= 0)
-            {
-                return;
-            }
-
-            double size = Math.Min(NewStatusTileMaxSize, (width - 10 - (3 * 10)) / 3);
-            if (size <= 0)
-            {
-                return;
-            }
-
-            foreach (UIElement child in NewStatusTilesGrid.Children)
-            {
-                if (child is AttachTile tile)
-                {
-                    tile.Width = size;
-                }
-            }
         }
 
         private void MenuButton_Click(object sender, RoutedEventArgs e)

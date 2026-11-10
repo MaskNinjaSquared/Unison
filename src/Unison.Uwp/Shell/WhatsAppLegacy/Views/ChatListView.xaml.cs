@@ -151,11 +151,7 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
 
             if (ListCommandBar != null)
             {
-                if (channelsOnly)
-                {
-                    ListCommandBar.SecondaryCommands.Clear();
-                }
-
+                // Keep Profile / Debug / Settings on every list scope (Chats, Channels, Archived).
                 CenterPrimaryCommands(ListCommandBar);
             }
         }

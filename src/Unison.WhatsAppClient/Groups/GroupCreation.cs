@@ -78,6 +78,7 @@ namespace Unison.WhatsAppClient.Groups
             result.PhotoFailed = !await TrySetPictureAsync(jid, request.PhotoBytes).ConfigureAwait(false);
             result.EphemeralFailed = !await TrySetEphemeralAsync(jid, request.Ephemeral.ToSeconds())
                 .ConfigureAwait(false);
+            await TryApplyPermissionsAsync(jid, request).ConfigureAwait(false);
             // StartNewChat already seeds the row subject; cache fill must not block the photo IQ.
             ScheduleName(jid, subject);
             return result;
@@ -197,6 +198,61 @@ namespace Unison.WhatsAppClient.Groups
             {
                 Debug.WriteLine("[GroupCreation] ephemeral: " + ex.Message);
                 return false;
+            }
+        }
+
+        /// <summary>
+        /// Create IQ has no permission children; apply non-default flags like ephemeral/picture.
+        /// Defaults match a fresh WhatsApp group (members can edit/send/add; no join approval).
+        /// </summary>
+        private async Task TryApplyPermissionsAsync(string jid, GroupCreateRequest request)
+        {
+            if (request == null || string.IsNullOrWhiteSpace(jid))
+            {
+                return;
+            }
+
+            // MembersCan* toggles invert the wire "adminsOnly" flags.
+            if (!request.MembersCanEditGroupSettings)
+            {
+                await TryPermissionAsync(
+                    "locked",
+                    () => _wire.UpdateGroupLockedAsync(jid, adminsOnly: true)).ConfigureAwait(false);
+            }
+
+            if (!request.MembersCanSendMessages)
+            {
+                await TryPermissionAsync(
+                    "announcement",
+                    () => _wire.UpdateGroupAnnouncementAsync(jid, adminsOnly: true)).ConfigureAwait(false);
+            }
+
+            if (!request.MembersCanAddMembers)
+            {
+                await TryPermissionAsync(
+                    "member-add",
+                    () => _wire.UpdateGroupMemberAddModeAsync(jid, adminsOnly: true)).ConfigureAwait(false);
+            }
+
+            if (request.AdminsMustApproveNewMembers)
+            {
+                await TryPermissionAsync(
+                    "join-approval",
+                    () => _wire.UpdateGroupJoinApprovalAsync(jid, required: true)).ConfigureAwait(false);
+            }
+
+            // MembersCanInviteViaLink is UI-only until an invite-permission IQ exists.
+        }
+
+        private async Task TryPermissionAsync(string label, Func<Task> send)
+        {
+            try
+            {
+                await send().ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[GroupCreation] " + label + ": " + ex.Message);
             }
         }
 

@@ -774,29 +774,35 @@
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
 
-                <!-- Reply sling handle: invisible at rest, fades in while dragging left. -->
-                <Grid Grid.Column="0"
-                      Tag="ReplySwipeHandle"
-                      Width="32"
+                <!--
+                  Reply sling handle: zero layout width so 4" screens do not pay 40px of empty
+                  gutter on every received row. The icon paints into the slot's left margin while
+                  the finger drags (Opacity driven from code-behind).
+                -->
+                <Grid Tag="ReplySwipeHandle"
+                      Width="0"
                       Height="32"
-                      Margin="0,0,8,0"
                       VerticalAlignment="Center"
                       Opacity="0"
                       IsHitTestVisible="False">
-                    <Ellipse Fill="{ThemeResource ChatDetailAccentBrush}" Opacity="0.2"/>
-                    <FontIcon Glyph="&#xE97A;"
-                              FontFamily="{StaticResource IconFont}"
-                              FontSize="16"
-                              Foreground="{ThemeResource ChatDetailAccentBrush}"
-                              HorizontalAlignment="Center"
-                              VerticalAlignment="Center"/>
+                    <Grid Width="32"
+                          Height="32"
+                          Margin="-36,0,0,0"
+                          HorizontalAlignment="Left">
+                        <Ellipse Fill="{ThemeResource ChatDetailAccentBrush}" Opacity="0.2"/>
+                        <FontIcon Glyph="&#xE97A;"
+                                  FontFamily="{StaticResource IconFont}"
+                                  FontSize="16"
+                                  Foreground="{ThemeResource ChatDetailAccentBrush}"
+                                  HorizontalAlignment="Center"
+                                  VerticalAlignment="Center"/>
+                    </Grid>
                 </Grid>
 
                 <!-- Local unread accent (IsRead == false). Hidden after open commits read. -->
-                <Border Grid.Column="1"
+                <Border Grid.Column="0"
                         Width="3"
                         MinHeight="18"
                         Margin="0,2,6,2"
@@ -806,7 +812,7 @@
                         Visibility="{x:Bind ShowUnreadMarker, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
 
                 <!-- Author avatar gutter (group incoming). Photo + contact fallback like the chat list. -->
-                <Grid Grid.Column="2"
+                <Grid Grid.Column="1"
                       Width="32"
                       Margin="0,0,8,0"
                       VerticalAlignment="Top"
@@ -822,7 +828,7 @@
                 </Grid>
 
                 <Grid x:Name="ReceivedBubblePanel"
-                      Grid.Column="3"
+                      Grid.Column="2"
                       HorizontalAlignment="Left"
                       MaxWidth="432">
                 <controls:MessageBubbleChromeHost
@@ -1409,7 +1415,7 @@
                         Width="40"
                         Visibility="{x:Bind ShowContactSlot, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
                 <Button Grid.Column="1"
-                        Margin="40,-4,4,0"
+                        Margin="0,-4,4,0"
                         Style="{StaticResource ChatDetailReactionChipButtonStyle}"
                         Background="{ThemeResource ChatDetailReactionChipReceivedBrush}"
                         BorderBrush="{ThemeResource ChatDetailReactionChipReceivedBorderBrush}"

@@ -2,6 +2,69 @@
 
 Newest first.
 
+## Status list — text avatars (color + Viewbox)
+
+Text Status rows use a colored circle with the body scaled via `Viewbox`
+(`StatusTextListAvatarControl`). `StatusListAvatarControl` hosts a
+`StatusListAvatarKindTemplateSelector` (photo → `ChatAvatarControl`, text →
+the color face). `StatusAuthorItem` / `OwnStatusItem` carry
+`LatestKind`/`Kind`, ARGB, and preview body from `StatusFacade`.
+
+## Own Status PN/LID — My status list after local publish
+
+Local publish and live own echoes now stamp `AuthorLid`/`AuthorPn`.
+`GetOwnStatusesAsync` collects all `IsFromMe` / self-linked rows (not a single
+author key), and Legacy `SelfStatus` merges PN+LID author groups so the new
+item appears in “My status” immediately after publish.
+
+## Legacy New Status dock on Shell + pivot loaders
+
+Legacy New Status picker (scrim + tiles) is hosted on `ShellView` root
+(`NewStatusPickerOverlay`, ColumnSpan 2) and opens from Status list events —
+no longer clipped inside the Status pivot. First materialize of any Legacy
+pivot tab shows the global `SectionLoadingOverlay` (with a paint delay) so the
+ring is visible during the pivot switch.
+
+## Own text Status — local persist after publish
+
+Companions do not get a status@broadcast echo of their own posts. After a
+successful `PublishTextStatusAsync`, `StatusFacade` upserts the item into
+`IHistoryStatusStore` (`SyncType=local-publish`) so store `Changed` raises
+`StatusUpdated` and the Status list reloads. Refused publishes still roll back
+via `DeleteOwnItemAsync` without keeping a local row.
+
+## Legacy Status fullscreen + pivot loaders + Unison Light accents
+
+Legacy `ShellStatusDetail` is a shell `ColumnSpan=2` overlay (empty Status pane stays in
+`DetailHost`). Pivot first-load spinner is global only for Chats; other tabs use in-section
+rings. Unison Light no longer forces ChatDetailInfo white `ToggleSwitch*` /
+`AccentTextFill*` globally (scoped on `ChatDetailInfoControl`); `ModernProgressRing`
+uses `SystemControlHighlightAccentBrush`.
+
+## Status text viewer + group create permissions + profile edit overlays
+
+Status viewer selects Text vs media via `StatusKindTemplateSelector`; text posts
+keep ExtendedTextMessage ARGB/font on `HistoryStatus` and show a center eye/views
+chip (0 until counts are wired into the viewer). Create-group permissions overlay
+uses SettingBox toggles; non-default flags run post-create through
+`UpdateGroupSettingsUseCase` (invite-link toggle is UI-only). Own-profile Name/About
+open a local edit overlay (FAB / Legacy CommandBar) with emoji — save does not hit
+the websocket yet.
+
+## Mobile — journal keepalive StartAsync early fails
+
+`LocationKeepAliveService.StartAsync` now writes `keepalive|*` on every
+failure path that returns false (not only ExtendedExecution deny/revoke):
+`start-rejected` (shutting down), `geolocator-setup-failed`,
+`location-access-request-failed`, `location-access-denied` (`access=…;coarse=False`),
+plus existing `denied` / `request-failed` / `allowed`. No behavior change —
+Settings still reverts the Background mode toggle when Start fails.
+
+**Next Lumia export check:** enable “Modo em segundo plano”, export diagnostics
+within ~1 min, search `keepalive|`. Expect `location-access-denied` or
+`denied` / `request-failed` on fail; `keepalive|allowed` on success. Absence
+of any `keepalive|` still means the toggle path did not run in that window.
+
 ## Unsupported (512 MB) — mild pacing retune
 
 `UnsupportedSyncWorkload` quiet floors match Low (4s/7s) with the longer

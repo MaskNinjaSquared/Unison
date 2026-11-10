@@ -168,7 +168,11 @@
                                                           HorizontalAlignment="Left"
                                                           VerticalAlignment="Center"
                                                           AvatarUrl="{x:Bind AvatarUrl, Mode=OneWay}"
-                                                          ViewState="{x:Bind ViewState, Mode=OneWay}"/>
+                                                          ViewState="{x:Bind ViewState, Mode=OneWay}"
+                                                          Kind="{x:Bind LatestKind, Mode=OneWay}"
+                                                          BackgroundArgb="{x:Bind BackgroundArgb, Mode=OneWay}"
+                                                          TextArgb="{x:Bind TextArgb, Mode=OneWay}"
+                                                          PreviewText="{x:Bind PreviewBody, Mode=OneWay}"/>
 
                         <StackPanel Grid.Column="1"
                                     VerticalAlignment="Center"
@@ -257,15 +261,6 @@
                 </AppBarButton>
 
                 <CommandBar.SecondaryCommands>
-                <!-- Probe item: if "…" opens but labels still hide, overflow still works. -->
-                <AppBarButton x:Uid="Shell_LegacyMenu_StatusMoreProbe"
-                              Label="More probe"
-                              Command="{x:Bind ViewModel.NewStatusCommand}">
-                    <AppBarButton.Icon>
-                        <FontIcon FontFamily="{StaticResource IconFont}" Glyph="&#xE710;"/>
-                    </AppBarButton.Icon>
-                </AppBarButton>
-                <AppBarSeparator/>
                 <AppBarButton x:Name="ProfileSecondaryButton"
                               x:Uid="Shell_LegacyMenu_Profile"
                               Label="Profile"
@@ -353,11 +348,16 @@
                                 <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
 
-                            <controls:ChatAvatarControl Width="48" Height="48"
-                                                        Size="48"
-                                                        HorizontalAlignment="Left"
-                                                        VerticalAlignment="Center"
-                                                        AvatarUrl="{x:Bind ThumbnailUri}"/>
+                            <controls:StatusListAvatarControl Width="48" Height="48"
+                                                              Size="48"
+                                                              ShowRing="False"
+                                                              HorizontalAlignment="Left"
+                                                              VerticalAlignment="Center"
+                                                              AvatarUrl="{x:Bind ThumbnailUri}"
+                                                              Kind="{x:Bind Kind}"
+                                                              BackgroundArgb="{x:Bind BackgroundArgb}"
+                                                              TextArgb="{x:Bind TextArgb}"
+                                                              PreviewText="{x:Bind Body}"/>
 
                             <StackPanel Grid.Column="1"
                                         VerticalAlignment="Center"
@@ -409,78 +409,7 @@
             </ListView>
         </Grid>
 
-        <!--
-            New status dock: same chrome as the chat attachment bar (scrim over everything, bar
-            sliding up over the CommandBar, heading, accent tiles, chevron strip) with two tiles.
-            Driven by IsNewStatusPickerOpen; the slide runs from the view.
-        -->
-        <Border x:Name="NewStatusScrim"
-                Grid.RowSpan="3"
-                Canvas.ZIndex="3"
-                Background="#99000000"
-                Opacity="0"
-                Visibility="Collapsed"
-                Tapped="NewStatusScrim_Tapped"/>
-
-        <Grid x:Name="NewStatusDock"
-              Grid.RowSpan="3"
-              Canvas.ZIndex="4"
-              VerticalAlignment="Bottom"
-              Visibility="Collapsed"
-              Background="{ThemeResource LegacyCommandBarBackgroundBrush}">
-            <Grid.RenderTransform>
-                <TranslateTransform x:Name="NewStatusDockTranslate" Y="1000"/>
-            </Grid.RenderTransform>
-            <Grid.RowDefinitions>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="54"/>
-            </Grid.RowDefinitions>
-
-            <TextBlock x:Uid="StatusList_NewStatusDockTitle"
-                       Text="NEW STATUS"
-                       Margin="10,14,10,4"
-                       FontFamily="{StaticResource MainFont}"
-                       FontSize="13"
-                       Foreground="{ThemeResource ChatDetailMutedTextBrush}"/>
-
-            <!-- Same 5px padding + 5px tile margin as the attachment bar; tiles centred. -->
-            <Grid x:Name="NewStatusTilesGrid"
-                  Grid.Row="1"
-                  Padding="5,5,5,0"
-                  HorizontalAlignment="Center">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="Auto"/>
-                </Grid.ColumnDefinitions>
-
-                <controls:AttachTile Grid.Column="0"
-                                     IconGlyph="&#xEB10;"
-                                     IconFontFamily="{StaticResource LegacyIconFont}"
-                                     Label="Photo &amp; video"
-                                     LocalizationUid="StatusList_NewMediaStatusTile"
-                                     Command="{x:Bind ViewModel.StartMediaStatusCommand}"/>
-
-                <controls:AttachTile Grid.Column="1"
-                                     IconGlyph="&#xE8D2;"
-                                     IconFontFamily="{StaticResource IconFont}"
-                                     Label="Text"
-                                     LocalizationUid="StatusList_NewTextStatusTile"
-                                     Command="{x:Bind ViewModel.StartTextStatusCommand}"/>
-            </Grid>
-
-            <Grid Grid.Row="2" Padding="12,0">
-                <Button Style="{StaticResource WhatsAppIconButtonStyle}"
-                        Width="40" Height="40"
-                        HorizontalAlignment="Left"
-                        VerticalAlignment="Center"
-                        Command="{x:Bind ViewModel.CloseNewStatusPickerCommand}"
-                        AutomationProperties.Name="Close">
-                    <TextBlock Text="&#xE70D;" FontFamily="{StaticResource IconFont}" FontSize="16"
-                               Foreground="{ThemeResource ChatDetailMutedTextBrush}"/>
-                </Button>
-            </Grid>
-        </Grid>
+        <!-- New status dock lives on ShellView (fullscreen over pivot); list raises events. -->
 
     </Grid>
 </UserControl>

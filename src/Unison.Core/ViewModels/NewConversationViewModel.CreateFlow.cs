@@ -27,6 +27,11 @@ namespace Unison.Core.ViewModels
         private byte[] _groupPhotoBytes;
         private GroupEphemeralDuration _groupEphemeralDuration = GroupEphemeralDuration.Off;
         private bool _isGroupPermissionsOpen;
+        private bool _membersCanEditGroupSettings = true;
+        private bool _membersCanSendMessages = true;
+        private bool _membersCanAddMembers = true;
+        private bool _membersCanInviteViaLink = true;
+        private bool _adminsMustApproveNewMembers;
         private string _communityName = string.Empty;
         private string _communityDescription = string.Empty;
         private byte[] _communityPhotoBytes;
@@ -89,7 +94,7 @@ namespace Unison.Core.ViewModels
         /// <summary>Opens the disappearing-messages dialog for create-group.</summary>
         public ICommand EditGroupEphemeralCommand { get; private set; }
 
-        /// <summary>Shows the (stub) group-permissions overlay.</summary>
+        /// <summary>Shows the group-permissions overlay.</summary>
         public ICommand OpenGroupPermissionsCommand { get; private set; }
 
         /// <summary>Closes the group-permissions overlay.</summary>
@@ -191,6 +196,36 @@ namespace Unison.Core.ViewModels
 
         /// <summary>Localized status under the temporary-messages row (Off / 24h / 7d / 90d).</summary>
         public string GroupEphemeralStatusLabel => FormatEphemeralLabel(_groupEphemeralDuration);
+
+        public bool MembersCanEditGroupSettings
+        {
+            get => _membersCanEditGroupSettings;
+            set => Set(ref _membersCanEditGroupSettings, value);
+        }
+
+        public bool MembersCanSendMessages
+        {
+            get => _membersCanSendMessages;
+            set => Set(ref _membersCanSendMessages, value);
+        }
+
+        public bool MembersCanAddMembers
+        {
+            get => _membersCanAddMembers;
+            set => Set(ref _membersCanAddMembers, value);
+        }
+
+        public bool MembersCanInviteViaLink
+        {
+            get => _membersCanInviteViaLink;
+            set => Set(ref _membersCanInviteViaLink, value);
+        }
+
+        public bool AdminsMustApproveNewMembers
+        {
+            get => _adminsMustApproveNewMembers;
+            set => Set(ref _adminsMustApproveNewMembers, value);
+        }
 
         public bool IsGroupPermissionsOpen
         {
@@ -626,6 +661,11 @@ namespace Unison.Core.ViewModels
             GroupPhotoBytes = null;
             GroupEphemeralDuration = GroupEphemeralDuration.Off;
             IsGroupPermissionsOpen = false;
+            MembersCanEditGroupSettings = true;
+            MembersCanSendMessages = true;
+            MembersCanAddMembers = true;
+            MembersCanInviteViaLink = true;
+            AdminsMustApproveNewMembers = false;
             CommunityName = string.Empty;
             CommunityDescription = string.Empty;
             CommunityPhotoBytes = null;
@@ -749,7 +789,12 @@ namespace Unison.Core.ViewModels
                 Subject = _groupName,
                 ParticipantJids = participants,
                 PhotoBytes = _groupPhotoBytes,
-                Ephemeral = _groupEphemeralDuration
+                Ephemeral = _groupEphemeralDuration,
+                MembersCanEditGroupSettings = _membersCanEditGroupSettings,
+                MembersCanSendMessages = _membersCanSendMessages,
+                MembersCanAddMembers = _membersCanAddMembers,
+                MembersCanInviteViaLink = _membersCanInviteViaLink,
+                AdminsMustApproveNewMembers = _adminsMustApproveNewMembers
             };
 
             GroupCreateResult result = await _groups.CreateGroupAsync(request).ConfigureAwait(false);

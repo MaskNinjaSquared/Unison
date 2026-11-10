@@ -31,6 +31,9 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
 
         public event EventHandler StatusClosed;
 
+        /// <summary>Bubbled from the list so Shell can host the fullscreen New Status dock.</summary>
+        public event EventHandler<bool> NewStatusPickerOpenChanged;
+
         public StatusListView ListChrome => StatusListPart;
 
         public StatusView()
@@ -40,6 +43,8 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             StatusListPart.ProfileRequested += (s, e) => ProfileRequested?.Invoke(this, e);
             StatusListPart.DebugRequested += (s, e) => DebugRequested?.Invoke(this, e);
             StatusListPart.SettingsRequested += (s, e) => SettingsRequested?.Invoke(this, e);
+            StatusListPart.NewStatusPickerOpenChanged += (s, open) =>
+                NewStatusPickerOpenChanged?.Invoke(this, open);
             NavigationCacheMode = NavigationCacheMode.Disabled;
         }
 
@@ -59,6 +64,7 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
         {
             if (_surfaceActive)
             {
+                StatusListPart?.ViewModel?.CloseNewStatusPicker();
                 StatusListPart?.ClearSelection();
                 _shell?.LeaveStatusSurface();
                 _surfaceActive = false;

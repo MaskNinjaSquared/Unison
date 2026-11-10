@@ -59,6 +59,12 @@ namespace Unison.Core.ViewModels
         private bool _diskMeasured;
         private bool _diskBusy;
         private string _diskUsageText = "Calculando...";
+        private bool _isProfileEditOpen;
+        private ProfileEditKind _profileEditKind = ProfileEditKind.None;
+        private string _profileEditText = string.Empty;
+        private string _profileNameLocal;
+        private string _profileStatusLocal = string.Empty;
+        private bool _isProfileEmojiOpen;
 
         public SettingsViewModel(
             ILocalSettings localSettings,
@@ -179,9 +185,22 @@ namespace Unison.Core.ViewModels
 
                 _ = ConfirmAndDisconnectAsync();
             });
+            OpenProfileNameEditCommand = new RelayCommand(() => OpenProfileEdit(ProfileEditKind.Name));
+            OpenProfileAboutEditCommand = new RelayCommand(() => OpenProfileEdit(ProfileEditKind.About));
+            CancelProfileEditCommand = new RelayCommand(CancelProfileEdit);
+            SaveProfileEditCommand = new RelayCommand(SaveProfileEdit, () => IsProfileEditOpen);
+            ToggleProfileEmojiCommand = new RelayCommand(() => IsProfileEmojiOpen = !IsProfileEmojiOpen);
+            InsertProfileEmojiCommand = new RelayCommand<string>(InsertProfileEmoji, e => !string.IsNullOrEmpty(e));
         }
 
         public event EventHandler LeaveRequested;
+
+        public enum ProfileEditKind
+        {
+            None = 0,
+            Name = 1,
+            About = 2
+        }
 
         /// <summary>Signed-in display name (from shell profile).</summary>
         public string ProfileDisplayName => _shell.ProfileDisplayName;
@@ -190,15 +209,85 @@ namespace Unison.Core.ViewModels
         public string CurrentUserAvatar => _shell.CurrentUserAvatar;
 
         /// <summary>Push name. Empty when the account has no name yet.</summary>
-        public string CurrentUserName => _shell.CurrentUserName;
+        public string CurrentUserName =>
+            !string.IsNullOrWhiteSpace(_profileNameLocal) ? _profileNameLocal : _shell.CurrentUserName;
 
         /// <summary>Account phone digits.</summary>
         public string CurrentUserPhone => _shell.CurrentUserPhone;
 
         /// <summary>
-        /// About text ("recado"). <see cref="Profile"/> does not store it yet, so this stays empty.
+        /// About text ("recado"). Local stub until About is wired through the bridge.
         /// </summary>
-        public string ProfileStatus => string.Empty;
+        public string ProfileStatus => _profileStatusLocal ?? string.Empty;
+
+        public bool IsProfileEditOpen
+        {
+            get => _isProfileEditOpen;
+            private set
+            {
+                if (!Set(ref _isProfileEditOpen, value))
+                {
+                    return;
+                }
+
+                OnPropertyChanged(nameof(ProfileEditTitle));
+                (SaveProfileEditCommand as RelayCommand)?.RaiseCanExecuteChanged();
+            }
+        }
+
+        public ProfileEditKind ActiveProfileEditKind
+        {
+            get => _profileEditKind;
+            private set
+            {
+                if (!Set(ref _profileEditKind, value))
+                {
+                    return;
+                }
+
+                OnPropertyChanged(nameof(ProfileEditTitle));
+            }
+        }
+
+        public string ProfileEditTitle
+        {
+            get
+            {
+                switch (_profileEditKind)
+                {
+                    case ProfileEditKind.Name:
+                        return _strings?.Get("Settings_ProfileEditNameTitle", "Name") ?? "Name";
+                    case ProfileEditKind.About:
+                        return _strings?.Get("Settings_ProfileEditAboutTitle", "About") ?? "About";
+                    default:
+                        return string.Empty;
+                }
+            }
+        }
+
+        public string ProfileEditText
+        {
+            get => _profileEditText;
+            set => Set(ref _profileEditText, value ?? string.Empty);
+        }
+
+        public bool IsProfileEmojiOpen
+        {
+            get => _isProfileEmojiOpen;
+            set => Set(ref _isProfileEmojiOpen, value);
+        }
+
+        public ICommand OpenProfileNameEditCommand { get; private set; }
+
+        public ICommand OpenProfileAboutEditCommand { get; private set; }
+
+        public ICommand CancelProfileEditCommand { get; private set; }
+
+        public ICommand SaveProfileEditCommand { get; private set; }
+
+        public ICommand ToggleProfileEmojiCommand { get; private set; }
+
+        public ICommand InsertProfileEmojiCommand { get; private set; }
 
         public bool NotificationsEnabled
         {
@@ -757,7 +846,67 @@ namespace Unison.Core.ViewModels
                 nameof(ProfileDisplayName),
                 nameof(CurrentUserName),
                 nameof(CurrentUserPhone),
-                nameof(CurrentUserAvatar));
+                nameof(CurrentUserAvatar),
+                nameof(ProfileStatus));
+        }
+
+        private void OpenProfileEdit(ProfileEditKind kind)
+        {
+            if (kind == ProfileEditKind.None)
+            {
+                return;
+            }
+
+            ActiveProfileEditKind = kind;
+            ProfileEditText = kind == ProfileEditKind.Name
+                ? (CurrentUserName ?? string.Empty)
+                : (ProfileStatus ?? string.Empty);
+            IsProfileEmojiOpen = false;
+            IsProfileEditOpen = true;
+        }
+
+        private void CancelProfileEdit()
+        {
+            IsProfileEditOpen = false;
+            IsProfileEmojiOpen = false;
+            ActiveProfileEditKind = ProfileEditKind.None;
+            ProfileEditText = string.Empty;
+        }
+
+        /// <summary>
+        /// Local-only save: updates displayed name/about. No websocket yet.
+        /// </summary>
+        private void SaveProfileEdit()
+        {
+            if (!IsProfileEditOpen)
+            {
+                return;
+            }
+
+            string text = (ProfileEditText ?? string.Empty).Trim();
+            if (ActiveProfileEditKind == ProfileEditKind.Name)
+            {
+                _profileNameLocal = text;
+                OnPropertyChanged(nameof(CurrentUserName));
+                OnPropertyChanged(nameof(ProfileDisplayName));
+            }
+            else if (ActiveProfileEditKind == ProfileEditKind.About)
+            {
+                _profileStatusLocal = text;
+                OnPropertyChanged(nameof(ProfileStatus));
+            }
+
+            CancelProfileEdit();
+        }
+
+        private void InsertProfileEmoji(string emoji)
+        {
+            if (string.IsNullOrEmpty(emoji))
+            {
+                return;
+            }
+
+            ProfileEditText = (ProfileEditText ?? string.Empty) + emoji;
         }
 
         private void RaiseTimeFormatSelectionChanged()

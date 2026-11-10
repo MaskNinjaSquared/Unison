@@ -241,7 +241,11 @@
                                                           HorizontalAlignment="Left"
                                                           VerticalAlignment="Center"
                                                           AvatarUrl="{x:Bind AvatarUrl, Mode=OneWay}"
-                                                          ViewState="{x:Bind ViewState, Mode=OneWay}"/>
+                                                          ViewState="{x:Bind ViewState, Mode=OneWay}"
+                                                          Kind="{x:Bind LatestKind, Mode=OneWay}"
+                                                          BackgroundArgb="{x:Bind BackgroundArgb, Mode=OneWay}"
+                                                          TextArgb="{x:Bind TextArgb, Mode=OneWay}"
+                                                          PreviewText="{x:Bind PreviewBody, Mode=OneWay}"/>
 
                         <StackPanel Grid.Column="1"
                                     VerticalAlignment="Center"
@@ -392,11 +396,16 @@
                                 <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
 
-                            <controls:ChatAvatarControl Width="48" Height="48"
-                                                        Size="48"
-                                                        HorizontalAlignment="Left"
-                                                        VerticalAlignment="Center"
-                                                        AvatarUrl="{x:Bind ThumbnailUri}"/>
+                            <controls:StatusListAvatarControl Width="48" Height="48"
+                                                              Size="48"
+                                                              ShowRing="False"
+                                                              HorizontalAlignment="Left"
+                                                              VerticalAlignment="Center"
+                                                              AvatarUrl="{x:Bind ThumbnailUri}"
+                                                              Kind="{x:Bind Kind}"
+                                                              BackgroundArgb="{x:Bind BackgroundArgb}"
+                                                              TextArgb="{x:Bind TextArgb}"
+                                                              PreviewText="{x:Bind Body}"/>
 
                             <StackPanel Grid.Column="1"
                                         VerticalAlignment="Center"

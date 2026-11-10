@@ -739,6 +739,48 @@ Disable after diagnosing: keeping it on slows the app.</value>
   <data name="CreateGroup_PermissionsOverlayTitle.Text" xml:space="preserve">
     <value>Group permissions</value>
   </data>
+  <data name="CreateGroup_PermMembersSection.Text" xml:space="preserve">
+    <value>Members can</value>
+  </data>
+  <data name="CreateGroup_PermAdminsSection.Text" xml:space="preserve">
+    <value>Admins can</value>
+  </data>
+  <data name="CreateGroup_PermEditSettings/Header" xml:space="preserve">
+    <value>Edit group settings</value>
+  </data>
+  <data name="CreateGroup_PermEditSettings/Text" xml:space="preserve">
+    <value>Includes the name, photo, description, disappearing messages, pin, unpin, and starred messages.</value>
+  </data>
+  <data name="CreateGroup_PermSendMessages/Header" xml:space="preserve">
+    <value>Send new messages</value>
+  </data>
+  <data name="CreateGroup_PermAddMembers/Header" xml:space="preserve">
+    <value>Add members</value>
+  </data>
+  <data name="CreateGroup_PermInviteLink/Header" xml:space="preserve">
+    <value>Invite via link or QR code</value>
+  </data>
+  <data name="CreateGroup_PermApproveMembers/Header" xml:space="preserve">
+    <value>Approve new members</value>
+  </data>
+  <data name="CreateGroup_PermApproveMembers/Text" xml:space="preserve">
+    <value>When enabled, admins must approve people who join the group.</value>
+  </data>
+  <data name="Settings_ProfileEditNameTitle" xml:space="preserve">
+    <value>Name</value>
+  </data>
+  <data name="Settings_ProfileEditAboutTitle" xml:space="preserve">
+    <value>About</value>
+  </data>
+  <data name="Settings_ProfileEditSave.Label" xml:space="preserve">
+    <value>Save</value>
+  </data>
+  <data name="Settings_ProfileEditCancel.Label" xml:space="preserve">
+    <value>Cancel</value>
+  </data>
+  <data name="Settings_ProfileEditEmoji.Label" xml:space="preserve">
+    <value>Emoji</value>
+  </data>
   <data name="CreateCommunity_ExplainTitle" xml:space="preserve">
     <value>Create community</value>
   </data>
@@ -2229,8 +2271,5 @@ Disable after diagnosing: keeping it on slows the app.</value>
   </data>
   <data name="StatusList_NewStatusDockTitle.Text" xml:space="preserve">
     <value>NEW STATUS</value>
-  </data>
-  <data name="Shell_LegacyMenu_StatusMoreProbe.Label" xml:space="preserve">
-    <value>More probe</value>
   </data>
 </root>

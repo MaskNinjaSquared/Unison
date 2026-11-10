@@ -14,6 +14,19 @@
         <SolidColorBrush x:Key="ChatDetailInfoCommandBarBrush" Color="#019944"/>
         <SolidColorBrush x:Key="ChatDetailInfoCloseHoverBrush" Color="#33FFFFFF"/>
         <SolidColorBrush x:Key="ChatDetailInfoClosePressedBrush" Color="#55FFFFFF"/>
+        <!-- Scoped to this green pane only (was global in Unison Light Styles and broke Settings). -->
+        <SolidColorBrush x:Key="SystemControlHyperlinkTextBrush" Color="#FFFFFFFF"/>
+        <SolidColorBrush x:Key="AccentTextFillColorPrimaryBrush" Color="#FFFFFFFF"/>
+        <SolidColorBrush x:Key="AccentTextFillColorSecondaryBrush" Color="#E6FFFFFF"/>
+        <SolidColorBrush x:Key="ToggleSwitchKnobFillOn" Color="#FFFFFFFF"/>
+        <SolidColorBrush x:Key="ToggleSwitchKnobFillOnPointerOver" Color="#FFFFFFFF"/>
+        <SolidColorBrush x:Key="ToggleSwitchKnobFillOnPressed" Color="#F2FFFFFF"/>
+        <SolidColorBrush x:Key="ToggleSwitchFillOn" Color="#66FFFFFF"/>
+        <SolidColorBrush x:Key="ToggleSwitchFillOnPointerOver" Color="#80FFFFFF"/>
+        <SolidColorBrush x:Key="ToggleSwitchFillOnPressed" Color="#59FFFFFF"/>
+        <SolidColorBrush x:Key="ToggleSwitchStrokeOn" Color="#66FFFFFF"/>
+        <SolidColorBrush x:Key="ToggleSwitchStrokeOnPointerOver" Color="#80FFFFFF"/>
+        <SolidColorBrush x:Key="ToggleSwitchStrokeOnPressed" Color="#59FFFFFF"/>
 
         <Style x:Key="ChatDetailInfoCloseButtonStyle" TargetType="Button">
             <Setter Property="Background" Value="Transparent"/>
