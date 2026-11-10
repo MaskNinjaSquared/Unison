@@ -93,7 +93,9 @@ namespace Unison.Core.Helpers
         }
 
         /// <summary>
-        /// Display label: hint (bubble / quote) → roster → protocol names → Person → 1:1 chat → JID user.
+        /// Display label: contacts (agenda) → hint (bubble / quote) → roster → Person → 1:1 chat → JID user.
+        /// Contacts come first so the agenda and the group strip agree on one origin: a push /
+        /// roster label the contact chose for themselves must not outrank the name the user saved.
         /// When <paramref name="directChatNames"/> is provided, the Chats walk is skipped.
         /// When <paramref name="rosterByCanonical"/> is provided, the roster is not scanned linearly.
         /// </summary>
@@ -113,6 +115,21 @@ namespace Unison.Core.Helpers
 
             string canonical = CanonicalJid(context, participantJid) ?? JidHelper.Normalize(participantJid);
 
+            string fromService = ResolveServiceName(context, participantJid, nameContext: "sender");
+            if (UsableLabel(fromService, canonical))
+            {
+                return fromService.Trim();
+            }
+
+            if (!string.Equals(canonical, participantJid, StringComparison.OrdinalIgnoreCase))
+            {
+                fromService = ResolveServiceName(context, canonical, nameContext: "sender");
+                if (UsableLabel(fromService, canonical))
+                {
+                    return fromService.Trim();
+                }
+            }
+
             if (UsableLabel(nameHint, canonical))
             {
                 return nameHint.Trim();
@@ -128,21 +145,6 @@ namespace Unison.Core.Helpers
             if (fromRoster != null && UsableLabel(fromRoster.DisplayName, canonical))
             {
                 return fromRoster.DisplayName.Trim();
-            }
-
-            string fromService = ResolveServiceName(context, participantJid, nameContext: "sender");
-            if (UsableLabel(fromService, canonical))
-            {
-                return fromService.Trim();
-            }
-
-            if (!string.Equals(canonical, participantJid, StringComparison.OrdinalIgnoreCase))
-            {
-                fromService = ResolveServiceName(context, canonical, nameContext: "sender");
-                if (UsableLabel(fromService, canonical))
-                {
-                    return fromService.Trim();
-                }
             }
 
             Person person = TryGetPerson(context, canonical, participantJid);
