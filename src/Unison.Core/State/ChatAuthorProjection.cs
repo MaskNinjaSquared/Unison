@@ -101,6 +101,7 @@ namespace Unison.Core.State
         // thread — no allocation and no formatting on the per-row path.
         private int _sweepNamed;
         private int _sweepNumbered;
+        private int _sweepResynced;
         private int _sweepRows;
         private int _sweepNoParticipant;
         private int _sweepCatalogue;
@@ -149,8 +150,9 @@ namespace Unison.Core.State
             _chatState.GroupRosterChanged += OnGroupRosterChanged;
             _chatState.Chats.CollectionChanged += OnChatsChanged;
 
-            // Persisted strips that already carry a name are left alone; a full catalogue walk at
-            // Start was the 30–100s Mobile stall.
+            // Persisted strips that already carry a name are left alone unless their rendered
+            // prefix disagrees with that name; a full catalogue walk at Start was the 30–100s
+            // Mobile stall.
             if (_sessionLog != null)
             {
                 _sessionLog.WriteAlways("[AuthorStrip] start");
@@ -544,6 +546,7 @@ namespace Unison.Core.State
             public string SelfLabel;
             public int Catalogue;
             public int NoParticipant;
+            public string Path;
         }
 
         /// <summary>
@@ -612,7 +615,11 @@ namespace Unison.Core.State
             {
                 Work = work,
                 DirectNames = directNames,
-                SelfLabel = request.SelfLabel
+                SelfLabel = request.SelfLabel,
+
+                // Catalogue / NoParticipant are full-sweep figures; the fast path never computes
+                // them, so Path is what tells a reader that a zero here means "not measured".
+                Path = "fast"
             };
         }
 
@@ -659,7 +666,19 @@ namespace Unison.Core.State
                     bool unnamed = request.UnnamedPass && !IsUsableParticipantLabel(
                         chat.LastMessageSenderName,
                         chat.LastMessageParticipantJid);
+
+                    // A row can hold a real name and still render digits: the prefix and the name
+                    // are stored in separate columns and carried forward independently. Such a
+                    // row is not "unnamed", so without this it is skipped by every pass and the
+                    // digits survive forever.
+                    bool desynced = request.UnnamedPass &&
+                        !unnamed &&
+                        ChatAuthorStripDecision.AuthorPrefixDisagrees(
+                            chat.LastMessageAuthor,
+                            chat.LastMessageSenderName);
+
                     if (!unnamed &&
+                        !desynced &&
                         !clearSystemAuthor &&
                         !IsPendingChat(chat, request.PendingChats) &&
                         !IsPendingParticipant(
@@ -687,7 +706,8 @@ namespace Unison.Core.State
                 DirectNames = directNames,
                 SelfLabel = request.SelfLabel,
                 Catalogue = catalogue == null ? 0 : catalogue.Count,
-                NoParticipant = noParticipant
+                NoParticipant = noParticipant,
+                Path = "full"
             };
         }
 
@@ -713,7 +733,8 @@ namespace Unison.Core.State
             if (_sessionLog != null)
             {
                 _sessionLog.WriteAlways(
-                    "[AuthorStrip] sweep-start work=" + _sweepWork.Count +
+                    "[AuthorStrip] sweep-start path=" + (prepared.Path ?? "?") +
+                    " work=" + _sweepWork.Count +
                     " catalogue=" + _sweepCatalogue +
                     " noParticipant=" + _sweepNoParticipant);
             }
@@ -813,9 +834,11 @@ namespace Unison.Core.State
             List<string> needsStoreLookup = _sweepWarm;
             int named = _sweepNamed;
             int numbered = _sweepNumbered;
+            int resynced = _sweepResynced;
             int rowsDecided = _sweepRows;
             _sweepNamed = 0;
             _sweepNumbered = 0;
+            _sweepResynced = 0;
             _sweepRows = 0;
             _sweepWork = null;
             _sweepDirectNames = null;
@@ -825,13 +848,15 @@ namespace Unison.Core.State
             _sweepIndex = 0;
 
             // One line per sweep, unconditional — see BeginSweepChunks. "rows" is how many the
-            // decision actually reached; named + number < rows means the rest were left alone.
+            // decision actually reached; named + number + resync < rows means the rest were
+            // genuinely left alone.
             if (_sessionLog != null)
             {
                 _sessionLog.WriteAlways(
                     "[AuthorStrip] sweep-done rows=" + rowsDecided +
                     " named=" + named +
                     " number=" + numbered +
+                    " resync=" + resynced +
                     " warm=" + (needsStoreLookup == null ? 0 : needsStoreLookup.Count));
             }
 
@@ -941,10 +966,14 @@ namespace Unison.Core.State
             string canonical = _jids.PeekCanonicalJid(participant);
             string number = ParticipantStripLabel.ForParticipant(participant, canonical);
 
+            bool currentIsRealName = IsUsableParticipantLabel(
+                chat.LastMessageSenderName,
+                participant);
+
             _sweepRows++;
             switch (ChatAuthorStripDecision.Decide(
                 chat.LastMessageSenderName,
-                IsUsableParticipantLabel(chat.LastMessageSenderName, participant),
+                currentIsRealName,
                 resolved,
                 resolved != null,
                 !string.IsNullOrEmpty(number)))
@@ -957,6 +986,28 @@ namespace Unison.Core.State
                     // The number goes in the strip but not in the sender-name slot: it is a
                     // stand-in, and leaving that slot empty keeps the next sweep looking.
                     ApplyStrip(chat, participant, canonical, null, selfLabel);
+                    break;
+
+                default:
+                    // Keep means "the name slot is already right". It says nothing about the
+                    // prefix, and the two are written and persisted separately — a tip with no
+                    // push name leaves digits in the prefix while the store carries the known
+                    // name forward beside it. Rewrite the prefix from the name the row already
+                    // holds, otherwise this pass declines to fix the only thing on screen.
+                    if (currentIsRealName &&
+                        ChatAuthorStripDecision.AuthorPrefixDisagrees(
+                            chat.LastMessageAuthor,
+                            chat.LastMessageSenderName))
+                    {
+                        _sweepResynced++;
+                        ApplyStrip(
+                            chat,
+                            participant,
+                            canonical,
+                            chat.LastMessageSenderName,
+                            selfLabel);
+                    }
+
                     break;
             }
 
