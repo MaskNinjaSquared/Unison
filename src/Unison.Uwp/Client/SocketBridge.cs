@@ -1773,7 +1773,7 @@ namespace Unison.Uwp.Client
                 string reason = MessageAckHandler.Describe(refusal);
                 Debug.WriteLine("[Bridge] Status " + id + " refused: error=" + refusal + " (" + reason + ")");
                 RaiseStatus(id, "failed", "ack " + refusal);
-                throw new Unison.Core.Contracts.WhatsApp.StatusPublishRefusedException(refusal, reason);
+                throw new Unison.Core.Contracts.WhatsApp.StatusPublishRefusedException(refusal, reason, id);
             }
         }
 

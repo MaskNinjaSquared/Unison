@@ -305,6 +305,42 @@ namespace Unison.Uwp.Data
             }
         }
 
+        /// <summary>
+        /// Removes one of the account's own items by id, with its viewer rows. False when the id
+        /// was not there — a refused Status whose echo never landed is not an error.
+        /// </summary>
+        public async Task<bool> DeleteOwnItemAsync(string messageId)
+        {
+            if (string.IsNullOrWhiteSpace(messageId))
+            {
+                return false;
+            }
+
+            await EnsureInitializedAsync().ConfigureAwait(false);
+            await _writeLock.WaitAsync().ConfigureAwait(false);
+            try
+            {
+                int removed = await _connection.ExecuteAsync(
+                    "DELETE FROM history_status WHERE MessageId = ? AND IsFromMe = 1",
+                    messageId).ConfigureAwait(false);
+                if (removed <= 0)
+                {
+                    return false;
+                }
+
+                await _connection.ExecuteAsync(
+                    "DELETE FROM history_status_viewer WHERE MessageId = ?",
+                    messageId).ConfigureAwait(false);
+                Debug.WriteLine("[HistoryStatusStore] Deleted own status item id=" + messageId);
+                RaiseChanged();
+                return true;
+            }
+            finally
+            {
+                _writeLock.Release();
+            }
+        }
+
         public async Task ClearAsync(string reason = null)
         {
             await EnsureInitializedAsync().ConfigureAwait(false);

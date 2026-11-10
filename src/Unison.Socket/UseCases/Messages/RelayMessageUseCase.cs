@@ -251,13 +251,26 @@ namespace Unison.Socket.UseCases.Messages
                     attributes,
                     extraAttrs).ConfigureAwait(false);
 
-                // SKDM participant nodes first, then the skmsg — receivers that walk children
-                // in order must install the sender key before opening the ciphertext.
                 participantNodes.AddRange(groupResult.ParticipantNodes);
                 shouldIncludeDeviceIdentity = shouldIncludeDeviceIdentity || groupResult.ShouldIncludeDeviceIdentity;
-                AppendParticipantNodes(content, participantNodes, attributes);
-                participantNodes.Clear();
-                content.Add(groupResult.EncNode);
+
+                if (isStatus)
+                {
+                    // Baileys pushes the skmsg into the stanza body before the participants node,
+                    // so a status from WhatsApp Web reads enc,participants. Groups keep the order
+                    // they already send and the server already accepts.
+                    content.Add(groupResult.EncNode);
+                    AppendParticipantNodes(content, participantNodes, attributes);
+                    participantNodes.Clear();
+                }
+                else
+                {
+                    // SKDM participant nodes first, then the skmsg - receivers that walk children
+                    // in order must install the sender key before opening the ciphertext.
+                    AppendParticipantNodes(content, participantNodes, attributes);
+                    participantNodes.Clear();
+                    content.Add(groupResult.EncNode);
+                }
             }
             else if (!isRetryResend)
             {
@@ -434,9 +447,16 @@ namespace Unison.Socket.UseCases.Messages
                 attributes["expiration"] = metadata.EphemeralDuration.ToString();
             }
 
+            // status@broadcast has no metadata to inherit addressing from, so the audience is
+            // collapsed into one address space here - before the device lookup, which otherwise
+            // echoes whichever space each recipient happened to be stored in.
+            StatusAudience statusAudience = null;
             if (isStatus && options.StatusJidList != null)
             {
-                participantJids.AddRange(options.StatusJidList);
+                statusAudience = await ResolveStatusAudienceAsync(options.StatusJidList, meId, meLid)
+                    .ConfigureAwait(false);
+                participantJids.AddRange(statusAudience.Recipients);
+                _log.Info("[Send] Status audience " + statusAudience.Describe());
             }
 
             if (_devices != null && participantJids.Count > 0)
@@ -460,7 +480,7 @@ namespace Unison.Socket.UseCases.Messages
                             ? paired
                             : null;
                     });
-                _log.Info("[Send] Status audience devices=" + result.Devices.Count + "; sameDeviceDropped=" + dropped);
+                _log.Info("[Send] Status devices=" + result.Devices.Count + "; sameDeviceDropped=" + dropped);
             }
 
             // Usync can answer empty (timeout, partial). Without at least each member's primary
@@ -482,6 +502,16 @@ namespace Unison.Socket.UseCases.Messages
                 metadata,
                 meLid,
                 out addressingModeSource);
+
+            // A status carries no metadata, so the audience decides which identity signs and
+            // which space the participants are written in. The attribute itself stays off:
+            // Baileys sets addressing_mode only when isGroup, and declaring it on a status is
+            // one of the things the server answers 479 (smax-invalid) to. Verified on device.
+            if (statusAudience != null && statusAudience.Normalized && statusAudience.Recipients.Count > 0)
+            {
+                addressingMode = statusAudience.AddressingMode;
+                addressingModeSource = statusAudience.Source;
+            }
 
             if (isGroup)
             {
@@ -613,6 +643,11 @@ namespace Unison.Socket.UseCases.Messages
                     (ownKeyed.Count > 0 ? string.Join(",", ownKeyed) : "none"));
             }
 
+            // No phash here. whatsmeow stamps group-shaped stanzas with a hash of the device
+            // list, but Baileys - which is what WhatsApp Web actually behaves like - only ever
+            // carries phash as an enc attribute on 1:1 sends, never as a stanza attribute on a
+            // group or status. The server answers 479 to a status stanza that carries an
+            // attribute Web would not have sent, so the status stanza stays bare: id, to, type.
             var encAttrs = new Dictionary<string, string> { { "v", "2" }, { "type", "skmsg" } };
             foreach (var attr in extraAttrs)
             {
@@ -624,7 +659,9 @@ namespace Unison.Socket.UseCases.Messages
             var loggedOwnTargets = needSenderKey.Where(ownPrimaryInMode.Contains).ToList();
             _log.Info(
                 "[Send] Group " + jid + ": addressing=" + addressingMode + " (" + addressingModeSource +
-                "), signer=" + senderIdentity +
+                "), declared=" + (isGroup ? "yes" : "no") +
+                ", phash=" + (attributes.ContainsKey("phash") ? attributes["phash"] : "none") +
+                ", signer=" + senderIdentity +
                 ", keyId=" + encrypted.KeyId +
                 ", participants=" + participantJids.Count +
                 ", devices=" + result.Devices.Count +
@@ -892,6 +929,33 @@ namespace Unison.Socket.UseCases.Messages
             return await _signal.HasSenderKeyAsync(groupJid, pnSigner).ConfigureAwait(false)
                 ? pnSigner
                 : null;
+        }
+
+        /// <summary>
+        /// The status audience in one address space, using the LID mapping store for the
+        /// translations. Falls back to the raw list if we have no mapping store at all, which
+        /// is the pre-existing behaviour and still better than sending nothing.
+        /// </summary>
+        private Task<StatusAudience> ResolveStatusAudienceAsync(
+            IList<string> statusJidList,
+            string meId,
+            string meLid)
+        {
+            LidMappingStore mapping = _signal != null ? _signal.LidMapping : null;
+            if (mapping == null)
+            {
+                return Task.FromResult(
+                    new StatusAudience(
+                        new List<string>(statusJidList), "pn", "no-mapping-store", null, normalized: false));
+            }
+
+            return StatusAudiencePolicy.ResolveAsync(
+                statusJidList,
+                meId,
+                meLid,
+                pns => mapping.GetLidsForPnsAsync(pns),
+                lids => mapping.GetPnsForLidsAsync(lids),
+                StatusAddressSpace.WidestLidFirst);
         }
 
         /// <summary>
