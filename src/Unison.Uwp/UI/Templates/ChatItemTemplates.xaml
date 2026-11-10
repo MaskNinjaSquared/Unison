@@ -5,7 +5,8 @@
     xmlns:views="using:Unison.Uwp.UI.Views"
     xmlns:templates="using:Unison.Uwp.UI.Templates"
     xmlns:models="using:Unison.Core.Models"
-    xmlns:controls="using:Unison.Uwp.UI.Controls">
+    xmlns:controls="using:Unison.Uwp.UI.Controls"
+    xmlns:helpers="using:Unison.Uwp.UI.Helpers">
 
     <DataTemplate x:Key="ChatItemTemplate" x:DataType="models:ChatItem">
         <!-- ContextFlyout on the row Grid (feature/2.1): platform opens once; Target.DataContext
@@ -190,7 +191,7 @@
                     <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
                 <TextBlock Grid.Row="0"
-                           Text="{x:Bind templates:ChatItemTemplates.GetChatDisplayName(Name, Kind, IsCommunityAnnounce), Mode=OneWay}"
+                           helpers:EmojiTextBlock.Text="{x:Bind templates:ChatItemTemplates.GetChatDisplayName(Name, Kind, IsCommunityAnnounce), Mode=OneWay}"
                            FontSize="18"
                            FontFamily="{StaticResource MainFontSemibold}"
                            FontWeight="SemiBold"
