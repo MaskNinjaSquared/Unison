@@ -4,12 +4,17 @@
 // Send: resolve the audience, publish through IStatusService, keep a dark
 // "publishing" overlay up meanwhile. A failure drops the overlay and leaves
 // the draft in place; success raises a toast and closes the composer.
+//
+// Success means the server acked the stanza, not merely that it was written:
+// a refused Status reports the server's error rather than a toast nobody's
+// contacts can account for.
 // =============================================================================
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
 using System.Threading.Tasks;
+using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Helpers;
 using Unison.Core.Models;
 
@@ -82,6 +87,22 @@ namespace Unison.Core.ViewModels
             try
             {
                 await _status.PublishTextStatusAsync(post);
+            }
+            catch (StatusPublishRefusedException refused)
+            {
+                Debug.WriteLine(
+                    "[StatusComposer] Publish refused: error=" + refused.ErrorCode +
+                    " (" + refused.Reason + ")");
+                IsPublishing = false;
+                string refusedBody =
+                    _strings?.Get(
+                        "StatusComposer_PublishRefusedBody",
+                        "WhatsApp rejected this status (error {0}), so nobody received it. Your text has been kept.")
+                    ?? "WhatsApp rejected this status (error {0}), so nobody received it. Your text has been kept.";
+                await ShowDialogAsync(
+                    _strings?.Get("StatusComposer_PublishFailedTitle", "Status not published") ?? "Status not published",
+                    string.Format(CultureInfo.CurrentCulture, refusedBody, refused.ErrorCode));
+                return;
             }
             catch (Exception ex)
             {

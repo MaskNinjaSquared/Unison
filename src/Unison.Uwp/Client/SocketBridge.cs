@@ -78,6 +78,13 @@ namespace Unison.Uwp.Client
         /// </summary>
         private static readonly TimeSpan CloseTimeout = TimeSpan.FromSeconds(3);
 
+        /// <summary>
+        /// How long a published Status waits for the server's ack before it is reported as sent.
+        /// The ack normally lands in well under a second; silence past this is read as taken,
+        /// because a Status that did arrive must not be reported as failed.
+        /// </summary>
+        private static readonly TimeSpan StatusAckTimeout = TimeSpan.FromSeconds(8);
+
         private const long TrustedContactTokenBucketDurationSeconds = 604800;
         private const int TrustedContactTokenBucketCount = 4;
 
@@ -1730,7 +1737,7 @@ namespace Unison.Uwp.Client
             return SendAsync(jid, content, explicitMessageId);
         }
 
-        public Task<string> SendTextStatusAsync(
+        public async Task<string> SendTextStatusAsync(
             string text,
             uint backgroundArgb,
             uint textArgb,
@@ -1749,7 +1756,25 @@ namespace Unison.Uwp.Client
                 Font = font
             };
 
-            return SendAsync(JidUtils.StatusBroadcast, content, null, statusJidList);
+            // The relay returns once the stanza is written, and a refused Status is refused
+            // afterwards, so the id is minted here and registered before the send.
+            string messageId = GenerateMessageId();
+            using (SentAckWait ack = RequireMessages().SentAcks.Expect(messageId))
+            {
+                string id = await SendAsync(JidUtils.StatusBroadcast, content, messageId, statusJidList)
+                    .ConfigureAwait(false);
+
+                string refusal = await ack.WaitAsync(StatusAckTimeout).ConfigureAwait(false);
+                if (string.IsNullOrEmpty(refusal))
+                {
+                    return id;
+                }
+
+                string reason = MessageAckHandler.Describe(refusal);
+                Debug.WriteLine("[Bridge] Status " + id + " refused: error=" + refusal + " (" + reason + ")");
+                RaiseStatus(id, "failed", "ack " + refusal);
+                throw new Unison.Core.Contracts.WhatsApp.StatusPublishRefusedException(refusal, reason);
+            }
         }
 
         public async Task<string> SendImageMessageAsync(

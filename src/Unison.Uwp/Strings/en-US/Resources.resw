@@ -2173,6 +2173,9 @@ Disable after diagnosing: keeping it on slows the app.</value>
   <data name="StatusComposer_PublishFailedBody" xml:space="preserve">
     <value>Your status could not be published. Check your connection and try again.</value>
   </data>
+  <data name="StatusComposer_PublishRefusedBody" xml:space="preserve">
+    <value>WhatsApp rejected this status (error {0}), so nobody received it. Your text has been kept.</value>
+  </data>
   <data name="StatusComposer_PublishedTitle" xml:space="preserve">
     <value>Status published</value>
   </data>

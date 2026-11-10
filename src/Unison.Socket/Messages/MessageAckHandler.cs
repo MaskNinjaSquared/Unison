@@ -9,6 +9,11 @@
 // The phash an ack can carry is logged, not acted on: rc14 tried resending on
 // it and disabled that because it loops.
 //
+// A caller that must report the real outcome of one send - Status publishing,
+// where the composer otherwise claims success for a stanza the server threw
+// away - registers the id with Expect before it relays and then awaits the
+// answer.
+//
 // Ports: rc14 handleBadAck (CB:ack,class:message) in src/Socket/messages-recv.ts
 // =============================================================================
 using System;
@@ -27,11 +32,71 @@ namespace Unison.Socket.Messages
 
         private readonly IWaEventBus _events;
         private readonly ISocketLog _log;
+        private readonly object _pendingGate = new object();
+
+        private readonly Dictionary<string, TaskCompletionSource<string>> _pending =
+            new Dictionary<string, TaskCompletionSource<string>>(StringComparer.Ordinal);
 
         public MessageAckHandler(IWaEventBus events, ISocketLog log = null)
         {
             _events = events ?? throw new ArgumentNullException(nameof(events));
             _log = log ?? NullSocketLog.Instance;
+        }
+
+        /// <summary>
+        /// Registers interest in the ack for a message about to be sent. Call this before
+        /// relaying, or the answer can arrive before anyone is listening. Always dispose the
+        /// wait, otherwise the registration is held until the ack that may never come.
+        /// </summary>
+        public SentAckWait Expect(string messageId)
+        {
+            var source = new TaskCompletionSource<string>();
+            if (string.IsNullOrEmpty(messageId))
+            {
+                return new SentAckWait(this, null, source);
+            }
+
+            lock (_pendingGate)
+            {
+                _pending[messageId] = source;
+            }
+
+            return new SentAckWait(this, messageId, source);
+        }
+
+        internal void Forget(string messageId)
+        {
+            if (string.IsNullOrEmpty(messageId))
+            {
+                return;
+            }
+
+            lock (_pendingGate)
+            {
+                _pending.Remove(messageId);
+            }
+        }
+
+        /// <summary>Hands the ack to whoever is waiting on this id. Silent when nobody is.</summary>
+        private void Answer(string messageId, string error)
+        {
+            if (string.IsNullOrEmpty(messageId))
+            {
+                return;
+            }
+
+            TaskCompletionSource<string> source;
+            lock (_pendingGate)
+            {
+                if (!_pending.TryGetValue(messageId, out source))
+                {
+                    return;
+                }
+
+                _pending.Remove(messageId);
+            }
+
+            source.TrySetResult(error);
         }
 
         public async Task HandleAsync(BinaryNode node)
@@ -58,6 +123,7 @@ namespace Unison.Socket.Messages
             if (string.IsNullOrEmpty(error))
             {
                 _log.Debug("[Ack] Server took " + summary);
+                Answer(id, null);
                 return;
             }
 
@@ -65,6 +131,8 @@ namespace Unison.Socket.Messages
                 "[Ack] Server refused " + summary + " error=" + error + " (" + Describe(error) + ") attrs=" +
                 string.Join(" ", node.Attrs.Select(a => a.Key + "=" + a.Value)) +
                 (node.Children.Count > 0 ? " children=" + string.Join(",", node.Children.Select(c => c.Tag)) : string.Empty));
+
+            Answer(id, error);
 
             if (string.IsNullOrEmpty(id) || string.IsNullOrEmpty(from))
             {
