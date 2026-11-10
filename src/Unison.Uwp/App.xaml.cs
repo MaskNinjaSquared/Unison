@@ -817,7 +817,8 @@ namespace Unison.Uwp
                 sp.GetRequiredService<ChatTimelineLoadPriorityGate>(),
                 sp.GetRequiredService<IRuntimeDiagnostics>(),
                 sp.GetRequiredService<IContactBlockActions>(),
-                uiHolds: sp.GetRequiredService<IUiWorkHolds>()));
+                uiHolds: sp.GetRequiredService<IUiWorkHolds>(),
+                memory: sp.GetRequiredService<IAppMemoryInfo>()));
             services.AddSingleton<IJidAliasPersistence>(sp => new JidAliasPersistence(
                 sp.GetRequiredService<JidAliasTable>(),
                 sp.GetRequiredService<ISocketAliasRegistrar>(),

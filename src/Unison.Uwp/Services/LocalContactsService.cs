@@ -429,7 +429,12 @@ namespace Unison.Uwp.Services
             ContactReader reader;
             try
             {
-                reader = list.GetContactReader();
+                // Names and phones are all this pass reads; a full Contact per entry is what
+                // pushed a 185 MB Lumia into High during post-replay-names.
+                reader = list.GetContactReader(new ContactQueryOptions
+                {
+                    DesiredFields = ContactQueryDesiredFields.PhoneNumber
+                });
             }
             catch (Exception ex)
             {

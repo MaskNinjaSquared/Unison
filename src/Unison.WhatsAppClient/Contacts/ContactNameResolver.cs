@@ -51,6 +51,12 @@ namespace Unison.WhatsAppClient.Contacts
         private readonly SyncWorkGate _syncWork;
         private readonly SyncWorkloadStrategy _workload;
         private readonly UsyncFailureCooldownBook _usyncFailures;
+        private readonly IAppMemoryInfo _memory;
+        private readonly IRuntimeDiagnostics _diagnostics;
+
+        /// <summary>Below these a name step is routine and stays out of the journal.</summary>
+        private const ulong StepJournalGrowthBytes = 8UL * 1024 * 1024;
+        private const long StepJournalElapsedMs = 1000;
 
         private DateTime _lastRefreshUtc = DateTime.MinValue;
         private volatile bool _isRunning;
@@ -70,8 +76,12 @@ namespace Unison.WhatsAppClient.Contacts
             IWhatsAppSessionProvider sessions,
             ChatNameRefresh nameRefresh,
             SyncWorkloadStrategy workload,
-            UsyncFailureCooldownBook usyncFailures = null)
+            UsyncFailureCooldownBook usyncFailures = null,
+            IAppMemoryInfo memory = null,
+            IRuntimeDiagnostics diagnostics = null)
         {
+            _memory = memory;
+            _diagnostics = diagnostics;
             _sessions = sessions ?? throw new ArgumentNullException(nameof(sessions));
             _nameRefresh = nameRefresh ?? throw new ArgumentNullException(nameof(nameRefresh));
             _pushNames = pushNames ?? throw new ArgumentNullException(nameof(pushNames));
@@ -213,7 +223,7 @@ namespace Unison.WhatsAppClient.Contacts
             // Names already on file come first and need no network. Every exit below (refresh
             // running, cooldown, nothing left to ask) used to skip them, so after a sync the list
             // kept numbers the chat screen could already name.
-            await _nameRefresh.ApplyAsync();
+            await MeasureStepAsync("apply", () => _nameRefresh.ApplyAsync()).ConfigureAwait(false);
 
             // force: first-sync unlock runs names while list hold / replay would otherwise skip.
             if (!force && _syncWork.ShouldDeferHeavyLocalWork(out string heavyDeferReason))
@@ -318,7 +328,7 @@ namespace Unison.WhatsAppClient.Contacts
                 .Take(maxPerPass)
                 .ToList();
 
-            await ResolveInChunksAsync(missingList).ConfigureAwait(false);
+            await MeasureStepAsync("usync", () => ResolveInChunksAsync(missingList)).ConfigureAwait(false);
 
             // Stamp cooldown even when chunks timed out so the next reconnect does not
             // immediately re-raise "Resolvendo nomes…" for the same bare numbers.
@@ -327,22 +337,52 @@ namespace Unison.WhatsAppClient.Contacts
 
             try
             {
-                IReadOnlyList<string> mapped =
-                    await _addressBook.RefreshAsync(force: false).ConfigureAwait(false);
-                if (mapped != null && mapped.Count > 0)
-                {
-                    await _nameRefresh.ApplyAsync(mapped).ConfigureAwait(false);
-                }
-                else
-                {
-                    await _nameRefresh.ApplyAsync(missingList).ConfigureAwait(false);
-                }
+                IReadOnlyList<string> mapped = null;
+                await MeasureStepAsync(
+                    "agenda",
+                    async () => mapped = await _addressBook.RefreshAsync(force: false).ConfigureAwait(false))
+                    .ConfigureAwait(false);
+                IReadOnlyList<string> applyScope = mapped != null && mapped.Count > 0 ? mapped : missingList;
+                await MeasureStepAsync("apply-after", () => _nameRefresh.ApplyAsync(applyScope))
+                    .ConfigureAwait(false);
 
                 _catalog.Schedule();
             }
             catch (Exception exPost)
             {
                 Debug.WriteLine($"[ContactNameResolver] ResolveMissing post-usync failed: {exPost.Message}");
+            }
+        }
+
+        private async Task MeasureStepAsync(string step, Func<Task> work)
+        {
+            if (_diagnostics == null || _memory == null)
+            {
+                await work().ConfigureAwait(false);
+                return;
+            }
+
+            ulong before = _memory.UsageBytes;
+            Stopwatch wall = Stopwatch.StartNew();
+            try
+            {
+                await work().ConfigureAwait(false);
+            }
+            finally
+            {
+                wall.Stop();
+                ulong after = _memory.UsageBytes;
+                ulong growth = after > before ? after - before : 0UL;
+                if (growth >= StepJournalGrowthBytes || wall.ElapsedMilliseconds >= StepJournalElapsedMs)
+                {
+                    _diagnostics.Write(
+                        "names",
+                        "resolve-step",
+                        "step=" + step +
+                        "; ms=" + wall.ElapsedMilliseconds +
+                        "; bytesBefore=" + before +
+                        "; bytesAfter=" + after);
+                }
             }
         }
 

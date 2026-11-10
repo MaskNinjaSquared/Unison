@@ -129,7 +129,8 @@ namespace Unison.WhatsAppClient.Contacts
             IRuntimeDiagnostics diagnostics = null,
             IContactBlockActions blockActions = null,
             Func<bool> isOfflineReplayTipBusy = null,
-            IUiWorkHolds uiHolds = null)
+            IUiWorkHolds uiHolds = null,
+            IAppMemoryInfo memory = null)
         {
             _blockActions = blockActions;
             Func<bool> tipBusy = isOfflineReplayTipBusy ?? (() => false);
@@ -203,7 +204,9 @@ namespace Unison.WhatsAppClient.Contacts
                 _syncWork,
                 sessions,
                 nameRefresh,
-                workload ?? throw new ArgumentNullException(nameof(workload)));
+                workload ?? throw new ArgumentNullException(nameof(workload)),
+                memory: memory,
+                diagnostics: diagnostics);
             _avatars = new ChatAvatarPolicy(
                 _deferredAvatars,
                 jids,
