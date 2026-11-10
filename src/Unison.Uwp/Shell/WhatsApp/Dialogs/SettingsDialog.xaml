@@ -3,6 +3,7 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:controls="using:Unison.Uwp.UI.Controls"
+    xmlns:helpers="using:Unison.Uwp.UI.Helpers"
     xmlns:triggers="using:Unison.Uwp.UI.Triggers"
     xmlns:Interactivity="using:Microsoft.Xaml.Interactivity"
     xmlns:Core="using:Microsoft.Xaml.Interactions.Core"
@@ -191,7 +192,7 @@
                         <StackPanel Grid.Column="1"
                                     Margin="12,0,0,0"
                                     VerticalAlignment="Center">
-                            <TextBlock Text="{Binding ProfileDisplayName}"
+                            <TextBlock helpers:EmojiTextBlock.Text="{Binding ProfileDisplayName}"
                                        Foreground="{ThemeResource WhatsAppTextHighBrush}"
                                        FontSize="14"
                                        TextTrimming="CharacterEllipsis"

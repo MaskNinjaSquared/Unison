@@ -27,6 +27,43 @@ namespace Unison.Core.Helpers
         }
 
         /// <summary>
+        /// Lowest UTF-16 code unit that can take part in an emoji: ZWJ (U+200D).
+        /// Every other trigger in <see cref="IsEmojiCodePoint"/> — U+20E3, U+2300-23FF,
+        /// U+2600-27BF, U+2B50-2B55, U+FE0F and the astral ranges, which are reached
+        /// through surrogates at U+D800 and above — sorts higher.
+        /// </summary>
+        public const char LowestEmojiChar = '\u200D';
+
+        /// <summary>
+        /// Allocation-free pre-test: <c>false</c> guarantees <paramref name="text"/> holds no
+        /// emoji, so callers can skip <see cref="Split"/> and paint the string directly.
+        /// <c>true</c> only means it might, and the caller must still split.
+        /// </summary>
+        /// <remarks>
+        /// Conservative in the safe direction: any char at or above <see cref="LowestEmojiChar"/>
+        /// falls through to the full walk, so behaviour is unchanged for anything that could
+        /// contain emoji. The catalog arm of <see cref="IsEmojiElement"/> is covered by a test
+        /// asserting every built-in glyph carries such a char.
+        /// </remarks>
+        public static bool MayContainEmoji(string text)
+        {
+            if (string.IsNullOrEmpty(text))
+            {
+                return false;
+            }
+
+            for (int i = 0; i < text.Length; i++)
+            {
+                if (text[i] >= LowestEmojiChar)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        /// <summary>
         /// Coalesced plain/emoji slices over <paramref name="text"/> (grapheme clusters).
         /// Empty input yields no segments.
         /// </summary>

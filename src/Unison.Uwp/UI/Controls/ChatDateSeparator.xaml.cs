@@ -1,3 +1,4 @@
+using Unison.Uwp.UI.Helpers;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
 
@@ -35,7 +36,8 @@ namespace Unison.Uwp.UI.Controls
                 return;
             }
 
-            control.LabelText.Text = e.NewValue as string ?? string.Empty;
+            // Group-event text flows through here too, so it can carry emoji.
+            EmojiRichRuns.SetTextBlock(control.LabelText, e.NewValue as string ?? string.Empty);
         }
     }
 }

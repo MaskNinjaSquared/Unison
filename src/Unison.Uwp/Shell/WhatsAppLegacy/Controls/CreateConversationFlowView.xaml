@@ -4,6 +4,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:controls="using:Unison.Uwp.UI.Controls"
     xmlns:local="using:Unison.Uwp.Shell.WhatsAppLegacy.Controls"
+    xmlns:helpers="using:Unison.Uwp.UI.Helpers"
     xmlns:toolkit="using:Microsoft.Toolkit.Uwp.UI.Controls"
     x:Name="Root"
     Background="{ThemeResource ChatListBackgroundBrush}">
@@ -23,7 +24,7 @@
                                             IsGroup="{Binding IsGroup}"/>
                 <TextBlock Grid.Column="1"
                            Margin="12,0,0,0"
-                           Text="{Binding Name}"
+                           helpers:EmojiTextBlock.Text="{Binding Name}"
                            FontSize="17"
                            FontFamily="{StaticResource MainFontSemibold}"
                            FontWeight="SemiBold"

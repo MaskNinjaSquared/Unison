@@ -4,6 +4,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:helpers="using:Unison.Uwp.UI.Helpers"
     mc:Ignorable="d"
     d:DesignHeight="800"
     d:DesignWidth="480"
@@ -106,7 +107,7 @@
                             VerticalAlignment="Center"
                             Margin="0,0,8,0"
                             Visibility="Collapsed">
-                    <TextBlock Text="{x:Bind ViewModel.SenderDisplayName, Mode=OneWay}"
+                    <TextBlock helpers:EmojiTextBlock.Text="{x:Bind ViewModel.SenderDisplayName, Mode=OneWay}"
                                FontSize="16"
                                FontWeight="SemiBold"
                                FontFamily="{StaticResource MainFont}"
