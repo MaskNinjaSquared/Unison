@@ -29,7 +29,11 @@ namespace Unison.WhatsAppClient.Helpers
         private readonly IDispatcher _ui;
         private readonly Func<IHistoryService> _history;
         private readonly IRuntimeDiagnostics _diagnostics;
+        private readonly IAppMemoryInfo _memory;
         private readonly SemaphoreSlim _persistRunLock = new SemaphoreSlim(1, 1);
+
+        private const ulong FullPersistJournalGrowthBytes = 8UL * 1024 * 1024;
+        private const long FullPersistJournalElapsedMs = 1000;
 
         public ChatCatalogDiskPersistence(
             ChatStateStore chats,
@@ -38,7 +42,8 @@ namespace Unison.WhatsAppClient.Helpers
             IHistoryChatPreviewStore previews,
             IDispatcher ui,
             Func<IHistoryService> history,
-            IRuntimeDiagnostics diagnostics = null)
+            IRuntimeDiagnostics diagnostics = null,
+            IAppMemoryInfo memory = null)
         {
             _chats = chats ?? throw new ArgumentNullException(nameof(chats));
             _aliases = aliases ?? throw new ArgumentNullException(nameof(aliases));
@@ -47,6 +52,7 @@ namespace Unison.WhatsAppClient.Helpers
             _ui = ui ?? throw new ArgumentNullException(nameof(ui));
             _history = history ?? throw new ArgumentNullException(nameof(history));
             _diagnostics = diagnostics;
+            _memory = memory;
         }
 
         public Task<bool> PersistFullAsync() =>
@@ -68,6 +74,44 @@ namespace Unison.WhatsAppClient.Helpers
             _persistRunLock.Release();
 
         async Task IChatCatalogFullPersistHost.PersistFullCatalogAndNameMapsAsync()
+        {
+            ulong before = _memory?.UsageBytes ?? 0UL;
+            Stopwatch wall = Stopwatch.StartNew();
+            int rows = 0;
+            try
+            {
+                rows = await PersistFullCatalogAndNameMapsCoreAsync().ConfigureAwait(false);
+            }
+            finally
+            {
+                JournalSlowFullPersist(before, wall.ElapsedMilliseconds, rows);
+            }
+        }
+
+        private void JournalSlowFullPersist(ulong before, long elapsedMs, int rows)
+        {
+            if (_diagnostics == null || _memory == null)
+            {
+                return;
+            }
+
+            ulong after = _memory.UsageBytes;
+            ulong growth = after > before ? after - before : 0UL;
+            if (growth < FullPersistJournalGrowthBytes && elapsedMs < FullPersistJournalElapsedMs)
+            {
+                return;
+            }
+
+            _diagnostics.Write(
+                "catalog",
+                "full-persist",
+                "rows=" + rows +
+                "; ms=" + elapsedMs +
+                "; bytesBefore=" + before +
+                "; bytesAfter=" + after);
+        }
+
+        private async Task<int> PersistFullCatalogAndNameMapsCoreAsync()
         {
             ChatCatalogSnapshot catalog = null;
             Dictionary<string, string> contactSnapshot = null;
@@ -96,6 +140,7 @@ namespace Unison.WhatsAppClient.Helpers
             Debug.WriteLine(
                 "[ChatCatalogDiskPersistence] Persisted " + (catalog?.Rows.Count ?? 0) +
                 " chat rows and contact metadata");
+            return catalog?.Rows.Count ?? 0;
         }
 
         void IChatCatalogFullPersistHost.LogFullPersistFailed(Exception error) =>

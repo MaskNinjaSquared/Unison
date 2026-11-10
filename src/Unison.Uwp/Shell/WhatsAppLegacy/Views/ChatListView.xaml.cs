@@ -661,7 +661,8 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
 
             TraceListUi(
                 "listview-unloaded",
-                "visibleVm=" + (ViewModel?.VisibleChats?.Count ?? 0),
+                "visibleVm=" + (ViewModel?.VisibleChats?.Count ?? 0) +
+                "; memoryBytes=" + Windows.System.MemoryManager.AppMemoryUsage,
                 flush: true);
         }
 

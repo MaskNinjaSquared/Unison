@@ -534,7 +534,8 @@ namespace Unison.Uwp.UI.Views
 
             TraceListUi(
                 "listview-unloaded",
-                "visibleVm=" + (ViewModel?.VisibleChats?.Count ?? 0),
+                "visibleVm=" + (ViewModel?.VisibleChats?.Count ?? 0) +
+                "; memoryBytes=" + Windows.System.MemoryManager.AppMemoryUsage,
                 flush: true);
         }
 

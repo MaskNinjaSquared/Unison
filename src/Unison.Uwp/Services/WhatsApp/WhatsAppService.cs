@@ -1006,7 +1006,8 @@ namespace Unison.Uwp.Services.WhatsApp
                 _chatPreviews,
                 _ui,
                 () => History,
-                RuntimeDiagnosticsService.Instance);
+                RuntimeDiagnosticsService.Instance,
+                _appMemory);
             _backgroundDisplayNames = new BackgroundDisplayNamesPersistence(
                 _chatState,
                 JidAlias,
