@@ -154,6 +154,66 @@ namespace Unison.Core.Tests.Helpers
         }
 
         [Fact]
+        public async Task Startup_normalize_keeps_a_named_title_while_only_the_push_name_is_known()
+        {
+            // Cold start: the address book has not loaded yet, so the push name is all the
+            // resolver has. It must not demote the title saved from the address book last run.
+            var pushNames = new DisplayNameTable();
+            pushNames.Set(Ana, "Ana");
+            var chat = new ChatItem { JID = Ana, Name = "Ana Trabalho" };
+            _chats.Chats.Add(chat);
+            var refresh = BuildWithPushNames(pushNames);
+
+            int updated = await refresh.NormalizePersistedTitlesAsync();
+
+            Assert.Equal(0, updated);
+            Assert.Equal("Ana Trabalho", chat.Name);
+        }
+
+        [Fact]
+        public async Task Startup_normalize_still_names_a_row_showing_its_number()
+        {
+            var pushNames = new DisplayNameTable();
+            pushNames.Set(Ana, "Ana");
+            var chat = new ChatItem { JID = Ana, Name = "5511988887777" };
+            _chats.Chats.Add(chat);
+            var refresh = BuildWithPushNames(pushNames);
+
+            int updated = await refresh.NormalizePersistedTitlesAsync();
+
+            Assert.Equal(1, updated);
+            Assert.Equal("Ana", chat.Name);
+        }
+
+        [Fact]
+        public async Task Title_changes_are_reported_with_the_pass_that_made_them()
+        {
+            _chats.Chats.Add(new ChatItem { JID = Ana, Name = "5511988887777" });
+            _addressBook.Set(Ana, "Ana Trabalho");
+            var refresh = Build();
+            var reports = new List<ChatTitleChanges>();
+            refresh.TitlesChanged += (s, e) => reports.Add(e);
+
+            await refresh.NormalizePersistedTitlesAsync();
+            await refresh.ApplyAsync();
+
+            ChatTitleChanges report = Assert.Single(reports);
+            Assert.Equal("normalize", report.Pass);
+            ResolvedNameChange change = Assert.Single(report.Changes);
+            Assert.Equal("5511988887777", change.Previous);
+            Assert.Equal("Ana Trabalho", change.Name);
+        }
+
+        private ChatNameRefresh BuildWithPushNames(DisplayNameTable pushNames)
+        {
+            _aliases.BindSelf(() => Me, () => null);
+            var markers = new FakeMarkers();
+            var names = new ContactDisplayNames(_aliases, pushNames, _addressBook, new RecordingPersonStore(), markers);
+            names.Bind(() => new SelfNameInputs { Id = Me }, null);
+            return new ChatNameRefresh(_ui, _chats, names, markers, new FakeGroupNaming());
+        }
+
+        [Fact]
         public async Task Concurrent_applies_coalesce_into_one_ui_walk()
         {
             _chats.Chats.Add(new ChatItem { JID = Ana, Name = "5511988887777" });

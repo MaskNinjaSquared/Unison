@@ -12,6 +12,21 @@ using Unison.Core.State;
 
 namespace Unison.WhatsAppClient.Helpers
 {
+    /// <summary>The chat titles one <see cref="ChatNameRefresh"/> pass replaced.</summary>
+    public sealed class ChatTitleChanges : EventArgs
+    {
+        internal ChatTitleChanges(string pass, IReadOnlyList<ResolvedNameChange> changes)
+        {
+            Pass = pass;
+            Changes = changes;
+        }
+
+        /// <summary>"normalize" for the startup pass, "apply" for every later one.</summary>
+        public string Pass { get; }
+
+        public IReadOnlyList<ResolvedNameChange> Changes { get; }
+    }
+
     /// <summary>
     /// Puts the names now known onto the chat rows and their members, in UI passes.
     /// </summary>
@@ -78,6 +93,9 @@ namespace Unison.WhatsAppClient.Helpers
 
         /// <summary>Raised with how many titles and member names changed; never with zero.</summary>
         public event EventHandler<int> Applied;
+
+        /// <summary>Raised outside the UI pass with the titles it replaced; never empty.</summary>
+        public event EventHandler<ChatTitleChanges> TitlesChanged;
 
         /// <summary>Full catalogue walk — discovery when the caller does not know which JIDs moved.</summary>
         public Task ApplyAsync() => ApplyAsync(affectedJids: null);
@@ -177,6 +195,7 @@ namespace Unison.WhatsAppClient.Helpers
             int totalUpdated = 0;
             int start = 0;
             List<ChatItem> targets = null;
+            var titles = new List<ResolvedNameChange>();
             bool announce = false;
             IUiWaitRun holds = _uiHolds.BeginRun("chat-names");
 
@@ -220,6 +239,7 @@ namespace Unison.WhatsAppClient.Helpers
                         ResolveForApply,
                         IsMeaningful,
                         membersToo: membersToo,
+                        titles: titles,
                         unnamedMembersOnly: frugal);
 
                     if (!more)
@@ -243,6 +263,16 @@ namespace Unison.WhatsAppClient.Helpers
             if (announce)
             {
                 Applied?.Invoke(this, totalUpdated);
+            }
+
+            RaiseTitlesChanged("apply", titles);
+        }
+
+        private void RaiseTitlesChanged(string pass, List<ResolvedNameChange> titles)
+        {
+            if (titles.Count > 0)
+            {
+                TitlesChanged?.Invoke(this, new ChatTitleChanges(pass, titles));
             }
         }
 
@@ -369,6 +399,8 @@ namespace Unison.WhatsAppClient.Helpers
         /// <summary>
         /// Titles only (no member relabel): the pass that runs once after persisted chats
         /// rehydrate, so phone-number placeholders become resolved names before the list paints.
+        /// A title that is already a name is kept: the address book and app-state contacts may
+        /// not have loaded yet, and the push name would demote it until the next pass.
         /// Frugal devices slice across dispatcher turns — a single UI pass over 250+ rows
         /// froze Lumia 950 XL for tens of seconds during deferred startup.
         /// </summary>
@@ -377,6 +409,7 @@ namespace Unison.WhatsAppClient.Helpers
         {
             bool frugal = _preferFrugal();
             int sliceSize = frugal ? FrugalUiSliceSize : int.MaxValue;
+            var titles = new List<ResolvedNameChange>();
             int totalUpdated = 0;
             int start = 0;
 
@@ -415,7 +448,9 @@ namespace Unison.WhatsAppClient.Helpers
                         batch,
                         ResolveForApply,
                         IsMeaningful,
-                        membersToo: false);
+                        membersToo: false,
+                        titles: titles,
+                        placeholdersOnly: true);
 
                     if (!more)
                     {
@@ -436,6 +471,7 @@ namespace Unison.WhatsAppClient.Helpers
                 await Task.Delay(FrugalSliceGap).ConfigureAwait(false);
             }
 
+            RaiseTitlesChanged("normalize", titles);
             return totalUpdated;
         }
 

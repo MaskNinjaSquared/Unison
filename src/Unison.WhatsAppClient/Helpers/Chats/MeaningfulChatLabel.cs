@@ -54,6 +54,13 @@ namespace Unison.WhatsAppClient.Helpers
                 return false;
             }
 
+            // A truncated copy of a real name must not count as one, or it would replace the
+            // whole name under "a better name always wins".
+            if (ContactLabelSanitizer.HasBrokenSurrogate(trimmed))
+            {
+                return false;
+            }
+
             if (isGroup)
             {
                 if (GroupNameSyncBlacklist.IsBlacklisted(trimmed))

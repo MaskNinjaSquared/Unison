@@ -51,6 +51,10 @@ namespace Unison.WhatsAppClient.Helpers
         /// <param name="unnamedMembersOnly">
         /// Only members still showing a number / JID are resolved; named ones are left as they are.
         /// </param>
+        /// <param name="placeholdersOnly">
+        /// Only titles still showing a number / placeholder are replaced. For passes that run
+        /// before every name source has loaded, where the best name known may be a weaker one.
+        /// </param>
         /// <returns>How many titles and member names changed.</returns>
         public static int Apply(
             IEnumerable<ChatItem> chats,
@@ -58,7 +62,8 @@ namespace Unison.WhatsAppClient.Helpers
             Func<string, string, bool, bool> isMeaningful,
             bool membersToo,
             ICollection<ResolvedNameChange> titles = null,
-            bool unnamedMembersOnly = false)
+            bool unnamedMembersOnly = false,
+            bool placeholdersOnly = false)
         {
             if (chats == null)
             {
@@ -83,12 +88,15 @@ namespace Unison.WhatsAppClient.Helpers
                     continue;
                 }
 
-                string resolved = resolveName(chat.JID, ChatContext);
+                bool existingMeaningful = isMeaningful(chat.Name, chat.JID, chat.IsGroup);
+                string resolved = placeholdersOnly && existingMeaningful
+                    ? null
+                    : resolveName(chat.JID, ChatContext);
                 if (ChatNameReplacement.ShouldReplace(
                         chat.Name,
                         resolved,
                         resolvedMeaningful: isMeaningful(resolved, chat.JID, chat.IsGroup),
-                        existingMeaningful: isMeaningful(chat.Name, chat.JID, chat.IsGroup),
+                        existingMeaningful: existingMeaningful,
                         isGroup: chat.IsGroup))
                 {
                     titles?.Add(new ResolvedNameChange(chat.JID, chat.Name, resolved));

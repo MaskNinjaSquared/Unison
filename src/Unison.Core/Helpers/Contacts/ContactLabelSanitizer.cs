@@ -238,6 +238,38 @@ namespace Unison.Core.Helpers
                    DigitsOnly(trimmed).Length >= MinDigitsForPhoneEcho;
         }
 
+        /// <summary>
+        /// Whether the label holds half of a UTF-16 surrogate pair, the mark of a name cut
+        /// through an emoji ("Leo🇮🇹" stored as "Leo🇮" plus a dangling high surrogate).
+        /// </summary>
+        public static bool HasBrokenSurrogate(string label)
+        {
+            if (string.IsNullOrEmpty(label))
+            {
+                return false;
+            }
+
+            for (int i = 0; i < label.Length; i++)
+            {
+                char c = label[i];
+                if (char.IsHighSurrogate(c))
+                {
+                    if (i + 1 >= label.Length || !char.IsLowSurrogate(label[i + 1]))
+                    {
+                        return true;
+                    }
+
+                    i++;
+                }
+                else if (char.IsLowSurrogate(c))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
         private static string DigitsOnly(string value)
         {
             if (string.IsNullOrWhiteSpace(value))

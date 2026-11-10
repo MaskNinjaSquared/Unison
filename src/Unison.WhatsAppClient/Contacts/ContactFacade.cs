@@ -230,6 +230,50 @@ namespace Unison.WhatsAppClient.Contacts
 
             // Lives as long as the app does, so there is nothing to unhook from.
             _nameRefresh.Applied += OnChatNamesApplied;
+            _nameRefresh.TitlesChanged += OnChatTitlesChanged;
+        }
+
+        private const int MaxJournaledTitleChanges = 20;
+
+        private void OnChatTitlesChanged(object sender, ChatTitleChanges e)
+        {
+            if (_diagnostics == null)
+            {
+                return;
+            }
+
+            int count = Math.Min(e.Changes.Count, MaxJournaledTitleChanges);
+            for (int i = 0; i < count; i++)
+            {
+                ResolvedNameChange change = e.Changes[i];
+                _diagnostics.Write(
+                    "names",
+                    "title-changed",
+                    "pass=" + e.Pass +
+                    "; jid=" + DiagnosticJidMask.Apply(change.Jid) +
+                    "; from=" + TitleForJournal(change.Previous) +
+                    "; to=" + TitleForJournal(change.Name) +
+                    "; toBroken=" + ContactLabelSanitizer.HasBrokenSurrogate(change.Name));
+            }
+
+            if (e.Changes.Count > count)
+            {
+                _diagnostics.Write(
+                    "names",
+                    "title-changed-truncated",
+                    "pass=" + e.Pass + "; total=" + e.Changes.Count);
+            }
+        }
+
+        private static string TitleForJournal(string title)
+        {
+            string trimmed = title?.Trim();
+            if (string.IsNullOrEmpty(trimmed))
+            {
+                return "-";
+            }
+
+            return ContactLabelSanitizer.IsPhoneLikeLabel(trimmed) ? "<number>" : trimmed;
         }
 
         private void OnChatNamesApplied(object sender, int updated)

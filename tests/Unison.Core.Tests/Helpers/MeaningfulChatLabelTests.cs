@@ -92,6 +92,34 @@ namespace Unison.Core.Tests.Helpers
             Assert.Equal("Leo🇮🇹", chat.Name);
         }
 
+        // Facts, not InlineData: xUnit serializes theory data and turns a lone surrogate into U+FFFD.
+        [Fact]
+        public void A_name_cut_after_a_high_surrogate_is_not_meaningful()
+        {
+            Assert.False(MeaningfulChatLabel.IsMeaningful("Leo🇮\uD83C", "123456789012345@lid", isGroup: false));
+        }
+
+        [Fact]
+        public void A_subject_starting_with_a_low_surrogate_is_not_meaningful()
+        {
+            Assert.False(MeaningfulChatLabel.IsMeaningful("\uDDF9Family", "120363000000000000@g.us", isGroup: true));
+        }
+
+        [Fact]
+        public void A_label_cut_through_an_emoji_does_not_overwrite_the_whole_name()
+        {
+            var chat = new ChatItem { JID = "123456789012345@lid", Name = "Leo🇮🇹" };
+
+            int changed = ResolvedNameApply.Apply(
+                new[] { chat },
+                (jid, context) => "Leo🇮\uD83C",
+                (label, jid, isGroup) => MeaningfulChatLabel.IsMeaningful(label, jid, isGroup),
+                membersToo: false);
+
+            Assert.Equal(0, changed);
+            Assert.Equal("Leo🇮🇹", chat.Name);
+        }
+
         [Fact]
         public void A_masked_phone_is_not_meaningful()
         {
