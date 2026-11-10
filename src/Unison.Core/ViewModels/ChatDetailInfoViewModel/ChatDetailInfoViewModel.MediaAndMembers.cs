@@ -706,6 +706,13 @@ namespace Unison.Core.ViewModels
                 return;
             }
 
+            if (e.PropertyName == nameof(ChatItem.GroupDescription))
+            {
+                OnPropertyChanged(nameof(StatusOrDescription));
+                OnPropertyChanged(nameof(HasStatusOrDescription));
+                return;
+            }
+
             if (e.PropertyName == nameof(ChatItem.Name) ||
                 e.PropertyName == nameof(ChatItem.Kind) ||
                 e.PropertyName == nameof(ChatItem.JID))

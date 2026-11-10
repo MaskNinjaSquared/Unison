@@ -19,6 +19,8 @@ namespace Unison.Core.Models
         private bool _isFavorite;
         private long? _mutedUntil;
         private ChannelViewerRole _channelRole;
+        private string _groupDescription;
+        private string _groupDescriptionId;
         private ChatLocalStateFields _known;
 
         public string Jid
@@ -102,8 +104,28 @@ namespace Unison.Core.Models
             }
         }
 
-        public bool IsMutedLocally => ChatMuteHelper.IsMuted(MutedUntil);
+        /// <summary>
+        /// The group description last read off the wire. Null = never learned; empty string =
+        /// the group genuinely has none. Set together with <see cref="GroupDescriptionId"/>.
+        /// </summary>
+        public string GroupDescription
+        {
+            get { return _groupDescription; }
+            set
+            {
+                _groupDescription = value;
+                _known |= ChatLocalStateFields.GroupDescription;
+            }
+        }
 
+        /// <summary>Wire id of the stored description; null when the reply carried none.</summary>
+        public string GroupDescriptionId
+        {
+            get { return _groupDescriptionId; }
+            set { _groupDescriptionId = value; }
+        }
+
+        public bool IsMutedLocally => ChatMuteHelper.IsMuted(MutedUntil);
         public ChatLocalStateFields KnownFields
         {
             get { return _known; }

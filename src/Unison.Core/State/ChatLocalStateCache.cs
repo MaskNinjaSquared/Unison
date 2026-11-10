@@ -263,6 +263,12 @@ namespace Unison.Core.State
                 copy.ChannelRole = source.ChannelRole;
             }
 
+            if (source.Knows(ChatLocalStateFields.GroupDescription))
+            {
+                copy.GroupDescription = source.GroupDescription;
+                copy.GroupDescriptionId = source.GroupDescriptionId;
+            }
+
             return copy;
         }
     }
