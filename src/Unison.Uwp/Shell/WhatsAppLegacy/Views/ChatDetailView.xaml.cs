@@ -3056,7 +3056,7 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                 _displayedPinnedIndex = 0;
                 PinnedMessageButton.Visibility = Visibility.Collapsed;
                 PinnedMessageTitleText.Text = LocalizedStrings.Get("ChatDetail_Pinned.Text");
-                PinnedMessagePreviewText.Text = string.Empty;
+                EmojiRichRuns.SetTextBlock(PinnedMessagePreviewText, string.Empty);
                 return;
             }
 
@@ -3083,9 +3083,17 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             _displayedPinnedMessage = _activePinnedMessages[_displayedPinnedIndex];
             string preview = _displayedPinnedMessage.Caption;
             if (string.IsNullOrWhiteSpace(preview)) preview = _displayedPinnedMessage.Content;
-            PinnedMessagePreviewText.Text = string.IsNullOrWhiteSpace(preview)
-                ? "[Mídia]"
-                : preview.Replace("\r", " ").Replace("\n", " ");
+            // Mentions resolve to display names and emoji get the packaged face, but links stay
+            // inert: the banner is a Button whose tap jumps to the pinned message, and a live
+            // Hyperlink inside it would swallow that gesture.
+            EmojiRichRuns.SetTextBlock(
+                PinnedMessagePreviewText,
+                string.IsNullOrWhiteSpace(preview)
+                    ? "[Mídia]"
+                    : CommentRichService.FormatMentionsPlain(
+                        preview.Replace("\r", " ").Replace("\n", " "),
+                        _displayedPinnedMessage.MentionedJids,
+                        _displayedPinnedMessage.MentionLookup));
             PinnedMessageTitleText.Text = _activePinnedMessages.Count > 1
                 ? LocalizedStrings.Format("ChatDetail_PinnedIndex", _displayedPinnedIndex + 1, _activePinnedMessages.Count)
                 : LocalizedStrings.Get("ChatDetail_Pinned.Text");
