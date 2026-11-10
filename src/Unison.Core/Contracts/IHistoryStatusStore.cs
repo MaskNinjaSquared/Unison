@@ -38,6 +38,13 @@ namespace Unison.Core.Contracts
 
         Task<int> DeleteExpiredAsync();
 
+        /// <summary>
+        /// Removes one item the account sent. The outgoing copy is ingested optimistically from
+        /// the local echo, long before the server acks, so a refused Status has to be taken back
+        /// out or it sits in "My status" as though it had been delivered.
+        /// </summary>
+        Task<bool> DeleteOwnItemAsync(string messageId);
+
         Task ClearAsync(string reason = null);
     }
 }

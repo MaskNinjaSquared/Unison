@@ -117,15 +117,63 @@ namespace Unison.WhatsAppClient.Status
             }
 
             List<string> recipients = StatusRecipientList.Build(post.RecipientJids, self);
-            string id = await _wire
-                .SendTextStatusAsync(post.Text, post.BackgroundArgb, post.TextArgb, post.Font, recipients)
-                .ConfigureAwait(false);
+            string id;
+            try
+            {
+                id = await _wire
+                    .SendTextStatusAsync(post.Text, post.BackgroundArgb, post.TextArgb, post.Font, recipients)
+                    .ConfigureAwait(false);
+            }
+            catch (StatusPublishRefusedException refused)
+            {
+                _diagnostics?.Write(
+                    "status",
+                    "refused",
+                    "error=" + refused.ErrorCode + "; reason=" + refused.Reason +
+                    "; recipients=" + recipients.Count);
+
+                // The local echo ingested this into "My status" within a few ms of the send,
+                // well before the refusal arrived. Leaving it there would show a Status that
+                // nobody received as though it had gone out.
+                await RollbackOwnItemAsync(refused.MessageId).ConfigureAwait(false);
+                throw;
+            }
 
             _diagnostics?.Write(
                 "status",
                 "published",
                 "id=" + id + "; recipients=" + recipients.Count);
             return id;
+        }
+
+        /// <summary>
+        /// Takes the optimistically ingested copy of a refused Status back out. The echo and the
+        /// refusal race, so a miss here is normal and must not replace the refusal the caller is
+        /// about to see.
+        /// </summary>
+        private async Task RollbackOwnItemAsync(string messageId)
+        {
+            if (string.IsNullOrWhiteSpace(messageId))
+            {
+                return;
+            }
+
+            try
+            {
+                bool removed = await _store.DeleteOwnItemAsync(messageId).ConfigureAwait(false);
+                _diagnostics?.Write(
+                    "status",
+                    "refused-rollback",
+                    "id=" + messageId + "; removed=" + removed);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[StatusFacade] Refused rollback failed id=" + messageId + ": " + ex.Message);
+                _diagnostics?.Write(
+                    "status",
+                    "refused-rollback-failed",
+                    "id=" + messageId + "; error=" + ex.Message);
+            }
         }
 
         public async Task<IReadOnlyList<StatusAuthorItem>> GetActiveAuthorsAsync()

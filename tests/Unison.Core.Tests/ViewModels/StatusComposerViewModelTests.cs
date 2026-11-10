@@ -262,6 +262,36 @@ namespace Unison.Core.Tests.ViewModels
         }
 
         [Fact]
+        public void A_refused_publish_reports_the_server_code_and_does_not_toast_success()
+        {
+            var status = new RecordingStatus { RefuseWith = "400" };
+            var navigator = new RecordingNavigator();
+            var notifications = new RecordingNotifications();
+            var dialogs = new RecordingDialogs(
+                StatusPrivacyDialogChoice.PickOnlyShareWith,
+                StatusPrivacyDialogChoice.Confirm);
+            var vm = new StatusComposerViewModel(
+                new CountingDispatcher(),
+                dialogs,
+                navigator: navigator,
+                status: status,
+                notifications: notifications);
+            vm.PrivacyCommand.Execute(null);
+            vm.SetPickerSelection(new[] { "1@s.whatsapp.net" });
+            vm.ContactPickerConfirmCommand.Execute(null);
+            vm.Text = "hi";
+
+            vm.SendCommand.Execute(null);
+
+            Assert.False(vm.IsPublishing);
+            Assert.Equal("hi", vm.Text);
+            Assert.Equal(1, dialogs.Shown);
+            Assert.Contains("400", dialogs.LastContent);
+            Assert.Equal(0, navigator.CloseFullScreenCalls);
+            Assert.Null(notifications.LastTitle);
+        }
+
+        [Fact]
         public void Publish_without_recipients_does_not_send()
         {
             var status = new RecordingStatus();
@@ -464,6 +494,9 @@ namespace Unison.Core.Tests.ViewModels
         {
             public bool Fail { get; set; }
 
+            /// <summary>Ack error code the server answers the publish with, when set.</summary>
+            public string RefuseWith { get; set; }
+
             public StatusTextPost LastPost { get; private set; }
 
             public event EventHandler StatusUpdated { add { } remove { } }
@@ -473,6 +506,11 @@ namespace Unison.Core.Tests.ViewModels
                 if (Fail)
                 {
                     throw new InvalidOperationException("offline");
+                }
+
+                if (!string.IsNullOrEmpty(RefuseWith))
+                {
+                    throw new StatusPublishRefusedException(RefuseWith, "bad-request");
                 }
 
                 LastPost = post;
