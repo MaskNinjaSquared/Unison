@@ -95,6 +95,18 @@ namespace Unison.Core.State
         private List<ChatItem> _sweepDirty;
         private List<string> _sweepWarm;
 
+        private readonly ISessionLogger _sessionLog;
+        private readonly IRuntimeDiagnostics _diagnostics;
+
+        // Per-sweep tallies for the one summary line in FinishSweep. Plain ints on the sweep
+        // thread — no allocation and no formatting on the per-row path.
+        private int _sweepNamed;
+        private int _sweepNumbered;
+        private int _sweepResynced;
+        private int _sweepRows;
+        private int _sweepNoParticipant;
+        private int _sweepCatalogue;
+
         public ChatAuthorProjection(
             IChatStateStore chatState,
             IPersonStore personStore,
@@ -104,7 +116,9 @@ namespace Unison.Core.State
             IContactService contacts = null,
             IChatService chats = null,
             ChatTimelineLoadPriorityGate timelinePriority = null,
-            Func<bool> preferFrugalUi = null)
+            Func<bool> preferFrugalUi = null,
+            ISessionLogger sessionLog = null,
+            IRuntimeDiagnostics diagnostics = null)
         {
             _chatState = chatState ?? throw new ArgumentNullException(nameof(chatState));
             _personStore = personStore ?? throw new ArgumentNullException(nameof(personStore));
@@ -114,11 +128,35 @@ namespace Unison.Core.State
             _chats = chats;
             _timelinePriority = timelinePriority;
             _preferFrugalUi = preferFrugalUi;
+            _sessionLog = sessionLog;
+            _diagnostics = diagnostics;
             _participants = new ParticipantResolutionContext(jids, contacts, chatState, personStore);
 
             if (_timelinePriority != null)
             {
                 _timelinePriority.Changed += OnTimelinePriorityChanged;
+            }
+        }
+
+        /// <summary>
+        /// One trace line to both sinks. The session log is a capped rolling buffer, so anything
+        /// emitted near launch — <see cref="Start"/> above all — can be evicted before the capture
+        /// is taken, leaving "never ran" and "ran and rolled off" indistinguishable. Diagnostics
+        /// retains the launch window, so lifecycle answers survive there.
+        /// </summary>
+        /// <remarks>One call per sweep or per lifecycle event. Never on the per-row path.</remarks>
+        private void TraceStrip(string eventName, string details = null)
+        {
+            if (_sessionLog != null)
+            {
+                _sessionLog.WriteAlways(
+                    "[AuthorStrip] " + eventName +
+                    (string.IsNullOrEmpty(details) ? string.Empty : " " + details));
+            }
+
+            if (_diagnostics != null)
+            {
+                _diagnostics.Write("author-strip", eventName, details);
             }
         }
 
@@ -139,8 +177,11 @@ namespace Unison.Core.State
             _chatState.GroupRosterChanged += OnGroupRosterChanged;
             _chatState.Chats.CollectionChanged += OnChatsChanged;
 
-            // Persisted strips that already carry a name are left alone; a full catalogue walk at
-            // Start was the 30–100s Mobile stall.
+            // Persisted strips that already carry a name are left alone unless their rendered
+            // prefix disagrees with that name; a full catalogue walk at Start was the 30–100s
+            // Mobile stall.
+            TraceStrip("start");
+
             ScheduleUnnamedSweep();
         }
 
@@ -318,6 +359,13 @@ namespace Unison.Core.State
 
         private void ArmFrugalUnnamedFlush()
         {
+            // The silent case: a deferred sweep leaves no trace at all, and on a frugal device
+            // this is the normal path, not the exception. One line per deferral.
+            TraceStrip(
+                "sweep-deferred",
+                "hold=" + (_timelinePriority != null && _timelinePriority.IsHeld) +
+                "; frugal=" + (_preferFrugalUi != null && _preferFrugalUi()));
+
             int generation = Interlocked.Increment(ref _frugalFlushGeneration);
             _ = FlushFrugalUnnamedAsync(generation);
         }
@@ -334,6 +382,9 @@ namespace Unison.Core.State
 
                 if (_timelinePriority != null && _timelinePriority.IsHeld)
                 {
+                    // Dead end until OnTimelinePriorityChanged fires: this does not re-arm.
+                    TraceStrip("sweep-flush-abandoned", "hold=True");
+
                     return;
                 }
 
@@ -511,6 +562,9 @@ namespace Unison.Core.State
             public List<ChatItem> Work;
             public IReadOnlyDictionary<string, string> DirectNames;
             public string SelfLabel;
+            public int Catalogue;
+            public int NoParticipant;
+            public string Path;
         }
 
         /// <summary>
@@ -579,7 +633,11 @@ namespace Unison.Core.State
             {
                 Work = work,
                 DirectNames = directNames,
-                SelfLabel = request.SelfLabel
+                SelfLabel = request.SelfLabel,
+
+                // Catalogue / NoParticipant are full-sweep figures; the fast path never computes
+                // them, so Path is what tells a reader that a zero here means "not measured".
+                Path = "fast"
             };
         }
 
@@ -591,6 +649,7 @@ namespace Unison.Core.State
                 ChatAuthorStripMaps.BuildDirectChatNames(catalogue, _jids);
 
             var work = new List<ChatItem>();
+            int noParticipant = 0;
             if (catalogue != null)
             {
                 for (int i = 0; i < catalogue.Count; i++)
@@ -610,6 +669,10 @@ namespace Unison.Core.State
 
                     if (string.IsNullOrWhiteSpace(chat.LastMessageParticipantJid))
                     {
+                        // A group row with no participant on the tip can never be swept, so its
+                        // author prefix is whatever the tip slice composed. Counted because it
+                        // looks identical to "swept and clean" from the outside.
+                        noParticipant++;
                         if (clearSystemAuthor)
                         {
                             work.Add(chat);
@@ -621,7 +684,19 @@ namespace Unison.Core.State
                     bool unnamed = request.UnnamedPass && !IsUsableParticipantLabel(
                         chat.LastMessageSenderName,
                         chat.LastMessageParticipantJid);
+
+                    // A row can hold a real name and still render digits: the prefix and the name
+                    // are stored in separate columns and carried forward independently. Such a
+                    // row is not "unnamed", so without this it is skipped by every pass and the
+                    // digits survive forever.
+                    bool desynced = request.UnnamedPass &&
+                        !unnamed &&
+                        ChatAuthorStripDecision.AuthorPrefixDisagrees(
+                            chat.LastMessageAuthor,
+                            chat.LastMessageSenderName);
+
                     if (!unnamed &&
+                        !desynced &&
                         !clearSystemAuthor &&
                         !IsPendingChat(chat, request.PendingChats) &&
                         !IsPendingParticipant(
@@ -647,7 +722,10 @@ namespace Unison.Core.State
             {
                 Work = work,
                 DirectNames = directNames,
-                SelfLabel = request.SelfLabel
+                SelfLabel = request.SelfLabel,
+                Catalogue = catalogue == null ? 0 : catalogue.Count,
+                NoParticipant = noParticipant,
+                Path = "full"
             };
         }
 
@@ -665,6 +743,18 @@ namespace Unison.Core.State
             _sweepIndex = 0;
             _sweepDirty = null;
             _sweepWarm = null;
+            _sweepCatalogue = prepared.Catalogue;
+            _sweepNoParticipant = prepared.NoParticipant;
+            // Unconditional: the absence of a conditional line cannot distinguish "the sweep
+            // never ran" from "it ran and had nothing to report", and that is the one thing a
+            // device log has to be able to say. One line per sweep, never per row.
+            TraceStrip(
+                "sweep-start",
+                "path=" + (prepared.Path ?? "?") +
+                "; work=" + _sweepWork.Count +
+                "; catalogue=" + _sweepCatalogue +
+                "; noParticipant=" + _sweepNoParticipant);
+
             ProcessSweepChunk();
         }
 
@@ -758,12 +848,31 @@ namespace Unison.Core.State
         {
             List<ChatItem> dirtyStrips = _sweepDirty;
             List<string> needsStoreLookup = _sweepWarm;
+            int named = _sweepNamed;
+            int numbered = _sweepNumbered;
+            int resynced = _sweepResynced;
+            int rowsDecided = _sweepRows;
+            _sweepNamed = 0;
+            _sweepNumbered = 0;
+            _sweepResynced = 0;
+            _sweepRows = 0;
             _sweepWork = null;
             _sweepDirectNames = null;
             _sweepSelfLabel = null;
             _sweepDirty = null;
             _sweepWarm = null;
             _sweepIndex = 0;
+
+            // One line per sweep, unconditional — see BeginSweepChunks. "rows" is how many the
+            // decision actually reached; named + number + resync < rows means the rest were
+            // genuinely left alone.
+            TraceStrip(
+                "sweep-done",
+                "rows=" + rowsDecided +
+                "; named=" + named +
+                "; number=" + numbered +
+                "; resync=" + resynced +
+                "; warm=" + (needsStoreLookup == null ? 0 : needsStoreLookup.Count));
 
             if (dirtyStrips != null && _chats != null)
             {
@@ -871,9 +980,14 @@ namespace Unison.Core.State
             string canonical = _jids.PeekCanonicalJid(participant);
             string number = ParticipantStripLabel.ForParticipant(participant, canonical);
 
+            bool currentIsRealName = IsUsableParticipantLabel(
+                chat.LastMessageSenderName,
+                participant);
+
+            _sweepRows++;
             switch (ChatAuthorStripDecision.Decide(
                 chat.LastMessageSenderName,
-                IsUsableParticipantLabel(chat.LastMessageSenderName, participant),
+                currentIsRealName,
                 resolved,
                 resolved != null,
                 !string.IsNullOrEmpty(number)))
@@ -886,6 +1000,31 @@ namespace Unison.Core.State
                     // The number goes in the strip but not in the sender-name slot: it is a
                     // stand-in, and leaving that slot empty keeps the next sweep looking.
                     ApplyStrip(chat, participant, canonical, null, selfLabel);
+                    break;
+
+                default:
+                    // Keep means "the name slot is already right". It says nothing about the
+                    // prefix, and the two are written and persisted separately — a tip with no
+                    // push name leaves digits in the prefix while the store carries the known
+                    // name forward beside it. Rewrite the prefix, otherwise this pass declines
+                    // to fix the only thing on screen.
+                    //
+                    // Rewrite it from "resolved" and never from LastMessageSenderName. That
+                    // stored name is only carried forward, not re-attributed: when the tip moves
+                    // to a participant with no push name, the store keeps the previous sender's
+                    // name beside the new sender's digits, so the two fields can describe two
+                    // different people. "resolved" was looked up from this participant, so it is
+                    // the only value here that is provably theirs. With no resolution the digits
+                    // stay — unhelpful, but honest, and the next pass tries again.
+                    if (resolved != null &&
+                        ChatAuthorStripDecision.AuthorPrefixDisagrees(
+                            chat.LastMessageAuthor,
+                            resolved))
+                    {
+                        _sweepResynced++;
+                        ApplyStrip(chat, participant, canonical, resolved, selfLabel);
+                    }
+
                     break;
             }
 

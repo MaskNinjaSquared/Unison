@@ -110,5 +110,37 @@ namespace Unison.Core.Tests.Helpers
             Assert.True(findCalls >= 1);
             Assert.True(findCalls <= 3, "tip/canonical/alias only, finds=" + findCalls);
         }
+
+        /// <summary>
+        /// The repair's load-bearing route. Persisted chats arrive as collection Adds, which
+        /// schedule a per-chat strip, so every restored group row is visited on this path — and a
+        /// row that already carries a real name must not be filtered out here, because that is
+        /// exactly the desynced row (known name, digits prefix) the sweep has to rewrite.
+        /// </summary>
+        [Fact]
+        public void CollectPendingChats_keeps_a_named_row_that_is_rendering_digits()
+        {
+            const string groupJid = "120363@g.us";
+            var desynced = new ChatItem
+            {
+                JID = groupJid,
+                IsGroup = true,
+                LastMessageIsFromMe = false,
+                LastMessageParticipantJid = "17186831148@s.whatsapp.net",
+                LastMessageSenderName = "Lindsay Hefner",
+                LastMessageAuthor = "17186831148: "
+            };
+
+            var pending = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { groupJid };
+            List<ChatItem> work = ChatAuthorSweepSelection.CollectPendingChats(
+                pending,
+                jid => string.Equals(jid, groupJid, StringComparison.OrdinalIgnoreCase)
+                    ? desynced
+                    : null,
+                jids: null);
+
+            Assert.Single(work);
+            Assert.Same(desynced, work[0]);
+        }
     }
 }

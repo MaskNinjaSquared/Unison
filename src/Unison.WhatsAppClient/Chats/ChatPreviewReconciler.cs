@@ -194,6 +194,33 @@ namespace Unison.WhatsAppClient.Chats
 
             IUiWaitRun holds = _uiHolds.BeginRun(tag);
 
+            // The tip slice composes the author prefix itself, with no name chain: when the
+            // stored message has no push name FormatListAuthorPrefix falls straight to the
+            // sender's digits. Counted once per pass so a device log shows which producer put
+            // the number on screen — the tip slice or the author sweep.
+            int digitAuthors = 0;
+            for (int i = 0; i < newestByCanonical.Count; i++)
+            {
+                TipPlan plan = newestByCanonical[i];
+                if (plan.IsGroup &&
+                    plan.Strip != null &&
+                    plan.Best != null &&
+                    !plan.Best.IsFromMe &&
+                    !string.IsNullOrEmpty(plan.Strip.AuthorPrefix) &&
+                    string.IsNullOrWhiteSpace(plan.Strip.SenderName))
+                {
+                    digitAuthors++;
+                }
+            }
+
+            if (digitAuthors > 0)
+            {
+                DiagWrite(
+                    "preview-tip",
+                    "author-digits:" + digitAuthors,
+                    "reason=" + tag + "; planned=" + newestByCanonical.Count);
+            }
+
             int uiSlice = frugal ? UiSliceSizeFrugal : UiSliceSizeGenerous;
             int updated = 0;
             bool chunked = chatJids != null && chatJids.Count > 0;

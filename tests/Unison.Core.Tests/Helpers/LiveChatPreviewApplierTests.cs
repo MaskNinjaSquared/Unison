@@ -197,6 +197,98 @@ namespace Unison.Core.Tests.Helpers
             Assert.Equal(string.Empty, chat.LastMessageAuthor);
         }
 
+        /// <summary>
+        /// The post-replay clobber. After a suspend/resume the reconcile rebuilds the strip from
+        /// stored messages, which carry no push name, so it arrives with the sender's digits. The
+        /// swap path must not overwrite a prefix ChatAuthorProjection already resolved — doing so
+        /// put the number back on screen minutes after the repair.
+        /// </summary>
+        [Fact]
+        public void A_replayed_tip_does_not_downgrade_a_resolved_prefix_to_digits()
+        {
+            ChatItem chat = Row("hello", Noon, messageId: "3EB0");
+            chat.LastMessageIsFromMe = false;
+            chat.LastMessageParticipantJid = "17186831148@s.whatsapp.net";
+            chat.LastMessageSenderName = "Lindsay Hefner";
+            chat.LastMessageAuthor = "Lindsay Hefner: ";
+
+            // Body differs, so IsAlreadyShowing fails upstream and this lands as a swap.
+            bool applied = LiveChatPreviewApplier.ApplyIfNewer(
+                chat,
+                "https://www.facebook.com/watch",
+                Noon.AddMinutes(1),
+                messageId: "3EB1",
+                isFromMe: false,
+                sendState: MessageSendState.NotApplicable,
+                authorPrefix: "17186831148: ",
+                yesterdayLabel: "Yesterday",
+                participantJid: "17186831148@s.whatsapp.net",
+                senderName: null);
+
+            Assert.True(applied);
+            Assert.Equal("Lindsay Hefner: ", chat.LastMessageAuthor);
+            Assert.Equal("Lindsay Hefner", chat.LastMessageSenderName);
+        }
+
+        /// <summary>
+        /// The same guard must not caption one member's message with another's name. When the tip
+        /// moves to a participant with no push name, the stored name belongs to the *previous*
+        /// sender, so keeping the old prefix would be confidently wrong. Digits are correct here.
+        /// </summary>
+        [Fact]
+        public void A_tip_from_a_different_member_is_not_captioned_with_the_previous_name()
+        {
+            ChatItem chat = Row("hello", Noon, messageId: "3EB0");
+            chat.LastMessageIsFromMe = false;
+            chat.LastMessageParticipantJid = "17186831148@s.whatsapp.net";
+            chat.LastMessageSenderName = "Lindsay Hefner";
+            chat.LastMessageAuthor = "Lindsay Hefner: ";
+
+            bool applied = LiveChatPreviewApplier.ApplyIfNewer(
+                chat,
+                "see you there",
+                Noon.AddMinutes(1),
+                messageId: "3EB1",
+                isFromMe: false,
+                sendState: MessageSendState.NotApplicable,
+                authorPrefix: "5511977776666: ",
+                yesterdayLabel: "Yesterday",
+                participantJid: "5511977776666@s.whatsapp.net",
+                senderName: null);
+
+            Assert.True(applied);
+            Assert.Equal("5511977776666: ", chat.LastMessageAuthor);
+            Assert.NotEqual("Lindsay Hefner: ", chat.LastMessageAuthor);
+        }
+
+        /// <summary>
+        /// A real incoming name is an upgrade, not a downgrade, and must still win.
+        /// </summary>
+        [Fact]
+        public void A_replayed_tip_that_carries_a_name_still_updates_the_prefix()
+        {
+            ChatItem chat = Row("hello", Noon, messageId: "3EB0");
+            chat.LastMessageIsFromMe = false;
+            chat.LastMessageParticipantJid = "17186831148@s.whatsapp.net";
+            chat.LastMessageSenderName = "Lindsay Hefner";
+            chat.LastMessageAuthor = "Lindsay Hefner: ";
+
+            LiveChatPreviewApplier.ApplyIfNewer(
+                chat,
+                "renamed",
+                Noon.AddMinutes(1),
+                messageId: "3EB1",
+                isFromMe: false,
+                sendState: MessageSendState.NotApplicable,
+                authorPrefix: "Lindsay H: ",
+                yesterdayLabel: "Yesterday",
+                participantJid: "17186831148@s.whatsapp.net",
+                senderName: "Lindsay H");
+
+            Assert.Equal("Lindsay H: ", chat.LastMessageAuthor);
+            Assert.Equal("Lindsay H", chat.LastMessageSenderName);
+        }
+
         [Fact]
         public void ApplyAuthorParts_rejects_the_group_title_as_sender_name()
         {
