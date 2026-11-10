@@ -190,6 +190,36 @@ namespace Unison.Core.Helpers
             return string.Equals(DigitsOnly(trimmed), contextDigits, StringComparison.Ordinal);
         }
 
+        /// <summary>
+        /// Whether the label is nothing but a phone number, whoever it belongs to. A LID
+        /// chat resolves to its paired number, whose digits never echo the LID itself.
+        /// Not part of <see cref="Sanitize"/>: there another person's number is still data.
+        /// </summary>
+        public static bool IsPhoneLikeLabel(string trimmed)
+        {
+            if (string.IsNullOrWhiteSpace(trimmed))
+            {
+                return false;
+            }
+
+            int digits = 0;
+            foreach (char c in trimmed)
+            {
+                if (char.IsDigit(c))
+                {
+                    digits++;
+                }
+                else if (PhonePunctuation.IndexOf(c) < 0)
+                {
+                    return false;
+                }
+            }
+
+            return digits >= MinDigitsForPhoneEcho;
+        }
+
+        private const string PhonePunctuation = "+-(). ";
+
         private static string DigitsOnly(string value)
         {
             if (string.IsNullOrWhiteSpace(value))

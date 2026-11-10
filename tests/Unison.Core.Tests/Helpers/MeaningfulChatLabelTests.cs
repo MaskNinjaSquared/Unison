@@ -2,6 +2,7 @@
 // Tests for MeaningfulChatLabel / GroupIdPlaceholder.
 // =============================================================================
 using Unison.Core.Helpers;
+using Unison.Core.Models;
 using Unison.WhatsAppClient.Helpers;
 using Xunit;
 
@@ -53,6 +54,42 @@ namespace Unison.Core.Tests.Helpers
                 "5511988887777",
                 "5511988887777@s.whatsapp.net",
                 isGroup: false));
+        }
+
+        [Theory]
+        [InlineData("393520211245")]
+        [InlineData("+39 352 021 1245")]
+        public void A_phone_number_on_a_lid_chat_is_not_meaningful(string label)
+        {
+            // The digits are the paired phone number, so they never echo the LID.
+            Assert.False(MeaningfulChatLabel.IsMeaningful(label, "123456789012345@lid", isGroup: false));
+        }
+
+        [Fact]
+        public void A_short_numeric_nickname_is_meaningful()
+        {
+            Assert.True(MeaningfulChatLabel.IsMeaningful("007", "123456789012345@lid", isGroup: false));
+        }
+
+        [Fact]
+        public void A_name_with_an_emoji_flag_is_meaningful()
+        {
+            Assert.True(MeaningfulChatLabel.IsMeaningful("Leo🇮🇹", "123456789012345@lid", isGroup: false));
+        }
+
+        [Fact]
+        public void A_resolved_phone_number_does_not_overwrite_a_real_name_on_a_lid_chat()
+        {
+            var chat = new ChatItem { JID = "123456789012345@lid", Name = "Leo🇮🇹" };
+
+            int changed = ResolvedNameApply.Apply(
+                new[] { chat },
+                (jid, context) => "393520211245",
+                (label, jid, isGroup) => MeaningfulChatLabel.IsMeaningful(label, jid, isGroup),
+                membersToo: false);
+
+            Assert.Equal(0, changed);
+            Assert.Equal("Leo🇮🇹", chat.Name);
         }
 
         [Fact]

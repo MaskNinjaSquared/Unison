@@ -71,7 +71,8 @@ namespace Unison.WhatsAppClient.Helpers
                 return !GroupIdPlaceholder.IsIdPlaceholder(trimmed, contextJid);
             }
 
-            return !ContactLabelSanitizer.IsPhoneEcho(trimmed, contextJid);
+            return !ContactLabelSanitizer.IsPhoneEcho(trimmed, contextJid) &&
+                   !ContactLabelSanitizer.IsPhoneLikeLabel(trimmed);
         }
     }
 }
