@@ -4,6 +4,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:controls="using:Unison.Uwp.UI.Controls"
     xmlns:templates="using:Unison.Uwp.UI.Templates"
+    xmlns:helpers="using:Unison.Uwp.UI.Helpers"
     x:Name="Root"
     Background="{ThemeResource ChatListBackgroundBrush}">
 
@@ -27,7 +28,7 @@
                                                 IsGroup="{Binding IsGroup}"/>
                     <TextBlock Grid.Column="1"
                                Margin="12,0,0,0"
-                               Text="{Binding Name}"
+                               helpers:EmojiTextBlock.Text="{Binding Name}"
                                FontSize="17"
                                FontFamily="{StaticResource MainFontSemibold}"
                                FontWeight="SemiBold"
@@ -342,7 +343,7 @@
                                 Background="#99000000"
                                 Padding="8,6,8,8">
                             <StackPanel>
-                                <TextBlock Text="{Binding SelfDisplayName}"
+                                <TextBlock helpers:EmojiTextBlock.Text="{Binding SelfDisplayName}"
                                            FontFamily="{StaticResource MainFont}"
                                            FontSize="13"
                                            Foreground="White"
@@ -567,7 +568,7 @@
                             </Grid>
                         </Border>
                         <StackPanel Grid.Column="1" Margin="12,0,0,0" VerticalAlignment="Center">
-                            <TextBlock Text="{Binding SelfDisplayName}"
+                            <TextBlock helpers:EmojiTextBlock.Text="{Binding SelfDisplayName}"
                                        FontSize="16"
                                        FontFamily="{StaticResource MainFontSemibold}"
                                        FontWeight="SemiBold"

@@ -4,6 +4,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:controls="using:Unison.Uwp.UI.Controls"
     xmlns:templates="using:Unison.Uwp.UI.Templates"
+    xmlns:helpers="using:Unison.Uwp.UI.Helpers"
     Background="{ThemeResource ChatListBackgroundBrush}">
 
     <UserControl.Resources>
@@ -29,7 +30,7 @@
                     <TextBlock x:Name="RowName"
                                Grid.Column="1"
                                Margin="12,0,0,0"
-                               Text="{Binding Name}"
+                               helpers:EmojiTextBlock.Text="{Binding Name}"
                                FontSize="17"
                                FontFamily="{StaticResource MainFontSemibold}"
                                FontWeight="SemiBold"

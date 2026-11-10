@@ -138,7 +138,7 @@
                             Content="&#xE72B;"/>
 
                     <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                        <TextBlock Text="{x:Bind ViewModel.AuthorName, Mode=OneWay}"
+                        <TextBlock helpers:EmojiTextBlock.Text="{x:Bind ViewModel.AuthorName, Mode=OneWay}"
                                    FontSize="16"
                                    FontWeight="SemiBold"
                                    FontFamily="{StaticResource MainFont}"
