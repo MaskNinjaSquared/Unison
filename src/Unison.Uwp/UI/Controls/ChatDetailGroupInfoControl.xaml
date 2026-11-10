@@ -133,7 +133,7 @@
                                                             Height="40"
                                                             VerticalAlignment="Center"/>
                                 <TextBlock Grid.Column="1"
-                                           Text="{Binding DisplayName}"
+                                           helpers:EmojiTextBlock.Text="{Binding DisplayName}"
                                            FontFamily="{StaticResource MainFont}"
                                            FontSize="16"
                                            Foreground="{ThemeResource ChatDetailInfoPaneBodyBrush}"
