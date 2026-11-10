@@ -925,7 +925,8 @@ namespace Unison.Uwp
                     {
                         IHistoryService history = sp.GetService<IHistoryService>();
                         return history != null && history.PreferFrugalSyncBudget;
-                    });
+                    },
+                    chatStore: sp.GetRequiredService<IChatStore>());
             });
             services.AddSingleton(sp => new GroupRosterWriter(
                 sp.GetRequiredService<IGroupRosterStore>(),

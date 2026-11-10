@@ -40,6 +40,13 @@ namespace Unison.WhatsAppClient.Helpers
         private readonly Func<bool> _preferFrugalUi;
         private readonly ILowPriorityDispatcher _uiLow;
 
+        /// <summary>
+        /// Durable home for the group description. Optional so test call sites and any
+        /// construction without a database keep working — the row is still updated, only the
+        /// restart-survival write is skipped.
+        /// </summary>
+        private readonly IChatStore _chatStore;
+
         public GroupMetadataApply(
             IGroupNaming naming,
             IDispatcher ui,
@@ -53,7 +60,8 @@ namespace Unison.WhatsAppClient.Helpers
             ChatTimelineLoadPriorityGate timelinePriority = null,
             int rosterBuildChunkSize = int.MaxValue,
             GroupRosterIndex rosterIndex = null,
-            Func<bool> preferFrugalUi = null)
+            Func<bool> preferFrugalUi = null,
+            IChatStore chatStore = null)
         {
             _naming = naming ?? throw new ArgumentNullException(nameof(naming));
             _ui = ui ?? throw new ArgumentNullException(nameof(ui));
@@ -68,6 +76,7 @@ namespace Unison.WhatsAppClient.Helpers
             _timelinePriority = timelinePriority;
             _index = rosterIndex ?? new GroupRosterIndex(_jids.GetCanonicalJid);
             _preferFrugalUi = preferFrugalUi ?? (() => false);
+            _chatStore = chatStore;
             // rosterBuildChunkSize kept for call-site compatibility; BuildMembers now runs
             // as one Task.Run hop (chunking on the UI sync context stalled Lumia 950 XL).
             _ = rosterBuildChunkSize;
@@ -334,6 +343,10 @@ namespace Unison.WhatsAppClient.Helpers
                                     }
 
                                     // Listing never materializes full rosters — flags + count only.
+                                    // Descriptions land on the row but are deliberately not
+                                    // written to SQLite here: a 200-group listing would mean 200
+                                    // writes at startup on Mobile. The single-group refresh the
+                                    // info panel fires persists the one the user actually reads.
                                     ApplyToRow(chat, entry, includeRoster: false);
                                 }
                             })
@@ -550,9 +563,84 @@ namespace Unison.WhatsAppClient.Helpers
                 }
             }).ConfigureAwait(false);
 
+            // Off the UI hop: SQLite is what makes the description survive a restart, and the
+            // row lookup above may legitimately have found nothing to put it on yet.
+            await PersistGroupDescriptionAsync(canonical, metadata.Description, metadata.DescriptionId)
+                .ConfigureAwait(false);
+
             if (includeRoster && chat != null && drafts != null && drafts.Count > 0)
             {
                 await ApplyMembersAsync(chat, drafts, cancellationToken).ConfigureAwait(false);
+            }
+        }
+
+        /// <summary>
+        /// A live description change (admin edited it while the app is running), or a
+        /// description read from a reply that did not go through <see cref="ApplyMetadataAsync"/>.
+        /// Updates the open row and stores it.
+        /// </summary>
+        /// <param name="description">
+        /// Empty string clears the description. Null is ignored — that is a notification that
+        /// said nothing about the description, such as an avatar change.
+        /// </param>
+        public async Task ApplyDescriptionAsync(
+            string groupJid,
+            string description,
+            string descriptionId)
+        {
+            if (description == null || string.IsNullOrWhiteSpace(groupJid))
+            {
+                return;
+            }
+
+            string canonical = _jids.GetCanonicalJid(groupJid);
+            await _ui.RunAsync(() =>
+            {
+                List<ChatItem> rows = _rows.FindConversation(canonical);
+                if (rows == null)
+                {
+                    return;
+                }
+
+                for (int i = 0; i < rows.Count; i++)
+                {
+                    ChatItem chat = rows[i];
+                    if (chat == null)
+                    {
+                        continue;
+                    }
+
+                    chat.GroupDescription = description;
+                    chat.GroupDescriptionId = descriptionId;
+                }
+            }).ConfigureAwait(false);
+
+            await PersistGroupDescriptionAsync(canonical, description, descriptionId)
+                .ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// Stores a group description read off the wire. A null description is the reply saying
+        /// nothing about it, and must not be written over one already stored.
+        /// </summary>
+        private async Task PersistGroupDescriptionAsync(
+            string groupJid,
+            string description,
+            string descriptionId)
+        {
+            if (_chatStore == null || description == null || string.IsNullOrWhiteSpace(groupJid))
+            {
+                return;
+            }
+
+            try
+            {
+                await _chatStore.SetGroupDescriptionAsync(groupJid, description, descriptionId)
+                    .ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[GroupMetadataApply] Description persist failed: " + ex.Message);
             }
         }
 
@@ -942,6 +1030,14 @@ namespace Unison.WhatsAppClient.Helpers
             if (metadata.MemberCount > 0)
             {
                 chat.GroupMemberCount = metadata.MemberCount;
+            }
+
+            // Null means the reply said nothing about the description; only an actual
+            // description node (even an empty one) is allowed to overwrite the row.
+            if (metadata.Description != null)
+            {
+                chat.GroupDescription = metadata.Description;
+                chat.GroupDescriptionId = metadata.DescriptionId;
             }
 
             if (!chat.LastMessageTimestampUtc.HasValue && metadata.CreationUnixSeconds > 0)

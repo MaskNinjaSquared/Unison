@@ -5,8 +5,9 @@
 //
 // These win over push names everywhere they exist, because someone who saved a
 // contact as "Mom" expects to read "Mom" and not whatever name that account
-// broadcasts. Holds no state: every call reads the address book and produces the
-// mapping again, which is what makes it safe to call from anywhere.
+// broadcasts. Every call reads the address book and produces the mapping again,
+// which is what makes it safe to call from anywhere; the only state kept is
+// whether the member-inclusive pass has run (see AddressBookMemberPassPolicy).
 // =============================================================================
 using System;
 using System.Collections.Generic;
@@ -31,6 +32,13 @@ namespace Unison.WhatsAppClient.Contacts
         private readonly IJidResolver _jids;
         private readonly DisplayNameTable _addressBookNames;
         private readonly IChatStateStore _chatState;
+
+        /// <summary>
+        /// Set once a pass has actually walked group rosters. Gating on this rather than on
+        /// <see cref="DisplayNameTable.Count"/> is what lets a group-only contact be named: the
+        /// cheap startup pass fills the table from 1:1 rows alone and used to latch this one shut.
+        /// </summary>
+        private bool _groupMembersMapped;
 
         internal AddressBookOverlay(
             ILocalContactsService localContacts,
@@ -210,14 +218,14 @@ namespace Unison.WhatsAppClient.Contacts
         private static readonly TimeSpan CollectSliceGap = TimeSpan.FromMilliseconds(24);
 
         /// <summary>
-        /// Rebuilds the in-memory overlay. When <paramref name="force"/> is false and an overlay
-        /// already exists, skipped (reading the address book is not cheap). After bootstrap, pass
-        /// true so live agenda names replace stale JSON / push names.
+        /// Rebuilds the in-memory overlay. When <paramref name="force"/> is false this is skipped
+        /// once a pass has already covered group rosters (reading the address book is not cheap).
+        /// After bootstrap, pass true so live agenda names replace stale JSON / push names.
         /// </summary>
         /// <returns>JIDs written into the overlay table (empty when skipped or none mapped).</returns>
         public async Task<IReadOnlyList<string>> RefreshAsync(bool force)
         {
-            if (!force && _addressBookNames.Count > 0)
+            if (!AddressBookMemberPassPolicy.ShouldRun(force, _groupMembersMapped, _addressBookNames.Count))
             {
                 return Array.Empty<string>();
             }
@@ -226,10 +234,12 @@ namespace Unison.WhatsAppClient.Contacts
             var jids = new List<string>();
             var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             List<ChatItem> snapshot = null;
+            bool coversMembers = false;
             await _ui.RunAsync(() =>
             {
                 // Shallow row refs only — member walks stay in budgeted hops below.
                 snapshot = new List<ChatItem>(_chatState.Chats);
+                coversMembers = AddressBookMemberPassPolicy.CoversGroupMembers(snapshot);
             }).ConfigureAwait(false);
 
             int index = 0;
@@ -262,6 +272,14 @@ namespace Unison.WhatsAppClient.Contacts
             }
 
             var overlay = await SyncAsync(jids, extraPhones).ConfigureAwait(false);
+
+            // Latched only when rosters were actually there to walk: a group whose members have
+            // not loaded yet contributes nothing, and must not count as "members mapped".
+            if (coversMembers)
+            {
+                _groupMembersMapped = true;
+            }
+
             if (overlay == null || overlay.Count == 0)
             {
                 Debug.WriteLine("[AddressBookOverlay] Overlay unavailable or empty; falling back to WhatsApp names");

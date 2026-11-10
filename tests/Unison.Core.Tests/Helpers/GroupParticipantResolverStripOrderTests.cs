@@ -85,6 +85,37 @@ namespace Unison.Core.Tests.Helpers
             Assert.True(contacts.ResolveCalls >= 1);
         }
 
+        [Fact]
+        public void ResolveStripDisplayName_joins_a_phone_participant_to_a_lid_keyed_chat()
+        {
+            // The reported bug: group tip in PN form, the person's 1:1 chat keyed by LID. Before
+            // the alias fallback the chain found nothing and the strip showed raw digits.
+            var contacts = new CountingContacts(null);
+            var jids = new AliasOnlyJids();
+            jids.Pair("1999@lid", Pn);
+            var context = new ParticipantResolutionContext(
+                jids,
+                contacts,
+                chatState: null,
+                people: null);
+
+            var directNames = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["1999@lid"] = "Ana Souza"
+            };
+
+            string name = GroupParticipantResolver.ResolveStripDisplayName(
+                Pn,
+                groupChat: null,
+                context,
+                nameHint: null,
+                rosterMember: null,
+                directChatNames: directNames);
+
+            Assert.Equal("Ana Souza", name);
+            Assert.Equal(0, contacts.ResolveCalls);
+        }
+
         private sealed class PassThroughJids : IJidResolver
         {
             public Profile Self => null;
@@ -94,6 +125,41 @@ namespace Unison.Core.Tests.Helpers
 
             public bool TryGetAlias(string jid, out string alias)
             {
+                alias = null;
+                return false;
+            }
+
+            public bool IsSelfLinked(string jid) => false;
+        }
+
+        /// <summary>Knows the PN/LID pair but never promotes it: canonical is the identity.</summary>
+        private sealed class AliasOnlyJids : IJidResolver
+        {
+            private readonly Dictionary<string, string> _pairs =
+                new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+            public Profile Self => null;
+
+            public void Pair(string left, string right)
+            {
+                string a = JidHelper.Normalize(left);
+                string b = JidHelper.Normalize(right);
+                _pairs[a] = b;
+                _pairs[b] = a;
+            }
+
+            public string GetCanonicalJid(string jid) => JidHelper.Normalize(jid) ?? jid;
+
+            public string PeekCanonicalJid(string jid) => GetCanonicalJid(jid);
+
+            public bool TryGetAlias(string jid, out string alias)
+            {
+                string key = JidHelper.Normalize(jid);
+                if (key != null && _pairs.TryGetValue(key, out alias))
+                {
+                    return true;
+                }
+
                 alias = null;
                 return false;
             }

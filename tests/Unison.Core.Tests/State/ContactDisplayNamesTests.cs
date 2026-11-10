@@ -66,6 +66,18 @@ namespace Unison.Core.Tests.State
         }
 
         [Fact]
+        public void A_phone_number_finds_the_contact_saved_under_its_lid()
+        {
+            // Mirror of the test above. The overlay is keyed by whatever form the chat list gave
+            // the address-book pass, and canonical settles on the PN, so the LID half of the pair
+            // was unreachable from a PN-form group participant.
+            _aliases[Ana] = AnaLid;
+            _addressBook.Set(AnaLid, "Ana Trabalho");
+
+            Assert.Equal("Ana Trabalho", Build().Resolve(Ana, "chat"));
+        }
+
+        [Fact]
         public void A_lid_finds_a_Person_row_keyed_under_the_phone_JID()
         {
             _aliases[AnaLid] = Ana;

@@ -243,6 +243,85 @@ namespace Unison.Core.Tests.Helpers
         }
 
         [Fact]
+        public async Task ApplyMetadata_puts_the_description_on_the_row_and_stores_it()
+        {
+            var f = new Fixture();
+            var chat = f.AddChat(Group, "Família");
+
+            await f.Apply.ApplyMetadataAsync(Group, new GroupMetadataSnapshot
+            {
+                Description = "Trip planning",
+                DescriptionId = "desc-7"
+            });
+
+            Assert.Equal("Trip planning", chat.GroupDescription);
+            Assert.Equal("desc-7", chat.GroupDescriptionId);
+            Assert.Single(f.ChatStore.Descriptions);
+            Assert.Equal(
+                Tuple.Create(Group, "Trip planning", "desc-7"),
+                f.ChatStore.Descriptions[0]);
+        }
+
+        [Fact]
+        public async Task ApplyMetadata_without_a_description_leaves_the_stored_one_alone()
+        {
+            // A reply that did not mention the description — or an avatar-only update — must not
+            // blank a description the panel is already showing.
+            var f = new Fixture();
+            var chat = f.AddChat(Group, "Família");
+            chat.GroupDescription = "Trip planning";
+
+            await f.Apply.ApplyMetadataAsync(Group, new GroupMetadataSnapshot { MemberCount = 7 });
+
+            Assert.Equal("Trip planning", chat.GroupDescription);
+            Assert.Empty(f.ChatStore.Descriptions);
+        }
+
+        [Fact]
+        public async Task ApplyMetadata_records_a_cleared_description()
+        {
+            var f = new Fixture();
+            var chat = f.AddChat(Group, "Família");
+            chat.GroupDescription = "Trip planning";
+
+            await f.Apply.ApplyMetadataAsync(Group, new GroupMetadataSnapshot
+            {
+                Description = string.Empty
+            });
+
+            Assert.Equal(string.Empty, chat.GroupDescription);
+            Assert.Single(f.ChatStore.Descriptions);
+        }
+
+        [Fact]
+        public async Task ApplyDescription_updates_the_live_row_and_stores_it()
+        {
+            // The live path: an admin edited the description while the app is running.
+            var f = new Fixture();
+            f.Jids.Canonical["alias@g.us"] = Group;
+            var chat = f.AddChat(Group, "Família");
+
+            await f.Apply.ApplyDescriptionAsync("alias@g.us", "Edited", "desc-9");
+
+            Assert.Equal("Edited", chat.GroupDescription);
+            Assert.Equal("desc-9", chat.GroupDescriptionId);
+            Assert.Single(f.ChatStore.Descriptions);
+        }
+
+        [Fact]
+        public async Task ApplyDescription_ignores_a_null_description()
+        {
+            var f = new Fixture();
+            var chat = f.AddChat(Group, "Família");
+            chat.GroupDescription = "Trip planning";
+
+            await f.Apply.ApplyDescriptionAsync(Group, null, null);
+
+            Assert.Equal("Trip planning", chat.GroupDescription);
+            Assert.Empty(f.ChatStore.Descriptions);
+        }
+
+        [Fact]
         public async Task ApplyMetadata_materializes_missing_community_parent()
         {
             const string hub = "120363777777777777@g.us";
@@ -552,8 +631,10 @@ namespace Unison.Core.Tests.Helpers
                 Index = new GroupRosterIndex(Jids.GetCanonicalJid);
                 Apply = new GroupMetadataApply(
                     Naming, Ui, Catalog, new GroupRosterWriter(Rosters, People), Jids, Chats, Rows, Naming.CachedNames, () => Now,
-                    rosterIndex: Index);
+                    rosterIndex: Index, chatStore: ChatStore);
             }
+
+            public RecordingChatStore ChatStore { get; } = new RecordingChatStore();
 
             public GroupRosterIndex Index { get; }
 
@@ -593,6 +674,36 @@ namespace Unison.Core.Tests.Helpers
                 action();
                 return Task.CompletedTask;
             }
+        }
+
+        /// <summary>Records only the one write group descriptions use.</summary>
+        private sealed class RecordingChatStore : IChatStore
+        {
+            public List<Tuple<string, string, string>> Descriptions { get; } =
+                new List<Tuple<string, string, string>>();
+
+            public Task SetGroupDescriptionAsync(string jid, string description, string descriptionId)
+            {
+                Descriptions.Add(Tuple.Create(jid, description, descriptionId));
+                return Task.CompletedTask;
+            }
+
+            public Task InitializeAsync() => Task.CompletedTask;
+            public Task WarmAsync() => Task.CompletedTask;
+            public ChatLocalState TryGetCached(string jid) => null;
+            public Task<ChatLocalState> GetAsync(string jid) => Task.FromResult<ChatLocalState>(null);
+            public IReadOnlyList<string> ListFavoriteJids() => new List<string>();
+            public Task SetChatPinnedAsync(string jid, bool pinned, long? pinnedTimestamp = null) => Task.CompletedTask;
+            public Task SetWidgetPinnedAsync(string jid, bool pinned) => Task.CompletedTask;
+            public Task SetFavoriteAsync(string jid, bool favorite) => Task.CompletedTask;
+            public Task SetMutedUntilAsync(string jid, long? mutedUntil) => Task.CompletedTask;
+            public Task SetStatusAsync(string jid, ChatStatus status) => Task.CompletedTask;
+            public Task SetChannelRoleAsync(string jid, ChannelViewerRole role) => Task.CompletedTask;
+            public void RememberChatPinned(string jid, bool pinned, long? pinnedTimestamp = null) { }
+            public void RememberFavorite(string jid, bool favorite) { }
+            public void RememberMutedUntil(string jid, long? mutedUntil) { }
+            public void ApplyTo(ChatItem chat) { }
+            public Task ApplyToAsync(ChatItem chat) => Task.CompletedTask;
         }
 
         private sealed class FakeJids : IJidResolver

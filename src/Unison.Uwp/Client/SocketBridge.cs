@@ -327,6 +327,13 @@ namespace Unison.Uwp.Client
         public Func<GroupSubjectChangeNotifyRequest, Task> GroupSubjectChanged { get; set; }
 
         /// <summary>
+        /// Group description from upsert/update. Separate from
+        /// <see cref="GroupSubjectChanged"/> because a description change carries no subject and
+        /// the subject path drops anything without one.
+        /// </summary>
+        public Func<GroupDescriptionChangeNotifyRequest, Task> GroupDescriptionChanged { get; set; }
+
+        /// <summary>
         /// <c>w:gp2</c> participant <c>add</c> (Baileys <c>GROUP_PARTICIPANT_ADD</c>).
         /// Host inserts GroupJoin system lines — not stubbed on the wire as WebMessageInfo.
         /// </summary>
@@ -2663,6 +2670,7 @@ namespace Unison.Uwp.Client
             }
 
             await ApplyGroupNamesAsync(batch).ConfigureAwait(false);
+            await ApplyGroupDescriptionsAsync(batch).ConfigureAwait(false);
             ApplyGroupRosterEvent(batch);
             await ApplyGroupParticipantsJoinedAsync(batch).ConfigureAwait(false);
             await ApplyGroupParticipantsLeftAsync(batch).ConfigureAwait(false);
@@ -2828,6 +2836,56 @@ namespace Unison.Uwp.Client
                             ? DateTimeOffset.FromUnixTimeSeconds(group.SubjectTime.Value).UtcDateTime
                             : DateTime.UtcNow,
                         EmitTimelineLine = true
+                    }).ConfigureAwait(false);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Group description from upsert/update. Deliberately a second pass rather than part of
+        /// <see cref="ApplyGroupNamesAsync"/>: that one requires a subject, and a description
+        /// change carries none. The two are independent and must stay that way.
+        /// </summary>
+        private async Task ApplyGroupDescriptionsAsync(WaEventBatch batch)
+        {
+            var descriptionChanged = GroupDescriptionChanged;
+            if (descriptionChanged == null)
+            {
+                return;
+            }
+
+            IList<GroupMetadata> created;
+            if (batch.TryGet(WaEventKind.GroupsUpsert, out created))
+            {
+                foreach (var group in created)
+                {
+                    // Null means the event said nothing about the description — notably avatar
+                    // updates. Empty string is a real "description was cleared".
+                    if (group == null || group.Description == null) continue;
+                    await descriptionChanged(new GroupDescriptionChangeNotifyRequest
+                    {
+                        GroupJid = group.Id,
+                        NewDescription = group.Description,
+                        DescriptionId = group.DescriptionId,
+                        AuthorJid = group.DescriptionOwner,
+                        TimestampUtc = DateTime.UtcNow
+                    }).ConfigureAwait(false);
+                }
+            }
+
+            IList<GroupUpdate> updated;
+            if (batch.TryGet(WaEventKind.GroupsUpdate, out updated))
+            {
+                foreach (var group in updated)
+                {
+                    if (group == null || group.Description == null) continue;
+                    await descriptionChanged(new GroupDescriptionChangeNotifyRequest
+                    {
+                        GroupJid = group.Id,
+                        NewDescription = group.Description,
+                        DescriptionId = group.DescriptionId,
+                        AuthorJid = group.Author,
+                        TimestampUtc = DateTime.UtcNow
                     }).ConfigureAwait(false);
                 }
             }

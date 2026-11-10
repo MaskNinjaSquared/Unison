@@ -11,6 +11,15 @@ namespace Unison.Core.Models
         /// <summary>Null when the reply carried none, which a single-group query often does not.</summary>
         public string Subject { get; set; }
 
+        /// <summary>
+        /// Group description (<c>description/body</c>). Null when the reply carried no
+        /// <c>description</c> node at all; empty when it carried one with no body.
+        /// </summary>
+        public string Description { get; set; }
+
+        /// <summary>Wire <c>description/@id</c>. Null when the reply omitted it.</summary>
+        public string DescriptionId { get; set; }
+
         public bool AnnounceOnly { get; set; }
 
         /// <summary>
