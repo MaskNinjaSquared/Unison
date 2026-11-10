@@ -1006,20 +1006,23 @@ namespace Unison.Core.State
                     // Keep means "the name slot is already right". It says nothing about the
                     // prefix, and the two are written and persisted separately — a tip with no
                     // push name leaves digits in the prefix while the store carries the known
-                    // name forward beside it. Rewrite the prefix from the name the row already
-                    // holds, otherwise this pass declines to fix the only thing on screen.
-                    if (currentIsRealName &&
+                    // name forward beside it. Rewrite the prefix, otherwise this pass declines
+                    // to fix the only thing on screen.
+                    //
+                    // Rewrite it from "resolved" and never from LastMessageSenderName. That
+                    // stored name is only carried forward, not re-attributed: when the tip moves
+                    // to a participant with no push name, the store keeps the previous sender's
+                    // name beside the new sender's digits, so the two fields can describe two
+                    // different people. "resolved" was looked up from this participant, so it is
+                    // the only value here that is provably theirs. With no resolution the digits
+                    // stay — unhelpful, but honest, and the next pass tries again.
+                    if (resolved != null &&
                         ChatAuthorStripDecision.AuthorPrefixDisagrees(
                             chat.LastMessageAuthor,
-                            chat.LastMessageSenderName))
+                            resolved))
                     {
                         _sweepResynced++;
-                        ApplyStrip(
-                            chat,
-                            participant,
-                            canonical,
-                            chat.LastMessageSenderName,
-                            selfLabel);
+                        ApplyStrip(chat, participant, canonical, resolved, selfLabel);
                     }
 
                     break;

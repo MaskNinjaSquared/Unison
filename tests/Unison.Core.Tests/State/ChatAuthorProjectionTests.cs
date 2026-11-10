@@ -554,6 +554,123 @@ namespace Unison.Core.Tests.State
             Assert.Null(decoy.LastMessageSenderName);
         }
 
+        /// <summary>
+        /// The device shape. The row already knows the sender's name, but the rendered prefix is
+        /// their digits: the two are separate columns and the store carries each forward on its
+        /// own, so a tip with no push name leaves digits beside a good name. Decide reads only
+        /// the name, so it reports Keep — and the prefix must still be rewritten.
+        /// </summary>
+        [Fact]
+        public async Task Sweep_rewrites_a_digits_prefix_that_sits_beside_a_known_name()
+        {
+            var jids = new AliasJids();
+            jids.Pair(Lid, Pn);
+
+            var people = new MemoryPersonStore();
+            people.SeedDisk(new Person
+            {
+                Jid = Pn,
+                Name = "Ana Souza",
+                Phone = "5511988887777",
+                Source = PersonSource.Observed
+            });
+
+            var chatState = new ChatStateStore(new CountingDispatcher());
+            var group = new ChatItem
+            {
+                JID = Group,
+                Name = "Família",
+                IsGroup = true,
+                LastMessageIsFromMe = false,
+                LastMessageParticipantJid = Pn,
+                LastMessageSenderName = "Ana Souza",
+                LastMessageAuthor = "5511988887777: "
+            };
+            chatState.Chats.Add(group);
+
+            var projection = new ChatAuthorProjection(
+                chatState,
+                people,
+                jids,
+                strings: null,
+                new CountingDispatcher());
+
+            projection.Start();
+            await WaitForAsync(() => group.LastMessageAuthor == "Ana Souza: ");
+
+            Assert.Equal("Ana Souza: ", group.LastMessageAuthor);
+            Assert.Equal("Ana Souza", group.LastMessageSenderName);
+        }
+
+        /// <summary>
+        /// The regression the repair must not cause. When the tip moves to a participant with no
+        /// push name, the store carries the *previous* sender's name forward beside the *new*
+        /// sender's digits — the two fields then describe two different people. Rewriting the
+        /// prefix from the stored name would put Ana's name on Beto's message, which is worse
+        /// than digits: silently wrong rather than unhelpfully honest.
+        /// </summary>
+        [Fact]
+        public async Task Sweep_never_puts_a_carried_over_name_on_a_different_sender()
+        {
+            const string otherPn = "5511977776666@s.whatsapp.net";
+
+            // Only Ana is on disk. Beto is unknown, so nothing can attribute a name to him.
+            var people = new MemoryPersonStore();
+            people.SeedDisk(new Person
+            {
+                Jid = Pn,
+                Name = "Ana Souza",
+                Phone = "5511988887777",
+                Source = PersonSource.Observed
+            });
+
+            var chatState = new ChatStateStore(new CountingDispatcher());
+
+            // A second row that Ana *does* own, used as the sweep's completion signal so this
+            // test waits on an observable event rather than burning wall-clock on a fixed delay.
+            var anaRow = new ChatItem
+            {
+                JID = "120364@g.us",
+                Name = "Trabalho",
+                IsGroup = true,
+                LastMessageIsFromMe = false,
+                LastMessageParticipantJid = Pn,
+                LastMessageSenderName = "Ana Souza",
+                LastMessageAuthor = "5511988887777: "
+            };
+            chatState.Chats.Add(anaRow);
+
+            var group = new ChatItem
+            {
+                JID = Group,
+                Name = "Família",
+                IsGroup = true,
+                LastMessageIsFromMe = false,
+
+                // Tip moved to Beto; Carry kept Ana's name beside Beto's digits.
+                LastMessageParticipantJid = otherPn,
+                LastMessageSenderName = "Ana Souza",
+                LastMessageAuthor = "5511977776666: "
+            };
+            chatState.Chats.Add(group);
+
+            var projection = new ChatAuthorProjection(
+                chatState,
+                people,
+                new AliasJids(),
+                strings: null,
+                new CountingDispatcher());
+
+            projection.Start();
+
+            // The sweep has demonstrably reached these rows once Ana's own row is repaired.
+            await WaitForAsync(() => anaRow.LastMessageAuthor == "Ana Souza: ");
+
+            // Beto's row was visited in the same pass and must have been left alone.
+            Assert.Equal("5511977776666: ", group.LastMessageAuthor);
+            Assert.NotEqual("Ana Souza: ", group.LastMessageAuthor);
+        }
+
         private static async Task WaitForAsync(Func<bool> condition)
         {
             for (int i = 0; i < 100; i++)
