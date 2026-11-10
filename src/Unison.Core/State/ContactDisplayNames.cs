@@ -198,9 +198,44 @@ namespace Unison.Core.State
                 return fromCanonical;
             }
 
-            return string.Equals(canonical, normalized, StringComparison.OrdinalIgnoreCase)
-                ? null
-                : SanitizedPhoneContactName(normalized);
+            if (!string.Equals(canonical, normalized, StringComparison.OrdinalIgnoreCase))
+            {
+                string fromNormalized = SanitizedPhoneContactName(normalized);
+                if (!string.IsNullOrWhiteSpace(fromNormalized))
+                {
+                    return fromNormalized;
+                }
+            }
+
+            // The overlay is keyed by whatever form the chat list handed the address-book pass.
+            // When direct chats are LID-keyed, a group tip asking in PN form finds nothing under
+            // either key, because canonical settles on the PN and never yields the LID back.
+            return FindPhoneContactNameViaAlias(canonical, normalized);
+        }
+
+        private string FindPhoneContactNameViaAlias(string canonical, string normalized)
+        {
+            string alias;
+            if (!string.IsNullOrWhiteSpace(canonical) &&
+                _aliases.TryGetValue(canonical, out alias) &&
+                !string.IsNullOrWhiteSpace(alias))
+            {
+                string viaCanonical = SanitizedPhoneContactName(alias);
+                if (!string.IsNullOrWhiteSpace(viaCanonical))
+                {
+                    return viaCanonical;
+                }
+            }
+
+            if (string.IsNullOrWhiteSpace(normalized) ||
+                string.Equals(canonical, normalized, StringComparison.OrdinalIgnoreCase))
+            {
+                return null;
+            }
+
+            return _aliases.TryGetValue(normalized, out alias) && !string.IsNullOrWhiteSpace(alias)
+                ? SanitizedPhoneContactName(alias)
+                : null;
         }
 
         private string SanitizedPhoneContactName(string jid)

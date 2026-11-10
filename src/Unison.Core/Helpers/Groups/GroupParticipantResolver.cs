@@ -153,7 +153,7 @@ namespace Unison.Core.Helpers
                 return person.Name.Trim();
             }
 
-            string fromChat = FindNameOnDirectChat(canonical, context, directChatNames);
+            string fromChat = FindNameOnDirectChat(canonical, context, directChatNames, participantJid);
             if (UsableLabel(fromChat, canonical))
             {
                 return fromChat.Trim();
@@ -282,7 +282,8 @@ namespace Unison.Core.Helpers
         private static string FindNameOnDirectChat(
             string canonical,
             ParticipantResolutionContext context,
-            IReadOnlyDictionary<string, string> directChatNames)
+            IReadOnlyDictionary<string, string> directChatNames,
+            string participantJid = null)
         {
             if (string.IsNullOrWhiteSpace(canonical))
             {
@@ -298,7 +299,11 @@ namespace Unison.Core.Helpers
                     return indexed;
                 }
 
-                return null;
+                // The 1:1 chat may be filed under the other half of the PN/LID pair. Canonical
+                // collapses a known pair to its PN form, so a LID-keyed direct chat is reachable
+                // only through the alias — the same join FindRosterTip and TryGetPersonViaAlias
+                // already make. O(1) and RAM-only; this runs per list row.
+                return FindAliasNameOnDirectChat(canonical, context, directChatNames, participantJid);
             }
 
             ObservableCollection<ChatItem> chats = context?.ChatState?.Chats;
@@ -324,6 +329,56 @@ namespace Unison.Core.Helpers
                 {
                     return chat.Name;
                 }
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// The 1:1 map under the alias half of a PN/LID pair. Dictionary + alias-table hits only —
+        /// both O(1) in RAM, so this stays safe on the per-row strip path.
+        /// </summary>
+        private static string FindAliasNameOnDirectChat(
+            string canonical,
+            ParticipantResolutionContext context,
+            IReadOnlyDictionary<string, string> directChatNames,
+            string participantJid)
+        {
+            Contracts.IJidResolver jids = context?.Jids;
+            if (jids == null)
+            {
+                return null;
+            }
+
+            string indexed;
+            string alias;
+            if (jids.TryGetAlias(canonical, out alias) &&
+                !string.IsNullOrWhiteSpace(alias) &&
+                directChatNames.TryGetValue(alias, out indexed) &&
+                UsableLabel(indexed, canonical))
+            {
+                return indexed;
+            }
+
+            if (string.IsNullOrWhiteSpace(participantJid) ||
+                string.Equals(participantJid, canonical, StringComparison.OrdinalIgnoreCase))
+            {
+                return null;
+            }
+
+            // The tip itself, then its alias: a participant that never canonicalized still joins.
+            if (directChatNames.TryGetValue(participantJid, out indexed) &&
+                UsableLabel(indexed, canonical))
+            {
+                return indexed;
+            }
+
+            if (jids.TryGetAlias(participantJid, out alias) &&
+                !string.IsNullOrWhiteSpace(alias) &&
+                directChatNames.TryGetValue(alias, out indexed) &&
+                UsableLabel(indexed, canonical))
+            {
+                return indexed;
             }
 
             return null;
@@ -443,7 +498,7 @@ namespace Unison.Core.Helpers
                     return DisplayNameResolution.StripContactIndicator(fromRoster.DisplayName.Trim());
                 }
 
-                string fromDirect = FindNameOnDirectChat(canonical, context, directChatNames);
+                string fromDirect = FindNameOnDirectChat(canonical, context, directChatNames, participantJid);
                 if (UsableLabel(fromDirect, canonical))
                 {
                     return DisplayNameResolution.StripContactIndicator(fromDirect.Trim());
