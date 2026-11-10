@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 using Proto;
 using Unison.Core.Models;
@@ -42,6 +43,19 @@ namespace Unison.Core.Contracts.WhatsApp
         /// right after login, before the first chunk arrives; false again only after a reset.
         /// </summary>
         bool IsAwaitingFirstHistorySync { get; }
+
+        /// <summary>
+        /// PairingBootstrap owns the session: awaiting first history, a bootstrap apply in
+        /// flight, or a non-on-demand chunk seen that has not quiet-finalized yet.
+        /// PostInitCatchUp must not solicit FULL_HISTORY or unlock the list here.
+        /// </summary>
+        bool IsPairingBootstrapActive { get; }
+
+        /// <summary>
+        /// True when a PairingBootstrap chunk was observed or is applying — catch-up finish
+        /// must leave list unlock to quiet-finalize.
+        /// </summary>
+        bool IsPairingBootstrapChunkSeenOrApplying { get; }
 
         /// <summary>
         /// True when startup and sync work should use smaller batches, longer quiet floors and
@@ -124,6 +138,21 @@ namespace Unison.Core.Contracts.WhatsApp
 
         /// <summary>A page was asked for <paramref name="jid"/> and has not landed yet.</summary>
         bool IsChatPagePending(string jid);
+
+        /// <summary>
+        /// Latches <paramref name="jid"/> for crash recovery of a session-open /
+        /// tip-only OnDemand ask. Durable until apply or consume.
+        /// </summary>
+        void ArmSessionOpenOnDemandPending(string jid);
+
+        /// <summary>Clears crash-latch entries after an OnDemand page lands.</summary>
+        void DisarmSessionOpenOnDemandPending(IReadOnlyList<string> jids);
+
+        /// <summary>How many JIDs are waiting for post-crash OnDemand (no clear).</summary>
+        int PeekSessionOpenOnDemandPendingCount();
+
+        /// <summary>Takes and clears the crash-latch list for reconnect consume.</summary>
+        IReadOnlyList<string> TakeSessionOpenOnDemandPending();
 
         /// <summary>
         /// Wire <c>ack</c> for an outstanding history-on-demand request (chat or full).

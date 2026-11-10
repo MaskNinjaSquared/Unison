@@ -36,6 +36,14 @@ namespace Unison.WhatsAppClient.Helpers
             // Cancel any quiet-finalize armed by a prior empty Status chunk so Bootstrap's
             // apply owns the next sqlite-finalized (otherwise Continue fires on processed=0).
             host.BumpSqliteHistoryFinalizeGeneration();
+
+            // Empty trailing chunks after list unlock must not republish initial-sync progress
+            // (safe mode / BeginBatch spam). Protocol note + bump above still run.
+            if (count == 0 && host.FirstSyncListAlreadyReleased)
+            {
+                return;
+            }
+
             host.PublishInitialSyncProgress(
                 true,
                 false,

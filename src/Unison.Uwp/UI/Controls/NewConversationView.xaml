@@ -4,6 +4,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:controls="using:Unison.Uwp.UI.Controls"
     xmlns:templates="using:Unison.Uwp.UI.Templates"
+    xmlns:helpers="using:Unison.Uwp.UI.Helpers"
     x:Name="Root"
     Background="{ThemeResource ChatListBackgroundBrush}">
 
@@ -27,7 +28,7 @@
                                                 IsGroup="{Binding IsGroup}"/>
                     <TextBlock Grid.Column="1"
                                Margin="12,0,0,0"
-                               Text="{Binding Name}"
+                               helpers:EmojiTextBlock.Text="{Binding Name}"
                                FontSize="17"
                                FontFamily="{StaticResource MainFontSemibold}"
                                FontWeight="SemiBold"
@@ -41,7 +42,8 @@
 
             <DataTemplate x:Key="NewConversationGroupHeaderTemplate">
                 <Border Width="36" Height="36"
-                        Margin="16,12,16,4"
+                        Margin="10,12,16,4"
+                        HorizontalAlignment="Left"
                         BorderBrush="{ThemeResource SystemControlHighlightAccentBrush}"
                         BorderThickness="2"
                         Background="Transparent">
@@ -188,8 +190,10 @@
 
     <!--
       Full-bleed overlay above the chat list (SharePicker pattern).
-      Title + search stay fixed; action tiles scroll with the A–Z list.
-      Minimal (&lt;500): 3+2 WP tiles sized to available width. Extended (≥500): icon + text rows.
+      Title + search stay sticky; action tiles paint in row 2 on first open, then promote into
+      ContactsList.Header so short viewports can scroll past tiles to the A–Z list.
+      SemanticZoom x:Loads after first Open yield.
+      Minimal (&lt;560): 3+2 WP tiles sized to available width. Extended (≥560): icon + text rows.
     -->
     <Grid x:Name="LayoutRoot" Background="{ThemeResource ChatListBackgroundBrush}">
         <VisualStateManager.VisualStateGroups>
@@ -205,7 +209,7 @@
                 </VisualState>
                 <VisualState x:Name="Extended">
                     <VisualState.StateTriggers>
-                        <AdaptiveTrigger MinWindowWidth="500"/>
+                        <AdaptiveTrigger MinWindowWidth="560"/>
                     </VisualState.StateTriggers>
                     <VisualState.Setters>
                         <Setter Target="OptionsTilesHost.Visibility" Value="Collapsed"/>
@@ -218,27 +222,26 @@
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
 
-        <Grid Grid.Row="0" Padding="4,8,16,8" Background="{ThemeResource ChatListBackgroundBrush}">
+        <Grid x:Name="CatalogHeader" Grid.Row="0" Padding="4,8,16,8" Background="{ThemeResource ChatListBackgroundBrush}">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="*"/>
             </Grid.ColumnDefinitions>
 
             <Button x:Name="BackButton"
-                    Click="BackButton_Click"
                     Style="{StaticResource ModernIconButtonStyle}"
                     VerticalAlignment="Center"
                     Margin="4,0,8,0"
-                    Command="{Binding CloseCommand}">
+                    Command="{Binding HeaderBackCommand}">
                 <FontIcon Glyph="&#xE72B;" FontFamily="{StaticResource IconFont}" FontSize="18"/>
             </Button>
 
-            <TextBlock x:Uid="NewConversation_Title"
-                       Grid.Column="1"
-                       Text="New chat"
+            <TextBlock Grid.Column="1"
+                       Text="{Binding HeaderTitle}"
                        FontSize="20"
                        FontFamily="{StaticResource MainFontSemibold}"
                        FontWeight="SemiBold"
@@ -253,347 +256,412 @@
                  Grid.Row="1"
                  x:Uid="NewConversation_Search"
                  Margin="16,0,16,8"
+                 Style="{ThemeResource ChatListSearchTextBoxStyle}"
                  PlaceholderText="Search name or number"
                  Text="{Binding SearchQuery, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
 
-        <SemanticZoom x:Name="ContactsZoom"
-                      Grid.Row="2"
-                      ViewChangeStarted="ContactsZoom_ViewChangeStarted"
-                      ViewChangeCompleted="ContactsZoom_ViewChangeCompleted">
-            <SemanticZoom.ZoomedInView>
-                <ListView x:Name="ContactsList"
-                          IsItemClickEnabled="True"
-                          ItemClick="ContactsList_ItemClick"
-                          SelectionMode="None"
-                          ItemTemplate="{StaticResource NewConversationContactTemplate}"
-                          Background="Transparent"
-                          ScrollViewer.IsVerticalScrollChainingEnabled="False">
-                    <ListView.Header>
-                        <Grid>
-                            <!-- Minimal / mobile: always 3+2; side scaled to host width (≤150). -->
-                            <Grid x:Name="OptionsTilesHost"
-                                  Margin="7,8,7,12"
-                                  HorizontalAlignment="Stretch"
-                                  Visibility="Visible"
-                                  SizeChanged="OptionsTilesHost_SizeChanged">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="*"/>
-                                </Grid.ColumnDefinitions>
-                                <Grid.RowDefinitions>
-                                    <RowDefinition Height="Auto"/>
-                                    <RowDefinition Height="Auto"/>
-                                </Grid.RowDefinitions>
+        <!-- First-open chrome (row 2); after catalog ready, code-behind moves this into ContactsList.Header. -->
+        <Grid x:Name="OptionsChromeHost" Grid.Row="2">
+            <!-- Minimal / mobile: always 3+2; side scaled to host width (≤150). -->
+            <Grid x:Name="OptionsTilesHost"
+                  Margin="7,8,7,12"
+                  HorizontalAlignment="Stretch"
+                  Visibility="Visible"
+                  SizeChanged="OptionsTilesHost_SizeChanged">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
 
-                                <controls:AttachTile x:Name="TileNewGroup"
-                                                     Grid.Row="0" Grid.Column="0"
-                                                     HorizontalAlignment="Center"
-                                                     IconGlyph="&#xE716;"
-                                                     IconFontFamily="{StaticResource IconFont}"
-                                                     Label="New group"
-                                                     LocalizationUid="NewConversation_NewGroup"
-                                                     Command="{Binding NewGroupCommand}"/>
-                                <controls:AttachTile x:Name="TileNewContact"
-                                                     Grid.Row="0" Grid.Column="1"
-                                                     HorizontalAlignment="Center"
-                                                     IconGlyph="&#xE8FA;"
-                                                     IconFontFamily="{StaticResource IconFont}"
-                                                     Label="New contact"
-                                                     LocalizationUid="NewConversation_NewContact"
-                                                     Command="{Binding NewContactCommand}"/>
-                                <controls:AttachTile x:Name="TileNewCommunity"
-                                                     Grid.Row="0" Grid.Column="2"
-                                                     HorizontalAlignment="Center"
-                                                     IconGlyph="&#xE125;"
-                                                     IconFontFamily="{StaticResource IconFont}"
-                                                     Label="New community"
-                                                     LocalizationUid="NewConversation_NewCommunity"
-                                                     Command="{Binding NewCommunityCommand}"/>
-                                <controls:AttachTile x:Name="TilePhoneNumber"
-                                                     Grid.Row="1" Grid.Column="0"
-                                                     HorizontalAlignment="Center"
-                                                     IconGlyph="&#xE75F;"
-                                                     IconFontFamily="{StaticResource IconFont}"
-                                                     Label="Phone number"
-                                                     LocalizationUid="NewConversation_PhoneNumber"
-                                                     Command="{Binding PhoneNumberCommand}"/>
+                <controls:AttachTile x:Name="TileNewGroup"
+                                     Grid.Row="0" Grid.Column="0"
+                                     HorizontalAlignment="Center"
+                                     IconGlyph="&#xE716;"
+                                     IconFontFamily="{StaticResource IconFont}"
+                                     Label="New group"
+                                     LocalizationUid="NewConversation_NewGroup"
+                                     Command="{Binding NewGroupCommand}"/>
+                <controls:AttachTile x:Name="TileNewContact"
+                                     Grid.Row="0" Grid.Column="1"
+                                     HorizontalAlignment="Center"
+                                     IconGlyph="&#xE8FA;"
+                                     IconFontFamily="{StaticResource IconFont}"
+                                     Label="New contact"
+                                     LocalizationUid="NewConversation_NewContact"
+                                     Command="{Binding NewContactCommand}"/>
+                <controls:AttachTile x:Name="TileNewCommunity"
+                                     Grid.Row="0" Grid.Column="2"
+                                     HorizontalAlignment="Center"
+                                     IconGlyph="&#xE125;"
+                                     IconFontFamily="{StaticResource IconFont}"
+                                     Label="New community"
+                                     LocalizationUid="NewConversation_NewCommunity"
+                                     Command="{Binding NewCommunityCommand}"/>
+                <controls:AttachTile x:Name="TileNewChannel"
+                                     Grid.Row="1" Grid.Column="0"
+                                     HorizontalAlignment="Center"
+                                     IconGlyph="{StaticResource ChannelGlyph}"
+                                     IconFontFamily="{StaticResource LegacyIconFont}"
+                                     Label="New channel"
+                                     LocalizationUid="NewConversation_NewChannel"
+                                     Command="{Binding NewChannelCommand}"/>
+                <controls:AttachTile x:Name="TilePhoneNumber"
+                                     Grid.Row="1" Grid.Column="1"
+                                     HorizontalAlignment="Center"
+                                     IconGlyph="&#xE75F;"
+                                     IconFontFamily="{StaticResource IconFont}"
+                                     Label="Phone number"
+                                     LocalizationUid="NewConversation_PhoneNumber"
+                                     Command="{Binding PhoneNumberCommand}"/>
 
-                                <Button x:Name="SelfTile"
-                                        Grid.Row="1" Grid.Column="1"
-                                        HorizontalAlignment="Center"
-                                        Margin="5"
-                                        Style="{StaticResource NewConversationSelfTileButtonStyle}"
-                                        Command="{Binding NavigateToPrivateChatCommand}">
-                                    <Grid>
-                                        <FontIcon Glyph="&#xE77B;"
-                                                  FontFamily="{StaticResource IconFont}"
-                                                  FontSize="54"
-                                                  Foreground="White"
-                                                  HorizontalAlignment="Center"
-                                                  VerticalAlignment="Center"
-                                                  Opacity="0.55"/>
-                                        <Border>
-                                            <Border.Background>
-                                                <ImageBrush Stretch="UniformToFill"
-                                                            ImageSource="{Binding SelfAvatarUrl, Converter={StaticResource StringToImageSourceConverter}, ConverterParameter=160}"/>
-                                            </Border.Background>
-                                        </Border>
-                                        <Border VerticalAlignment="Bottom"
-                                                Background="#99000000"
-                                                Padding="8,6,8,8">
-                                            <StackPanel>
-                                                <TextBlock Text="{Binding SelfDisplayName}"
-                                                           FontFamily="{StaticResource MainFont}"
-                                                           FontSize="13"
-                                                           Foreground="White"
-                                                           TextWrapping="NoWrap"
-                                                           TextTrimming="CharacterEllipsis"
-                                                           MaxLines="1"/>
-                                                <TextBlock Text="{Binding SelfSubtitle}"
-                                                           FontFamily="{StaticResource MainFont}"
-                                                           FontSize="11"
-                                                           Foreground="#CCFFFFFF"
-                                                           TextWrapping="NoWrap"
-                                                           TextTrimming="CharacterEllipsis"
-                                                           MaxLines="1"/>
-                                            </StackPanel>
-                                        </Border>
-                                    </Grid>
-                                </Button>
-                            </Grid>
-
-                            <!-- Extended+: square icon + title/description rows. -->
-                            <StackPanel x:Name="OptionsListHost"
-                                        Padding="4,8,4,12"
-                                        Visibility="Collapsed">
-                                <Button Style="{StaticResource NewConversationOptionRowStyle}"
-                                        Command="{Binding NewGroupCommand}">
-                                    <Grid>
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="Auto"/>
-                                            <ColumnDefinition Width="*"/>
-                                        </Grid.ColumnDefinitions>
-                                        <Border Width="56" Height="56"
-                                                Background="{ThemeResource ChatDetailAccentBrush}">
-                                            <FontIcon Glyph="&#xE716;"
-                                                      FontFamily="{StaticResource IconFont}"
-                                                      FontSize="26"
-                                                      Foreground="White"
-                                                      HorizontalAlignment="Center"
-                                                      VerticalAlignment="Center"/>
-                                        </Border>
-                                        <StackPanel Grid.Column="1" Margin="12,0,0,0" VerticalAlignment="Center">
-                                            <TextBlock x:Uid="NewConversation_NewGroup"
-                                                       Text="New group"
-                                                       FontSize="16"
-                                                       FontFamily="{StaticResource MainFontSemibold}"
-                                                       FontWeight="SemiBold"
-                                                       Foreground="{ThemeResource WhatsAppTextHighBrush}"
-                                                       TextWrapping="NoWrap"
-                                                       TextTrimming="CharacterEllipsis"/>
-                                            <TextBlock x:Uid="NewConversation_NewGroupDesc"
-                                                       Text="Create a group with your contacts"
-                                                       FontSize="13"
-                                                       Foreground="{ThemeResource WhatsAppTextMediumBrush}"
-                                                       TextWrapping="NoWrap"
-                                                       TextTrimming="CharacterEllipsis"/>
-                                        </StackPanel>
-                                    </Grid>
-                                </Button>
-
-                                <Button Style="{StaticResource NewConversationOptionRowStyle}"
-                                        Command="{Binding NewContactCommand}">
-                                    <Grid>
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="Auto"/>
-                                            <ColumnDefinition Width="*"/>
-                                        </Grid.ColumnDefinitions>
-                                        <Border Width="56" Height="56"
-                                                Background="{ThemeResource ChatDetailAccentBrush}">
-                                            <FontIcon Glyph="&#xE8FA;"
-                                                      FontFamily="{StaticResource IconFont}"
-                                                      FontSize="26"
-                                                      Foreground="White"
-                                                      HorizontalAlignment="Center"
-                                                      VerticalAlignment="Center"/>
-                                        </Border>
-                                        <StackPanel Grid.Column="1" Margin="12,0,0,0" VerticalAlignment="Center">
-                                            <TextBlock x:Uid="NewConversation_NewContact"
-                                                       Text="New contact"
-                                                       FontSize="16"
-                                                       FontFamily="{StaticResource MainFontSemibold}"
-                                                       FontWeight="SemiBold"
-                                                       Foreground="{ThemeResource WhatsAppTextHighBrush}"
-                                                       TextWrapping="NoWrap"
-                                                       TextTrimming="CharacterEllipsis"/>
-                                            <TextBlock x:Uid="NewConversation_NewContactDesc"
-                                                       Text="Save someone to this device"
-                                                       FontSize="13"
-                                                       Foreground="{ThemeResource WhatsAppTextMediumBrush}"
-                                                       TextWrapping="NoWrap"
-                                                       TextTrimming="CharacterEllipsis"/>
-                                        </StackPanel>
-                                    </Grid>
-                                </Button>
-
-                                <Button Style="{StaticResource NewConversationOptionRowStyle}"
-                                        Command="{Binding NewCommunityCommand}">
-                                    <Grid>
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="Auto"/>
-                                            <ColumnDefinition Width="*"/>
-                                        </Grid.ColumnDefinitions>
-                                        <Border Width="56" Height="56"
-                                                Background="{ThemeResource ChatDetailAccentBrush}">
-                                            <FontIcon Glyph="&#xE125;"
-                                                      FontFamily="{StaticResource IconFont}"
-                                                      FontSize="26"
-                                                      Foreground="White"
-                                                      HorizontalAlignment="Center"
-                                                      VerticalAlignment="Center"/>
-                                        </Border>
-                                        <StackPanel Grid.Column="1" Margin="12,0,0,0" VerticalAlignment="Center">
-                                            <TextBlock x:Uid="NewConversation_NewCommunity"
-                                                       Text="New community"
-                                                       FontSize="16"
-                                                       FontFamily="{StaticResource MainFontSemibold}"
-                                                       FontWeight="SemiBold"
-                                                       Foreground="{ThemeResource WhatsAppTextHighBrush}"
-                                                       TextWrapping="NoWrap"
-                                                       TextTrimming="CharacterEllipsis"/>
-                                            <TextBlock x:Uid="NewConversation_NewCommunityDesc"
-                                                       Text="Bring related groups together"
-                                                       FontSize="13"
-                                                       Foreground="{ThemeResource WhatsAppTextMediumBrush}"
-                                                       TextWrapping="NoWrap"
-                                                       TextTrimming="CharacterEllipsis"/>
-                                        </StackPanel>
-                                    </Grid>
-                                </Button>
-
-                                <Button Style="{StaticResource NewConversationOptionRowStyle}"
-                                        Command="{Binding PhoneNumberCommand}">
-                                    <Grid>
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="Auto"/>
-                                            <ColumnDefinition Width="*"/>
-                                        </Grid.ColumnDefinitions>
-                                        <Border Width="56" Height="56"
-                                                Background="{ThemeResource ChatDetailAccentBrush}">
-                                            <FontIcon Glyph="&#xE75F;"
-                                                      FontFamily="{StaticResource IconFont}"
-                                                      FontSize="26"
-                                                      Foreground="White"
-                                                      HorizontalAlignment="Center"
-                                                      VerticalAlignment="Center"/>
-                                        </Border>
-                                        <StackPanel Grid.Column="1" Margin="12,0,0,0" VerticalAlignment="Center">
-                                            <TextBlock x:Uid="NewConversation_PhoneNumber"
-                                                       Text="Phone number"
-                                                       FontSize="16"
-                                                       FontFamily="{StaticResource MainFontSemibold}"
-                                                       FontWeight="SemiBold"
-                                                       Foreground="{ThemeResource WhatsAppTextHighBrush}"
-                                                       TextWrapping="NoWrap"
-                                                       TextTrimming="CharacterEllipsis"/>
-                                            <TextBlock x:Uid="NewConversation_PhoneNumberDesc"
-                                                       Text="Start a chat with a phone number"
-                                                       FontSize="13"
-                                                       Foreground="{ThemeResource WhatsAppTextMediumBrush}"
-                                                       TextWrapping="NoWrap"
-                                                       TextTrimming="CharacterEllipsis"/>
-                                        </StackPanel>
-                                    </Grid>
-                                </Button>
-
-                                <Button Style="{StaticResource NewConversationOptionRowStyle}"
-                                        Command="{Binding NavigateToPrivateChatCommand}">
-                                    <Grid>
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="Auto"/>
-                                            <ColumnDefinition Width="*"/>
-                                        </Grid.ColumnDefinitions>
-                                        <Border Width="56" Height="56"
-                                                Background="{ThemeResource ChatDetailAccentBrush}">
-                                            <Grid>
-                                                <FontIcon Glyph="&#xE77B;"
-                                                          FontFamily="{StaticResource IconFont}"
-                                                          FontSize="26"
-                                                          Foreground="White"
-                                                          HorizontalAlignment="Center"
-                                                          VerticalAlignment="Center"
-                                                          Opacity="0.55"/>
-                                                <Border>
-                                                    <Border.Background>
-                                                        <ImageBrush Stretch="UniformToFill"
-                                                                    ImageSource="{Binding SelfAvatarUrl, Converter={StaticResource StringToImageSourceConverter}, ConverterParameter=112}"/>
-                                                    </Border.Background>
-                                                </Border>
-                                            </Grid>
-                                        </Border>
-                                        <StackPanel Grid.Column="1" Margin="12,0,0,0" VerticalAlignment="Center">
-                                            <TextBlock Text="{Binding SelfDisplayName}"
-                                                       FontSize="16"
-                                                       FontFamily="{StaticResource MainFontSemibold}"
-                                                       FontWeight="SemiBold"
-                                                       Foreground="{ThemeResource WhatsAppTextHighBrush}"
-                                                       TextWrapping="NoWrap"
-                                                       TextTrimming="CharacterEllipsis"/>
-                                            <TextBlock Text="{Binding SelfSubtitle}"
-                                                       FontSize="13"
-                                                       Foreground="{ThemeResource WhatsAppTextMediumBrush}"
-                                                       TextWrapping="NoWrap"
-                                                       TextTrimming="CharacterEllipsis"/>
-                                        </StackPanel>
-                                    </Grid>
-                                </Button>
+                <Button x:Name="SelfTile"
+                        Grid.Row="1" Grid.Column="2"
+                        HorizontalAlignment="Center"
+                        Margin="5"
+                        Style="{StaticResource NewConversationSelfTileButtonStyle}"
+                        Command="{Binding NavigateToPrivateChatCommand}">
+                    <Grid>
+                        <FontIcon Glyph="&#xE77B;"
+                                  FontFamily="{StaticResource IconFont}"
+                                  FontSize="54"
+                                  Foreground="White"
+                                  HorizontalAlignment="Center"
+                                  VerticalAlignment="Center"
+                                  Opacity="0.55"/>
+                        <Border>
+                            <Border.Background>
+                                <ImageBrush Stretch="UniformToFill"
+                                            ImageSource="{Binding SelfAvatarUrl, Converter={StaticResource StringToImageSourceConverter}, ConverterParameter=160}"/>
+                            </Border.Background>
+                        </Border>
+                        <Border VerticalAlignment="Bottom"
+                                Background="#99000000"
+                                Padding="8,6,8,8">
+                            <StackPanel>
+                                <TextBlock helpers:EmojiTextBlock.Text="{Binding SelfDisplayName}"
+                                           FontFamily="{StaticResource MainFont}"
+                                           FontSize="13"
+                                           Foreground="White"
+                                           TextWrapping="NoWrap"
+                                           TextTrimming="CharacterEllipsis"
+                                           MaxLines="1"/>
+                                <TextBlock Text="{Binding SelfSubtitle}"
+                                           FontFamily="{StaticResource MainFont}"
+                                           FontSize="11"
+                                           Foreground="#CCFFFFFF"
+                                           TextWrapping="NoWrap"
+                                           TextTrimming="CharacterEllipsis"
+                                           MaxLines="1"/>
                             </StackPanel>
-                        </Grid>
-                    </ListView.Header>
-                    <ListView.GroupStyle>
-                        <GroupStyle HeaderTemplate="{StaticResource NewConversationGroupHeaderTemplate}"
-                                    HeaderContainerStyle="{StaticResource NewConversationGroupHeaderContainerStyle}"/>
-                    </ListView.GroupStyle>
-                    <ListView.ItemContainerStyle>
-                        <Style TargetType="ListViewItem">
-                            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
-                            <Setter Property="Padding" Value="0"/>
-                            <Setter Property="MinHeight" Value="0"/>
-                        </Style>
-                    </ListView.ItemContainerStyle>
-                </ListView>
-            </SemanticZoom.ZoomedInView>
-            <SemanticZoom.ZoomedOutView>
-                <GridView x:Name="JumpList"
-                          HorizontalAlignment="Center"
-                          VerticalAlignment="Center"
-                          ItemTemplate="{StaticResource NewConversationZoomedOutTemplate}"
-                          IsItemClickEnabled="True"
-                          ItemClick="JumpList_ItemClick"
-                          SelectionMode="None"
-                          Background="Transparent"
-                          ScrollViewer.IsHorizontalScrollChainingEnabled="False"
-                          ScrollViewer.IsVerticalScrollChainingEnabled="False">
-                    <GridView.ItemsPanel>
-                        <ItemsPanelTemplate>
-                            <ItemsWrapGrid Orientation="Horizontal"
-                                           HorizontalAlignment="Center"
-                                           MaximumRowsOrColumns="4"/>
-                        </ItemsPanelTemplate>
-                    </GridView.ItemsPanel>
-                    <GridView.ItemContainerStyle>
-                        <Style TargetType="GridViewItem">
-                            <Setter Property="HorizontalContentAlignment" Value="Center"/>
-                            <Setter Property="VerticalContentAlignment" Value="Center"/>
-                            <Setter Property="Margin" Value="0"/>
-                            <Setter Property="Padding" Value="0"/>
-                            <Setter Property="MinWidth" Value="0"/>
-                            <Setter Property="MinHeight" Value="0"/>
-                        </Style>
-                    </GridView.ItemContainerStyle>
-                </GridView>
-            </SemanticZoom.ZoomedOutView>
-        </SemanticZoom>
+                        </Border>
+                    </Grid>
+                </Button>
+            </Grid>
+
+            <!-- Extended+: square icon + title/description rows. -->
+            <StackPanel x:Name="OptionsListHost"
+                        Padding="4,8,4,12"
+                        Visibility="Collapsed">
+                <Button Style="{StaticResource NewConversationOptionRowStyle}"
+                        Command="{Binding NewGroupCommand}">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <Border Width="56" Height="56"
+                                Background="{ThemeResource ChatDetailAccentBrush}">
+                            <FontIcon Glyph="&#xE716;"
+                                      FontFamily="{StaticResource IconFont}"
+                                      FontSize="26"
+                                      Foreground="White"
+                                      HorizontalAlignment="Center"
+                                      VerticalAlignment="Center"/>
+                        </Border>
+                        <StackPanel Grid.Column="1" Margin="12,0,0,0" VerticalAlignment="Center">
+                            <TextBlock x:Uid="NewConversation_NewGroup"
+                                       Text="New group"
+                                       FontSize="16"
+                                       FontFamily="{StaticResource MainFontSemibold}"
+                                       FontWeight="SemiBold"
+                                       Foreground="{ThemeResource WhatsAppTextHighBrush}"
+                                       TextWrapping="NoWrap"
+                                       TextTrimming="CharacterEllipsis"/>
+                            <TextBlock x:Uid="NewConversation_NewGroupDesc"
+                                       Text="Create a group with your contacts"
+                                       FontSize="13"
+                                       Foreground="{ThemeResource WhatsAppTextMediumBrush}"
+                                       TextWrapping="NoWrap"
+                                       TextTrimming="CharacterEllipsis"/>
+                        </StackPanel>
+                    </Grid>
+                </Button>
+
+                <Button Style="{StaticResource NewConversationOptionRowStyle}"
+                        Command="{Binding NewContactCommand}">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <Border Width="56" Height="56"
+                                Background="{ThemeResource ChatDetailAccentBrush}">
+                            <FontIcon Glyph="&#xE8FA;"
+                                      FontFamily="{StaticResource IconFont}"
+                                      FontSize="26"
+                                      Foreground="White"
+                                      HorizontalAlignment="Center"
+                                      VerticalAlignment="Center"/>
+                        </Border>
+                        <StackPanel Grid.Column="1" Margin="12,0,0,0" VerticalAlignment="Center">
+                            <TextBlock x:Uid="NewConversation_NewContact"
+                                       Text="New contact"
+                                       FontSize="16"
+                                       FontFamily="{StaticResource MainFontSemibold}"
+                                       FontWeight="SemiBold"
+                                       Foreground="{ThemeResource WhatsAppTextHighBrush}"
+                                       TextWrapping="NoWrap"
+                                       TextTrimming="CharacterEllipsis"/>
+                            <TextBlock x:Uid="NewConversation_NewContactDesc"
+                                       Text="Save someone to this device"
+                                       FontSize="13"
+                                       Foreground="{ThemeResource WhatsAppTextMediumBrush}"
+                                       TextWrapping="NoWrap"
+                                       TextTrimming="CharacterEllipsis"/>
+                        </StackPanel>
+                    </Grid>
+                </Button>
+
+                <Button Style="{StaticResource NewConversationOptionRowStyle}"
+                        Command="{Binding NewCommunityCommand}">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <Border Width="56" Height="56"
+                                Background="{ThemeResource ChatDetailAccentBrush}">
+                            <FontIcon Glyph="&#xE125;"
+                                      FontFamily="{StaticResource IconFont}"
+                                      FontSize="26"
+                                      Foreground="White"
+                                      HorizontalAlignment="Center"
+                                      VerticalAlignment="Center"/>
+                        </Border>
+                        <StackPanel Grid.Column="1" Margin="12,0,0,0" VerticalAlignment="Center">
+                            <TextBlock x:Uid="NewConversation_NewCommunity"
+                                       Text="New community"
+                                       FontSize="16"
+                                       FontFamily="{StaticResource MainFontSemibold}"
+                                       FontWeight="SemiBold"
+                                       Foreground="{ThemeResource WhatsAppTextHighBrush}"
+                                       TextWrapping="NoWrap"
+                                       TextTrimming="CharacterEllipsis"/>
+                            <TextBlock x:Uid="NewConversation_NewCommunityDesc"
+                                       Text="Bring related groups together"
+                                       FontSize="13"
+                                       Foreground="{ThemeResource WhatsAppTextMediumBrush}"
+                                       TextWrapping="NoWrap"
+                                       TextTrimming="CharacterEllipsis"/>
+                        </StackPanel>
+                    </Grid>
+                </Button>
+
+                <Button Style="{StaticResource NewConversationOptionRowStyle}"
+                        Command="{Binding NewChannelCommand}">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <Border Width="56" Height="56"
+                                Background="{ThemeResource ChatDetailAccentBrush}">
+                            <FontIcon Glyph="{StaticResource ChannelGlyph}"
+                                      FontFamily="{StaticResource LegacyIconFont}"
+                                      FontSize="26"
+                                      Foreground="White"
+                                      HorizontalAlignment="Center"
+                                      VerticalAlignment="Center"/>
+                        </Border>
+                        <StackPanel Grid.Column="1" Margin="12,0,0,0" VerticalAlignment="Center">
+                            <TextBlock x:Uid="NewConversation_NewChannel"
+                                       Text="New channel"
+                                       FontSize="16"
+                                       FontFamily="{StaticResource MainFontSemibold}"
+                                       FontWeight="SemiBold"
+                                       Foreground="{ThemeResource WhatsAppTextHighBrush}"
+                                       TextWrapping="NoWrap"
+                                       TextTrimming="CharacterEllipsis"/>
+                            <TextBlock x:Uid="NewConversation_NewChannelDesc"
+                                       Text="Reach an unlimited number of people"
+                                       FontSize="13"
+                                       Foreground="{ThemeResource WhatsAppTextMediumBrush}"
+                                       TextWrapping="NoWrap"
+                                       TextTrimming="CharacterEllipsis"/>
+                        </StackPanel>
+                    </Grid>
+                </Button>
+
+                <Button Style="{StaticResource NewConversationOptionRowStyle}"
+                        Command="{Binding PhoneNumberCommand}">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <Border Width="56" Height="56"
+                                Background="{ThemeResource ChatDetailAccentBrush}">
+                            <FontIcon Glyph="&#xE75F;"
+                                      FontFamily="{StaticResource IconFont}"
+                                      FontSize="26"
+                                      Foreground="White"
+                                      HorizontalAlignment="Center"
+                                      VerticalAlignment="Center"/>
+                        </Border>
+                        <StackPanel Grid.Column="1" Margin="12,0,0,0" VerticalAlignment="Center">
+                            <TextBlock x:Uid="NewConversation_PhoneNumber"
+                                       Text="Phone number"
+                                       FontSize="16"
+                                       FontFamily="{StaticResource MainFontSemibold}"
+                                       FontWeight="SemiBold"
+                                       Foreground="{ThemeResource WhatsAppTextHighBrush}"
+                                       TextWrapping="NoWrap"
+                                       TextTrimming="CharacterEllipsis"/>
+                            <TextBlock x:Uid="NewConversation_PhoneNumberDesc"
+                                       Text="Start a chat with a phone number"
+                                       FontSize="13"
+                                       Foreground="{ThemeResource WhatsAppTextMediumBrush}"
+                                       TextWrapping="NoWrap"
+                                       TextTrimming="CharacterEllipsis"/>
+                        </StackPanel>
+                    </Grid>
+                </Button>
+
+                <Button Style="{StaticResource NewConversationOptionRowStyle}"
+                        Command="{Binding NavigateToPrivateChatCommand}">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <Border Width="56" Height="56"
+                                Background="{ThemeResource ChatDetailAccentBrush}">
+                            <Grid>
+                                <FontIcon Glyph="&#xE77B;"
+                                          FontFamily="{StaticResource IconFont}"
+                                          FontSize="26"
+                                          Foreground="White"
+                                          HorizontalAlignment="Center"
+                                          VerticalAlignment="Center"
+                                          Opacity="0.55"/>
+                                <Border>
+                                    <Border.Background>
+                                        <ImageBrush Stretch="UniformToFill"
+                                                    ImageSource="{Binding SelfAvatarUrl, Converter={StaticResource StringToImageSourceConverter}, ConverterParameter=112}"/>
+                                    </Border.Background>
+                                </Border>
+                            </Grid>
+                        </Border>
+                        <StackPanel Grid.Column="1" Margin="12,0,0,0" VerticalAlignment="Center">
+                            <TextBlock helpers:EmojiTextBlock.Text="{Binding SelfDisplayName}"
+                                       FontSize="16"
+                                       FontFamily="{StaticResource MainFontSemibold}"
+                                       FontWeight="SemiBold"
+                                       Foreground="{ThemeResource WhatsAppTextHighBrush}"
+                                       TextWrapping="NoWrap"
+                                       TextTrimming="CharacterEllipsis"/>
+                            <TextBlock Text="{Binding SelfSubtitle}"
+                                       FontSize="13"
+                                       Foreground="{ThemeResource WhatsAppTextMediumBrush}"
+                                       TextWrapping="NoWrap"
+                                       TextTrimming="CharacterEllipsis"/>
+                        </StackPanel>
+                    </Grid>
+                </Button>
+            </StackPanel>
+        </Grid>
+
+        <Grid x:Name="ContactsAreaHost" Grid.Row="3">
+            <!-- Sticky after first open: later IsOpen toggles only Visibility on the parent. -->
+            <SemanticZoom x:Name="ContactsZoom"
+                          x:Load="{x:Bind ViewModel.IsContactsSurfaceReady, Mode=OneWay}"
+                          ViewChangeStarted="ContactsZoom_ViewChangeStarted"
+                          ViewChangeCompleted="ContactsZoom_ViewChangeCompleted">
+                <SemanticZoom.ZoomedInView>
+                    <ListView x:Name="ContactsList"
+                              IsItemClickEnabled="True"
+                              ItemClick="ContactsList_ItemClick"
+                              SelectionMode="None"
+                              ItemTemplate="{StaticResource NewConversationContactTemplate}"
+                              Background="Transparent"
+                              ScrollViewer.IsVerticalScrollChainingEnabled="False">
+                        <ListView.GroupStyle>
+                            <GroupStyle HeaderTemplate="{StaticResource NewConversationGroupHeaderTemplate}"
+                                        HeaderContainerStyle="{StaticResource NewConversationGroupHeaderContainerStyle}"/>
+                        </ListView.GroupStyle>
+                        <ListView.ItemContainerStyle>
+                            <Style TargetType="ListViewItem">
+                                <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                                <Setter Property="Padding" Value="0"/>
+                                <Setter Property="MinHeight" Value="0"/>
+                            </Style>
+                        </ListView.ItemContainerStyle>
+                    </ListView>
+                </SemanticZoom.ZoomedInView>
+                <SemanticZoom.ZoomedOutView>
+                    <GridView x:Name="JumpList"
+                              HorizontalAlignment="Center"
+                              VerticalAlignment="Center"
+                              ItemTemplate="{StaticResource NewConversationZoomedOutTemplate}"
+                              IsItemClickEnabled="True"
+                              ItemClick="JumpList_ItemClick"
+                              SelectionMode="None"
+                              Background="Transparent"
+                              ScrollViewer.IsHorizontalScrollChainingEnabled="False"
+                              ScrollViewer.IsVerticalScrollChainingEnabled="False">
+                        <GridView.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <ItemsWrapGrid Orientation="Horizontal"
+                                               HorizontalAlignment="Center"
+                                               MaximumRowsOrColumns="4"/>
+                            </ItemsPanelTemplate>
+                        </GridView.ItemsPanel>
+                        <GridView.ItemContainerStyle>
+                            <Style TargetType="GridViewItem">
+                                <Setter Property="HorizontalContentAlignment" Value="Center"/>
+                                <Setter Property="VerticalContentAlignment" Value="Center"/>
+                                <Setter Property="Margin" Value="0"/>
+                                <Setter Property="Padding" Value="0"/>
+                                <Setter Property="MinWidth" Value="0"/>
+                                <Setter Property="MinHeight" Value="0"/>
+                            </Style>
+                        </GridView.ItemContainerStyle>
+                    </GridView>
+                </SemanticZoom.ZoomedOutView>
+            </SemanticZoom>
+
+            <!-- Above the list so first-open inflate still shows chrome + spinner.
+                 x:Bind ViewModel — classic Binding inherited ShellViewModel at warm inflate. -->
+            <Border x:Name="CatalogLoadingHost"
+                    Background="{ThemeResource ChatListBackgroundBrush}"
+                    Visibility="{x:Bind ViewModel.IsCatalogLoading, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}">
+                <controls:ModernProgressRing Width="36" Height="36"
+                                             HorizontalAlignment="Center"
+                                             VerticalAlignment="Center"
+                                             IsActive="{x:Bind ViewModel.IsCatalogLoading, Mode=OneWay}"/>
+            </Border>
+        </Grid>
+
+        <!-- Unison / WhatsApp create scaffold (SemanticZoom members + circular FAB). -->
+        <controls:CreateConversationFlowView x:Name="CreateFlowPart"
+                                             Grid.Row="0"
+                                             Grid.RowSpan="4"
+                                             Visibility="Collapsed"/>
+
     </Grid>
 </UserControl>

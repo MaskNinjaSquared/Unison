@@ -29,11 +29,32 @@ namespace Unison.Core.State
         /// <summary>True while the saved chat rows are being read back into <see cref="Chats"/> at startup.</summary>
         bool IsLoadingPersistedChats { get; }
 
+        /// <summary>
+        /// True while a bulk catalogue mutation (e.g. group listing hub ensure) is adding rows
+        /// without wanting a full visible refresh per Add.
+        /// </summary>
+        bool IsBulkCatalogueMutating { get; }
+
+        /// <summary>
+        /// Suppresses per-Add list refresh while hubs/rows land; dispose raises
+        /// <see cref="BulkCatalogueMutationEnded"/> so the list can rebuild once.
+        /// </summary>
+        IDisposable BeginBulkCatalogueMutation();
+
+        /// <summary>Raised when a <see cref="BeginBulkCatalogueMutation"/> scope ends.</summary>
+        event EventHandler BulkCatalogueMutationEnded;
+
         /// <summary>Raised with the chat JID whose message list changed.</summary>
         event EventHandler<string> MessagesChanged;
 
         /// <summary>Raised when resolved display names changed, so lists can re-render labels.</summary>
         event EventHandler DisplayNamesChanged;
+
+        /// <summary>
+        /// Raised when group/community subjects landed in the name cache (listing/metadata)
+        /// without a broad display-name pass. Hub rows may restamp; author strips must not.
+        /// </summary>
+        event EventHandler CommunitySubjectsUpdated;
 
         /// <summary>
         /// Raised once per roster apply or flush, with the group and the participants that changed
@@ -97,6 +118,12 @@ namespace Unison.Core.State
         /// existing name becomes reachable under a newly learned LID/PN alias.
         /// </summary>
         void NotifyDisplayNamesChanged();
+
+        /// <summary>
+        /// Subjects were cached for groups/communities; stamp unresolved hubs only — do not
+        /// treat this as a full DisplayNamesChanged (author-strip storm on Mobile).
+        /// </summary>
+        void NotifyCommunitySubjectsUpdated();
 
         /// <summary>
         /// Announces that a group's roster was applied, so labels resolved from participants can

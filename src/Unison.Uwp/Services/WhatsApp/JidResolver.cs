@@ -27,6 +27,8 @@ namespace Unison.Uwp.Services.WhatsApp
 
         public string GetCanonicalJid(string jid) => _aliases.GetCanonicalJid(jid);
 
+        public string PeekCanonicalJid(string jid) => _aliases.PeekCanonicalJid(jid);
+
         public bool IsSelfLinked(string jid) => _aliases.IsSelfLinked(jid);
 
         public bool TryGetAlias(string jid, out string alias)

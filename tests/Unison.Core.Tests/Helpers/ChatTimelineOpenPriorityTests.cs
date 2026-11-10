@@ -101,6 +101,51 @@ namespace Unison.Core.Tests.Helpers
         }
 
         [Fact]
+        public void Tip_reconcile_ui_pauses_while_offline_tip_busy()
+        {
+            // Journal 82908f3f: post-replay Low slices waited behind tip/name Normal work;
+            // pause the full heal while offline tip flush owns the list.
+            Assert.True(
+                ChatTimelineOpenPriority.ShouldPauseTipReconcileUi(
+                    deepLinkListHeld: false,
+                    timelineLoadPriorityHeld: false,
+                    windowVisible: true,
+                    listColdPopulate: false,
+                    offlineTipBusy: true));
+            Assert.False(
+                ChatTimelineOpenPriority.ShouldPauseTipReconcileUi(
+                    deepLinkListHeld: false,
+                    timelineLoadPriorityHeld: false,
+                    windowVisible: true,
+                    listColdPopulate: false,
+                    offlineTipBusy: false));
+        }
+
+        [Theory]
+        [InlineData(true, false, true, false, false, "deeplink")]
+        [InlineData(false, true, true, false, false, "timeline")]
+        [InlineData(false, false, false, false, false, "hidden")]
+        [InlineData(false, false, true, true, false, "cold-populate")]
+        [InlineData(false, false, true, false, true, "offline-tip")]
+        [InlineData(false, false, true, false, false, null)]
+        public void Tip_reconcile_pause_names_the_holding_gate(
+            bool deepLink,
+            bool timeline,
+            bool visible,
+            bool cold,
+            bool offline,
+            string? expected)
+        {
+            string gate = ChatTimelineOpenPriority.DescribeTipReconcilePause(
+                deepLink, timeline, visible, cold, offline);
+
+            Assert.Equal(expected, gate);
+            Assert.Equal(
+                expected != null,
+                ChatTimelineOpenPriority.ShouldPauseTipReconcileUi(deepLink, timeline, visible, cold, offline));
+        }
+
+        [Fact]
         public void Mobile_scroll_settle_hold_covers_large_group_open_window()
         {
             // Must outlast the post-paint Continues storm on a ~250-row list after
@@ -140,6 +185,47 @@ namespace Unison.Core.Tests.Helpers
             Assert.True(
                 ChatTimelineOpenPriority.ShouldScheduleVisibleRefreshOnTimelineRelease(
                     orderDirty: true));
+        }
+
+        [Fact]
+        public void Tip_hydrate_skips_reorder_while_timeline_held()
+        {
+            Assert.False(
+                ChatTimelineOpenPriority.ShouldReorderVisibleOnTipHydrate(
+                    timelineLoadPriorityHeld: true));
+            Assert.True(
+                ChatTimelineOpenPriority.ShouldReorderVisibleOnTipHydrate(
+                    timelineLoadPriorityHeld: false));
+        }
+
+        [Fact]
+        public void Hot_tip_reasons_use_normal_ui_lane()
+        {
+            Assert.True(
+                ChatTimelineOpenPriority.ShouldUseNormalTipUiLane("chat-open", workCount: 1));
+            Assert.True(
+                ChatTimelineOpenPriority.ShouldUseNormalTipUiLane("history-chunk-tip", workCount: 1));
+            Assert.True(
+                ChatTimelineOpenPriority.ShouldUseNormalTipUiLane("list-chunk", workCount: 10));
+            Assert.False(
+                ChatTimelineOpenPriority.ShouldUseNormalTipUiLane("persisted-ui-loaded", workCount: 257));
+            Assert.True(
+                ChatTimelineOpenPriority.ShouldUseNormalTipUiLane("post-replay", workCount: 0));
+        }
+
+        [Fact]
+        public void Soft_wait_budgets_cover_settle_without_hanging_forever()
+        {
+            Assert.True(
+                ChatTimelineOpenPriority.UiSlicePauseMaxWait >=
+                ChatTimelineOpenPriority.MobileScrollSettleHold);
+            Assert.True(
+                ChatTimelineOpenPriority.TimelineHoldWaitMax >
+                ChatTimelineOpenPriority.UiSlicePauseMaxWait);
+            Assert.True(
+                ChatTimelineOpenPriority.UiSlicePauseMaxWait.TotalSeconds <= 15);
+            Assert.True(
+                ChatTimelineOpenPriority.TimelineHoldWaitMax.TotalSeconds <= 20);
         }
     }
 }

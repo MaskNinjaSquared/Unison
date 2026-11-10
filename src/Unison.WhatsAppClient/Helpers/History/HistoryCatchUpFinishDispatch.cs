@@ -32,7 +32,10 @@ namespace Unison.WhatsAppClient.Helpers
             HistoryCatchUpFinishNext next = HistoryCatchUpFinishDecision.Decide(
                 releaseEnrichment,
                 host.IsFirstSyncListHoldInProgress,
-                host.IsListAwaitingFirstHistorySync);
+                host.IsListAwaitingFirstHistorySync,
+                host.IsPairingBootstrapChunkSeenOrApplying,
+                host.FirstSyncListReleaseDeferred,
+                host.IsHistoryApplyBusy);
             if (next == HistoryCatchUpFinishNext.None)
             {
                 return;

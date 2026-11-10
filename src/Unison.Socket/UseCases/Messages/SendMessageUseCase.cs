@@ -65,10 +65,24 @@ namespace Unison.Socket.UseCases.Messages
         /// The id to send under, when the caller has already shown the message and needs the two
         /// to match. Left null, one is generated.
         /// </param>
-        public async Task<MessageEnvelope> ExecuteAsync(
+        public Task<MessageEnvelope> ExecuteAsync(
             string jid,
             OutgoingContent content,
             string explicitMessageId = null,
+            CancellationToken cancellationToken = default(CancellationToken))
+        {
+            return ExecuteAsync(jid, content, explicitMessageId, null, cancellationToken);
+        }
+
+        /// <param name="statusJidList">
+        /// Who receives a Status update. status@broadcast has no participant list of its own,
+        /// so without this the sender key reaches nobody but our own devices.
+        /// </param>
+        public async Task<MessageEnvelope> ExecuteAsync(
+            string jid,
+            OutgoingContent content,
+            string explicitMessageId,
+            IList<string> statusJidList,
             CancellationToken cancellationToken = default(CancellationToken))
         {
             if (string.IsNullOrEmpty(jid))
@@ -85,7 +99,8 @@ namespace Unison.Socket.UseCases.Messages
             {
                 MessageId = messageId,
                 AdditionalAttributes = built.Attributes,
-                AdditionalNodes = built.Nodes
+                AdditionalNodes = built.Nodes,
+                StatusJidList = statusJidList
             };
 
             await _relay.ExecuteAsync(jid, built.Content, options).ConfigureAwait(false);

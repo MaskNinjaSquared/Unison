@@ -524,8 +524,8 @@ namespace Unison.Uwp.Shell.Unison.Views
                 if (jids != null)
                 {
                     return string.Equals(
-                        jids.GetCanonicalJid(active.JID),
-                        jids.GetCanonicalJid(chat.JID),
+                        jids.PeekCanonicalJid(active.JID),
+                        jids.PeekCanonicalJid(chat.JID),
                         StringComparison.OrdinalIgnoreCase);
                 }
             }

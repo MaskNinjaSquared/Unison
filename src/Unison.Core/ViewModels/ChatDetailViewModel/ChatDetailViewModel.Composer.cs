@@ -119,7 +119,6 @@ namespace Unison.Core.ViewModels
 
         /// <summary>
         /// Feeds a camera JPEG into the same image-send preview used by gallery attach.
-        /// Called by the chat detail view after <see cref="CameraPickViewModel.PhotoCaptured"/>.
         /// </summary>
         public Task AcceptCapturedPhotoAsync(byte[] jpegBytes)
         {
@@ -137,6 +136,25 @@ namespace Unison.Core.ViewModels
                     FileName = "camera.jpg",
                     IsImage = true
                 });
+        }
+
+        /// <summary>Opens the Shell camera overlay and sends the JPEG through the image preview.</summary>
+        private async Task AttachCameraAsync()
+        {
+            if (_cameraPick == null || _activeChat == null || _isSending || IsRecording)
+            {
+                return;
+            }
+
+            // Stay on the UI sync context: ShowImageSendPreviewAsync is a ContentDialog
+            // (RPC_E_WRONG_THREAD if we ConfigureAwait(false) across PickJpegAsync).
+            byte[] jpeg = await _cameraPick.PickJpegAsync().ConfigureAwait(true);
+            if (jpeg == null || jpeg.Length == 0)
+            {
+                return;
+            }
+
+            await AcceptCapturedPhotoAsync(jpeg).ConfigureAwait(true);
         }
 
         /// <summary>

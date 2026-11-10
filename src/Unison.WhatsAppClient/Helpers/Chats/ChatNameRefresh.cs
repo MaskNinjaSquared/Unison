@@ -4,12 +4,29 @@ using System.Threading;
 using System.Threading.Tasks;
 using Unison.Core.Contracts;
 using Unison.Core.Contracts.WhatsApp;
+using Unison.Core.Helpers;
+using Unison.Core.Helpers.Chats;
+using Unison.Core.Helpers.Ui;
 using Unison.Core.Models;
 using Unison.Core.State;
-using Unison.Core.Helpers;
 
 namespace Unison.WhatsAppClient.Helpers
 {
+    /// <summary>The chat titles one <see cref="ChatNameRefresh"/> pass replaced.</summary>
+    public sealed class ChatTitleChanges : EventArgs
+    {
+        internal ChatTitleChanges(string pass, IReadOnlyList<ResolvedNameChange> changes)
+        {
+            Pass = pass;
+            Changes = changes;
+        }
+
+        /// <summary>"normalize" for the startup pass, "apply" for every later one.</summary>
+        public string Pass { get; }
+
+        public IReadOnlyList<ResolvedNameChange> Changes { get; }
+    }
+
     /// <summary>
     /// Puts the names now known onto the chat rows and their members, in UI passes.
     /// </summary>
@@ -23,7 +40,9 @@ namespace Unison.WhatsAppClient.Helpers
     /// Concurrent callers coalesce into one in-flight walk (plus at most one follow-up if more
     /// tickets arrived while it ran) so usync / subject-cache storms do not stack full catalogue
     /// walks. A scoped ticket merges into a full ticket; two scoped tickets union their JIDs.
-    /// <see cref="Applied"/> is raised once inside the last UI pass (never with zero).
+    /// <see cref="Applied"/> is raised once after the last UI pass (never with zero) so handlers
+    /// cannot nest into the name-apply hop.
+    /// PreferFrugal runs slices on Low and yields while offline tip flush is busy.
     /// </remarks>
     public sealed class ChatNameRefresh
     {
@@ -33,11 +52,13 @@ namespace Unison.WhatsAppClient.Helpers
         private static readonly TimeSpan FrugalSliceGap = TimeSpan.FromMilliseconds(24);
 
         private readonly IDispatcher _ui;
+        private readonly ILowPriorityDispatcher _uiLow;
         private readonly IChatStateStore _chats;
         private readonly ContactDisplayNames _names;
         private readonly IGroupNaming _groupNaming;
         private readonly ISelfMarkerNaming _markers;
         private readonly Func<bool> _preferFrugal;
+        private readonly IUiWorkHolds _uiHolds;
         private readonly SemaphoreSlim _applyGate = new SemaphoreSlim(1, 1);
         private readonly object _pendingLock = new object();
         private int _applyTickets;
@@ -51,18 +72,30 @@ namespace Unison.WhatsAppClient.Helpers
             ContactDisplayNames names,
             ISelfMarkerNaming markers,
             IGroupNaming groupNaming,
-            Func<bool> preferFrugal = null)
+            Func<bool> preferFrugal = null,
+            Func<bool> isOfflineReplayTipBusy = null,
+            IUiWorkHolds uiHolds = null)
         {
             _ui = ui ?? throw new ArgumentNullException(nameof(ui));
+            _uiLow = ui as ILowPriorityDispatcher;
             _chats = chats ?? throw new ArgumentNullException(nameof(chats));
             _names = names ?? throw new ArgumentNullException(nameof(names));
             _markers = markers ?? throw new ArgumentNullException(nameof(markers));
             _groupNaming = groupNaming ?? throw new ArgumentNullException(nameof(groupNaming));
             _preferFrugal = preferFrugal ?? (() => false);
+            Func<bool> tipBusy = isOfflineReplayTipBusy ?? (() => false);
+            _uiHolds = uiHolds ?? new UiWorkHolds(() => new UiHoldSnapshot
+            {
+                WindowVisible = true,
+                OfflineTipBusy = tipBusy(),
+            });
         }
 
         /// <summary>Raised with how many titles and member names changed; never with zero.</summary>
         public event EventHandler<int> Applied;
+
+        /// <summary>Raised outside the UI pass with the titles it replaced; never empty.</summary>
+        public event EventHandler<ChatTitleChanges> TitlesChanged;
 
         /// <summary>Full catalogue walk — discovery when the caller does not know which JIDs moved.</summary>
         public Task ApplyAsync() => ApplyAsync(affectedJids: null);
@@ -162,13 +195,18 @@ namespace Unison.WhatsAppClient.Helpers
             int totalUpdated = 0;
             int start = 0;
             List<ChatItem> targets = null;
+            var titles = new List<ResolvedNameChange>();
+            bool announce = false;
+            IUiWaitRun holds = _uiHolds.BeginRun("chat-names");
 
             while (true)
             {
+                await holds.WaitAsync(UiWorkKind.SilentNames).ConfigureAwait(false);
+
                 int sliceStart = start;
                 bool done = false;
 
-                await _ui.RunAsync(() =>
+                await RunNameUiAsync(frugal, () =>
                 {
                     if (targets == null)
                     {
@@ -179,11 +217,7 @@ namespace Unison.WhatsAppClient.Helpers
                     if (sliceStart >= chatCount)
                     {
                         done = true;
-                        if (totalUpdated > 0)
-                        {
-                            Applied?.Invoke(this, totalUpdated);
-                        }
-
+                        announce = totalUpdated > 0;
                         return;
                     }
 
@@ -205,15 +239,13 @@ namespace Unison.WhatsAppClient.Helpers
                         ResolveForApply,
                         IsMeaningful,
                         membersToo: membersToo,
+                        titles: titles,
                         unnamedMembersOnly: frugal);
 
                     if (!more)
                     {
                         done = true;
-                        if (totalUpdated > 0)
-                        {
-                            Applied?.Invoke(this, totalUpdated);
-                        }
+                        announce = totalUpdated > 0;
                     }
                 }).ConfigureAwait(false);
 
@@ -225,6 +257,33 @@ namespace Unison.WhatsAppClient.Helpers
                 start = sliceStart + sliceSize;
                 await Task.Delay(FrugalSliceGap).ConfigureAwait(false);
             }
+
+            // Outside the UI hop — Applied → NotifyDisplayNamesUpdated / author sweep must not
+            // nest under HasThreadAccess (82908f3f: ApplyCoreAsync ~44s for count=3).
+            if (announce)
+            {
+                Applied?.Invoke(this, totalUpdated);
+            }
+
+            RaiseTitlesChanged("apply", titles);
+        }
+
+        private void RaiseTitlesChanged(string pass, List<ResolvedNameChange> titles)
+        {
+            if (titles.Count > 0)
+            {
+                TitlesChanged?.Invoke(this, new ChatTitleChanges(pass, titles));
+            }
+        }
+
+        private Task RunNameUiAsync(bool frugal, Action action)
+        {
+            if (TipUiPipelineGate.PreferLowSilentUi(frugal) && _uiLow != null)
+            {
+                return _uiLow.RunLowAsync(action);
+            }
+
+            return _ui.RunAsync(action);
         }
 
         private List<ChatItem> CollectTargets(HashSet<string> affectedJids)
@@ -340,6 +399,8 @@ namespace Unison.WhatsAppClient.Helpers
         /// <summary>
         /// Titles only (no member relabel): the pass that runs once after persisted chats
         /// rehydrate, so phone-number placeholders become resolved names before the list paints.
+        /// A title that is already a name is kept: the address book and app-state contacts may
+        /// not have loaded yet, and the push name would demote it until the next pass.
         /// Frugal devices slice across dispatcher turns — a single UI pass over 250+ rows
         /// froze Lumia 950 XL for tens of seconds during deferred startup.
         /// </summary>
@@ -348,6 +409,7 @@ namespace Unison.WhatsAppClient.Helpers
         {
             bool frugal = _preferFrugal();
             int sliceSize = frugal ? FrugalUiSliceSize : int.MaxValue;
+            var titles = new List<ResolvedNameChange>();
             int totalUpdated = 0;
             int start = 0;
 
@@ -386,7 +448,9 @@ namespace Unison.WhatsAppClient.Helpers
                         batch,
                         ResolveForApply,
                         IsMeaningful,
-                        membersToo: false);
+                        membersToo: false,
+                        titles: titles,
+                        placeholdersOnly: true);
 
                     if (!more)
                     {
@@ -407,6 +471,7 @@ namespace Unison.WhatsAppClient.Helpers
                 await Task.Delay(FrugalSliceGap).ConfigureAwait(false);
             }
 
+            RaiseTitlesChanged("normalize", titles);
             return totalUpdated;
         }
 

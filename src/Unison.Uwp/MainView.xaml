@@ -3,6 +3,7 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:controls="using:Unison.Uwp.UI.Controls"
+    xmlns:helpers="using:Unison.Uwp.UI.Helpers"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d"
@@ -218,7 +219,7 @@
                             </Grid>
 
                             <TextBlock Grid.Column="1"
-                                       Text="{Binding ProfileDisplayName}"
+                                       helpers:EmojiTextBlock.Text="{Binding ProfileDisplayName}"
                                        Foreground="{ThemeResource WhatsAppTextHighBrush}"
                                        Margin="12,0,0,0"
                                        FontSize="14"
@@ -240,6 +241,7 @@
         <!-- Share Target picker: full-bleed over SplitView (Mobile needs opaque cover). -->
         <controls:ContactsVisualizerControl
             x:Name="SharePickerOverlay"
+            x:Load="{x:Bind ViewModel.IsSharePickerOpen, Mode=OneWay}"
             Canvas.ZIndex="100"
             IsOpen="{x:Bind ViewModel.IsSharePickerOpen, Mode=TwoWay}"
             Title="{x:Bind ViewModel.SharePickerTitle, Mode=OneWay}"
@@ -247,10 +249,24 @@
             ItemClickCommand="{x:Bind ViewModel.SelectShareChatCommand}"
             BackCommand="{x:Bind ViewModel.CloseSharePickerCommand}"/>
 
-        <!-- New conversation: tiles + A–Z above the chat list (same cover model as Share). -->
+        <!-- New conversation: warm chrome; A–Z list x:Loads inside after first Open yield. -->
         <controls:NewConversationView
             x:Name="NewConversationOverlay"
             Canvas.ZIndex="101"
             ViewModel="{x:Bind ViewModel.NewConversation, Mode=OneWay}"/>
+
+        <!-- Full-screen pages (INavigator.NavigateFullScreen): over the sidebar and every overlay. -->
+        <Frame x:Name="FullScreenFrame"
+               Canvas.ZIndex="102"
+               Visibility="Collapsed"
+               Background="{ThemeResource WhatsAppBackgroundBrush}"
+               Navigated="FullScreenFrame_Navigated"/>
+
+        <!-- Shell camera (shared CameraPickView); deferred until IsCameraPickOpen. -->
+        <ContentPresenter
+            x:Name="CameraPickPresenter"
+            x:Load="{x:Bind ViewModel.IsCameraPickOpen, Mode=OneWay}"
+            Canvas.ZIndex="103"
+            Visibility="Collapsed"/>
     </Grid>
 </Page>

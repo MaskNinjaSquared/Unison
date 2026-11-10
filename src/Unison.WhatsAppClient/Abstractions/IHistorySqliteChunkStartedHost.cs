@@ -9,6 +9,9 @@ namespace Unison.WhatsAppClient.Abstractions
     {
         int SqliteHistoryConversationsAccumulated { get; }
 
+        /// <summary>True after first-sync list <c>IsCompleted</c> — empty starts skip UI progress.</summary>
+        bool FirstSyncListAlreadyReleased { get; }
+
         void NoteFullHistoryCatchUpProgress(string reason);
 
         void BumpSqliteHistoryFinalizeGeneration();

@@ -62,6 +62,21 @@ namespace Unison.WhatsAppClient.Helpers
                 chat.IsFavorite = state.IsFavorite;
             }
 
+            if (state.Knows(ChatLocalStateFields.ChannelRole) &&
+                state.ChannelRole != ChannelViewerRole.Unknown)
+            {
+                chat.ChannelRole = state.ChannelRole;
+            }
+
+            // Only a stored description is applied. A row that predates the column answers
+            // "unknown", and writing that absence over a description already fetched this
+            // session would blank the info panel until the next metadata reply.
+            if (state.Knows(ChatLocalStateFields.GroupDescription))
+            {
+                chat.GroupDescription = state.GroupDescription;
+                chat.GroupDescriptionId = state.GroupDescriptionId;
+            }
+
             if (!state.Knows(ChatLocalStateFields.Pin))
             {
                 return;

@@ -27,6 +27,7 @@
 // =============================================================================
 using System;
 using System.Collections.Generic;
+using System.Threading;
 using System.Threading.Tasks;
 using Unison.Baileys.Client;
 using Unison.Socket.Signal;
@@ -38,6 +39,10 @@ namespace Unison.Uwp.Services.Socket
     {
         private readonly SignalHandler _signal;
         private readonly LidMappingStore _lidMapping;
+        private readonly object _deferLock = new object();
+        private int _deferredPersistDepth;
+        private readonly HashSet<string> _dirtySessionJids =
+            new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         public SignalRepositoryAdapter(SignalHandler signal, LidMappingStore lidMapping)
         {
@@ -55,6 +60,84 @@ namespace Unison.Uwp.Services.Socket
             get { return _lidMapping; }
         }
 
+        public void BeginDeferredSessionPersist()
+        {
+            lock (_deferLock)
+            {
+                _deferredPersistDepth++;
+            }
+        }
+
+        public Task EndDeferredSessionPersistAsync()
+        {
+            string[] dirty;
+            lock (_deferLock)
+            {
+                if (_deferredPersistDepth <= 0)
+                {
+                    return Task.CompletedTask;
+                }
+
+                _deferredPersistDepth--;
+                if (_deferredPersistDepth > 0)
+                {
+                    return Task.CompletedTask;
+                }
+
+                dirty = new string[_dirtySessionJids.Count];
+                _dirtySessionJids.CopyTo(dirty);
+                _dirtySessionJids.Clear();
+            }
+
+            if (dirty.Length == 0)
+            {
+                return Task.CompletedTask;
+            }
+
+            // Status@broadcast SKDM dirties hundreds of 1:1 sessions. Awaiting UWP StorageFile
+            // for each blocked the publish for minutes; memory already holds the advanced
+            // counters, so disk catches up in the background (same idea as sender-key persist).
+            _ = FlushDirtySessionsInBackgroundAsync(dirty);
+            return Task.CompletedTask;
+        }
+
+        private async Task FlushDirtySessionsInBackgroundAsync(string[] dirty)
+        {
+            using (var gate = new SemaphoreSlim(4))
+            {
+                var tasks = new List<Task>(dirty.Length);
+                foreach (string sessionJid in dirty)
+                {
+                    await gate.WaitAsync().ConfigureAwait(false);
+                    tasks.Add(PersistDirtySessionAsync(sessionJid, gate));
+                }
+
+                try
+                {
+                    await Task.WhenAll(tasks).ConfigureAwait(false);
+                }
+                catch
+                {
+                    // Best-effort disk mirror; send already completed with in-memory ratchets.
+                }
+            }
+        }
+
+        private async Task PersistDirtySessionAsync(string sessionJid, SemaphoreSlim gate)
+        {
+            try
+            {
+                await _signal.SaveSessionAsync(sessionJid).ConfigureAwait(false);
+            }
+            catch
+            {
+            }
+            finally
+            {
+                gate.Release();
+            }
+        }
+
         public async Task<EncryptedPayload> EncryptMessageAsync(string jid, byte[] plaintext)
         {
             var sessionJid = await ResolveSessionJidAsync(jid).ConfigureAwait(false);
@@ -67,7 +150,20 @@ namespace Unison.Uwp.Services.Socket
             // Encrypting advances the sending chain. Leaving that in memory means a restart
             // rewinds the counter and the next message repeats one the peer already consumed,
             // which they answer by showing the message as still on its way.
-            await _signal.SaveSessionAsync(sessionJid).ConfigureAwait(false);
+            bool defer;
+            lock (_deferLock)
+            {
+                defer = _deferredPersistDepth > 0;
+                if (defer)
+                {
+                    _dirtySessionJids.Add(sessionJid);
+                }
+            }
+
+            if (!defer)
+            {
+                await _signal.SaveSessionAsync(sessionJid).ConfigureAwait(false);
+            }
 
             return new EncryptedPayload { Type = result.Type, Ciphertext = result.Ciphertext };
         }

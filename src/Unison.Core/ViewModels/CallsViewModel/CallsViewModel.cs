@@ -30,6 +30,9 @@ namespace Unison.Core.ViewModels
         private readonly IJidResolver _jids;
         private readonly IStringResources _strings;
         private readonly IDispatcher _ui;
+        private readonly IDialogService _dialogs;
+        private readonly IContactService _contacts;
+        private readonly DebouncedUiRebuild _favoritesRebuildDebounce;
 
         private ObservableCollection<CallFavoriteItem> _favoritePreview =
             new ObservableCollection<CallFavoriteItem>();
@@ -37,8 +40,9 @@ namespace Unison.Core.ViewModels
             new ObservableCollection<CallRecentItem>();
         private ObservableCollection<CallHistoryEntry> _selectedHistory =
             new ObservableCollection<CallHistoryEntry>();
-        private ObservableCollection<CallHistoryDateGroup> _groupedHistory =
-            new ObservableCollection<CallHistoryDateGroup>();
+        private ObservableCollection<CallHistoryEntry> _selectedHistoryRest =
+            new ObservableCollection<CallHistoryEntry>();
+        private CallHistoryEntry _selectedLatest;
         private bool _hasMoreFavorites;
         private bool _isShowingAllFavorites;
         private bool _hasFavorites;
@@ -53,7 +57,9 @@ namespace Unison.Core.ViewModels
             IDispatcher ui,
             ICallLogService callLog = null,
             IPersonStore people = null,
-            IJidResolver jids = null)
+            IJidResolver jids = null,
+            IDialogService dialogs = null,
+            IContactService contacts = null)
         {
             _chatState = chatState ?? throw new ArgumentNullException(nameof(chatState));
             _chats = chats ?? throw new ArgumentNullException(nameof(chats));
@@ -62,6 +68,13 @@ namespace Unison.Core.ViewModels
             _callLog = callLog;
             _people = people;
             _jids = jids;
+            _dialogs = dialogs;
+            _contacts = contacts;
+            _favoritesRebuildDebounce = new DebouncedUiRebuild(
+                () => true,
+                RebuildFavorites,
+                _ui,
+                logTag: "CallsFavorites");
 
             OpenNewCallCommand = new RelayCommand(() => NewCallRequested?.Invoke(this, EventArgs.Empty));
             OpenMenuCommand = new RelayCommand(() => MenuRequested?.Invoke(this, EventArgs.Empty));
@@ -70,6 +83,8 @@ namespace Unison.Core.ViewModels
             SelectRecentCommand = new RelayCommand<CallRecentItem>(SelectRecent);
             CloseDetailsCommand = new RelayCommand(CloseDetails);
             OpenChatCommand = new RelayCommand(OpenSelectedChat, CanOpenSelectedChat);
+            CallFavoriteVoiceCommand = new RelayCommand<CallFavoriteItem>(
+                item => _ = CallFavoriteVoiceAsync(item));
 
             _chatState.Chats.CollectionChanged += OnChatsCollectionChanged;
             _chats.FavoritesMembershipChanged += OnFavoritesMembershipChanged;
@@ -247,21 +262,47 @@ namespace Unison.Core.ViewModels
             }
         }
 
-        /// <summary>Call info history bucketed by local day for SemanticZoom.</summary>
-        public ObservableCollection<CallHistoryDateGroup> GroupedHistory
+        /// <summary>Newest entry for the open contact — shown above HISTORY.</summary>
+        public CallHistoryEntry SelectedLatest
         {
-            get => _groupedHistory;
+            get => _selectedLatest;
             private set
             {
-                if (ReferenceEquals(_groupedHistory, value))
+                if (ReferenceEquals(_selectedLatest, value))
                 {
                     return;
                 }
 
-                _groupedHistory = value;
-                OnPropertyChanged(nameof(GroupedHistory));
+                _selectedLatest = value;
+                OnPropertyChanged(nameof(SelectedLatest));
+                OnPropertyChanged(nameof(HasSelectedLatest));
             }
         }
+
+        public bool HasSelectedLatest => _selectedLatest != null;
+
+        /// <summary>Older entries under the HISTORY subheader (flat, newest-first).</summary>
+        public ObservableCollection<CallHistoryEntry> SelectedHistoryRest
+        {
+            get => _selectedHistoryRest;
+            private set
+            {
+                if (ReferenceEquals(_selectedHistoryRest, value))
+                {
+                    return;
+                }
+
+                _selectedHistoryRest = value;
+                OnPropertyChanged(nameof(SelectedHistoryRest));
+                OnPropertyChanged(nameof(HasSelectedHistoryRest));
+            }
+        }
+
+        public bool HasSelectedHistoryRest =>
+            _selectedHistoryRest != null && _selectedHistoryRest.Count > 0;
+
+        public string HistorySectionTitle =>
+            _strings?.Get("Calls_HistorySection", "HISTORY") ?? "HISTORY";
 
         public ICommand OpenNewCallCommand { get; }
 
@@ -276,6 +317,9 @@ namespace Unison.Core.ViewModels
         public ICommand CloseDetailsCommand { get; }
 
         public ICommand OpenChatCommand { get; }
+
+        /// <summary>Favourites voice button → call-back confirm dialog (hide only).</summary>
+        public ICommand CallFavoriteVoiceCommand { get; }
 
         public string DirectionLabel(CallDirection direction)
         {
@@ -322,6 +366,37 @@ namespace Unison.Core.ViewModels
             IsCallDetailsOpen = true;
         }
 
+        private async System.Threading.Tasks.Task CallFavoriteVoiceAsync(CallFavoriteItem item)
+        {
+            if (item == null || _dialogs == null)
+            {
+                return;
+            }
+
+            if (item.Chat != null && item.Chat.IsGroup)
+            {
+                return;
+            }
+
+            string phone = null;
+            if (_contacts != null && !string.IsNullOrEmpty(item.Jid))
+            {
+                phone = _contacts.TryResolvePhone(item.Jid);
+            }
+
+            if (string.IsNullOrEmpty(phone))
+            {
+                phone = JidHelper.TryPhoneFromJid(item.Jid);
+            }
+
+            if (string.IsNullOrEmpty(phone))
+            {
+                return;
+            }
+
+            await _dialogs.ShowCallBackAsync(phone).ConfigureAwait(false);
+        }
+
         private void SelectRecent(CallRecentItem item)
         {
             if (item == null)
@@ -345,7 +420,8 @@ namespace Unison.Core.ViewModels
             IsCallDetailsOpen = false;
             SelectedSubject = null;
             SelectedHistory = new ObservableCollection<CallHistoryEntry>();
-            GroupedHistory = new ObservableCollection<CallHistoryDateGroup>();
+            SelectedHistoryRest = new ObservableCollection<CallHistoryEntry>();
+            SelectedLatest = null;
         }
 
         private bool CanOpenSelectedChat()
@@ -489,7 +565,8 @@ namespace Unison.Core.ViewModels
             if (_callLog == null || string.IsNullOrWhiteSpace(jid))
             {
                 SelectedHistory = new ObservableCollection<CallHistoryEntry>();
-                GroupedHistory = new ObservableCollection<CallHistoryDateGroup>();
+                SelectedHistoryRest = new ObservableCollection<CallHistoryEntry>();
+                SelectedLatest = null;
                 return;
             }
 
@@ -513,10 +590,24 @@ namespace Unison.Core.ViewModels
             }
 
             SelectedHistory = new ObservableCollection<CallHistoryEntry>(history);
-            string today = _strings?.Get("Common_Today", "Today") ?? "Today";
-            string yesterday = _strings?.Get("Common_Yesterday", "Yesterday") ?? "Yesterday";
-            GroupedHistory = new ObservableCollection<CallHistoryDateGroup>(
-                CallHistoryDateGrouping.Build(history, today, yesterday));
+            if (history.Count == 0)
+            {
+                SelectedLatest = null;
+                SelectedHistoryRest = new ObservableCollection<CallHistoryEntry>();
+                return;
+            }
+
+            SelectedLatest = history[0];
+            var rest = new List<CallHistoryEntry>();
+            for (int i = 1; i < history.Count; i++)
+            {
+                if (history[i] != null)
+                {
+                    rest.Add(history[i]);
+                }
+            }
+
+            SelectedHistoryRest = new ObservableCollection<CallHistoryEntry>(rest);
         }
 
         private void OnChatsCollectionChanged(object sender, NotifyCollectionChangedEventArgs e)
@@ -591,7 +682,7 @@ namespace Unison.Core.ViewModels
 
         private void ScheduleRebuildFavorites()
         {
-            _ = _ui.RunAsync(RebuildFavorites);
+            _favoritesRebuildDebounce.Schedule();
         }
 
         private void RebuildFavorites()

@@ -26,6 +26,12 @@ namespace Unison.Core.Contracts.WhatsApp
         event EventHandler FavoritesMembershipChanged;
 
         /// <summary>
+        /// Raised when tip/unread paint changed recency without a catalogue Move (frugal offline
+        /// apply). Chat list drains Visible order in place instead of rebuilding.
+        /// </summary>
+        event EventHandler VisibleOrderInvalidated;
+
+        /// <summary>
         /// Pins the conversation to the top of the list, for this account everywhere. Distinct
         /// from <see cref="ChatItem.IsWidgetPinned"/>, which is a tile on this device's Start
         /// screen and means nothing to WhatsApp.
@@ -72,8 +78,19 @@ namespace Unison.Core.Contracts.WhatsApp
         /// </summary>
         void SetActiveChatJid(string jid);
 
-        /// <summary>User action: makes sure a chat row exists for <paramref name="jid"/> (new-chat flow).</summary>
-        void StartNewChat(string jid);
+        /// <summary>
+        /// User action: makes sure a chat row exists for <paramref name="jid"/> (new-chat / group-create
+        /// flow). <paramref name="displayName"/> seeds the strip title when already known (group subject);
+        /// otherwise the contact resolver fills it. The row is stamped with UtcNow so it stays at the
+        /// top until a real tip arrives, and that single row is persisted.
+        /// </summary>
+        void StartNewChat(string jid, string displayName = null);
+
+        /// <summary>
+        /// Community-create flow: same as <see cref="StartNewChat"/> for the parent JID, but the
+        /// row is a community hub so the list projects it as one before the groups listing lands.
+        /// </summary>
+        void StartNewCommunity(string parentJid, string displayName);
 
         /// <summary>
         /// Zeroes the unread count locally, on every row that is the same conversation. PN and LID
@@ -131,6 +148,11 @@ namespace Unison.Core.Contracts.WhatsApp
         /// Applies every waiting offline replay tip to the list. A failure puts them back and rethrows.
         /// </summary>
         Task FlushOfflineReplayTipsAsync(string reason);
+
+        /// <summary>
+        /// True while offline tip book / flush owns list paint — silent alias/listing should wait.
+        /// </summary>
+        bool IsOfflineReplayTipBusy { get; }
 
         /// <summary>Updates list rows for one chat tip (duplicate/revoke/replay refresh).</summary>
         Task RefreshChatPreviewAsync(

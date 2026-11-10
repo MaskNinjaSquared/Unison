@@ -11,6 +11,7 @@
 
     <UserControl.Resources>
         <conv:BooleanToVisibilityConverter x:Key="BoolToVis"/>
+        <conv:InvertedBooleanToVisibilityConverter x:Key="BoolToVisInverted"/>
         <Style x:Key="CameraChromeIconButtonStyle" TargetType="Button">
             <Setter Property="Background" Value="Transparent"/>
             <Setter Property="BorderThickness" Value="0"/>
@@ -43,11 +44,23 @@
         <Grid x:Name="PreviewHost"
               HorizontalAlignment="Center"
               VerticalAlignment="Center"
-              Background="Black">
+              Background="Black"
+              Tapped="PreviewHost_Tapped">
             <CaptureElement x:Name="PreviewElement"
                             Stretch="UniformToFill"
                             HorizontalAlignment="Stretch"
-                            VerticalAlignment="Stretch"/>
+                            VerticalAlignment="Stretch"
+                            IsHitTestVisible="False"/>
+            <!-- Brief tap-to-focus reticle -->
+            <Ellipse x:Name="FocusReticle"
+                     Width="72"
+                     Height="72"
+                     Stroke="White"
+                     StrokeThickness="1.5"
+                     Opacity="0"
+                     IsHitTestVisible="False"
+                     HorizontalAlignment="Left"
+                     VerticalAlignment="Top"/>
         </Grid>
 
         <!-- Transparent top chrome -->
@@ -73,7 +86,7 @@
                     Content="&#xE72B;"
                     ToolTipService.ToolTip="Back"/>
 
-            <!-- Single flash affordance; disabled until flash mode is wired. -->
+            <!-- Flash: IsEnabled follows FlashControl.Supported on the active camera. -->
             <Border Grid.Column="1"
                     HorizontalAlignment="Center"
                     VerticalAlignment="Center"
@@ -82,13 +95,23 @@
                     Background="#99000000"
                     Padding="6,2">
                 <Button Style="{StaticResource CameraChromeIconButtonStyle}"
-                        IsEnabled="False"
-                        ToolTipService.ToolTip="Ativar Flash">
-                    <FontIcon Glyph="&#xEB0E;"
-                              FontFamily="{StaticResource LegacyIconFont}"
-                              FontSize="18"
-                              Foreground="White"
-                              Opacity="0.55"/>
+                        IsEnabled="{x:Bind ViewModel.IsFlashAvailable, Mode=OneWay}"
+                        Command="{x:Bind ViewModel.ToggleFlashCommand, Mode=OneWay}"
+                        ToolTipService.ToolTip="Flash">
+                    <Grid>
+                        <!-- Off / unsupported: white (IsEnabled=false greys when no FlashControl). -->
+                        <FontIcon Glyph="&#xEB0E;"
+                                  FontFamily="{StaticResource LegacyIconFont}"
+                                  FontSize="18"
+                                  Foreground="White"
+                                  Visibility="{x:Bind ViewModel.IsFlashOn, Mode=OneWay, Converter={StaticResource BoolToVisInverted}}"/>
+                        <!-- On: accent yellow until the next shutter. -->
+                        <FontIcon Glyph="&#xEB0E;"
+                                  FontFamily="{StaticResource LegacyIconFont}"
+                                  FontSize="18"
+                                  Foreground="#FFEB3B"
+                                  Visibility="{x:Bind ViewModel.IsFlashOn, Mode=OneWay, Converter={StaticResource BoolToVis}}"/>
+                    </Grid>
                 </Button>
             </Border>
 

@@ -67,6 +67,18 @@ namespace Unison.Core.Models
         public ulong MemoryLimitBytes { get; set; }
         public string MemoryUsageLevel { get; set; }
 
+        /// <summary>Keys in the LID memory cache (two per pair).</summary>
+        public int LidCacheEntries { get; set; }
+
+        /// <summary>Longest wait any caller saw on the LID memory cache lock this process.</summary>
+        public long LidCacheMaxLockWaitMs { get; set; }
+
+        /// <summary>How many <c>ui-hold-timeout</c> events this process logged.</summary>
+        public long UiHoldTimeoutCount { get; set; }
+
+        /// <summary>Whether the offline tip book (or its post-flush quiet) is busy right now.</summary>
+        public bool OfflineTipBusy { get; set; }
+
         /// <summary>
         /// Result of <c>WebPHelpers.HasWebPCodec</c> (ApiContract 7 + WebpDecoderId in enumerator).
         /// Can be a false positive on Mobile if a codec pack registers the id but XAML still fails.
@@ -132,7 +144,8 @@ namespace Unison.Core.Models
             return string.Format(
                 "status={0}; service={1}; socket={2}; handshake={3}; transport={4}; brokerOwned={5}; connecting={6}; reconnecting={7}; " +
                 "qLive={8}; qOffline={9}; qNode={10}; pendingIq={11}; pump={12}; pumpStage={13}; pumpGen={14}; history={15}; " +
-                "frames={16}; nodes={17}; decrypted={18}; applied={19}; send={20}/{21}/{22}; mem={23}/{24}MB; stalled={25}",
+                "frames={16}; nodes={17}; decrypted={18}; applied={19}; send={20}/{21}/{22}; mem={23}/{24}MB; stalled={25}; " +
+                "lidCache={26}; lidCacheMaxWaitMs={27}",
                 ConnectionStatus ?? string.Empty,
                 IsServiceConnected,
                 IsSocketConnected,
@@ -158,7 +171,9 @@ namespace Unison.Core.Models
                 SendFailureCount,
                 MemoryUsageBytes / (1024UL * 1024UL),
                 MemoryLimitBytes / (1024UL * 1024UL),
-                IsPotentiallyStalled);
+                IsPotentiallyStalled,
+                LidCacheEntries,
+                LidCacheMaxLockWaitMs);
         }
 
         public string ToDisplayText()
@@ -221,6 +236,8 @@ namespace Unison.Core.Models
             sb.AppendLine("Memory");
             sb.AppendLine("  Usage / limit: " + (MemoryUsageBytes / (1024UL * 1024UL)) + " / " + (MemoryLimitBytes / (1024UL * 1024UL)) + " MB");
             sb.AppendLine("  Level: " + (MemoryUsageLevel ?? "unknown"));
+            sb.AppendLine("  LID cache keys / max lock wait: " + LidCacheEntries + " / " + LidCacheMaxLockWaitMs + " ms");
+            sb.AppendLine("  UI hold timeouts / offline-tip busy: " + UiHoldTimeoutCount + " / " + YesNo(OfflineTipBusy));
             sb.AppendLine();
             sb.AppendLine("Media");
             sb.AppendLine("  webpSupportEnabled: " + (WebPSupportEnabled ? "true" : "false"));

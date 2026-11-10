@@ -15,6 +15,17 @@ namespace Unison.Core.Helpers
     {
         public static int CountChatsWithNotification(System.Collections.Generic.IEnumerable<ChatItem> chats)
         {
+            return CountChatsWithNotification(chats, include: null);
+        }
+
+        /// <summary>
+        /// Same as <see cref="CountChatsWithNotification(System.Collections.Generic.IEnumerable{ChatItem})"/>
+        /// but only rows that pass <paramref name="include"/> (e.g. Channels / Archived scope).
+        /// </summary>
+        public static int CountChatsWithNotification(
+            System.Collections.Generic.IEnumerable<ChatItem> chats,
+            Func<ChatItem, bool> include)
+        {
             if (chats == null)
             {
                 return 0;
@@ -23,10 +34,17 @@ namespace Unison.Core.Helpers
             int count = 0;
             foreach (ChatItem chat in chats)
             {
-                if (chat != null && chat.HasUnread)
+                if (chat == null || !chat.HasUnread)
                 {
-                    count++;
+                    continue;
                 }
+
+                if (include != null && !include(chat))
+                {
+                    continue;
+                }
+
+                count++;
             }
 
             return count;
@@ -73,18 +91,27 @@ namespace Unison.Core.Helpers
     public sealed class NotificationCounterWatch : IDisposable
     {
         private readonly ObservableCollection<ChatItem> _chats;
+        private readonly Func<ChatItem, bool> _include;
         private bool _disposed;
 
         public NotificationCounterWatch(ObservableCollection<ChatItem> chats)
+            : this(chats, include: null)
+        {
+        }
+
+        public NotificationCounterWatch(
+            ObservableCollection<ChatItem> chats,
+            Func<ChatItem, bool> include)
         {
             _chats = chats ?? throw new ArgumentNullException(nameof(chats));
+            _include = include;
             _chats.CollectionChanged += Chats_CollectionChanged;
             for (int i = 0; i < _chats.Count; i++)
             {
                 Hook(_chats[i]);
             }
 
-            Count = NotificationCounter.CountChatsWithNotification(_chats);
+            Count = NotificationCounter.CountChatsWithNotification(_chats, _include);
         }
 
         public event EventHandler Changed;
@@ -138,7 +165,9 @@ namespace Unison.Core.Helpers
 
         private void Chat_PropertyChanged(object sender, PropertyChangedEventArgs e)
         {
-            if (e.PropertyName == nameof(ChatItem.UnreadCount))
+            if (e.PropertyName == nameof(ChatItem.UnreadCount) ||
+                e.PropertyName == nameof(ChatItem.Status) ||
+                e.PropertyName == nameof(ChatItem.IsChannel))
             {
                 Publish();
             }
@@ -146,7 +175,7 @@ namespace Unison.Core.Helpers
 
         private void Publish()
         {
-            int next = NotificationCounter.CountChatsWithNotification(_chats);
+            int next = NotificationCounter.CountChatsWithNotification(_chats, _include);
             if (next == Count)
             {
                 return;

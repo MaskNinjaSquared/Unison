@@ -47,6 +47,7 @@
             <SolidColorBrush x:Key="WhatsAppSidebarBrush" Color="#FF000000"/>
             <SolidColorBrush x:Key="ChatListBackgroundBrush" Color="#FF000000"/>
             <SolidColorBrush x:Key="ChatDetailBackgroundBrush" Color="#FF000000"/>
+            <SolidColorBrush x:Key="ChatDetailChannelBackgroundBrush" Color="#FF1A1A1A"/>
             <SolidColorBrush x:Key="ChatDetailWallpaperBackgroundBrush" Color="#FF000000"/>
             <SolidColorBrush x:Key="ChatDetailDateSeparatorBackgroundBrush" Color="#FF1A1A1A"/>
             <SolidColorBrush x:Key="ChatDetailHeaderBrush" Color="#FF000000"/>
@@ -130,6 +131,7 @@
             <SolidColorBrush x:Key="WhatsAppSidebarBrush" Color="#FF000000"/>
             <SolidColorBrush x:Key="ChatListBackgroundBrush" Color="#FF000000"/>
             <SolidColorBrush x:Key="ChatDetailBackgroundBrush" Color="#FF000000"/>
+            <SolidColorBrush x:Key="ChatDetailChannelBackgroundBrush" Color="#FF1A1A1A"/>
             <SolidColorBrush x:Key="ChatDetailWallpaperBackgroundBrush" Color="#FF000000"/>
             <SolidColorBrush x:Key="ChatDetailDateSeparatorBackgroundBrush" Color="#FF1A1A1A"/>
             <SolidColorBrush x:Key="ChatDetailHeaderBrush" Color="#FF000000"/>
@@ -224,6 +226,7 @@
             <SolidColorBrush x:Key="ChatListBackgroundBrush" Color="#FFFFFFFF"/>
             <!-- Same underlay as Unison Light — tile PNG is mostly transparent. -->
             <SolidColorBrush x:Key="ChatDetailBackgroundBrush" Color="#8A9191"/>
+            <SolidColorBrush x:Key="ChatDetailChannelBackgroundBrush" Color="#B8BDBD"/>
             <SolidColorBrush x:Key="ChatDetailWallpaperBackgroundBrush" Color="#DDE0DB"/>
             <SolidColorBrush x:Key="ChatDetailDateSeparatorBackgroundBrush" Color="#FFF0F0F0"/>
             <SolidColorBrush x:Key="ChatDetailDateSeparatorForegroundBrush" Color="#FF333333"/>

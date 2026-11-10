@@ -24,7 +24,7 @@ namespace Unison.Core.ViewModels
     /// Owns the New Conversation surface. Hosts bind <see cref="IsOpen"/> and
     /// subscribe to <see cref="ChatOpenRequested"/> to navigate into a chat.
     /// </summary>
-    public sealed class NewConversationViewModel : Observable
+    public sealed partial class NewConversationViewModel : Observable
     {
         private readonly IChatStateStore _chatState;
         private readonly IContactService _contacts;
@@ -35,9 +35,27 @@ namespace Unison.Core.ViewModels
         private readonly INewChatDialogViewModelFactory _newChatFactory;
         private readonly IStringResources _strings;
         private readonly IDispatcher _dispatcher;
+        private readonly IUrgentDispatcher _urgentUi;
+        private readonly ILocalContactsService _localContacts;
+        private readonly IFilePicker _filePicker;
+        private readonly ICameraPickService _cameraPick;
+        private readonly IGroupService _groups;
+        private readonly INotificationService _notifications;
+        private readonly IChannelService _channels;
+
+        private static readonly TimeSpan RebuildDebounce = TimeSpan.FromMilliseconds(400);
+
+        /// <summary>
+        /// First open only: leave chrome + spinner on screen for at least one paint before
+        /// <c>x:Load</c> of the A–Z host. Same-turn materialize finished in ~15ms and hid the ring.
+        /// </summary>
+        private static readonly TimeSpan FirstOpenPaintBudget = TimeSpan.FromMilliseconds(50);
 
         private bool _isOpen;
         private bool _catalogHooked;
+        private bool _rebuildScheduled;
+        private bool _isCatalogLoading;
+        private bool _isContactsSurfaceReady;
         private string _searchQuery = string.Empty;
         private string _selfDisplayName = string.Empty;
         private string _selfAvatarUrl;
@@ -56,7 +74,14 @@ namespace Unison.Core.ViewModels
             IDialogService dialogs,
             INewChatDialogViewModelFactory newChatFactory,
             IStringResources strings,
-            IDispatcher dispatcher = null)
+            IDispatcher dispatcher = null,
+            ILocalContactsService localContacts = null,
+            IFilePicker filePicker = null,
+            IGroupService groups = null,
+            INotificationService notifications = null,
+            IChannelService channels = null,
+            IUrgentDispatcher urgentDispatcher = null,
+            ICameraPickService cameraPick = null)
         {
             _chatState = chatState ?? throw new ArgumentNullException(nameof(chatState));
             _contacts = contacts ?? throw new ArgumentNullException(nameof(contacts));
@@ -67,14 +92,24 @@ namespace Unison.Core.ViewModels
             _newChatFactory = newChatFactory ?? throw new ArgumentNullException(nameof(newChatFactory));
             _strings = strings;
             _dispatcher = dispatcher;
+            // Create dismiss must beat Normal name-batch hops; AttachedUiDispatcher is both.
+            _urgentUi = urgentDispatcher ?? (dispatcher as IUrgentDispatcher);
+            _localContacts = localContacts;
+            _filePicker = filePicker;
+            _cameraPick = cameraPick;
+            _groups = groups;
+            _notifications = notifications;
+            _channels = channels;
 
             CloseCommand = new RelayCommand(Close);
-            NewGroupCommand = new RelayCommand(() => _ = ShowComingSoonAsync("NewConversation_NewGroup.Text"));
-            NewContactCommand = new RelayCommand(() => _ = ShowComingSoonAsync("NewConversation_NewContact.Text"));
-            NewCommunityCommand = new RelayCommand(() => _ = ShowComingSoonAsync("NewConversation_NewCommunity.Text"));
+            NewGroupCommand = new RelayCommand(OpenCreateGroup);
+            NewContactCommand = new RelayCommand(() => _ = OpenNewContactAsync());
+            NewCommunityCommand = new RelayCommand(OpenCreateCommunity);
+            NewChannelCommand = new RelayCommand(OpenCreateChannel);
             PhoneNumberCommand = new RelayCommand(() => _ = OpenPhoneDialogAsync());
             NavigateToPrivateChatCommand = new RelayCommand(() => _ = NavigateToPrivateChatAsync());
             SelectContactCommand = new RelayCommand<ChatItem>(chat => _ = OpenContactAsync(chat));
+            InitCreateFlowCommands();
         }
 
         /// <summary>Raised after a contact / phone / self row should open a conversation.</summary>
@@ -96,13 +131,61 @@ namespace Unison.Core.ViewModels
                 {
                     RefreshSelfTile();
                     HookCatalog();
-                    RebuildCatalog();
+                    RefreshCreateChrome();
+                    // First open: chrome paints with loading; contacts SemanticZoom materializes
+                    // after yield. Later opens keep the surface warm and only refresh catalog.
+                    if (!_isContactsSurfaceReady)
+                    {
+                        IsCatalogLoading = true;
+                    }
+
+                    ScheduleOpenRebuild();
                 }
                 else
                 {
                     UnhookCatalog();
                     SearchQuery = string.Empty;
+                    ClearCreateFlow();
+                    IsCatalogLoading = false;
                 }
+            }
+        }
+
+        /// <summary>
+        /// True while the first contacts surface is still deferred (spinner over the list area).
+        /// Stays false on later opens once <see cref="IsContactsSurfaceReady"/> is sticky.
+        /// </summary>
+        public bool IsCatalogLoading
+        {
+            get => _isCatalogLoading;
+            private set
+            {
+                if (_isCatalogLoading == value)
+                {
+                    return;
+                }
+
+                _isCatalogLoading = value;
+                OnPropertyChanged(nameof(IsCatalogLoading));
+            }
+        }
+
+        /// <summary>
+        /// Sticky after the first deferred open: hosts x:Load the A–Z SemanticZoom once, then
+        /// subsequent <see cref="IsOpen"/> toggles only Visibility.
+        /// </summary>
+        public bool IsContactsSurfaceReady
+        {
+            get => _isContactsSurfaceReady;
+            private set
+            {
+                if (_isContactsSurfaceReady == value)
+                {
+                    return;
+                }
+
+                _isContactsSurfaceReady = value;
+                OnPropertyChanged(nameof(IsContactsSurfaceReady));
             }
         }
 
@@ -178,6 +261,7 @@ namespace Unison.Core.ViewModels
         public ICommand NewGroupCommand { get; }
         public ICommand NewContactCommand { get; }
         public ICommand NewCommunityCommand { get; }
+        public ICommand NewChannelCommand { get; }
         public ICommand PhoneNumberCommand { get; }
 
         /// <summary>Opens the notes-to-self / personal chat (Message yourself).</summary>
@@ -225,6 +309,7 @@ namespace Unison.Core.ViewModels
 
         private void UnhookCatalog()
         {
+            _rebuildScheduled = false;
             if (!_catalogHooked)
             {
                 return;
@@ -276,15 +361,112 @@ namespace Unison.Core.ViewModels
             RefreshSelfTile();
         }
 
+        /// <summary>
+        /// Coalesces DisplayNamesChanged / Chats bursts: one A–Z rebuild per window instead of
+        /// one per enrich hop, so opening Nova Conversa does not starve the Normal UI queue.
+        /// </summary>
         private void ScheduleRebuild()
         {
-            if (_dispatcher != null)
+            if (_rebuildScheduled || !_isOpen)
             {
-                _ = _dispatcher.RunAsync(RebuildCatalog);
                 return;
             }
 
+            _rebuildScheduled = true;
+            _ = RunScheduledRebuildAsync(RebuildDebounce);
+        }
+
+        /// <summary>
+        /// First paint after Open: one yield so leave-chat / pane flip drains, then catalog.
+        /// </summary>
+        private void ScheduleOpenRebuild()
+        {
+            if (_rebuildScheduled)
+            {
+                return;
+            }
+
+            _rebuildScheduled = true;
+            _ = RunScheduledRebuildAsync(TimeSpan.Zero);
+        }
+
+        /// <summary>
+        /// Awaited half of <see cref="ScheduleRebuild"/> — kept out of <c>async void</c> so a
+        /// throw from rebuild lands in the catch below instead of the sync context.
+        /// </summary>
+        private async Task RunScheduledRebuildAsync(TimeSpan debounce)
+        {
+            var sw = Stopwatch.StartNew();
+            try
+            {
+                try
+                {
+                    if (debounce > TimeSpan.Zero)
+                    {
+                        await Task.Delay(debounce).ConfigureAwait(false);
+                    }
+                    else
+                    {
+                        // Leave the Open/IsOpen turn before CollectionViewSource bind.
+                        await Task.Yield();
+                    }
+                }
+                finally
+                {
+                    _rebuildScheduled = false;
+                }
+
+                if (!_isOpen)
+                {
+                    IsCatalogLoading = false;
+                    return;
+                }
+
+                // First open: IsCatalogLoading is already true — wait a frame so the ring paints
+                // before sticky x:Load + catalog bind clear it on the same hop.
+                if (!_isContactsSurfaceReady)
+                {
+                    await Task.Delay(FirstOpenPaintBudget).ConfigureAwait(false);
+                    if (!_isOpen)
+                    {
+                        IsCatalogLoading = false;
+                        return;
+                    }
+                }
+
+                if (_dispatcher != null)
+                {
+                    await _dispatcher.RunAsync(MaterializeContactsAndRebuild).ConfigureAwait(false);
+                }
+                else
+                {
+                    MaterializeContactsAndRebuild();
+                }
+
+                Debug.WriteLine(
+                    "[NewConversation] catalog-ready; groups=" + GroupedContacts.Count +
+                    "; surface=" + _isContactsSurfaceReady +
+                    "; ms=" + sw.ElapsedMilliseconds);
+            }
+            catch (Exception ex)
+            {
+                IsCatalogLoading = false;
+                Debug.WriteLine("[NewConversation] Scheduled rebuild failed: " + ex.Message);
+            }
+        }
+
+        /// <summary>
+        /// UI-thread half of open: flip sticky x:Load for the A–Z host, then bind catalog.
+        /// </summary>
+        private void MaterializeContactsAndRebuild()
+        {
+            if (!_isContactsSurfaceReady)
+            {
+                IsContactsSurfaceReady = true;
+            }
+
             RebuildCatalog();
+            IsCatalogLoading = false;
         }
 
         private void RebuildCatalog()
@@ -302,9 +484,12 @@ namespace Unison.Core.ViewModels
             JumpTiles = AlphabetChatGroups.BuildJumpTiles(GroupedContacts);
         }
 
-        private async Task ShowComingSoonAsync(string titleKey)
+        private Task ShowComingSoonAsync(string titleKey) =>
+            ShowComingSoonAsync(titleKey, "Coming soon");
+
+        private async Task ShowComingSoonAsync(string titleKey, string titleFallback)
         {
-            string title = _strings?.Get(titleKey, "Coming soon") ?? "Coming soon";
+            string title = _strings?.Get(titleKey, titleFallback) ?? titleFallback;
             string body = _strings?.Get(
                 "NewConversation_ComingSoon",
                 "This option is not available yet.") ?? "This option is not available yet.";
@@ -317,6 +502,25 @@ namespace Unison.Core.ViewModels
             {
                 Debug.WriteLine("[NewConversation] ComingSoon failed: " + ex.Message);
             }
+        }
+
+        private async Task OpenNewContactAsync()
+        {
+            try
+            {
+                if (_localContacts != null &&
+                    await _localContacts.OpenNewContactEditorAsync().ConfigureAwait(false))
+                {
+                    return;
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[NewConversation] Open People new contact failed: " + ex.Message);
+            }
+
+            await ShowComingSoonAsync("NewConversation_NewContact.Text", "New contact")
+                .ConfigureAwait(false);
         }
 
         private async Task OpenPhoneDialogAsync()

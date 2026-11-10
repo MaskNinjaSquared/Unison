@@ -81,6 +81,12 @@ namespace Unison.Socket.Messages.Content
                 return Simple(BuildText(text));
             }
 
+            var statusText = content as StatusTextContent;
+            if (statusText != null)
+            {
+                return Simple(BuildStatusText(statusText));
+            }
+
             var media = content as MediaContent;
             if (media != null)
             {
@@ -145,6 +151,24 @@ namespace Unison.Socket.Messages.Content
                 {
                     Text = content.Text ?? string.Empty,
                     ContextInfo = context
+                }
+            };
+        }
+
+        /// <summary>
+        /// A text Status is always an extended text: a conversation has nowhere to carry the
+        /// background, the text colour or the font the phone renders it with.
+        /// </summary>
+        private static global::Proto.Message BuildStatusText(StatusTextContent content)
+        {
+            return new global::Proto.Message
+            {
+                ExtendedTextMessage = new global::Proto.Message.Types.ExtendedTextMessage
+                {
+                    Text = content.Text ?? string.Empty,
+                    BackgroundArgb = content.BackgroundArgb,
+                    TextArgb = content.TextArgb,
+                    Font = (global::Proto.Message.Types.ExtendedTextMessage.Types.FontType)content.Font
                 }
             };
         }

@@ -43,6 +43,8 @@ namespace Unison.Uwp.Data
                 string dbPath = Path.Combine(ApplicationData.Current.LocalFolder.Path, DatabaseFileName);
                 _connection = new SQLiteAsyncConnection(dbPath);
                 await _connection.CreateTableAsync<CallLogRow>().ConfigureAwait(false);
+                await EnsureColumnAsync("DurationSeconds", "INTEGER NOT NULL DEFAULT 0")
+                    .ConfigureAwait(false);
                 _initialized = true;
                 Debug.WriteLine("[CallLogStore] Initialized at " + dbPath);
             }
@@ -86,10 +88,42 @@ namespace Unison.Uwp.Data
             try
             {
                 await _connection.InsertOrReplaceAsync(row).ConfigureAwait(false);
+                await DeleteLegacyDuplicatesAsync(entry.CallId, entry.CanonicalJid, row.Id)
+                    .ConfigureAwait(false);
             }
             finally
             {
                 _writeLock.Release();
+            }
+        }
+
+        /// <summary>
+        /// Removes pre-2.4 rows keyed by CallId|ChromeKind|Jid so Offer+Missed cannot
+        /// leave two Recents lines after a restart.
+        /// </summary>
+        private async Task DeleteLegacyDuplicatesAsync(string callId, string canonicalJid, string keepId)
+        {
+            if (string.IsNullOrWhiteSpace(callId) || string.IsNullOrWhiteSpace(canonicalJid))
+            {
+                return;
+            }
+
+            for (int kind = 0; kind <= 3; kind++)
+            {
+                string legacyId = CallLogRow.MakeLegacyId(callId, kind, canonicalJid);
+                if (string.Equals(legacyId, keepId, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                try
+                {
+                    await _connection.DeleteAsync<CallLogRow>(legacyId).ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine("[CallLogStore] Delete legacy " + legacyId + ": " + ex.Message);
+                }
             }
         }
 
@@ -106,12 +140,13 @@ namespace Unison.Uwp.Data
             int kind = (int)entry.ChromeKind;
             return new CallLogRow
             {
-                Id = CallLogRow.MakeId(entry.CallId, kind, entry.CanonicalJid),
+                Id = CallLogRow.MakeId(entry.CallId, entry.CanonicalJid),
                 CallId = entry.CallId ?? string.Empty,
                 CanonicalJid = entry.CanonicalJid,
                 Direction = (int)entry.Direction,
                 ChromeKind = kind,
                 IsVideo = entry.IsVideo,
+                DurationSeconds = entry.DurationSeconds,
                 TimestampUtc = entry.TimestampUtc.Kind == DateTimeKind.Utc
                     ? entry.TimestampUtc
                     : DateTime.SpecifyKind(entry.TimestampUtc, DateTimeKind.Utc),
@@ -141,10 +176,26 @@ namespace Unison.Uwp.Data
                     : row.DirectionGlyph,
                 ChromeKind = (CallEventChromeKind)row.ChromeKind,
                 IsVideo = row.IsVideo,
+                DurationSeconds = row.DurationSeconds,
                 TimestampUtc = DateTime.SpecifyKind(row.TimestampUtc, DateTimeKind.Utc),
                 CategoryLabel = row.CategoryLabel,
                 TimestampLabel = row.TimestampLabel
             };
+        }
+
+        private async Task EnsureColumnAsync(string column, string sqlType)
+        {
+            try
+            {
+                await _connection.ExecuteAsync(
+                        "ALTER TABLE call_log ADD COLUMN " + column + " " + sqlType)
+                    .ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                // Column already exists on upgraded installs.
+                Debug.WriteLine("[CallLogStore] EnsureColumn " + column + ": " + ex.Message);
+            }
         }
     }
 }

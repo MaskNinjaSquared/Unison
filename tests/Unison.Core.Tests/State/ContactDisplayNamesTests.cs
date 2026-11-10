@@ -66,6 +66,18 @@ namespace Unison.Core.Tests.State
         }
 
         [Fact]
+        public void A_phone_number_finds_the_contact_saved_under_its_lid()
+        {
+            // Mirror of the test above. The overlay is keyed by whatever form the chat list gave
+            // the address-book pass, and canonical settles on the PN, so the LID half of the pair
+            // was unreachable from a PN-form group participant.
+            _aliases[Ana] = AnaLid;
+            _addressBook.Set(AnaLid, "Ana Trabalho");
+
+            Assert.Equal("Ana Trabalho", Build().Resolve(Ana, "chat"));
+        }
+
+        [Fact]
         public void A_lid_finds_a_Person_row_keyed_under_the_phone_JID()
         {
             _aliases[AnaLid] = Ana;
@@ -171,6 +183,32 @@ namespace Unison.Core.Tests.State
             Assert.Equal("5511988887777", names.Resolve(Ana, "chat"));
         }
 
+        // --- Person warm --------------------------------------------------------
+
+        [Fact]
+        public void An_unknown_contact_is_warmed_from_disk_once_per_render_storm()
+        {
+            ContactDisplayNames names = Build();
+
+            names.Resolve(Ana, "chat");
+            names.Resolve(Ana, "strip");
+            names.Resolve(Ana, "chat");
+
+            Assert.Single(_people.Loaded, j => string.Equals(j, Ana, StringComparison.OrdinalIgnoreCase));
+        }
+
+        [Fact]
+        public void A_person_change_lets_the_next_resolve_warm_again()
+        {
+            ContactDisplayNames names = Build();
+            names.Resolve(Ana, "chat");
+
+            _people.RaiseChanged(Ana);
+            names.Resolve(Ana, "chat");
+
+            Assert.Equal(2, _people.Loaded.FindAll(j => string.Equals(j, Ana, StringComparison.OrdinalIgnoreCase)).Count);
+        }
+
         // --- Fakes -------------------------------------------------------------
 
         private sealed class FakeMarkers : ISelfMarkerNaming
@@ -186,7 +224,9 @@ namespace Unison.Core.Tests.State
 
             public List<string> Loaded { get; } = new List<string>();
 
-            public event EventHandler<string>? PersonChanged { add { } remove { } }
+            public event EventHandler<string>? PersonChanged;
+
+            public void RaiseChanged(string jid) => PersonChanged?.Invoke(this, jid);
 
             public void Cache(string jid, string name, PersonSource source) =>
                 _cache[jid] = new Person { Jid = jid, Name = name, Source = source };

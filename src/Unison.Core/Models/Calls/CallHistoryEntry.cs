@@ -24,6 +24,9 @@ namespace Unison.Core.Models
 
         public DateTime TimestampUtc { get; set; }
 
+        /// <summary>Wire duration when known; 0 otherwise.</summary>
+        public int DurationSeconds { get; set; }
+
         /// <summary>Localized Outgoing / Incoming / Missed (filled by UI/VM).</summary>
         public string CategoryLabel { get; set; }
 

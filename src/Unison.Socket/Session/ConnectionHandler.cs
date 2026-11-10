@@ -813,9 +813,21 @@ namespace Unison.Socket.Session
                 {
                     answeredAQuery = waiter.TrySetResult(node);
                 }
+                else if (node.Tag == "iq" && IsQueryAnswer(node))
+                {
+                    _log.Info("[Query] Answer arrived with no waiter: id=" + msgId +
+                        "; type=" + node.GetAttribute("type") +
+                        "; from=" + (node.GetAttribute("from") ?? "-"));
+                }
             }
 
             QueueForDispatch(node, answeredAQuery);
+        }
+
+        private static bool IsQueryAnswer(BinaryNode node)
+        {
+            var type = node.GetAttribute("type");
+            return type == "result" || type == "error";
         }
 
         /// <summary>

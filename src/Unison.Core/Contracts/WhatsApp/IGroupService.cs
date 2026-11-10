@@ -50,6 +50,12 @@ namespace Unison.Core.Contracts.WhatsApp
         Task EnsureGroupRosterLoadedFromStoreAsync(string groupJid);
 
         /// <summary>
+        /// Puts this account's role from its stored roster row onto <paramref name="group"/>, unless
+        /// a metadata reply already set it this session. One local lookup; never hits the network.
+        /// </summary>
+        Task RestoreMyGroupRoleAsync(ChatItem group);
+
+        /// <summary>
         /// One participant from memory (row or roster index), or null. Cheap; bubbles and the
         /// list strip call it per author. UI thread.
         /// </summary>
@@ -104,10 +110,14 @@ namespace Unison.Core.Contracts.WhatsApp
 
         /// <summary>
         /// Writes a picture hit, a confirmed miss (<c>no-picture</c>), or a transient failure
-        /// onto every roster row that matches <paramref name="memberJid"/>. The caller is on the
-        /// UI thread.
+        /// onto roster rows that match <paramref name="memberJid"/>. When
+        /// <paramref name="limitToGroupJid"/> is set, only that group is touched (hydrate path).
+        /// The caller is on the UI thread.
         /// </summary>
-        void ApplyGroupMemberAvatarOutcome(string memberJid, GroupMemberAvatarFetchResult result);
+        void ApplyGroupMemberAvatarOutcome(
+            string memberJid,
+            GroupMemberAvatarFetchResult result,
+            string limitToGroupJid = null);
 
         /// <summary>
         /// Whether <paramref name="member"/> is the same person as <paramref name="candidateJid"/>
@@ -172,6 +182,16 @@ namespace Unison.Core.Contracts.WhatsApp
         Task ApplyGroupMetadataAsync(string groupJid, GroupMetadataSnapshot metadata);
 
         /// <summary>
+        /// A group description arriving outside a metadata reply — an admin edited it while the
+        /// app is running. Updates the open row and stores it. Pass an empty string for a
+        /// description that was cleared; null is ignored.
+        /// </summary>
+        Task ApplyRemoteGroupDescriptionAsync(
+            string groupJid,
+            string description,
+            string descriptionId);
+
+        /// <summary>
         /// Receipt path: parse a w:g2 metadata IQ the host already fetched and apply it.
         /// Does not query the network.
         /// </summary>
@@ -181,6 +201,12 @@ namespace Unison.Core.Contracts.WhatsApp
         /// Host path: background resolution reached the group listing step.
         /// </summary>
         void NotifyGroupListingDue();
+
+        /// <summary>
+        /// Post-sync: materialize community hubs into the catalogue and re-query rows still
+        /// lacking a meaningful title. Safe to call while listing is in flight (arms a deferred pass).
+        /// </summary>
+        Task ReconcileGroupCommunityTitlesAsync(CancellationToken cancellationToken = default);
 
         /// <summary>
         /// Leaves the group on the server (Baileys <c>groupLeave</c>). Does not delete the chat.
@@ -208,5 +234,14 @@ namespace Unison.Core.Contracts.WhatsApp
             string groupJid,
             string inviteCode = null,
             CancellationToken cancellationToken = default);
+
+        /// <summary>
+        /// Baileys <c>groupCreate</c>, then the picture and the disappearing timer when asked for.
+        /// Never throws for a refused create; read <see cref="GroupCreateResult.FailureReason"/>.
+        /// </summary>
+        Task<GroupCreateResult> CreateGroupAsync(GroupCreateRequest request);
+
+        /// <summary>Baileys <c>communityCreate</c>, then the picture when asked for.</summary>
+        Task<GroupCreateResult> CreateCommunityAsync(CommunityCreateRequest request);
     }
 }

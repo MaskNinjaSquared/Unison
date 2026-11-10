@@ -89,6 +89,8 @@ namespace Unison.Core.Tests.Helpers
             {
             }
 
+            public void FlushDeferredAliasFollowUp(string source) { }
+
             public void NotifyJidAliasResolved(string phoneJid, string lidJid, string source)
             {
             }
@@ -268,6 +270,8 @@ namespace Unison.Core.Tests.Helpers
 
                 return key;
             }
+
+            public string PeekCanonicalJid(string jid) => GetCanonicalJid(jid);
 
             public bool TryGetAlias(string jid, out string alias)
             {

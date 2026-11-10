@@ -45,14 +45,38 @@ namespace Unison.Core.State
         public ObservableCollection<ChatItem> Chats { get; } = new ObservableCollection<ChatItem>();
 
         private volatile bool _isLoadingPersistedChats;
+        private int _bulkCatalogueMutationDepth;
 
         public bool IsLoadingPersistedChats => _isLoadingPersistedChats;
+
+        public bool IsBulkCatalogueMutating =>
+            System.Threading.Volatile.Read(ref _bulkCatalogueMutationDepth) > 0;
+
+        public event EventHandler BulkCatalogueMutationEnded;
 
         /// <summary>Marks the startup read of saved rows; dispose when it ends, failed or not.</summary>
         public IDisposable BeginPersistedChatsLoad()
         {
             _isLoadingPersistedChats = true;
             return new PersistedChatsLoad(this);
+        }
+
+        public IDisposable BeginBulkCatalogueMutation()
+        {
+            System.Threading.Interlocked.Increment(ref _bulkCatalogueMutationDepth);
+            return new BulkCatalogueMutation(this);
+        }
+
+        private void EndBulkCatalogueMutation()
+        {
+            if (System.Threading.Interlocked.Decrement(ref _bulkCatalogueMutationDepth) == 0)
+            {
+                EventHandler handler = BulkCatalogueMutationEnded;
+                if (handler != null)
+                {
+                    handler(this, EventArgs.Empty);
+                }
+            }
         }
 
         private sealed class PersistedChatsLoad : IDisposable
@@ -74,9 +98,30 @@ namespace Unison.Core.State
             }
         }
 
+        private sealed class BulkCatalogueMutation : IDisposable
+        {
+            private ChatStateStore _owner;
+
+            public BulkCatalogueMutation(ChatStateStore owner)
+            {
+                _owner = owner;
+            }
+
+            public void Dispose()
+            {
+                if (_owner != null)
+                {
+                    _owner.EndBulkCatalogueMutation();
+                    _owner = null;
+                }
+            }
+        }
+
         public event EventHandler<string> MessagesChanged;
 
         public event EventHandler DisplayNamesChanged;
+
+        public event EventHandler CommunitySubjectsUpdated;
 
         public event EventHandler<GroupRosterChangedEventArgs> GroupRosterChanged;
 
@@ -369,6 +414,15 @@ namespace Unison.Core.State
         public void NotifyDisplayNamesChanged()
         {
             RaiseDisplayNamesChanged();
+        }
+
+        public void NotifyCommunitySubjectsUpdated()
+        {
+            EventHandler handler = CommunitySubjectsUpdated;
+            if (handler != null)
+            {
+                handler(this, EventArgs.Empty);
+            }
         }
 
         public void NotifyGroupRosterChanged(string groupJid, IReadOnlyList<string> changedJids = null)

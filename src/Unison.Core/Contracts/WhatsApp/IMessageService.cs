@@ -147,6 +147,18 @@ namespace Unison.Core.Contracts.WhatsApp
         /// <summary>True while an on-demand history request is in flight for <paramref name="jid"/>.</summary>
         bool IsHistoryOnDemandPending(string jid);
 
+        /// <summary>
+        /// Claims one session-open OnDemand probe for <paramref name="jid"/> (first
+        /// thin open / tip-only paint). Returns false when already claimed this process.
+        /// </summary>
+        bool TryClaimSessionOpenOnDemand(string jid);
+
+        /// <summary>
+        /// Consumes a prior session-open OnDemand claim (alias-aware). True only once
+        /// so later scroll-up OnDemand for the same chat stays silent on ChatMessagesChanged.
+        /// </summary>
+        bool TryConsumeSessionOpenOnDemandClaim(string jid);
+
         Task<ChatMessage> SendTextMessageAsync(string jid, string text);
 
         /// <summary>Same send, with @mentions already turned into JIDs and the everyone flag.</summary>
@@ -284,9 +296,11 @@ namespace Unison.Core.Contracts.WhatsApp
             ChatItem chat);
 
         /// <summary>
-        /// Inbound revoke: tombstone the target (never insert a synthetic deleted row),
+        /// Inbound revoke: soft-tombstone the target (keep original body for "view original"),
         /// drop a leftover envelope row from older builds, persist, notify the open chat,
         /// and refresh the list tip when the revoked message was the preview.
+        /// When the target was never received, inserts an empty soft tombstone so the UI
+        /// can explain that the message arrived already deleted.
         /// </summary>
         Task ApplyIncomingRevocationAsync(
             string chatJid,

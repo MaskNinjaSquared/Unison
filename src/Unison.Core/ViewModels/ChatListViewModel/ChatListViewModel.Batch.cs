@@ -13,6 +13,7 @@ using Unison.Core.Contracts;
 using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Factories;
 using Unison.Core.Helpers;
+using Unison.Core.Helpers.Chats;
 using Unison.Core.Models;
 using Unison.Core.State;
 
@@ -55,6 +56,14 @@ namespace Unison.Core.ViewModels
             _batchTotal = Math.Max(_batchTotal, total);
             }
 
+            // Same contract as RefreshVisibleChats cold fill: tip-swapped must not fight
+            // ReleaseNextBatch on Low (ad243a19: tip + push-name starved visible drain).
+            if (!_batchColdPopulateHeld)
+            {
+                _batchColdPopulateHeld = true;
+                _coldPopulateGate?.Hold();
+            }
+
             // Never clamped to the store count: this event is raised before the chunk's previews
             // are persisted, so on the first chunk the store is still empty and clamping pinned
             // the target at zero - which left the list frozen at one batch until the whole sync
@@ -68,6 +77,17 @@ namespace Unison.Core.ViewModels
                 BuildListSnapshot("fresh=" + fresh + "; argTarget=" + visibleTarget),
                 flush: true);
             EnsureBatchLoop();
+        }
+
+        private void ReleaseBatchColdPopulateGate()
+        {
+            if (!_batchColdPopulateHeld)
+            {
+                return;
+            }
+
+            _batchColdPopulateHeld = false;
+            _coldPopulateGate?.Release();
         }
 
         /// <summary>
@@ -158,7 +178,10 @@ namespace Unison.Core.ViewModels
                 ReorderVisibleChatsInPlace();
                 // Hydrate can stall with pending=True forever; once every scoped row is on
                 // screen after the hold, open the enrich gate and finish the batch next tick.
-                if (!IsListHeldForSync && !IsInSafeMode)
+                // Do not wait for IsInSafeMode to clear — trailing StatusV3/PushName can keep
+                // safe mode true for minutes while VisibleChats is already caught up, which
+                // leaves release-tick spinning forever on Low memory.
+                if (!IsListHeldForSync)
                 {
                     if (!HasPendingPreviewHydrate())
                     {
@@ -272,6 +295,7 @@ namespace Unison.Core.ViewModels
             TraceListLifecycle("batch-complete-before-refresh", BuildListSnapshot(), flush: true);
             _batchRendering = false;
             _batchCompleted = false;
+            ReleaseBatchColdPopulateGate();
             RefreshVisibleChats();
             TraceListLifecycle("batch-complete-after-refresh", BuildListSnapshot(), flush: true);
 
@@ -308,10 +332,14 @@ namespace Unison.Core.ViewModels
                 return;
             }
 
-            for (int i = 0; i < _chatState.Chats.Count; i++)
+            IReadOnlyList<ChatItem> scoped = _catalog != null
+                ? _catalog.ForScope(_scope)
+                : ScopedCatalogueRows();
+
+            for (int i = 0; i < scoped.Count; i++)
             {
-                ChatItem chat = _chatState.Chats[i];
-                if (chat == null || string.IsNullOrWhiteSpace(chat.JID) || !MatchesScope(chat))
+                ChatItem chat = scoped[i];
+                if (chat == null || string.IsNullOrWhiteSpace(chat.JID))
                 {
                     continue;
                 }
@@ -346,31 +374,45 @@ namespace Unison.Core.ViewModels
         }
 
         /// <summary>
-        /// Re-sorts <see cref="VisibleChats"/> during batch/sync without clearing the list â€”
+        /// Re-sorts <see cref="VisibleChats"/> during batch/sync without clearing the list —
         /// keeps pinned conversations at the top while tips keep arriving.
         /// </summary>
-        private void ReorderVisibleChatsInPlace()
+        private void ReorderVisibleChatsInPlace() =>
+            ReorderVisibleChatsInPlace(int.MaxValue);
+
+        /// <summary>
+        /// Applies up to <paramref name="maxMoves"/> Moves. Returns true when more Moves remain
+        /// (frugal drain chunks so ListView layout can run between hops).
+        /// </summary>
+        private bool ReorderVisibleChatsInPlace(int maxMoves)
         {
             // VisibleChats is already community-projected. Pin/recency reshuffle must not call
             // BuildVisibleRefreshSource just because a hub exists in the catalogue — that was the
             // Mobile Low ~10s buildMs hitch after enrichment (hubs present → full rebuild).
-            _visibleOrderDirty = false;
-
-            if (VisibleChats.Count < 2)
+            if (VisibleChats.Count < 2 || maxMoves <= 0)
             {
-                return;
+                if (VisibleChats.Count < 2)
+                {
+                    _visibleOrderDirty = false;
+                }
+
+                return false;
             }
 
-            ApplyLocalChatFieldsToScopedChats();
-
-            var desired = _chatService != null
-                ? _chatService.SortChatsForDisplay(
-                    VisibleChats.Where(c => c != null && !string.IsNullOrWhiteSpace(c.JID)))
-                : VisibleChats.Where(c => c != null && !string.IsNullOrWhiteSpace(c.JID)).ToList();
-
+            // Hold IsRefreshing across ApplyLocalChatFields: pin/mute PropertyChanged would
+            // otherwise nest another RequestVisibleOrderRepair (HasThreadAccess) inside this
+            // hop and stack full Visible Moves under ApplyOffline softOrder.
+            int moved = 0;
             IsRefreshing = true;
             try
             {
+                ApplyLocalChatFieldsToScopedChats();
+
+                var desired = _chatService != null
+                    ? _chatService.SortChatsForDisplay(
+                        VisibleChats.Where(c => c != null && !string.IsNullOrWhiteSpace(c.JID)))
+                    : VisibleChats.Where(c => c != null && !string.IsNullOrWhiteSpace(c.JID)).ToList();
+
                 for (int i = 0; i < desired.Count; i++)
                 {
                     ChatItem item = desired[i];
@@ -383,12 +425,63 @@ namespace Unison.Core.ViewModels
                     if (existingIndex >= 0 && existingIndex != i)
                     {
                         VisibleChats.Move(existingIndex, i);
+                        moved++;
+                        if (moved >= maxMoves)
+                        {
+                            _visibleOrderDirty = true;
+                            return true;
+                        }
                     }
                 }
             }
             finally
             {
                 IsRefreshing = false;
+            }
+
+            _visibleOrderDirty = false;
+            return false;
+        }
+
+        /// <summary>
+        /// Applies Move chunks on Low-priority hops so enrichment-end does not leave the
+        /// ListView measuring 250+ realized rows in one uninterrupted layout pass.
+        /// </summary>
+        private async Task DrainFrugalVisibleReorderAsync()
+        {
+            int serial = Interlocked.Increment(ref _frugalReorderDrainSerial);
+            await Task.Yield();
+            ILowPriorityDispatcher low = _dispatcher as ILowPriorityDispatcher;
+
+            while (serial == Volatile.Read(ref _frugalReorderDrainSerial))
+            {
+                bool more = false;
+                Action chunk = () =>
+                {
+                    if (serial != _frugalReorderDrainSerial)
+                    {
+                        return;
+                    }
+
+                    more = ReorderVisibleChatsInPlace(VisibleChatReorderPolicy.FrugalDrainChunk);
+                };
+
+                // Prefer Low so softOrder / push repair does not stack behind tip Urgent on Normal.
+                if (low != null)
+                {
+                    await low.RunLowAsync(chunk).ConfigureAwait(false);
+                }
+                else
+                {
+                    await _dispatcher.RunAsync(chunk).ConfigureAwait(false);
+                }
+
+                if (!more || serial != Volatile.Read(ref _frugalReorderDrainSerial))
+                {
+                    return;
+                }
+
+                await Task.Delay(32).ConfigureAwait(false);
             }
         }
 

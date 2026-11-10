@@ -146,8 +146,15 @@ namespace Unison.Core.ViewModels
 
         private void Connection_SessionEstablished(object sender, EventArgs e)
         {
-            _sessionLogger.WriteAlways("[Pairing] Session established — dismiss QR preview if open");
-            _ = _dispatcher.RunAsync(RaiseQrFullscreenDismissRequested);
+            _sessionLogger.WriteAlways(
+                "[Pairing] Session established — dismiss login pairing dialogs if open");
+            _ = _dispatcher.RunAsync(() =>
+            {
+                // Hide ContentDialogs before Shell navigates away from Login (race with
+                // EnterConnectedSurface). QR still listens to QrFullscreenDismissRequested.
+                _dialogService.DismissLoginPairingDialogs();
+                RaiseQrFullscreenDismissRequested();
+            });
         }
 
         private void RaiseQrFullscreenDismissRequested()

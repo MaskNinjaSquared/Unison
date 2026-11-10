@@ -151,11 +151,7 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
 
             if (ListCommandBar != null)
             {
-                if (channelsOnly)
-                {
-                    ListCommandBar.SecondaryCommands.Clear();
-                }
-
+                // Keep Profile / Debug / Settings on every list scope (Chats, Channels, Archived).
                 CenterPrimaryCommands(ListCommandBar);
             }
         }
@@ -650,9 +646,19 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
 
         private void ChatList_Unloaded(object sender, RoutedEventArgs e)
         {
+            // Clear before teardown finishes — child Unloaded runs ahead of page Detach.
+            try
+            {
+                ViewModel?.PrepareListUnload();
+            }
+            catch
+            {
+            }
+
             TraceListUi(
                 "listview-unloaded",
-                "visibleVm=" + (ViewModel?.VisibleChats?.Count ?? 0),
+                "visibleVm=" + (ViewModel?.VisibleChats?.Count ?? 0) +
+                "; memoryBytes=" + Windows.System.MemoryManager.AppMemoryUsage,
                 flush: true);
         }
 

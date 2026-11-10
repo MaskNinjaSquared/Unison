@@ -12,6 +12,7 @@
         <ResourceDictionary x:Key="Default">
             <SolidColorBrush x:Key="WhatsAppBackgroundBrush" Color="#FF2C2C2C"/>
             <SolidColorBrush x:Key="ChatDetailBackgroundBrush" Color="#0F1210"/>
+            <SolidColorBrush x:Key="ChatDetailChannelBackgroundBrush" Color="#2A3232"/>
             <SolidColorBrush x:Key="ChatDetailWallpaperBackgroundBrush" Color="#424D4D"/>
             <SolidColorBrush x:Key="ChatDetailDateSeparatorBackgroundBrush" Color="#424D4D"/>
             <SolidColorBrush x:Key="ChatDetailDateSeparatorForegroundBrush" Color="#FFFFFFFF"/>
@@ -162,6 +163,7 @@
         <ResourceDictionary x:Key="Dark">
             <SolidColorBrush x:Key="WhatsAppBackgroundBrush" Color="#FF2C2C2C"/>
             <SolidColorBrush x:Key="ChatDetailBackgroundBrush" Color="#0F1210"/>
+            <SolidColorBrush x:Key="ChatDetailChannelBackgroundBrush" Color="#2A3232"/>
             <SolidColorBrush x:Key="ChatDetailWallpaperBackgroundBrush" Color="#424D4D"/>
             <SolidColorBrush x:Key="ChatDetailDateSeparatorBackgroundBrush" Color="#424D4D"/>
             <SolidColorBrush x:Key="ChatDetailDateSeparatorForegroundBrush" Color="#FFFFFFFF"/>
@@ -310,6 +312,7 @@
         <ResourceDictionary x:Key="Light">
             <SolidColorBrush x:Key="WhatsAppBackgroundBrush" Color="#FFF0F2F5"/>
             <SolidColorBrush x:Key="ChatDetailBackgroundBrush" Color="#8A9191"/>
+            <SolidColorBrush x:Key="ChatDetailChannelBackgroundBrush" Color="#B8BDBD"/>
             <SolidColorBrush x:Key="ChatDetailWallpaperBackgroundBrush" Color="#DDE0DB"/>
             <SolidColorBrush x:Key="ChatDetailDateSeparatorBackgroundBrush" Color="#C7D1D1"/>
             <SolidColorBrush x:Key="ChatDetailDateSeparatorForegroundBrush" Color="#FF111B21"/>
@@ -362,19 +365,12 @@
             <!-- Body on brand-green pane (name / phone / groups-in-common titles). Never SystemAccent. -->
             <SolidColorBrush x:Key="ChatDetailInfoPaneBodyBrush" Color="#FFFFFFFF"/>
             <SolidColorBrush x:Key="ChatDetailInfoMutedBrush" Color="#E8FFFFFF"/>
-            <!-- Info pane on green: white hyperlinks + translucent toggles. -->
-            <SolidColorBrush x:Key="SystemControlHyperlinkTextBrush" Color="#FFFFFFFF"/>
-            <SolidColorBrush x:Key="AccentTextFillColorPrimaryBrush" Color="#FFFFFFFF"/>
-            <SolidColorBrush x:Key="AccentTextFillColorSecondaryBrush" Color="#E6FFFFFF"/>
-            <SolidColorBrush x:Key="ToggleSwitchKnobFillOn" Color="#FFFFFFFF"/>
-            <SolidColorBrush x:Key="ToggleSwitchKnobFillOnPointerOver" Color="#FFFFFFFF"/>
-            <SolidColorBrush x:Key="ToggleSwitchKnobFillOnPressed" Color="#F2FFFFFF"/>
-            <SolidColorBrush x:Key="ToggleSwitchFillOn" Color="#66FFFFFF"/>
-            <SolidColorBrush x:Key="ToggleSwitchFillOnPointerOver" Color="#80FFFFFF"/>
-            <SolidColorBrush x:Key="ToggleSwitchFillOnPressed" Color="#59FFFFFF"/>
-            <SolidColorBrush x:Key="ToggleSwitchStrokeOn" Color="#66FFFFFF"/>
-            <SolidColorBrush x:Key="ToggleSwitchStrokeOnPointerOver" Color="#80FFFFFF"/>
-            <SolidColorBrush x:Key="ToggleSwitchStrokeOnPressed" Color="#59FFFFFF"/>
+            <!--
+              Light: do NOT override ToggleSwitch*/AccentTextFill*/Hyperlink globally —
+              those whites were for ChatDetailInfo on green and bled into Settings + ProgressRing.
+              Scoped white chrome lives on ChatDetailInfoControl resources.
+              SystemAccentOverrides Light keeps green accents for Settings toggles / rings.
+            -->
             <SolidColorBrush x:Key="ChatDetailPaneSeparatorBrush" Color="#FFE9EDEF"/>
             <SolidColorBrush x:Key="ChatDetailPinnedBarBackgroundBrush" Color="#FFFFFFFF"/>
             <SolidColorBrush x:Key="ChatDetailPinnedPreviewBrush" Color="#FF111B21"/>

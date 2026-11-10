@@ -27,6 +27,12 @@ namespace Unison.Uwp.Data.Entities
 
         public int Kind { get; set; }
 
+        public uint BackgroundArgb { get; set; }
+
+        public uint TextArgb { get; set; }
+
+        public int Font { get; set; }
+
         public string MediaUrl { get; set; }
 
         public string MediaDirectPath { get; set; }

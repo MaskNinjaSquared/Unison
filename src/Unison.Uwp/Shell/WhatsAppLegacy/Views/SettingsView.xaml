@@ -159,7 +159,7 @@
                     <TextBlock x:Uid="Settings_Profile" Text="Profile" FontSize="32" Margin="20,8,10,16"
                                FontFamily="{StaticResource MainFontLight}"
                                Foreground="{ThemeResource WhatsAppTextHighBrush}"/>
-                    <controls:WhatsAppProfileControl/>
+                    <controls:WhatsAppProfileControl IsLegacyChrome="True"/>
                 </StackPanel>
 
                 <StackPanel x:Name="GeneralCategory"

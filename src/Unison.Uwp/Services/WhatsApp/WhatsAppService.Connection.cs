@@ -109,15 +109,15 @@ namespace Unison.Uwp.Services.WhatsApp
 
         void IPublishConnectionUpdateHost.ClearReconnectRequiredToast(string status)
         {
-            string clearError;
+                string clearError;
             bool cleared = BackgroundToastPresenter.ClearReconnectRequired(out clearError);
-            RuntimeDiagnosticsService.Instance.Write(
-                "notifications",
-                "reconnect-required-toast-cleared",
+                RuntimeDiagnosticsService.Instance.Write(
+                    "notifications",
+                    "reconnect-required-toast-cleared",
                 "status=" + status +
-                "; succeeded=" + cleared +
-                "; error=" + (clearError ?? string.Empty));
-        }
+                    "; succeeded=" + cleared +
+                    "; error=" + (clearError ?? string.Empty));
+            }
 
         void IPublishConnectionUpdateHost.StampLastConnectionEventUtc() =>
             Interlocked.Exchange(ref _diagnosticsLastConnectionEventUtcTicks, DateTime.UtcNow.Ticks);
@@ -133,6 +133,44 @@ namespace Unison.Uwp.Services.WhatsApp
 
         void IPublishConnectionUpdateHost.RaiseConnectionUpdate(string status) =>
             OnConnectionUpdate?.Invoke(this, status);
+
+        void IPublishConnectionUpdateHost.SyncOfflineSyncedWatchdog(string status)
+        {
+            if (string.Equals(status, "open", StringComparison.Ordinal))
+            {
+                // Connect prepare already resets the latch for a new socket. If pending
+                // notifications arrived before this open event, HasReleased is true — do not
+                // clear it or arm a watchdog that would force a second release.
+                if (_offlineReplayLatch.HasReleased)
+                {
+                    return;
+                }
+
+                _offlineReplayLatch.ResetForNewOpen();
+                _offlineSyncedWatchdog?.Arm();
+                return;
+            }
+
+            if (string.Equals(status, "synced", StringComparison.Ordinal) ||
+                string.Equals(status, "close", StringComparison.Ordinal) ||
+                string.Equals(status, "closed", StringComparison.Ordinal) ||
+                string.Equals(status, "reconnecting", StringComparison.Ordinal) ||
+                string.Equals(status, "connecting", StringComparison.Ordinal) ||
+                string.Equals(status, "background", StringComparison.Ordinal) ||
+                string.Equals(status, "suspended", StringComparison.Ordinal))
+            {
+                _offlineSyncedWatchdog?.Cancel(status);
+            }
+        }
+
+        private bool IsOfflineSyncedWatchdogTransportReady()
+        {
+            var socket = _socket;
+            return ConnectionTransportReady.IsReady(
+                socket != null,
+                socket != null && socket.IsConnected,
+                socket != null && socket.IsHandshakeComplete);
+        }
 
         /// <summary>
         /// Writes the suppress flag used by the background toast presenter (winmd cannot
@@ -246,12 +284,12 @@ namespace Unison.Uwp.Services.WhatsApp
             {
                 if (!_owner.IsIncomingMessagePumpStalled(ConnectionHealthPolicy.IncomingPumpStallLimit))
                 {
-                    return;
-                }
+                        return;
+                    }
 
-                RuntimeDiagnosticsService.Instance.Write(
-                    "messages",
-                    "incoming-pump-health-restart",
+                        RuntimeDiagnosticsService.Instance.Write(
+                            "messages",
+                            "incoming-pump-health-restart",
                     "stage=" + _owner.IncomingPumpStage);
                 _owner.ResetIncomingMessagePump("health-stall", requeueCurrent: true);
                 _owner.RestartIncomingMessagePumpIfNeeded();
@@ -282,9 +320,9 @@ namespace Unison.Uwp.Services.WhatsApp
                 ReferenceEquals(_owner._socket, _socket);
 
             void IForceDisconnectMonitoredSocketHost.DisconnectMonitoredSocketBestEffort()
+        {
+            try
             {
-                try
-                {
                     _socket.Disconnect();
                 }
                 catch
@@ -311,7 +349,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
             public void RecordHealthException(Exception error) =>
                 RuntimeDiagnosticsService.Instance.RecordException(
-                    "connection",
+                            "connection",
                     "health-monitor-failed",
                     error);
 
@@ -365,7 +403,7 @@ namespace Unison.Uwp.Services.WhatsApp
             Interlocked.Exchange(ref _preSessionCloseStreak, 0);
 
         void IMarkPairingRestartPendingHost.TracePairingRestartPending(string reason) =>
-            PairingTrace("pairingRestartPending=true reason=" + (reason ?? string.Empty));
+                PairingTrace("pairingRestartPending=true reason=" + (reason ?? string.Empty));
 
         /// <summary>
         /// Owns stage-2 reconnect after pair-success / 515. Idempotent under
@@ -420,9 +458,9 @@ namespace Unison.Uwp.Services.WhatsApp
             RuntimeDiagnosticsService.Instance.Write("connection", "reconnect-scheduled", reason);
 
         void ISoftReconnectIoHost.TracePairingSkippedForPending(string reason) =>
-            PairingTrace(
-                "ScheduleAutoReconnect SKIPPED (pairingRestartPending) reason=" +
-                (reason ?? string.Empty));
+                        PairingTrace(
+                            "ScheduleAutoReconnect SKIPPED (pairingRestartPending) reason=" +
+                            (reason ?? string.Empty));
 
         void ISoftReconnectIoHost.TraceScheduleAutoReconnectReason(string reason)
         {
@@ -490,7 +528,7 @@ namespace Unison.Uwp.Services.WhatsApp
             _messageStore.InitializeAsync();
 
         void IInitializeConnectionStateHost.LoadHistoryFreshnessRepairState() =>
-            LoadHistoryFreshnessRepairState();
+                LoadHistoryFreshnessRepairState();
 
         async Task IInitializeConnectionStateHost.RecoverPendingIncomingJournalAsync()
         {
@@ -502,16 +540,16 @@ namespace Unison.Uwp.Services.WhatsApp
 
         async Task IInitializeConnectionStateHost.LoadOrCreateAuthStateAsync()
         {
-            _authState = await _authStore.LoadAsync();
-            if (_authState == null)
-            {
-                _authState = AuthState.Create();
+                _authState = await _authStore.LoadAsync();
+                if (_authState == null)
+                {
+                    _authState = AuthState.Create();
                 Debug.WriteLine(
                     "[WhatsAppService] Created NEW AuthState (ObjID: " +
                     _authState.GetHashCode() + ")");
-            }
-            else
-            {
+                }
+                else
+                {
                 Debug.WriteLine(
                     "[WhatsAppService] Loaded EXISTING AuthState (ObjID: " +
                     _authState.GetHashCode() + "), registered: " + _authState.Registered);
@@ -564,9 +602,9 @@ namespace Unison.Uwp.Services.WhatsApp
                         t =>
                         {
                             if (t.Status != TaskStatus.RanToCompletion)
-                            {
-                                return;
-                            }
+            {
+                return;
+            }
 
                             try
                             {
@@ -794,8 +832,8 @@ namespace Unison.Uwp.Services.WhatsApp
         async Task<bool> IBrokerReconnectConsumeHost.TryAcquireBrokerReconnectLeaseAsync()
         {
             _brokerReconnectConsumeLease = await BrokerInterprocessLock.AcquireAsync(
-                "foreground:consume-reconnect",
-                TimeSpan.FromSeconds(8),
+                    "foreground:consume-reconnect",
+                    TimeSpan.FromSeconds(8),
                 CancellationToken.None).ConfigureAwait(false);
             return _brokerReconnectConsumeLease != null;
         }
@@ -811,15 +849,15 @@ namespace Unison.Uwp.Services.WhatsApp
         }
 
         void IBrokerReconnectConsumeHost.WriteBrokerReconnectLockTimeout() =>
-            RuntimeDiagnosticsService.Instance.Write(
-                "socket-broker",
-                "reconnect-request-lock-timeout");
+                    RuntimeDiagnosticsService.Instance.Write(
+                        "socket-broker",
+                        "reconnect-request-lock-timeout");
 
         async Task<BrokerReconnectOwnershipSnapshot> IBrokerReconnectConsumeHost.LoadBrokerOwnershipSnapshotAsync()
         {
             BrokerOwnershipState state = await BrokerOwnershipStore.LoadAsync().ConfigureAwait(false);
-            if (state == null)
-            {
+                if (state == null)
+                {
                 return null;
             }
 
@@ -839,36 +877,36 @@ namespace Unison.Uwp.Services.WhatsApp
         void IBrokerReconnectConsumeHost.WriteBrokerReconnectConsumed(
             BrokerReconnectOwnershipSnapshot snapshot,
             bool brokerEntryMissing) =>
-            RuntimeDiagnosticsService.Instance.Write(
-                "socket-broker",
-                "reconnect-request-consumed",
+                RuntimeDiagnosticsService.Instance.Write(
+                    "socket-broker",
+                    "reconnect-request-consumed",
                 "id=" + snapshot.SocketId +
                 "; closeCount=" + snapshot.SocketClosedCount +
                 "; reason=" + snapshot.LastReason +
-                "; brokerEntryMissing=" + brokerEntryMissing);
+                    "; brokerEntryMissing=" + brokerEntryMissing);
 
         async Task IBrokerReconnectConsumeHost.TearDownAfterBrokerReconnectConsumeAsync(
             BrokerReconnectOwnershipSnapshot snapshot)
         {
-            StopConnectionHealthMonitor("broker-reconnect-request");
+                StopConnectionHealthMonitor("broker-reconnect-request");
             await SocketBrokerCoordinator.DisposeBrokerSocketAsync(snapshot.SocketId)
                 .ConfigureAwait(false);
 
-            IWhatsAppSocket staleSocket = _socket;
-            _socket = null;
-            if (staleSocket != null)
-            {
-                try { staleSocket.Disconnect(); } catch { }
-                try { staleSocket.Dispose(); } catch { }
-            }
+                IWhatsAppSocket staleSocket = _socket;
+                _socket = null;
+                if (staleSocket != null)
+                {
+                    try { staleSocket.Disconnect(); } catch { }
+                    try { staleSocket.Dispose(); } catch { }
+                }
 
             await NoiseSessionStore.ClearAsync().ConfigureAwait(false);
-        }
+            }
 
         void IBrokerReconnectConsumeHost.RecordBrokerReconnectConsumeFailed(Exception error) =>
-            RuntimeDiagnosticsService.Instance.RecordException(
-                "socket-broker",
-                "reconnect-request-consume-failed",
+                RuntimeDiagnosticsService.Instance.RecordException(
+                    "socket-broker",
+                    "reconnect-request-consume-failed",
                 error);
 
         /// <summary>
@@ -1021,7 +1059,7 @@ namespace Unison.Uwp.Services.WhatsApp
             catch
             {
             }
-        }
+            }
 
         void IIsCurrentSocketHealthyHost.ClearCurrentSocketIfSame(object socket)
         {
@@ -1134,10 +1172,10 @@ namespace Unison.Uwp.Services.WhatsApp
         }
 
         void IConnectAsyncHost.WriteConnectSkippedAlreadyHealthy() =>
-            RuntimeDiagnosticsService.Instance.Write(
-                "connection",
-                "connect-skipped",
-                "reason=already-healthy");
+                    RuntimeDiagnosticsService.Instance.Write(
+                        "connection",
+                        "connect-skipped",
+                        "reason=already-healthy");
 
         void IConnectAsyncHost.WriteConnectAbortedFatal() =>
             RuntimeDiagnosticsService.Instance.Write(
@@ -1146,18 +1184,18 @@ namespace Unison.Uwp.Services.WhatsApp
                 "reason=fatal-session-ended");
 
         void IConnectAsyncHost.WriteConnectForceFreshForQr() =>
-            RuntimeDiagnosticsService.Instance.Write(
-                "connection",
-                "connect-force-fresh-for-qr",
-                "reason=unregistered-reconnect");
+                    RuntimeDiagnosticsService.Instance.Write(
+                        "connection",
+                        "connect-force-fresh-for-qr",
+                        "reason=unregistered-reconnect");
 
         void IConnectAsyncHost.TraceForceFreshPairingForQr()
         {
-            try
-            {
-                SessionLogger.Instance.WriteAlways(
-                    "[Pairing] ConnectAsync forcing fresh socket for QR refresh");
-            }
+                    try
+                    {
+                        SessionLogger.Instance.WriteAlways(
+                            "[Pairing] ConnectAsync forcing fresh socket for QR refresh");
+                    }
             catch
             {
             }
@@ -1167,9 +1205,9 @@ namespace Unison.Uwp.Services.WhatsApp
             ConnectionConnectPrepare.RunAsync(this);
 
         void IConnectAsyncHost.WriteConnectPrepareAbort(ConnectionConnectPrepareResult result)
-        {
-            RuntimeDiagnosticsService.Instance.Write(
-                "connection",
+                {
+                    RuntimeDiagnosticsService.Instance.Write(
+                        "connection",
                 ConnectionConnectAbortedJournal.EventName,
                 ConnectionConnectAbortedJournal.DetailForPrepareAbort(result));
         }
@@ -1261,7 +1299,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 _fatalSessionEnded);
 
         void IConnectionPairingStage2Host.ClearPairingRestartPending() =>
-            _pairingRestartPending = false;
+                _pairingRestartPending = false;
 
         void IConnectionPairingStage2Host.ClearReconnectingFlag() =>
             _softReconnect.ClearReconnectingFlag();
@@ -1303,7 +1341,7 @@ namespace Unison.Uwp.Services.WhatsApp
         {
             LatchFatalSession("policy-" + (reason ?? "fatal"));
             RuntimeDiagnosticsService.Instance.Write(
-                "connection",
+                    "connection",
                 "reconnect-suppressed-by-policy",
                 "reason=" + (reason ?? ""));
             Debug.WriteLine("[WhatsAppService] Reconnect suppressed by ConnectionFacade policy: " + reason);
@@ -1411,11 +1449,11 @@ namespace Unison.Uwp.Services.WhatsApp
             var auth = _authState;
             if (auth == null)
             {
-                return;
-            }
+                    return;
+                }
 
             _syncWork.SetReplayDrainPending(auth.Registered);
-            Interlocked.Exchange(ref _offlineReplayReleased, 0);
+            _offlineReplayLatch.ResetForNewOpen();
             if (!_fatalSessionEnded)
             {
                 _suppressReconnect = false;
@@ -1456,7 +1494,7 @@ namespace Unison.Uwp.Services.WhatsApp
             var auth = _authState;
             if (auth == null)
             {
-                return;
+                        return;
             }
 
             RuntimeDiagnosticsService.Instance.Write(
@@ -1549,7 +1587,9 @@ namespace Unison.Uwp.Services.WhatsApp
 
         void IConnectionLifecycleHost.ResetPersistScheduler()
         {
+            FlushPendingCatalogRows();
             _catalogDebounce.Dispose();
+            _rowPersistDebounce.Dispose();
             _persistScheduler.Reset();
         }
 

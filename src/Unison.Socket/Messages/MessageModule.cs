@@ -100,7 +100,9 @@ namespace Unison.Socket.Messages
 
             if (lidMappings != null)
             {
-                GroupMetadata.MappingsDiscovered = mappings => lidMappings.StoreMappingsAsync(mappings);
+                // Bulk discovery (a whole roster per group): storage only, read into RAM on demand.
+                GroupMetadata.MappingsDiscovered = mappings =>
+                    lidMappings.StoreMappingsAsync(mappings, cacheInMemory: false);
             }
 
             Relay = new RelayMessageUseCase(
@@ -193,6 +195,7 @@ namespace Unison.Socket.Messages
                 GroupParticipantsChanged = update => GroupMetadata.Invalidate(update.Id)
             };
             Calls = new CallHandler(session.Events, Ack, log);
+            SentAcks = new MessageAckHandler(session.Events, log);
             Presence = new PresenceHandler(session.Events, log);
 
             Nodes = new NodeProcessor(
@@ -271,6 +274,9 @@ namespace Unison.Socket.Messages
 
         public CallHandler Calls { get; }
 
+        /// <summary>The server's answer to what we sent; the only place a refused send shows up.</summary>
+        public MessageAckHandler SentAcks { get; }
+
         public PresenceHandler Presence { get; }
 
         /// <summary>Starts routing message, receipt, notification and call nodes.</summary>
@@ -289,6 +295,7 @@ namespace Unison.Socket.Messages
             // a typing indicator that arrives late is worse than one that never arrives.
             _routes.Add(dispatcher.Register("presence", node => Presence.HandleAsync(node)));
             _routes.Add(dispatcher.Register("chatstate", node => Presence.HandleAsync(node)));
+            _routes.Add(dispatcher.Register("ack", node => SentAcks.HandleAsync(node)));
 
             // Our identity is only known after login, and the receipt routing depends on it.
             _session.Opened += () =>

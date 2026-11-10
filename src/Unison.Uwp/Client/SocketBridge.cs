@@ -35,6 +35,7 @@ using Unison.Baileys.Crypto;
 using Unison.Baileys.Protocol;
 using Unison.Core.Contracts;
 using Unison.Core.Helpers;
+using Unison.Core.Helpers.Chats;
 using Unison.Core.Helpers.Groups;
 using Unison.Core.Models;
 using Unison.Socket.Abstractions;
@@ -78,6 +79,13 @@ namespace Unison.Uwp.Client
         /// </summary>
         private static readonly TimeSpan CloseTimeout = TimeSpan.FromSeconds(3);
 
+        /// <summary>
+        /// How long a published Status waits for the server's ack before it is reported as sent.
+        /// The ack normally lands in well under a second; silence past this is read as taken,
+        /// because a Status that did arrive must not be reported as failed.
+        /// </summary>
+        private static readonly TimeSpan StatusAckTimeout = TimeSpan.FromSeconds(8);
+
         private const long TrustedContactTokenBucketDurationSeconds = 604800;
         private const int TrustedContactTokenBucketCount = 4;
 
@@ -86,6 +94,7 @@ namespace Unison.Uwp.Client
         private readonly bool _reuseLoadedKeyState;
         private readonly SignalHandler _signal;
         private readonly LidMappingStore _lidMappings;
+        private readonly ProfilePictureQueryCache _pictureCache;
         private readonly IEncryptedMediaDownloader _downloader;
         private readonly SocketConfig _config = CreateSocketConfig();
 
@@ -160,12 +169,21 @@ namespace Unison.Uwp.Client
             AuthState authState,
             FileKeyStore sharedKeyStore,
             bool reuseLoadedKeyState,
-            LidMappingStore lidMappings = null)
+            LidMappingStore lidMappings = null,
+            ProfilePictureQueryCache pictureCache = null,
+            int initialPreKeyUploadCount = 0)
         {
             if (authState == null)
             {
                 throw new ArgumentNullException(nameof(authState));
             }
+
+            if (initialPreKeyUploadCount > 0)
+            {
+                _config.InitialPreKeyCount = initialPreKeyUploadCount;
+            }
+
+            _pictureCache = pictureCache;
 
             _authState = authState;
             _appStateKeyId = authState.MyAppStateKeyId;
@@ -202,6 +220,18 @@ namespace Unison.Uwp.Client
                          line.IndexOf("[Decrypt] Failed", StringComparison.Ordinal) >= 0)
                 {
                     RuntimeDiagnosticsService.Instance.Write("messages", "decrypt-failed", line);
+                }
+                // A refused send only shows as a bare code in the ack; without it a Status looks published.
+                else if (!string.IsNullOrEmpty(line) &&
+                         (line.IndexOf("[Ack] Server refused", StringComparison.Ordinal) >= 0 ||
+                          line.IndexOf("[Send] Status", StringComparison.Ordinal) >= 0))
+                {
+                    RuntimeDiagnosticsService.Instance.Write("send", "ack-refused-or-status", line);
+                }
+                else if (!string.IsNullOrEmpty(line) &&
+                         line.IndexOf("[Query]", StringComparison.Ordinal) >= 0)
+                {
+                    RuntimeDiagnosticsService.Instance.Write("protocol", "query", line);
                 }
             });
             _downloader = new HttpEncryptedMediaDownloader(_log);
@@ -295,6 +325,13 @@ namespace Unison.Uwp.Client
         /// inserts a rename system line.
         /// </summary>
         public Func<GroupSubjectChangeNotifyRequest, Task> GroupSubjectChanged { get; set; }
+
+        /// <summary>
+        /// Group description from upsert/update. Separate from
+        /// <see cref="GroupSubjectChanged"/> because a description change carries no subject and
+        /// the subject path drops anything without one.
+        /// </summary>
+        public Func<GroupDescriptionChangeNotifyRequest, Task> GroupDescriptionChanged { get; set; }
 
         /// <summary>
         /// <c>w:gp2</c> participant <c>add</c> (Baileys <c>GROUP_PARTICIPANT_ADD</c>).
@@ -639,7 +676,15 @@ namespace Unison.Uwp.Client
 
             var messages = BuildMessageModule(session);
 
-            var offline = new OfflineSyncCoordinator(session.Connection, session.Events, _authState, _log);
+            var offline = new OfflineSyncCoordinator(
+                session.Connection,
+                session.Events,
+                _authState,
+                _log,
+                detail => RuntimeDiagnosticsService.Instance.Write(
+                    "connection",
+                    "offline-buffer-safety",
+                    detail));
             offline.Attach();
 
             session.Connection.NodeReceived += OnNodeReceived;
@@ -1075,6 +1120,125 @@ namespace Unison.Uwp.Client
             return joined != null && joined.Succeeded;
         }
 
+        public Task<string> CreateGroupAsync(string subject, IReadOnlyList<string> participantJids)
+        {
+            GroupsModule groups = RequireGroups("group create");
+            return TraceCreateAsync(
+                "group",
+                "participants=" + (participantJids != null ? participantJids.Count : 0),
+                () => groups.Create.ExecuteAsync(subject, participantJids));
+        }
+
+        public Task<string> CreateCommunityAsync(string subject, string description)
+        {
+            GroupsModule groups = RequireGroups("community create");
+            return TraceCreateAsync(
+                "community",
+                "descriptionLen=" + (description != null ? description.Length : 0),
+                () => groups.CreateCommunity.ExecuteAsync(subject, description));
+        }
+
+        /// <summary>The VM only shows a generic failure; the server's answer lands in Runtime Health.</summary>
+        private static async Task<string> TraceCreateAsync(
+            string kind,
+            string detail,
+            Func<Task<GroupMetadata>> create)
+        {
+            RuntimeDiagnosticsService.Instance.Write("groups", kind + "-create-begin", detail);
+            try
+            {
+                GroupMetadata created = await create().ConfigureAwait(false);
+                RuntimeDiagnosticsService.Instance.Write(
+                    "groups",
+                    kind + "-create-ok",
+                    "jid=" + (created != null ? created.Id : "(none)") +
+                    "; isCommunity=" + (created != null && created.IsCommunity));
+                return created != null ? created.Id : null;
+            }
+            catch (Exception ex)
+            {
+                RuntimeDiagnosticsService.Instance.Write(
+                    "groups",
+                    kind + "-create-failed",
+                    ex.GetType().Name + ": " + ex.Message);
+                throw;
+            }
+        }
+
+        public Task UpdateGroupEphemeralAsync(string groupJid, int seconds)
+        {
+            GroupsModule groups = RequireGroups("group ephemeral");
+            return groups.Settings.UpdateEphemeralAsync(groupJid, seconds);
+        }
+
+        public Task UpdateGroupLockedAsync(string groupJid, bool adminsOnly)
+        {
+            GroupsModule groups = RequireGroups("group locked");
+            return groups.Settings.UpdateLockedAsync(groupJid, adminsOnly);
+        }
+
+        public Task UpdateGroupAnnouncementAsync(string groupJid, bool adminsOnly)
+        {
+            GroupsModule groups = RequireGroups("group announcement");
+            return groups.Settings.UpdateAnnouncementAsync(groupJid, adminsOnly);
+        }
+
+        public Task UpdateGroupMemberAddModeAsync(string groupJid, bool adminsOnly)
+        {
+            GroupsModule groups = RequireGroups("group member-add");
+            return groups.Settings.UpdateMemberAddModeAsync(groupJid, adminsOnly);
+        }
+
+        public Task UpdateGroupJoinApprovalAsync(string groupJid, bool required)
+        {
+            GroupsModule groups = RequireGroups("group join-approval");
+            return groups.Settings.UpdateJoinApprovalAsync(groupJid, required);
+        }
+
+        public async Task UpdateGroupPictureAsync(string groupJid, byte[] jpeg)
+        {
+            RuntimeDiagnosticsService.Instance.Write(
+                "groups",
+                "picture-set-begin",
+                "jid=" + (groupJid ?? "(none)") +
+                "; bytes=" + (jpeg != null ? jpeg.Length : 0));
+            try
+            {
+                var session = Require();
+                await new Unison.Socket.UseCases.Profile.UpdateProfileUseCase(session.Connection)
+                    .UpdatePictureAsync(groupJid, jpeg)
+                    .ConfigureAwait(false);
+                RuntimeDiagnosticsService.Instance.Write(
+                    "groups",
+                    "picture-set-ok",
+                    "jid=" + (groupJid ?? "(none)"));
+            }
+            catch (Exception ex)
+            {
+                RuntimeDiagnosticsService.Instance.Write(
+                    "groups",
+                    "picture-set-failed",
+                    ex.GetType().Name + ": " + ex.Message);
+                throw;
+            }
+        }
+
+        private GroupsModule RequireGroups(string operation)
+        {
+            GroupsModule groups;
+            lock (_gate)
+            {
+                groups = _groups;
+            }
+
+            if (groups == null)
+            {
+                throw new InvalidOperationException("Not connected: " + operation + " was not sent.");
+            }
+
+            return groups;
+        }
+
         public Task UpdateBlockStatusAsync(string jid, bool block)
         {
             var session = Require();
@@ -1117,11 +1281,15 @@ namespace Unison.Uwp.Client
                 return;
             }
 
-            Store(mappings, source, true);
+            // Whole rosters: bulk discovery stays in storage until an async read asks for it.
+            Store(mappings, source, true, cacheInMemory: false);
             await ForwardMappingsAsync(mappings, source).ConfigureAwait(false);
         }
 
-        public async Task<ProfilePictureResult> GetProfilePictureUrlResultAsync(string jid, string type = "preview")
+        public async Task<ProfilePictureResult> GetProfilePictureUrlResultAsync(
+            string jid,
+            string type = "preview",
+            bool revalidate = false)
         {
             if (string.IsNullOrEmpty(jid))
             {
@@ -1134,6 +1302,18 @@ namespace Unison.Uwp.Client
                 return await GetNewsletterProfilePictureResultAsync(jid).ConfigureAwait(false);
             }
 
+            if (_pictureCache == null)
+            {
+                return await QueryProfilePictureAsync(jid, type).ConfigureAwait(false);
+            }
+
+            return await _pictureCache
+                .GetAsync(jid, type, revalidate, () => QueryProfilePictureAsync(jid, type))
+                .ConfigureAwait(false);
+        }
+
+        private async Task<ProfilePictureResult> QueryProfilePictureAsync(string jid, string type)
+        {
             var session = Require();
 
             try
@@ -1211,6 +1391,43 @@ namespace Unison.Uwp.Client
                     FailureReason = ex.GetBaseException().Message
                 };
             }
+        }
+
+        public async Task<Unison.Socket.UseCases.Newsletter.NewsletterMetadataResult> CreateNewsletterAsync(
+            string name,
+            string description)
+        {
+            var session = Require();
+            RuntimeDiagnosticsService.Instance.Write(
+                "channels",
+                "channel-create-begin",
+                "descriptionLen=" + (description != null ? description.Length : 0));
+            Unison.Socket.UseCases.Newsletter.NewsletterMetadataResult created =
+                await new Unison.Socket.UseCases.Newsletter.CreateNewsletterUseCase(session.Connection)
+                    .ExecuteAsync(name, description)
+                    .ConfigureAwait(false);
+            if (string.IsNullOrEmpty(created.Id))
+            {
+                // The VM only shows a generic failure; the server's answer lands in Runtime Health.
+                RuntimeDiagnosticsService.Instance.Write(
+                    "channels",
+                    "channel-create-failed",
+                    created.FailureReason ?? "(none)");
+                throw new InvalidOperationException(created.FailureReason ?? "no-channel");
+            }
+
+            RuntimeDiagnosticsService.Instance.Write(
+                "channels",
+                "channel-create-ok",
+                "jid=" + created.Id + "; role=" + (created.ViewerRole ?? "(none)"));
+            return created;
+        }
+
+        public Task UpdateNewsletterPictureAsync(string newsletterJid, byte[] jpeg)
+        {
+            var session = Require();
+            return new Unison.Socket.UseCases.Newsletter.UpdateNewsletterPictureUseCase(session.Connection)
+                .ExecuteAsync(newsletterJid, jpeg);
         }
 
         private async Task<ProfilePictureResult> GetNewsletterProfilePictureResultAsync(string jid)
@@ -1343,18 +1560,53 @@ namespace Unison.Uwp.Client
             }
         }
 
-        public Task PresenceSubscribeAsync(string toJid)
+        /// <summary>
+        /// rc14 presenceSubscribe: user JIDs carry their trusted-contact token, without which a
+        /// contact who limits last seen to people they talk to never answers.
+        /// </summary>
+        public async Task PresenceSubscribeAsync(string toJid)
         {
             var session = Require();
+            var token = await GetPresenceTokenAsync(toJid).ConfigureAwait(false);
+            await CreatePresence(session)
+                .SubscribeAsync(toJid, token != null ? token.Token : null)
+                .ConfigureAwait(false);
+        }
 
-            return session.Connection.SendNodeAsync(new BinaryNode(
-                "presence",
-                new Dictionary<string, string>
-                {
-                    { "to", toJid },
-                    { "id", session.Connection.GenerateMessageTag() },
-                    { "type", "subscribe" }
-                }));
+        public Task SendAvailabilityAsync(bool available)
+        {
+            return CreatePresence(Require()).ExecuteAsync(
+                available ? PresenceState.Available : PresenceState.Unavailable);
+        }
+
+        private SendPresenceUseCase CreatePresence(WhatsAppSession session)
+        {
+            return new SendPresenceUseCase(
+                session.Connection,
+                () => _authState.Me != null ? _authState.Me.Id : null,
+                () => _authState.Me != null ? _authState.Me.Lid : null,
+                () => _authState.Me != null ? _authState.Me.Name : null);
+        }
+
+        /// <summary>Tokens are filed under whichever address the chat used, so try the LID too.</summary>
+        private async Task<TcTokenData> GetPresenceTokenAsync(string jid)
+        {
+            var token = await GetValidProfilePictureTokenAsync(jid).ConfigureAwait(false);
+            if (token != null)
+            {
+                return token;
+            }
+
+            var normalized = JidUtils.NormalizedUser(jid);
+            if (!JidUtils.IsAnyPn(normalized))
+            {
+                return null;
+            }
+
+            var lid = await _lidMappings.GetLidForPnAsync(normalized).ConfigureAwait(false);
+            return string.IsNullOrEmpty(lid)
+                ? null
+                : await GetValidProfilePictureTokenAsync(lid).ConfigureAwait(false);
         }
 
         /// <summary>
@@ -1578,6 +1830,46 @@ namespace Unison.Uwp.Client
             return SendAsync(jid, content, explicitMessageId);
         }
 
+        public async Task<string> SendTextStatusAsync(
+            string text,
+            uint backgroundArgb,
+            uint textArgb,
+            int font,
+            IList<string> statusJidList)
+        {
+            if (statusJidList == null || statusJidList.Count == 0)
+            {
+                throw new ArgumentException("A Status needs at least one recipient", nameof(statusJidList));
+            }
+
+            var content = new StatusTextContent(text)
+            {
+                BackgroundArgb = backgroundArgb,
+                TextArgb = textArgb,
+                Font = font
+            };
+
+            // The relay returns once the stanza is written, and a refused Status is refused
+            // afterwards, so the id is minted here and registered before the send.
+            string messageId = GenerateMessageId();
+            using (SentAckWait ack = RequireMessages().SentAcks.Expect(messageId))
+            {
+                string id = await SendAsync(JidUtils.StatusBroadcast, content, messageId, statusJidList)
+                    .ConfigureAwait(false);
+
+                string refusal = await ack.WaitAsync(StatusAckTimeout).ConfigureAwait(false);
+                if (string.IsNullOrEmpty(refusal))
+                {
+                    return id;
+                }
+
+                string reason = MessageAckHandler.Describe(refusal);
+                Debug.WriteLine("[Bridge] Status " + id + " refused: error=" + refusal + " (" + reason + ")");
+                RaiseStatus(id, "failed", "ack " + refusal);
+                throw new Unison.Core.Contracts.WhatsApp.StatusPublishRefusedException(refusal, reason, id);
+            }
+        }
+
         public async Task<string> SendImageMessageAsync(
             string jid,
             byte[] imageBytes,
@@ -1787,7 +2079,7 @@ namespace Unison.Uwp.Client
                 return;
             }
 
-            Store(new List<LidMapping> { mapping }, source, writeLog);
+            Store(new List<LidMapping> { mapping }, source, writeLog, cacheInMemory: true);
         }
 
         public void RegisterJidAliases(IDictionary<string, string> aliases, string source)
@@ -1807,10 +2099,11 @@ namespace Unison.Uwp.Client
                 }
             }
 
-            Store(mappings, source, true);
+            // Alias-table snapshot: the table already holds these in RAM; storage only here.
+            Store(mappings, source, true, cacheInMemory: false);
         }
 
-        private void Store(List<LidMapping> mappings, string source, bool writeLog)
+        private void Store(List<LidMapping> mappings, string source, bool writeLog, bool cacheInMemory)
         {
             if (mappings.Count == 0)
             {
@@ -1822,7 +2115,7 @@ namespace Unison.Uwp.Client
             // Not awaited is not the same as not watched, though - GC.KeepAlive observes
             // nothing, so a failed write took the pairing with it in silence and the contact
             // went back to showing a bare number.
-            _ = ReportIfStoreFailsAsync(_lidMappings.StoreMappingsAsync(mappings), source);
+            _ = ReportIfStoreFailsAsync(_lidMappings.StoreMappingsAsync(mappings, cacheInMemory), source);
 
             if (writeLog)
             {
@@ -2041,19 +2334,20 @@ namespace Unison.Uwp.Client
         /// Publishes prekeys when the server is running out of them.
         /// </summary>
         /// <remarks>
-        /// The provider here is deliberately built without the "credentials moved" callback the
-        /// retry path uses. A batch is over eight hundred keys, and a host that saves the whole
-        /// auth state on each one would write it eight hundred times - which, on the receive
-        /// path, is enough to starve the socket. The batch reports once, at the end.
+        /// The batch path raises the credentials callback once after minting and once after the
+        /// ack, never per key: a host that saved the auth state on each of hundreds of keys would
+        /// starve the receive path. Minted ids are saved even when the upload fails, so the next
+        /// connect re-announces them instead of minting a fresh batch on top.
         /// </remarks>
         private async Task UploadPreKeysAsync(WhatsAppSession session)
         {
             var upload = new UploadPreKeysUseCase(
                 session.Connection,
                 _authState,
-                new AuthStatePreKeyProvider(_authState, _keyStore),
+                new AuthStatePreKeyProvider(_authState, _keyStore, RaiseAuthStateUpdate),
                 _log);
 
+            var started = Stopwatch.StartNew();
             var uploaded = await new UploadPreKeysIfRequiredUseCase(
                     session.Connection,
                     upload,
@@ -2064,7 +2358,13 @@ namespace Unison.Uwp.Client
 
             if (uploaded > 0)
             {
-                RaiseAuthStateUpdate();
+                RuntimeDiagnosticsService.Instance.Write(
+                    "connection",
+                    "prekey-upload",
+                    "uploaded=" + uploaded +
+                    "; batch=" + _config.InitialPreKeyCount +
+                    "; firstUnuploaded=" + _authState.FirstUnuploadedPreKeyId +
+                    "; milliseconds=" + started.ElapsedMilliseconds);
             }
         }
 
@@ -2232,7 +2532,21 @@ namespace Unison.Uwp.Client
             switch (update.Connection.Value)
             {
                 case ConnectionStatus.Open:
+                    // Raise open first so the host resets the first-release latch / arms the
+                    // synced watchdog before a deferred safety claim can fire release.
                     Raise(OnConnectionUpdate, "open");
+
+                    OfflineSyncCoordinator offlineOnOpen;
+                    lock (_gate)
+                    {
+                        offlineOnOpen = _offline;
+                    }
+
+                    if (offlineOnOpen != null)
+                    {
+                        await offlineOnOpen.NotifyConnectedAsync().ConfigureAwait(false);
+                    }
+
                     break;
 
                 case ConnectionStatus.Close:
@@ -2297,7 +2611,9 @@ namespace Unison.Uwp.Client
                 VerifiedName = envelope.VerifiedBusinessName,
                 SenderLid = JidUtils.IsLidUser(key.ParticipantAlt) ? key.ParticipantAlt : null,
                 RecipientJid = key.RemoteJidAlt,
-                IsOffline = reason == MessageUpsertReason.Append
+                IsOffline = OfflineReplayUiPolicy.IsOfflineEnvelope(
+                    reason == MessageUpsertReason.Append,
+                    key.FromMe)
             };
         }
 
@@ -2346,24 +2662,18 @@ namespace Unison.Uwp.Client
         /// </summary>
         private async Task ApplyAppStateAsync(WaEventBatch batch)
         {
+            // Upsert (group create notify) and update (app-state flags) share one host callback.
+            // Upsert carries ConversationTimestamp for empty-list order; update carries pin/mute.
+            IList<ChatUpdate> upsertedChats;
+            if (batch.TryGet(WaEventKind.ChatsUpsert, out upsertedChats))
+            {
+                await ForwardChatUpdatesAsync(upsertedChats).ConfigureAwait(false);
+            }
+
             IList<ChatUpdate> chats;
             if (batch.TryGet(WaEventKind.ChatsUpdate, out chats))
             {
-                foreach (var chat in chats)
-                {
-                    await StoreTcTokenAsync(
-                        chat.Id,
-                        chat.TcToken,
-                        chat.TcTokenTimestamp,
-                        chat.TcTokenSenderTimestamp,
-                        "app-state privacy token").ConfigureAwait(false);
-
-                    var chatChanged = ChatSettingsChanged;
-                    if (chatChanged != null)
-                    {
-                        await chatChanged(chat).ConfigureAwait(false);
-                    }
-                }
+                await ForwardChatUpdatesAsync(chats).ConfigureAwait(false);
             }
 
             // Two events, one handler. An upsert is the address book arriving from app state and
@@ -2379,10 +2689,12 @@ namespace Unison.Uwp.Client
             IList<ContactUpdate> contacts;
             if (batch.TryGet(WaEventKind.ContactsUpdate, out contacts))
             {
+                InvalidateChangedPictures(contacts);
                 await ForwardContactsAsync(contacts).ConfigureAwait(false);
             }
 
             await ApplyGroupNamesAsync(batch).ConfigureAwait(false);
+            await ApplyGroupDescriptionsAsync(batch).ConfigureAwait(false);
             ApplyGroupRosterEvent(batch);
             await ApplyGroupParticipantsJoinedAsync(batch).ConfigureAwait(false);
             await ApplyGroupParticipantsLeftAsync(batch).ConfigureAwait(false);
@@ -2406,6 +2718,66 @@ namespace Unison.Uwp.Client
                 foreach (var key in deletedMessages)
                 {
                     await messageDeleted(key).ConfigureAwait(false);
+                }
+            }
+        }
+
+        private async Task ForwardChatUpdatesAsync(IList<ChatUpdate> chats)
+        {
+            if (chats == null || chats.Count == 0)
+            {
+                return;
+            }
+
+            foreach (var chat in chats)
+            {
+                if (chat == null)
+                {
+                    continue;
+                }
+
+                await StoreTcTokenAsync(
+                    chat.Id,
+                    chat.TcToken,
+                    chat.TcTokenTimestamp,
+                    chat.TcTokenSenderTimestamp,
+                    "app-state privacy token").ConfigureAwait(false);
+
+                var chatChanged = ChatSettingsChanged;
+                if (chatChanged != null)
+                {
+                    await chatChanged(chat).ConfigureAwait(false);
+                }
+            }
+        }
+
+        /// <summary>
+        /// A <c>picture</c> notification carries a sentinel, never the new URL: drop the cached
+        /// IQ answer so the next fetch asks the server.
+        /// </summary>
+        private void InvalidateChangedPictures(IList<ContactUpdate> updates)
+        {
+            if (_pictureCache == null || updates == null)
+            {
+                return;
+            }
+
+            for (int i = 0; i < updates.Count; i++)
+            {
+                ContactUpdate update = updates[i];
+                if (update != null &&
+                    (update.ImgUrl == ContactImageState.Changed || update.ImgUrl == ContactImageState.Removed))
+                {
+                    _pictureCache.Invalidate(update.Id);
+                    if (!string.IsNullOrEmpty(update.Lid))
+                    {
+                        _pictureCache.Invalidate(update.Lid);
+                    }
+
+                    if (!string.IsNullOrEmpty(update.PhoneNumber))
+                    {
+                        _pictureCache.Invalidate(update.PhoneNumber);
+                    }
                 }
             }
         }
@@ -2488,6 +2860,56 @@ namespace Unison.Uwp.Client
                             ? DateTimeOffset.FromUnixTimeSeconds(group.SubjectTime.Value).UtcDateTime
                             : DateTime.UtcNow,
                         EmitTimelineLine = true
+                    }).ConfigureAwait(false);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Group description from upsert/update. Deliberately a second pass rather than part of
+        /// <see cref="ApplyGroupNamesAsync"/>: that one requires a subject, and a description
+        /// change carries none. The two are independent and must stay that way.
+        /// </summary>
+        private async Task ApplyGroupDescriptionsAsync(WaEventBatch batch)
+        {
+            var descriptionChanged = GroupDescriptionChanged;
+            if (descriptionChanged == null)
+            {
+                return;
+            }
+
+            IList<GroupMetadata> created;
+            if (batch.TryGet(WaEventKind.GroupsUpsert, out created))
+            {
+                foreach (var group in created)
+                {
+                    // Null means the event said nothing about the description — notably avatar
+                    // updates. Empty string is a real "description was cleared".
+                    if (group == null || group.Description == null) continue;
+                    await descriptionChanged(new GroupDescriptionChangeNotifyRequest
+                    {
+                        GroupJid = group.Id,
+                        NewDescription = group.Description,
+                        DescriptionId = group.DescriptionId,
+                        AuthorJid = group.DescriptionOwner,
+                        TimestampUtc = DateTime.UtcNow
+                    }).ConfigureAwait(false);
+                }
+            }
+
+            IList<GroupUpdate> updated;
+            if (batch.TryGet(WaEventKind.GroupsUpdate, out updated))
+            {
+                foreach (var group in updated)
+                {
+                    if (group == null || group.Description == null) continue;
+                    await descriptionChanged(new GroupDescriptionChangeNotifyRequest
+                    {
+                        GroupJid = group.Id,
+                        NewDescription = group.Description,
+                        DescriptionId = group.DescriptionId,
+                        AuthorJid = group.Author,
+                        TimestampUtc = DateTime.UtcNow
                     }).ConfigureAwait(false);
                 }
             }
@@ -2580,7 +3002,8 @@ namespace Unison.Uwp.Client
                     Kind = chrome.Value,
                     IsVideo = call.IsVideo,
                     TimestampUtc = stamp,
-                    CallerJid = call.From
+                    CallerJid = call.From,
+                    DurationSeconds = call.DurationSeconds
                 });
             }
 
@@ -2805,13 +3228,19 @@ namespace Unison.Uwp.Client
         /// Sends and reports the outcome the way the legacy client did, since the service tracks
         /// an outgoing message by those two events rather than by the returned id alone.
         /// </summary>
-        private async Task<string> SendAsync(string jid, OutgoingContent content, string explicitMessageId)
+        private async Task<string> SendAsync(
+            string jid,
+            OutgoingContent content,
+            string explicitMessageId,
+            IList<string> statusJidList = null)
         {
             var module = RequireMessages();
 
             try
             {
-                var sent = await module.Send.ExecuteAsync(jid, content, explicitMessageId).ConfigureAwait(false);
+                var sent = await module.Send
+                    .ExecuteAsync(jid, content, explicitMessageId, statusJidList)
+                    .ConfigureAwait(false);
 
                 RaiseStatus(sent.Key.Id, "sent", null);
                 return sent.Key.Id;

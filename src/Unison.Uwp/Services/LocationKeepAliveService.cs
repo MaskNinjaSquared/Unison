@@ -62,6 +62,7 @@ namespace Unison.Uwp.Services
         {
             if (_shuttingDown)
             {
+                Journal("start-rejected", "reason=shutting-down");
                 return false;
             }
 
@@ -104,6 +105,7 @@ namespace Unison.Uwp.Services
             catch (Exception ex)
             {
                 Debug.WriteLine("[KeepAlive] geolocator setup failed: " + ex.Message);
+                Journal("geolocator-setup-failed", "message=" + ex.Message);
                 return false;
             }
 
@@ -115,6 +117,7 @@ namespace Unison.Uwp.Services
             catch (Exception ex)
             {
                 Debug.WriteLine("[KeepAlive] RequestAccessAsync failed: " + ex.Message);
+                Journal("location-access-request-failed", "message=" + ex.Message);
             }
 
             if (access != GeolocationAccessStatus.Allowed)
@@ -124,6 +127,9 @@ namespace Unison.Uwp.Services
                 if (!coarseAvailable)
                 {
                     StopGeolocator();
+                    Journal(
+                        "location-access-denied",
+                        "access=" + access + ";coarse=False");
                     return false;
                 }
             }

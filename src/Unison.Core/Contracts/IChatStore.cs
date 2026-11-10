@@ -41,6 +41,15 @@ namespace Unison.Core.Contracts
 
         Task SetStatusAsync(string jid, ChatStatus status);
 
+        /// <summary>This account's role in a channel, as the server last answered it.</summary>
+        Task SetChannelRoleAsync(string jid, ChannelViewerRole role);
+
+        /// <summary>
+        /// The group description as the last <c>w:g2</c> reply or description notification said it.
+        /// Pass an empty string for a group whose description was cleared.
+        /// </summary>
+        Task SetGroupDescriptionAsync(string jid, string description, string descriptionId);
+
         /// <summary>
         /// Writes the pin into the in-memory cache immediately. History sync applies flags onto
         /// the row and then persists asynchronously — without this, the next

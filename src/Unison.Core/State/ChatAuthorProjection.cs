@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.Specialized;
 using System.Diagnostics;
+using System.Threading;
 using System.Threading.Tasks;
 using Unison.Core.Contracts;
 using Unison.Core.Contracts.WhatsApp;
@@ -31,6 +32,12 @@ namespace Unison.Core.State
         private readonly ChatTimelineLoadPriorityGate _timelinePriority;
 
         /// <summary>
+        /// Mobile / enrich budget: unnamed full-catalogue walks wait for Release or a quiet delay
+        /// so DisplayNamesChanged storms do not inflate the open-group RefreshChat pass.
+        /// </summary>
+        private readonly Func<bool> _preferFrugalUi;
+
+        /// <summary>
         /// Same sources, same order the timeline bubbles use. The strip resolving a sender through
         /// a shorter list than the bubble is what let an open group show the name above the message
         /// and the JID in the list at the same time.
@@ -38,6 +45,9 @@ namespace Unison.Core.State
         private readonly ParticipantResolutionContext _participants;
 
         private readonly object _gate = new object();
+
+        /// <summary>Quiet delay before flushing a frugal-deferred unnamed pass when Hold never runs.</summary>
+        private const int FrugalUnnamedDelayMs = 1500;
 
         /// <summary>
         /// JIDs already looked up in SQLite. The Person cache starts cold every launch, so the
@@ -60,7 +70,9 @@ namespace Unison.Core.State
         private bool _sweepRunning;
         private bool _sweepAgain;
         private bool _unnamedPassRequested;
+        private bool _unnamedDeferred;
         private bool _retryWarmForUnnamed;
+        private int _frugalFlushGeneration;
 
         /// <summary>
         /// Groups per UI hop. A full pass used to hold the dispatcher for tens of seconds on
@@ -83,6 +95,21 @@ namespace Unison.Core.State
         private List<ChatItem> _sweepDirty;
         private List<string> _sweepWarm;
 
+        private readonly ISessionLogger _sessionLog;
+        private readonly IRuntimeDiagnostics _diagnostics;
+
+        // Per-sweep tallies for the one summary line in FinishSweep. Plain ints on the sweep
+        // thread — no allocation and no formatting on the per-row path.
+        private int _sweepNamed;
+        private int _sweepNumbered;
+        private int _sweepResynced;
+        private int _sweepRows;
+        private int _sweepNoParticipant;
+        private int _sweepCatalogue;
+
+        // Deferrals since the last sweep-done; written under _gate.
+        private int _sweepDeferrals;
+
         public ChatAuthorProjection(
             IChatStateStore chatState,
             IPersonStore personStore,
@@ -91,7 +118,10 @@ namespace Unison.Core.State
             IDispatcher dispatcher,
             IContactService contacts = null,
             IChatService chats = null,
-            ChatTimelineLoadPriorityGate timelinePriority = null)
+            ChatTimelineLoadPriorityGate timelinePriority = null,
+            Func<bool> preferFrugalUi = null,
+            ISessionLogger sessionLog = null,
+            IRuntimeDiagnostics diagnostics = null)
         {
             _chatState = chatState ?? throw new ArgumentNullException(nameof(chatState));
             _personStore = personStore ?? throw new ArgumentNullException(nameof(personStore));
@@ -100,7 +130,37 @@ namespace Unison.Core.State
             _dispatcher = dispatcher ?? throw new ArgumentNullException(nameof(dispatcher));
             _chats = chats;
             _timelinePriority = timelinePriority;
+            _preferFrugalUi = preferFrugalUi;
+            _sessionLog = sessionLog;
+            _diagnostics = diagnostics;
             _participants = new ParticipantResolutionContext(jids, contacts, chatState, personStore);
+
+            if (_timelinePriority != null)
+            {
+                _timelinePriority.Changed += OnTimelinePriorityChanged;
+            }
+        }
+
+        /// <summary>
+        /// One trace line to both sinks. The session log is a capped rolling buffer, so anything
+        /// emitted near launch — <see cref="Start"/> above all — can be evicted before the capture
+        /// is taken, leaving "never ran" and "ran and rolled off" indistinguishable. Diagnostics
+        /// retains the launch window, so lifecycle answers survive there.
+        /// </summary>
+        /// <remarks>One call per sweep or per lifecycle event. Never on the per-row path.</remarks>
+        private void TraceStrip(string eventName, string details = null)
+        {
+            if (_sessionLog != null)
+            {
+                _sessionLog.WriteAlways(
+                    "[AuthorStrip] " + eventName +
+                    (string.IsNullOrEmpty(details) ? string.Empty : " " + details));
+            }
+
+            if (_diagnostics != null)
+            {
+                _diagnostics.Write("author-strip", eventName, details);
+            }
         }
 
         public void Start()
@@ -120,8 +180,11 @@ namespace Unison.Core.State
             _chatState.GroupRosterChanged += OnGroupRosterChanged;
             _chatState.Chats.CollectionChanged += OnChatsChanged;
 
-            // Persisted strips that already carry a name are left alone; a full catalogue walk at
-            // Start was the 30–100s Mobile stall.
+            // Persisted strips that already carry a name are left alone unless their rendered
+            // prefix disagrees with that name; a full catalogue walk at Start was the 30–100s
+            // Mobile stall.
+            TraceStrip("start");
+
             ScheduleUnnamedSweep();
         }
 
@@ -145,15 +208,34 @@ namespace Unison.Core.State
         /// PersonChanged / GroupRosterChanged by key). Alias pairs often land after the first warm
         /// missed under the LID, so those rows' senders may hit SQLite again — never the whole set,
         /// which re-read the store for every group during a metadata burst.
+        /// Under Hold/frugal: mark warm-retry + defer the catalogue walk so open RefreshChat stays
+        /// on the pending-chat fast path.
         /// </summary>
         private void OnDisplayNamesChanged(object sender, EventArgs e)
         {
+            bool defer;
+            bool firstDeferral = false;
             lock (_gate)
             {
                 _retryWarmForUnnamed = true;
+                defer = ShouldDeferUnnamedSweep();
+                if (defer)
+                {
+                    firstDeferral = MarkUnnamedDeferred();
+                }
+                else
+                {
+                    _unnamedPassRequested = true;
+                }
             }
 
-            ScheduleUnnamedSweep();
+            if (defer)
+            {
+                ArmFrugalUnnamedFlush(firstDeferral);
+                return;
+            }
+
+            SchedulePass();
         }
 
         /// <summary>
@@ -198,7 +280,7 @@ namespace Unison.Core.State
                 }
 
                 keys.Add(normalized);
-                string canonical = _jids.GetCanonicalJid(normalized);
+                string canonical = _jids.PeekCanonicalJid(normalized);
                 if (!string.IsNullOrWhiteSpace(canonical))
                 {
                     keys.Add(canonical);
@@ -234,8 +316,115 @@ namespace Unison.Core.State
         /// <summary>Every group tip whose strip has no usable name yet.</summary>
         private void ScheduleUnnamedSweep()
         {
+            bool defer;
+            bool firstDeferral = false;
             lock (_gate)
             {
+                defer = ShouldDeferUnnamedSweep();
+                if (defer)
+                {
+                    // Do not set _unnamedPassRequested yet — a concurrent RefreshChat must stay
+                    // on the pending-chat fast path while Hold/frugal is active.
+                    firstDeferral = MarkUnnamedDeferred();
+                }
+                else
+                {
+                    _unnamedPassRequested = true;
+                }
+            }
+
+            if (defer)
+            {
+                ArmFrugalUnnamedFlush(firstDeferral);
+                return;
+            }
+
+            SchedulePass();
+        }
+
+        /// <summary>Call under <c>_gate</c>. True only when the sweep was not already deferred.</summary>
+        private bool MarkUnnamedDeferred()
+        {
+            bool first = !_unnamedDeferred;
+            _unnamedDeferred = true;
+            _sweepDeferrals++;
+            return first;
+        }
+
+        private bool ShouldDeferUnnamedSweep()
+        {
+            if (_timelinePriority != null && _timelinePriority.IsHeld)
+            {
+                return true;
+            }
+
+            return _preferFrugalUi != null && _preferFrugalUi();
+        }
+
+        private void OnTimelinePriorityChanged(object sender, EventArgs e)
+        {
+            if (_timelinePriority != null && _timelinePriority.IsHeld)
+            {
+                return;
+            }
+
+            FlushDeferredUnnamed();
+        }
+
+        private void ArmFrugalUnnamedFlush(bool traceDeferral)
+        {
+            // The silent case: a deferred sweep leaves no trace at all, and on a frugal device
+            // this is the normal path, not the exception. One line when the sweep becomes
+            // deferred: frugal defers on every name event, so a line each was a journal write
+            // per event during sync. The rest are counted into sweep-done.
+            if (traceDeferral)
+            {
+                TraceStrip(
+                    "sweep-deferred",
+                    "hold=" + (_timelinePriority != null && _timelinePriority.IsHeld) +
+                    "; frugal=" + (_preferFrugalUi != null && _preferFrugalUi()));
+            }
+
+            int generation = Interlocked.Increment(ref _frugalFlushGeneration);
+            _ = FlushFrugalUnnamedAsync(generation);
+        }
+
+        private async Task FlushFrugalUnnamedAsync(int generation)
+        {
+            try
+            {
+                await Task.Delay(FrugalUnnamedDelayMs).ConfigureAwait(false);
+                if (generation != Volatile.Read(ref _frugalFlushGeneration))
+                {
+                    return;
+                }
+
+                if (_timelinePriority != null && _timelinePriority.IsHeld)
+                {
+                    // Dead end until OnTimelinePriorityChanged fires: this does not re-arm.
+                    TraceStrip("sweep-flush-abandoned", "hold=True");
+
+                    return;
+                }
+
+                FlushDeferredUnnamed();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[ChatAuthorProjection] Frugal unnamed flush failed: " + ex.Message);
+            }
+        }
+
+        private void FlushDeferredUnnamed()
+        {
+            lock (_gate)
+            {
+                if (!_unnamedDeferred)
+                {
+                    return;
+                }
+
+                _unnamedDeferred = false;
                 _unnamedPassRequested = true;
             }
 
@@ -253,7 +442,7 @@ namespace Unison.Core.State
             lock (_gate)
             {
                 _pendingChatJids.Add(key);
-                string canonical = _jids.GetCanonicalJid(key);
+                string canonical = _jids.PeekCanonicalJid(key);
                 if (!string.IsNullOrWhiteSpace(canonical))
                 {
                     _pendingChatJids.Add(canonical);
@@ -274,7 +463,7 @@ namespace Unison.Core.State
             lock (_gate)
             {
                 _pendingParticipantJids.Add(key);
-                string canonical = _jids.GetCanonicalJid(key);
+                string canonical = _jids.PeekCanonicalJid(key);
                 if (!string.IsNullOrWhiteSpace(canonical))
                 {
                     _pendingParticipantJids.Add(canonical);
@@ -317,7 +506,7 @@ namespace Unison.Core.State
 
         /// <summary>
         /// Waits out Prepare/Complete Hold so first group open owns paint + LoadMessages.
-        /// RefreshChat from SyncActiveChat used to BeginSweep on the same turn.
+        /// Setup (BuildDirectChatNames + catalogue select) runs off the UI; only chunks marshal.
         /// </summary>
         private async Task RunPassWhenOpenAllowsAsync()
         {
@@ -333,7 +522,37 @@ namespace Unison.Core.State
                 // same watchdog hop (seen as RunPassWhenOpenAllowsAsync for 30–86s on ARM). Always
                 // leave the current frame before the next pass.
                 await Task.Yield();
-                await _dispatcher.RunAsync(BeginSweep).ConfigureAwait(false);
+
+                SweepRequest fullRequest = null;
+                await _dispatcher.RunAsync(() =>
+                {
+                    SweepRequest request = CaptureSweepRequest();
+                    if (request == null)
+                    {
+                        return;
+                    }
+
+                    // Fast path stays on UI: FindChat walks ObservableCollection; work is O(pending).
+                    if (request.UseFastPath)
+                    {
+                        BeginSweepChunks(PrepareFastPath(request));
+                        return;
+                    }
+
+                    fullRequest = request;
+                }).ConfigureAwait(false);
+
+                if (fullRequest == null)
+                {
+                    return;
+                }
+
+                // Snapshot refs captured on the UI hop; heavy index + select off the dispatcher.
+                List<ChatItem> snapshot = fullRequest.CatalogueSnapshot;
+                PreparedSweep prepared = await Task.Run(
+                        () => PrepareFullSweep(fullRequest, snapshot))
+                    .ConfigureAwait(false);
+                await _dispatcher.RunAsync(() => BeginSweepChunks(prepared)).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
@@ -341,11 +560,36 @@ namespace Unison.Core.State
                 lock (_gate)
                 {
                     _sweepScheduled = false;
+                    _sweepRunning = false;
                 }
             }
         }
 
-        private void BeginSweep()
+        private sealed class SweepRequest
+        {
+            public bool UnnamedPass;
+            public bool RetryWarm;
+            public bool UseFastPath;
+            public HashSet<string> PendingChats;
+            public HashSet<string> PendingParticipants;
+            public List<ChatItem> CatalogueSnapshot;
+            public string SelfLabel;
+        }
+
+        private sealed class PreparedSweep
+        {
+            public List<ChatItem> Work;
+            public IReadOnlyDictionary<string, string> DirectNames;
+            public string SelfLabel;
+            public int Catalogue;
+            public int NoParticipant;
+            public string Path;
+        }
+
+        /// <summary>
+        /// UI hop: claim the pass, copy pending sets, and either mark fast-path or snapshot chats.
+        /// </summary>
+        private SweepRequest CaptureSweepRequest()
         {
             bool unnamedPass;
             bool retryWarm;
@@ -368,64 +612,168 @@ namespace Unison.Core.State
                 _pendingParticipantJids.Clear();
             }
 
-            _sweepSelfLabel = _strings != null
+            string selfLabel = _strings != null
                 ? _strings.Get("Chat_SelfFallbackName", "You")
                 : "You";
 
-            // Same 1:1 map the open-chat bubbles build once — without it every group tip walked
-            // the whole chat list looking for a DM name (Mobile: tens of seconds per pass).
-            _sweepDirectNames = ChatAuthorStripMaps.BuildDirectChatNames(_chatState.Chats, _jids);
+            bool useFastPath = ChatAuthorSweepSelection.CanUsePendingChatFastPath(
+                unnamedPass,
+                pendingChats.Count,
+                pendingParticipants.Count);
 
-            _sweepWork = new List<ChatItem>();
-            foreach (ChatItem chat in _chatState.Chats)
+            List<ChatItem> snapshot = null;
+            if (!useFastPath)
             {
-                if (chat == null || !chat.IsGroup || chat.LastMessageIsFromMe)
-                {
-                    continue;
-                }
-
-                // Join/leave/rename already name the actor in the body; a leftover "X: " chip
-                // must be cleared even when the tip has no participant (subject change).
-                bool clearSystemAuthor = unnamedPass &&
-                    (chat.LastMessageKind == ChatPreviewKind.GroupJoin ||
-                     chat.LastMessageKind == ChatPreviewKind.CallEvent) &&
-                    !string.IsNullOrEmpty(chat.LastMessageAuthor);
-
-                if (string.IsNullOrWhiteSpace(chat.LastMessageParticipantJid))
-                {
-                    if (clearSystemAuthor)
-                    {
-                        _sweepWork.Add(chat);
-                    }
-
-                    continue;
-                }
-
-                bool unnamed = unnamedPass && !IsUsableParticipantLabel(
-                    chat.LastMessageSenderName,
-                    chat.LastMessageParticipantJid);
-                if (!unnamed &&
-                    !clearSystemAuthor &&
-                    !IsPendingChat(chat, pendingChats) &&
-                    !IsPendingParticipant(chat.LastMessageParticipantJid, pendingParticipants))
-                {
-                    continue;
-                }
-
-                if (unnamed && retryWarm)
-                {
-                    lock (_gate)
-                    {
-                        _warmAttempted.Remove(chat.LastMessageParticipantJid);
-                    }
-                }
-
-                _sweepWork.Add(chat);
+                snapshot = new List<ChatItem>(_chatState.Chats);
             }
 
+            return new SweepRequest
+            {
+                UnnamedPass = unnamedPass,
+                RetryWarm = retryWarm,
+                UseFastPath = useFastPath,
+                PendingChats = pendingChats,
+                PendingParticipants = pendingParticipants,
+                CatalogueSnapshot = snapshot,
+                SelfLabel = selfLabel
+            };
+        }
+
+        private PreparedSweep PrepareFastPath(SweepRequest request)
+        {
+            List<ChatItem> work = ChatAuthorSweepSelection.CollectPendingChats(
+                request.PendingChats,
+                _chatState.FindChat,
+                _jids);
+            IReadOnlyDictionary<string, string> directNames =
+                ChatAuthorSweepSelection.BuildDirectNamesForWork(work, _chatState.FindChat, _jids);
+
+            return new PreparedSweep
+            {
+                Work = work,
+                DirectNames = directNames,
+                SelfLabel = request.SelfLabel,
+
+                // Catalogue / NoParticipant are full-sweep figures; the fast path never computes
+                // them, so Path is what tells a reader that a zero here means "not measured".
+                Path = "fast"
+            };
+        }
+
+        private PreparedSweep PrepareFullSweep(SweepRequest request, List<ChatItem> catalogue)
+        {
+            // Same 1:1 map the open-chat bubbles build once — without it every group tip walked
+            // the whole chat list looking for a DM name (Mobile: tens of seconds per pass).
+            Dictionary<string, string> directNames =
+                ChatAuthorStripMaps.BuildDirectChatNames(catalogue, _jids);
+
+            var work = new List<ChatItem>();
+            int noParticipant = 0;
+            if (catalogue != null)
+            {
+                for (int i = 0; i < catalogue.Count; i++)
+                {
+                    ChatItem chat = catalogue[i];
+                    if (chat == null || !chat.IsGroup || chat.LastMessageIsFromMe)
+                    {
+                        continue;
+                    }
+
+                    // Join/leave/rename already name the actor in the body; a leftover "X: " chip
+                    // must be cleared even when the tip has no participant (subject change).
+                    bool clearSystemAuthor = request.UnnamedPass &&
+                        (chat.LastMessageKind == ChatPreviewKind.GroupJoin ||
+                         chat.LastMessageKind == ChatPreviewKind.CallEvent) &&
+                        !string.IsNullOrEmpty(chat.LastMessageAuthor);
+
+                    if (string.IsNullOrWhiteSpace(chat.LastMessageParticipantJid))
+                    {
+                        // A group row with no participant on the tip can never be swept, so its
+                        // author prefix is whatever the tip slice composed. Counted because it
+                        // looks identical to "swept and clean" from the outside.
+                        noParticipant++;
+                        if (clearSystemAuthor)
+                        {
+                            work.Add(chat);
+                        }
+
+                        continue;
+                    }
+
+                    bool unnamed = request.UnnamedPass && !IsUsableParticipantLabel(
+                        chat.LastMessageSenderName,
+                        chat.LastMessageParticipantJid);
+
+                    // A row can hold a real name and still render digits: the prefix and the name
+                    // are stored in separate columns and carried forward independently. Such a
+                    // row is not "unnamed", so without this it is skipped by every pass and the
+                    // digits survive forever.
+                    bool desynced = request.UnnamedPass &&
+                        !unnamed &&
+                        ChatAuthorStripDecision.AuthorPrefixDisagrees(
+                            chat.LastMessageAuthor,
+                            chat.LastMessageSenderName);
+
+                    if (!unnamed &&
+                        !desynced &&
+                        !clearSystemAuthor &&
+                        !IsPendingChat(chat, request.PendingChats) &&
+                        !IsPendingParticipant(
+                            chat.LastMessageParticipantJid,
+                            request.PendingParticipants))
+                    {
+                        continue;
+                    }
+
+                    if (unnamed && request.RetryWarm)
+                    {
+                        lock (_gate)
+                        {
+                            _warmAttempted.Remove(chat.LastMessageParticipantJid);
+                        }
+                    }
+
+                    work.Add(chat);
+                }
+            }
+
+            return new PreparedSweep
+            {
+                Work = work,
+                DirectNames = directNames,
+                SelfLabel = request.SelfLabel,
+                Catalogue = catalogue == null ? 0 : catalogue.Count,
+                NoParticipant = noParticipant,
+                Path = "full"
+            };
+        }
+
+        private void BeginSweepChunks(PreparedSweep prepared)
+        {
+            if (prepared == null)
+            {
+                FinishSweep();
+                return;
+            }
+
+            _sweepSelfLabel = prepared.SelfLabel;
+            _sweepDirectNames = prepared.DirectNames;
+            _sweepWork = prepared.Work ?? new List<ChatItem>();
             _sweepIndex = 0;
             _sweepDirty = null;
             _sweepWarm = null;
+            _sweepCatalogue = prepared.Catalogue;
+            _sweepNoParticipant = prepared.NoParticipant;
+            // Unconditional: the absence of a conditional line cannot distinguish "the sweep
+            // never ran" from "it ran and had nothing to report", and that is the one thing a
+            // device log has to be able to say. One line per sweep, never per row.
+            TraceStrip(
+                "sweep-start",
+                "path=" + (prepared.Path ?? "?") +
+                "; work=" + _sweepWork.Count +
+                "; catalogue=" + _sweepCatalogue +
+                "; noParticipant=" + _sweepNoParticipant);
+
             ProcessSweepChunk();
         }
 
@@ -442,7 +790,7 @@ namespace Unison.Core.State
                 return true;
             }
 
-            string canonical = _jids.GetCanonicalJid(chat.JID);
+            string canonical = _jids.PeekCanonicalJid(chat.JID);
             return !string.IsNullOrWhiteSpace(canonical) && pendingChats.Contains(canonical);
         }
 
@@ -461,7 +809,7 @@ namespace Unison.Core.State
                 return true;
             }
 
-            string canonical = _jids.GetCanonicalJid(participantJid);
+            string canonical = _jids.PeekCanonicalJid(participantJid);
             if (!string.IsNullOrWhiteSpace(canonical) && pendingParticipants.Contains(canonical))
             {
                 return true;
@@ -519,12 +867,39 @@ namespace Unison.Core.State
         {
             List<ChatItem> dirtyStrips = _sweepDirty;
             List<string> needsStoreLookup = _sweepWarm;
+            int named = _sweepNamed;
+            int numbered = _sweepNumbered;
+            int resynced = _sweepResynced;
+            int rowsDecided = _sweepRows;
+            _sweepNamed = 0;
+            _sweepNumbered = 0;
+            _sweepResynced = 0;
+            _sweepRows = 0;
+            int deferrals;
+            lock (_gate)
+            {
+                deferrals = _sweepDeferrals;
+                _sweepDeferrals = 0;
+            }
+
             _sweepWork = null;
             _sweepDirectNames = null;
             _sweepSelfLabel = null;
             _sweepDirty = null;
             _sweepWarm = null;
             _sweepIndex = 0;
+
+            // One line per sweep, unconditional — see BeginSweepChunks. "rows" is how many the
+            // decision actually reached; named + number + resync < rows means the rest were
+            // genuinely left alone.
+            TraceStrip(
+                "sweep-done",
+                "rows=" + rowsDecided +
+                "; named=" + named +
+                "; number=" + numbered +
+                "; resync=" + resynced +
+                "; warm=" + (needsStoreLookup == null ? 0 : needsStoreLookup.Count) +
+                "; deferrals=" + deferrals);
 
             if (dirtyStrips != null && _chats != null)
             {
@@ -629,12 +1004,17 @@ namespace Unison.Core.State
                 (_sweepWarm ?? (_sweepWarm = new List<string>())).Add(participant);
             }
 
-            string canonical = _jids.GetCanonicalJid(participant);
+            string canonical = _jids.PeekCanonicalJid(participant);
             string number = ParticipantStripLabel.ForParticipant(participant, canonical);
 
+            bool currentIsRealName = IsUsableParticipantLabel(
+                chat.LastMessageSenderName,
+                participant);
+
+            _sweepRows++;
             switch (ChatAuthorStripDecision.Decide(
                 chat.LastMessageSenderName,
-                IsUsableParticipantLabel(chat.LastMessageSenderName, participant),
+                currentIsRealName,
                 resolved,
                 resolved != null,
                 !string.IsNullOrEmpty(number)))
@@ -647,6 +1027,31 @@ namespace Unison.Core.State
                     // The number goes in the strip but not in the sender-name slot: it is a
                     // stand-in, and leaving that slot empty keeps the next sweep looking.
                     ApplyStrip(chat, participant, canonical, null, selfLabel);
+                    break;
+
+                default:
+                    // Keep means "the name slot is already right". It says nothing about the
+                    // prefix, and the two are written and persisted separately — a tip with no
+                    // push name leaves digits in the prefix while the store carries the known
+                    // name forward beside it. Rewrite the prefix, otherwise this pass declines
+                    // to fix the only thing on screen.
+                    //
+                    // Rewrite it from "resolved" and never from LastMessageSenderName. That
+                    // stored name is only carried forward, not re-attributed: when the tip moves
+                    // to a participant with no push name, the store keeps the previous sender's
+                    // name beside the new sender's digits, so the two fields can describe two
+                    // different people. "resolved" was looked up from this participant, so it is
+                    // the only value here that is provably theirs. With no resolution the digits
+                    // stay — unhelpful, but honest, and the next pass tries again.
+                    if (resolved != null &&
+                        ChatAuthorStripDecision.AuthorPrefixDisagrees(
+                            chat.LastMessageAuthor,
+                            resolved))
+                    {
+                        _sweepResynced++;
+                        ApplyStrip(chat, participant, canonical, resolved, selfLabel);
+                    }
+
                     break;
             }
 
@@ -751,7 +1156,7 @@ namespace Unison.Core.State
 
             string phone = ParticipantStripLabel.ForParticipant(
                 participantJid,
-                _jids?.GetCanonicalJid(participantJid));
+                _jids?.PeekCanonicalJid(participantJid));
             if (string.IsNullOrEmpty(phone))
             {
                 return false;
@@ -798,7 +1203,7 @@ namespace Unison.Core.State
             }
 
             Add(participantJid);
-            string canonical = _jids?.GetCanonicalJid(participantJid);
+            string canonical = _jids?.PeekCanonicalJid(participantJid);
             Add(canonical);
 
             string alias;
@@ -829,7 +1234,7 @@ namespace Unison.Core.State
             lock (_gate)
             {
                 _warmAttempted.Remove(jid);
-                string canonical = _jids?.GetCanonicalJid(jid);
+                string canonical = _jids?.PeekCanonicalJid(jid);
                 if (!string.IsNullOrWhiteSpace(canonical))
                 {
                     _warmAttempted.Remove(canonical);
@@ -893,7 +1298,7 @@ namespace Unison.Core.State
                 return false;
             }
 
-            string canonical = _jids?.GetCanonicalJid(jid);
+            string canonical = _jids?.PeekCanonicalJid(jid);
             if (!string.IsNullOrWhiteSpace(canonical) &&
                 !string.Equals(canonical, jid, StringComparison.OrdinalIgnoreCase) &&
                 !GroupParticipantResolver.IsUsableDisplayLabel(candidate, canonical))

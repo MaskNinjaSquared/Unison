@@ -3,10 +3,12 @@
 //
 // Body of RequestFirstSyncListReleaseAfterNames after gate decide. CAS /
 // Task.Run / name resolution stay on the host.
+//
+// List unlock is never blocked on directory names: IsCompleted publishes first,
+// then a background pass resolves placeholders in workload-sized usync lots.
 // =============================================================================
 using System;
 using System.Threading.Tasks;
-using Unison.Core.State;
 using Unison.WhatsAppClient.Abstractions;
 
 namespace Unison.WhatsAppClient.Helpers
@@ -25,7 +27,7 @@ namespace Unison.WhatsAppClient.Helpers
             }
 
             FirstSyncListReleaseAction action = FirstSyncListReleaseGates.Decide(
-                HistoryFirstSyncListHoldDecision.ShouldResolveNamesBeforeListRelease(
+                HistoryFirstSyncListHoldDecision.ShouldScheduleNamesAfterListRelease(
                     host.IsFirstSyncListHoldInProgress),
                 host.IsFirstSyncUnlockInFlight);
 
@@ -43,25 +45,23 @@ namespace Unison.WhatsAppClient.Helpers
                 return;
             }
 
-            host.MarkFirstSyncListReleaseDeferred();
-            host.PublishInitialSyncProgress(
-                true,
-                false,
-                processed,
-                Math.Max(processed, 1),
-                stage + "-names");
+            // Unlock first — VisibleChats may paint while names catch up.
+            host.PublishInitialSyncProgress(false, true, processed, total, stage);
+            host.ClearSqliteHistoryConversationsAccumulated();
+            host.ScheduleDeferredAvatarsAfterUnlock(stage);
+            host.ClearEnrichmentAwaitingHeavyHistory();
+            host.TrySchedulePostMessageEnrichment(
+                "after-first-sync-unlock:" + (stage ?? string.Empty));
             host.WriteFirstSyncNamesJournal(stage, processed);
 
             string stageCapture = stage;
-            int processedCapture = processed;
             host.FireAndForgetFirstSyncUnlock(
-                () => RunNamesThenUnlockAsync(host, stageCapture, processedCapture));
+                () => RunNamesAfterUnlockAsync(host, stageCapture));
         }
 
-        public static async Task RunNamesThenUnlockAsync(
+        public static async Task RunNamesAfterUnlockAsync(
             IFirstSyncListReleaseHost host,
-            string stage,
-            int processed)
+            string stage)
         {
             if (host == null)
             {
@@ -75,30 +75,22 @@ namespace Unison.WhatsAppClient.Helpers
             catch (Exception ex)
             {
                 host.LogFirstSyncListRelease(
-                    "First-sync names before list failed: " + ex.Message);
+                    "First-sync names after list failed: " + ex.Message);
                 host.RecordFirstSyncNamesException(ex, stage);
             }
             finally
             {
-                try
-                {
-                    host.PublishInitialSyncProgress(
-                        false,
-                        true,
-                        processed,
-                        Math.Max(processed, 1),
-                        stage);
-                    host.ClearSqliteHistoryConversationsAccumulated();
-                    host.ScheduleDeferredAvatarsAfterUnlock(stage);
-                    host.ClearEnrichmentAwaitingHeavyHistory();
-                    host.TrySchedulePostMessageEnrichment(
-                        "after-first-sync-names:" + (stage ?? string.Empty));
-                }
-                finally
-                {
-                    host.ClearFirstSyncUnlockInFlight();
-                }
+                host.ClearFirstSyncUnlockInFlight();
             }
+        }
+
+        /// <summary>Obsolete name — prefer <see cref="RunNamesAfterUnlockAsync"/>.</summary>
+        public static Task RunNamesThenUnlockAsync(
+            IFirstSyncListReleaseHost host,
+            string stage,
+            int processed)
+        {
+            return RunNamesAfterUnlockAsync(host, stage);
         }
     }
 }

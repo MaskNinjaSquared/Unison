@@ -5,7 +5,8 @@
     xmlns:views="using:Unison.Uwp.UI.Views"
     xmlns:templates="using:Unison.Uwp.UI.Templates"
     xmlns:models="using:Unison.Core.Models"
-    xmlns:controls="using:Unison.Uwp.UI.Controls">
+    xmlns:controls="using:Unison.Uwp.UI.Controls"
+    xmlns:helpers="using:Unison.Uwp.UI.Helpers">
 
     <DataTemplate x:Key="ChatItemTemplate" x:DataType="models:ChatItem">
         <!-- ContextFlyout on the row Grid (feature/2.1): platform opens once; Target.DataContext
@@ -173,7 +174,8 @@
                                         VerticalAlignment="Center"
                                         x:Load="{x:Bind templates:ChatItemTemplates.ShowsStandardListAvatar(IsCommunityAnnounce), Mode=OneWay}"
                                         AvatarUrl="{x:Bind GetAvatarUrl(AvatarUrl, AvatarHighUrl), Mode=OneWay}"
-                                        IsGroup="{x:Bind templates:ChatItemTemplates.ShowsGroupAvatar(IsGroup, Kind), Mode=OneWay}"/>
+                                        IsGroup="{x:Bind templates:ChatItemTemplates.ShowsGroupAvatar(IsGroup, Kind), Mode=OneWay}"
+                                        IsChannel="{x:Bind templates:ChatItemTemplates.ShowsChannelAvatar(Kind), Mode=OneWay}"/>
             <controls:CommunityAnnouncementsAvatarControl x:Name="RowAnnounceAvatar"
                                                           Width="48" Height="48"
                                                           Size="48"
@@ -189,7 +191,7 @@
                     <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
                 <TextBlock Grid.Row="0"
-                           Text="{x:Bind templates:ChatItemTemplates.GetChatDisplayName(Name, Kind, IsCommunityAnnounce), Mode=OneWay}"
+                           helpers:EmojiTextBlock.Text="{x:Bind templates:ChatItemTemplates.GetChatDisplayName(Name, Kind, IsCommunityAnnounce), Mode=OneWay}"
                            FontSize="18"
                            FontFamily="{StaticResource MainFontSemibold}"
                            FontWeight="SemiBold"

@@ -42,7 +42,8 @@ namespace Unison.WhatsAppClient.Helpers
                     firstSyncInProgress,
                     handOffCatchUp,
                     catchUpBanner,
-                    enrichmentAwaiting);
+                    enrichmentAwaiting,
+                    processed);
 
                 if (deferListRelease)
                 {
@@ -54,9 +55,10 @@ namespace Unison.WhatsAppClient.Helpers
                         "sqlite-quiet-catch-up");
                     host.FirstSyncListReleaseDeferred = true;
                 }
-                else if (HistoryFirstSyncListHoldDecision.ShouldResolveNamesBeforeListRelease(
+                else if (HistoryFirstSyncListHoldDecision.ShouldScheduleNamesAfterListRelease(
                     firstSyncInProgress))
                 {
+                    // Unlocks immediately; names run after IsCompleted (batched usync).
                     host.RequestFirstSyncListReleaseAfterNames(
                         "sqlite-finalized",
                         processed,
@@ -122,8 +124,10 @@ namespace Unison.WhatsAppClient.Helpers
                             delayMs);
                     }
                 }
-                else
+                else if (!host.IsHistoryCatchUpActive)
                 {
+                    // Early list unlock may leave catch-up running without a quiet hand-off —
+                    // do not clear the request or drop the banner while pages are still owed.
                     host.ClearFullHistoryOnDemandRequestState("sqlite-finalized");
                     host.EndHistoryCatchUpBanner("sqlite-finalized");
                 }

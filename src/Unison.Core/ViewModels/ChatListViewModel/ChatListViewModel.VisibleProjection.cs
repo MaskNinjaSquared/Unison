@@ -35,6 +35,13 @@ namespace Unison.Core.ViewModels
                 return;
             }
 
+            if (!OwnsVisiblePaint())
+            {
+                _refreshCts?.Cancel();
+                _refreshContinueCts?.Cancel();
+                return;
+            }
+
             // Chat open owns the dispatcher: do not start (or continue) list Moves until Release.
             if (_timelinePriority != null && _timelinePriority.IsHeld)
             {
@@ -56,13 +63,14 @@ namespace Unison.Core.ViewModels
                 return;
             }
 
-            // Frugal Mobile: hold reshuffles while background names/avatars/groups enrich so
-            // Move/Insert thrash does not stack on top of PropertyChanged storms. Search and
-            // explicit list-filter changes still refresh so the UI stays responsive.
+            // Frugal Active only: Channels/Archived stay immediate (lean catalog filter).
             if (!allowDuringEnrichment &&
-                PreferFrugalUi &&
                 string.IsNullOrWhiteSpace(SearchQuery) &&
-                _chatService.MatchesListEnrichmentPhase(_lastSyncPhaseToken))
+                ChatListEnrichmentRefresh.ShouldDeferVisibleRefresh(
+                    PreferFrugalUi,
+                    _chatService != null &&
+                    _chatService.MatchesListEnrichmentPhase(_lastSyncPhaseToken),
+                    _scope))
             {
                 _refreshDeferredForEnrichment = true;
                 _visibleOrderDirty = true;
@@ -75,6 +83,19 @@ namespace Unison.Core.ViewModels
                 _refreshCts != null &&
                 !_refreshCts.IsCancellationRequested)
             {
+                return;
+            }
+
+            // Frugal: a budgeted Continue is draining Moves with a cached projection. Alias /
+            // name storms used to cancel it here, force BuildVisibleRefreshSource again, and
+            // stall (~3s lastFinished=ScheduleRefreshVisibleChatsContinue). Mark dirty; the
+            // Incomplete=false exit already schedules one coalesced rebuild.
+            if (PreferFrugalUi &&
+                _pendingVisibleRefreshSource != null &&
+                _refreshContinueCts != null &&
+                !_refreshContinueCts.IsCancellationRequested)
+            {
+                _visibleOrderDirty = true;
                 return;
             }
 
@@ -107,6 +128,12 @@ namespace Unison.Core.ViewModels
         {
             if (_batchRendering || IsInSafeMode || IsListHeldForSync)
             {
+                return;
+            }
+
+            if (!OwnsVisiblePaint())
+            {
+                _refreshContinueCts?.Cancel();
                 return;
             }
 
@@ -207,6 +234,12 @@ namespace Unison.Core.ViewModels
 
             RestoreSelection();
 
+            // Deferred empty reattach showed ChatList_Loading; drop it as soon as rows land.
+            if (VisibleChats.Count > 0)
+            {
+                IsLoadingOverlayVisible = false;
+            }
+
             TraceListLifecycle(
                 "refresh-visible-exit",
                 BuildListSnapshot(
@@ -254,7 +287,7 @@ namespace Unison.Core.ViewModels
             ApplyLocalChatFieldsToScopedChats();
 
             string query = SearchQuery?.Trim() ?? string.Empty;
-            var source = _chatState.Chats.Where(MatchesScope).ToList();
+            List<ChatItem> source = ScopedCatalogueRows();
 
             if (!string.IsNullOrEmpty(query))
             {
@@ -267,21 +300,27 @@ namespace Unison.Core.ViewModels
             }
 
             source = _chatService.DeduplicateChatsByCanonicalJid(source, GetCanonical);
-            source = _chatService.ProjectCommunityList(
-                source,
-                ResolveCatalogByJid,
-                GetOrCreateSyntheticCommunity,
-                GetCanonical);
-            EnrichCommunityHubRows(source);
 
-            if (_activeFilter != ChatListFilter.All)
+            // Channels/Archived: flat membership — skip community hubs (aefa3dfb: ArmCatalog
+            // over the full store during enrichment held Attach for minutes for source=2).
+            if (ChatListCatalogAccess.NeedsCommunityProjection(_scope))
             {
-                source = source.Where(MatchesActiveFilter).ToList();
+                source = _chatService.ProjectCommunityList(
+                    source,
+                    ResolveCatalogByJid,
+                    GetOrCreateSyntheticCommunity,
+                    GetCanonical);
+                EnrichCommunityHubRows(source);
+
+                if (_activeFilter != ChatListFilter.All)
+                {
+                    source = source.Where(MatchesActiveFilter).ToList();
+                }
             }
 
             source = _chatService.SortChatsForDisplay(source);
 
-            if (_activeCommunity != null)
+            if (_activeCommunity != null && ChatListCatalogAccess.NeedsCommunityProjection(_scope))
             {
                 ChatItem stillOpen = FindProjectedCommunity(_activeCommunity.JID, source);
                 if (stillOpen == null)
@@ -302,16 +341,47 @@ namespace Unison.Core.ViewModels
             return source;
         }
 
+        /// <summary>Catalogue rows for the current scope — shared context when registered.</summary>
+        private List<ChatItem> ScopedCatalogueRows()
+        {
+            if (_catalog != null)
+            {
+                IReadOnlyList<ChatItem> scoped = _catalog.ForScope(_scope);
+                return scoped as List<ChatItem> ?? new List<ChatItem>(scoped);
+            }
+
+            var fallback = new List<ChatItem>();
+            for (int i = 0; i < _chatState.Chats.Count; i++)
+            {
+                ChatItem chat = _chatState.Chats[i];
+                if (MatchesScope(chat))
+                {
+                    fallback.Add(chat);
+                }
+            }
+
+            return fallback;
+        }
+
         /// <summary>
         /// Continues a budgeted refresh on the next dispatcher turn so one sync chunk cannot
         /// hold the UI thread for hundreds of Moves.
         /// </summary>
         private void ScheduleRefreshVisibleChatsContinue(bool coldPopulate = false)
         {
+            if (!OwnsVisiblePaint())
+            {
+                _refreshContinueCts?.Cancel();
+                return;
+            }
+
+            // Chat-open / hidden: keep only the cold first viewport; do not keep slicing
+            // budget=10 → 249 while the conversation owns the dispatcher.
             if (_timelinePriority != null && _timelinePriority.IsHeld)
             {
                 _refreshDeferredForTimelinePriority = true;
                 _visibleOrderDirty = true;
+                _refreshContinueCts?.Cancel();
                 return;
             }
 
@@ -319,6 +389,7 @@ namespace Unison.Core.ViewModels
             {
                 _refreshDeferredForWindowHidden = true;
                 _visibleOrderDirty = true;
+                _refreshContinueCts?.Cancel();
                 return;
             }
 
@@ -424,27 +495,8 @@ namespace Unison.Core.ViewModels
             }
         }
 
-        private bool MatchesScope(ChatItem chat)
-        {
-            if (chat == null)
-            {
-                return false;
-            }
-
-            switch (_scope)
-            {
-                case ChatListScope.Archived:
-                    return chat.Status == ChatStatus.Archived;
-
-                case ChatListScope.Channels:
-                    return chat.Status == ChatStatus.Active && chat.IsChannel;
-
-                case ChatListScope.Active:
-                default:
-                    // Channels have their own tab — keep them out of the main list.
-                    return chat.Status == ChatStatus.Active && !chat.IsChannel;
-            }
-        }
+        private bool MatchesScope(ChatItem chat) =>
+            ChatListCatalogAccess.MatchesScope(chat, _scope);
 
         /// <summary>
         /// True when this JID (or its canonical form) is in the device address-book overlay â€”
@@ -468,7 +520,7 @@ namespace Unison.Core.ViewModels
                 return true;
             }
 
-            string canonical = _jids.GetCanonicalJid(chat.JID);
+            string canonical = _jids.PeekCanonicalJid(chat.JID);
             return !string.IsNullOrWhiteSpace(canonical) && names.ContainsKey(canonical);
         }
 
@@ -590,7 +642,17 @@ namespace Unison.Core.ViewModels
                 return null;
             }
 
+            if (_catalog != null)
+            {
+                return _catalog.ResolveByCanonical(jid);
+            }
+
             string key = GetCanonical(jid);
+            if (string.IsNullOrWhiteSpace(key))
+            {
+                return null;
+            }
+
             foreach (ChatItem chat in _chatState.Chats)
             {
                 if (chat == null || string.IsNullOrWhiteSpace(chat.JID))
@@ -828,7 +890,13 @@ namespace Unison.Core.ViewModels
                 return jid;
             }
 
-            string canonical = _jids.GetCanonicalJid(jid);
+            // Peek via shared catalog when registered; never promote mid-build.
+            if (_catalog != null)
+            {
+                return _catalog.PeekCanonical(jid);
+            }
+
+            string canonical = _jids.PeekCanonicalJid(jid);
             return string.IsNullOrWhiteSpace(canonical) ? jid : canonical;
         }
 
@@ -851,6 +919,10 @@ namespace Unison.Core.ViewModels
 
         private bool IsWindowHidden =>
             _appVisibility != null && !_appVisibility.IsWindowVisible;
+
+        private bool OwnsVisiblePaint() =>
+            _attached &&
+            ChatListVisiblePaintOwner.IsCurrent(this, _visiblePaintGeneration);
 
         private void TimelinePriority_Changed(object sender, EventArgs e)
         {

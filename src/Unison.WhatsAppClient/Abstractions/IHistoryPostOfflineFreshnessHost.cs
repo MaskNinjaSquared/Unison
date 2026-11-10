@@ -17,6 +17,11 @@ namespace Unison.WhatsAppClient.Abstractions
 
         bool IsHistoryCatchUpActive { get; }
 
+        /// <summary>
+        /// PairingBootstrap owns history — do not solicit reconnect FULL_HISTORY.
+        /// </summary>
+        bool IsPairingBootstrapActive { get; }
+
         int CatchUpStagnantCyclesBeforeStop { get; }
 
         void NoteCatchUpProgress(string reason);

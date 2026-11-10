@@ -158,10 +158,42 @@ namespace Unison.Uwp.Client
             System.Threading.CancellationToken cancellationToken =
                 default(System.Threading.CancellationToken));
 
+        /// <summary>Baileys <c>groupCreate</c>. Returns the new group's JID.</summary>
+        Task<string> CreateGroupAsync(
+            string subject,
+            System.Collections.Generic.IReadOnlyList<string> participantJids);
+
+        /// <summary>Baileys <c>communityCreate</c>. Returns the parent's JID.</summary>
+        Task<string> CreateCommunityAsync(string subject, string description);
+
+        /// <summary>Baileys <c>groupToggleEphemeral</c>; 0 turns it off.</summary>
+        Task UpdateGroupEphemeralAsync(string groupJid, int seconds);
+
+        /// <summary>Baileys <c>updateProfilePicture</c> with a group as the target. Square JPEG.</summary>
+        Task UpdateGroupPictureAsync(string groupJid, byte[] jpeg);
+
+        /// <summary>True = only admins may edit group info (locked).</summary>
+        Task UpdateGroupLockedAsync(string groupJid, bool adminsOnly);
+
+        /// <summary>True = only admins may send messages (announcement).</summary>
+        Task UpdateGroupAnnouncementAsync(string groupJid, bool adminsOnly);
+
+        /// <summary>True = only admins may add members.</summary>
+        Task UpdateGroupMemberAddModeAsync(string groupJid, bool adminsOnly);
+
+        /// <summary>True = join-by-link requires admin approval.</summary>
+        Task UpdateGroupJoinApprovalAsync(string groupJid, bool required);
+
         /// <summary>Baileys <c>updateBlockStatus</c> — block or unblock a direct JID.</summary>
         Task UpdateBlockStatusAsync(string jid, bool block);
 
-        Task<ProfilePictureResult> GetProfilePictureUrlResultAsync(string jid, string type = "preview");
+        /// <param name="revalidate">
+        /// Skip the cached answer, ask the server and keep the fresh one (chat open, broken image).
+        /// </param>
+        Task<ProfilePictureResult> GetProfilePictureUrlResultAsync(
+            string jid,
+            string type = "preview",
+            bool revalidate = false);
 
         /// <summary>
         /// Channel (@newsletter) metadata via WMex — name + picture id/path.
@@ -169,6 +201,17 @@ namespace Unison.Uwp.Client
         /// </summary>
         Task<Unison.Socket.UseCases.Newsletter.NewsletterMetadataResult> GetNewsletterMetadataAsync(
             string jid);
+
+        /// <summary>
+        /// Baileys <c>newsletterCreate</c>. Returns the new channel (id + viewer role);
+        /// throws when the server refuses it.
+        /// </summary>
+        Task<Unison.Socket.UseCases.Newsletter.NewsletterMetadataResult> CreateNewsletterAsync(
+            string name,
+            string description);
+
+        /// <summary>Baileys <c>newsletterUpdatePicture</c>. Square JPEG; throws when refused.</summary>
+        Task UpdateNewsletterPictureAsync(string newsletterJid, byte[] jpeg);
 
         Task<byte[]> DownloadAndDecryptMediaAsync(
             string url,
@@ -178,6 +221,12 @@ namespace Unison.Uwp.Client
             byte[] expectedFileEncSha256 = null);
 
         Task PresenceSubscribeAsync(string toJid);
+
+        /// <summary>
+        /// Account-wide online state. The server only forwards contacts' presence to a device
+        /// that is available.
+        /// </summary>
+        Task SendAvailabilityAsync(bool available);
 
         /// <summary>Pins or unpins a conversation for the whole account.</summary>
         Task SetChatPinnedAsync(string jid, bool pinned);
@@ -216,6 +265,17 @@ namespace Unison.Uwp.Client
             OutgoingQuote quote = null,
             bool markAsForwarded = false,
             uint forwardingScore = 0);
+
+        /// <summary>
+        /// Publishes a text Status to status@broadcast for <paramref name="statusJidList"/>.
+        /// Returns the message id.
+        /// </summary>
+        Task<string> SendTextStatusAsync(
+            string text,
+            uint backgroundArgb,
+            uint textArgb,
+            int font,
+            IList<string> statusJidList);
 
         Task<string> SendImageMessageAsync(
             string jid,

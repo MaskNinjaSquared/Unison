@@ -54,8 +54,19 @@ namespace Unison.WhatsAppClient.Helpers
         /// <inheritdoc />
         public void RegisterAliasMappings(
             IEnumerable<KeyValuePair<string, string>> lidToPn,
-            string source) =>
+            string source)
+        {
             RegisterAliasMappingsDispatch.Run(this, lidToPn, source);
+            try
+            {
+                _contacts()?.FlushDeferredAliasFollowUp(source);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine(
+                    "[JidAliasPersistence] FlushDeferredAliasFollowUp failed: " + ex.Message);
+            }
+        }
 
         /// <inheritdoc />
         public Task PersistAliasesAsync(string reason) =>
@@ -172,17 +183,57 @@ namespace Unison.WhatsAppClient.Helpers
 
         async Task<IReadOnlyList<string>> IPersistJidAliasesHost.CollectDistinctChatJidsAsync()
         {
-            List<string> chatJids = null;
-            await _ui.RunAsync(() =>
+            // Strings only on the UI hop — ChatItem copies + Normal priority competed with tip
+            // paint (ui-stall lastFinished=CollectDistinctChatJidsAsync ~3s on Mobile).
+            List<string> rawJids = null;
+            Action collect = () =>
             {
-                chatJids = _chats.Chats
-                    .Where(c => c != null && !string.IsNullOrWhiteSpace(c.JID))
-                    .Select(c => JidHelper.Normalize(c.JID))
-                    .Where(j => !string.IsNullOrWhiteSpace(j))
-                    .Distinct(StringComparer.OrdinalIgnoreCase)
-                    .ToList();
+                rawJids = new List<string>(_chats.Chats.Count);
+                foreach (ChatItem chat in _chats.Chats)
+                {
+                    if (chat == null || string.IsNullOrWhiteSpace(chat.JID))
+                    {
+                        continue;
+                    }
+
+                    rawJids.Add(chat.JID);
+                }
+            };
+
+            ILowPriorityDispatcher lowUi = _ui as ILowPriorityDispatcher;
+            if (lowUi != null)
+            {
+                await lowUi.RunLowAsync(collect).ConfigureAwait(false);
+            }
+            else
+            {
+                await _ui.RunAsync(collect).ConfigureAwait(false);
+            }
+
+            if (rawJids == null || rawJids.Count == 0)
+            {
+                return Array.Empty<string>();
+            }
+
+            // Normalize/Distinct off the UI hop — SaveJidAliases may wait on the store write
+            // lock for seconds while history is flushing; that must not ride the dispatcher.
+            return await Task.Run(() =>
+            {
+                var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                var list = new List<string>(rawJids.Count);
+                for (int i = 0; i < rawJids.Count; i++)
+                {
+                    string jid = JidHelper.Normalize(rawJids[i]);
+                    if (string.IsNullOrWhiteSpace(jid) || !set.Add(jid))
+                    {
+                        continue;
+                    }
+
+                    list.Add(jid);
+                }
+
+                return (IReadOnlyList<string>)list;
             }).ConfigureAwait(false);
-            return chatJids ?? (IReadOnlyList<string>)Array.Empty<string>();
         }
 
         IReadOnlyDictionary<string, string> IPersistJidAliasesHost.SnapshotJidAliases() =>

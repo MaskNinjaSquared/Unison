@@ -13,6 +13,7 @@
 using System;
 using System.Collections.Generic;
 using System.Threading;
+using Unison.Core.Contracts;
 using Unison.Core.Helpers;
 using Unison.Core.Models;
 
@@ -20,19 +21,39 @@ namespace Unison.Core.State
 {
     public sealed class ChatRowIndex
     {
+        /// <summary>Rows between two build progress marks.</summary>
+        private const int BuildProgressEvery = 25;
+
         private readonly Func<IEnumerable<ChatItem>> _rows;
         private readonly Func<string, string> _canonicalOf;
+        private readonly IUiWorkStage _stage;
+        private readonly object _buildGate = new object();
         private Dictionary<string, List<ChatItem>> _byCanonical;
         private int _version;
 
-        public ChatRowIndex(Func<IEnumerable<ChatItem>> rows, Func<string, string> canonicalOf)
+        /// <param name="stage">
+        /// Optional breadcrumb: a build inside a tracked UI hop marks <c>find-build:i/n</c> so a
+        /// stall report shows whether the hop is canonicalising rows (26b3431b find:* stall).
+        /// </param>
+        public ChatRowIndex(
+            Func<IEnumerable<ChatItem>> rows,
+            Func<string, string> canonicalOf,
+            IUiWorkStage stage = null)
         {
             _rows = rows ?? throw new ArgumentNullException(nameof(rows));
             _canonicalOf = canonicalOf ?? throw new ArgumentNullException(nameof(canonicalOf));
+            _stage = stage;
         }
+
+        /// <summary>Full builds since start; a climbing count under load means invalidation churn.</summary>
+        public int BuildCount => Volatile.Read(ref _buildCount);
+
+        private int _buildCount;
 
         public void Invalidate()
         {
+            // Lock-free: Build may be walking _rows() under _buildGate; taking the same lock
+            // here would deadlock when a row enumerator invalidates mid-build.
             Interlocked.Increment(ref _version);
             _byCanonical = null;
         }
@@ -48,7 +69,7 @@ namespace Unison.Core.State
                 return new List<ChatItem>();
             }
 
-            Dictionary<string, List<ChatItem>> index = _byCanonical ?? Build();
+            Dictionary<string, List<ChatItem>> index = GetOrBuild();
 
             return index.TryGetValue(canonical, out List<ChatItem> rows)
                 ? new List<ChatItem>(rows)
@@ -70,40 +91,67 @@ namespace Unison.Core.State
             return Find(canonical);
         }
 
-        private Dictionary<string, List<ChatItem>> Build()
+        /// <summary>
+        /// One build shared by every Find until the next <see cref="Invalidate"/>. Dropping a
+        /// raced build used to leave the cache empty so the next Find rebuilt again — alias
+        /// follow-up × N targets rebuilt the map on every call (~22s on Mobile).
+        /// </summary>
+        private Dictionary<string, List<ChatItem>> GetOrBuild()
         {
-            int builtFrom = Volatile.Read(ref _version);
-            var index = new Dictionary<string, List<ChatItem>>(StringComparer.OrdinalIgnoreCase);
-            foreach (ChatItem chat in _rows())
+            Dictionary<string, List<ChatItem>> cached = _byCanonical;
+            if (cached != null)
             {
-                if (chat == null)
-                {
-                    continue;
-                }
-
-                string key = _canonicalOf(chat.JID);
-                if (string.IsNullOrWhiteSpace(key))
-                {
-                    continue;
-                }
-
-                if (!index.TryGetValue(key, out List<ChatItem> bucket))
-                {
-                    bucket = new List<ChatItem>();
-                    index[key] = bucket;
-                }
-
-                bucket.Add(chat);
+                return cached;
             }
 
-            // Kept only if nothing changed while it was being built. A build that raced an
-            // invalidation describes a list that no longer exists, and it would stay installed.
-            if (Volatile.Read(ref _version) == builtFrom)
+            lock (_buildGate)
             {
+                if (_byCanonical != null)
+                {
+                    return _byCanonical;
+                }
+
+                var index = new Dictionary<string, List<ChatItem>>(StringComparer.OrdinalIgnoreCase);
+                IEnumerable<ChatItem> rows = _rows();
+                var counted = rows as ICollection<ChatItem>;
+                string total = counted != null ? counted.Count.ToString() : "?";
+                int seen = 0;
+                foreach (ChatItem chat in rows)
+                {
+                    seen++;
+                    if (_stage != null && seen % BuildProgressEvery == 0)
+                    {
+                        _stage.Mark("find-build:" + seen + "/" + total);
+                    }
+
+                    if (chat == null)
+                    {
+                        continue;
+                    }
+
+                    string key = _canonicalOf(chat.JID);
+                    if (string.IsNullOrWhiteSpace(key))
+                    {
+                        continue;
+                    }
+
+                    List<ChatItem> bucket;
+                    if (!index.TryGetValue(key, out bucket))
+                    {
+                        bucket = new List<ChatItem>();
+                        index[key] = bucket;
+                    }
+
+                    bucket.Add(chat);
+                }
+
+                // Always publish once. A mid-build Invalidate cleared _byCanonical; installing
+                // this snapshot still beats rebuilding on every subsequent Find until the next
+                // real list/alias change.
                 _byCanonical = index;
+                Interlocked.Increment(ref _buildCount);
+                return index;
             }
-
-            return index;
         }
     }
 }

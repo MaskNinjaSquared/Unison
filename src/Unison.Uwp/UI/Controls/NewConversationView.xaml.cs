@@ -1,9 +1,10 @@
 using System;
 using System.ComponentModel;
+using Microsoft.Extensions.DependencyInjection;
+using Unison.Core.Contracts;
 using Unison.Core.Helpers;
 using Unison.Core.Models;
 using Unison.Core.ViewModels;
-using Windows.UI.Core;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
 using Windows.UI.Xaml.Data;
@@ -12,8 +13,10 @@ using Windows.UI.Xaml.Media.Animation;
 namespace Unison.Uwp.UI.Controls
 {
     /// <summary>
-    /// New Conversation overlay: action tiles + message-yourself + A–Z contacts.
-    /// Hosts set <see cref="ViewModel"/>; visibility follows <see cref="NewConversationViewModel.IsOpen"/>.
+    /// Unison / WhatsApp New Conversation overlay: tiles + A–Z contacts, hosts
+    /// <see cref="CreateConversationFlowView"/> for New Group / Community.
+    /// System Back is owned by <see cref="INavigator.PushLocalBack"/> (not a direct
+    /// <c>SystemNavigationManager</c> subscription) so MainView / Legacy Shell cannot skip it.
     /// </summary>
     public sealed partial class NewConversationView : UserControl
     {
@@ -24,20 +27,18 @@ namespace Unison.Uwp.UI.Controls
                 typeof(NewConversationView),
                 new PropertyMetadata(null, OnViewModelChanged));
 
-        private readonly CollectionViewSource _groupedCvs = new CollectionViewSource
-        {
-            IsSourceGrouped = true
-        };
-
         private NewConversationViewModel _hookedVm;
-        private bool _backHooked;
-        private AlphabetChatGroup _pendingJumpGroup;
+        private IDisposable _localBackRegistration;
+        private bool _layoutHooked;
+        private VisualStateGroup _layoutStates;
+        private AlphabetSemanticZoomHost _contactsZoom;
 
         public NewConversationView()
         {
             InitializeComponent();
             Visibility = Visibility.Collapsed;
             Opacity = 1;
+            Loaded += NewConversationView_Loaded;
             Unloaded += NewConversationView_Unloaded;
         }
 
@@ -62,7 +63,9 @@ namespace Unison.Uwp.UI.Controls
             }
 
             DataContext = newVm;
+            CreateFlowPart.ViewModel = newVm;
             _hookedVm = newVm;
+            ApplyCreateFlowVisibility();
             if (_hookedVm == null)
             {
                 BeginClose(animate: false);
@@ -101,48 +104,123 @@ namespace Unison.Uwp.UI.Controls
                 return;
             }
 
-            if (string.Equals(e.PropertyName, nameof(NewConversationViewModel.GroupedContacts), StringComparison.Ordinal))
+            if (string.Equals(e.PropertyName, nameof(NewConversationViewModel.IsCreateFlowOpen), StringComparison.Ordinal))
             {
-                BindGroupedSource();
+                ApplyCreateFlowVisibility();
+                return;
             }
 
-            if (string.Equals(e.PropertyName, nameof(NewConversationViewModel.JumpTiles), StringComparison.Ordinal))
+            if (string.Equals(e.PropertyName, nameof(NewConversationViewModel.IsCatalogLoading), StringComparison.Ordinal))
             {
-                JumpList.ItemsSource = ViewModel.JumpTiles;
+                TryPromoteOptionsIntoListHeader();
+                return;
+            }
+
+            if (string.Equals(e.PropertyName, nameof(NewConversationViewModel.IsContactsSurfaceReady), StringComparison.Ordinal) ||
+                string.Equals(e.PropertyName, nameof(NewConversationViewModel.GroupedContacts), StringComparison.Ordinal) ||
+                string.Equals(e.PropertyName, nameof(NewConversationViewModel.JumpTiles), StringComparison.Ordinal))
+            {
+                BindGroupedSource();
             }
         }
 
         private void BeginOpen()
         {
-            ContactsZoom.IsZoomedInViewActive = true;
+            EnsureContactsZoom();
+            _contactsZoom?.ResetZoomedIn();
             Opacity = 0;
             Visibility = Visibility.Visible;
+            ApplyCreateFlowVisibility();
             HookBack();
+            HookLayoutStates();
             BindGroupedSource();
-            JumpList.ItemsSource = ViewModel?.JumpTiles;
             RunOpenFade();
         }
 
         private void BeginClose(bool animate)
         {
             UnhookBack();
-            _pendingJumpGroup = null;
-            _groupedCvs.Source = null;
-            ContactsList.ItemsSource = null;
-            JumpList.ItemsSource = null;
+            // Keep the x:Load A–Z host warm; only hide the overlay.
             Opacity = 1;
             Visibility = Visibility.Collapsed;
         }
 
-        private void BindGroupedSource()
+        private void EnsureContactsZoom()
         {
-            if (ViewModel == null)
+            // ContactsZoom is x:Load'd — null until IsContactsSurfaceReady.
+            if (_contactsZoom != null || ContactsZoom == null || ContactsList == null || JumpList == null)
             {
                 return;
             }
 
-            _groupedCvs.Source = ViewModel.GroupedContacts;
-            ContactsList.ItemsSource = _groupedCvs.View;
+            _contactsZoom = new AlphabetSemanticZoomHost(ContactsZoom, ContactsList, JumpList);
+        }
+
+        private void BindGroupedSource()
+        {
+            if (ViewModel == null || !ViewModel.IsContactsSurfaceReady)
+            {
+                return;
+            }
+
+            EnsureContactsZoom();
+            _contactsZoom?.Bind(ViewModel.GroupedContacts, ViewModel.JumpTiles);
+            TryPromoteOptionsIntoListHeader();
+        }
+
+        /// <summary>
+        /// After the A–Z host is warm, move the action tiles into the list header so short
+        /// viewports can scroll past the tiles and reach contacts (keeps search sticky).
+        /// </summary>
+        private void TryPromoteOptionsIntoListHeader()
+        {
+            if (ViewModel == null || ViewModel.IsCatalogLoading)
+            {
+                return;
+            }
+
+            if (ContactsList == null || OptionsChromeHost == null)
+            {
+                return;
+            }
+
+            if (ReferenceEquals(ContactsList.Header, OptionsChromeHost))
+            {
+                return;
+            }
+
+            var parent = OptionsChromeHost.Parent as Panel;
+            if (parent != null)
+            {
+                parent.Children.Remove(OptionsChromeHost);
+            }
+
+            ContactsList.Header = OptionsChromeHost;
+        }
+
+        /// <summary>Catalog (search + tiles + contacts) and the create wizard never share the screen.</summary>
+        private void ApplyCreateFlowVisibility()
+        {
+            bool isCreateFlowOpen = ViewModel != null && ViewModel.IsCreateFlowOpen;
+            Visibility catalog = isCreateFlowOpen ? Visibility.Collapsed : Visibility.Visible;
+            CatalogHeader.Visibility = catalog;
+            SearchBox.Visibility = catalog;
+            if (OptionsChromeHost != null)
+            {
+                OptionsChromeHost.Visibility = catalog;
+            }
+
+            if (ContactsAreaHost != null)
+            {
+                ContactsAreaHost.Visibility = catalog;
+            }
+
+            if (ContactsZoom != null)
+            {
+                ContactsZoom.Visibility = catalog;
+            }
+
+            CreateFlowPart.Visibility = isCreateFlowOpen ? Visibility.Visible : Visibility.Collapsed;
         }
 
         private void RunOpenFade()
@@ -163,47 +241,115 @@ namespace Unison.Uwp.UI.Controls
 
         private void HookBack()
         {
-            if (_backHooked)
+            if (_localBackRegistration != null)
             {
                 return;
             }
 
-            SystemNavigationManager.GetForCurrentView().BackRequested += OnBackRequested;
-            _backHooked = true;
+            INavigator navigator = App.Services?.GetService<INavigator>();
+            if (navigator == null)
+            {
+                return;
+            }
+
+            _localBackRegistration = navigator.PushLocalBack(TryHandleLocalBack);
         }
 
         private void UnhookBack()
         {
-            if (!_backHooked)
+            _localBackRegistration?.Dispose();
+            _localBackRegistration = null;
+        }
+
+        private void HookLayoutStates()
+        {
+            if (_layoutHooked)
             {
                 return;
             }
 
-            SystemNavigationManager.GetForCurrentView().BackRequested -= OnBackRequested;
-            _backHooked = false;
+            FrameworkElement host = LayoutRoot ?? (Content as FrameworkElement);
+            if (host == null)
+            {
+                return;
+            }
+
+            foreach (VisualStateGroup group in VisualStateManager.GetVisualStateGroups(host))
+            {
+                if (group.Name != "LayoutStates")
+                {
+                    continue;
+                }
+
+                _layoutStates = group;
+                _layoutStates.CurrentStateChanged += LayoutStates_CurrentStateChanged;
+                _layoutHooked = true;
+                ReportLayoutFromStates();
+                return;
+            }
         }
 
-        private void OnBackRequested(object sender, BackRequestedEventArgs e)
+        private void UnhookLayoutStates()
+        {
+            if (!_layoutHooked || _layoutStates == null)
+            {
+                return;
+            }
+
+            _layoutStates.CurrentStateChanged -= LayoutStates_CurrentStateChanged;
+            _layoutStates = null;
+            _layoutHooked = false;
+        }
+
+        private void LayoutStates_CurrentStateChanged(object sender, VisualStateChangedEventArgs e)
+        {
+            ReportLayoutFromStates();
+        }
+
+        private void ReportLayoutFromStates()
+        {
+            string name = _layoutStates?.CurrentState?.Name;
+            bool minimal = string.IsNullOrEmpty(name) ||
+                           string.Equals(name, "Minimal", StringComparison.Ordinal);
+            ViewModel?.ReportLayoutMinimal(minimal);
+        }
+
+        private bool TryHandleLocalBack()
         {
             if (ViewModel == null || !ViewModel.IsOpen)
             {
-                return;
+                return false;
             }
 
-            if (!ContactsZoom.IsZoomedInViewActive)
+            if (CreateFlowPart != null && CreateFlowPart.TryHandleMembersZoomBack())
             {
-                e.Handled = true;
-                ContactsZoom.IsZoomedInViewActive = true;
-                return;
+                return true;
             }
 
-            e.Handled = true;
+            if (ViewModel.TryHandleCreateBack())
+            {
+                return true;
+            }
+
+            if (_contactsZoom != null && _contactsZoom.TryHandleBackToZoomedIn())
+            {
+                return true;
+            }
+
             ViewModel.Close();
+            return true;
+        }
+
+        private void NewConversationView_Loaded(object sender, RoutedEventArgs e)
+        {
+            EnsureContactsZoom();
+            HookLayoutStates();
         }
 
         private void NewConversationView_Unloaded(object sender, RoutedEventArgs e)
         {
             UnhookBack();
+            UnhookLayoutStates();
             if (_hookedVm != null)
             {
                 _hookedVm.PropertyChanged -= ViewModel_PropertyChanged;
@@ -211,14 +357,6 @@ namespace Unison.Uwp.UI.Controls
             }
         }
 
-        private void BackButton_Click(object sender, RoutedEventArgs e)
-        {
-            ViewModel?.Close();
-        }
-
-        /// <summary>
-        /// Minimal grid: keep 3+2 and scale each square to the column width (capped at 150).
-        /// </summary>
         private void OptionsTilesHost_SizeChanged(object sender, SizeChangedEventArgs e)
         {
             if (OptionsTilesHost == null ||
@@ -228,7 +366,6 @@ namespace Unison.Uwp.UI.Controls
                 return;
             }
 
-            // AttachTile / SelfTile Margin="5" → 10px horizontal chrome per cell.
             const double tileMargin = 5;
             const double maxSide = 150;
             const int columns = 3;
@@ -246,6 +383,7 @@ namespace Unison.Uwp.UI.Controls
             ApplyMinimalTileSide(TileNewGroup, side);
             ApplyMinimalTileSide(TileNewContact, side);
             ApplyMinimalTileSide(TileNewCommunity, side);
+            ApplyMinimalTileSide(TileNewChannel, side);
             ApplyMinimalTileSide(TilePhoneNumber, side);
             ApplyMinimalTileSide(SelfTile, side);
         }
@@ -275,77 +413,18 @@ namespace Unison.Uwp.UI.Controls
             }
         }
 
+        // Jump / SemanticZoom handlers kept for XAML event wiring; host owns the logic.
         private void JumpList_ItemClick(object sender, ItemClickEventArgs e)
         {
-            var tile = e.ClickedItem as AlphabetJumpTile;
-            if (tile == null || !tile.IsEnabled || tile.Group == null || tile.Group.Count == 0)
-            {
-                return;
-            }
-
-            _pendingJumpGroup = tile.Group;
-            if (!ContactsZoom.IsZoomedInViewActive)
-            {
-                ContactsZoom.IsZoomedInViewActive = true;
-                return;
-            }
-
-            ScheduleScrollToPendingGroup();
+            // AlphabetSemanticZoomHost also listens; keep empty for XAML compatibility if wired.
         }
 
         private void ContactsZoom_ViewChangeStarted(object sender, SemanticZoomViewChangedEventArgs e)
         {
-            if (e == null || e.IsSourceZoomedInView)
-            {
-                return;
-            }
-
-            AlphabetChatGroup pending = _pendingJumpGroup;
-            if (pending != null && pending.Count > 0)
-            {
-                e.DestinationItem.Item = pending[0];
-                return;
-            }
-
-            var tile = e.SourceItem?.Item as AlphabetJumpTile;
-            if (tile?.Group != null && tile.Group.Count > 0)
-            {
-                e.DestinationItem.Item = tile.Group[0];
-                _pendingJumpGroup = tile.Group;
-            }
         }
 
         private void ContactsZoom_ViewChangeCompleted(object sender, SemanticZoomViewChangedEventArgs e)
         {
-            if (e == null || e.IsSourceZoomedInView || _pendingJumpGroup == null)
-            {
-                return;
-            }
-
-            ScheduleScrollToPendingGroup();
-        }
-
-        private void ScheduleScrollToPendingGroup()
-        {
-            AlphabetChatGroup group = _pendingJumpGroup;
-            if (group == null || group.Count == 0)
-            {
-                return;
-            }
-
-            ChatItem first = group[0];
-            _ = Dispatcher.RunAsync(CoreDispatcherPriority.Normal, () =>
-            {
-                try
-                {
-                    ContactsList.ScrollIntoView(first, ScrollIntoViewAlignment.Leading);
-                }
-                catch
-                {
-                }
-
-                _pendingJumpGroup = null;
-            });
         }
     }
 }

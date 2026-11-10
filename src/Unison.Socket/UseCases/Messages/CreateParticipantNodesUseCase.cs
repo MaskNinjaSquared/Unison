@@ -90,57 +90,91 @@ namespace Unison.Socket.UseCases.Messages
             var ownLidUser = JidUtils.GetUser(meLid);
 
             var failures = 0;
-
-            foreach (var jid in recipientJids)
+            // Status@broadcast SKDM can hit hundreds of devices; awaiting StorageFile after each
+            // encrypt freezes the send for a minute+. Defer disk until the batch finishes.
+            bool deferPersist = recipientJids.Count >= DeferredSessionPersistThreshold;
+            if (deferPersist)
             {
-                if (string.IsNullOrEmpty(jid))
+                _log.Info(
+                    "[Send] Group participant-encrypt begin; targets=" + recipientJids.Count +
+                    "; deferredSessionPersist=True");
+                _signal.BeginDeferredSessionPersist();
+            }
+
+            try
+            {
+                int attempted = 0;
+                foreach (var jid in recipientJids)
                 {
-                    continue;
-                }
-
-                try
-                {
-                    var payload = SelectPayload(jid, message, deviceSentMessage, meId, meLid, ownPnUser, ownLidUser);
-
-                    if (PatchMessageBeforeSending != null)
+                    if (string.IsNullOrEmpty(jid))
                     {
-                        payload = await PatchMessageBeforeSending(payload, jid).ConfigureAwait(false) ?? payload;
-                    }
-
-                    var encrypted = await _signal
-                        .EncryptMessageAsync(jid, payload.ToByteArray())
-                        .ConfigureAwait(false);
-
-                    if (encrypted == null || encrypted.Ciphertext == null)
-                    {
-                        failures++;
                         continue;
                     }
 
-                    if (encrypted.IsPreKeyMessage)
+                    try
                     {
-                        result.ShouldIncludeDeviceIdentity = true;
-                    }
+                        var payload = SelectPayload(jid, message, deviceSentMessage, meId, meLid, ownPnUser, ownLidUser);
 
-                    var attrs = new Dictionary<string, string> { { "v", "2" }, { "type", encrypted.Type } };
-                    if (extraAttrs != null)
-                    {
-                        foreach (var attr in extraAttrs)
+                        if (PatchMessageBeforeSending != null)
                         {
-                            attrs[attr.Key] = attr.Value;
+                            payload = await PatchMessageBeforeSending(payload, jid).ConfigureAwait(false) ?? payload;
                         }
+
+                        var encrypted = await _signal
+                            .EncryptMessageAsync(jid, payload.ToByteArray())
+                            .ConfigureAwait(false);
+
+                        if (encrypted == null || encrypted.Ciphertext == null)
+                        {
+                            failures++;
+                            continue;
+                        }
+
+                        if (encrypted.IsPreKeyMessage)
+                        {
+                            result.ShouldIncludeDeviceIdentity = true;
+                        }
+
+                        var attrs = new Dictionary<string, string> { { "v", "2" }, { "type", encrypted.Type } };
+                        if (extraAttrs != null)
+                        {
+                            foreach (var attr in extraAttrs)
+                            {
+                                attrs[attr.Key] = attr.Value;
+                            }
+                        }
+
+                        result.Nodes.Add(new BinaryNode(
+                            "to",
+                            new Dictionary<string, string> { { "jid", jid } },
+                            new List<BinaryNode> { new BinaryNode("enc", attrs, encrypted.Ciphertext) }));
+                    }
+                    catch (Exception ex)
+                    {
+                        // One unreachable device must not cost the other recipients their copy.
+                        failures++;
+                        _log.Error("[Send] Failed to encrypt for " + jid, ex);
                     }
 
-                    result.Nodes.Add(new BinaryNode(
-                        "to",
-                        new Dictionary<string, string> { { "jid", jid } },
-                        new List<BinaryNode> { new BinaryNode("enc", attrs, encrypted.Ciphertext) }));
+                    attempted++;
+                    if (deferPersist && attempted % ProgressLogEvery == 0)
+                    {
+                        // Prefix "[Send] Group" so SocketBridge forwards this into Runtime Health.
+                        _log.Info(
+                            "[Send] Group participant-encrypt " + attempted + "/" + recipientJids.Count +
+                            "; sealed=" + result.Nodes.Count + "; failures=" + failures);
+                        await Task.Yield();
+                    }
                 }
-                catch (Exception ex)
+            }
+            finally
+            {
+                if (deferPersist)
                 {
-                    // One unreachable device must not cost the other recipients their copy.
-                    failures++;
-                    _log.Error("[Send] Failed to encrypt for " + jid, ex);
+                    _log.Info(
+                        "[Send] Group participant-encrypt done; sealed=" + result.Nodes.Count +
+                        "; failures=" + failures + "; flushingSessions=background");
+                    await _signal.EndDeferredSessionPersistAsync().ConfigureAwait(false);
                 }
             }
 
@@ -157,6 +191,11 @@ namespace Unison.Socket.UseCases.Messages
 
             return result;
         }
+
+        /// <summary>Above this, session disk writes are batched after the loop.</summary>
+        private const int DeferredSessionPersistThreshold = 16;
+
+        private const int ProgressLogEvery = 50;
 
         /// <summary>
         /// Our own devices - other than the one sending - receive the device-sent form so they

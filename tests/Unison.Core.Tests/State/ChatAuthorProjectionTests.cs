@@ -391,6 +391,353 @@ namespace Unison.Core.Tests.State
             await WaitForAsync(() => group.LastMessageSenderName == "Ana Souza");
         }
 
+        [Fact]
+        public async Task RefreshChat_without_Start_names_only_the_pending_group()
+        {
+            var jids = new AliasJids();
+            var people = new MemoryPersonStore();
+            var chatState = new ChatStateStore(new CountingDispatcher());
+
+            chatState.Chats.Add(new ChatItem
+            {
+                JID = Pn,
+                Name = "Ana Souza",
+                IsGroup = false
+            });
+
+            for (int i = 0; i < 120; i++)
+            {
+                chatState.Chats.Add(new ChatItem
+                {
+                    JID = "120399" + i + "@g.us",
+                    Name = "Decoy " + i,
+                    IsGroup = true,
+                    LastMessageIsFromMe = false,
+                    LastMessageParticipantJid = "551190000" + i.ToString("0000") + "@s.whatsapp.net"
+                });
+            }
+
+            var target = new ChatItem
+            {
+                JID = Group,
+                Name = "Família",
+                IsGroup = true,
+                LastMessageIsFromMe = false,
+                LastMessageParticipantJid = Pn
+            };
+            chatState.Chats.Add(target);
+
+            var dispatcher = new CountingDispatcher();
+            var projection = new ChatAuthorProjection(
+                chatState,
+                people,
+                jids,
+                strings: null,
+                dispatcher);
+
+            // No Start(): unnamed catalogue walk must not run — only RefreshChat pending.
+            projection.RefreshChat(Group);
+            await WaitForAsync(() => target.LastMessageSenderName == "Ana Souza");
+
+            Assert.Equal("Ana Souza: ", target.LastMessageAuthor);
+            Assert.True(dispatcher.MaxDepth <= 1, "nested depth=" + dispatcher.MaxDepth);
+            Assert.True(dispatcher.Passes <= 4, "passes=" + dispatcher.Passes);
+        }
+
+        [Fact]
+        public async Task A_burst_of_name_changes_on_a_frugal_device_traces_one_deferral()
+        {
+            // Frugal defers every unnamed sweep, so a line per deferral was a journal write per
+            // name event during first sync on the 512MB Lumias.
+            var chatState = new ChatStateStore(new CountingDispatcher());
+            chatState.Chats.Add(new ChatItem
+            {
+                JID = Group,
+                Name = "Família",
+                IsGroup = true,
+                LastMessageParticipantJid = Lid
+            });
+            var diagnostics = new CountingDiagnostics();
+            var projection = new ChatAuthorProjection(
+                chatState,
+                new MemoryPersonStore(),
+                new AliasJids(),
+                strings: null,
+                new CountingDispatcher(),
+                preferFrugalUi: () => true,
+                diagnostics: diagnostics);
+
+            projection.Start();
+            for (int i = 0; i < 10; i++)
+            {
+                chatState.NotifyDisplayNamesChanged();
+            }
+
+            Assert.Equal(1, diagnostics.Count("sweep-deferred"));
+            await Task.CompletedTask;
+        }
+
+        private sealed class CountingDiagnostics : IRuntimeDiagnostics
+        {
+            private readonly List<string> _events = new List<string>();
+
+            public int Count(string eventName)
+            {
+                lock (_events)
+                {
+                    return _events.FindAll(e => e == eventName).Count;
+                }
+            }
+
+            public bool IsVerboseLoggingEnabled => false;
+            public void SetVerboseLogging(bool enabled, string source) { }
+            public void Start() { }
+            public void StartHealthSampling() { }
+
+            public void Write(string category, string eventName, string details = null)
+            {
+                lock (_events)
+                {
+                    _events.Add(eventName);
+                }
+            }
+
+            public void RecordException(string category, string eventName, Exception exception, string details = null) { }
+            public string GetRecentText() => string.Empty;
+            public RuntimeDiagnosticsSnapshot CaptureSnapshot() => null;
+            public Task FlushAsync(string reason) => Task.CompletedTask;
+            public Task<string> ExportReportAsync() => Task.FromResult(string.Empty);
+            public Task<string> SaveReportToLocalFolderAsync() => Task.FromResult(string.Empty);
+            public Task ClearAsync() => Task.CompletedTask;
+        }
+
+        [Fact]
+        public async Task DisplayNamesChanged_under_Hold_does_not_schedule_unnamed_until_Release()
+        {
+            var jids = new AliasJids();
+            jids.Pair(Lid, Pn);
+            var people = new MemoryPersonStore();
+            people.SeedDisk(new Person
+            {
+                Jid = Pn,
+                Name = "Ana Souza",
+                Phone = "5511988887777",
+                Source = PersonSource.Observed
+            });
+            // Warm the in-memory cache so the deferred unnamed pass resolves in one hop.
+            await people.GetAsync(Pn);
+
+            var gate = new ChatTimelineLoadPriorityGate();
+            gate.Hold("open");
+
+            var chatState = new ChatStateStore(new CountingDispatcher());
+            var unnamed = new ChatItem
+            {
+                JID = Group,
+                Name = "Família",
+                IsGroup = true,
+                LastMessageIsFromMe = false,
+                LastMessageParticipantJid = Lid
+            };
+            chatState.Chats.Add(unnamed);
+
+            var dispatcher = new CountingDispatcher();
+            var projection = new ChatAuthorProjection(
+                chatState,
+                people,
+                jids,
+                strings: null,
+                dispatcher,
+                timelinePriority: gate,
+                preferFrugalUi: () => true);
+
+            // Start under Hold+frugal: unnamed is deferred (no dispatcher hop yet).
+            projection.Start();
+            chatState.NotifyDisplayNamesChanged();
+            await Task.Delay(250);
+
+            Assert.Null(unnamed.LastMessageSenderName);
+            Assert.Equal(0, dispatcher.Passes);
+
+            gate.Release("open");
+            await WaitForAsync(() => unnamed.LastMessageSenderName == "Ana Souza");
+        }
+
+        [Fact]
+        public async Task RefreshChat_under_frugal_Hold_stays_pending_fast_path_after_DisplayNamesChanged()
+        {
+            var jids = new AliasJids();
+            var people = new MemoryPersonStore();
+            var gate = new ChatTimelineLoadPriorityGate();
+            gate.Hold("open");
+
+            var chatState = new ChatStateStore(new CountingDispatcher());
+            chatState.Chats.Add(new ChatItem
+            {
+                JID = Pn,
+                Name = "Ana Souza",
+                IsGroup = false
+            });
+
+            var decoy = new ChatItem
+            {
+                JID = "120364@g.us",
+                Name = "Outro",
+                IsGroup = true,
+                LastMessageIsFromMe = false,
+                LastMessageParticipantJid = Lid,
+                LastMessageAuthor = "199999999999: "
+            };
+            var target = new ChatItem
+            {
+                JID = Group,
+                Name = "Família",
+                IsGroup = true,
+                LastMessageIsFromMe = false,
+                LastMessageParticipantJid = Pn
+            };
+            chatState.Chats.Add(decoy);
+            chatState.Chats.Add(target);
+
+            var projection = new ChatAuthorProjection(
+                chatState,
+                people,
+                jids,
+                strings: null,
+                new CountingDispatcher(),
+                timelinePriority: gate,
+                preferFrugalUi: () => true);
+
+            projection.Start();
+            // Would have forced a full unnamed walk before the open RefreshChat.
+            chatState.NotifyDisplayNamesChanged();
+            projection.RefreshChat(Group);
+
+            gate.Release("open");
+            await WaitForAsync(() => target.LastMessageSenderName == "Ana Souza");
+
+            // Decoy still unnamed: DisplayNamesChanged was deferred and must not have ridden
+            // along inside the pending-chat pass (a later flushed unnamed walk may still touch it).
+            Assert.Null(decoy.LastMessageSenderName);
+        }
+
+        /// <summary>
+        /// The device shape. The row already knows the sender's name, but the rendered prefix is
+        /// their digits: the two are separate columns and the store carries each forward on its
+        /// own, so a tip with no push name leaves digits beside a good name. Decide reads only
+        /// the name, so it reports Keep — and the prefix must still be rewritten.
+        /// </summary>
+        [Fact]
+        public async Task Sweep_rewrites_a_digits_prefix_that_sits_beside_a_known_name()
+        {
+            var jids = new AliasJids();
+            jids.Pair(Lid, Pn);
+
+            var people = new MemoryPersonStore();
+            people.SeedDisk(new Person
+            {
+                Jid = Pn,
+                Name = "Ana Souza",
+                Phone = "5511988887777",
+                Source = PersonSource.Observed
+            });
+
+            var chatState = new ChatStateStore(new CountingDispatcher());
+            var group = new ChatItem
+            {
+                JID = Group,
+                Name = "Família",
+                IsGroup = true,
+                LastMessageIsFromMe = false,
+                LastMessageParticipantJid = Pn,
+                LastMessageSenderName = "Ana Souza",
+                LastMessageAuthor = "5511988887777: "
+            };
+            chatState.Chats.Add(group);
+
+            var projection = new ChatAuthorProjection(
+                chatState,
+                people,
+                jids,
+                strings: null,
+                new CountingDispatcher());
+
+            projection.Start();
+            await WaitForAsync(() => group.LastMessageAuthor == "Ana Souza: ");
+
+            Assert.Equal("Ana Souza: ", group.LastMessageAuthor);
+            Assert.Equal("Ana Souza", group.LastMessageSenderName);
+        }
+
+        /// <summary>
+        /// The regression the repair must not cause. When the tip moves to a participant with no
+        /// push name, the store carries the *previous* sender's name forward beside the *new*
+        /// sender's digits — the two fields then describe two different people. Rewriting the
+        /// prefix from the stored name would put Ana's name on Beto's message, which is worse
+        /// than digits: silently wrong rather than unhelpfully honest.
+        /// </summary>
+        [Fact]
+        public async Task Sweep_never_puts_a_carried_over_name_on_a_different_sender()
+        {
+            const string otherPn = "5511977776666@s.whatsapp.net";
+
+            // Only Ana is on disk. Beto is unknown, so nothing can attribute a name to him.
+            var people = new MemoryPersonStore();
+            people.SeedDisk(new Person
+            {
+                Jid = Pn,
+                Name = "Ana Souza",
+                Phone = "5511988887777",
+                Source = PersonSource.Observed
+            });
+
+            var chatState = new ChatStateStore(new CountingDispatcher());
+
+            // A second row that Ana *does* own, used as the sweep's completion signal so this
+            // test waits on an observable event rather than burning wall-clock on a fixed delay.
+            var anaRow = new ChatItem
+            {
+                JID = "120364@g.us",
+                Name = "Trabalho",
+                IsGroup = true,
+                LastMessageIsFromMe = false,
+                LastMessageParticipantJid = Pn,
+                LastMessageSenderName = "Ana Souza",
+                LastMessageAuthor = "5511988887777: "
+            };
+            chatState.Chats.Add(anaRow);
+
+            var group = new ChatItem
+            {
+                JID = Group,
+                Name = "Família",
+                IsGroup = true,
+                LastMessageIsFromMe = false,
+
+                // Tip moved to Beto; Carry kept Ana's name beside Beto's digits.
+                LastMessageParticipantJid = otherPn,
+                LastMessageSenderName = "Ana Souza",
+                LastMessageAuthor = "5511977776666: "
+            };
+            chatState.Chats.Add(group);
+
+            var projection = new ChatAuthorProjection(
+                chatState,
+                people,
+                new AliasJids(),
+                strings: null,
+                new CountingDispatcher());
+
+            projection.Start();
+
+            // The sweep has demonstrably reached these rows once Ana's own row is repaired.
+            await WaitForAsync(() => anaRow.LastMessageAuthor == "Ana Souza: ");
+
+            // Beto's row was visited in the same pass and must have been left alone.
+            Assert.Equal("5511977776666: ", group.LastMessageAuthor);
+            Assert.NotEqual("Ana Souza: ", group.LastMessageAuthor);
+        }
+
         private static async Task WaitForAsync(Func<bool> condition)
         {
             for (int i = 0; i < 100; i++)
@@ -432,6 +779,8 @@ namespace Unison.Core.Tests.State
 
                 return key;
             }
+
+            public string PeekCanonicalJid(string jid) => GetCanonicalJid(jid);
 
             public bool TryGetAlias(string jid, out string alias)
             {

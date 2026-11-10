@@ -34,16 +34,24 @@ namespace Unison.Core.ViewModels
         private string _mediaUri;
         private bool _isVideo;
         private bool _isImage;
+        private bool _isText;
         private bool _isLoading;
         private bool _hasOpenAuthor;
         private bool _canDownload;
         private bool _isSaving;
         private bool _waitingForNaturalDuration;
+        private string _textBody = string.Empty;
+        private string _backgroundColorHex = "#FF128C7E";
+        private string _textColorHex = "#FFFFFFFF";
+        private string _fontFamilyName = "Segoe UI";
+        private int _viewCount;
+        private ChatPreviewKind _currentKind = ChatPreviewKind.Text;
         private CancellationTokenSource _timerCts;
         private int _openGeneration;
         private DateTime _itemShownUtc;
         private TimeSpan _itemDuration;
         private string _openingAuthorJid;
+        private string _startMessageId;
         private readonly RelayCommand _downloadCommand;
 
         public StatusDetailViewModel(
@@ -112,6 +120,49 @@ namespace Unison.Core.ViewModels
             private set => Set(ref _isImage, value);
         }
 
+        public bool IsText
+        {
+            get => _isText;
+            private set => Set(ref _isText, value);
+        }
+
+        /// <summary>Kind of the open item — drives <c>StatusKindTemplateSelector</c>.</summary>
+        public ChatPreviewKind CurrentKind
+        {
+            get => _currentKind;
+            private set => Set(ref _currentKind, value);
+        }
+
+        public string TextBody
+        {
+            get => _textBody;
+            private set => Set(ref _textBody, value ?? string.Empty);
+        }
+
+        public string BackgroundColorHex
+        {
+            get => _backgroundColorHex;
+            private set => Set(ref _backgroundColorHex, value ?? "#FF128C7E");
+        }
+
+        public string TextColorHex
+        {
+            get => _textColorHex;
+            private set => Set(ref _textColorHex, value ?? "#FFFFFFFF");
+        }
+
+        public string FontFamilyName
+        {
+            get => _fontFamilyName;
+            private set => Set(ref _fontFamilyName, value ?? "Segoe UI");
+        }
+
+        public int ViewCount
+        {
+            get => _viewCount;
+            private set => Set(ref _viewCount, value);
+        }
+
         public bool IsLoading
         {
             get => _isLoading;
@@ -149,12 +200,18 @@ namespace Unison.Core.ViewModels
 
         public event EventHandler Closed;
 
-        public async Task OpenAuthorAsync(string authorJid, string displayName)
+        /// <param name="startMessageId">Status to show first (own "My status" page); null starts at the oldest.</param>
+        public async Task OpenAuthorAsync(string authorJid, string displayName, string startMessageId = null)
         {
             // SelectionChanged / list reload often re-raises the same author while EnsureMedia
             // is in flight. Bumping generation there cancelled show before any media log.
             if (IsSameAuthorOpen(authorJid))
             {
+                if (TryJumpTo(startMessageId))
+                {
+                    return;
+                }
+
                 LogStatus(
                     "open-skip-same",
                     "author=" + (authorJid ?? "-") +
@@ -168,6 +225,7 @@ namespace Unison.Core.ViewModels
             int generation = _openGeneration;
             _authorJid = authorJid;
             _openingAuthorJid = authorJid;
+            _startMessageId = startMessageId;
             AuthorName = displayName ?? string.Empty;
             HasOpenAuthor = !string.IsNullOrWhiteSpace(authorJid);
 
@@ -223,7 +281,8 @@ namespace Unison.Core.ViewModels
                 }
 
                 RebuildSegments(_items.Count);
-                _index = 0;
+                _index = StatusStartIndex.Resolve(_items, _startMessageId);
+                _startMessageId = null;
             }).ConfigureAwait(false);
 
             if (generation != _openGeneration)
@@ -253,6 +312,35 @@ namespace Unison.Core.ViewModels
             }
         }
 
+        /// <summary>
+        /// Same author re-opened on another item: still loading → remember the target;
+        /// already showing → move there. False when there is nothing to jump to.
+        /// </summary>
+        private bool TryJumpTo(string startMessageId)
+        {
+            if (string.IsNullOrWhiteSpace(startMessageId))
+            {
+                return false;
+            }
+
+            if (!string.IsNullOrWhiteSpace(_openingAuthorJid))
+            {
+                _startMessageId = startMessageId;
+                return true;
+            }
+
+            int? target = StatusStartIndex.Find(_items, startMessageId);
+            if (!target.HasValue || target.Value == _index)
+            {
+                return false;
+            }
+
+            LogStatus("open-jump", "from=" + _index + "; to=" + target.Value + "; id=" + startMessageId);
+            _index = target.Value;
+            _ = ShowCurrentAsync(_openGeneration);
+            return true;
+        }
+
         private bool IsSameAuthorOpen(string authorJid)
         {
             if (string.IsNullOrWhiteSpace(authorJid))
@@ -277,6 +365,7 @@ namespace Unison.Core.ViewModels
             _openGeneration++;
             _authorJid = null;
             _openingAuthorJid = null;
+            _startMessageId = null;
             _items = Array.Empty<HistoryStatus>();
             HasOpenAuthor = false;
             ResetVisual();
@@ -383,6 +472,7 @@ namespace Unison.Core.ViewModels
             _openGeneration++;
             _authorJid = null;
             _openingAuthorJid = null;
+            _startMessageId = null;
             _items = Array.Empty<HistoryStatus>();
             HasOpenAuthor = false;
             ResetVisual();
@@ -495,6 +585,7 @@ namespace Unison.Core.ViewModels
             HistoryStatus item = _items[_index];
             bool isVideo = item.Kind == ChatPreviewKind.Video;
             bool isImage = item.Kind == ChatPreviewKind.Image || item.Kind == ChatPreviewKind.Sticker;
+            bool isText = item.Kind == ChatPreviewKind.Text;
 
             await _dispatcher.RunAsync(() =>
             {
@@ -505,9 +596,14 @@ namespace Unison.Core.ViewModels
 
                 UpdateSegmentFills();
                 TimestampUtc = item.TimestampUtc;
-                Caption = item.Body;
+                Caption = isText ? null : item.Body;
+                TextBody = isText ? (item.Body ?? string.Empty) : string.Empty;
+                ApplyTextStyle(item);
+                CurrentKind = item.Kind;
                 IsVideo = false;
                 IsImage = false;
+                IsText = isText;
+                ViewCount = 0;
                 MediaUri = null;
                 IsLoading = isVideo || isImage;
                 RefreshCanDownload();
@@ -563,6 +659,7 @@ namespace Unison.Core.ViewModels
                 // when ApplyMedia assigns Source — MediaUri-first left it Collapsed on reopen.
                 IsVideo = showVideo;
                 IsImage = showImage;
+                IsText = item.Kind == ChatPreviewKind.Text && !showVideo && !showImage;
                 MediaUri = displayUri;
                 RefreshCanDownload();
                 _itemShownUtc = DateTime.UtcNow;
@@ -731,12 +828,47 @@ namespace Unison.Core.ViewModels
             AuthorName = string.Empty;
             TimestampUtc = null;
             Caption = null;
+            TextBody = string.Empty;
+            BackgroundColorHex = "#FF128C7E";
+            TextColorHex = "#FFFFFFFF";
+            FontFamilyName = "Segoe UI";
+            ViewCount = 0;
+            CurrentKind = ChatPreviewKind.Text;
             MediaUri = null;
             IsVideo = false;
             IsImage = false;
+            IsText = false;
             IsLoading = false;
             _waitingForNaturalDuration = false;
             RefreshCanDownload();
+        }
+
+        private void ApplyTextStyle(HistoryStatus item)
+        {
+            uint background = item != null && item.BackgroundArgb != 0
+                ? item.BackgroundArgb
+                : 0xFF128C7E;
+            uint text = item != null && item.TextArgb != 0
+                ? item.TextArgb
+                : 0xFFFFFFFF;
+            BackgroundColorHex = "#" + background.ToString("X8");
+            TextColorHex = "#" + text.ToString("X8");
+            FontFamilyName = FontFamilyFromWire(item != null ? item.Font : 0);
+        }
+
+        private static string FontFamilyFromWire(int font)
+        {
+            IReadOnlyList<int> wire = StatusComposerViewModel.FontWireTypes;
+            IReadOnlyList<string> names = StatusComposerViewModel.FontPalette;
+            for (int i = 0; i < wire.Count && i < names.Count; i++)
+            {
+                if (wire[i] == font)
+                {
+                    return names[i];
+                }
+            }
+
+            return names.Count > 0 ? names[0] : "Segoe UI";
         }
 
         private HistoryStatus CurrentItem()

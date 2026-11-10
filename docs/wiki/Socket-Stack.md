@@ -182,6 +182,13 @@ mergers themselves, for `MessagingHistorySet`, chats/contacts/messages upserts, 
 updates. Until they exist, a first sync costs the host one dispatch per event rather than one batch,
 which is why `SocketBridge` still coalesces on its own side.
 
+Do not add a `MessagesUpsert` merger without moving the ack: `IncomingMessageHandler` acks the stanza
+before it emits the upsert, so the host persists after the server already dropped its copy. Today that
+gap is the time of one awaited dispatch; a merger would hold the upsert until the buffer flushes (up to
+the 30s timeout during offline replay), and a crash in that window loses the message. Receipts and chat
+flags are coalesced host-side instead
+(`KeyedLatestCoalescer` in `MessageFacade` / `ChatFacade`, see [UI work scheduling](Ui-Work-Scheduling.md)).
+
 QR travels on `ConnectionUpdate.Qr` (no separate QR event), matching rc14.
 
 Offline nodes are processed **sequentially** (`OfflineNodeProcessor` + `OfflineSyncCoordinator`: preview → batches of 100 → “done” releases the buffer, with a 20s safety).

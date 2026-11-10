@@ -52,6 +52,7 @@ namespace Unison.Uwp.Data
                 string dbPath = Path.Combine(ApplicationData.Current.LocalFolder.Path, DatabaseFileName);
                 _connection = new SQLiteAsyncConnection(dbPath);
                 await _connection.CreateTableAsync<HistoryStatusRow>().ConfigureAwait(false);
+                await _connection.CreateTableAsync<HistoryStatusViewerRow>().ConfigureAwait(false);
                 await DropLegacyThumbnailColumnAsync().ConfigureAwait(false);
                 await EnsureIsViewedColumnAsync().ConfigureAwait(false);
                 _initialized = true;
@@ -207,6 +208,76 @@ namespace Unison.Uwp.Data
             return changed;
         }
 
+        public async Task<bool> RecordViewerAsync(string messageId, string viewerJid, DateTime viewedAtUtc)
+        {
+            string viewer = JidHelper.Normalize(viewerJid);
+            if (string.IsNullOrWhiteSpace(messageId) || string.IsNullOrWhiteSpace(viewer))
+            {
+                return false;
+            }
+
+            await EnsureInitializedAsync().ConfigureAwait(false);
+            string id = HistoryStatusViewerRow.MakeId(messageId.Trim(), viewer);
+            bool added = false;
+            await _writeLock.WaitAsync().ConfigureAwait(false);
+            try
+            {
+                HistoryStatusViewerRow existing = await _connection.FindAsync<HistoryStatusViewerRow>(id)
+                    .ConfigureAwait(false);
+                if (existing == null)
+                {
+                    await _connection.InsertAsync(new HistoryStatusViewerRow
+                    {
+                        Id = id,
+                        MessageId = messageId.Trim(),
+                        ViewerJid = viewer,
+                        ViewedAtUtc = viewedAtUtc
+                    }).ConfigureAwait(false);
+                    added = true;
+                }
+            }
+            finally
+            {
+                _writeLock.Release();
+            }
+
+            if (added)
+            {
+                RaiseChanged();
+            }
+
+            return added;
+        }
+
+        public async Task<IReadOnlyDictionary<string, int>> GetViewerCountsAsync(IReadOnlyList<string> messageIds)
+        {
+            var counts = new Dictionary<string, int>(StringComparer.Ordinal);
+            if (messageIds == null || messageIds.Count == 0)
+            {
+                return counts;
+            }
+
+            await EnsureInitializedAsync().ConfigureAwait(false);
+            var wanted = new HashSet<string>(messageIds, StringComparer.Ordinal);
+            List<HistoryStatusViewerRow> rows = await _connection.Table<HistoryStatusViewerRow>()
+                .ToListAsync()
+                .ConfigureAwait(false);
+            for (int i = 0; i < rows.Count; i++)
+            {
+                string id = rows[i]?.MessageId;
+                if (id == null || !wanted.Contains(id))
+                {
+                    continue;
+                }
+
+                int count;
+                counts.TryGetValue(id, out count);
+                counts[id] = count + 1;
+            }
+
+            return counts;
+        }
+
         public async Task<int> DeleteExpiredAsync()
         {
             await EnsureInitializedAsync().ConfigureAwait(false);
@@ -219,11 +290,50 @@ namespace Unison.Uwp.Data
                     now).ConfigureAwait(false);
                 if (removed > 0)
                 {
+                    await _connection.ExecuteAsync(
+                        "DELETE FROM history_status_viewer WHERE MessageId NOT IN (SELECT MessageId FROM history_status)")
+                        .ConfigureAwait(false);
                     Debug.WriteLine("[HistoryStatusStore] Deleted " + removed + " expired status item(s)");
                     RaiseChanged();
                 }
 
                 return removed;
+            }
+            finally
+            {
+                _writeLock.Release();
+            }
+        }
+
+        /// <summary>
+        /// Removes one of the account's own items by id, with its viewer rows. False when the id
+        /// was not there — a refused Status whose echo never landed is not an error.
+        /// </summary>
+        public async Task<bool> DeleteOwnItemAsync(string messageId)
+        {
+            if (string.IsNullOrWhiteSpace(messageId))
+            {
+                return false;
+            }
+
+            await EnsureInitializedAsync().ConfigureAwait(false);
+            await _writeLock.WaitAsync().ConfigureAwait(false);
+            try
+            {
+                int removed = await _connection.ExecuteAsync(
+                    "DELETE FROM history_status WHERE MessageId = ? AND IsFromMe = 1",
+                    messageId).ConfigureAwait(false);
+                if (removed <= 0)
+                {
+                    return false;
+                }
+
+                await _connection.ExecuteAsync(
+                    "DELETE FROM history_status_viewer WHERE MessageId = ?",
+                    messageId).ConfigureAwait(false);
+                Debug.WriteLine("[HistoryStatusStore] Deleted own status item id=" + messageId);
+                RaiseChanged();
+                return true;
             }
             finally
             {
@@ -238,6 +348,7 @@ namespace Unison.Uwp.Data
             try
             {
                 await _connection.DeleteAllAsync<HistoryStatusRow>().ConfigureAwait(false);
+                await _connection.DeleteAllAsync<HistoryStatusViewerRow>().ConfigureAwait(false);
                 Debug.WriteLine("[HistoryStatusStore] Cleared reason=" + (reason ?? ""));
                 RaiseChanged();
             }
@@ -360,6 +471,9 @@ namespace Unison.Uwp.Data
                 PushName = model.PushName,
                 Body = model.Body,
                 Kind = (int)model.Kind,
+                BackgroundArgb = model.BackgroundArgb,
+                TextArgb = model.TextArgb,
+                Font = model.Font,
                 MediaUrl = model.MediaUrl,
                 MediaDirectPath = model.MediaDirectPath,
                 MediaKeyBase64 = model.MediaKeyBase64,
@@ -403,6 +517,9 @@ namespace Unison.Uwp.Data
                 PushName = row.PushName,
                 Body = row.Body,
                 Kind = kind,
+                BackgroundArgb = row.BackgroundArgb,
+                TextArgb = row.TextArgb,
+                Font = row.Font,
                 MediaUrl = row.MediaUrl,
                 MediaDirectPath = row.MediaDirectPath,
                 MediaKeyBase64 = row.MediaKeyBase64,

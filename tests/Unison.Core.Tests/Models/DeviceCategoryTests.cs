@@ -48,7 +48,17 @@ namespace Unison.Core.Tests.Models
             // FULL_HISTORY cascade — same class of phone that worked on 1.8.3.
             DeviceCategory raw = DeviceCategories.FromAppMemoryLimit(900UL * MB);
             Assert.Equal(DeviceCategory.High, raw);
-            Assert.Equal(DeviceCategory.Low, DeviceCategories.CapForMobile(raw, isMobile: true));
+            Assert.Equal(
+                DeviceCategory.Low,
+                DeviceCategories.CapForMobile(raw, isMobile: true));
+        }
+
+        [Fact]
+        public void Mobile_low_stays_low()
+        {
+            Assert.Equal(
+                DeviceCategory.Low,
+                DeviceCategories.CapForMobile(DeviceCategory.Low, isMobile: true));
         }
 
         [Fact]

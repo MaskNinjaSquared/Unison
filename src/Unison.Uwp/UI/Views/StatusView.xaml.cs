@@ -377,7 +377,7 @@ namespace Unison.Uwp.UI.Views
                 {
                 }
 
-                await StatusDetailPart.OpenAuthorAsync(e.Author);
+                await StatusDetailPart.OpenAuthorAsync(e.Author, e.StartMessageId);
                 if (!StatusDetailPart.HasOpenAuthor)
                 {
                     Debug.WriteLine("[StatusView] Open status did not activate UI for " + e.Author.Jid);
@@ -452,7 +452,7 @@ namespace Unison.Uwp.UI.Views
                 return true;
             }
 
-            return false;
+            return StatusListPart != null && StatusListPart.TryHandleBack();
         }
     }
 }

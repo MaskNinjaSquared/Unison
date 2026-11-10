@@ -4,6 +4,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:helpers="using:Unison.Uwp.UI.Helpers"
     mc:Ignorable="d"
     d:DesignHeight="800"
     d:DesignWidth="480">
@@ -56,6 +57,35 @@
                   VerticalAlignment="Top"
                   Canvas.ZIndex="2"
                   Tapped="Chrome_Tapped">
+                <!-- Media canvas is always black — keep WP8 ring/glyph white even in Light theme
+                     (app-wide LegacyBackButton* brushes go black on light pages). -->
+                <Grid.Resources>
+                    <ResourceDictionary>
+                        <ResourceDictionary.ThemeDictionaries>
+                            <ResourceDictionary x:Key="Default">
+                                <SolidColorBrush x:Key="LegacyBackButtonFillBrush" Color="Transparent"/>
+                                <SolidColorBrush x:Key="LegacyBackButtonRingBrush" Color="#FFFFFFFF"/>
+                                <SolidColorBrush x:Key="LegacyBackButtonGlyphBrush" Color="#FFFFFFFF"/>
+                                <SolidColorBrush x:Key="LegacyBackButtonHoverFillBrush" Color="#FFFFFFFF"/>
+                                <SolidColorBrush x:Key="LegacyBackButtonHoverGlyphBrush" Color="#FF000000"/>
+                            </ResourceDictionary>
+                            <ResourceDictionary x:Key="Light">
+                                <SolidColorBrush x:Key="LegacyBackButtonFillBrush" Color="Transparent"/>
+                                <SolidColorBrush x:Key="LegacyBackButtonRingBrush" Color="#FFFFFFFF"/>
+                                <SolidColorBrush x:Key="LegacyBackButtonGlyphBrush" Color="#FFFFFFFF"/>
+                                <SolidColorBrush x:Key="LegacyBackButtonHoverFillBrush" Color="#FFFFFFFF"/>
+                                <SolidColorBrush x:Key="LegacyBackButtonHoverGlyphBrush" Color="#FF000000"/>
+                            </ResourceDictionary>
+                            <ResourceDictionary x:Key="Dark">
+                                <SolidColorBrush x:Key="LegacyBackButtonFillBrush" Color="Transparent"/>
+                                <SolidColorBrush x:Key="LegacyBackButtonRingBrush" Color="#FFFFFFFF"/>
+                                <SolidColorBrush x:Key="LegacyBackButtonGlyphBrush" Color="#FFFFFFFF"/>
+                                <SolidColorBrush x:Key="LegacyBackButtonHoverFillBrush" Color="#FFFFFFFF"/>
+                                <SolidColorBrush x:Key="LegacyBackButtonHoverGlyphBrush" Color="#FF000000"/>
+                            </ResourceDictionary>
+                        </ResourceDictionary.ThemeDictionaries>
+                    </ResourceDictionary>
+                </Grid.Resources>
                 <Grid.Background>
                     <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
                         <GradientStop Color="#CC000000" Offset="0"/>
@@ -80,7 +110,7 @@
                                 Grid.Column="1"
                                 VerticalAlignment="Top"
                                 Margin="0,2,8,0">
-                        <TextBlock Text="{x:Bind ViewModel.SenderDisplayName, Mode=OneWay}"
+                        <TextBlock helpers:EmojiTextBlock.Text="{x:Bind ViewModel.SenderDisplayName, Mode=OneWay}"
                                    FontSize="16"
                                    FontWeight="SemiBold"
                                    FontFamily="{StaticResource MainFont}"
@@ -107,16 +137,22 @@
                     Canvas.ZIndex="2"
                     Visibility="Collapsed"
                     Tapped="Chrome_Tapped">
-                <TextBlock Text="{x:Bind ViewModel.Caption, Mode=OneWay}"
-                           FontSize="15"
-                           FontFamily="{StaticResource MainFont}"
-                           Foreground="White"
-                           TextWrapping="Wrap"
-                           TextTrimming="CharacterEllipsis"
-                           MaxLines="5"
-                           TextAlignment="Center"
-                           HorizontalAlignment="Stretch"
-                           IsTextSelectionEnabled="True"/>
+                <!-- Mirrors UI/Views/ImageViewerView.xaml: rich caption so emoji, mentions and
+                     links render the same as the bubble behind the overlay. -->
+                <RichTextBlock helpers:CommentRichService.Text="{x:Bind ViewModel.Caption, Mode=OneWay}"
+                               helpers:CommentRichService.MentionedJids="{x:Bind ViewModel.MentionedJids, Mode=OneWay}"
+                               helpers:CommentRichService.MentionLookup="{x:Bind ViewModel.MentionLookup, Mode=OneWay}"
+                               helpers:CommentRichService.RefreshKey="{x:Bind ViewModel.MentionRefreshKey, Mode=OneWay}"
+                               helpers:CommentRichService.LinkBrushKey="ImageViewerCaptionLinkBrush"
+                               FontSize="15"
+                               FontFamily="{StaticResource MainFont}"
+                               Foreground="White"
+                               TextWrapping="Wrap"
+                               TextTrimming="CharacterEllipsis"
+                               MaxLines="5"
+                               TextAlignment="Center"
+                               HorizontalAlignment="Stretch"
+                               IsTextSelectionEnabled="True"/>
             </Border>
         </Grid>
 

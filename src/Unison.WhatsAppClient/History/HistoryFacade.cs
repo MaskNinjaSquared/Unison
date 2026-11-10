@@ -26,6 +26,7 @@ using Unison.Core.Constants;
 using Unison.Core.Contracts;
 using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Helpers;
+using Unison.Core.Helpers.Chats;
 using Unison.Core.Models;
 using Unison.Core.State;
 using Unison.Socket.Events;
@@ -67,6 +68,7 @@ namespace Unison.WhatsAppClient.History
         private readonly IJidResolver _jids;
         private readonly IMessageStore _store;
         private readonly ILocalSettings _settings;
+        private readonly SessionOpenOnDemandCrashLatch _sessionOpenOnDemandLatch;
         private readonly IHistoryChatPreviewStore _chatPreviewStore;
         private readonly IHistoryMigrationStore _migrationStore;
         private readonly IHistoryMessageStore _messageHistoryStore;
@@ -102,6 +104,9 @@ namespace Unison.WhatsAppClient.History
         /// </summary>
         private volatile bool _awaitingFirstHistorySync;
         private volatile bool _firstHistorySyncCompletedThisSession;
+        private int _pairingBootstrapApplyInFlight;
+        private volatile bool _pairingBootstrapChunkSeenPendingFinalize;
+        private readonly Func<IChatService> _resolveChats;
 
         public HistoryFacade(
             IWhatsAppSessionProvider sessions,
@@ -134,7 +139,8 @@ namespace Unison.WhatsAppClient.History
             IAppVisibility visibility = null,
             IHistoryMessageThumbnailMaterializer messageThumbs = null,
             IStatusThumbnailMaterializer statusThumbs = null,
-            ILidMappingDiskPersistGate lidDiskPersist = null)
+            ILidMappingDiskPersistGate lidDiskPersist = null,
+            Func<IChatService> resolveChats = null)
         {
             if (sessions == null)
             {
@@ -165,6 +171,7 @@ namespace Unison.WhatsAppClient.History
             _onDemandSocket = onDemandSocket ?? throw new ArgumentNullException(nameof(onDemandSocket));
             _resolveConnection = resolveConnection;
             _resolveMessages = resolveMessages;
+            _resolveChats = resolveChats;
             _resync = resync ?? throw new ArgumentNullException(nameof(resync));
             _historySync = historySync ?? throw new ArgumentNullException(nameof(historySync));
             _catchUpHost = catchUpHost ?? throw new ArgumentNullException(nameof(catchUpHost));
@@ -174,6 +181,7 @@ namespace Unison.WhatsAppClient.History
             _jids = jids ?? throw new ArgumentNullException(nameof(jids));
             _store = store;
             _settings = settings;
+            _sessionOpenOnDemandLatch = new SessionOpenOnDemandCrashLatch(settings);
             _onDemandRequests = onDemandRequests ?? throw new ArgumentNullException(nameof(onDemandRequests));
             _onDemand = new HistoryOnDemandDispatch(
                 onDemandRequests,
@@ -213,6 +221,7 @@ namespace Unison.WhatsAppClient.History
                     _displayKeepAwake?.Release("before-list-xload");
                     _firstHistorySyncCompletedThisSession = true;
                     _awaitingFirstHistorySync = false;
+                    _pairingBootstrapChunkSeenPendingFinalize = false;
                     // History SQLite is quiet: paced LID disk writes may start (not in parallel).
                     _lidDiskPersist?.ReleaseAfterHistory("initial-sync-completed");
                 }
@@ -255,6 +264,18 @@ namespace Unison.WhatsAppClient.History
             _catchUp.IsActive(_catchUpHost.IsCatchUpBannerActive);
 
         public bool IsAwaitingFirstHistorySync => _awaitingFirstHistorySync;
+
+        /// <inheritdoc />
+        public bool IsPairingBootstrapActive =>
+            HistorySyncFlowDecision.IsPairingBootstrapActive(
+                _awaitingFirstHistorySync,
+                Volatile.Read(ref _pairingBootstrapApplyInFlight) > 0,
+                _pairingBootstrapChunkSeenPendingFinalize);
+
+        /// <inheritdoc />
+        public bool IsPairingBootstrapChunkSeenOrApplying =>
+            _pairingBootstrapChunkSeenPendingFinalize ||
+            Volatile.Read(ref _pairingBootstrapApplyInFlight) > 0;
 
         public bool PreferFrugalSyncBudget => _syncBudget.IsFrugal;
 
@@ -396,7 +417,13 @@ namespace Unison.WhatsAppClient.History
             }
 
             // Null payload: list UI must not treat this as "sync over" — finalize is debounced.
-            NotifyHistorySyncReceived(null);
+            // OnDemand must not raise it: History_SyncReceived would RefreshVisibleChats on a
+            // painted list (and under an open chat) for a tip/timeline chunk.
+            if (HistoryListUiRefresh.ShouldRaiseNullHistorySyncReceived(
+                    IsOnDemandSyncType(syncType)))
+            {
+                NotifyHistorySyncReceived(null);
+            }
         }
 
         /// <summary>
@@ -479,7 +506,7 @@ namespace Unison.WhatsAppClient.History
 
             try
             {
-                ApplyLidMappingsFromHistory(sync);
+                ApplyLidMappingsFromHistory(sync, result.SyncType, result.ConversationCount);
             }
             catch (Exception ex)
             {
@@ -526,6 +553,20 @@ namespace Unison.WhatsAppClient.History
                 result.MessageChatJids = Array.Empty<string>();
             }
 
+            // Persist finished off-UI — one tip heal for chats in this block only (not full list).
+            try
+            {
+                if (HistorySyncApplyPipelineDecision.ShouldRunHistoryChunkTipReconcile(
+                        result.ConversationCount))
+                {
+                    await ApplyHistoryChunkTipFinalAsync(result).ConfigureAwait(false);
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[HistoryFacade] History chunk tip final failed: " + ex.Message);
+            }
+
             try
             {
                 await PersistStatusesAsync(sync).ConfigureAwait(false);
@@ -543,7 +584,9 @@ namespace Unison.WhatsAppClient.History
                     IReadOnlyList<string> latchJids = result.ConversationJids.Count > 0
                         ? result.ConversationJids
                         : result.MessageChatJids;
-                    _onDemandRequests.CompleteChats(latchJids.Select(JidHelper.Normalize).ToList());
+                    List<string> normalized = latchJids.Select(JidHelper.Normalize).ToList();
+                    _onDemandRequests.CompleteChats(normalized);
+                    _sessionOpenOnDemandLatch.Disarm(normalized);
                 }
                 catch (Exception ex)
                 {
@@ -575,6 +618,34 @@ namespace Unison.WhatsAppClient.History
             return result;
         }
 
+        /// <summary>
+        /// After SQLite persist for this chunk, heal tips only for chats that landed in the block.
+        /// </summary>
+        private async Task ApplyHistoryChunkTipFinalAsync(HistorySqliteChunkResult result)
+        {
+            if (_resolveChats == null || result == null)
+            {
+                return;
+            }
+
+            IChatService chats = _resolveChats();
+            if (chats == null)
+            {
+                return;
+            }
+
+            IReadOnlyList<string> jids = result.MessageChatJids != null && result.MessageChatJids.Count > 0
+                ? result.MessageChatJids
+                : result.ConversationJids;
+            if (jids == null || jids.Count == 0)
+            {
+                return;
+            }
+
+            await chats.ReconcileChatPreviewsFromSqliteAsync(jids, "history-chunk-tip")
+                .ConfigureAwait(false);
+        }
+
         private static IReadOnlyList<string> CollectConversationJids(HistorySync sync)
         {
             if (sync?.Conversations == null || sync.Conversations.Count == 0)
@@ -603,7 +674,10 @@ namespace Unison.WhatsAppClient.History
             return jids;
         }
 
-        private void ApplyLidMappingsFromHistory(HistorySync sync)
+        private void ApplyLidMappingsFromHistory(
+            HistorySync sync,
+            string syncType,
+            int conversationCount)
         {
             if (sync == null)
             {
@@ -612,7 +686,10 @@ namespace Unison.WhatsAppClient.History
 
             var pairs = new List<KeyValuePair<string, string>>();
 
-            if (sync.PhoneNumberToLidMappings != null)
+            if (HistorySyncApplyPipelineDecision.ShouldRegisterPhoneNumberLidAliases(
+                    syncType,
+                    conversationCount) &&
+                sync.PhoneNumberToLidMappings != null)
             {
                 foreach (var mapping in sync.PhoneNumberToLidMappings)
                 {
@@ -629,7 +706,9 @@ namespace Unison.WhatsAppClient.History
                 }
             }
 
-            if (sync.Conversations != null)
+            if (HistorySyncApplyPipelineDecision.ShouldHarvestConversationLidAliases(
+                    conversationCount) &&
+                sync.Conversations != null)
             {
                 foreach (var conv in sync.Conversations)
                 {
@@ -882,6 +961,22 @@ namespace Unison.WhatsAppClient.History
             _awaitingFirstHistorySync = true;
             _listPaintGate?.Arm(reason);
             _displayKeepAwake?.Hold(reason);
+            // Align IsFirstSyncListHoldInProgress with the paint gate from arm time —
+            // otherwise catch-up finish takes the "no history" escape while the list waits.
+            try
+            {
+                _initialSync.Publish(
+                    active: true,
+                    completed: false,
+                    processed: 0,
+                    total: 0,
+                    stage: "first-sync-hold:" + (reason ?? string.Empty));
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine(
+                    "[HistoryFacade] First-sync hold progress publish failed: " + ex.Message);
+            }
         }
 
         private string CurrentSyncId()
@@ -1013,6 +1108,18 @@ namespace Unison.WhatsAppClient.History
             string normJid = JidHelper.Normalize(jid);
             return !string.IsNullOrWhiteSpace(normJid) && _onDemandRequests.IsChatPending(normJid);
         }
+
+        public void ArmSessionOpenOnDemandPending(string jid) =>
+            _sessionOpenOnDemandLatch.Arm(jid);
+
+        public void DisarmSessionOpenOnDemandPending(IReadOnlyList<string> jids) =>
+            _sessionOpenOnDemandLatch.Disarm(jids);
+
+        public int PeekSessionOpenOnDemandPendingCount() =>
+            _sessionOpenOnDemandLatch.Peek().Count;
+
+        public IReadOnlyList<string> TakeSessionOpenOnDemandPending() =>
+            _sessionOpenOnDemandLatch.TakeAll();
 
         /// <summary>
         /// Sends the request and waits for the history it produces, rather than for a fixed time.
@@ -1183,26 +1290,68 @@ namespace Unison.WhatsAppClient.History
         /// <inheritdoc />
         public async Task ApplyHistorySyncAsync(HistorySync sync)
         {
-            if (sync != null)
+            string syncType = sync != null ? sync.SyncType.ToString() : string.Empty;
+            int conversationCount = sync?.Conversations?.Count ?? 0;
+            bool pairingChunk = sync != null && !IsOnDemandSyncType(syncType);
+            if (pairingChunk)
             {
-                IMessageService messages = _resolveMessages();
-                if (messages == null)
-                {
-                    throw new InvalidOperationException(
-                        "IMessageService must resolve before history sync apply.");
-                }
-
-                await messages.SyncMessageHistoryAsync(sync).ConfigureAwait(false);
+                BeginPairingBootstrapApply(syncType, conversationCount);
             }
 
-            NotifyHistorySyncReceived(sync);
+            try
+            {
+                if (sync != null)
+                {
+                    IMessageService messages = _resolveMessages();
+                    if (messages == null)
+                    {
+                        throw new InvalidOperationException(
+                            "IMessageService must resolve before history sync apply.");
+                    }
 
-            bool hasContent = sync != null &&
-                ((sync.Conversations != null && sync.Conversations.Count > 0) ||
-                 (sync.Pushnames != null && sync.Pushnames.Count > 0));
-            _historySync.NoteHistorySyncLanded(
-                sync != null ? sync.SyncType.ToString() : null,
-                hasContent);
+                    await messages.SyncMessageHistoryAsync(sync).ConfigureAwait(false);
+                }
+
+                NotifyHistorySyncReceived(sync);
+
+                bool hasContent = sync != null &&
+                    ((sync.Conversations != null && sync.Conversations.Count > 0) ||
+                     (sync.Pushnames != null && sync.Pushnames.Count > 0));
+                _historySync.NoteHistorySyncLanded(
+                    sync != null ? sync.SyncType.ToString() : null,
+                    hasContent);
+            }
+            finally
+            {
+                if (pairingChunk)
+                {
+                    EndPairingBootstrapApply();
+                }
+            }
+        }
+
+        /// <summary>
+        /// Marks PairingBootstrap apply in flight and publishes progress before person upsert /
+        /// SQLite work so catch-up idle cannot empty-ack-finish during a long apply.
+        /// </summary>
+        private void BeginPairingBootstrapApply(string syncType, int conversationCount)
+        {
+            _pairingBootstrapChunkSeenPendingFinalize = true;
+            Interlocked.Increment(ref _pairingBootstrapApplyInFlight);
+            try
+            {
+                _historySync.NotifyHistorySqliteChunkStarted(syncType, conversationCount);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine(
+                    "[HistoryFacade] Pairing bootstrap apply heartbeat failed: " + ex.Message);
+            }
+        }
+
+        private void EndPairingBootstrapApply()
+        {
+            Interlocked.Decrement(ref _pairingBootstrapApplyInFlight);
         }
 
         /// <inheritdoc />
@@ -1318,6 +1467,15 @@ namespace Unison.WhatsAppClient.History
                         ackAccepted,
                         progressSignals);
                     return;
+            }
+
+            // PairingBootstrap owns history delivery — do not solicit adjacent FULL_HISTORY.
+            if (!HistorySyncFlowDecision.ShouldRequestAdjacentCatchUp(IsPairingBootstrapActive))
+            {
+                _catchUpHost.FinishContinue(
+                    "pairing-bootstrap-defer-adjacent",
+                    releaseEnrichment: true);
+                return;
             }
 
             _ = RequestAdjacentFullHistoryCatchUpAsync(

@@ -89,8 +89,8 @@ namespace Unison.Core.Helpers
         }
 
         /// <param name="contextJid">
-        /// The address the label was offered for. Only used to catch a label that is just
-        /// that address's own digits.
+        /// The address the label was offered for. Only used to catch a label that is a number —
+        /// either that address's own digits, or any phone-shaped string.
         /// </param>
         public ContactLabelResult Sanitize(string label, string contextJid)
         {
@@ -181,13 +181,93 @@ namespace Unison.Core.Helpers
                 return false;
             }
 
+            string labelDigits = DigitsOnly(trimmed);
+            if (labelDigits.Length < MinDigitsForPhoneEcho || !IsPhoneShaped(trimmed))
+            {
+                return false;
+            }
+
             string contextDigits = DigitsOnly(normalizedContext);
             if (contextDigits.Length < MinDigitsForPhoneEcho)
             {
                 return false;
             }
 
-            return string.Equals(DigitsOnly(trimmed), contextDigits, StringComparison.Ordinal);
+            // Same number, written differently. An exact comparison only caught the form the
+            // address itself uses, so a number saved without its country code — "(11) 98888-7777"
+            // against 5511988887777 — was accepted as a name. One being the tail of the other is
+            // the dialling-prefix case; a different number is still a real label and is kept,
+            // because it carries information the address does not.
+            return labelDigits.EndsWith(contextDigits, StringComparison.Ordinal) ||
+                   contextDigits.EndsWith(labelDigits, StringComparison.Ordinal);
+        }
+
+        /// <summary>
+        /// Digits plus the punctuation people write numbers with, and nothing else. Mirrors the
+        /// placeholder rule in <c>GroupParticipantResolver</c> so the two agree on what a number
+        /// looks like.
+        /// </summary>
+        private static bool IsPhoneShaped(string trimmed)
+        {
+            for (int i = 0; i < trimmed.Length; i++)
+            {
+                char c = trimmed[i];
+                if (c == '+' || c == ' ' || c == '-' || c == '(' || c == ')')
+                {
+                    continue;
+                }
+
+                if (!char.IsDigit(c))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// Whether the label is nothing but a phone number, whoever it belongs to. A LID
+        /// chat resolves to its paired number, whose digits never echo the LID itself.
+        /// Not part of <see cref="Sanitize"/>: there another person's number is still data.
+        /// </summary>
+        public static bool IsPhoneLikeLabel(string trimmed)
+        {
+            return !string.IsNullOrWhiteSpace(trimmed) &&
+                   IsPhoneShaped(trimmed) &&
+                   DigitsOnly(trimmed).Length >= MinDigitsForPhoneEcho;
+        }
+
+        /// <summary>
+        /// Whether the label holds half of a UTF-16 surrogate pair, the mark of a name cut
+        /// through an emoji ("Leo🇮🇹" stored as "Leo🇮" plus a dangling high surrogate).
+        /// </summary>
+        public static bool HasBrokenSurrogate(string label)
+        {
+            if (string.IsNullOrEmpty(label))
+            {
+                return false;
+            }
+
+            for (int i = 0; i < label.Length; i++)
+            {
+                char c = label[i];
+                if (char.IsHighSurrogate(c))
+                {
+                    if (i + 1 >= label.Length || !char.IsLowSurrogate(label[i + 1]))
+                    {
+                        return true;
+                    }
+
+                    i++;
+                }
+                else if (char.IsLowSurrogate(c))
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         private static string DigitsOnly(string value)

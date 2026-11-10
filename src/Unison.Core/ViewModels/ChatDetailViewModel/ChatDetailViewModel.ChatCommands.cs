@@ -122,23 +122,38 @@ namespace Unison.Core.ViewModels
                 _ = SyncLocalStateAsync(chat);
             }
 
-            // EnsureFresh: 2nd open of the same group reuses the warm 1:1 index / roster maps.
-            RebuildParticipantLookup();
-
+            // Groups only: EnsureFresh walks every 1:1 row for the shared direct index.
+            // Self / personal open paid that walk on the UI turn after SyncLocalState and
+            // stalled ~40s under active=none while alias follow-up promoted LidMapping misses.
             if (LooksLikeGroupChat(chat))
             {
+                // EnsureFresh: 2nd open of the same group reuses the warm 1:1 index / roster maps.
+                RebuildParticipantLookup();
+
+                // Before the w:g2 refresh below: the stored self row answers the composer lock
+                // until the server does, and loses to it once it has.
+                if (_groupService != null)
+                {
+                    _ = _groupService.RestoreMyGroupRoleAsync(chat);
+                }
+
                 // Strip after Yield only. Subject/meta IQ once here (not on ProgressBar arm) so
                 // a brand-new group still gets a name while the timeline loads.
                 _ = DeferGroupOpenEnrichmentAsync(chat.JID);
                 TryRefreshGroupSubjectOnce();
             }
 
+            if (chat.IsChannel && _channels != null)
+            {
+                _ = _channels.RefreshViewerRoleAsync(chat);
+            }
+
             bool isMobile = _systemInfo != null && _systemInfo.IsMobile();
             if (_contactService != null &&
                 MobileChatListAvatarGate.AllowRefreshOnChatOpen(isMobile, chatChanged, chat != null))
             {
-                // Force past the 7-day interval: Mobile revalidates on every open; Apply skips
-                // the CDN download when picture id/url matches what we already cached.
+                // Force = revalidate: past the 7-day interval and the IQ cache (60s cooldown per
+                // JID); Apply skips the CDN download when picture id/url matches what we cached.
                 _contactService.RequestAvatarRefresh(chat, force: true);
             }
         }
@@ -172,6 +187,7 @@ namespace Unison.Core.ViewModels
                 e.PropertyName == nameof(ChatItem.LeftGroup) ||
                 e.PropertyName == nameof(ChatItem.IsComposerLocked) ||
                 e.PropertyName == nameof(ChatItem.IsChannel) ||
+                e.PropertyName == nameof(ChatItem.ChannelRole) ||
                 e.PropertyName == nameof(ChatItem.Kind) ||
                 e.PropertyName == nameof(ChatItem.IsAnnounceOnly) ||
                 e.PropertyName == nameof(ChatItem.MyGroupRole) ||

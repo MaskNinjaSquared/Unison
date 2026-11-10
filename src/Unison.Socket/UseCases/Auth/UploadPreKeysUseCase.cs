@@ -72,24 +72,24 @@ namespace Unison.Socket.UseCases.Auth
                 throw new InvalidOperationException("Cannot upload prekeys before the identity exists");
             }
 
-            var keys = new List<BinaryNode>(count);
-            for (var i = 0; i < count; i++)
-            {
-                var record = await _preKeys.GetNextPreKeyAsync().ConfigureAwait(false);
-                if (record == null)
-                {
-                    // The store refused to mint more. Announcing what we have beats announcing
-                    // nothing, so the batch goes up short rather than not at all.
-                    _log.Warn("[PreKeys] Could only prepare " + keys.Count + " of " + count + " keys");
-                    break;
-                }
-
-                keys.Add(KeyBundleNodes.PreKey(record.KeyId, record.PublicKey));
-            }
-
-            if (keys.Count == 0)
+            PreKeyUploadBatch batch = await _preKeys.PrepareUploadBatchAsync(count).ConfigureAwait(false);
+            if (batch == null || batch.Keys.Count == 0)
             {
                 throw new InvalidOperationException("No prekeys could be generated");
+            }
+
+            if (batch.Keys.Count < count)
+            {
+                // Announcing what we have beats announcing nothing, so the batch goes up short.
+                _log.Warn("[PreKeys] Could only prepare " + batch.Keys.Count + " of " + count + " keys");
+            }
+
+            var keys = new List<BinaryNode>(batch.Keys.Count);
+            int highestKeyId = 0;
+            foreach (PreKeyRecord record in batch.Keys)
+            {
+                keys.Add(KeyBundleNodes.PreKey(record.KeyId, record.PublicKey));
+                highestKeyId = Math.Max(highestKeyId, record.KeyId);
             }
 
             var iq = new BinaryNode(
@@ -110,8 +110,11 @@ namespace Unison.Socket.UseCases.Auth
                 });
 
             await _connection.QueryAsync(iq, timeout ?? DefaultTimeout).ConfigureAwait(false);
+            _preKeys.ConfirmUploaded(highestKeyId);
 
-            _log.Info("[PreKeys] Uploaded " + keys.Count + " prekey(s)");
+            _log.Info(
+                "[PreKeys] Uploaded " + keys.Count + " prekey(s) (reused " + batch.Reused +
+                ", minted " + batch.Minted + ")");
             return keys.Count;
         }
     }

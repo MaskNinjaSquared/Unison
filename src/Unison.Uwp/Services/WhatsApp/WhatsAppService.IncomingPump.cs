@@ -10,11 +10,11 @@ using Proto;
 
 namespace Unison.Uwp.Services.WhatsApp
 {
-    /// <summary>
+        /// <summary>
     /// Thin host ports for placeholder resend and bound mutation. The decrypted
     /// queue/drain live on <see cref="IncomingMessagePump"/>; offline-replay flush
     /// ownership is <see cref="OfflineReplayFlush"/>.
-    /// </summary>
+        /// </summary>
     public partial class WhatsAppService : IBoundMutationGate
     {
         bool IPlaceholderResendSocket.IsHandshakeComplete =>

@@ -102,6 +102,29 @@ namespace Unison.Core.Tests.Helpers
         }
 
         [Fact]
+        public void Apply_callEvent_does_not_break_same_sender_run_or_grow_own_tip()
+        {
+            var first = Incoming(AnaPn, "Ana");
+            var call = new ChatMessage
+            {
+                Kind = ChatMessageKind.CallEvent,
+                IsFromMe = false,
+                CallChromeKind = CallEventChromeKind.Missed
+            };
+            var second = Incoming(AnaPn, "Ana");
+            var messages = new[] { first, call, second };
+
+            MessageRunLayout.Apply(messages, isGroup: true, groupChat: null, lookup: null, "Hoje", "Ontem", null);
+
+            Assert.True(first.IsRunStart);
+            Assert.False(first.IsRunEnd);
+            Assert.False(call.IsRunStart);
+            Assert.False(call.IsRunEnd);
+            Assert.False(second.IsRunStart);
+            Assert.True(second.IsRunEnd);
+        }
+
+        [Fact]
         public void ApplyUnreadDividerUsesExplicitIsReadFalse()
         {
             var read = Incoming(AnaPn, "Ana");

@@ -104,6 +104,29 @@ namespace Unison.Core.Tests.State
         }
 
         [Fact]
+        public void BeginBulkImport_remembers_only_the_pairs_set_inside_the_scope()
+        {
+            var memory = new FakeMemory();
+            var table = new JidAliasTable();
+            table.AttachLidMappingMemory(memory);
+
+            using (table.BeginBulkImport())
+            {
+                table["199999999999@lid"] = "5511999990000@s.whatsapp.net";
+                table["288888888888@lid"] = "5511888880000@s.whatsapp.net";
+            }
+
+            using (table.BeginBulkImport())
+            {
+                table["377777777777@lid"] = "5511777770000@s.whatsapp.net";
+            }
+
+            Assert.Equal(2, memory.RememberPairsCalls);
+            KeyValuePair<string, string> only = Assert.Single(memory.LastPairs);
+            Assert.Equal("377777777777@lid", only.Key);
+        }
+
+        [Fact]
         public void IsBulkImporting_tracks_nested_scopes()
         {
             var table = new JidAliasTable();

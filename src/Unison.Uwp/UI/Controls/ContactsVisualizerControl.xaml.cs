@@ -19,6 +19,7 @@ namespace Unison.Uwp.UI.Controls
     /// Generic contact/chat picker overlay. Hosts pass a title, collection, and click command —
     /// open presentation (compact rows, deferred bind, fade) comes from the active shell theme strategy.
     /// Always groups A–Z for SemanticZoom (no category) so jump letters match Favourites.
+    /// System Back via <see cref="INavigator.PushLocalBack"/> (share / favorites pickers).
     /// </summary>
     public sealed partial class ContactsVisualizerControl : UserControl
     {
@@ -62,7 +63,7 @@ namespace Unison.Uwp.UI.Controls
             IsSourceGrouped = true
         };
 
-        private bool _backHooked;
+        private IDisposable _localBackRegistration;
         private bool _openInProgress;
         private bool _clickBusy;
         private ModernProgressRing _rowBusyRing;
@@ -286,48 +287,46 @@ namespace Unison.Uwp.UI.Controls
 
         private void HookBack()
         {
-            if (_backHooked)
+            if (_localBackRegistration != null)
             {
                 return;
             }
 
-            SystemNavigationManager.GetForCurrentView().BackRequested += OnBackRequested;
-            _backHooked = true;
+            INavigator navigator = App.Services?.GetService<INavigator>();
+            if (navigator == null)
+            {
+                return;
+            }
+
+            _localBackRegistration = navigator.PushLocalBack(TryHandleLocalBack);
         }
 
         private void UnhookBack()
         {
-            if (!_backHooked)
-            {
-                return;
-            }
-
-            SystemNavigationManager.GetForCurrentView().BackRequested -= OnBackRequested;
-            _backHooked = false;
+            _localBackRegistration?.Dispose();
+            _localBackRegistration = null;
         }
 
-        private void OnBackRequested(object sender, BackRequestedEventArgs e)
+        private bool TryHandleLocalBack()
         {
             if (!IsOpen)
             {
-                return;
+                return false;
             }
 
             if (_clickBusy)
             {
-                e.Handled = true;
-                return;
+                return true;
             }
 
             if (!ContactsZoom.IsZoomedInViewActive)
             {
-                e.Handled = true;
                 ContactsZoom.IsZoomedInViewActive = true;
-                return;
+                return true;
             }
 
-            e.Handled = true;
             RequestClose();
+            return true;
         }
 
         private void ContactsVisualizerControl_Unloaded(object sender, RoutedEventArgs e)

@@ -13,6 +13,7 @@ using Unison.Core.Contracts;
 using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Factories;
 using Unison.Core.Helpers;
+using Unison.Core.Helpers.Chats;
 using Unison.Core.Models;
 using Unison.Core.State;
 
@@ -34,6 +35,7 @@ namespace Unison.Core.ViewModels
         {
             if (_attached) return;
             _attached = true;
+            _visiblePaintGeneration = ChatListVisiblePaintOwner.Claim(this);
 
             _connection.StatusChanged += Connection_StatusChanged;
             _history.SyncStatusChanged += History_SyncStatusChanged;
@@ -42,6 +44,9 @@ namespace Unison.Core.ViewModels
             _history.ChatPreviewChunkPersisted += History_ChatPreviewChunkPersisted;
             _history.HistoryMessageChunkPersisted += History_MessageChunkPersisted;
             _contactService.DisplayNamesUpdated += Contacts_DisplayNamesUpdated;
+            _chatState.CommunitySubjectsUpdated += ChatState_CommunitySubjectsUpdated;
+            _chatState.BulkCatalogueMutationEnded += ChatState_BulkCatalogueMutationEnded;
+            _chatService.VisibleOrderInvalidated += ChatService_VisibleOrderInvalidated;
             _chatState.Chats.CollectionChanged += ChatState_ChatsChanged;
 
             foreach (var chat in _chatState.Chats)
@@ -66,7 +71,10 @@ namespace Unison.Core.ViewModels
                 _appVisibility.Changed += AppVisibility_Changed;
             }
 
-            _notificationCounter = new NotificationCounterWatch(_chatState.Chats);
+            // Scope-filtered badge: Channels/Archived show their own unread count, not Active's.
+            _notificationCounter = new NotificationCounterWatch(
+                _chatState.Chats,
+                MatchesScope);
             _notificationCounter.Changed += NotificationCounter_Changed;
             RaiseProperties(nameof(NotificationCounterBadge), nameof(NotificationCounterBadgeText));
 
@@ -93,10 +101,19 @@ namespace Unison.Core.ViewModels
             }
             else if (IsInSafeMode)
             {
-                BeginBatchRendering(
-                    _history.InitialSyncProcessedConversations,
-                    _history.InitialSyncTotalConversations,
-                    _chatState.Chats.Count);
+                // Resume/reattach while a trailing empty chunk re-armed safe mode — the list
+                // is already painted; do not restart BeginBatch (release-tick hang).
+                if (IsChatListMaterialized)
+                {
+                    NotifyListPaintReleased("attach-safe-mode-already-materialized");
+                }
+                else
+                {
+                    BeginBatchRendering(
+                        _history.InitialSyncProcessedConversations,
+                        _history.InitialSyncTotalConversations,
+                        _chatState.Chats.Count);
+                }
             }
             else
             {
@@ -111,7 +128,52 @@ namespace Unison.Core.ViewModels
 
             if (!_batchRendering)
             {
-                RefreshVisibleChats();
+                // Transient VMs miss SyncStatusChanged history — seed from the shared channel
+                // so Active+frugal still defers mid-groups (aefa3dfb Channels attach was fine
+                // to run; Active cold rebuild is what hung the UI for minutes).
+                if (string.IsNullOrWhiteSpace(_lastSyncPhaseToken) && _syncStatus != null)
+                {
+                    _lastSyncPhaseToken = _syncStatus.LastEnrichmentStatus;
+                }
+
+                // Frugal Active only: Channels/Archived use the lean catalog path and paint now.
+                if (ChatListEnrichmentRefresh.ShouldDeferVisibleRefresh(
+                        PreferFrugalUi,
+                        _chatService != null &&
+                        _chatService.MatchesListEnrichmentPhase(_lastSyncPhaseToken),
+                        _scope))
+                {
+                    _refreshDeferredForEnrichment = true;
+                    _visibleOrderDirty = true;
+                    EnsureDeferredEmptyListLoadingOverlay();
+                    // Keep the freio for mid-enrichment storms, but paint once when unload
+                    // left VisibleChats empty — otherwise Groups/Avatars stuck without
+                    // Raise(null) leave ChatList_Loading forever (f7af47e0).
+                    if (ChatListEnrichmentRefresh.ShouldPaintEmptyListDuringEnrichmentDeferral(
+                            VisibleChats.Count))
+                    {
+                        ScheduleRefreshVisibleChats(
+                            ChatListEnrichmentRefresh.EmptyDeferredListPaintDelay,
+                            allowDuringEnrichment: true);
+                    }
+
+                    TraceListLifecycle(
+                        "refresh-deferred-enrichment-attach",
+                        BuildListSnapshot("visible=" + VisibleChats.Count),
+                        flush: true);
+                }
+                else
+                {
+                    _ = _dispatcher.RunAsync(() =>
+                    {
+                        if (!_attached || _batchRendering || IsInSafeMode || IsListHeldForSync)
+                        {
+                            return;
+                        }
+
+                        RefreshVisibleChats();
+                    });
+                }
             }
         }
 
@@ -167,8 +229,104 @@ namespace Unison.Core.ViewModels
                     return;
                 }
 
+                // Settings go-back / list unload mid-groups: Attach already deferred the
+                // cold Active rebuild. Pins must not bypass that freio (c2ba3c60: ~285s
+                // buildMs inside EnsureLocalChatPinsAppliedAsync while enrichment ran).
+                bool enrichmentPhase = _chatService != null &&
+                    _chatService.MatchesListEnrichmentPhase(_lastSyncPhaseToken);
+                if (ChatListEnrichmentRefresh.ShouldDeferPinsVisibleRefresh(
+                        _refreshDeferredForEnrichment,
+                        PreferFrugalUi,
+                        enrichmentPhase,
+                        _scope))
+                {
+                    _refreshDeferredForEnrichment = true;
+                    _visibleOrderDirty = true;
+                    EnsureDeferredEmptyListLoadingOverlay();
+                    // Attach may already have armed the empty paint; coalesce keeps it.
+                    // If only pins saw the empty deferral, arm the same one-shot paint.
+                    if (ChatListEnrichmentRefresh.ShouldPaintEmptyListDuringEnrichmentDeferral(
+                            VisibleChats.Count))
+                    {
+                        ScheduleRefreshVisibleChats(
+                            ChatListEnrichmentRefresh.EmptyDeferredListPaintDelay,
+                            allowDuringEnrichment: true,
+                            coalesceIfArmed: true);
+                    }
+
+                    TraceListLifecycle(
+                        "refresh-deferred-enrichment-pins",
+                        BuildListSnapshot("visible=" + VisibleChats.Count),
+                        flush: true);
+                    return;
+                }
+
+                // Pin ApplyTo already mutated ChatItem refs — reshuffle painted rows.
+                // Full RefreshVisibleChats only when unload left the list empty.
+                if (ChatListEnrichmentRefresh.PreferInPlaceReorderAfterPins(VisibleChats.Count))
+                {
+                    ReorderVisibleChatsInPlace();
+                    return;
+                }
+
                 RefreshVisibleChats();
             }).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// Go-back mid-enrichment: store may already have chats (Attach would hide the
+        /// cold-start overlay) while VisibleChats is still empty after unload.
+        /// </summary>
+        private void EnsureDeferredEmptyListLoadingOverlay()
+        {
+            if (!ChatListEnrichmentRefresh.ShouldShowLoadingWhileDeferredEmpty(
+                    VisibleChats.Count,
+                    _refreshDeferredForEnrichment))
+            {
+                return;
+            }
+
+            ShowDeepLinkLoadingOverlay();
+        }
+
+        /// <summary>
+        /// ListView Unloaded runs before page Detach. Drop painted rows so UWP does not
+        /// tear down hundreds of realized containers on the UI thread during resume /
+        /// navigation (Mobile hang with active=none after ClearRecordingUi).
+        /// </summary>
+        public void PrepareListUnload()
+        {
+            _refreshCts?.Cancel();
+            _refreshContinueCts?.Cancel();
+            _pendingVisibleRefreshSource = null;
+            if (_visibleColdPopulate)
+            {
+                _visibleColdPopulate = false;
+                _coldPopulateGate?.Release();
+            }
+
+            ReleaseBatchColdPopulateGate();
+
+            if (!ChatListUnloadPolicy.ShouldClearVisibleChats(VisibleChats.Count))
+            {
+                return;
+            }
+
+            IsRefreshing = true;
+            try
+            {
+                VisibleChats.Clear();
+            }
+            finally
+            {
+                IsRefreshing = false;
+            }
+
+            _visibleOrderDirty = false;
+            TraceListLifecycle(
+                "list-unload-cleared",
+                BuildListSnapshot("reason=listview-unloaded"),
+                flush: true);
         }
 
         /// <summary>Mirror of <see cref="Attach"/>.</summary>
@@ -176,6 +334,9 @@ namespace Unison.Core.ViewModels
         {
             if (!_attached) return;
             _attached = false;
+            PrepareListUnload();
+            ChatListVisiblePaintOwner.Release(this, _visiblePaintGeneration);
+            _visiblePaintGeneration = 0;
 
             CancellationTokenSource running;
             lock (_messagePreviewReconcileGate)
@@ -193,6 +354,9 @@ namespace Unison.Core.ViewModels
             _history.ChatPreviewChunkPersisted -= History_ChatPreviewChunkPersisted;
             _history.HistoryMessageChunkPersisted -= History_MessageChunkPersisted;
             _contactService.DisplayNamesUpdated -= Contacts_DisplayNamesUpdated;
+            _chatState.CommunitySubjectsUpdated -= ChatState_CommunitySubjectsUpdated;
+            _chatState.BulkCatalogueMutationEnded -= ChatState_BulkCatalogueMutationEnded;
+            _chatService.VisibleOrderInvalidated -= ChatService_VisibleOrderInvalidated;
             _chatState.Chats.CollectionChanged -= ChatState_ChatsChanged;
 
             if (_deepLinkHold != null)
@@ -231,7 +395,7 @@ namespace Unison.Core.ViewModels
                 _coldPopulateGate?.Release();
             }
 
-            _batchRendering = false;
+            ReleaseBatchColdPopulateGate();
             lock (_previewHydrateGate)
             {
                 _previewHydrateQueue?.Clear();

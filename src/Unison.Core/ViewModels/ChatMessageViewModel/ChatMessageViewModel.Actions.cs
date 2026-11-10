@@ -856,6 +856,52 @@ namespace Unison.Core.ViewModels
             await Task.Delay(16);
         }
 
+        private async Task ViewDeletedContentAsync()
+        {
+            if (_dialogs == null || Model == null || !Model.IsRevoked)
+            {
+                return;
+            }
+
+            string title = Text("ChatDetail_DeletedMessageTitle", "Deleted message");
+            string original = ResolveDeletedOriginalText();
+            string body = string.IsNullOrWhiteSpace(original)
+                ? Text(
+                    "ChatDetail_DeletedBeforeReceived",
+                    "This message was deleted before it could be delivered, so its content is not available.")
+                : original;
+            string close = Text("Common_OK", "OK");
+
+            try
+            {
+                await _dialogs.ShowMessageAsync(title, body, close);
+            }
+            catch
+            {
+            }
+        }
+
+        /// <summary>Retained soft-delete body (Content, else Caption). Empty when arrived deleted.</summary>
+        private string ResolveDeletedOriginalText()
+        {
+            if (Model == null)
+            {
+                return string.Empty;
+            }
+
+            if (!string.IsNullOrWhiteSpace(Model.Content))
+            {
+                return Model.Content.Trim();
+            }
+
+            if (!string.IsNullOrWhiteSpace(Model.Caption))
+            {
+                return Model.Caption.Trim();
+            }
+
+            return string.Empty;
+        }
+
         private async Task ShowErrorSafeAsync(string resourceKey, string fallback)
         {
             if (_dialogs == null)

@@ -97,6 +97,13 @@ namespace Unison.Core.Constants
         public const string MessageStoreForceHistoryRepair = "MessageStoreForceHistoryRepair";
 
         /// <summary>
+        /// Pipe-separated canonical JIDs with an in-flight session-open / tip-only
+        /// HISTORY_SYNC_ON_DEMAND. Survives crash so the next connect can re-ask.
+        /// Empty by default.
+        /// </summary>
+        public const string SessionOpenOnDemandPendingJids = "SessionOpenOnDemandPendingJids";
+
+        /// <summary>
         /// Selected UI language (<see cref="AppLanguage"/> stored as int).
         /// Default <see cref="AppLanguage.System"/> (follow OS, else English resources).
         /// </summary>
@@ -169,6 +176,7 @@ namespace Unison.Core.Constants
                 { PendingShellAppliedToast, false },
                 { MessageStoreSyncId, "" },
                 { MessageStoreForceHistoryRepair, false },
+                { SessionOpenOnDemandPendingJids, "" },
                 { ChatListPaneWidth, ChatPaneLayoutConstants.DefaultListWidth },
                 { PublishContactsToWindowsEnabled, false },
                 { PublishWindowsUserDataAccountId, "" },

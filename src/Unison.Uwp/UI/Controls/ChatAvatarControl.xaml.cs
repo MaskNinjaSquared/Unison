@@ -30,6 +30,13 @@ namespace Unison.Uwp.UI.Controls
                 typeof(ChatAvatarControl),
                 new PropertyMetadata(false, OnVisualPropertyChanged));
 
+        public static readonly DependencyProperty IsChannelProperty =
+            DependencyProperty.Register(
+                nameof(IsChannel),
+                typeof(bool),
+                typeof(ChatAvatarControl),
+                new PropertyMetadata(false, OnVisualPropertyChanged));
+
         public static readonly DependencyProperty SizeProperty =
             DependencyProperty.Register(
                 nameof(Size),
@@ -64,6 +71,16 @@ namespace Unison.Uwp.UI.Controls
         {
             get { return (bool)GetValue(IsGroupProperty); }
             set { SetValue(IsGroupProperty, value); }
+        }
+
+        /// <summary>
+        /// Uses the Channels sidebar glyph (<c>EB17</c> / <c>LegacyIconFont</c>) and
+        /// <c>ChannelAvatarFallbackBackgroundBrush</c> (#545C69) as the empty-avatar fallback.
+        /// </summary>
+        public bool IsChannel
+        {
+            get { return (bool)GetValue(IsChannelProperty); }
+            set { SetValue(IsChannelProperty, value); }
         }
 
         public double Size
@@ -108,12 +125,15 @@ namespace Unison.Uwp.UI.Controls
             BorderEllipse.Height = size;
             BorderEllipse.Visibility = ShowBorder ? Visibility.Visible : Visibility.Collapsed;
 
-            ContactFallbackIcon.FontSize = size * (20d / 48d);
+            // XAML FontSize is only design-time — this hop owns the live scale. Channel
+            // glyphs (LegacyIconFont EB17) need a larger ratio than contact to fill the
+            // plate; contact keeps the prior XAML intent of ~28 at Size=48.
+            double glyphAt48 = IsChannel ? 35d : 28d;
+            ContactFallbackIcon.FontSize = size * (glyphAt48 / 48d);
             GroupFallbackHost.Width = size * 0.5;
             GroupFallbackHost.Height = size * 0.5;
 
-            bool group = IsGroup;
-            ApplyFallbackVisual(group);
+            ApplyFallbackVisual(IsGroup, IsChannel);
 
             string url = AvatarUrl;
             if (string.IsNullOrWhiteSpace(url))
@@ -170,8 +190,51 @@ namespace Unison.Uwp.UI.Controls
         /// <summary>
         /// WhatsApp Legacy registers full-bleed placeholder bitmaps; other shells keep glyph fallbacks.
         /// </summary>
-        private void ApplyFallbackVisual(bool group)
+        private void ApplyFallbackVisual(bool group, bool channel)
         {
+            if (channel)
+            {
+                Brush channelPlate = TryGetAppResource("ChannelAvatarFallbackBackgroundBrush") as Brush
+                    ?? new SolidColorBrush(Windows.UI.Color.FromArgb(0xFF, 0x54, 0x5C, 0x69));
+                if (FallbackPlate != null)
+                {
+                    FallbackPlate.Fill = channelPlate;
+                }
+
+                if (FallbackEllipse != null)
+                {
+                    FallbackEllipse.Fill = channelPlate;
+                }
+
+                if (ContactFallbackIcon != null)
+                {
+                    ContactFallbackIcon.Glyph = ResolveChannelGlyph();
+                    ContactFallbackIcon.FontFamily = TryGetAppResource("LegacyIconFont") as FontFamily
+                        ?? ContactFallbackIcon.FontFamily;
+                    ContactFallbackIcon.Foreground = new SolidColorBrush(Windows.UI.Colors.White);
+                    ContactFallbackIcon.Visibility = Visibility.Visible;
+                }
+
+                if (GroupFallbackHost != null)
+                {
+                    GroupFallbackHost.Visibility = Visibility.Collapsed;
+                }
+
+                return;
+            }
+
+            if (ContactFallbackIcon != null)
+            {
+                ContactFallbackIcon.Glyph = "\uEA8C";
+                ContactFallbackIcon.FontFamily = TryGetAppResource("IconFont") as FontFamily
+                    ?? ContactFallbackIcon.FontFamily;
+                object iconBrush = TryGetAppResource("AvatarFallbackIconBrush");
+                if (iconBrush is Brush fallbackIcon)
+                {
+                    ContactFallbackIcon.Foreground = fallbackIcon;
+                }
+            }
+
             string imageKey = group ? "AvatarGroupFallbackImage" : "AvatarContactFallbackImage";
             ImageSource image = TryGetAppResource(imageKey) as ImageSource;
             if (image != null)
@@ -195,6 +258,13 @@ namespace Unison.Uwp.UI.Controls
                 ?? new SolidColorBrush(Windows.UI.Color.FromArgb(0xFF, 0x45, 0x45, 0x45));
             ContactFallbackIcon.Visibility = group ? Visibility.Collapsed : Visibility.Visible;
             GroupFallbackHost.Visibility = group ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        private static string ResolveChannelGlyph()
+        {
+            object glyph = TryGetAppResource("ChannelGlyph");
+            string text = glyph as string;
+            return string.IsNullOrEmpty(text) ? "\uEB17" : text;
         }
 
         private static object TryGetAppResource(string key)

@@ -55,5 +55,31 @@ namespace Unison.Core.Helpers
                 ? ChatAuthorStripAction.ShowNumber
                 : ChatAuthorStripAction.Keep;
         }
+
+        /// <summary>
+        /// Whether a row that <see cref="Decide"/> wants to <see cref="ChatAuthorStripAction.Keep"/>
+        /// is in fact showing something other than the name it already knows.
+        /// </summary>
+        /// <remarks>
+        /// The rendered prefix and the sender name are two fields, and they are persisted
+        /// independently — a tip that carries no push name writes digits into the prefix while the
+        /// store carries the previously resolved name forward beside it. Decide only ever reads
+        /// the name, so it sees a named row, returns Keep, and the digits become permanent: the
+        /// one pass that could rewrite the prefix is also the one that declines to.
+        /// </remarks>
+        /// <param name="currentAuthorPrefix">The prefix the row is rendering, e.g. "Ana: ".</param>
+        /// <param name="currentSenderName">The name the row already knows for that sender.</param>
+        public static bool AuthorPrefixDisagrees(string currentAuthorPrefix, string currentSenderName)
+        {
+            if (string.IsNullOrWhiteSpace(currentSenderName))
+            {
+                return false;
+            }
+
+            return string.IsNullOrEmpty(currentAuthorPrefix) ||
+                   !currentAuthorPrefix.StartsWith(
+                       currentSenderName.Trim(),
+                       StringComparison.Ordinal);
+        }
     }
 }

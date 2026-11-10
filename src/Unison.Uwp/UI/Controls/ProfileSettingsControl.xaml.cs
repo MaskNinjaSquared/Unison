@@ -1,4 +1,6 @@
 using System;
+using System.Windows.Input;
+using Unison.Core.ViewModels;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
 
@@ -38,6 +40,30 @@ namespace Unison.Uwp.UI.Controls
 
             bool bounded = !double.IsNaN(Height) && !double.IsPositiveInfinity(Height) && Height > 0;
             ProfileScroll.VerticalScrollMode = bounded ? ScrollMode.Enabled : ScrollMode.Disabled;
+        }
+
+        private void NameBox_Click(object sender, EventArgs e)
+        {
+            Execute(DataContext as SettingsViewModel, vm => vm.OpenProfileNameEditCommand);
+        }
+
+        private void AboutBox_Click(object sender, EventArgs e)
+        {
+            Execute(DataContext as SettingsViewModel, vm => vm.OpenProfileAboutEditCommand);
+        }
+
+        private static void Execute(SettingsViewModel vm, Func<SettingsViewModel, ICommand> pick)
+        {
+            if (vm == null)
+            {
+                return;
+            }
+
+            ICommand command = pick(vm);
+            if (command != null && command.CanExecute(null))
+            {
+                command.Execute(null);
+            }
         }
     }
 }

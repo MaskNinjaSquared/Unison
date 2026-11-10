@@ -13,6 +13,7 @@ using Unison.Core.Contracts;
 using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Factories;
 using Unison.Core.Helpers;
+using Unison.Core.Helpers.Chats;
 using Unison.Core.Models;
 using Unison.Core.State;
 
@@ -42,6 +43,12 @@ namespace Unison.Core.ViewModels
     {
         /// <summary>Which JIDs are the same person (PN vs LID).</summary>
         private readonly IJidResolver _jids;
+
+        /// <summary>App-wide catalogue filter + canonical scratch (singleton).</summary>
+        private readonly IChatListCatalogContext _catalog;
+
+        /// <summary>Shared sync banner channel — seeds enrichment deferral on Attach.</summary>
+        private readonly SyncStatusChannel _syncStatus;
 
         /// <summary>
         /// Where the chat list comes from. Read through the store rather than through the service,
@@ -135,6 +142,8 @@ namespace Unison.Core.ViewModels
         private string _lastSelectedChatJid;
         private ChatItem _selectedChat;
         private bool _attached;
+        /// <summary>Stamp from <see cref="ChatListVisiblePaintOwner.Claim"/> while attached.</summary>
+        private int _visiblePaintGeneration;
         private bool _menuActionBusy;
         private bool _awaitingResyncHistory;
         private readonly RelayCommand _refreshContactNamesCommand;
@@ -174,10 +183,19 @@ namespace Unison.Core.ViewModels
         /// <summary>Empty VisibleChats → full store: fewer Continue rounds on reattach.</summary>
         private const int VisibleRefreshMoveBudgetFrugalCold = 20;
         private static readonly TimeSpan PreviewHydrateInterval = TimeSpan.FromMilliseconds(40);
+
+        /// <summary>
+        /// On Low/frugal (or while the batch drain owns Normal), hydrate must not outpace
+        /// ReleaseNextBatch — 40ms Normal slices starved visible adds (ad243a19).
+        /// </summary>
+        private TimeSpan CurrentPreviewHydrateInterval =>
+            PreferFrugalUi || _batchRendering ? BatchInterval : PreviewHydrateInterval;
         private static readonly TimeSpan MessagePreviewReconcileDebounce = TimeSpan.FromMilliseconds(350);
         private readonly object _messagePreviewReconcileGate = new object();
-        private List<string> _messagePreviewReconcileQueue;
+        private readonly MessagePreviewReconcilePending _messagePreviewReconcilePending =
+            new MessagePreviewReconcilePending();
         private CancellationTokenSource _messagePreviewReconcileCts;
+        private bool _messagePreviewReconcileArmed;
 
         private bool _batchRendering;
         private bool _batchLoopRunning;
@@ -201,10 +219,14 @@ namespace Unison.Core.ViewModels
         /// </summary>
         private bool _refreshDeferredForEnrichment;
 
+        /// <summary>Invalidates an in-flight frugal Move drain when a newer one starts.</summary>
+        private int _frugalReorderDrainSerial;
+
         /// <summary>
         /// Reattach started with VisibleChats empty — keep cold budget/Continue gaps until filled.
         /// </summary>
         private bool _visibleColdPopulate;
+        private bool _batchColdPopulateHeld;
 
         private bool _previewHydrateLoopRunning;
         private readonly object _previewHydrateGate = new object();
@@ -216,6 +238,7 @@ namespace Unison.Core.ViewModels
         /// opens the phone-number path.
         /// </summary>
         private readonly INewChatDialogViewModelFactory _newChatFactory;
+        private readonly ILocalContactsService _localContacts;
 
         /// <summary>Full-bleed New Conversation overlay (tiles + A–Z).</summary>
         private readonly NewConversationViewModel _newConversation;
@@ -249,9 +272,14 @@ namespace Unison.Core.ViewModels
             ChatTimelineLoadPriorityGate timelineLoadPriority = null,
             ISystemInfoProvider systemInfo = null,
             IAppVisibility appVisibility = null,
-            NewConversationViewModel newConversation = null)
+            NewConversationViewModel newConversation = null,
+            ILocalContactsService localContacts = null,
+            IChatListCatalogContext catalog = null,
+            SyncStatusChannel syncStatus = null)
         {
             _jids = jids ?? throw new ArgumentNullException(nameof(jids));
+            _catalog = catalog;
+            _syncStatus = syncStatus;
             _chatService = chatService;
             _groups = groupService;
             _groupNaming = groupNaming;
@@ -279,6 +307,7 @@ namespace Unison.Core.ViewModels
             _groupPreviewFactory = groupPreviewFactory;
             _newChatFactory = newChatFactory ?? throw new ArgumentNullException(nameof(newChatFactory));
             _newConversation = newConversation;
+            _localContacts = localContacts;
 
             // Strategy-driven: WhatsApp always inline; Unison Mobile uses StatusBar.
             DisplaySync = theme == null || theme.DisplaySyncInChatList;
@@ -334,7 +363,7 @@ namespace Unison.Core.ViewModels
                            _chatStore != null);
             OpenMenuCommand = new RelayCommand(() => MenuRequested?.Invoke(this, EventArgs.Empty));
             NewChatCommand = new RelayCommand(OpenNewConversation);
-            AddContactCommand = new RelayCommand(BeginAddContact);
+            AddContactCommand = new RelayCommand(() => _ = BeginAddContactAsync());
             FilterChatsCommand = new RelayCommand<int>(ApplyChatListFilter);
         }
 
@@ -581,8 +610,25 @@ namespace Unison.Core.ViewModels
         /// </summary>
         public ICommand FilterChatsCommand { get; }
 
-        private static void BeginAddContact()
+        /// <summary>
+        /// Legacy list CommandBar "Add contact" — same People blank editor as New Conversation.
+        /// Unison/WhatsApp list chrome has no equivalent; chat-detail Add Contact stays per-person.
+        /// </summary>
+        private async Task BeginAddContactAsync()
         {
+            if (_localContacts == null)
+            {
+                return;
+            }
+
+            try
+            {
+                await _localContacts.OpenNewContactEditorAsync().ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[ChatList] Add contact failed: " + ex.Message);
+            }
         }
 
         // ---------------------------------------------------------------------

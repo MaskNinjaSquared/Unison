@@ -183,6 +183,7 @@ device link. A pairing the user completes is registered, and does replace it.
 - Protocol internals → [Socket stack](Socket-Stack)
 - Facades, DI, ViewModels → [Application layer](Application-Layer)
 - How to write new code → [Coding standards](Coding-Standards)
+- UI waits and storm coalescing → [UI work scheduling](Ui-Work-Scheduling)
 - Suspended socket and toasts → [Background broker](Background-Broker)
 - Shell, chat UI, i18n → [UI and shell](UI-and-Shell)
 - Remaining work → [Migration](Migration)

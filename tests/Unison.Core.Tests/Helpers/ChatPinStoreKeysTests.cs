@@ -106,6 +106,8 @@ namespace Unison.Core.Tests.Helpers
                 return Canonical.TryGetValue(key, out value) ? value : key;
             }
 
+            public string PeekCanonicalJid(string jid) => GetCanonicalJid(jid);
+
             public bool TryGetAlias(string jid, out string alias)
             {
                 return Alias.TryGetValue(JidHelper.Normalize(jid) ?? string.Empty, out alias);
@@ -123,6 +125,7 @@ namespace Unison.Core.Tests.Helpers
             public Profile Self => null;
 
             public string GetCanonicalJid(string jid) => jid;
+            public string PeekCanonicalJid(string jid) => GetCanonicalJid(jid);
 
             public bool TryGetAlias(string jid, out string alias)
             {

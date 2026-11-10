@@ -16,6 +16,12 @@ namespace Unison.Core.Helpers.Calls
                 return CallDirection.Missed;
             }
 
+            // AnsweredElsewhere is still an inbound outcome for the Recents stripe.
+            if (kind == CallEventChromeKind.AnsweredElsewhere)
+            {
+                return CallDirection.Incoming;
+            }
+
             return callerIsSelf ? CallDirection.Outgoing : CallDirection.Incoming;
         }
     }

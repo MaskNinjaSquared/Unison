@@ -137,7 +137,13 @@ namespace Unison.Uwp.UI.Views
 
         private void ViewModel_BackRequested(object sender, EventArgs e)
         {
-            App.Services?.GetService<ShellViewModel>()?.NavigateToSectionCommand.Execute(NavigationRoutes.Chats);
+            var shell = App.Services?.GetService<ShellViewModel>();
+            if (shell != null && shell.TryHandleShellBack())
+            {
+                return;
+            }
+
+            shell?.NavigateToSectionCommand?.Execute(NavigationRoutes.Chats);
         }
 
         private void ViewModel_LogTextChanged(object sender, EventArgs e)

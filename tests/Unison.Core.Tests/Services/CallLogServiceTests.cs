@@ -11,7 +11,7 @@ namespace Unison.Core.Tests.Services
     public sealed class CallLogServiceTests
     {
         [Fact]
-        public void Upsert_groups_by_canonical_jid_and_orders_recents()
+        public void GetRecents_is_flat_one_row_per_call_newest_first()
         {
             var jids = new StubJids();
             var log = new CallLogService(jids);
@@ -45,11 +45,13 @@ namespace Unison.Core.Tests.Services
             });
 
             IReadOnlyList<CallRecentItem> recents = log.GetRecents();
-            Assert.Equal(2, recents.Count);
+            Assert.Equal(3, recents.Count);
             Assert.Equal("2@s.whatsapp.net", recents[0].Jid);
             Assert.Equal(CallDirection.Missed, recents[0].Direction);
             Assert.Equal("1@s.whatsapp.net", recents[1].Jid);
             Assert.Equal(CallDirection.Outgoing, recents[1].Direction);
+            Assert.Equal("1@s.whatsapp.net", recents[2].Jid);
+            Assert.Equal(CallDirection.Incoming, recents[2].Direction);
 
             IReadOnlyList<CallHistoryEntry> history = log.GetHistory("1@s.whatsapp.net");
             Assert.Equal(2, history.Count);
@@ -109,7 +111,35 @@ namespace Unison.Core.Tests.Services
             IReadOnlyList<CallHistoryEntry> history = log.GetHistory("1@s.whatsapp.net");
             Assert.Equal(1, history.Count);
             Assert.Equal(CallEventChromeKind.Missed, history[0].ChromeKind);
+            Assert.Equal(1, log.GetRecents().Count);
             Assert.Equal(CallDirection.Missed, log.GetRecents()[0].Direction);
+        }
+
+        [Fact]
+        public void Upsert_incoming_does_not_recreate_row_after_missed_same_callId()
+        {
+            var log = new CallLogService(new StubJids());
+            log.Upsert(new CallHistoryEntry
+            {
+                CallId = "ring",
+                CanonicalJid = "1@s.whatsapp.net",
+                Direction = CallDirection.Missed,
+                ChromeKind = CallEventChromeKind.Missed,
+                TimestampUtc = DateTime.UtcNow,
+                CategoryLabel = "Missed"
+            });
+            log.Upsert(new CallHistoryEntry
+            {
+                CallId = "ring",
+                CanonicalJid = "1@s.whatsapp.net",
+                Direction = CallDirection.Incoming,
+                ChromeKind = CallEventChromeKind.Incoming,
+                TimestampUtc = DateTime.UtcNow.AddMinutes(-1),
+                CategoryLabel = "Incoming"
+            });
+
+            Assert.Equal(1, log.GetRecents().Count);
+            Assert.Equal(CallEventChromeKind.Missed, log.GetHistory("1@s.whatsapp.net")[0].ChromeKind);
         }
 
         [Fact]
@@ -137,7 +167,7 @@ namespace Unison.Core.Tests.Services
                 TimestampUtc = DateTime.UtcNow
             });
 
-            Assert.Equal(1, log.GetRecents().Count);
+            Assert.Equal(2, log.GetRecents().Count);
             Assert.Equal(2, log.GetHistory("111@lid").Count);
             Assert.Equal(2, log.GetHistory("1@s.whatsapp.net").Count);
         }
@@ -160,6 +190,7 @@ namespace Unison.Core.Tests.Services
                 new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
             public string GetCanonicalJid(string jid) => jid;
+            public string PeekCanonicalJid(string jid) => GetCanonicalJid(jid);
 
             public bool TryGetAlias(string jid, out string alias)
             {

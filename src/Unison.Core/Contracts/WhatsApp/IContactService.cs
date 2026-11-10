@@ -29,6 +29,12 @@ namespace Unison.Core.Contracts.WhatsApp
         void NotifyJidAliasResolved(string phoneJid, string lidJid, string source);
 
         /// <summary>
+        /// After a bulk <c>RegisterAliasMappings</c>, arm one alias follow-up for pairs that
+        /// deferred <see cref="NotifyJidAliasResolved"/> while the import scope was open.
+        /// </summary>
+        void FlushDeferredAliasFollowUp(string source);
+
+        /// <summary>
         /// Best known label for a JID: device address book first, then the push name the account
         /// broadcasts, then the bare number. <paramref name="context"/> only labels the call site
         /// in diagnostics.

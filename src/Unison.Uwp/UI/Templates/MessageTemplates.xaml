@@ -22,14 +22,16 @@
                 Grid.Row="1"
                 Text="{x:Bind UnreadDividerText, Mode=OneWay}"
                 Visibility="{x:Bind IsUnreadDivider, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
-            <!-- Stretch slot constrains measure; Auto bubble columns alone ignore Wrap. -->
+            <!-- Stretch slot constrains measure; Auto bubble columns alone ignore Wrap.
+                 ManipulationMode keeps System: without it a pan starting on the bubble never
+                 reaches the list's ScrollViewer (touch scroll only worked in the side margin). -->
             <Grid x:Name="SentBubbleSlot"
                   Grid.Row="2"
                   HorizontalAlignment="Stretch"
                   Margin="48,0,12,0"
                   Loaded="MessageBubbleSlot_Loaded"
                   SizeChanged="MessageBubbleSlot_SizeChanged"
-                  ManipulationMode="TranslateX"
+                  ManipulationMode="TranslateX,System"
                   ManipulationDelta="MessageBubble_ManipulationDelta"
                   ManipulationCompleted="MessageBubble_ManipulationCompleted"
                   Tapped="MessageBubble_Tapped"
@@ -128,7 +130,7 @@
                                 helpers:DesktopCursor.CursorKind="{x:Bind CanNavigateToQuote, Mode=OneWay, Converter={StaticResource BoolToDesktopCursorKindConverter}}"
                                 x:Load="{x:Bind HasQuote, Mode=OneWay}">
                             <StackPanel>
-                                <TextBlock Text="{x:Bind QuotedSenderName, Mode=OneWay}"
+                                <TextBlock helpers:EmojiTextBlock.Text="{x:Bind QuotedSenderName, Mode=OneWay}"
                                            FontSize="12"
                                            FontWeight="SemiBold"
                                            Foreground="{ThemeResource ChatDetailSentTextBrush}"
@@ -421,7 +423,7 @@
                                                Foreground="{ThemeResource ChatDetailSentTextBrush}"
                                                VerticalAlignment="Center"
                                                Margin="0,0,10,0"/>
-                                    <TextBlock Text="{x:Bind DocumentDisplayName, Mode=OneWay}"
+                                    <TextBlock helpers:EmojiTextBlock.Text="{x:Bind DocumentDisplayName, Mode=OneWay}"
                                                Foreground="{ThemeResource ChatDetailSentTextBrush}"
                                                FontSize="14"
                                                FontFamily="{StaticResource MainFont}"
@@ -491,7 +493,7 @@
                                     <ColumnDefinition Width="*"/>
                                 </Grid.ColumnDefinitions>
                                 <TextBlock Grid.Column="1"
-                                           Text="{x:Bind ContactCardDisplayName, Mode=OneWay}"
+                                           helpers:EmojiTextBlock.Text="{x:Bind ContactCardDisplayName, Mode=OneWay}"
                                            Foreground="{ThemeResource ChatDetailSentTextBrush}"
                                            FontSize="15"
                                            FontFamily="{StaticResource MainFont}"
@@ -576,8 +578,23 @@
                                 <ColumnDefinition Width="*"/>
                                 <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
-                            <!-- Kind glyph (list chips): photo E91B / video E979 — left of timestamp row -->
+                            <!-- Kind glyph (list chips): photo E91B / video E979 — left of timestamp row.
+                                 Revoked: eye in that slot opens retained original / arrived-deleted info. -->
                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                <Button Style="{StaticResource TransparentMediaButtonStyle}"
+                                        Padding="0"
+                                        MinWidth="0"
+                                        MinHeight="0"
+                                        VerticalAlignment="Center"
+                                        Command="{x:Bind ViewDeletedContentCommand, Mode=OneWay}"
+                                        Visibility="{x:Bind IsRevoked, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"
+                                        AutomationProperties.Name="View deleted message">
+                                    <FontIcon Glyph="&#xE7B3;"
+                                              FontFamily="{StaticResource IconFont}"
+                                              FontSize="14"
+                                              Foreground="{ThemeResource ChatDetailSentMetaBrush}"
+                                              Opacity="0.85"/>
+                                </Button>
                                 <TextBlock Text="&#xE91B;"
                                            FontFamily="{StaticResource IconFont}"
                                            FontSize="12"
@@ -635,6 +652,22 @@
                             <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
                                 <TextBlock Text="&#xE718;" FontFamily="{StaticResource IconFont}" Foreground="{ThemeResource ChatDetailSentMetaBrush}" FontSize="10" Margin="0,0,4,0"
                                            Visibility="{x:Bind IsPinned, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                                <StackPanel Orientation="Horizontal"
+                                            Margin="0,0,6,0"
+                                            VerticalAlignment="Center"
+                                            Visibility="{x:Bind ShowViewCount, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                    <FontIcon Glyph="&#xE890;"
+                                              FontFamily="{StaticResource IconFont}"
+                                              FontSize="11"
+                                              Foreground="{ThemeResource ChatDetailSentMetaBrush}"
+                                              VerticalAlignment="Center"
+                                              Margin="0,0,3,0"/>
+                                    <TextBlock Text="{x:Bind ViewCountText, Mode=OneWay}"
+                                               Foreground="{ThemeResource ChatDetailSentMetaBrush}"
+                                               FontSize="11"
+                                               FontFamily="{StaticResource MainFont}"
+                                               VerticalAlignment="Center"/>
+                                </StackPanel>
                                 <TextBlock Text="{x:Bind Timestamp, Mode=OneWay, Converter={StaticResource LocalTimeConverter}}"
                                            Foreground="{ThemeResource ChatDetailSentMetaBrush}"
                                            FontSize="11"
@@ -679,6 +712,8 @@
             </Grid>
 
             <Button Grid.Row="2"
+                    HorizontalAlignment="Left"
+                    Margin="40,-2,10,0"
                     Style="{StaticResource ChatDetailSentReactionChipButtonStyle}"
                     Background="{ThemeResource ChatDetailReactionChipSentBrush}"
                     BorderBrush="{ThemeResource ChatDetailReactionChipSentBorderBrush}"
@@ -712,7 +747,7 @@
                   Margin="12,0,48,0"
                   Loaded="MessageBubbleSlot_Loaded"
                   SizeChanged="MessageBubbleSlot_SizeChanged"
-                  ManipulationMode="TranslateX"
+                  ManipulationMode="TranslateX,System"
                   ManipulationDelta="MessageBubble_ManipulationDelta"
                   ManipulationCompleted="MessageBubble_ManipulationCompleted"
                   Tapped="MessageBubble_Tapped"
@@ -739,29 +774,35 @@
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
 
-                <!-- Reply sling handle: invisible at rest, fades in while dragging left. -->
-                <Grid Grid.Column="0"
-                      Tag="ReplySwipeHandle"
-                      Width="32"
+                <!--
+                  Reply sling handle: zero layout width so 4" screens do not pay 40px of empty
+                  gutter on every received row. The icon paints into the slot's left margin while
+                  the finger drags (Opacity driven from code-behind).
+                -->
+                <Grid Tag="ReplySwipeHandle"
+                      Width="0"
                       Height="32"
-                      Margin="0,0,8,0"
                       VerticalAlignment="Center"
                       Opacity="0"
                       IsHitTestVisible="False">
-                    <Ellipse Fill="{ThemeResource ChatDetailAccentBrush}" Opacity="0.2"/>
-                    <FontIcon Glyph="&#xE97A;"
-                              FontFamily="{StaticResource IconFont}"
-                              FontSize="16"
-                              Foreground="{ThemeResource ChatDetailAccentBrush}"
-                              HorizontalAlignment="Center"
-                              VerticalAlignment="Center"/>
+                    <Grid Width="32"
+                          Height="32"
+                          Margin="-36,0,0,0"
+                          HorizontalAlignment="Left">
+                        <Ellipse Fill="{ThemeResource ChatDetailAccentBrush}" Opacity="0.2"/>
+                        <FontIcon Glyph="&#xE97A;"
+                                  FontFamily="{StaticResource IconFont}"
+                                  FontSize="16"
+                                  Foreground="{ThemeResource ChatDetailAccentBrush}"
+                                  HorizontalAlignment="Center"
+                                  VerticalAlignment="Center"/>
+                    </Grid>
                 </Grid>
 
                 <!-- Local unread accent (IsRead == false). Hidden after open commits read. -->
-                <Border Grid.Column="1"
+                <Border Grid.Column="0"
                         Width="3"
                         MinHeight="18"
                         Margin="0,2,6,2"
@@ -771,7 +812,7 @@
                         Visibility="{x:Bind ShowUnreadMarker, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
 
                 <!-- Author avatar gutter (group incoming). Photo + contact fallback like the chat list. -->
-                <Grid Grid.Column="2"
+                <Grid Grid.Column="1"
                       Width="32"
                       Margin="0,0,8,0"
                       VerticalAlignment="Top"
@@ -787,7 +828,7 @@
                 </Grid>
 
                 <Grid x:Name="ReceivedBubblePanel"
-                      Grid.Column="3"
+                      Grid.Column="2"
                       HorizontalAlignment="Left"
                       MaxWidth="432">
                 <controls:MessageBubbleChromeHost
@@ -804,7 +845,7 @@
                             <RowDefinition Height="Auto"/>
                         </Grid.RowDefinitions>
                         <StackPanel Grid.Row="0">
-                        <TextBlock Text="{x:Bind SenderName, Mode=OneWay}"
+                        <TextBlock helpers:EmojiTextBlock.Text="{x:Bind SenderName, Mode=OneWay}"
                                    Visibility="{x:Bind ShowGroupSenderName, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"
                                    Foreground="{ThemeResource ChatDetailGroupSenderBrush}"
                                    FontSize="13"
@@ -843,7 +884,7 @@
                                 helpers:DesktopCursor.CursorKind="{x:Bind CanNavigateToQuote, Mode=OneWay, Converter={StaticResource BoolToDesktopCursorKindConverter}}"
                                 x:Load="{x:Bind HasQuote, Mode=OneWay}">
                             <StackPanel>
-                                <TextBlock Text="{x:Bind QuotedSenderName, Mode=OneWay}"
+                                <TextBlock helpers:EmojiTextBlock.Text="{x:Bind QuotedSenderName, Mode=OneWay}"
                                            FontSize="12"
                                            FontWeight="SemiBold"
                                            Foreground="{ThemeResource ChatDetailReceivedTextBrush}"
@@ -1114,7 +1155,7 @@
                                                Foreground="{ThemeResource ChatDetailReceivedTextBrush}"
                                                VerticalAlignment="Center"
                                                Margin="0,0,10,0"/>
-                                    <TextBlock Text="{x:Bind DocumentDisplayName, Mode=OneWay}"
+                                    <TextBlock helpers:EmojiTextBlock.Text="{x:Bind DocumentDisplayName, Mode=OneWay}"
                                                Foreground="{ThemeResource ChatDetailReceivedTextBrush}"
                                                FontSize="14"
                                                FontFamily="{StaticResource MainFont}"
@@ -1183,7 +1224,7 @@
                                     <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
                                 <TextBlock Grid.Column="0"
-                                           Text="{x:Bind ContactCardDisplayName, Mode=OneWay}"
+                                           helpers:EmojiTextBlock.Text="{x:Bind ContactCardDisplayName, Mode=OneWay}"
                                            Foreground="{ThemeResource ChatDetailReceivedTextBrush}"
                                            FontSize="15"
                                            FontFamily="{StaticResource MainFont}"
@@ -1271,6 +1312,20 @@
                                 <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                <Button Style="{StaticResource TransparentMediaButtonStyle}"
+                                        Padding="0"
+                                        MinWidth="0"
+                                        MinHeight="0"
+                                        VerticalAlignment="Center"
+                                        Command="{x:Bind ViewDeletedContentCommand, Mode=OneWay}"
+                                        Visibility="{x:Bind IsRevoked, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"
+                                        AutomationProperties.Name="View deleted message">
+                                    <FontIcon Glyph="&#xE7B3;"
+                                              FontFamily="{StaticResource IconFont}"
+                                              FontSize="14"
+                                              Foreground="{ThemeResource ChatDetailReceivedMetaBrush}"
+                                              Opacity="0.85"/>
+                                </Button>
                                 <TextBlock Text="&#xE91B;"
                                            FontFamily="{StaticResource IconFont}"
                                            FontSize="12"
@@ -1395,8 +1450,179 @@
         </Grid>
     </DataTemplate>
 
+    <!-- CallEvent: normal chat bubble chrome; quote strip inside (MinHeight 50). -->
+    <DataTemplate x:Key="MessageCallEventTemplate" x:DataType="vm:ChatMessageViewModel">
+        <Grid HorizontalAlignment="Stretch">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+            <controls:ChatDateSeparator
+                Grid.Row="0"
+                Text="{x:Bind DateSeparatorText, Mode=OneWay}"
+                Visibility="{x:Bind IsFirstOfDay, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+            <controls:ChatDateSeparator
+                Grid.Row="1"
+                Text="{x:Bind UnreadDividerText, Mode=OneWay}"
+                Visibility="{x:Bind IsUnreadDivider, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+
+            <!-- Call cards always get run-start spacing (top+bottom) so they do not glue to neighbors. -->
+            <StackPanel Grid.Row="2">
+                <Border Height="5" Background="Transparent"/>
+
+                <!-- Outgoing call bubble -->
+                <Grid HorizontalAlignment="Right"
+                      Margin="48,0,12,0"
+                      MaxWidth="432"
+                      Visibility="{x:Bind IsFromMe, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}">
+                    <controls:MessageBubbleChromeHost
+                        IsFromMe="True"
+                        IsRunStart="False"
+                        IsRunEnd="False"
+                        IsGroupChat="{x:Bind IsGroupChat, Mode=OneWay}"/>
+                    <Border Background="Transparent" Margin="0,1,0,0" Padding="12,8,16,8">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+                            <Border Background="{ThemeResource ChatDetailSentQuoteBackgroundBrush}"
+                                    CornerRadius="8"
+                                    Padding="10,8"
+                                    MinHeight="50"
+                                    VerticalAlignment="Stretch">
+                                <Grid VerticalAlignment="Center">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <FontIcon Glyph="{x:Bind CallGlyph, Mode=OneWay}"
+                                              FontFamily="{StaticResource IconFont}"
+                                              FontSize="20"
+                                              Width="20" Height="20"
+                                              VerticalAlignment="Center"
+                                              Margin="0,0,10,0"
+                                              Foreground="{x:Bind IsMissedCall, Mode=OneWay, Converter={StaticResource CallMissedToBrushConverter}}"/>
+                                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                        <TextBlock Text="{x:Bind CallTitle, Mode=OneWay}"
+                                                   FontSize="15"
+                                                   FontWeight="SemiBold"
+                                                   FontFamily="{StaticResource MainFontSemibold}"
+                                                   Foreground="{ThemeResource ChatDetailSentTextBrush}"
+                                                   TextWrapping="NoWrap"
+                                                   TextTrimming="CharacterEllipsis"/>
+                                        <TextBlock Text="{x:Bind CallSubtitle, Mode=OneWay}"
+                                                   FontSize="13"
+                                                   Margin="0,2,0,0"
+                                                   FontFamily="{StaticResource MainFont}"
+                                                   Foreground="{x:Bind IsMissedCall, Mode=OneWay, Converter={StaticResource CallMissedToBrushConverter}}"
+                                                   TextWrapping="WrapWholeWords"
+                                                   Visibility="{x:Bind HasCallSubtitle, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                                    </StackPanel>
+                                </Grid>
+                            </Border>
+                            <Grid Grid.Row="1" Margin="0,4,0,0">
+                                <HyperlinkButton x:Uid="CallBack_CallBackLink"
+                                                 Content="Call back"
+                                                 Command="{x:Bind CallBackCommand}"
+                                                 Padding="0"
+                                                 FontSize="13"
+                                                 FontFamily="{StaticResource MainFont}"
+                                                 Foreground="{ThemeResource ChatDetailAccentBrush}"
+                                                 HorizontalAlignment="Left"
+                                                 VerticalAlignment="Center"/>
+                                <TextBlock Text="{x:Bind Timestamp, Mode=OneWay, Converter={StaticResource LocalTimeConverter}}"
+                                           Foreground="{ThemeResource ChatDetailSentMetaBrush}"
+                                           FontSize="11"
+                                           FontFamily="{StaticResource MainFont}"
+                                           HorizontalAlignment="Right"
+                                           VerticalAlignment="Center"/>
+                            </Grid>
+                        </Grid>
+                    </Border>
+                </Grid>
+
+                <!-- Incoming call bubble -->
+                <Grid HorizontalAlignment="Left"
+                      Margin="12,0,48,0"
+                      MaxWidth="432"
+                      Visibility="{x:Bind IsFromMe, Mode=OneWay, Converter={StaticResource InvertedBooleanToVisibilityConverter}}">
+                    <controls:MessageBubbleChromeHost
+                        IsFromMe="False"
+                        IsRunStart="False"
+                        IsRunEnd="False"
+                        IsGroupChat="{x:Bind IsGroupChat, Mode=OneWay}"/>
+                    <Border Background="Transparent" Margin="0,1,0,0" Padding="16,8,12,8">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+                            <Border Background="{ThemeResource ChatDetailReceivedQuoteBackgroundBrush}"
+                                    CornerRadius="8"
+                                    Padding="10,8"
+                                    MinHeight="50"
+                                    VerticalAlignment="Stretch">
+                                <Grid VerticalAlignment="Center">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <FontIcon Glyph="{x:Bind CallGlyph, Mode=OneWay}"
+                                              FontFamily="{StaticResource IconFont}"
+                                              FontSize="20"
+                                              Width="20" Height="20"
+                                              VerticalAlignment="Center"
+                                              Margin="0,0,10,0"
+                                              Foreground="{x:Bind IsMissedCall, Mode=OneWay, Converter={StaticResource CallMissedToBrushConverter}}"/>
+                                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                        <TextBlock Text="{x:Bind CallTitle, Mode=OneWay}"
+                                                   FontSize="15"
+                                                   FontWeight="SemiBold"
+                                                   FontFamily="{StaticResource MainFontSemibold}"
+                                                   Foreground="{ThemeResource ChatDetailReceivedTextBrush}"
+                                                   TextWrapping="NoWrap"
+                                                   TextTrimming="CharacterEllipsis"/>
+                                        <TextBlock Text="{x:Bind CallSubtitle, Mode=OneWay}"
+                                                   FontSize="13"
+                                                   Margin="0,2,0,0"
+                                                   FontFamily="{StaticResource MainFont}"
+                                                   Foreground="{x:Bind IsMissedCall, Mode=OneWay, Converter={StaticResource CallMissedToBrushConverter}}"
+                                                   TextWrapping="WrapWholeWords"
+                                                   Visibility="{x:Bind HasCallSubtitle, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                                    </StackPanel>
+                                </Grid>
+                            </Border>
+                            <Grid Grid.Row="1" Margin="0,4,0,0">
+                                <HyperlinkButton x:Uid="CallBack_CallBackLink"
+                                                 Content="Call back"
+                                                 Command="{x:Bind CallBackCommand}"
+                                                 Padding="0"
+                                                 FontSize="13"
+                                                 FontFamily="{StaticResource MainFont}"
+                                                 Foreground="{ThemeResource ChatDetailAccentBrush}"
+                                                 HorizontalAlignment="Left"
+                                                 VerticalAlignment="Center"/>
+                                <TextBlock Text="{x:Bind Timestamp, Mode=OneWay, Converter={StaticResource LocalTimeConverter}}"
+                                           Foreground="{ThemeResource ChatDetailReceivedMetaBrush}"
+                                           FontSize="11"
+                                           FontFamily="{StaticResource MainFont}"
+                                           HorizontalAlignment="Right"
+                                           VerticalAlignment="Center"/>
+                            </Grid>
+                        </Grid>
+                    </Border>
+                </Grid>
+
+                <Border Height="5" Background="Transparent"/>
+            </StackPanel>
+        </Grid>
+    </DataTemplate>
+
     <selectors:MessageTemplateSelector x:Key="MessageTemplateSelector"
                                        SentTemplate="{StaticResource MessageSentTemplate}"
                                        ReceivedTemplate="{StaticResource MessageReceivedTemplate}"
-                                       GroupJoinTemplate="{StaticResource MessageGroupJoinTemplate}"/>
+                                       GroupJoinTemplate="{StaticResource MessageGroupJoinTemplate}"
+                                       CallEventTemplate="{StaticResource MessageCallEventTemplate}"/>
 </ResourceDictionary>

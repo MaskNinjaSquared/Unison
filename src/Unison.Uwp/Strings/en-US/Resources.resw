@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <root>
   <!-- 
     Microsoft ResX Schema 
@@ -269,6 +269,12 @@ Disable after diagnosing: keeping it on slows the app.</value>
   <data name="ChatDetail_MessageDeleted.Text" xml:space="preserve">
     <value>This message was deleted</value>
   </data>
+  <data name="ChatDetail_DeletedMessageTitle" xml:space="preserve">
+    <value>Deleted message</value>
+  </data>
+  <data name="ChatDetail_DeletedBeforeReceived" xml:space="preserve">
+    <value>This message was deleted before it could be delivered, so its content is not available.</value>
+  </data>
   <data name="ChatList_Loading.Text" xml:space="preserve">
     <value>Preparing conversations…</value>
   </data>
@@ -319,6 +325,9 @@ Disable after diagnosing: keeping it on slows the app.</value>
   </data>
   <data name="ChatDetail_MessageInput.PlaceholderText" xml:space="preserve">
     <value>Type a message</value>
+  </data>
+  <data name="ChatDetail_ChannelUpdateInput" xml:space="preserve">
+    <value>Write an update...</value>
   </data>
   <data name="ChatDetail_MentionEveryone" xml:space="preserve">
     <value>Everyone</value>
@@ -521,6 +530,12 @@ Disable after diagnosing: keeping it on slows the app.</value>
   <data name="ChatDetail_SelectForGroupInfo" xml:space="preserve">
     <value>tap here for group info</value>
   </data>
+  <data name="ChatDetail_SelectForChannelInfo" xml:space="preserve">
+    <value>tap here for channel info</value>
+  </data>
+  <data name="ChatDetail_ChannelFollowers" xml:space="preserve">
+    <value>{0} followers</value>
+  </data>
   <data name="ImageViewer_UnknownSender" xml:space="preserve">
     <value>Contact</value>
   </data>
@@ -616,6 +631,12 @@ Disable after diagnosing: keeping it on slows the app.</value>
   <data name="NewConversation_NewCommunityDesc.Text" xml:space="preserve">
     <value>Bring related groups together</value>
   </data>
+  <data name="NewConversation_NewChannel.Text" xml:space="preserve">
+    <value>New channel</value>
+  </data>
+  <data name="NewConversation_NewChannelDesc.Text" xml:space="preserve">
+    <value>Reach an unlimited number of people</value>
+  </data>
   <data name="NewConversation_PhoneNumber.Text" xml:space="preserve">
     <value>Phone number</value>
   </data>
@@ -630,6 +651,249 @@ Disable after diagnosing: keeping it on slows the app.</value>
   </data>
   <data name="NewConversation_ComingSoon" xml:space="preserve">
     <value>This option is not available yet.</value>
+  </data>
+  <data name="CreateFlow_Next" xml:space="preserve">
+    <value>Next</value>
+  </data>
+  <data name="CreateFlow_Confirm" xml:space="preserve">
+    <value>Confirm</value>
+  </data>
+  <data name="CreateFlow_Start" xml:space="preserve">
+    <value>Get started</value>
+  </data>
+  <data name="CreateGroup_MembersHeader.Header" xml:space="preserve">
+    <value>Select members</value>
+  </data>
+  <data name="CreateGroup_InfoHeader.Header" xml:space="preserve">
+    <value>Group details</value>
+  </data>
+  <data name="CreateGroup_ExplainMembersTitle" xml:space="preserve">
+    <value>Select members</value>
+  </data>
+  <data name="CreateGroup_ExplainMembersBody" xml:space="preserve">
+    <value>Choose the contacts that will be part of this group.</value>
+  </data>
+  <data name="CreateGroup_ExplainInfoTitle" xml:space="preserve">
+    <value>Group details</value>
+  </data>
+  <data name="CreateGroup_ExplainInfoBody" xml:space="preserve">
+    <value>Give your group a name and review the details before creating it.</value>
+  </data>
+  <data name="CreateGroup_Name.PlaceholderText" xml:space="preserve">
+    <value>Group name</value>
+  </data>
+  <data name="CreateGroup_Name.Header" xml:space="preserve">
+    <value>Group name</value>
+  </data>
+  <data name="CreateGroup_MembersSelectedSuffix.Text" xml:space="preserve">
+    <value> selected</value>
+  </data>
+  <data name="CreateGroup_ManageMembers.Content" xml:space="preserve">
+    <value>Manage</value>
+  </data>
+  <data name="CreateGroup_AddPhotoOverlay.Text" xml:space="preserve">
+    <value>Add group image...</value>
+  </data>
+  <data name="CreateGroup_EphemeralTitle.Text" xml:space="preserve">
+    <value>Temporary messages</value>
+  </data>
+  <data name="CreateGroup_EphemeralDialog.Title" xml:space="preserve">
+    <value>Temporary messages</value>
+  </data>
+  <data name="CreateGroup_EphemeralDialog.PrimaryButtonText" xml:space="preserve">
+    <value>OK</value>
+  </data>
+  <data name="CreateGroup_EphemeralDialog.CloseButtonText" xml:space="preserve">
+    <value>Cancel</value>
+  </data>
+  <data name="CreateGroup_EphemeralDialogBody.Text" xml:space="preserve">
+    <value>All new messages in this chat will disappear after the selected duration...</value>
+  </data>
+  <data name="CreateGroup_Ephemeral_24Hours.Content" xml:space="preserve">
+    <value>24 hours</value>
+  </data>
+  <data name="CreateGroup_Ephemeral_7Days.Content" xml:space="preserve">
+    <value>7 days</value>
+  </data>
+  <data name="CreateGroup_Ephemeral_90Days.Content" xml:space="preserve">
+    <value>90 days</value>
+  </data>
+  <data name="CreateGroup_Ephemeral_Off.Content" xml:space="preserve">
+    <value>Off</value>
+  </data>
+  <data name="CreateGroup_EphemeralStatus_24Hours" xml:space="preserve">
+    <value>24 hours</value>
+  </data>
+  <data name="CreateGroup_EphemeralStatus_7Days" xml:space="preserve">
+    <value>7 days</value>
+  </data>
+  <data name="CreateGroup_EphemeralStatus_90Days" xml:space="preserve">
+    <value>90 days</value>
+  </data>
+  <data name="CreateGroup_EphemeralStatus_Off" xml:space="preserve">
+    <value>Off</value>
+  </data>
+  <data name="CreateGroup_PermissionsTitle.Text" xml:space="preserve">
+    <value>Group permissions</value>
+  </data>
+  <data name="CreateGroup_PermissionsOverlayTitle.Text" xml:space="preserve">
+    <value>Group permissions</value>
+  </data>
+  <data name="CreateGroup_PermMembersSection.Text" xml:space="preserve">
+    <value>Members can</value>
+  </data>
+  <data name="CreateGroup_PermAdminsSection.Text" xml:space="preserve">
+    <value>Admins can</value>
+  </data>
+  <data name="CreateGroup_PermEditSettings/Header" xml:space="preserve">
+    <value>Edit group settings</value>
+  </data>
+  <data name="CreateGroup_PermEditSettings/Text" xml:space="preserve">
+    <value>Includes the name, photo, description, disappearing messages, pin, unpin, and starred messages.</value>
+  </data>
+  <data name="CreateGroup_PermSendMessages/Header" xml:space="preserve">
+    <value>Send new messages</value>
+  </data>
+  <data name="CreateGroup_PermAddMembers/Header" xml:space="preserve">
+    <value>Add members</value>
+  </data>
+  <data name="CreateGroup_PermInviteLink/Header" xml:space="preserve">
+    <value>Invite via link or QR code</value>
+  </data>
+  <data name="CreateGroup_PermApproveMembers/Header" xml:space="preserve">
+    <value>Approve new members</value>
+  </data>
+  <data name="CreateGroup_PermApproveMembers/Text" xml:space="preserve">
+    <value>When enabled, admins must approve people who join the group.</value>
+  </data>
+  <data name="Settings_ProfileEditNameTitle" xml:space="preserve">
+    <value>Name</value>
+  </data>
+  <data name="Settings_ProfileEditAboutTitle" xml:space="preserve">
+    <value>About</value>
+  </data>
+  <data name="Settings_ProfileEditSave.Label" xml:space="preserve">
+    <value>Save</value>
+  </data>
+  <data name="Settings_ProfileEditCancel.Label" xml:space="preserve">
+    <value>Cancel</value>
+  </data>
+  <data name="Settings_ProfileEditEmoji.Label" xml:space="preserve">
+    <value>Emoji</value>
+  </data>
+  <data name="CreateCommunity_ExplainTitle" xml:space="preserve">
+    <value>Create community</value>
+  </data>
+  <data name="CreateCommunity_ExplainBody" xml:space="preserve">
+    <value>Bring together people from your neighborhood, your school, and more in one place. Create groups for specific topics and send announcements to everyone easily.</value>
+  </data>
+  <data name="CreateGroup_Error_NameRequired" xml:space="preserve">
+    <value>Enter a group name.</value>
+  </data>
+  <data name="CreateGroup_Error_Failed" xml:space="preserve">
+    <value>Couldn't create the group. Try again.</value>
+  </data>
+  <data name="CreateCommunity_Error_NameRequired" xml:space="preserve">
+    <value>Enter a community name.</value>
+  </data>
+  <data name="CreateCommunity_Error_Failed" xml:space="preserve">
+    <value>Couldn't create the community. Try again.</value>
+  </data>
+  <data name="CreateFlow_Error_NotConnected" xml:space="preserve">
+    <value>You're not connected. Try again when the connection is back.</value>
+  </data>
+  <data name="CreateFlow_PartialFailure" xml:space="preserve">
+    <value>Created, but the photo or disappearing messages could not be applied. You can change them in the info screen.</value>
+  </data>
+  <data name="CreateFlow_GroupCreatedTitle" xml:space="preserve">
+    <value>Group created</value>
+  </data>
+  <data name="CreateFlow_GroupCreatedBody" xml:space="preserve">
+    <value>{0} created successfully.</value>
+  </data>
+  <data name="CreateFlow_CommunityCreatedTitle" xml:space="preserve">
+    <value>Community created</value>
+  </data>
+  <data name="CreateFlow_CommunityCreatedBody" xml:space="preserve">
+    <value>{0} created successfully.</value>
+  </data>
+  <data name="CreateFlow_ChannelCreatedTitle" xml:space="preserve">
+    <value>Channel created</value>
+  </data>
+  <data name="CreateFlow_ChannelCreatedBody" xml:space="preserve">
+    <value>{0} created successfully.</value>
+  </data>
+  <data name="CreateChannel_Error_NameRequired" xml:space="preserve">
+    <value>Enter a channel name.</value>
+  </data>
+  <data name="CreateChannel_Error_Failed" xml:space="preserve">
+    <value>Couldn't create the channel. Try again.</value>
+  </data>
+  <data name="CreateChannel_PhotoFailed" xml:space="preserve">
+    <value>Channel created, but the photo couldn't be applied. You can change it in the channel info.</value>
+  </data>
+  <data name="CreateChannel_ExplainTitle" xml:space="preserve">
+    <value>Create a channel to reach an unlimited number of people.</value>
+  </data>
+  <data name="CreateChannel_PublicTitle.Text" xml:space="preserve">
+    <value>Anyone can find your channel</value>
+  </data>
+  <data name="CreateChannel_PublicBody.Text" xml:space="preserve">
+    <value>Channels are public. Anyone who uses WhatsApp can find channels and see activity from the last 30 days.</value>
+  </data>
+  <data name="CreateChannel_PrivacyTitle.Text" xml:space="preserve">
+    <value>People only have access to the channel</value>
+  </data>
+  <data name="CreateChannel_PrivacyBody.Text" xml:space="preserve">
+    <value>Your phone number, profile photo, and name are not shown to channel followers, but they are shown to other admins.</value>
+  </data>
+  <data name="CreateChannel_ResponsibilityTitle.Text" xml:space="preserve">
+    <value>You are responsible for your channel</value>
+  </data>
+  <data name="CreateChannel_ResponsibilityBefore.Text" xml:space="preserve">
+    <value>Your channel must follow our </value>
+  </data>
+  <data name="CreateChannel_Guidelines.Text" xml:space="preserve">
+    <value>guidelines</value>
+  </data>
+  <data name="CreateChannel_ResponsibilityAfter.Text" xml:space="preserve">
+    <value> and will be reviewed by WhatsApp.</value>
+  </data>
+  <data name="CreateChannel_Name.Header" xml:space="preserve">
+    <value>Channel name</value>
+  </data>
+  <data name="CreateChannel_Description.Header" xml:space="preserve">
+    <value>Channel description</value>
+  </data>
+  <data name="CreateChannel_Description.PlaceholderText" xml:space="preserve">
+    <value>Enter a description for the channel and include useful information for your followers.</value>
+  </data>
+  <data name="CreateChannel_AddPhotoOverlay.Text" xml:space="preserve">
+    <value>Add channel image...</value>
+  </data>
+  <data name="CreateCommunity_Name.PlaceholderText" xml:space="preserve">
+    <value>Community name</value>
+  </data>
+  <data name="CreateCommunity_Name.Header" xml:space="preserve">
+    <value>Community name</value>
+  </data>
+  <data name="CreateCommunity_Description.PlaceholderText" xml:space="preserve">
+    <value>Hi! This community was created so participants can chat in topic groups and receive important announcements.</value>
+  </data>
+  <data name="CreateCommunity_Description.Header" xml:space="preserve">
+    <value>Community description</value>
+  </data>
+  <data name="CreateCommunity_AddPhotoOverlay.Text" xml:space="preserve">
+    <value>Add community image...</value>
+  </data>
+  <data name="CallBack_TitleFormat" xml:space="preserve">
+    <value>Call {0}</value>
+  </data>
+  <data name="CallBack_VoiceCall" xml:space="preserve">
+    <value>Voice call</value>
+  </data>
+  <data name="CallBack_CallBackLink.Content" xml:space="preserve">
+    <value>Call back</value>
   </data>
   <data name="NewConversation_SelfUnavailable" xml:space="preserve">
     <value>Your account is not ready yet.</value>
@@ -765,6 +1029,48 @@ Disable after diagnosing: keeping it on slows the app.</value>
   </data>
   <data name="StatusList_MyStatusHint.Text" xml:space="preserve">
     <value>Tap to update your status…</value>
+  </data>
+  <data name="StatusList_MyStatusCount" xml:space="preserve">
+    <value>{0} updates</value>
+  </data>
+  <data name="StatusList_MyStatusNone" xml:space="preserve">
+    <value>No updates</value>
+  </data>
+  <data name="StatusList_OneView" xml:space="preserve">
+    <value>1 view</value>
+  </data>
+  <data name="StatusList_ViewCount" xml:space="preserve">
+    <value>{0} views</value>
+  </data>
+  <data name="StatusList_MyStatusPageTitle.Text" xml:space="preserve">
+    <value>My status</value>
+  </data>
+  <data name="StatusList_OwnForward.Text" xml:space="preserve">
+    <value>Forward</value>
+  </data>
+  <data name="StatusList_OwnSave.Text" xml:space="preserve">
+    <value>Save</value>
+  </data>
+  <data name="StatusList_OwnShare.Text" xml:space="preserve">
+    <value>Share</value>
+  </data>
+  <data name="StatusList_OwnDelete.Text" xml:space="preserve">
+    <value>Delete</value>
+  </data>
+  <data name="Time_JustNow" xml:space="preserve">
+    <value>Just now</value>
+  </data>
+  <data name="Time_OneMinuteAgo" xml:space="preserve">
+    <value>1 minute ago</value>
+  </data>
+  <data name="Time_MinutesAgo" xml:space="preserve">
+    <value>{0} minutes ago</value>
+  </data>
+  <data name="Time_OneHourAgo" xml:space="preserve">
+    <value>1 hour ago</value>
+  </data>
+  <data name="Time_HoursAgo" xml:space="preserve">
+    <value>{0} hours ago</value>
   </data>
   <data name="StatusList_RecentHeader.Text" xml:space="preserve">
     <value>RECENT</value>
@@ -909,6 +1215,30 @@ Disable after diagnosing: keeping it on slows the app.</value>
   </data>
   <data name="Message_CallCompletedVideo" xml:space="preserve">
     <value>Video call</value>
+  </data>
+  <data name="Message_CallTitleVoice" xml:space="preserve">
+    <value>Voice call</value>
+  </data>
+  <data name="Message_CallTitleVideo" xml:space="preserve">
+    <value>Video call</value>
+  </data>
+  <data name="Message_CallMissedTapToReturn" xml:space="preserve">
+    <value>Tap to call back</value>
+  </data>
+  <data name="Message_CallAnsweredElsewhere" xml:space="preserve">
+    <value>Answered on another device</value>
+  </data>
+  <data name="Call_DurationSeconds" xml:space="preserve">
+    <value>{0} seconds</value>
+  </data>
+  <data name="Call_DurationMinutesSeconds" xml:space="preserve">
+    <value>{0} min {1} s</value>
+  </data>
+  <data name="Call_DurationHoursMinutes" xml:space="preserve">
+    <value>{0} h {1} min</value>
+  </data>
+  <data name="Calls_HistorySection" xml:space="preserve">
+    <value>HISTORY</value>
   </data>
   <data name="Shell_Archived.Text" xml:space="preserve">
     <value>Archived chats</value>
@@ -1281,6 +1611,21 @@ Disable after diagnosing: keeping it on slows the app.</value>
   </data>
   <data name="ChatDetailInfo_MemberCountSingular" xml:space="preserve">
     <value>1 member</value>
+  </data>
+  <data name="ChatDetailInfo_FollowerCount" xml:space="preserve">
+    <value>{0} followers</value>
+  </data>
+  <data name="ChatDetailInfo_FollowerCountSingular" xml:space="preserve">
+    <value>1 follower</value>
+  </data>
+  <data name="ChatDetailInfo_FollowersLabel" xml:space="preserve">
+    <value>FOLLOWERS</value>
+  </data>
+  <data name="ChatDetailInfo_ChannelInfo.Header" xml:space="preserve">
+    <value>CHANNEL INFO</value>
+  </data>
+  <data name="ChatDetailInfo_ChannelName" xml:space="preserve">
+    <value>CHANNEL NAME</value>
   </data>
   <data name="ChatDetail_Search.Text" xml:space="preserve">
     <value>Search</value>
@@ -1818,5 +2163,113 @@ Disable after diagnosing: keeping it on slows the app.</value>
   </data>
   <data name="Debug_SocketSliceStop.Content" xml:space="preserve">
     <value>Stop</value>
+  </data>
+  <data name="StatusList_NewMediaStatus.Text" xml:space="preserve">
+    <value>Photo &amp; video</value>
+  </data>
+  <data name="StatusList_NewTextStatus.Text" xml:space="preserve">
+    <value>Text</value>
+  </data>
+  <data name="StatusList_NewMediaStatusTile.Text" xml:space="preserve">
+    <value>Photo &amp; video</value>
+  </data>
+  <data name="StatusList_NewTextStatusTile.Text" xml:space="preserve">
+    <value>Text</value>
+  </data>
+  <data name="Shell_LegacyAppBar_TextStatus.Label" xml:space="preserve">
+    <value>Text status</value>
+  </data>
+  <data name="StatusComposer_Input.PlaceholderText" xml:space="preserve">
+    <value>Type a status</value>
+  </data>
+  <data name="StatusComposer_SendAppBar.Label" xml:space="preserve">
+    <value>Send</value>
+  </data>
+  <data name="StatusComposer_PrivacyAppBar.Label" xml:space="preserve">
+    <value>Privacy</value>
+  </data>
+  <data name="StatusComposer_PrivacyContacts" xml:space="preserve">
+    <value>Status: Contacts</value>
+  </data>
+  <data name="StatusComposer_PrivacyTitle" xml:space="preserve">
+    <value>Status privacy</value>
+  </data>
+  <data name="StatusComposer_Title" xml:space="preserve">
+    <value>Text status</value>
+  </data>
+  <data name="StatusComposer_PrivacyExcept" xml:space="preserve">
+    <value>Status: Contacts except {0}</value>
+  </data>
+  <data name="StatusComposer_PrivacyOnly" xml:space="preserve">
+    <value>Status: Only share with {0}</value>
+  </data>
+  <data name="StatusComposer_Publishing.Text" xml:space="preserve">
+    <value>Publishing status...</value>
+  </data>
+  <data name="StatusComposer_NoRecipients" xml:space="preserve">
+    <value>There are no contacts to share this status with.</value>
+  </data>
+  <data name="StatusComposer_PublishFailedTitle" xml:space="preserve">
+    <value>Status not published</value>
+  </data>
+  <data name="StatusComposer_PublishFailedBody" xml:space="preserve">
+    <value>Your status could not be published. Check your connection and try again.</value>
+  </data>
+  <data name="StatusComposer_PublishRefusedBody" xml:space="preserve">
+    <value>WhatsApp rejected this status (error {0}), so nobody received it. Your text has been kept.</value>
+  </data>
+  <data name="StatusComposer_PublishedTitle" xml:space="preserve">
+    <value>Status published</value>
+  </data>
+  <data name="StatusComposer_PublishedBody" xml:space="preserve">
+    <value>Your status is now visible to the people you chose for the next 24 hours.</value>
+  </data>
+  <data name="StatusPrivacyDialog.Title" xml:space="preserve">
+    <value>Status privacy</value>
+  </data>
+  <data name="StatusPrivacyDialog.PrimaryButtonText" xml:space="preserve">
+    <value>Confirm</value>
+  </data>
+  <data name="StatusPrivacyDialog.CloseButtonText" xml:space="preserve">
+    <value>Cancel</value>
+  </data>
+  <data name="StatusPrivacyDialog_Prompt.Text" xml:space="preserve">
+    <value>Who can see my status updates on WhatsApp</value>
+  </data>
+  <data name="StatusPrivacyDialog_Contacts.Text" xml:space="preserve">
+    <value>My contacts</value>
+  </data>
+  <data name="StatusPrivacyDialog_ContactsHint.Text" xml:space="preserve">
+    <value>Share with all of your contacts</value>
+  </data>
+  <data name="StatusPrivacyDialog_Except.Text" xml:space="preserve">
+    <value>My contacts except...</value>
+  </data>
+  <data name="StatusPrivacyDialog_Only.Text" xml:space="preserve">
+    <value>Only share with...</value>
+  </data>
+  <data name="StatusPrivacy_ExcludedCount" xml:space="preserve">
+    <value>{0} contacts excluded</value>
+  </data>
+  <data name="StatusPrivacy_SelectedCount" xml:space="preserve">
+    <value>{0} contacts selected</value>
+  </data>
+  <data name="StatusPrivacy_ExceptTitle" xml:space="preserve">
+    <value>My contacts except...</value>
+  </data>
+  <data name="StatusPrivacy_OnlyShareWithTitle" xml:space="preserve">
+    <value>Only share with...</value>
+  </data>
+  <data name="StatusPrivacy_PickerSelected" xml:space="preserve">
+    <value>{0} selected</value>
+  </data>
+  <data name="StatusPicker_ConfirmAppBar.Label" xml:space="preserve">
+    <value>Confirm</value>
+  </data>
+  <data name="StatusPicker_CancelAppBar.Label" xml:space="preserve">
+    <value>Cancel</value>
+  </data>
+  <data name="StatusList_NewStatusDockTitle.Text" xml:space="preserve">
+    <value>NEW STATUS</value>
   </data>
 </root>

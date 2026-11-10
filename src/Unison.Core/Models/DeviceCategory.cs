@@ -44,7 +44,7 @@ namespace Unison.Core.Models
         {
             if (isMobile && category == DeviceCategory.High)
             {
-                return DeviceCategory.Low;
+                category = DeviceCategory.Low;
             }
 
             return category;

@@ -105,28 +105,15 @@ namespace Unison.Core.Services
             PersistFireAndForget(entry);
         }
 
+        /// <summary>
+        /// Flat Recents feed — one row per call entry (no collapse by contact).
+        /// </summary>
         public IReadOnlyList<CallRecentItem> GetRecents()
         {
             lock (_gate)
             {
-                var newestByContact = new Dictionary<string, CallHistoryEntry>(StringComparer.OrdinalIgnoreCase);
-                foreach (CallHistoryEntry entry in _entries)
-                {
-                    if (entry == null || string.IsNullOrWhiteSpace(entry.CanonicalJid))
-                    {
-                        continue;
-                    }
-
-                    string key = GroupKey(entry.CanonicalJid);
-                    CallHistoryEntry current;
-                    if (!newestByContact.TryGetValue(key, out current) ||
-                        entry.TimestampUtc > current.TimestampUtc)
-                    {
-                        newestByContact[key] = entry;
-                    }
-                }
-
-                return newestByContact.Values
+                return _entries
+                    .Where(e => e != null && !string.IsNullOrWhiteSpace(e.CanonicalJid))
                     .OrderByDescending(e => e.TimestampUtc)
                     .Select(ToRecent)
                     .ToList();
@@ -159,27 +146,43 @@ namespace Unison.Core.Services
 
             string callId = entry.CallId ?? string.Empty;
 
-            // Missed/Completed replaces a prior Incoming ring for the same call-id.
-            if (!string.IsNullOrEmpty(callId) &&
-                (entry.ChromeKind == CallEventChromeKind.Missed ||
-                 entry.ChromeKind == CallEventChromeKind.Completed))
+            // One logical call → one row. Match by CallId (+ contact), not by chrome kind —
+            // Offer(Incoming) then Timeout(Missed) must not create two Recents lines.
+            if (!string.IsNullOrEmpty(callId))
             {
                 for (int i = 0; i < _entries.Count; i++)
                 {
                     CallHistoryEntry prior = _entries[i];
                     if (prior == null ||
-                        prior.ChromeKind != CallEventChromeKind.Incoming ||
                         !string.Equals(prior.CallId ?? string.Empty, callId, StringComparison.Ordinal) ||
                         !SameContact(prior.CanonicalJid, entry.CanonicalJid))
                     {
                         continue;
                     }
 
+                    // Never let a late Offer/Incoming overwrite Missed/Completed/elsewhere.
+                    if (entry.ChromeKind == CallEventChromeKind.Incoming &&
+                        IsTerminalChrome(prior.ChromeKind))
+                    {
+                        return;
+                    }
+
+                    if (!preferIncomingIfNewer &&
+                        !IsTerminalChrome(entry.ChromeKind) &&
+                        prior.TimestampUtc >= entry.TimestampUtc)
+                    {
+                        return;
+                    }
+
                     _entries[i] = entry;
                     return;
                 }
+
+                _entries.Add(entry);
+                return;
             }
 
+            // No CallId — fall back to chrome+contact+time (legacy / incomplete stanzas).
             for (int i = 0; i < _entries.Count; i++)
             {
                 CallHistoryEntry existing = _entries[i];
@@ -205,6 +208,13 @@ namespace Unison.Core.Services
             }
 
             _entries.Add(entry);
+        }
+
+        private static bool IsTerminalChrome(CallEventChromeKind kind)
+        {
+            return kind == CallEventChromeKind.Missed
+                || kind == CallEventChromeKind.Completed
+                || kind == CallEventChromeKind.AnsweredElsewhere;
         }
 
         private void PersistFireAndForget(CallHistoryEntry entry)

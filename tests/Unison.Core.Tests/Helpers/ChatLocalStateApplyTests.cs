@@ -181,6 +181,74 @@ public class ChatLocalStateApplyTests
     }
 
     [Fact]
+    public void A_stored_channel_role_comes_back_onto_the_row()
+    {
+        // Restored before paint so an owner does not see the read-only strip flash first.
+        var chat = new ChatItem { JID = "1@newsletter" };
+
+        ChatLocalStateApply.Apply(
+            chat,
+            new ChatLocalState { Jid = "1@newsletter", ChannelRole = ChannelViewerRole.Owner });
+
+        Assert.Equal(ChannelViewerRole.Owner, chat.ChannelRole);
+    }
+
+    [Fact]
+    public void A_row_without_a_stored_channel_role_keeps_the_one_it_holds()
+    {
+        var chat = new ChatItem { JID = "1@newsletter", ChannelRole = ChannelViewerRole.Admin };
+
+        ChatLocalStateApply.Apply(chat, new ChatLocalState { Jid = "1@newsletter", IsChatPinned = true });
+
+        Assert.Equal(ChannelViewerRole.Admin, chat.ChannelRole);
+    }
+
+    [Fact]
+    public void A_stored_group_description_comes_back_onto_the_row()
+    {
+        // Restart survival: the info panel reads GroupDescription off the row, and the metadata
+        // IQ that would refill it only fires once the panel is already open.
+        var chat = new ChatItem { JID = "120363@g.us" };
+
+        ChatLocalStateApply.Apply(
+            chat,
+            new ChatLocalState
+            {
+                Jid = "120363@g.us",
+                GroupDescription = "Trip planning",
+                GroupDescriptionId = "abc123"
+            });
+
+        Assert.Equal("Trip planning", chat.GroupDescription);
+        Assert.Equal("abc123", chat.GroupDescriptionId);
+    }
+
+    [Fact]
+    public void A_row_without_a_stored_group_description_keeps_the_one_it_holds()
+    {
+        // Every row read from SQLite claims to know the base fields. If the description were one
+        // of them, a pre-migration NULL would wipe a description fetched earlier this session.
+        var chat = new ChatItem { JID = "120363@g.us", GroupDescription = "Fetched this session" };
+
+        ChatLocalStateApply.Apply(chat, new ChatLocalState { Jid = "120363@g.us", IsChatPinned = true });
+
+        Assert.Equal("Fetched this session", chat.GroupDescription);
+    }
+
+    [Fact]
+    public void A_cleared_group_description_is_restored_as_cleared()
+    {
+        // Empty is a real value — an admin removed the description — and must beat the old text.
+        var chat = new ChatItem { JID = "120363@g.us", GroupDescription = "Old text" };
+
+        ChatLocalStateApply.Apply(
+            chat,
+            new ChatLocalState { Jid = "120363@g.us", GroupDescription = string.Empty });
+
+        Assert.Equal(string.Empty, chat.GroupDescription);
+    }
+
+    [Fact]
     public void A_null_chat_is_ignored_rather_than_thrown_at()
     {
         ChatLocalStateApply.Apply(null, new ChatLocalState { Jid = "a@s.whatsapp.net" });

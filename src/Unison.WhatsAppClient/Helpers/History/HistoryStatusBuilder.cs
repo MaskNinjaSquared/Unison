@@ -186,8 +186,28 @@ namespace Unison.WhatsAppClient.Helpers
                 SyncType = syncType ?? string.Empty,
                 UpdatedAtUtc = now
             };
+            ApplyTextStyle(row, info.Message);
             HistoryMediaFiller.Apply(row, info);
             return row;
+        }
+
+        private static void ApplyTextStyle(HistoryStatus row, Message message)
+        {
+            if (row == null || row.Kind != ChatPreviewKind.Text || message == null)
+            {
+                return;
+            }
+
+            Message unwrapped = ProtoMessageUnwrap.Run(message);
+            var extended = unwrapped?.ExtendedTextMessage;
+            if (extended == null)
+            {
+                return;
+            }
+
+            row.BackgroundArgb = extended.BackgroundArgb;
+            row.TextArgb = extended.TextArgb;
+            row.Font = (int)extended.Font;
         }
 
         private static string ResolveAuthorJid(WebMessageInfo info)

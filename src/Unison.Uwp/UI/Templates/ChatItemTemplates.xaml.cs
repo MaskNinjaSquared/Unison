@@ -425,10 +425,16 @@ namespace Unison.Uwp.UI.Templates
             return item.GetNameResolved(strings);
         }
 
-        /// <summary>Group glyph under the photo for groups and community hubs.</summary>
+        /// <summary>Group glyph under the photo for groups and community hubs (not channels).</summary>
         public static bool ShowsGroupAvatar(bool isGroup, ChatKind kind)
         {
-            return isGroup || kind == ChatKind.Community;
+            return kind != ChatKind.Channel && (isGroup || kind == ChatKind.Community);
+        }
+
+        /// <summary>Channels sidebar glyph + #545C69 plate when the row has no picture.</summary>
+        public static bool ShowsChannelAvatar(ChatKind kind)
+        {
+            return kind == ChatKind.Channel;
         }
 
         /// <summary>

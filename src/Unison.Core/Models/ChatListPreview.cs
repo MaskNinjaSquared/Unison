@@ -15,6 +15,7 @@ namespace Unison.Core.Models
         private bool _showAuthorChevron;
         private ChatPreviewKind _kind;
         private bool _isFromMe;
+        private bool _isMissedCall;
         private MessageSendState _sendState;
         private List<string> _mentionedJids;
 
@@ -86,6 +87,13 @@ namespace Unison.Core.Models
 
                 RaiseStatusUi();
             }
+        }
+
+        /// <summary>CallEvent preview that should render in the missed-call red.</summary>
+        public bool IsMissedCall
+        {
+            get => _isMissedCall;
+            set => Set(ref _isMissedCall, value);
         }
 
         public MessageSendState SendState
@@ -187,6 +195,7 @@ namespace Unison.Core.Models
             ShowAuthorChevron = source.ShowAuthorChevron;
             Kind = source.Kind;
             IsFromMe = source.IsFromMe;
+            IsMissedCall = source.IsMissedCall;
             SendState = source.SendState;
             MentionedJids = source.MentionedJids != null && source.MentionedJids.Count > 0
                 ? new List<string>(source.MentionedJids)

@@ -4,6 +4,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:local="using:Unison.Uwp.Shell.WhatsAppLegacy.Views"
     xmlns:controls="using:Unison.Uwp.UI.Controls"
+    xmlns:legacyControls="using:Unison.Uwp.Shell.WhatsAppLegacy.Controls"
     xmlns:views="using:Unison.Uwp.UI.Views"
     Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
 
@@ -96,7 +97,7 @@
                 <TextBox x:Name="ShellSearchBox"
                          Grid.Row="1"
                          Margin="0,10,0,8"
-                         Style="{StaticResource LegacySearchBoxStyle}"
+                         Style="{ThemeResource ChatListSearchTextBoxStyle}"
                          x:Uid="Shell_LegacySearchBox"
                          PlaceholderText="search"
                          VerticalAlignment="Center"
@@ -140,12 +141,15 @@
                     </PivotItem>
                 </Pivot>
 
+                <!-- First materialize of any pivot tab (sibling of Pivot so the ring paints during switch). -->
                 <Grid x:Name="SectionLoadingOverlay"
                       Visibility="Collapsed"
                       Background="{ThemeResource ApplicationPageBackgroundThemeBrush}"
                       Canvas.ZIndex="20">
                     <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
-                        <controls:ModernProgressRing IsActive="True" Width="36" Height="36"/>
+                        <controls:ModernProgressRing x:Name="SectionLoadingRing"
+                                                     IsActive="False"
+                                                     Width="36" Height="36"/>
                         <TextBlock x:Name="SectionLoadingText"
                                    x:Uid="ChatList_Loading"
                                    Text="Preparing conversations…"
@@ -198,14 +202,15 @@
             </Border>
         </Border>
 
-        <!-- RIGHT: chat / status / calls detail (wide) or fullscreen (narrow) — not inside Pivot. -->
+        <!-- RIGHT: chat / empty-status pane / calls detail (wide) or fullscreen (narrow). -->
         <Border x:Name="DetailHost"
                 Grid.Column="1"
                 Background="{ThemeResource ApplicationPageBackgroundThemeBrush}"
                 Visibility="Collapsed">
             <Grid>
                 <local:ChatDetailView x:Name="ShellChatDetail"/>
-                <views:StatusDetailView x:Name="ShellStatusDetail"
+                <!-- Empty Status pane (wide, no author). Open viewer is ShellStatusDetail overlay. -->
+                <views:StatusDetailView x:Name="ShellStatusPaneEmpty"
                                         Visibility="Collapsed"/>
                 <Grid x:Name="ShellCallsDetailRoot"
                       Visibility="Collapsed">
@@ -215,6 +220,14 @@
                 </Grid>
             </Grid>
         </Border>
+
+        <!-- Status viewer: shell-level fullscreen overlay (covers list + detail). -->
+        <views:StatusDetailView x:Name="ShellStatusDetail"
+                                Grid.Column="0"
+                                Grid.ColumnSpan="2"
+                                Canvas.ZIndex="5"
+                                Visibility="Collapsed"
+                                Background="{ThemeResource ApplicationPageBackgroundThemeBrush}"/>
 
         <!-- Settings and debug. Spans both columns so an open chat cannot stay beside them. -->
         <Frame x:Name="ContentFrame"
@@ -229,6 +242,7 @@
         <!-- Share Target picker: full-bleed over pivot + detail (Mobile opaque cover). -->
         <controls:ContactsVisualizerControl
             x:Name="SharePickerOverlay"
+            x:Load="{x:Bind ViewModel.IsSharePickerOpen, Mode=OneWay}"
             Grid.Column="0"
             Grid.ColumnSpan="2"
             Canvas.ZIndex="100"
@@ -238,11 +252,28 @@
             ItemClickCommand="{x:Bind ViewModel.SelectShareChatCommand}"
             BackCommand="{x:Bind ViewModel.CloseSharePickerCommand}"/>
 
-        <controls:NewConversationView
+        <!-- Warm chrome; A–Z list x:Loads inside NewConversationView after first Open yield. -->
+        <legacyControls:NewConversationView
             x:Name="NewConversationOverlay"
             Grid.Column="0"
             Grid.ColumnSpan="2"
             Canvas.ZIndex="101"
             ViewModel="{x:Bind ViewModel.NewConversation, Mode=OneWay}"/>
+
+        <!-- New Status dock: shell root (covers pivot + detail); Status list raises open/close. -->
+        <legacyControls:NewStatusPickerOverlay
+            x:Name="NewStatusPickerOverlay"
+            Grid.Column="0"
+            Grid.ColumnSpan="2"
+            Canvas.ZIndex="102"
+            DataContext="{x:Null}"/>
+
+        <ContentPresenter
+            x:Name="CameraPickPresenter"
+            x:Load="{x:Bind ViewModel.IsCameraPickOpen, Mode=OneWay}"
+            Grid.Column="0"
+            Grid.ColumnSpan="2"
+            Canvas.ZIndex="103"
+            Visibility="Collapsed"/>
     </Grid>
 </Page>

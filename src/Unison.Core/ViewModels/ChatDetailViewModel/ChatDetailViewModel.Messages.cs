@@ -341,7 +341,13 @@ namespace Unison.Core.ViewModels
             }
 
             // Ask for history either way — an empty timeline is the reason we are here.
-            _ = _messageService.EnsureHistoryOnDemandAsync(targetJid, InitialUiMessageWindow);
+            // Claim so the session-open OnDemand page can notify ChatMessagesChanged once.
+            if (_messageService != null)
+            {
+                _messageService.TryClaimSessionOpenOnDemand(targetJid);
+                _ = _messageService.EnsureHistoryOnDemandAsync(targetJid, InitialUiMessageWindow);
+            }
+
             return fallback;
         }
 

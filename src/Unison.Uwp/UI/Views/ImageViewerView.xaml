@@ -4,6 +4,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:helpers="using:Unison.Uwp.UI.Helpers"
     mc:Ignorable="d"
     d:DesignHeight="800"
     d:DesignWidth="480">
@@ -76,7 +77,7 @@
                             Grid.Column="1"
                             VerticalAlignment="Top"
                             Margin="0,2,8,0">
-                    <TextBlock Text="{x:Bind ViewModel.SenderDisplayName, Mode=OneWay}"
+                    <TextBlock helpers:EmojiTextBlock.Text="{x:Bind ViewModel.SenderDisplayName, Mode=OneWay}"
                                FontSize="16"
                                FontWeight="SemiBold"
                                FontFamily="{StaticResource MainFont}"
@@ -128,16 +129,23 @@
                 Canvas.ZIndex="2"
                 Visibility="Collapsed"
                 Tapped="Chrome_Tapped">
-            <TextBlock Text="{x:Bind ViewModel.Caption, Mode=OneWay}"
-                       FontSize="15"
-                       FontFamily="{StaticResource MainFont}"
-                       Foreground="White"
-                       TextWrapping="Wrap"
-                       TextTrimming="CharacterEllipsis"
-                       MaxLines="5"
-                       TextAlignment="Center"
-                       HorizontalAlignment="Stretch"
-                       IsTextSelectionEnabled="True"/>
+            <!-- Same rich path as the bubble caption (MessageTemplates SentCaption): emoji runs on
+                 the packaged WhatsApp face, URLs as links, @digits resolved to contact names.
+                 A plain TextBlock here rendered modern emoji as tofu. -->
+            <RichTextBlock helpers:CommentRichService.Text="{x:Bind ViewModel.Caption, Mode=OneWay}"
+                           helpers:CommentRichService.MentionedJids="{x:Bind ViewModel.MentionedJids, Mode=OneWay}"
+                           helpers:CommentRichService.MentionLookup="{x:Bind ViewModel.MentionLookup, Mode=OneWay}"
+                           helpers:CommentRichService.RefreshKey="{x:Bind ViewModel.MentionRefreshKey, Mode=OneWay}"
+                           helpers:CommentRichService.LinkBrushKey="ImageViewerCaptionLinkBrush"
+                           FontSize="15"
+                           FontFamily="{StaticResource MainFont}"
+                           Foreground="White"
+                           TextWrapping="Wrap"
+                           TextTrimming="CharacterEllipsis"
+                           MaxLines="5"
+                           TextAlignment="Center"
+                           HorizontalAlignment="Stretch"
+                           IsTextSelectionEnabled="True"/>
         </Border>
     </Grid>
 </UserControl>

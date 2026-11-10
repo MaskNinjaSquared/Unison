@@ -1,11 +1,14 @@
 using System;
 using System.ComponentModel;
+using System.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 using Unison.Core.Contracts;
 using Unison.Core.Models;
 using Unison.Core.ViewModels;
+using Unison.Uwp.UI.Views;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
+using Windows.UI.Xaml.Input;
 
 namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
 {
@@ -13,9 +16,13 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
     {
         public StatusAuthorItem Author { get; }
 
-        public StatusAuthorSelectedEventArgs(StatusAuthorItem author)
+        /// <summary>Status to show first; null opens at the oldest.</summary>
+        public string StartMessageId { get; }
+
+        public StatusAuthorSelectedEventArgs(StatusAuthorItem author, string startMessageId = null)
         {
             Author = author;
+            StartMessageId = startMessageId;
         }
     }
 
@@ -41,6 +48,11 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
 
         public event EventHandler SettingsRequested;
 
+        /// <summary>
+        /// Shell hosts the fullscreen New Status dock; the list only signals open/close.
+        /// </summary>
+        public event EventHandler<bool> NewStatusPickerOpenChanged;
+
         public StatusListView()
         {
             if (App.Services != null)
@@ -51,6 +63,7 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             }
 
             InitializeComponent();
+            MyStatusItem.AddHandler(TappedEvent, new TappedEventHandler(MyStatusRow_Tapped), true);
             Loaded += StatusListView_Loaded;
             Unloaded += StatusListView_Unloaded;
             ApplyFilterLabel();
@@ -136,6 +149,83 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             ViewModel.PropertyChanged += ViewModel_PropertyChanged;
             ViewModel.Attach();
             SyncSelectionFromViewModel();
+            ApplySelfStatusRow();
+        }
+
+        private void ApplySelfStatusRow()
+        {
+            MyStatusRowChrome.Apply(ViewModel?.SelfStatus, MyStatusRing, MyStatusPlainAvatar, MyStatusCaption, MyStatusTime);
+            MyStatusItem.IsSelected = MyStatusRowChrome.IsSelfSelected(ViewModel?.SelectedAuthor, ViewModel?.SelfStatus);
+        }
+
+        private void MyStatusRow_Tapped(object sender, TappedRoutedEventArgs e)
+        {
+            if (MyStatusRowChrome.IsWithin(e.OriginalSource, AddStatusButton))
+            {
+                return;
+            }
+
+            StatusAuthorItem self = ViewModel?.SelfStatus;
+            TraceSelfMatch("my-status-tap", self);
+            if (self == null)
+            {
+                return;
+            }
+
+            e.Handled = true;
+            MyStatusItem.IsSelected = false;
+            _ = ViewModel.OpenMyStatusAsync();
+        }
+
+        private void MyStatusBackButton_Click(object sender, RoutedEventArgs e)
+        {
+            ViewModel?.CloseMyStatus();
+        }
+
+        private void OwnStatusList_ItemClick(object sender, ItemClickEventArgs e)
+        {
+            StatusAuthorItem self = ViewModel?.SelfStatus;
+            if (self == null || !(e.ClickedItem is OwnStatusItem item))
+            {
+                return;
+            }
+
+            ViewModel.SelectedAuthor = self;
+            AuthorSelected?.Invoke(this, new StatusAuthorSelectedEventArgs(self, item.MessageId));
+        }
+
+        /// <summary>Closes the "My status" page; false when it was not open.</summary>
+        public bool TryHandleBack()
+        {
+            if (ViewModel != null && ViewModel.TryHandleNewStatusBack())
+            {
+                return true;
+            }
+
+            if (ViewModel == null || !ViewModel.IsMyStatusOpen)
+            {
+                return false;
+            }
+
+            ViewModel.CloseMyStatus();
+            return true;
+        }
+
+        private void AddStatusButton_Tapped(object sender, TappedRoutedEventArgs e)
+        {
+            e.Handled = true;
+        }
+
+        private void TraceSelfMatch(string eventName, StatusAuthorItem author)
+        {
+            if (ViewModel == null)
+            {
+                return;
+            }
+
+            string details = ViewModel.DescribeSelfMatch(author);
+            Debug.WriteLine("[StatusList] " + eventName + " " + details);
+            App.Services?.GetService<IRuntimeDiagnostics>()?.Write("status-self", eventName, details);
         }
 
         private void StatusListView_Unloaded(object sender, RoutedEventArgs e)
@@ -196,6 +286,14 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             {
                 SyncSelectionFromViewModel();
             }
+            else if (e.PropertyName == nameof(StatusListViewModel.SelfStatus))
+            {
+                ApplySelfStatusRow();
+            }
+            else if (e.PropertyName == nameof(StatusListViewModel.IsNewStatusPickerOpen))
+            {
+                NewStatusPickerOpenChanged?.Invoke(this, ViewModel.IsNewStatusPickerOpen);
+            }
         }
 
         private void SyncSelectionFromViewModel()
@@ -209,6 +307,7 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             try
             {
                 AuthorList.SelectedItem = ViewModel.SelectedAuthor;
+                MyStatusItem.IsSelected = MyStatusRowChrome.IsSelfSelected(ViewModel.SelectedAuthor, ViewModel.SelfStatus);
             }
             finally
             {
@@ -229,6 +328,8 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                 return;
             }
 
+            TraceSelfMatch("list-tap", author);
+
             // Same author re-selected (list reload / delayed SelectionChanged) — do not reopen.
             if (ViewModel.SelectedAuthor != null &&
                 string.Equals(
@@ -246,6 +347,32 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
         private void MenuButton_Click(object sender, RoutedEventArgs e)
         {
             MenuClicked?.Invoke(this, EventArgs.Empty);
+        }
+
+        private OwnStatusItem _ownStatusFlyoutItem;
+
+        /// <summary>
+        /// MenuFlyout pops out of the item tree — capture the row so Save Click is not Command-bound
+        /// (CommandParameter is flaky on older Mobile UWP builds).
+        /// </summary>
+        private void OwnStatusMoreFlyout_Opening(object sender, object e)
+        {
+            var flyout = sender as MenuFlyout;
+            var target = flyout?.Target as FrameworkElement;
+            _ownStatusFlyoutItem = target?.DataContext as OwnStatusItem;
+        }
+
+        private void OwnStatusSave_Click(object sender, RoutedEventArgs e)
+        {
+            OwnStatusItem item = _ownStatusFlyoutItem
+                ?? (sender as FrameworkElement)?.DataContext as OwnStatusItem;
+            if (item == null || ViewModel == null)
+            {
+                Debug.WriteLine("[StatusList] OwnStatusSave: no item");
+                return;
+            }
+
+            _ = ViewModel.SaveOwnStatusAsync(item);
         }
     }
 }

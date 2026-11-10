@@ -15,6 +15,7 @@ namespace Unison.WhatsAppClient.Abstractions
     {
         Task HydrateCachedAsync(string reason);
 
-        Task FetchAndApplyAsync(ChatItem chat, CancellationToken token, bool fetchHighQuality);
+        /// <param name="revalidate">Skip the cached IQ answer and keep the fresh one (chat open, broken image).</param>
+        Task FetchAndApplyAsync(ChatItem chat, CancellationToken token, bool fetchHighQuality, bool revalidate = false);
     }
 }

@@ -32,6 +32,12 @@ namespace Unison.Core.Models
         /// Tracked as the active section when settings is open; do not pass to
         /// <c>NavigateInShell</c> — use <see cref="Contracts.INavigator.OpenSettings"/>.
         /// </summary>
-        Settings = 20
+        Settings = 20,
+
+        /// <summary>
+        /// Text status composer. Full-screen only — open with
+        /// <see cref="Contracts.INavigator.NavigateFullScreen"/>.
+        /// </summary>
+        StatusComposer = 21
     }
 }

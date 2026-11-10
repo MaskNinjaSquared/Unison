@@ -4,6 +4,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:controls="using:Unison.Uwp.UI.Controls"
     xmlns:models="using:Unison.Core.Models"
+    xmlns:helpers="using:Unison.Uwp.UI.Helpers"
     Background="Transparent">
 
     <UserControl.Resources>
@@ -33,7 +34,7 @@
                                             VerticalAlignment="Center"/>
 
                 <TextBlock Grid.Column="1"
-                           Text="{x:Bind DisplayName}"
+                           helpers:EmojiTextBlock.Text="{x:Bind DisplayName}"
                            Margin="12,0,12,0"
                            VerticalAlignment="Center"
                            HorizontalAlignment="Stretch"
@@ -54,11 +55,11 @@
                         <FontIcon Glyph="&#xE714;" FontFamily="{StaticResource IconFont}" FontSize="18"
                                   Foreground="{ThemeResource WhatsAppTextMediumBrush}"/>
                     </Button>
-                    <Button IsEnabled="False"
-                            Style="{StaticResource ModernIconButtonStyle}"
+                    <Button Style="{StaticResource ModernIconButtonStyle}"
+                            Click="FavoriteVoiceCallButton_Click"
                             AutomationProperties.Name="Voice call">
                         <FontIcon Glyph="&#xE717;" FontFamily="{StaticResource IconFont}" FontSize="18"
-                                  Foreground="{ThemeResource WhatsAppTextMediumBrush}"/>
+                                  Foreground="{ThemeResource WhatsAppTextHighBrush}"/>
                     </Button>
                 </StackPanel>
             </Grid>
@@ -90,7 +91,7 @@
                         <RowDefinition Height="Auto"/>
                     </Grid.RowDefinitions>
 
-                    <TextBlock Text="{x:Bind DisplayName}"
+                    <TextBlock helpers:EmojiTextBlock.Text="{x:Bind DisplayName}"
                                HorizontalAlignment="Stretch"
                                FontSize="17"
                                FontFamily="{StaticResource MainFontSemibold}"

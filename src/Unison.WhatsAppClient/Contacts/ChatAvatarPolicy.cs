@@ -270,7 +270,11 @@ namespace Unison.WhatsAppClient.Contacts
             {
                 try
                 {
-                    await _fetch.FetchAndApplyAsync(chat, CancellationToken.None, fetchHighQuality: true);
+                    await _fetch.FetchAndApplyAsync(
+                        chat,
+                        CancellationToken.None,
+                        fetchHighQuality: true,
+                        revalidate: force);
                     _catalog.Schedule();
                     ClearViewportPriority(chat);
                 }

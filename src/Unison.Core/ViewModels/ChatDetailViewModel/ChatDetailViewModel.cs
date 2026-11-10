@@ -59,6 +59,9 @@ namespace Unison.Core.ViewModels
         /// <summary>File pickers — chat attach uses PickChatAttachmentAsync.</summary>
         private readonly IFilePicker _filePicker;
 
+        /// <summary>Shell-hosted camera (JPEG bytes); null when UI capture is not plugged.</summary>
+        private readonly ICameraPickService _cameraPick;
+
         /// <summary>Confirm dialogs (delete chat, call phone, …).</summary>
         private readonly IDialogService _dialogs;
 
@@ -131,9 +134,12 @@ namespace Unison.Core.ViewModels
         private readonly PresenceWatchGate _presenceWatch = new PresenceWatchGate();
         private string _composerWarmedGroupJid;
         private bool _attached;
+        private DebouncedUiRebuild _authorLabelsRebuild;
         private bool _presenceHandlerAttached;
         private bool _presenceReceived;
         private string _pendingPresenceText;
+        private bool _presenceAnnounced;
+        private string _presenceShownText;
         private DateTime _presenceOpenedUtc;
         private bool _hasReachedStart;
         private int _emptyLoadAttempts;
@@ -154,6 +160,9 @@ namespace Unison.Core.ViewModels
 
         /// <summary>Which JIDs are the same person (PN vs LID).</summary>
         private readonly IJidResolver _jids;
+
+        /// <summary>Owner / admin role on an open channel — decides whether the composer shows.</summary>
+        private readonly IChannelService _channels;
 
         /// <summary>How many bubble VMs to materialize when opening a chat (service may hold more data).</summary>
         public int InitialUiMessageWindow { get; }
@@ -191,8 +200,12 @@ namespace Unison.Core.ViewModels
             IEmojiRecentStore emojiRecents = null,
             IChatExportService chatExport = null,
             IProfileService profile = null,
-            IShareService share = null)
+            IShareService share = null,
+            IChannelService channels = null,
+            ICameraPickService cameraPick = null)
         {
+            _cameraPick = cameraPick;
+            _channels = channels;
             _chatService = chatService;
             _connectionService = connectionService;
             _groupService = groupService;
@@ -207,6 +220,11 @@ namespace Unison.Core.ViewModels
             _dialogs = dialogs;
             _uriLauncher = uriLauncher;
             _dispatcher = dispatcher;
+            _authorLabelsRebuild = new DebouncedUiRebuild(
+                () => _attached,
+                RefreshGroupAuthorLabelsAfterNamesChanged,
+                _dispatcher,
+                logTag: "ChatDetailAuthorLabels");
             _messageFactory = messageFactory ?? throw new ArgumentNullException(nameof(messageFactory));
             _infoFactory = infoFactory ?? throw new ArgumentNullException(nameof(infoFactory));
             _strings = strings;
@@ -248,10 +266,10 @@ namespace Unison.Core.ViewModels
                 () => CanCompose);
 
             // Contact / location stay unavailable until each has a send route.
-            // Camera opens the in-chat CameraPickView; document attach is live.
+            // Camera uses Shell ICameraPickService; document attach is live.
             AttachCameraCommand = new RelayCommand(
-                () => CameraPickRequested?.Invoke(this, EventArgs.Empty),
-                () => CanCompose);
+                () => _ = RunSafeAsync(AttachCameraAsync, "attach-camera"),
+                () => CanCompose && _cameraPick != null);
             AttachFileCommand = new RelayCommand(
                 () => _ = RunSafeAsync(AttachDocumentAsync, "attach-file"),
                 () => CanCompose);
@@ -390,9 +408,6 @@ namespace Unison.Core.ViewModels
         public event EventHandler BackRequested;
         public event EventHandler MessageSent;
 
-        /// <summary>Chat detail should show <c>CameraPickView</c> over the conversation.</summary>
-        public event EventHandler CameraPickRequested;
-
         /// <summary>Raised after pin/unpin succeeds (view refreshes pinned banner).</summary>
         public event EventHandler MessagePinnedChanged;
 
@@ -434,6 +449,30 @@ namespace Unison.Core.ViewModels
             return joined.Substring(0, maxLen - 1).TrimEnd(',', ' ') + "…";
         }
 
+        /// <summary>"{0} followers" for the channel header subtitle, or null when the count is unknown.</summary>
+        public string FormatChannelFollowersSummary(ChatItem channel)
+        {
+            if (channel == null || !channel.IsChannel || channel.ChannelFollowerCount <= 0)
+            {
+                return null;
+            }
+
+            string template = _strings != null
+                ? _strings.Get("ChatDetail_ChannelFollowers", "{0} followers")
+                : "{0} followers";
+            return string.Format(template, channel.ChannelFollowerCount);
+        }
+
+        /// <summary>Composer watermark: channels ask for an update, chats for a message.</summary>
+        public string ComposerPlaceholderText =>
+            ActiveChat != null && ActiveChat.IsChannel
+                ? (_strings != null
+                    ? _strings.Get("ChatDetail_ChannelUpdateInput", "Write an update...")
+                    : "Write an update...")
+                : (_strings != null
+                    ? _strings.Get("ChatDetail_MessageInput.PlaceholderText", "Type a message")
+                    : "Type a message");
+
         // ── Bindable state ────────────────────────────────────────────────────
 
         public ObservableCollection<ChatMessageViewModel> Messages { get; }
@@ -461,6 +500,7 @@ namespace Unison.Core.ViewModels
                 OnPropertyChanged(nameof(ShowsAnnounceOnlyComposerLock));
                 OnPropertyChanged(nameof(IsComposerLocked));
                 OnPropertyChanged(nameof(IsChannelReadOnly));
+                OnPropertyChanged(nameof(ComposerPlaceholderText));
                 OnPropertyChanged(nameof(CanLoadMore));
                 CloseMentionMenu();
                 DismissMessageActions();
@@ -489,8 +529,12 @@ namespace Unison.Core.ViewModels
         /// <summary>Channel subscriber or announce-only group — hide the composer.</summary>
         public bool IsComposerLocked => ActiveChat != null && ActiveChat.IsComposerLocked;
 
-        /// <summary>WhatsApp Channel open — banner copy differs from group announce-only.</summary>
-        public bool IsChannelReadOnly => ActiveChat != null && ActiveChat.IsChannel;
+        /// <summary>
+        /// WhatsApp Channel this account only follows — banner copy differs from group
+        /// announce-only. Owners and admins get the composer instead.
+        /// </summary>
+        public bool IsChannelReadOnly =>
+            ActiveChat != null && ActiveChat.IsChannel && !ActiveChat.CanPostToChannel;
 
         public string MessageText
         {
@@ -1189,6 +1233,25 @@ namespace Unison.Core.ViewModels
         }
 
         /// <summary>
+        /// Call-event balloon / shared entry: confirm dialog only (no dialer).
+        /// </summary>
+        private async Task ShowCallBackDialogAsync()
+        {
+            if (_dialogs == null)
+            {
+                return;
+            }
+
+            string phone = ResolveActiveChatPhone();
+            if (string.IsNullOrEmpty(phone))
+            {
+                return;
+            }
+
+            await _dialogs.ShowCallBackAsync(phone).ConfigureAwait(false);
+        }
+
+        /// <summary>
         /// Re-reads the local chat row before the overflow menu is built. Mute can be changed from
         /// the chat list, from a notification, or on another device, and the menu has to offer
         /// "mute" or "unmute" based on what is true now rather than on what was true when the
@@ -1222,14 +1285,7 @@ namespace Unison.Core.ViewModels
         private void Contacts_DisplayNamesUpdated(object sender, EventArgs e)
         {
             _groupService?.InvalidateParticipantDirectChatIndex();
-
-            if (_dispatcher != null)
-            {
-                _ = _dispatcher.RunAsync(RefreshGroupAuthorLabelsAfterNamesChanged);
-                return;
-            }
-
-            RefreshGroupAuthorLabelsAfterNamesChanged();
+            _authorLabelsRebuild.Schedule();
         }
 
         /// <summary>

@@ -68,6 +68,12 @@ namespace Unison.Core.Contracts
         /// <summary>Shows the pairing code for the given login VM context.</summary>
         Task ShowPairingCodeAsync(LoginViewModel loginVm, string code);
 
+        /// <summary>
+        /// Hides any open login pairing ContentDialog (QR fullscreen, phone input, or
+        /// pairing code). Safe no-op when none is showing. Call before leaving Login.
+        /// </summary>
+        void DismissLoginPairingDialogs();
+
         /// <summary>Opens the new-chat dialog bound to the supplied VM. Returns resolved JID or null.</summary>
         Task<string> ShowNewChatDialogAsync(NewChatDialogViewModel newChatVm);
 
@@ -142,6 +148,32 @@ namespace Unison.Core.Contracts
         /// After export: file row (ChatInfo layout) with Share / Save. Returns the choice.
         /// </summary>
         Task<ChatExportReadyChoice> ShowChatExportReadyAsync(string fileName, string infoText);
+
+        /// <summary>
+        /// Status privacy (three audiences) bound to <paramref name="composer"/>. Choosing one of
+        /// the two contact-list options closes the dialog with a Pick* result so the caller can
+        /// open the contact picker and show the dialog again.
+        /// </summary>
+        Task<StatusPrivacyDialogChoice> ShowStatusPrivacyAsync(StatusComposerViewModel composer);
+
+        /// <summary>
+        /// Call-back confirm: title "Ligar para +CC DDD …", voice-call row + Cancel.
+        /// Choosing voice call only dismisses the dialog (no dialer / empty command).
+        /// </summary>
+        Task ShowCallBackAsync(string phoneDigitsOrRaw);
+
+        /// <summary>
+        /// Disappearing-messages preset for create-group. Returns null when cancelled.
+        /// </summary>
+        Task<GroupEphemeralDuration?> ShowGroupEphemeralAsync(GroupEphemeralDuration current);
+    }
+
+    public enum StatusPrivacyDialogChoice
+    {
+        Cancel,
+        Confirm,
+        PickExcluded,
+        PickOnlyShareWith
     }
 
     public enum ChatExportReadyChoice

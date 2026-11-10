@@ -23,5 +23,10 @@ namespace Unison.WhatsAppClient.Abstractions
         void LogConnectionStatus(string status);
 
         void RaiseConnectionUpdate(string status);
+
+        /// <summary>
+        /// Arm / cancel the offline→synced watchdog for this status transition.
+        /// </summary>
+        void SyncOfflineSyncedWatchdog(string status);
     }
 }

@@ -37,6 +37,9 @@ namespace Unison.Core.ViewModels
         private readonly IConnectionService _connectionService;
         private readonly IContactService _contacts;
         private readonly SyncStatusChannel _syncStatus;
+        private readonly IProfileService _profile;
+        private readonly IFilePicker _filePicker;
+        private readonly ICameraPickService _cameraPick;
 
         private readonly ShellViewModel _shell;
 
@@ -56,6 +59,12 @@ namespace Unison.Core.ViewModels
         private bool _diskMeasured;
         private bool _diskBusy;
         private string _diskUsageText = "Calculando...";
+        private bool _isProfileEditOpen;
+        private ProfileEditKind _profileEditKind = ProfileEditKind.None;
+        private string _profileEditText = string.Empty;
+        private string _profileNameLocal;
+        private string _profileStatusLocal = string.Empty;
+        private bool _isProfileEmojiOpen;
 
         public SettingsViewModel(
             ILocalSettings localSettings,
@@ -72,7 +81,10 @@ namespace Unison.Core.ViewModels
             ShellViewModel shell,
             IContactService contacts = null,
             SyncStatusChannel syncStatus = null,
-            IStartupLaunchService startupLaunch = null)
+            IStartupLaunchService startupLaunch = null,
+            IProfileService profile = null,
+            IFilePicker filePicker = null,
+            ICameraPickService cameraPick = null)
         {
             _localSettings = localSettings;
             _startupLaunch = startupLaunch;
@@ -89,10 +101,22 @@ namespace Unison.Core.ViewModels
             _shell = shell;
             _contacts = contacts;
             _syncStatus = syncStatus;
+            _profile = profile;
+            _filePicker = filePicker;
+            _cameraPick = cameraPick;
 
             _shell.PropertyChanged += OnShellPropertyChanged;
 
             LeaveCommand = new RelayCommand(() => LeaveRequested?.Invoke(this, EventArgs.Empty));
+            PickProfilePhotoFromCameraCommand = new RelayCommand(
+                () => _ = PickProfilePhotoFromCameraAsync(),
+                () => _profile != null && _cameraPick != null);
+            PickProfilePhotoFromGalleryCommand = new RelayCommand(
+                () => _ = PickProfilePhotoFromGalleryAsync(),
+                () => _profile != null && _filePicker != null);
+            RemoveProfilePhotoCommand = new RelayCommand(
+                () => _ = RemoveProfilePhotoAsync(),
+                () => _profile != null);
             ChooseStartTileCommand = new RelayCommand(() => { _ = ChooseStartTileAsync(); });
             ChooseNotificationFilterCommand = new RelayCommand(() => { _ = ChooseNotificationFilterAsync(); });
             CleanMediaCacheCommand = new RelayCommand(
@@ -161,9 +185,22 @@ namespace Unison.Core.ViewModels
 
                 _ = ConfirmAndDisconnectAsync();
             });
+            OpenProfileNameEditCommand = new RelayCommand(() => OpenProfileEdit(ProfileEditKind.Name));
+            OpenProfileAboutEditCommand = new RelayCommand(() => OpenProfileEdit(ProfileEditKind.About));
+            CancelProfileEditCommand = new RelayCommand(CancelProfileEdit);
+            SaveProfileEditCommand = new RelayCommand(SaveProfileEdit, () => IsProfileEditOpen);
+            ToggleProfileEmojiCommand = new RelayCommand(() => IsProfileEmojiOpen = !IsProfileEmojiOpen);
+            InsertProfileEmojiCommand = new RelayCommand<string>(InsertProfileEmoji, e => !string.IsNullOrEmpty(e));
         }
 
         public event EventHandler LeaveRequested;
+
+        public enum ProfileEditKind
+        {
+            None = 0,
+            Name = 1,
+            About = 2
+        }
 
         /// <summary>Signed-in display name (from shell profile).</summary>
         public string ProfileDisplayName => _shell.ProfileDisplayName;
@@ -172,15 +209,85 @@ namespace Unison.Core.ViewModels
         public string CurrentUserAvatar => _shell.CurrentUserAvatar;
 
         /// <summary>Push name. Empty when the account has no name yet.</summary>
-        public string CurrentUserName => _shell.CurrentUserName;
+        public string CurrentUserName =>
+            !string.IsNullOrWhiteSpace(_profileNameLocal) ? _profileNameLocal : _shell.CurrentUserName;
 
         /// <summary>Account phone digits.</summary>
         public string CurrentUserPhone => _shell.CurrentUserPhone;
 
         /// <summary>
-        /// About text ("recado"). <see cref="Profile"/> does not store it yet, so this stays empty.
+        /// About text ("recado"). Local stub until About is wired through the bridge.
         /// </summary>
-        public string ProfileStatus => string.Empty;
+        public string ProfileStatus => _profileStatusLocal ?? string.Empty;
+
+        public bool IsProfileEditOpen
+        {
+            get => _isProfileEditOpen;
+            private set
+            {
+                if (!Set(ref _isProfileEditOpen, value))
+                {
+                    return;
+                }
+
+                OnPropertyChanged(nameof(ProfileEditTitle));
+                (SaveProfileEditCommand as RelayCommand)?.RaiseCanExecuteChanged();
+            }
+        }
+
+        public ProfileEditKind ActiveProfileEditKind
+        {
+            get => _profileEditKind;
+            private set
+            {
+                if (!Set(ref _profileEditKind, value))
+                {
+                    return;
+                }
+
+                OnPropertyChanged(nameof(ProfileEditTitle));
+            }
+        }
+
+        public string ProfileEditTitle
+        {
+            get
+            {
+                switch (_profileEditKind)
+                {
+                    case ProfileEditKind.Name:
+                        return _strings?.Get("Settings_ProfileEditNameTitle", "Name") ?? "Name";
+                    case ProfileEditKind.About:
+                        return _strings?.Get("Settings_ProfileEditAboutTitle", "About") ?? "About";
+                    default:
+                        return string.Empty;
+                }
+            }
+        }
+
+        public string ProfileEditText
+        {
+            get => _profileEditText;
+            set => Set(ref _profileEditText, value ?? string.Empty);
+        }
+
+        public bool IsProfileEmojiOpen
+        {
+            get => _isProfileEmojiOpen;
+            set => Set(ref _isProfileEmojiOpen, value);
+        }
+
+        public ICommand OpenProfileNameEditCommand { get; private set; }
+
+        public ICommand OpenProfileAboutEditCommand { get; private set; }
+
+        public ICommand CancelProfileEditCommand { get; private set; }
+
+        public ICommand SaveProfileEditCommand { get; private set; }
+
+        public ICommand ToggleProfileEmojiCommand { get; private set; }
+
+        public ICommand InsertProfileEmojiCommand { get; private set; }
 
         public bool NotificationsEnabled
         {
@@ -595,6 +702,12 @@ namespace Unison.Core.ViewModels
         /// <summary>Leaves Settings and returns to the chats section.</summary>
         public ICommand LeaveCommand { get; }
 
+        public ICommand PickProfilePhotoFromCameraCommand { get; }
+
+        public ICommand PickProfilePhotoFromGalleryCommand { get; }
+
+        public ICommand RemoveProfilePhotoCommand { get; }
+
         /// <summary>Opens the Start-tile picker and pins the chosen glyph.</summary>
         public ICommand ChooseStartTileCommand { get; }
 
@@ -733,7 +846,67 @@ namespace Unison.Core.ViewModels
                 nameof(ProfileDisplayName),
                 nameof(CurrentUserName),
                 nameof(CurrentUserPhone),
-                nameof(CurrentUserAvatar));
+                nameof(CurrentUserAvatar),
+                nameof(ProfileStatus));
+        }
+
+        private void OpenProfileEdit(ProfileEditKind kind)
+        {
+            if (kind == ProfileEditKind.None)
+            {
+                return;
+            }
+
+            ActiveProfileEditKind = kind;
+            ProfileEditText = kind == ProfileEditKind.Name
+                ? (CurrentUserName ?? string.Empty)
+                : (ProfileStatus ?? string.Empty);
+            IsProfileEmojiOpen = false;
+            IsProfileEditOpen = true;
+        }
+
+        private void CancelProfileEdit()
+        {
+            IsProfileEditOpen = false;
+            IsProfileEmojiOpen = false;
+            ActiveProfileEditKind = ProfileEditKind.None;
+            ProfileEditText = string.Empty;
+        }
+
+        /// <summary>
+        /// Local-only save: updates displayed name/about. No websocket yet.
+        /// </summary>
+        private void SaveProfileEdit()
+        {
+            if (!IsProfileEditOpen)
+            {
+                return;
+            }
+
+            string text = (ProfileEditText ?? string.Empty).Trim();
+            if (ActiveProfileEditKind == ProfileEditKind.Name)
+            {
+                _profileNameLocal = text;
+                OnPropertyChanged(nameof(CurrentUserName));
+                OnPropertyChanged(nameof(ProfileDisplayName));
+            }
+            else if (ActiveProfileEditKind == ProfileEditKind.About)
+            {
+                _profileStatusLocal = text;
+                OnPropertyChanged(nameof(ProfileStatus));
+            }
+
+            CancelProfileEdit();
+        }
+
+        private void InsertProfileEmoji(string emoji)
+        {
+            if (string.IsNullOrEmpty(emoji))
+            {
+                return;
+            }
+
+            ProfileEditText = (ProfileEditText ?? string.Empty) + emoji;
         }
 
         private void RaiseTimeFormatSelectionChanged()
@@ -1060,6 +1233,75 @@ namespace Unison.Core.ViewModels
             {
                 _publishContactsBusy = false;
                 OnPropertyChanged(nameof(PublishContactsToWindowsEnabled));
+            }
+        }
+
+        private async Task PickProfilePhotoFromCameraAsync()
+        {
+            if (_cameraPick == null || _profile == null)
+            {
+                return;
+            }
+
+            try
+            {
+                byte[] jpeg = await _cameraPick.PickJpegAsync().ConfigureAwait(true);
+                if (jpeg == null || jpeg.Length == 0)
+                {
+                    return;
+                }
+
+                await _profile.UpdateSelfPictureAsync(jpeg).ConfigureAwait(false);
+                _shell.RefreshUserInfo();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine(
+                    "[SettingsViewModel] Profile camera photo failed: " + ex.Message);
+            }
+        }
+
+        private async Task PickProfilePhotoFromGalleryAsync()
+        {
+            if (_filePicker == null || _profile == null)
+            {
+                return;
+            }
+
+            try
+            {
+                PickedChatMedia picked = await _filePicker.PickChatImageAsync().ConfigureAwait(false);
+                if (picked?.Bytes == null || picked.Bytes.Length == 0)
+                {
+                    return;
+                }
+
+                await _profile.UpdateSelfPictureAsync(picked.Bytes).ConfigureAwait(false);
+                _shell.RefreshUserInfo();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine(
+                    "[SettingsViewModel] Profile gallery photo failed: " + ex.Message);
+            }
+        }
+
+        private async Task RemoveProfilePhotoAsync()
+        {
+            if (_profile == null)
+            {
+                return;
+            }
+
+            try
+            {
+                await _profile.RemoveSelfPictureAsync().ConfigureAwait(false);
+                _shell.RefreshUserInfo();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine(
+                    "[SettingsViewModel] Profile photo remove failed: " + ex.Message);
             }
         }
     }

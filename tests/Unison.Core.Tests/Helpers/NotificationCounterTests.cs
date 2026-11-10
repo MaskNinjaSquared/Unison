@@ -58,5 +58,31 @@ namespace Unison.Core.Tests.Helpers
             quiet.UnreadCount = 0;
             Assert.Equal(1, watch.Count);
         }
+
+        [Fact]
+        public void Scoped_watch_counts_only_rows_that_pass_the_filter()
+        {
+            var active = new ChatItem { UnreadCount = 2, Status = ChatStatus.Active };
+            var archived = new ChatItem { UnreadCount = 5, Status = ChatStatus.Archived };
+            var chats = new ObservableCollection<ChatItem> { active, archived };
+
+            var watch = new NotificationCounterWatch(
+                chats,
+                chat => chat.Status == ChatStatus.Archived);
+
+            Assert.Equal(1, watch.Count);
+            Assert.Equal("(1)", watch.BadgeText);
+
+            archived.UnreadCount = 0;
+            Assert.Equal(0, watch.Count);
+
+            archived.UnreadCount = 1;
+            Assert.Equal(1, watch.Count);
+
+            archived.Status = ChatStatus.Active;
+            Assert.Equal(0, watch.Count);
+
+            watch.Dispose();
+        }
     }
 }

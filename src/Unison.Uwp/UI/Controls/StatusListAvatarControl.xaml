@@ -3,6 +3,7 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:controls="using:Unison.Uwp.UI.Controls"
+    xmlns:selectors="using:Unison.Uwp.UI.TemplateSelectors"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d"
@@ -10,9 +11,30 @@
     d:DesignWidth="56"
     IsTabStop="False">
 
-    <!-- Same circular photo path as ChatAvatarControl (Creators Update–safe):
-         Ellipse Fill = ImageBrush Stretch=UniformToFill. Do not use UIElement.Clip
-         or Border+Image — those letterbox landscape thumbs on older XAML. -->
+    <UserControl.Resources>
+        <DataTemplate x:Key="StatusListTextFaceTemplate" x:DataType="controls:StatusListAvatarFace">
+            <controls:StatusTextListAvatarControl
+                Width="{x:Bind Size}"
+                Height="{x:Bind Size}"
+                Size="{x:Bind Size}"
+                BackgroundArgb="{x:Bind BackgroundArgb}"
+                TextArgb="{x:Bind TextArgb}"
+                Text="{x:Bind PreviewText}"/>
+        </DataTemplate>
+        <DataTemplate x:Key="StatusListPhotoFaceTemplate" x:DataType="controls:StatusListAvatarFace">
+            <controls:ChatAvatarControl
+                Width="{x:Bind Size}"
+                Height="{x:Bind Size}"
+                Size="{x:Bind Size}"
+                ShowBorder="False"
+                AvatarUrl="{x:Bind AvatarUrl}"/>
+        </DataTemplate>
+        <selectors:StatusListAvatarKindTemplateSelector
+            x:Key="StatusListAvatarKindSelector"
+            TextTemplate="{StaticResource StatusListTextFaceTemplate}"
+            PhotoTemplate="{StaticResource StatusListPhotoFaceTemplate}"/>
+    </UserControl.Resources>
+
     <Grid x:Name="RootGrid" Width="56" Height="56">
         <Ellipse x:Name="Ring"
                  Width="56"
@@ -20,26 +42,14 @@
                  StrokeThickness="2.5"
                  Fill="Transparent"
                  Stroke="#FF25D366"/>
-        <controls:ChatAvatarControl x:Name="InnerAvatar"
-                                    Width="48"
-                                    Height="48"
-                                    Size="48"
-                                    ShowBorder="False"
-                                    HorizontalAlignment="Center"
-                                    VerticalAlignment="Center"/>
-        <Ellipse x:Name="PhotoEllipse"
-                 Width="48"
-                 Height="48"
-                 HorizontalAlignment="Center"
-                 VerticalAlignment="Center"
-                 Visibility="Collapsed">
-            <Ellipse.Fill>
-                <ImageBrush x:Name="PhotoBrush"
-                            Stretch="UniformToFill"
-                            AlignmentX="Center"
-                            AlignmentY="Center"
-                            ImageFailed="PhotoBrush_ImageFailed"/>
-            </Ellipse.Fill>
-        </Ellipse>
+        <ContentControl x:Name="FaceHost"
+                        Width="48"
+                        Height="48"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center"
+                        HorizontalContentAlignment="Stretch"
+                        VerticalContentAlignment="Stretch"
+                        IsTabStop="False"
+                        ContentTemplateSelector="{StaticResource StatusListAvatarKindSelector}"/>
     </Grid>
 </UserControl>

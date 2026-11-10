@@ -3,6 +3,7 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
+using Unison.Core.Contracts;
 using Unison.Core.ViewModels;
 using Unison.Uwp.Client;
 using Windows.UI.Core;
@@ -74,7 +75,8 @@ namespace Unison.Uwp.UI.Views
         protected override void OnNavigatedFrom(NavigationEventArgs e)
         {
             base.OnNavigatedFrom(e);
-            PairingTrace("OnNavigatedFrom → Deactivate");
+            PairingTrace("OnNavigatedFrom → dismiss pairing dialogs + Deactivate");
+            DismissLoginPairingDialogs();
             if (_shell != null)
             {
                 _shell.PropertyChanged -= Shell_PropertyChanged;
@@ -93,7 +95,8 @@ namespace Unison.Uwp.UI.Views
 
         private void LoginView_BackRequested(object sender, BackRequestedEventArgs e)
         {
-            // QR is a root terminal page: never GoBack from here.
+            // Close QR / phone / pairing-code overlays first; never GoBack off Login.
+            DismissLoginPairingDialogs();
             e.Handled = true;
         }
 
@@ -108,6 +111,11 @@ namespace Unison.Uwp.UI.Views
             ShellViewModel shell = _shell;
             try
             {
+                // Hide ContentDialogs before the exit wipe / NavigateAndClear so they do not
+                // sit orphaned over AppShell after SessionEstablished.
+                PairingTrace("Login exit transition → dismiss pairing dialogs");
+                DismissLoginPairingDialogs();
+
                 PairingTrace("Login exit transition → PlayExitTransitionAsync");
                 Deactivate();
                 await PlayExitTransitionAsync();
@@ -119,6 +127,18 @@ namespace Unison.Uwp.UI.Views
             {
                 PairingTrace("Login exit transition FAILED: " + ex.Message);
                 shell?.CompleteEnterConnectedNavigation();
+            }
+        }
+
+        private static void DismissLoginPairingDialogs()
+        {
+            try
+            {
+                App.Services?.GetService<IDialogService>()?.DismissLoginPairingDialogs();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[LoginView] DismissLoginPairingDialogs: " + ex.Message);
             }
         }
 

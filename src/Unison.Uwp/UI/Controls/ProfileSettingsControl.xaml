@@ -14,44 +14,52 @@
     Background="{ThemeResource SettingsPageBackgroundBrush}"
     SizeChanged="ProfileSettingsRoot_SizeChanged">
 
-    <!-- Unison expanded profile rows. Scrolls when the page gives this surface a height. -->
-    <ScrollViewer x:Name="ProfileScroll"
-                  VerticalAlignment="Stretch"
-                  HorizontalAlignment="Stretch"
-                  VerticalScrollMode="Disabled"
-                  VerticalScrollBarVisibility="Auto"
-                  HorizontalScrollMode="Disabled"
-                  HorizontalScrollBarVisibility="Disabled"
-                  ZoomMode="Disabled">
-        <Grid x:Name="ProfileFieldsHost"
-              MaxWidth="800"
-              HorizontalAlignment="Center"
-              Padding="15,0,15,24">
-            <Grid.RowDefinitions>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="Auto"/>
-            </Grid.RowDefinitions>
-            <controls:ProfileBox x:Uid="Settings_ProfileName"
-                                 Title="Name"
-                                 Glyph="&#xE77B;"
-                                 Margin="0,0,0,8"
-                                 HorizontalAlignment="Stretch"
-                                 Value="{Binding CurrentUserName}"/>
-            <controls:ProfileBox x:Uid="Settings_ProfilePhone"
-                                 Grid.Row="1"
-                                 Title="Phone"
-                                 Glyph="&#xE717;"
-                                 Margin="0,0,0,8"
-                                 HorizontalAlignment="Stretch"
-                                 Value="{Binding CurrentUserPhone}"/>
-            <controls:ProfileBox x:Uid="Settings_ProfileStatus"
-                                 Grid.Row="2"
-                                 Title="About"
-                                 Glyph="&#xE8BD;"
-                                 Margin="0,0,0,8"
-                                 HorizontalAlignment="Stretch"
-                                 Value="{Binding ProfileStatus}"/>
-        </Grid>
-    </ScrollViewer>
+    <Grid>
+        <!-- Unison expanded profile rows. Scrolls when the page gives this surface a height. -->
+        <ScrollViewer x:Name="ProfileScroll"
+                      VerticalAlignment="Stretch"
+                      HorizontalAlignment="Stretch"
+                      VerticalScrollMode="Disabled"
+                      VerticalScrollBarVisibility="Auto"
+                      HorizontalScrollMode="Disabled"
+                      HorizontalScrollBarVisibility="Disabled"
+                      ZoomMode="Disabled"
+                      Visibility="{Binding IsProfileEditOpen, Converter={StaticResource InvertedBooleanToVisibilityConverter}}">
+            <Grid x:Name="ProfileFieldsHost"
+                  MaxWidth="800"
+                  HorizontalAlignment="Center"
+                  Padding="15,0,15,24">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+                <controls:ProfileBox x:Uid="Settings_ProfileName"
+                                     Title="Name"
+                                     Glyph="&#xE77B;"
+                                     Margin="0,0,0,8"
+                                     HorizontalAlignment="Stretch"
+                                     Value="{Binding CurrentUserName}"
+                                     Click="NameBox_Click"/>
+                <controls:ProfileBox x:Uid="Settings_ProfilePhone"
+                                     Grid.Row="1"
+                                     Title="Phone"
+                                     Glyph="&#xE717;"
+                                     Margin="0,0,0,8"
+                                     HorizontalAlignment="Stretch"
+                                     Value="{Binding CurrentUserPhone}"/>
+                <controls:ProfileBox x:Uid="Settings_ProfileStatus"
+                                     Grid.Row="2"
+                                     Title="About"
+                                     Glyph="&#xE8BD;"
+                                     Margin="0,0,0,8"
+                                     HorizontalAlignment="Stretch"
+                                     Value="{Binding ProfileStatus}"
+                                     Click="AboutBox_Click"/>
+            </Grid>
+        </ScrollViewer>
+
+        <controls:ProfileEditOverlay Canvas.ZIndex="20"
+                                     Visibility="{Binding IsProfileEditOpen, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+    </Grid>
 </UserControl>

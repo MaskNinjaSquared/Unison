@@ -10,6 +10,7 @@ using System.Threading.Tasks;
 using Unison.Baileys.Client;
 using Unison.Core.Contracts;
 using Unison.Core.Helpers;
+using Unison.Core.State;
 using Unison.Socket.Signal;
 using Unison.Uwp.Client;
 using Unison.WhatsAppClient.Helpers;
@@ -20,13 +21,19 @@ namespace Unison.Uwp.Services.WhatsApp
     {
         private readonly IWhatsAppTransportFactory _transports;
         private readonly ISystemInfoProvider _systemInfo;
+        private readonly ProfilePictureQueryCache _pictureCache;
+        private readonly SyncWorkloadStrategy _workload;
 
         public UwpConnectionSocketSessionFactory(
             IWhatsAppTransportFactory transports,
-            ISystemInfoProvider systemInfo)
+            ISystemInfoProvider systemInfo,
+            ProfilePictureQueryCache pictureCache,
+            SyncWorkloadStrategy workload)
         {
             _transports = transports ?? throw new ArgumentNullException(nameof(transports));
             _systemInfo = systemInfo ?? throw new ArgumentNullException(nameof(systemInfo));
+            _pictureCache = pictureCache ?? throw new ArgumentNullException(nameof(pictureCache));
+            _workload = workload ?? throw new ArgumentNullException(nameof(workload));
         }
 
         public object CreateAndWire(ConnectionSocketSessionRequest request)
@@ -48,7 +55,9 @@ namespace Unison.Uwp.Services.WhatsApp
                 request.AuthState,
                 request.SharedKeyStore as FileKeyStore,
                 request.ReuseLoadedKeyState,
-                request.LidMappings as LidMappingStore);
+                request.LidMappings as LidMappingStore,
+                _pictureCache,
+                _workload.InitialPreKeyUploadCount);
 
             SocketBridgeRemoteHooks.Attach(
                 bridge,

@@ -21,6 +21,8 @@ using Unison.Baileys.Protocol;
 using Unison.Core.Contracts;
 using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Helpers;
+using Unison.Core.Helpers.Chats;
+using Unison.Core.Helpers.Ui;
 using Unison.Core.Models;
 using Unison.Core.State;
 using Unison.WhatsAppClient.Abstractions;
@@ -45,6 +47,7 @@ namespace Unison.WhatsAppClient.Groups
         private readonly GroupMetadataReader _reader;
         private readonly GroupMetadataApply _apply;
         private readonly GroupRosterDemand _rosterDemand;
+        private readonly GroupSelfRoleRestore _selfRole;
         private readonly IGroupAvatarActions _avatars;
         private readonly IUsyncGate _usyncGate;
         private readonly SyncStatusChannel _syncStatus;
@@ -52,15 +55,26 @@ namespace Unison.WhatsAppClient.Groups
         private readonly SyncWorkloadStrategy _workload;
         private readonly IRuntimeDiagnostics _diagnostics;
         private readonly IAppVisibility _visibility;
+        private readonly GroupCreation _creation;
         private readonly GroupQueryWindow _queryWindow = new GroupQueryWindow();
 
         /// <summary>0 free / 1 busy — overlapping listings each burn a 60s IQ and starve chat open.</summary>
         private int _listingInFlight;
 
+        /// <summary>Participating-groups UI apply completed once this session.</summary>
+        private int _listingAppliedThisSession;
+
+        private readonly IUiWorkHolds _uiHolds;
+
         /// <summary>
         /// Listing was skipped for catch-up / sync traffic; retry once the next due signal arrives.
         /// </summary>
         private int _listingRetryPending;
+
+        /// <summary>
+        /// Title reconcile was deferred because listing was in flight or the window hid.
+        /// </summary>
+        private int _titleReconcilePending;
 
         /// <summary>
         /// Bumped when the window hides (or a newer resume settle arms) so a delayed
@@ -99,8 +113,17 @@ namespace Unison.WhatsAppClient.Groups
             IChatCatalogPersistence catalog,
             ChatNameRefresh nameRefresh,
             IRuntimeDiagnostics diagnostics = null,
-            IAppVisibility visibility = null)
+            IAppVisibility visibility = null,
+            IProfilePictureEncoder pictureEncoder = null,
+            GroupSelfRoleRestore selfRole = null,
+            Func<bool> isOfflineReplayTipBusy = null,
+            IUiWorkHolds uiHolds = null)
         {
+            _selfRole = selfRole;
+            Func<bool> tipBusy = isOfflineReplayTipBusy ?? (() => false);
+            _uiHolds = uiHolds ?? new UiWorkHolds(
+                () => new UiHoldSnapshot { WindowVisible = true, OfflineTipBusy = tipBusy() },
+                diagnostics);
             _workload = workload ?? throw new ArgumentNullException(nameof(workload));
             _syncStatus = syncStatus ?? throw new ArgumentNullException(nameof(syncStatus));
             _syncWork = syncWork ?? throw new ArgumentNullException(nameof(syncWork));
@@ -122,6 +145,11 @@ namespace Unison.WhatsAppClient.Groups
             _diagnostics = diagnostics;
             _visibility = visibility;
             _reader = new GroupMetadataReader(jids);
+            _creation = new GroupCreation(
+                wire,
+                (jid, subject) => _contacts().ApplyRemoteGroupSubjectsAsync(
+                    new[] { new KeyValuePair<string, string>(jid, subject) }),
+                pictureEncoder);
             if (_visibility != null)
             {
                 _visibility.Changed += OnAppVisibilityChanged;
@@ -142,6 +170,33 @@ namespace Unison.WhatsAppClient.Groups
             }
 
             _ = RunBackgroundListingAsync();
+        }
+
+        /// <inheritdoc />
+        public Task ReconcileGroupCommunityTitlesAsync(CancellationToken cancellationToken = default)
+        {
+            if (GroupListingVisibilityGate.ShouldDeferStart(IsWindowVisible))
+            {
+                Interlocked.Exchange(ref _titleReconcilePending, 1);
+                Interlocked.Exchange(ref _listingRetryPending, 1);
+                _diagnostics?.Write(
+                    "names",
+                    "post-sync-titles",
+                    "deferred=window-hidden");
+                return Task.CompletedTask;
+            }
+
+            if (Volatile.Read(ref _listingInFlight) != 0)
+            {
+                Interlocked.Exchange(ref _titleReconcilePending, 1);
+                _diagnostics?.Write(
+                    "names",
+                    "post-sync-titles",
+                    "deferred=listing-in-flight");
+                return Task.CompletedTask;
+            }
+
+            return RunTitleReconcileAsync(cancellationToken);
         }
 
         private bool IsWindowVisible =>
@@ -201,6 +256,21 @@ namespace Unison.WhatsAppClient.Groups
 
         private async Task RunBackgroundListingAsync()
         {
+            // Nested Notify while unresolved-metadata still runs: QueryAllGroups skips
+            // in-flight, but Raise(null) in finally used to clear the Groups banner and
+            // release frugal list deferral into a multi-minute cold BuildVisibleRefreshSource.
+            if (!GroupListingBannerOwnership.MayOwnSyncBanner(
+                    Volatile.Read(ref _listingInFlight) != 0))
+            {
+                TraceListingSkipped("in-flight");
+                _diagnostics?.Write("startup-phase", "background-groups:begin");
+                _diagnostics?.Write(
+                    "startup-phase",
+                    "background-groups:end",
+                    "elapsedMs=0");
+                return;
+            }
+
             _syncStatus.Raise(SyncPhaseStatus.Format(SyncPhaseStatus.Groups));
             _diagnostics?.Write("startup-phase", "background-groups:begin");
             var elapsed = Stopwatch.StartNew();
@@ -219,7 +289,13 @@ namespace Unison.WhatsAppClient.Groups
                     "startup-phase",
                     "background-groups:end",
                     "elapsedMs=" + elapsed.ElapsedMilliseconds);
-                _syncStatus.Raise(null);
+                // Race: two RunBackground saw in-flight=0, both Raised Groups; the loser
+                // skipped inside QueryAllGroups — must not clear while the winner still runs.
+                if (GroupListingBannerOwnership.ShouldClearSyncBannerAfterPass(
+                        Volatile.Read(ref _listingInFlight) != 0))
+                {
+                    _syncStatus.Raise(null);
+                }
             }
         }
 
@@ -229,6 +305,44 @@ namespace Unison.WhatsAppClient.Groups
                 "startup-phase",
                 "background-groups:skipped",
                 "reason=" + (reason ?? "?"));
+        }
+
+        /// <summary>
+        /// First pass: cache subjects + row flags via <see cref="GroupMetadataApply.ApplyListingAsync"/>.
+        /// Later passes this session: only restamp community hubs from GroupSubjects (resume /
+        /// already-applied) so placeholders do not stick after a hidden apply.
+        /// </summary>
+        private async Task ApplyParticipatingListingOrRestampAsync(
+            List<BinaryNode> groupNodes,
+            bool force)
+        {
+            bool alreadyApplied = Volatile.Read(ref _listingAppliedThisSession) != 0;
+            if (!SessionListingApplyPolicy.ShouldApplyListing(alreadyApplied, force))
+            {
+                _diagnostics?.Write(
+                    "startup-phase",
+                    "background-groups:listing-skip",
+                    "reason=already-applied-this-session;restamp=True");
+                _chats.NotifyCommunitySubjectsUpdated();
+                return;
+            }
+
+            // Tip-first: do not hold the dispatcher with listing while offline tips flush.
+            // Capped: a stuck offline-tip gate parked the listing for a whole session (26b3431b).
+            var waited = System.Diagnostics.Stopwatch.StartNew();
+            await _uiHolds.BeginRun("listing").WaitAsync(UiWorkKind.GroupListing).ConfigureAwait(false);
+
+            var applyWatch = System.Diagnostics.Stopwatch.StartNew();
+            _diagnostics?.Write(
+                "startup-phase",
+                "background-groups:listing-apply-begin",
+                "groups=" + (groupNodes != null ? groupNodes.Count : 0) + "; waitedMs=" + waited.ElapsedMilliseconds);
+            await _apply.ApplyListingAsync(_reader.ReadListing(groupNodes)).ConfigureAwait(false);
+            Interlocked.Exchange(ref _listingAppliedThisSession, 1);
+            _diagnostics?.Write(
+                "startup-phase",
+                "background-groups:listing-apply-end",
+                "ms=" + applyWatch.ElapsedMilliseconds);
         }
 
         public Task RefreshGroupSendPermissionsAsync(
@@ -334,6 +448,11 @@ namespace Unison.WhatsAppClient.Groups
             return _rosterDemand.RestoreFromStoreAsync(groupJid);
         }
 
+        public Task RestoreMyGroupRoleAsync(ChatItem group)
+        {
+            return _selfRole?.RestoreAsync(group) ?? Task.CompletedTask;
+        }
+
         /// <inheritdoc />
         public GroupMember TryGetMember(string groupJid, string memberJid) =>
             _rosterDemand.TryGetMember(groupJid, memberJid);
@@ -394,6 +513,15 @@ namespace Unison.WhatsAppClient.Groups
         public Task ApplyGroupMetadataAsync(string groupJid, GroupMetadataSnapshot metadata)
         {
             return _apply.ApplyMetadataAsync(groupJid, metadata);
+        }
+
+        /// <inheritdoc />
+        public Task ApplyRemoteGroupDescriptionAsync(
+            string groupJid,
+            string description,
+            string descriptionId)
+        {
+            return _apply.ApplyDescriptionAsync(groupJid, description, descriptionId);
         }
 
         /// <inheritdoc />
@@ -484,43 +612,17 @@ namespace Unison.WhatsAppClient.Groups
             return attempt.Finish();
         }
 
-        public void ApplyGroupMemberAvatarOutcome(string memberJid, GroupMemberAvatarFetchResult result)
+        public void ApplyGroupMemberAvatarOutcome(
+            string memberJid,
+            GroupMemberAvatarFetchResult result,
+            string limitToGroupJid = null)
         {
-            if (string.IsNullOrWhiteSpace(memberJid) || result == null)
-            {
-                return;
-            }
-
-            DateTime nowUtc = DateTime.UtcNow;
-            string canonical = _jids.GetCanonicalJid(JidHelper.Normalize(memberJid));
-            foreach (var chat in _chats.Chats)
-            {
-                if (chat?.GroupMembers == null || chat.GroupMembers.Count == 0)
-                {
-                    continue;
-                }
-
-                foreach (var member in chat.GroupMembers)
-                {
-                    if (member == null || !GroupRosterRules.MemberMatches(member, canonical, _jids))
-                    {
-                        continue;
-                    }
-
-                    if (result.HasPicture)
-                    {
-                        ChatAvatarOutcome.RecordCached(member, result.LocalUri, nowUtc);
-                    }
-                    else if (result.IsNotFound)
-                    {
-                        ChatAvatarOutcome.RecordAbsent(member, "no-picture", nowUtc);
-                    }
-                    else
-                    {
-                        ChatAvatarOutcome.RecordFailure(member, result.FailureReason ?? "fetch-failed", nowUtc);
-                    }
-                }
-            }
+            GroupMemberAvatarApply.Apply(
+                _chats.Chats,
+                memberJid,
+                result,
+                _jids,
+                limitToGroupJid);
         }
 
         private static GroupMemberAvatarFetchResult NotReady()
@@ -695,23 +797,31 @@ namespace Unison.WhatsAppClient.Groups
                         "background-groups:iq-end",
                         "elapsedMs=" + iqClock.ElapsedMilliseconds +
                         "; hasResponse=" + (response != null));
-                    if (GroupListingVisibilityGate.ShouldAbortInFlight(
-                            IsWindowVisible,
-                            listingToken.IsCancellationRequested))
+
+                    // Subjects always — even when the window hid after the IQ. Journal 82908f3f
+                    // aborted before ApplyListing and left community hubs on the fallback label.
+                    bool windowHiddenAfterIq = GroupListingVisibilityGate.ShouldAbortInFlight(
+                        IsWindowVisible,
+                        listingToken.IsCancellationRequested);
+                    if (GroupListingVisibilityGate.ShouldApplyListingSubjects(response != null))
+                    {
+                        listingAnswered = true;
+                        var groupNodes = response.FindAllDescendants("group");
+                        Debug.WriteLine(
+                            "[GroupFacade] QueryAllGroupsAsync found " + groupNodes.Count + " group nodes.");
+                        await ApplyParticipatingListingOrRestampAsync(groupNodes, force: false)
+                            .ConfigureAwait(false);
+                    }
+
+                    if (windowHiddenAfterIq)
                     {
                         abortedForVisibility = true;
                         Interlocked.Exchange(ref _listingRetryPending, 1);
                         _diagnostics?.Write(
                             "startup-phase",
                             "background-groups:aborted",
-                            "reason=window-hidden;stage=after-listing-iq");
-                    }
-                    else if (response != null)
-                    {
-                        listingAnswered = true;
-                        var groupNodes = response.FindAllDescendants("group");
-                        Debug.WriteLine("[GroupFacade] QueryAllGroupsAsync found " + groupNodes.Count + " group nodes.");
-                        await _apply.ApplyListingAsync(_reader.ReadListing(groupNodes));
+                            "reason=window-hidden;stage=after-listing-iq" +
+                            (listingAnswered ? ";subjects=cached" : string.Empty));
                     }
                 }
                 catch (OperationCanceledException)
@@ -777,7 +887,135 @@ namespace Unison.WhatsAppClient.Groups
             finally
             {
                 Interlocked.Exchange(ref _listingInFlight, 0);
+
+                if (Interlocked.Exchange(ref _titleReconcilePending, 0) == 1 &&
+                    !GroupListingVisibilityGate.ShouldDeferStart(IsWindowVisible))
+                {
+                    try
+                    {
+                        await RunTitleReconcileAsync(CancellationToken.None).ConfigureAwait(false);
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.WriteLine(
+                            "[GroupFacade] Deferred title reconcile failed: " + ex.Message);
+                    }
+                }
             }
+        }
+
+        /// <summary>
+        /// Persist community hubs that still only live as synthetic rows, restamp labels, and
+        /// ask metadata for catalogue rows whose Name is still a stand-in.
+        /// </summary>
+        private async Task RunTitleReconcileAsync(CancellationToken cancellationToken)
+        {
+            int ensured = 0;
+            int renamed = 0;
+            bool catalogDirty = false;
+
+            await _ui.RunAsync(() =>
+            {
+                var parents = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                var byCanonical = new Dictionary<string, ChatItem>(StringComparer.OrdinalIgnoreCase);
+
+                foreach (ChatItem chat in _chats.Chats)
+                {
+                    if (chat == null || string.IsNullOrWhiteSpace(chat.JID))
+                    {
+                        continue;
+                    }
+
+                    string key = _jids.GetCanonicalJid(chat.JID);
+                    if (string.IsNullOrWhiteSpace(key))
+                    {
+                        continue;
+                    }
+
+                    if (!byCanonical.ContainsKey(key))
+                    {
+                        byCanonical[key] = chat;
+                    }
+
+                    if (chat.IsCommunityParent || chat.Kind == ChatKind.Community)
+                    {
+                        parents.Add(key);
+                    }
+
+                    if (!string.IsNullOrWhiteSpace(chat.LinkedParentJid))
+                    {
+                        string parentKey = _jids.GetCanonicalJid(chat.LinkedParentJid);
+                        if (!string.IsNullOrWhiteSpace(parentKey))
+                        {
+                            parents.Add(parentKey);
+                        }
+                    }
+                }
+
+                foreach (string parentKey in parents)
+                {
+                    string subject = _naming.ResolveChatDisplayName(parentKey);
+                    bool beforeExists = byCanonical.ContainsKey(parentKey);
+                    string beforeName = beforeExists ? byCanonical[parentKey].Name : null;
+
+                    if (!CommunityHubCatalogEnsure.TryEnsure(
+                            parentKey,
+                            subject,
+                            jid =>
+                            {
+                                ChatItem row;
+                                return byCanonical.TryGetValue(jid, out row) ? row : null;
+                            },
+                            hub =>
+                            {
+                                _chats.Chats.Add(hub);
+                                byCanonical[parentKey] = hub;
+                                ensured++;
+                                catalogDirty = true;
+                            },
+                            _naming.IsMeaningfulGroupLabel))
+                    {
+                        continue;
+                    }
+
+                    catalogDirty = true;
+                    ChatItem after;
+                    if (beforeExists &&
+                        byCanonical.TryGetValue(parentKey, out after) &&
+                        !string.Equals(beforeName, after?.Name, StringComparison.Ordinal))
+                    {
+                        renamed++;
+                    }
+                }
+            }).ConfigureAwait(false);
+
+            if (catalogDirty)
+            {
+                _catalog.Schedule();
+            }
+
+            _chats.NotifyCommunitySubjectsUpdated();
+
+            int metadataQueued = 0;
+            if (!GroupListingVisibilityGate.ShouldDeferStart(IsWindowVisible) &&
+                !cancellationToken.IsCancellationRequested)
+            {
+                bool aborted = await QueryUnresolvedGroupMetadataAsync(
+                    _workload.GroupMetadataBatchSize,
+                    cancellationToken).ConfigureAwait(false);
+                if (!aborted)
+                {
+                    metadataQueued = _workload.GroupMetadataBatchSize;
+                }
+            }
+
+            _diagnostics?.Write(
+                "names",
+                "post-sync-titles",
+                "ensured=" + ensured +
+                "; renamed=" + renamed +
+                "; metadataQueued=" + metadataQueued +
+                "; catalogDirty=" + catalogDirty);
         }
 
         /// <returns>True when aborted because the window hid mid-pass.</returns>
@@ -1080,6 +1318,10 @@ namespace Unison.WhatsAppClient.Groups
                 {
                     await _apply.SetNoLongerParticipantAsync(canonical, left: false)
                         .ConfigureAwait(false);
+                    // Empty join must not land under DateTime.MinValue — stamp join clock
+                    // (wire creation arrives later via metadata / ChatsUpsert when present).
+                    await _apply.SeedEmptyListOrderAsync(canonical, createIfMissing: true)
+                        .ConfigureAwait(false);
                 }
 
                 return ok;
@@ -1090,5 +1332,11 @@ namespace Unison.WhatsAppClient.Groups
                 return false;
             }
         }
+
+        public Task<GroupCreateResult> CreateGroupAsync(GroupCreateRequest request) =>
+            _creation.CreateGroupAsync(request);
+
+        public Task<GroupCreateResult> CreateCommunityAsync(CommunityCreateRequest request) =>
+            _creation.CreateCommunityAsync(request);
     }
 }

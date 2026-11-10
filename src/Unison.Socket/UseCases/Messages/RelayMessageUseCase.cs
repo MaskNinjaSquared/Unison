@@ -251,13 +251,26 @@ namespace Unison.Socket.UseCases.Messages
                     attributes,
                     extraAttrs).ConfigureAwait(false);
 
-                // SKDM participant nodes first, then the skmsg — receivers that walk children
-                // in order must install the sender key before opening the ciphertext.
                 participantNodes.AddRange(groupResult.ParticipantNodes);
                 shouldIncludeDeviceIdentity = shouldIncludeDeviceIdentity || groupResult.ShouldIncludeDeviceIdentity;
-                AppendParticipantNodes(content, participantNodes, attributes);
-                participantNodes.Clear();
-                content.Add(groupResult.EncNode);
+
+                if (isStatus)
+                {
+                    // Baileys pushes the skmsg into the stanza body before the participants node,
+                    // so a status from WhatsApp Web reads enc,participants. Groups keep the order
+                    // they already send and the server already accepts.
+                    content.Add(groupResult.EncNode);
+                    AppendParticipantNodes(content, participantNodes, attributes);
+                    participantNodes.Clear();
+                }
+                else
+                {
+                    // SKDM participant nodes first, then the skmsg - receivers that walk children
+                    // in order must install the sender key before opening the ciphertext.
+                    AppendParticipantNodes(content, participantNodes, attributes);
+                    participantNodes.Clear();
+                    content.Add(groupResult.EncNode);
+                }
             }
             else if (!isRetryResend)
             {
@@ -335,7 +348,14 @@ namespace Unison.Socket.UseCases.Messages
                 }
             }
 
-            await _connection.SendNodeAsync(new BinaryNode("message", stanzaAttrs, content)).ConfigureAwait(false);
+            var stanza = new BinaryNode("message", stanzaAttrs, content);
+            if (isStatus)
+            {
+                // The server answers a bad Status with a bare code in its ack; this is what to compare.
+                _log.Info("[Send] Status stanza " + StanzaShape.Describe(stanza));
+            }
+
+            await _connection.SendNodeAsync(stanza).ConfigureAwait(false);
             _log.Debug("[Send] Relayed " + messageId + " to " + destinationJid + " across " + participantNodes.Count + " device(s)");
 
             if (groupResult != null && groupResult.SenderKeyMemory != null)
@@ -427,9 +447,16 @@ namespace Unison.Socket.UseCases.Messages
                 attributes["expiration"] = metadata.EphemeralDuration.ToString();
             }
 
+            // status@broadcast has no metadata to inherit addressing from, so the audience is
+            // collapsed into one address space here - before the device lookup, which otherwise
+            // echoes whichever space each recipient happened to be stored in.
+            StatusAudience statusAudience = null;
             if (isStatus && options.StatusJidList != null)
             {
-                participantJids.AddRange(options.StatusJidList);
+                statusAudience = await ResolveStatusAudienceAsync(options.StatusJidList, meId, meLid)
+                    .ConfigureAwait(false);
+                participantJids.AddRange(statusAudience.Recipients);
+                _log.Info("[Send] Status audience " + statusAudience.Describe());
             }
 
             if (_devices != null && participantJids.Count > 0)
@@ -441,9 +468,27 @@ namespace Unison.Socket.UseCases.Messages
                 result.Devices.AddRange(enumerated);
             }
 
+            if (isStatus)
+            {
+                var lidMapping = _signal.LidMapping;
+                int dropped = SameDeviceAddressDedupe.Apply(
+                    result.Devices,
+                    deviceJid =>
+                    {
+                        string paired;
+                        return lidMapping != null && lidMapping.TryGetCachedPairedJid(deviceJid, out paired)
+                            ? paired
+                            : null;
+                    });
+                _log.Info("[Send] Status devices=" + result.Devices.Count + "; sameDeviceDropped=" + dropped);
+            }
+
             // Usync can answer empty (timeout, partial). Without at least each member's primary
             // device the stanza carries an skmsg and no SKDM — sealed for nobody but us.
-            EnsurePrimaryParticipantDevices(result.Devices, participantJids);
+            if (SkmsgFanoutPolicy.FillsMissingPrimaryDevices(isStatus))
+            {
+                EnsurePrimaryParticipantDevices(result.Devices, participantJids);
+            }
 
             // The group decides which of our identities signs its messages, so a guess here does
             // not degrade gracefully: the recipients derive the sender key from an address we
@@ -457,6 +502,16 @@ namespace Unison.Socket.UseCases.Messages
                 metadata,
                 meLid,
                 out addressingModeSource);
+
+            // A status carries no metadata, so the audience decides which identity signs and
+            // which space the participants are written in. The attribute itself stays off:
+            // Baileys sets addressing_mode only when isGroup, and declaring it on a status is
+            // one of the things the server answers 479 (smax-invalid) to. Verified on device.
+            if (statusAudience != null && statusAudience.Normalized && statusAudience.Recipients.Count > 0)
+            {
+                addressingMode = statusAudience.AddressingMode;
+                addressingModeSource = statusAudience.Source;
+            }
 
             if (isGroup)
             {
@@ -477,16 +532,16 @@ namespace Unison.Socket.UseCases.Messages
                 "[Send] Group " + jid + " encrypt ok; keyId=" + encrypted.KeyId +
                 "; newKey=" + encrypted.CreatedNewSenderKey);
 
-            var senderKeyMemory = GetSenderKeyMemory(
-                jid,
-                senderIdentity,
-                encrypted.KeyId,
-                encrypted.CreatedNewSenderKey);
+            var senderKeyMemory = SkmsgFanoutPolicy.UsesSenderKeyMemory(isStatus)
+                ? GetSenderKeyMemory(jid, senderIdentity, encrypted.KeyId, encrypted.CreatedNewSenderKey)
+                : null;
 
             var alreadyHasKey = new HashSet<string>(
-                senderKeyMemory
-                    .Where(entry => !entry.StartsWith(KeyIdMarker, StringComparison.Ordinal))
-                    .Select(WA.NormalizeDeviceJid),
+                senderKeyMemory != null
+                    ? senderKeyMemory
+                        .Where(entry => !entry.StartsWith(KeyIdMarker, StringComparison.Ordinal))
+                        .Select(WA.NormalizeDeviceJid)
+                    : Enumerable.Empty<string>(),
                 StringComparer.OrdinalIgnoreCase);
 
             // Phone (device 0) must be able to open what we seal. Only the address space of this
@@ -549,14 +604,21 @@ namespace Unison.Socket.UseCases.Messages
 
                 if (_sessions != null)
                 {
+                    _log.Info(
+                        "[Send] Group " + jid + " SKDM assert-sessions begin; targets=" + needSenderKey.Count);
                     await _sessions.ExecuteAsync(needSenderKey).ConfigureAwait(false);
+                    _log.Info("[Send] Group " + jid + " SKDM assert-sessions done");
                 }
 
                 // Bare SKDM for everyone including our phone (Baileys). DeviceSentMessage on the
                 // initial group send left the Android copy pending and is not required for skmsg.
+                _log.Info(
+                    "[Send] Group " + jid + " SKDM encrypt-participants begin; targets=" + needSenderKey.Count);
                 var nodes = await _participants
                     .ExecuteAsync(needSenderKey, senderKeyMessage, extraAttrs)
                     .ConfigureAwait(false);
+                _log.Info(
+                    "[Send] Group " + jid + " SKDM encrypt-participants done; nodes=" + nodes.Nodes.Count);
 
                 result.ParticipantNodes.AddRange(nodes.Nodes);
                 result.ShouldIncludeDeviceIdentity = nodes.ShouldIncludeDeviceIdentity;
@@ -581,6 +643,11 @@ namespace Unison.Socket.UseCases.Messages
                     (ownKeyed.Count > 0 ? string.Join(",", ownKeyed) : "none"));
             }
 
+            // No phash here. whatsmeow stamps group-shaped stanzas with a hash of the device
+            // list, but Baileys - which is what WhatsApp Web actually behaves like - only ever
+            // carries phash as an enc attribute on 1:1 sends, never as a stanza attribute on a
+            // group or status. The server answers 479 to a status stanza that carries an
+            // attribute Web would not have sent, so the status stanza stays bare: id, to, type.
             var encAttrs = new Dictionary<string, string> { { "v", "2" }, { "type", "skmsg" } };
             foreach (var attr in extraAttrs)
             {
@@ -592,7 +659,9 @@ namespace Unison.Socket.UseCases.Messages
             var loggedOwnTargets = needSenderKey.Where(ownPrimaryInMode.Contains).ToList();
             _log.Info(
                 "[Send] Group " + jid + ": addressing=" + addressingMode + " (" + addressingModeSource +
-                "), signer=" + senderIdentity +
+                "), declared=" + (isGroup ? "yes" : "no") +
+                ", phash=" + (attributes.ContainsKey("phash") ? attributes["phash"] : "none") +
+                ", signer=" + senderIdentity +
                 ", keyId=" + encrypted.KeyId +
                 ", participants=" + participantJids.Count +
                 ", devices=" + result.Devices.Count +
@@ -860,6 +929,33 @@ namespace Unison.Socket.UseCases.Messages
             return await _signal.HasSenderKeyAsync(groupJid, pnSigner).ConfigureAwait(false)
                 ? pnSigner
                 : null;
+        }
+
+        /// <summary>
+        /// The status audience in one address space, using the LID mapping store for the
+        /// translations. Falls back to the raw list if we have no mapping store at all, which
+        /// is the pre-existing behaviour and still better than sending nothing.
+        /// </summary>
+        private Task<StatusAudience> ResolveStatusAudienceAsync(
+            IList<string> statusJidList,
+            string meId,
+            string meLid)
+        {
+            LidMappingStore mapping = _signal != null ? _signal.LidMapping : null;
+            if (mapping == null)
+            {
+                return Task.FromResult(
+                    new StatusAudience(
+                        new List<string>(statusJidList), "pn", "no-mapping-store", null, normalized: false));
+            }
+
+            return StatusAudiencePolicy.ResolveAsync(
+                statusJidList,
+                meId,
+                meLid,
+                pns => mapping.GetLidsForPnsAsync(pns),
+                lids => mapping.GetPnsForLidsAsync(lids),
+                StatusAddressSpace.WidestLidFirst);
         }
 
         /// <summary>

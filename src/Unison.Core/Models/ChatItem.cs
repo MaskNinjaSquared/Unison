@@ -329,6 +329,53 @@ namespace Unison.Core.Models
             }
         }
 
+        private string _groupDescription;
+        /// <summary>
+        /// Group description (<c>description/body</c> from a <c>w:g2</c> reply, or a live
+        /// description notification). Null = never learned; empty = the group has none.
+        /// </summary>
+        public string GroupDescription
+        {
+            get => _groupDescription;
+            set
+            {
+                if (string.Equals(_groupDescription, value, StringComparison.Ordinal)) return;
+                _groupDescription = value;
+                OnPropertyChanged();
+            }
+        }
+
+        private string _groupDescriptionId;
+        /// <summary>
+        /// Wire id of the current description. Needed to edit it later, and lets a repeated
+        /// notification be recognised as the one already stored.
+        /// </summary>
+        public string GroupDescriptionId
+        {
+            get => _groupDescriptionId;
+            set
+            {
+                if (string.Equals(_groupDescriptionId, value, StringComparison.Ordinal)) return;
+                _groupDescriptionId = value;
+                OnPropertyChanged();
+            }
+        }
+
+        private int _channelFollowerCount;
+        /// <summary>
+        /// Channel <c>subscribers_count</c> from newsletter metadata. 0 = not yet known.
+        /// </summary>
+        public int ChannelFollowerCount
+        {
+            get => _channelFollowerCount;
+            set
+            {
+                if (_channelFollowerCount == value) return;
+                _channelFollowerCount = value;
+                OnPropertyChanged();
+            }
+        }
+
         private System.Collections.Generic.List<GroupMember> _groupMembers;
         private System.Collections.Generic.IReadOnlyDictionary<string, string> _mentionLookup =
             MentionLookupBuilder.Empty;
@@ -1105,6 +1152,38 @@ namespace Unison.Core.Models
             }
         }
 
+        /// <summary>
+        /// A metadata reply set <see cref="MyGroupRole"/> this session. A stored roster row read on
+        /// open may predate a promotion or demotion, so it must not override that answer.
+        /// </summary>
+        [Newtonsoft.Json.JsonIgnore]
+        public bool IsMyGroupRoleFromServer { get; set; }
+
+        private ChannelViewerRole _channelRole = ChannelViewerRole.Unknown;
+        /// <summary>
+        /// This account's role on the channel (WMex <c>viewer_metadata.role</c>).
+        /// Ignored for anything that is not a channel.
+        /// </summary>
+        public ChannelViewerRole ChannelRole
+        {
+            get => _channelRole;
+            set
+            {
+                if (_channelRole == value) return;
+                _channelRole = value;
+                Raise(
+                    nameof(ChannelRole),
+                    nameof(CanPostToChannel),
+                    nameof(IsComposerLocked));
+            }
+        }
+
+        /// <summary>Channel owner or admin — the only roles WhatsApp lets post.</summary>
+        [Newtonsoft.Json.JsonIgnore]
+        public bool CanPostToChannel =>
+            IsChannel &&
+            (_channelRole == ChannelViewerRole.Owner || _channelRole == ChannelViewerRole.Admin);
+
         /// <summary>True when <see cref="MyGroupRole"/> is Admin or SuperAdmin.</summary>
         [Newtonsoft.Json.JsonIgnore]
         public bool IsGroupAdmin =>
@@ -1127,12 +1206,15 @@ namespace Unison.Core.Models
         public bool IsNoLongerGroupParticipant => IsGroup && _leftGroup;
 
         /// <summary>
-        /// Composer must stay closed: channel, announce-only group, or a group this
-        /// account is no longer in.
+        /// Composer must stay closed: channel this account only follows, announce-only group,
+        /// or a group this account is no longer in.
         /// </summary>
         [Newtonsoft.Json.JsonIgnore]
         public bool IsComposerLocked =>
-            IsChannel || IsGroupLockedForMessages || IsNoLongerGroupParticipant || CanJoin;
+            (IsChannel && !CanPostToChannel) ||
+            IsGroupLockedForMessages ||
+            IsNoLongerGroupParticipant ||
+            CanJoin;
 
         public string Initial => !string.IsNullOrEmpty(Name) ? Name.Substring(0, 1).ToUpper() : "?";
 
@@ -1177,6 +1259,7 @@ namespace Unison.Core.Models
                 nameof(IsDirect),
                 nameof(IsCommunity),
                 nameof(IsChannel),
+                nameof(CanPostToChannel),
                 nameof(IsGroupLockedForMessages),
                 nameof(IsNoLongerGroupParticipant),
                 nameof(IsComposerLocked));

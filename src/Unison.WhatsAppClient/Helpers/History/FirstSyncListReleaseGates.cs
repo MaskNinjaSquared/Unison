@@ -15,17 +15,17 @@ namespace Unison.WhatsAppClient.Helpers
         /// <summary>Another unlock pass is already running.</summary>
         SkipAlreadyInFlight,
 
-        /// <summary>Resolve names under the hold, then publish IsCompleted.</summary>
-        StartNamesThenUnlock
+        /// <summary>Publish IsCompleted now, then resolve names in the background.</summary>
+        UnlockThenScheduleNames
     }
 
     public static class FirstSyncListReleaseGates
     {
         public static FirstSyncListReleaseAction Decide(
-            bool shouldResolveNamesBeforeRelease,
+            bool scheduleNamesAfterUnlock,
             bool unlockAlreadyInFlight)
         {
-            if (!shouldResolveNamesBeforeRelease)
+            if (!scheduleNamesAfterUnlock)
             {
                 return FirstSyncListReleaseAction.CompleteNow;
             }
@@ -35,7 +35,7 @@ namespace Unison.WhatsAppClient.Helpers
                 return FirstSyncListReleaseAction.SkipAlreadyInFlight;
             }
 
-            return FirstSyncListReleaseAction.StartNamesThenUnlock;
+            return FirstSyncListReleaseAction.UnlockThenScheduleNames;
         }
     }
 }

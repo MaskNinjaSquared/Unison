@@ -50,7 +50,10 @@ namespace Unison.Uwp.Data
                 string dbPath = Path.Combine(ApplicationData.Current.LocalFolder.Path, DatabaseFileName);
                 _connection = new SQLiteAsyncConnection(dbPath);
                 await _connection.CreateTableAsync<ChatRow>().ConfigureAwait(false);
-                await EnsurePinnedTimestampColumnAsync().ConfigureAwait(false);
+                await EnsureColumnAsync(nameof(ChatRow.PinnedTimestamp)).ConfigureAwait(false);
+                await EnsureColumnAsync(nameof(ChatRow.ChannelRole)).ConfigureAwait(false);
+                await EnsureTextColumnAsync(nameof(ChatRow.GroupDescription)).ConfigureAwait(false);
+                await EnsureTextColumnAsync(nameof(ChatRow.GroupDescriptionId)).ConfigureAwait(false);
                 _initialized = true;
                 Debug.WriteLine("[ChatStore] Initialized at " + dbPath);
             }
@@ -144,6 +147,20 @@ namespace Unison.Uwp.Data
         public Task SetStatusAsync(string jid, ChatStatus status)
         {
             return WriteAsync(jid, existing => existing.Status = status);
+        }
+
+        public Task SetChannelRoleAsync(string jid, ChannelViewerRole role)
+        {
+            return WriteAsync(jid, existing => existing.ChannelRole = role);
+        }
+
+        public Task SetGroupDescriptionAsync(string jid, string description, string descriptionId)
+        {
+            return WriteAsync(jid, existing =>
+            {
+                existing.GroupDescription = description ?? string.Empty;
+                existing.GroupDescriptionId = descriptionId;
+            });
         }
 
         public void RememberChatPinned(string jid, bool pinned, long? pinnedTimestamp = null)
@@ -251,7 +268,24 @@ namespace Unison.Uwp.Data
             }
         }
 
-        private async Task EnsurePinnedTimestampColumnAsync()
+        /// <summary>Adds a nullable INTEGER column that a database from an older build lacks.</summary>
+        private Task EnsureColumnAsync(string column)
+        {
+            return EnsureColumnAsync(column, "INTEGER");
+        }
+
+        /// <summary>Adds a nullable TEXT column that a database from an older build lacks.</summary>
+        private Task EnsureTextColumnAsync(string column)
+        {
+            return EnsureColumnAsync(column, "TEXT");
+        }
+
+        /// <remarks>
+        /// Idempotent: <c>PRAGMA table_info</c> first, <c>ALTER TABLE</c> only when the column is
+        /// genuinely absent, so a database that already migrated is left alone. SQLite has no
+        /// "add column if not exists".
+        /// </remarks>
+        private async Task EnsureColumnAsync(string column, string sqlType)
         {
             try
             {
@@ -263,10 +297,7 @@ namespace Unison.Uwp.Data
                 {
                     for (int i = 0; i < columns.Count; i++)
                     {
-                        if (string.Equals(
-                                columns[i]?.name,
-                                nameof(ChatRow.PinnedTimestamp),
-                                StringComparison.OrdinalIgnoreCase))
+                        if (string.Equals(columns[i]?.name, column, StringComparison.OrdinalIgnoreCase))
                         {
                             exists = true;
                             break;
@@ -277,14 +308,14 @@ namespace Unison.Uwp.Data
                 if (!exists)
                 {
                     await _connection.ExecuteAsync(
-                            "ALTER TABLE Chat ADD COLUMN PinnedTimestamp INTEGER NULL")
+                            "ALTER TABLE Chat ADD COLUMN " + column + " " + sqlType + " NULL")
                         .ConfigureAwait(false);
-                    Debug.WriteLine("[ChatStore] Added PinnedTimestamp column");
+                    Debug.WriteLine("[ChatStore] Added " + column + " column");
                 }
             }
             catch (Exception ex)
             {
-                Debug.WriteLine("[ChatStore] Ensure PinnedTimestamp column failed: " + ex.Message);
+                Debug.WriteLine("[ChatStore] Ensure " + column + " column failed: " + ex.Message);
             }
         }
 
@@ -306,7 +337,7 @@ namespace Unison.Uwp.Data
                 status = (ChatStatus)row.Status;
             }
 
-            return new ChatLocalState
+            var state = new ChatLocalState
             {
                 Jid = row.Jid,
                 Status = status,
@@ -317,6 +348,21 @@ namespace Unison.Uwp.Data
                 MutedUntil = row.MutedUntil,
                 KnownFields = ChatLocalStateFields.All
             };
+
+            if (row.ChannelRole.HasValue && Enum.IsDefined(typeof(ChannelViewerRole), row.ChannelRole.Value))
+            {
+                state.ChannelRole = (ChannelViewerRole)row.ChannelRole.Value;
+            }
+
+            // NULL is "this row predates the column", not "no description" — leave the field
+            // unknown so ChatLocalStateApply does not blank a freshly fetched description.
+            if (row.GroupDescription != null)
+            {
+                state.GroupDescription = row.GroupDescription;
+                state.GroupDescriptionId = row.GroupDescriptionId;
+            }
+
+            return state;
         }
 
         private static ChatRow ToRow(ChatLocalState state)
@@ -330,6 +376,15 @@ namespace Unison.Uwp.Data
                 IsWidgetPinned = state.IsWidgetPinned,
                 IsFavorite = state.IsFavorite,
                 MutedUntil = state.MutedUntil,
+                ChannelRole = state.Knows(ChatLocalStateFields.ChannelRole)
+                    ? (int?)state.ChannelRole
+                    : null,
+                GroupDescription = state.Knows(ChatLocalStateFields.GroupDescription)
+                    ? (state.GroupDescription ?? string.Empty)
+                    : null,
+                GroupDescriptionId = state.Knows(ChatLocalStateFields.GroupDescription)
+                    ? state.GroupDescriptionId
+                    : null,
                 UpdatedAtUtc = DateTime.UtcNow
             };
         }

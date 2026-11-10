@@ -13,6 +13,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
 using Unison.Core.Contracts;
@@ -79,9 +80,14 @@ namespace Unison.WhatsAppClient.Contacts
             _jids = jids ?? throw new ArgumentNullException(nameof(jids));
         }
 
-        private Task RunLowAsync(Action action)
+        private Task RunLowAsync(
+            Action action,
+            [CallerMemberName] string caller = null,
+            [CallerFilePath] string callerFile = null)
         {
-            return _lowUi != null ? _lowUi.RunLowAsync(action) : _ui.RunAsync(action);
+            return _lowUi != null
+                ? _lowUi.RunLowAsync(action, caller, callerFile)
+                : _ui.RunAsync(action, caller, callerFile);
         }
 
         /// <summary>True while a full-roster <see cref="HydrateAsync"/> pass is running.</summary>
@@ -152,7 +158,7 @@ namespace Unison.WhatsAppClient.Contacts
 
                 Debug.WriteLine("[GroupRosterPolicy] Batch=" + batch.Count + " for " + canonical);
 
-                bool persist = await FetchMembersAsync(batch, token).ConfigureAwait(false);
+                bool persist = await FetchMembersAsync(canonical, batch, token).ConfigureAwait(false);
 
                 if (persist)
                 {
@@ -220,7 +226,7 @@ namespace Unison.WhatsAppClient.Contacts
 
             try
             {
-                bool persist = await FetchMembersAsync(batch, token).ConfigureAwait(false);
+                bool persist = await FetchMembersAsync(canonical, batch, token).ConfigureAwait(false);
                 if (persist)
                 {
                     _catalog.Schedule();
@@ -235,7 +241,10 @@ namespace Unison.WhatsAppClient.Contacts
             }
         }
 
-        private async Task<bool> FetchMembersAsync(List<GroupMember> batch, CancellationToken token)
+        private async Task<bool> FetchMembersAsync(
+            string groupJid,
+            List<GroupMember> batch,
+            CancellationToken token)
         {
             bool persist = false;
             for (int i = 0; i < batch.Count; i++)
@@ -272,8 +281,13 @@ namespace Unison.WhatsAppClient.Contacts
                         };
                     }
 
+                    string applyGroup = groupJid;
                     await RunLowAsync(
-                        () => _groups.ApplyGroupMemberAvatarOutcome(member.Jid, result))
+                            () => _groups.ApplyGroupMemberAvatarOutcome(
+                                member.Jid,
+                                result,
+                                limitToGroupJid: applyGroup),
+                            caller: "ApplyMemberAvatar")
                         .ConfigureAwait(false);
 
                     if (result.HasPicture)
@@ -378,29 +392,40 @@ namespace Unison.WhatsAppClient.Contacts
 
         private async Task<List<GroupMember>> SnapshotBatchAsync(string groupJid)
         {
-            var batch = new List<GroupMember>();
-            DateTime nowUtc = DateTime.UtcNow;
+            List<GroupMember> snapshot = null;
             await RunLowAsync(() =>
             {
                 ChatItem chat = FindGroup(groupJid);
-                if (chat?.GroupMembers == null)
+                if (chat?.GroupMembers == null || chat.GroupMembers.Count == 0)
                 {
                     return;
                 }
 
-                for (int i = 0; i < chat.GroupMembers.Count && batch.Count < BatchSize; i++)
-                {
-                    GroupMember member = chat.GroupMembers[i];
-                    if (!ShouldFetch(member, nowUtc))
-                    {
-                        continue;
-                    }
-
-                    batch.Add(member);
-                }
+                // Refs only — ShouldFetch filter runs off the UI hop.
+                snapshot = new List<GroupMember>(chat.GroupMembers);
             }).ConfigureAwait(false);
 
-            return batch;
+            if (snapshot == null || snapshot.Count == 0)
+            {
+                return new List<GroupMember>();
+            }
+
+            DateTime nowUtc = DateTime.UtcNow;
+            int batchSize = BatchSize;
+            return await Task.Run(() =>
+            {
+                var batch = new List<GroupMember>();
+                for (int i = 0; i < snapshot.Count && batch.Count < batchSize; i++)
+                {
+                    GroupMember member = snapshot[i];
+                    if (ShouldFetch(member, nowUtc))
+                    {
+                        batch.Add(member);
+                    }
+                }
+
+                return batch;
+            }).ConfigureAwait(false);
         }
 
         private async Task<List<GroupMember>> SnapshotVisibleBatchAsync(
@@ -450,6 +475,7 @@ namespace Unison.WhatsAppClient.Contacts
                 var seen = new HashSet<GroupMember>();
                 foreach (string key in wanted)
                 {
+                    // Indexed tip lookup — never walk the whole roster with MemberMatches.
                     GroupMember member = chat.FindGroupMember(key);
                     if (member != null && seen.Add(member) && ShouldFetch(member, nowUtc))
                     {
@@ -463,27 +489,36 @@ namespace Unison.WhatsAppClient.Contacts
 
         private async Task<bool> HasRemainingAsync(string groupJid)
         {
-            bool remaining = false;
-            DateTime nowUtc = DateTime.UtcNow;
+            List<GroupMember> snapshot = null;
             await RunLowAsync(() =>
             {
                 ChatItem chat = FindGroup(groupJid);
-                if (chat?.GroupMembers == null)
+                if (chat?.GroupMembers == null || chat.GroupMembers.Count == 0)
                 {
                     return;
                 }
 
-                for (int i = 0; i < chat.GroupMembers.Count; i++)
-                {
-                    if (ShouldFetch(chat.GroupMembers[i], nowUtc))
-                    {
-                        remaining = true;
-                        return;
-                    }
-                }
+                snapshot = new List<GroupMember>(chat.GroupMembers);
             }).ConfigureAwait(false);
 
-            return remaining;
+            if (snapshot == null || snapshot.Count == 0)
+            {
+                return false;
+            }
+
+            DateTime nowUtc = DateTime.UtcNow;
+            return await Task.Run(() =>
+            {
+                for (int i = 0; i < snapshot.Count; i++)
+                {
+                    if (ShouldFetch(snapshot[i], nowUtc))
+                    {
+                        return true;
+                    }
+                }
+
+                return false;
+            }).ConfigureAwait(false);
         }
 
         private bool ShouldFetch(GroupMember member, DateTime nowUtc)
@@ -518,20 +553,17 @@ namespace Unison.WhatsAppClient.Contacts
 
         private ChatItem FindGroup(string groupJid)
         {
-            foreach (ChatItem chat in _chatState.Chats)
+            ChatItem chat = _chatState.FindChat(groupJid);
+            if (chat != null)
             {
-                if (chat == null)
-                {
-                    continue;
-                }
+                return chat;
+            }
 
-                if (string.Equals(
-                    _jids.GetCanonicalJid(chat.JID),
-                    groupJid,
-                    StringComparison.OrdinalIgnoreCase))
-                {
-                    return chat;
-                }
+            string canonical = _jids.GetCanonicalJid(groupJid);
+            if (!string.IsNullOrWhiteSpace(canonical) &&
+                !string.Equals(canonical, groupJid, StringComparison.OrdinalIgnoreCase))
+            {
+                return _chatState.FindChat(canonical);
             }
 
             return null;

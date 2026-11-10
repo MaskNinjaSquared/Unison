@@ -127,5 +127,37 @@ namespace Unison.Core.Tests.State
             Assert.True(queue.TryBegin(out var batch));
             Assert.Empty(batch.AvatarTargets);
         }
+
+        [Fact]
+        public void TryBegin_with_cap_leaves_remainder_and_source()
+        {
+            var queue = new AliasFollowUpQueue();
+            queue.NoteAvatarTarget(PnA);
+            queue.NoteAvatarTarget(PnB);
+            queue.NoteAvatarTarget("5511999990003@s.whatsapp.net");
+            queue.Request("history");
+
+            Assert.True(queue.TryBegin(2, out var batch, out bool more));
+            Assert.True(more);
+            Assert.True(queue.HasPendingTargets);
+            Assert.Equal(new[] { PnA, PnB }, batch.AvatarTargets);
+            Assert.Equal("history", queue.PendingSource);
+
+            queue.End();
+            Assert.True(queue.TryBegin(out var next, out bool moreAfter));
+            Assert.False(moreAfter);
+            Assert.False(queue.HasPendingTargets);
+            Assert.Equal(new[] { "5511999990003@s.whatsapp.net" }, next.AvatarTargets);
+            Assert.Equal("history", next.Source);
+        }
+
+        [Fact]
+        public void HasPendingTargets_false_when_only_source_requested()
+        {
+            var queue = new AliasFollowUpQueue();
+            queue.Request("group-join");
+            Assert.False(queue.HasPendingTargets);
+            Assert.Equal("group-join", queue.PendingSource);
+        }
     }
 }

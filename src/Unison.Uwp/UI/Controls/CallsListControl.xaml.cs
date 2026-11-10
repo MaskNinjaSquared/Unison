@@ -104,6 +104,18 @@ namespace Unison.Uwp.UI.Controls
             }
         }
 
+        private void FavoriteVoiceCallButton_Click(object sender, RoutedEventArgs e)
+        {
+            var button = sender as FrameworkElement;
+            var item = button?.DataContext as CallFavoriteItem;
+            if (item != null &&
+                _viewModel?.CallFavoriteVoiceCommand != null &&
+                _viewModel.CallFavoriteVoiceCommand.CanExecute(item))
+            {
+                _viewModel.CallFavoriteVoiceCommand.Execute(item);
+            }
+        }
+
         private void RecentsList_ItemClick(object sender, ItemClickEventArgs e)
         {
             var item = e.ClickedItem as CallRecentItem;

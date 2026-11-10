@@ -102,6 +102,8 @@ namespace Unison.Core.Tests.Helpers
 
             public bool IsHistoryCatchUpQuiet => false;
             public bool IsAwaitingFirstHistorySync => false;
+            public bool IsPairingBootstrapActive => false;
+            public bool IsPairingBootstrapChunkSeenOrApplying => false;
             public bool PreferFrugalSyncBudget => false;
             public int InitialSyncProcessedConversations => 0;
             public int InitialSyncTotalConversations => 0;
@@ -119,6 +121,10 @@ namespace Unison.Core.Tests.Helpers
                 Task.FromResult(false);
             public Task<bool> EnsureChatPageAsync(string jid, int count) => Task.FromResult(false);
             public bool IsChatPagePending(string jid) => false;
+            public void ArmSessionOpenOnDemandPending(string jid) { }
+            public void DisarmSessionOpenOnDemandPending(IReadOnlyList<string> jids) { }
+            public int PeekSessionOpenOnDemandPendingCount() => 0;
+            public IReadOnlyList<string> TakeSessionOpenOnDemandPending() => Array.Empty<string>();
             public void HandleOnDemandAck(string ackClass, string ackId, string ackError) { }
             public Task ApplyHistorySyncAsync(HistorySync sync) => Task.CompletedTask;
 

@@ -3,6 +3,7 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:converters="using:Unison.Uwp.UI.Converters"
+    xmlns:helpers="using:Unison.Uwp.UI.Helpers"
     xmlns:reply="using:Unison.Uwp.UI.Controls.Reply">
 
     <UserControl.Resources>
@@ -19,7 +20,7 @@
             <ColumnDefinition Width="Auto"/>
         </Grid.ColumnDefinitions>
         <StackPanel DataContext="{Binding ComposerReply}" VerticalAlignment="Center">
-            <TextBlock Text="{Binding SenderName}"
+            <TextBlock helpers:EmojiTextBlock.Text="{Binding SenderName}"
                        FontFamily="{StaticResource MainFontSemibold}"
                        FontSize="14"
                        TextTrimming="CharacterEllipsis"/>

@@ -64,8 +64,9 @@ namespace Unison.Socket.UseCases.Messages
             var unique = jids.Where(jid => !string.IsNullOrEmpty(jid)).Distinct(StringComparer.Ordinal).ToList();
             var missing = new List<string>();
 
-            foreach (var jid in unique)
+            for (int i = 0; i < unique.Count; i++)
             {
+                string jid = unique[i];
                 if (!force)
                 {
                     var validation = await _signal.ValidateSessionAsync(jid).ConfigureAwait(false);
@@ -76,44 +77,95 @@ namespace Unison.Socket.UseCases.Messages
                 }
 
                 missing.Add(jid);
+
+                if ((i + 1) % 100 == 0)
+                {
+                    _log.Info(
+                        "[Send] Group assert-sessions scanning " + (i + 1) + "/" + unique.Count +
+                        "; missingSoFar=" + missing.Count);
+                    await Task.Yield();
+                }
             }
+
+            _log.Info(
+                "[Send] Group assert-sessions validated; have=" + (unique.Count - missing.Count) +
+                "; missing=" + missing.Count + "; total=" + unique.Count);
 
             if (missing.Count == 0)
             {
                 return false;
             }
 
-            var userNodes = missing
-                .Select(jid =>
+            // One IQ with hundreds of users (status@broadcast SKDM) stalls or times out.
+            // Fetch in chunks so a Status publish to "My contacts" can finish.
+            // Inject also used to await StorageFile per bundle — defer disk for the batch.
+            bool deferPersist = missing.Count >= DeferredSessionPersistThreshold;
+            if (deferPersist)
+            {
+                _signal.BeginDeferredSessionPersist();
+            }
+
+            int injectedTotal = 0;
+            try
+            {
+                for (int offset = 0; offset < missing.Count; offset += PrekeyFetchChunkSize)
                 {
-                    var attrs = new Dictionary<string, string> { { "jid", jid } };
-                    if (force)
-                    {
-                        attrs["reason"] = "identity";
-                    }
+                    int count = Math.Min(PrekeyFetchChunkSize, missing.Count - offset);
+                    var chunk = missing.GetRange(offset, count);
+                    var userNodes = chunk
+                        .Select(jid =>
+                        {
+                            var attrs = new Dictionary<string, string> { { "jid", jid } };
+                            if (force)
+                            {
+                                attrs["reason"] = "identity";
+                            }
 
-                    return new BinaryNode("user", attrs);
-                })
-                .ToList();
+                            return new BinaryNode("user", attrs);
+                        })
+                        .ToList();
 
-            var iq = new BinaryNode(
-                "iq",
-                new Dictionary<string, string>
+                    var iq = new BinaryNode(
+                        "iq",
+                        new Dictionary<string, string>
+                        {
+                            { "xmlns", "encrypt" },
+                            { "type", "get" },
+                            { "to", WA.S_WHATSAPP_NET }
+                        },
+                        new List<BinaryNode> { new BinaryNode("key", null, userNodes) });
+
+                    _log.Info(
+                        "[Send] Group assert-sessions fetch " + (offset + chunk.Count) + "/" +
+                        missing.Count + " (chunk=" + chunk.Count + ")");
+
+                    var response = await _connection.QueryAsync(iq).ConfigureAwait(false);
+                    int injected = await E2ESessionParser
+                        .ParseAndInjectAsync(response, _signal)
+                        .ConfigureAwait(false);
+                    injectedTotal += injected;
+
+                    _log.Info(
+                        "[Send] Group assert-sessions inject " + (offset + chunk.Count) + "/" +
+                        missing.Count + "; opened=" + injected);
+                }
+            }
+            finally
+            {
+                if (deferPersist)
                 {
-                    { "xmlns", "encrypt" },
-                    { "type", "get" },
-                    { "to", WA.S_WHATSAPP_NET }
-                },
-                new List<BinaryNode> { new BinaryNode("key", null, userNodes) });
+                    await _signal.EndDeferredSessionPersistAsync().ConfigureAwait(false);
+                }
+            }
 
-            _log.Debug("[Sessions] Fetching " + missing.Count + " prekey bundle(s)");
-
-            var response = await _connection.QueryAsync(iq).ConfigureAwait(false);
-            var injected = await E2ESessionParser.ParseAndInjectAsync(response, _signal).ConfigureAwait(false);
-
-            _log.Debug("[Sessions] Opened " + injected + " session(s)");
-            return injected > 0;
+            _log.Info("[Send] Group assert-sessions opened " + injectedTotal + " session(s)");
+            return injectedTotal > 0;
         }
+
+        /// <summary>Max user nodes per encrypt IQ — keeps status SKDM prekey fetches responsive.</summary>
+        private const int PrekeyFetchChunkSize = 100;
+
+        private const int DeferredSessionPersistThreshold = 16;
 
     }
 }

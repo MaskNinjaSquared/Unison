@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Runtime.InteropServices.WindowsRuntime;
 using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
@@ -9,14 +10,18 @@ using Unison.Core.Models;
 using Unison.Core.ViewModels;
 using Windows.ApplicationModel;
 using Windows.Devices.Enumeration;
+using Windows.Foundation;
 using Windows.Graphics.Imaging;
 using Windows.Media.Capture;
+using Windows.Media.Devices;
 using Windows.Media.MediaProperties;
 using Windows.Storage.Streams;
 using Windows.UI.Core;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
+using Windows.UI.Xaml.Input;
 using Windows.UI.Xaml.Media;
+using Windows.UI.Xaml.Media.Animation;
 
 namespace Unison.Uwp.UI.Views
 {
@@ -658,6 +663,7 @@ namespace Unison.Uwp.UI.Views
 
             try
             {
+                // UWP FlashControl.Supported — capability of the *current* VideoDeviceId.
                 var flash = _mediaCapture.VideoDeviceController.FlashControl;
                 if (!flash.Supported)
                 {
@@ -677,6 +683,7 @@ namespace Unison.Uwp.UI.Views
                     // Some devices expose Auto as read-only.
                 }
 
+                // Still capture: Enabled fires the flash on the next CapturePhotoToStreamAsync.
                 flash.Enabled = _viewModel.IsFlashOn;
                 _viewModel.ReportFlashApplied(flash.Enabled);
             }
@@ -684,6 +691,122 @@ namespace Unison.Uwp.UI.Views
             {
                 System.Diagnostics.Debug.WriteLine("[CameraPickView] ApplyFlash: " + ex.Message);
             }
+        }
+
+        private async void PreviewHost_Tapped(object sender, TappedRoutedEventArgs e)
+        {
+            if (_mediaCapture == null || PreviewHost == null || _viewModel == null ||
+                !_viewModel.IsPreviewReady || _viewModel.IsBusy || _viewModel.IsCancelled)
+            {
+                return;
+            }
+
+            Point tap = e.GetPosition(PreviewHost);
+            ShowFocusReticle(tap);
+            try
+            {
+                await TapToFocusAsync(tap).ConfigureAwait(true);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine("[CameraPickView] TapToFocus: " + ex.Message);
+            }
+        }
+
+        private void ShowFocusReticle(Point tap)
+        {
+            if (FocusReticle == null)
+            {
+                return;
+            }
+
+            FocusReticle.Margin = new Thickness(
+                tap.X - (FocusReticle.Width / 2),
+                tap.Y - (FocusReticle.Height / 2),
+                0,
+                0);
+            FocusReticle.Opacity = 1;
+
+            var fade = new DoubleAnimation
+            {
+                To = 0,
+                Duration = TimeSpan.FromMilliseconds(700),
+                BeginTime = TimeSpan.FromMilliseconds(350),
+                EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut }
+            };
+            Storyboard.SetTarget(fade, FocusReticle);
+            Storyboard.SetTargetProperty(fade, "Opacity");
+            var board = new Storyboard();
+            board.Children.Add(fade);
+            board.Begin();
+        }
+
+        /// <summary>
+        /// Tap-to-focus via <see cref="FocusControl"/> + <see cref="RegionsOfInterestControl"/>
+        /// (Microsoft camera guidance: Configure → SetRegionsAsync → FocusAsync).
+        /// </summary>
+        private async Task TapToFocusAsync(Point tapInPreviewHost)
+        {
+            MediaCapture capture = _mediaCapture;
+            if (capture == null || PreviewHost == null)
+            {
+                return;
+            }
+
+            FocusControl focus = capture.VideoDeviceController.FocusControl;
+            RegionsOfInterestControl roi = capture.VideoDeviceController.RegionsOfInterestControl;
+            if (!focus.Supported ||
+                !roi.AutoFocusSupported ||
+                roi.MaxRegions < 1)
+            {
+                return;
+            }
+
+            double hostW = PreviewHost.ActualWidth;
+            double hostH = PreviewHost.ActualHeight;
+            if (hostW <= 0 || hostH <= 0)
+            {
+                return;
+            }
+
+            // Normalized ROI ~10% of the preview around the tap (clamped).
+            double normW = 0.15;
+            double normH = 0.15;
+            double nx = (tapInPreviewHost.X / hostW) - (normW / 2);
+            double ny = (tapInPreviewHost.Y / hostH) - (normH / 2);
+            nx = Math.Max(0, Math.Min(1 - normW, nx));
+            ny = Math.Max(0, Math.Min(1 - normH, ny));
+
+            var region = new RegionOfInterest
+            {
+                AutoFocusEnabled = true,
+                BoundsNormalized = true,
+                Bounds = new Rect(nx, ny, normW, normH),
+                Type = RegionOfInterestType.Unknown,
+                Weight = 100
+            };
+
+            AutoFocusRange range = focus.SupportedFocusRanges.Contains(AutoFocusRange.FullRange)
+                ? AutoFocusRange.FullRange
+                : (focus.SupportedFocusRanges.Count > 0
+                    ? focus.SupportedFocusRanges[0]
+                    : AutoFocusRange.FullRange);
+            FocusMode mode = focus.SupportedFocusModes.Contains(FocusMode.Single)
+                ? FocusMode.Single
+                : (focus.SupportedFocusModes.Count > 0
+                    ? focus.SupportedFocusModes[0]
+                    : FocusMode.Single);
+
+            focus.Configure(new FocusSettings
+            {
+                Mode = mode,
+                AutoFocusRange = range,
+                WaitForFocus = true,
+                DisableDriverFallback = false
+            });
+
+            await roi.SetRegionsAsync(new[] { region }, true);
+            await focus.FocusAsync();
         }
 
         private async Task CapturePhotoAsync()

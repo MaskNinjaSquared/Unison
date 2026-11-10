@@ -2,6 +2,201 @@
 
 Newest first.
 
+## Status list — text avatars (color + Viewbox)
+
+Text Status rows use a colored circle with the body scaled via `Viewbox`
+(`StatusTextListAvatarControl`). `StatusListAvatarControl` hosts a
+`StatusListAvatarKindTemplateSelector` (photo → `ChatAvatarControl`, text →
+the color face). `StatusAuthorItem` / `OwnStatusItem` carry
+`LatestKind`/`Kind`, ARGB, and preview body from `StatusFacade`.
+
+## Own Status PN/LID — My status list after local publish
+
+Local publish and live own echoes now stamp `AuthorLid`/`AuthorPn`.
+`GetOwnStatusesAsync` collects all `IsFromMe` / self-linked rows (not a single
+author key), and Legacy `SelfStatus` merges PN+LID author groups so the new
+item appears in “My status” immediately after publish.
+
+## Legacy New Status dock on Shell + pivot loaders
+
+Legacy New Status picker (scrim + tiles) is hosted on `ShellView` root
+(`NewStatusPickerOverlay`, ColumnSpan 2) and opens from Status list events —
+no longer clipped inside the Status pivot. First materialize of any Legacy
+pivot tab shows the global `SectionLoadingOverlay` (with a paint delay) so the
+ring is visible during the pivot switch.
+
+## Own text Status — local persist after publish
+
+Companions do not get a status@broadcast echo of their own posts. After a
+successful `PublishTextStatusAsync`, `StatusFacade` upserts the item into
+`IHistoryStatusStore` (`SyncType=local-publish`) so store `Changed` raises
+`StatusUpdated` and the Status list reloads. Refused publishes still roll back
+via `DeleteOwnItemAsync` without keeping a local row.
+
+## Legacy Status fullscreen + pivot loaders + Unison Light accents
+
+Legacy `ShellStatusDetail` is a shell `ColumnSpan=2` overlay (empty Status pane stays in
+`DetailHost`). Pivot first-load spinner is global only for Chats; other tabs use in-section
+rings. Unison Light no longer forces ChatDetailInfo white `ToggleSwitch*` /
+`AccentTextFill*` globally (scoped on `ChatDetailInfoControl`); `ModernProgressRing`
+uses `SystemControlHighlightAccentBrush`.
+
+## Status text viewer + group create permissions + profile edit overlays
+
+Status viewer selects Text vs media via `StatusKindTemplateSelector`; text posts
+keep ExtendedTextMessage ARGB/font on `HistoryStatus` and show a center eye/views
+chip (0 until counts are wired into the viewer). Create-group permissions overlay
+uses SettingBox toggles; non-default flags run post-create through
+`UpdateGroupSettingsUseCase` (invite-link toggle is UI-only). Own-profile Name/About
+open a local edit overlay (FAB / Legacy CommandBar) with emoji — save does not hit
+the websocket yet.
+
+## Mobile — journal keepalive StartAsync early fails
+
+`LocationKeepAliveService.StartAsync` now writes `keepalive|*` on every
+failure path that returns false (not only ExtendedExecution deny/revoke):
+`start-rejected` (shutting down), `geolocator-setup-failed`,
+`location-access-request-failed`, `location-access-denied` (`access=…;coarse=False`),
+plus existing `denied` / `request-failed` / `allowed`. No behavior change —
+Settings still reverts the Background mode toggle when Start fails.
+
+**Next Lumia export check:** enable “Modo em segundo plano”, export diagnostics
+within ~1 min, search `keepalive|`. Expect `location-access-denied` or
+`denied` / `request-failed` on fail; `keepalive|allowed` on success. Absence
+of any `keepalive|` still means the toggle path did not run in that window.
+
+## Unsupported (512 MB) — mild pacing retune
+
+`UnsupportedSyncWorkload` quiet floors match Low (4s/7s) with the longer
+catch-up abort (50s/3); avatar/roster/name delays and enrich quiet step toward
+Low without raising batch sizes, caches, or `MaxFullHistoryCatchUpRounds`.
+Always-frugal for `DeviceCategory.Unsupported` stays. Dump `01c59887` (~79/185).
+
+## Offline tip — PreferFrugal gate only during replay drain
+
+Defer + post-flush quiet apply only while `SyncWorkGate.IsReplayDrainActive`.
+After settle, late Append paints progressively; backstop keeps its first
+deadline under flood; send echo (`Append` + from-me) uses the live tip path.
+Health shows `UI hold timeouts / offline-tip busy`. Wiki: [UI work scheduling](Ui-Work-Scheduling).
+
+## Logout — QR without cold-loading SignalKeys
+
+`ClearSession` called `FileKeyStore.InitializeAsync` before wipe, scanning ~1k
+sessions + sender-keys (~1 min) only to delete them. Wipe now deletes the folder
+and rebuilds an empty tree (`key-store-cleared`); pairing starts immediately.
+Package **2.4.53**.
+
+## Shell — preserve Frame back stack for secondary sections
+
+Status/Channels/Archived/Calls/Favorites use `NavigateInShell` (not AndClear) so
+Chats → Archived → Settings → back returns to Archived. Header back calls
+`TryHandleShellBack` (stack first, Chats only when empty). Package **2.4.52**.
+
+## Shell — header back on Calls and Favorites
+
+Unison/WhatsApp Calls and Favorites get the same header back arrow to Chats
+(system back was already wired). Package **2.4.51**.
+
+## Shell — back on Status/Channels/Archived + scoped badges + lean Attach
+
+Unison/WhatsApp (not Legacy): Status, Channels and Archived show a header back
+arrow (and system back) that returns to Chats — `NavigateInShellAndClear` left
+no Frame stack. Chat-list badges count unread in the current scope only.
+`ChatPinStoreKeys` peeks canonical JIDs (no promote) so Archived Attach no longer
+stalls ~14s under alias-follow-up. Out-of-scope `PropertyChanged` is ignored on
+Channels/Archived VMs. Package **2.4.50**.
+
+## Chat list — incremental group listing without UI monopoly
+
+Journal `089b69a2`: `GroupMetadataApply.ApplyListingAsync` held `sync:` ~40s while
+hub Adds triggered refresh cascades and alias-follow-up (`more=True`) stacked on
+Low. Listing now caches subjects / ensures hubs / paints flags in Low chunks with
+yields; catalogue Adds run under `BeginBulkCatalogueMutation` so the list rebuilds
+once; alias follow-up defers during bulk and spaces frugal remainder to 5s.
+Package **2.4.48**.
+
+## Sync UI — open stuck on Updating… without offline release
+
+`status=open` could never reach `synced` when `ib,,offline` never arrived and the
+20s buffer safety timed out before TLS finished (claim discarded, no retry). Safety
+now defers the claim until connected; a 30s per-open host watchdog forces
+`offline-replay-release` if still missing; first-release latch resets on each open.
+Journal: `offline-buffer-safety`, `offline-synced-watchdog`. Package **2.4.47**.
+
+## Communities — persist hub titles + post-sync reconcile
+
+Cold open showed `Comunidade` because synthetic hubs never entered the catalogue
+(`GroupSubjects` is RAM-only). Listing/metadata now materialize community parents
+into `Chats` so `Name` reaches SQLite like groups. PreferFrugal enrichment adds
+`post-message-enrich-titles` after group listing. `Group Owner` is no longer a
+meaningful group label so unresolved metadata can replace it. Package **2.4.46**.
+
+## Groups — cache listing subjects even when window hidden
+
+Journal `82908f3f`: `background-groups` aborted after the participating-groups
+IQ when CoreWindow was hidden, so `ApplyListing` never ran and community hubs
+stayed on `Comunidade`. Subjects now cache whenever the IQ answers; unresolved
+metadata still defers. Resume / already-applied passes restamp hubs via
+`NotifyCommunitySubjectsUpdated`. Package **2.4.45**.
+
+## Sync UI — PreferFrugal tip paint only on settle
+
+Offline open freeze: progressive tip flush painted the list every ~1s while the
+pump still drained. PreferFrugal now keeps tips in the book only (no progressive
+timer) and paints once on settle after persist (`offline-complete`). Name batches
+wait tip-busy and prefer Low; frugal Visible reorder drains on Low; live badge
+`RefreshUnreadState` moves off the Urgent strip path into the toast Task.Run.
+Package **2.4.43**.
+
+## Incoming pump — leave route:control without UI hop
+
+Journal `82908f3f`: ordinary envelopes sat at `route:control` because
+`TryApplyIncomingEnvelopeControlAsync` always awaited `BoundMutationGate` via
+reaction classify, while Urgent tip paint held the dispatcher for 20–50s —
+`health-stall` → requeue with `applied` frozen. Chat-control classify now
+detects reactions after proto unwrap; non-controls return immediately.
+`ApplyIncomingReactionAsync` maps off-thread and hops only to apply. Package
+**2.4.42**.
+
+## Tip-first — pause post-replay heal + Low name refresh
+
+Journal `82908f3f`: `ChatNameRefresh` on Normal (~44s for 3 names) starved
+`post-replay` Low slices (`ui-slice-slow` 18–86s, `swapped=0`) until the stream
+died (`428`). PreferFrugal name slices now run on Low, yield while offline tip
+flush is busy, and raise `Applied` outside the UI hop. Full post-replay wait
+for tip idle; tip-reconcile pause includes `IsOfflineReplayTipBusy`. Package
+**2.4.41**.
+
+## Offline softOrder — do not nest Visible repair in ApplyOffline hop
+
+PreferFrugal `ApplyOfflineReplayChatSummariesAsync` raised
+`VisibleOrderInvalidated` inside the same Normal UI hop as the badge/journal
+write. `AttachedUiDispatcher` runs inline on `HasThreadAccess`, so
+`RequestVisibleOrderRepair` (and ListView Moves) were billed as
+`sync:ChatFacade.ApplyOfflineReplayChatSummariesAsync` for 20–30s per tip
+(journal `82908f3f`). Soft-order notify now runs after that hop; the list VM
+`Task.Yield`s before repair; in-place reorder holds `IsRefreshing` across
+`ApplyLocalChatFields` so pin PropertyChanged cannot re-enter. Package
+**2.4.40**.
+
+## Groups — persist subject on chat.Name when it changes
+
+`ApplyRemoteGroupSubjects` / resolved-name batches and `ChatNameRefresh.Applied`
+now `_catalog.Schedule()` only when a row title actually moved. Subjects stay
+memory-only (`GroupSubjects`); durable titles ride on catalogue `Name` via
+`GroupSubjectRowWrite.TryWrite` (!= current + blacklist).
+
+## Mobile — chat-list cold build mid-enrichment freeze
+
+Attach no longer calls `RefreshVisibleChats` synchronously on the UI
+thread. On frugal devices, mid-names/avatars/groups attach only marks the
+list dirty and defers until enrichment ends; an empty deferred list then
+full-refreshes (reorder alone is a no-op). List projection uses
+`PeekCanonicalJid` and a one-shot catalog map so community resolve stays
+O(1) without LidMapping promote / `Alias.Changed` storms. Journal
+`fb466dc2`: `buildMs≈411s`, `ui-stall active=none` while groups 5/12
+starved.
+
 ## Favourites — app-state regular_low resilience
 
 Undecryptable syncd snapshot/patch records are skipped with a warning

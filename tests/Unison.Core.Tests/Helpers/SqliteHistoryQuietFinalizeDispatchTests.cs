@@ -30,7 +30,7 @@ namespace Unison.Core.Tests.Helpers
         }
 
         [Fact]
-        public async Task Defers_list_release_when_first_sync_and_hand_off()
+        public async Task Defers_list_release_when_first_sync_empty_store_and_hand_off()
         {
             var registry = new HistoryOnDemandRegistry();
             Assert.True(registry.TryClaimFull());
@@ -44,18 +44,49 @@ namespace Unison.Core.Tests.Helpers
 
             var host = new FakeHost
             {
-                Accumulated = 2,
+                Accumulated = 0,
                 HandOff = true,
                 FirstSyncHold = true,
                 CatchUpActive = true,
                 LotRequest = lot
             };
 
-            await SqliteHistoryQuietFinalizeDispatch.RunAsync(host, 800, 2);
+            await SqliteHistoryQuietFinalizeDispatch.RunAsync(host, 800, 0);
 
             Assert.Equal("sqlite-quiet-catch-up", host.LastPublishReason);
             Assert.True(host.FirstSyncDeferred);
+            Assert.False(host.RequestedListRelease);
+        }
+
+        [Fact]
+        public async Task Unlocks_list_when_first_sync_has_conversations_even_with_catch_up()
+        {
+            var registry = new HistoryOnDemandRegistry();
+            Assert.True(registry.TryClaimFull());
+            HistoryOnDemandRequest lot = registry.RegisterFull(
+                "lot-2",
+                isRepair: true,
+                baselineMessageCount: 10,
+                reason: "full",
+                nowUtc: DateTime.UtcNow);
+            registry.Ack("lot-2", error: null, DateTime.UtcNow);
+
+            var host = new FakeHost
+            {
+                Accumulated = 12,
+                HandOff = true,
+                FirstSyncHold = true,
+                CatchUpActive = true,
+                LotRequest = lot
+            };
+
+            await SqliteHistoryQuietFinalizeDispatch.RunAsync(host, 800, 12);
+
+            Assert.True(host.RequestedListRelease);
+            Assert.False(host.FirstSyncDeferred);
             Assert.True(host.NotifiedIdleBatch);
+            Assert.False(host.EndedBanner);
+            Assert.False(host.ClearedFullHistory);
         }
 
         private sealed class FakeHost : ISqliteHistoryQuietFinalizeHost
@@ -72,6 +103,7 @@ namespace Unison.Core.Tests.Helpers
             public bool ClearedFullHistory { get; private set; }
             public bool EndedBanner { get; private set; }
             public bool NotifiedIdleBatch { get; private set; }
+            public bool RequestedListRelease { get; private set; }
 
             public int SqliteHistoryConversationsAccumulated
             {
@@ -116,9 +148,8 @@ namespace Unison.Core.Tests.Helpers
             public void RequestFirstSyncListReleaseAfterNames(
                 string reason,
                 int processed,
-                int total)
-            {
-            }
+                int total) =>
+                RequestedListRelease = true;
 
             public void NotifyCatchUpIdleBatch(
                 string lotRequestId,

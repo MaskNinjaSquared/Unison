@@ -37,12 +37,16 @@ namespace Unison.Socket.Session
         /// buffer anyway. Holding events forever because one node never arrived would look like
         /// a frozen app, which is worse than a batch that arrives early.
         /// </summary>
-        private static readonly TimeSpan BufferSafetyTimeout = TimeSpan.FromSeconds(20);
+        private static readonly TimeSpan DefaultBufferSafetyTimeout = TimeSpan.FromSeconds(20);
 
         private readonly ConnectionHandler _connection;
         private readonly IWaEventBus _events;
         private readonly AuthState _auth;
         private readonly ISocketLog _log;
+        private readonly Action<string> _safetyJournal;
+        private readonly TimeSpan _bufferSafetyTimeout;
+        private readonly Func<TimeSpan, Task> _delay;
+        private readonly OfflineBufferSafetyClaim _safetyClaim = new OfflineBufferSafetyClaim();
         private readonly List<IDisposable> _routes = new List<IDisposable>();
 
         private readonly object _gate = new object();
@@ -54,7 +58,10 @@ namespace Unison.Socket.Session
             ConnectionHandler connection,
             IWaEventBus events,
             AuthState auth,
-            ISocketLog log = null)
+            ISocketLog log = null,
+            Action<string> safetyJournal = null,
+            TimeSpan? bufferSafetyTimeout = null,
+            Func<TimeSpan, Task> delay = null)
         {
             if (connection == null)
             {
@@ -70,10 +77,13 @@ namespace Unison.Socket.Session
             _events = events;
             _auth = auth;
             _log = log ?? NullSocketLog.Instance;
+            _safetyJournal = safetyJournal;
+            _bufferSafetyTimeout = bufferSafetyTimeout ?? DefaultBufferSafetyTimeout;
+            _delay = delay ?? Task.Delay;
         }
 
         /// <summary>True once the server has confirmed the backlog is drained.</summary>
-        public bool ReceivedPendingNotifications { get; private set; }
+        public bool ReceivedPendingNotifications => _safetyClaim.ReceivedPendingNotifications;
 
         /// <summary>How many stanzas the server said it replayed.</summary>
         public int ReplayedCount { get; private set; }
@@ -112,7 +122,7 @@ namespace Unison.Socket.Session
             // Unwrapped, so a failure inside the release is observed rather than left on a
             // task nobody holds. This is the safety net for the buffer; if it throws quietly,
             // events stay buffered and the list simply stops updating.
-            var _ = Task.Delay(BufferSafetyTimeout)
+            var _ = _delay(_bufferSafetyTimeout)
                 .ContinueWith(
                     t => ReleaseBufferAsync("timed out"),
                     CancellationToken.None,
@@ -125,6 +135,13 @@ namespace Unison.Socket.Session
                     TaskContinuationOptions.OnlyOnFaulted,
                     TaskScheduler.Default);
         }
+
+        /// <summary>
+        /// Session reached open. If a safety timeout deferred the pending-notifications claim
+        /// because TLS was still in flight, claim it now.
+        /// </summary>
+        public Task NotifyConnectedAsync() =>
+            ApplySafetyOutcomeAsync(_safetyClaim.OnConnected(), "connected");
 
         /// <summary>Releases the buffer if it is still held. Safe to call more than once.</summary>
         private async Task ReleaseBufferAsync(string reason)
@@ -148,22 +165,57 @@ namespace Unison.Socket.Session
             // the chat-list header stays on "Updating..." forever (it only clears on "synced").
             // But BeginBuffering runs *before* TLS — if connect is still hung, claiming
             // pending-notifications would publish a false "synced" with socket=False.
-            if (string.Equals(reason, "timed out", StringComparison.Ordinal) &&
-                !ReceivedPendingNotifications)
+            // Defer the claim until NotifyConnectedAsync when that happens.
+            if (string.Equals(reason, "timed out", StringComparison.Ordinal))
             {
-                if (!_connection.IsConnected)
-                {
+                await ApplySafetyOutcomeAsync(
+                        _safetyClaim.OnSafetyTimeout(_connection.IsConnected),
+                        "timed out")
+                    .ConfigureAwait(false);
+            }
+        }
+
+        private async Task ApplySafetyOutcomeAsync(OfflineBufferSafetyOutcome outcome, string reason)
+        {
+            switch (outcome)
+            {
+                case OfflineBufferSafetyOutcome.Deferred:
                     _log.Warn(
                         "[Offline] Safety timeout before connect completed; " +
-                        "not claiming pending notifications");
+                        "deferring pending-notifications claim");
+                    JournalSafety("result=deferred; reason=" + reason);
                     return;
-                }
 
-                ReceivedPendingNotifications = true;
-                _log.Info("[Offline] Safety timeout: treating pending notifications as received");
-                await _events.EmitAsync(
-                    WaEventKind.ConnectionUpdate,
-                    new ConnectionUpdate { ReceivedPendingNotifications = true }).ConfigureAwait(false);
+                case OfflineBufferSafetyOutcome.ClaimPendingNotifications:
+                    _log.Info(
+                        "[Offline] Safety claim: treating pending notifications as received (" +
+                        reason + ")");
+                    JournalSafety("result=claimed; reason=" + reason);
+                    await _events.EmitAsync(
+                            WaEventKind.ConnectionUpdate,
+                            new ConnectionUpdate { ReceivedPendingNotifications = true })
+                        .ConfigureAwait(false);
+                    return;
+
+                case OfflineBufferSafetyOutcome.SkippedAlreadyReceived:
+                    JournalSafety("result=skipped-already-received; reason=" + reason);
+                    return;
+
+                case OfflineBufferSafetyOutcome.SkippedNotPending:
+                    JournalSafety("result=skipped-not-pending; reason=" + reason);
+                    return;
+
+                default:
+                    return;
+            }
+        }
+
+        private void JournalSafety(string detail)
+        {
+            var journal = _safetyJournal;
+            if (journal != null)
+            {
+                journal(detail);
             }
         }
 
@@ -194,7 +246,7 @@ namespace Unison.Socket.Session
             int.TryParse(child != null ? child.GetAttribute("count") : null, out count);
 
             ReplayedCount = count;
-            ReceivedPendingNotifications = true;
+            _safetyClaim.MarkReceivedFromServer();
 
             _log.Info("[Offline] Server replayed " + count + " stanza(s)");
 

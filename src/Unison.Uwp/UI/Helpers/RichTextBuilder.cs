@@ -92,20 +92,24 @@ namespace Unison.Uwp.UI.Helpers
 
         private static Brush ResolveLinkBrush(RichTextBlock block)
         {
-            Brush linkBrush = block.Foreground;
+            // About sits on the settings page background. SystemControlHyperlinkTextBrush is
+            // forced white for the green chat-info pane — unreadable in Light theme here.
+            // Brand accent matches CreateChannel guidelines links.
+            Brush accent = TryAppBrush("WhatsAppGreenFocusBrush")
+                ?? TryAppBrush("UnisonGreenBrush");
+            return accent ?? block.Foreground;
+        }
+
+        private static Brush TryAppBrush(string key)
+        {
             try
             {
-                var accent = Application.Current.Resources["SystemControlHyperlinkTextBrush"] as Brush;
-                if (accent != null)
-                {
-                    linkBrush = accent;
-                }
+                return Application.Current.Resources[key] as Brush;
             }
             catch
             {
+                return null;
             }
-
-            return linkBrush;
         }
 
         private static void AppendPlainMentionsAndBreaks(

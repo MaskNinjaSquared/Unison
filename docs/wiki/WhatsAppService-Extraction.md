@@ -1228,8 +1228,11 @@ Writing resolved names onto the list is `ResolvedNameApply` (10 tests). `ChatNam
 already taken the "should this title change" question; both the live pass (`ChatNameRefresh.ApplyAsync`)
 and the startup titles-only pass (`NormalizePersistedTitlesAsync`) call it. The pass takes the name
 lookup and the meaningful-label check as functions, renames members only when asked, and returns how
-many labels changed. The startup pass still schedules persist when titles changed; both raise
-`Applied` so the client can fire the names-changed event. A member keeps the weaker rule it had: any
+many labels changed. The startup pass runs with `placeholdersOnly`: it names rows still showing a
+number but keeps titles that are already names, because the address book and app-state contacts may
+not have loaded yet and the push name would demote them. It still schedules persist when titles
+changed; both raise `Applied` so the client can fire the names-changed event, and `TitlesChanged`
+carries the replaced titles for the `names|title-changed` journal. A member keeps the weaker rule it had: any
 non-blank name that differs is written, with no check that it is recognisable.
 
 **Another sweep of the main file.** Reading a partial `ChatUpdate` (does it speak about pin or mute,

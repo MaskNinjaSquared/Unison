@@ -52,6 +52,13 @@ namespace Unison.Core.State
         public abstract uint HistoryStorageQuotaMb { get; }
 
         /// <summary>
+        /// One-time prekeys minted and announced when the server runs low (post-login and the
+        /// low-count notification). Until one batch is acked the phone cannot encrypt the
+        /// history sync to this device, so the batch must fit inside the server's patience.
+        /// </summary>
+        public abstract int InitialPreKeyUploadCount { get; }
+
+        /// <summary>
         /// After the first sync, run names → contacts → one avatar pass → groups one after
         /// another with quiet gaps, instead of firing the background resolution cascade.
         /// </summary>
@@ -145,6 +152,18 @@ namespace Unison.Core.State
         public abstract int LidMappingWarmMaxPairs { get; }
 
         /// <summary>
+        /// Profile-picture IQ answers kept in RAM (key = jid + query type), so list batches,
+        /// alias follow-ups and roster passes do not ask the server again for the same JID.
+        /// </summary>
+        public abstract int ProfilePictureQueryCacheMaxEntries { get; }
+
+        /// <summary>
+        /// Groups whose SQLite roster stays in RAM between writes (mention lookups, sender
+        /// labels and the info pane read the same roster many times per open).
+        /// </summary>
+        public abstract int GroupRosterMemoryMaxGroups { get; }
+
+        /// <summary>
         /// Cache key budget for <see cref="LidMappingMemoryCacheMaxPairs"/> (pair × 2).
         /// </summary>
         public int LidMappingMemoryCacheMaxEntries =>
@@ -216,39 +235,46 @@ namespace Unison.Core.State
 
         public override int AvatarFetchBatchSize => 1;
 
-        public override int AvatarFetchInterRequestDelayMs => 1500;
+        // Mild step toward Low: dump 01c59887 held ~79/185 with headroom; batch stays 1.
+        public override int AvatarFetchInterRequestDelayMs => 900;
 
         public override uint HistoryStorageQuotaMb => 256;
 
+        // 812 keys outlived the socket (8e31b77c: 428 before the ack, three times). The
+        // low-count notification refills, so a small first batch costs nothing in reach.
+        public override int InitialPreKeyUploadCount => 100;
+
         public override bool SerializePostSyncEnrichment => true;
 
-        public override int PostSyncEnrichmentQuietSeconds => 15;
+        // Still above Low's 6s — decorate later than 1 GB, earlier than the old 12s crawl.
+        public override int PostSyncEnrichmentQuietSeconds => 9;
 
         public override int MaxFullHistoryCatchUpRounds => 0;
 
         public override bool AllowStagnantHistoryRepairCascade => false;
 
-        public override int HistoryFinalizeQuietMs => 6000;
+        // Still above High (1000/700): late Mobile chunks must not look like end-of-wave.
+        public override int HistoryFinalizeQuietMs => 1600;
 
-        public override int HistoryFullFinalizeDelayMs => 2000;
+        public override int HistoryFullFinalizeDelayMs => 900;
 
-        public override int GroupMetadataBatchSize => 5;
+        public override int GroupMetadataBatchSize => 12;
 
-        public override int GroupMetadataPauseMs => 400;
+        public override int GroupMetadataPauseMs => 200;
 
-        public override int GroupListingResumeSettleMs => 3000;
+        public override int GroupListingResumeSettleMs => 2500;
 
         public override int GroupRosterBatchSize => 4;
 
-        public override int GroupRosterInterRequestDelayMs => 1200;
+        public override int GroupRosterInterRequestDelayMs => 900;
 
-        public override int GroupRosterNextBatchDelaySeconds => 40;
+        public override int GroupRosterNextBatchDelaySeconds => 35;
 
         public override int NameResolveMaxPerPass => 4;
 
         public override int NameResolveChunkSize => 2;
 
-        public override int NameResolveInterChunkDelayMs => 1000;
+        public override int NameResolveInterChunkDelayMs => 700;
 
         // Smallest disk lots: 512 MB class cannot afford large SQLite LID batches.
         public override int LidMappingPersistBatchSize => 8;
@@ -256,7 +282,11 @@ namespace Unison.Core.State
         public override int LidMappingPersistDelayMs => 3000;
 
         // On-demand only; tight LRU so warm dumps cannot pin RAM.
-        public override int LidMappingMemoryCacheMaxPairs => 512;
+        public override int LidMappingMemoryCacheMaxPairs => 1024;
+
+        public override int ProfilePictureQueryCacheMaxEntries => 512;
+
+        public override int GroupRosterMemoryMaxGroups => 16;
 
         public override int LidMappingWarmMaxPairs => 0;
 
@@ -265,9 +295,11 @@ namespace Unison.Core.State
 
         public override int DeferredAvatarMaxRetries => 0;
 
-        protected override SyncPacing FrugalPacing { get; } = new SyncPacing(5000, 10000, 50, 3);
+        // Match Low quiet floors; keep the longer catch-up abort (50/3) so empty ghosts
+        // on 185 MB do not race the way Low's 30/2 can.
+        protected override SyncPacing FrugalPacing { get; } = new SyncPacing(4000, 7000, 50, 3);
 
-        protected override SyncPacing GenerousPacing { get; } = new SyncPacing(1500, 2500, 40, 2);
+        protected override SyncPacing GenerousPacing { get; } = new SyncPacing(1200, 2000, 40, 2);
     }
 
     /// <summary>1 GB class (~390 MB app limit): economical, not extreme.</summary>
@@ -300,15 +332,18 @@ namespace Unison.Core.State
 
         public override int PreviewHydrateBatchSize => 10;
 
-        public override int AvatarFetchBatchSize => 1;
+        public override int AvatarFetchBatchSize => 3;
 
-        public override int AvatarFetchInterRequestDelayMs => 1200;
+        public override int AvatarFetchInterRequestDelayMs => 600;
 
         public override uint HistoryStorageQuotaMb => 1024;
 
+        // rc14 INITIAL_PREKEY_COUNT; 1 GB Lumias finish it before the server gives up.
+        public override int InitialPreKeyUploadCount => 812;
+
         public override bool SerializePostSyncEnrichment => true;
 
-        public override int PostSyncEnrichmentQuietSeconds => 12;
+        public override int PostSyncEnrichmentQuietSeconds => 6;
 
         // A few adjacent FULL_HISTORY pages — enough for Meta's near days, not the old
         // 12-round idle-continue burn while signals stay 0. Catch-up still defers usync
@@ -317,14 +352,15 @@ namespace Unison.Core.State
 
         public override bool AllowStagnantHistoryRepairCascade => false;
 
-        // Slightly longer than High so a late chunk on slow Mobile is not mistaken for end.
-        public override int HistoryFinalizeQuietMs => 2500;
+        // Above High (1000/700) for late Mobile chunks; tightened from 2500/1200 so
+        // idle gaps between Bootstrap/Recent/Full waves cost less wall time on Low.
+        public override int HistoryFinalizeQuietMs => 1600;
 
-        public override int HistoryFullFinalizeDelayMs => 1200;
+        public override int HistoryFullFinalizeDelayMs => 900;
 
-        public override int GroupMetadataBatchSize => 12;
+        public override int GroupMetadataBatchSize => 16;
 
-        public override int GroupMetadataPauseMs => 200;
+        public override int GroupMetadataPauseMs => 120;
 
         public override int GroupListingResumeSettleMs => 2500;
 
@@ -334,18 +370,22 @@ namespace Unison.Core.State
 
         public override int GroupRosterNextBatchDelaySeconds => 35;
 
-        public override int NameResolveMaxPerPass => 4;
+        public override int NameResolveMaxPerPass => 8;
 
-        public override int NameResolveChunkSize => 2;
+        public override int NameResolveChunkSize => 4;
 
-        public override int NameResolveInterChunkDelayMs => 700;
-
+        public override int NameResolveInterChunkDelayMs => 350;
         public override int LidMappingPersistBatchSize => 40;
 
         public override int LidMappingPersistDelayMs => 1500;
 
-        // Mobile 1 GB: on-demand only; larger LRU than Unsupported.
-        public override int LidMappingMemoryCacheMaxPairs => 1024;
+        // Mobile 1 GB: on-demand only; larger LRU than Unsupported. A full 1024 cap evicted on
+        // every insert during listing imports (26b3431b); bulk discovery now skips RAM.
+        public override int LidMappingMemoryCacheMaxPairs => 4096;
+
+        public override int ProfilePictureQueryCacheMaxEntries => 1024;
+
+        public override int GroupRosterMemoryMaxGroups => 32;
 
         public override int LidMappingWarmMaxPairs => 0;
 
@@ -353,7 +393,9 @@ namespace Unison.Core.State
 
         public override int DeferredAvatarMaxRetries => 2;
 
-        protected override SyncPacing FrugalPacing { get; } = new SyncPacing(4000, 7000, 50, 3);
+        // Empty-ack finish ends a quiet ghost lot in one round; these caps are the
+        // safety net when ack metadata is missing (Lumia / 1 GB: ~60s worst case).
+        protected override SyncPacing FrugalPacing { get; } = new SyncPacing(4000, 7000, 30, 2);
 
         protected override SyncPacing GenerousPacing { get; } = new SyncPacing(1200, 2000, 40, 2);
     }
@@ -390,6 +432,8 @@ namespace Unison.Core.State
 
         public override uint HistoryStorageQuotaMb => 10240;
 
+        public override int InitialPreKeyUploadCount => 812;
+
         public override bool SerializePostSyncEnrichment => false;
 
         public override int PostSyncEnrichmentQuietSeconds => 5;
@@ -425,7 +469,11 @@ namespace Unison.Core.State
         public override int LidMappingPersistDelayMs => 400;
 
         // Desktop: larger LRU only — still on-demand (no boot seed).
-        public override int LidMappingMemoryCacheMaxPairs => 2048;
+        public override int LidMappingMemoryCacheMaxPairs => 8192;
+
+        public override int ProfilePictureQueryCacheMaxEntries => 4096;
+
+        public override int GroupRosterMemoryMaxGroups => 128;
 
         public override int LidMappingWarmMaxPairs => 0;
 

@@ -202,6 +202,99 @@ namespace Unison.Uwp.Services
             }
         }
 
+        /// <inheritdoc />
+        public async Task<bool> OpenNewContactEditorAsync()
+        {
+            try
+            {
+                CoreDispatcher dispatcher = Window.Current?.Dispatcher
+                    ?? CoreApplication.MainView?.CoreWindow?.Dispatcher;
+                if (dispatcher == null)
+                {
+                    return await TryLaunchPeopleNewContactAsync().ConfigureAwait(false);
+                }
+
+                // Same Idle hop as the contact card: wait for the tile/button press to finish
+                // so People is not opened and immediately dismissed.
+                var done = new TaskCompletionSource<bool>();
+                await dispatcher.RunIdleAsync(e =>
+                {
+                    // Fire-and-forget: RunIdleAsync callback cannot be async.
+#pragma warning disable CS4014
+                    CompleteNewContactLaunchAsync(done);
+#pragma warning restore CS4014
+                });
+                return await done.Task.ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[LocalContactsService] OpenNewContactEditor failed: " + ex.Message);
+                return false;
+            }
+        }
+
+        private static async Task CompleteNewContactLaunchAsync(TaskCompletionSource<bool> done)
+        {
+            try
+            {
+                done.TrySetResult(await TryLaunchPeopleNewContactAsync().ConfigureAwait(true));
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[LocalContactsService] New contact launch failed: " + ex.Message);
+                done.TrySetResult(false);
+            }
+        }
+
+        /// <summary>
+        /// People blank editor: <c>savecontacttask</c> needs ForResults; fall back to
+        /// <c>savetocontact</c> then the People home URI when the host rejects ForResults.
+        /// </summary>
+        private static async Task<bool> TryLaunchPeopleNewContactAsync()
+        {
+            try
+            {
+                LaunchUriResult result = await Launcher.LaunchUriForResultsAsync(
+                    new Uri("ms-people:savecontacttask", UriKind.Absolute),
+                    new LauncherOptions());
+                if (result != null && result.Status == LaunchUriStatus.Success)
+                {
+                    return true;
+                }
+
+                Debug.WriteLine(
+                    "[LocalContactsService] savecontacttask status=" +
+                    (result != null ? result.Status.ToString() : "null"));
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[LocalContactsService] savecontacttask: " + ex.Message);
+            }
+
+            try
+            {
+                if (await Launcher.LaunchUriAsync(
+                        new Uri("ms-people:savetocontact", UriKind.Absolute)))
+                {
+                    return true;
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[LocalContactsService] savetocontact: " + ex.Message);
+            }
+
+            try
+            {
+                return await Launcher.LaunchUriAsync(new Uri("ms-people:", UriKind.Absolute));
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[LocalContactsService] ms-people: " + ex.Message);
+                return false;
+            }
+        }
+
         private static void ShowCard(Contact contact)
         {
             // Desktop / Continuum: full People window (not the light-dismiss flyout that
@@ -336,7 +429,12 @@ namespace Unison.Uwp.Services
             ContactReader reader;
             try
             {
-                reader = list.GetContactReader();
+                // Names and phones are all this pass reads; a full Contact per entry is what
+                // pushed a 185 MB Lumia into High during post-replay-names.
+                reader = list.GetContactReader(new ContactQueryOptions
+                {
+                    DesiredFields = ContactQueryDesiredFields.PhoneNumber
+                });
             }
             catch (Exception ex)
             {

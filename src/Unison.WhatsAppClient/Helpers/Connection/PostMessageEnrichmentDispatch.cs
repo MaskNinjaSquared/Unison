@@ -105,6 +105,7 @@ namespace Unison.WhatsAppClient.Helpers
             }
             catch (Exception ex)
             {
+                host.ClearSyncStatus();
                 host.RecordFailed(ex, reason);
             }
         }
@@ -153,6 +154,22 @@ namespace Unison.WhatsAppClient.Helpers
 
             host.ClearSyncStatus();
             host.NotifyGroupListingDue();
+
+            if (!await WaitReadyAsync(
+                    host,
+                    quiet,
+                    "post-message-enrich-titles",
+                    token).ConfigureAwait(false))
+            {
+                return;
+            }
+
+            await host.ReconcileGroupCommunityTitlesAsync(token).ConfigureAwait(false);
+
+            // Last serialized phase: its quiet gate painted the settling banner and
+            // title reconciliation raises no status of its own, so nothing downstream
+            // would ever take it back down.
+            host.ClearSyncStatus();
         }
 
         private static async Task<bool> WaitReadyAsync(

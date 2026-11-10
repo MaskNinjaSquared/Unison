@@ -52,5 +52,29 @@ namespace Unison.WhatsAppClient.Abstractions
             string groupJid,
             string inviteCode = null,
             CancellationToken cancellationToken = default(CancellationToken));
+
+        /// <summary>Baileys <c>groupCreate</c>. Returns the new group's JID; throws when refused.</summary>
+        Task<string> CreateGroupAsync(string subject, IReadOnlyList<string> participantJids);
+
+        /// <summary>Baileys <c>communityCreate</c>. Returns the parent's JID; throws when refused.</summary>
+        Task<string> CreateCommunityAsync(string subject, string description);
+
+        /// <summary>Baileys <c>groupToggleEphemeral</c>; 0 turns it off.</summary>
+        Task UpdateGroupEphemeralAsync(string groupJid, int seconds);
+
+        /// <summary>Baileys <c>updateProfilePicture</c> addressed to a group. Square JPEG only.</summary>
+        Task UpdateGroupPictureAsync(string groupJid, byte[] jpeg);
+
+        /// <summary>True = only admins may edit subject/picture/description (locked).</summary>
+        Task UpdateGroupLockedAsync(string groupJid, bool adminsOnly);
+
+        /// <summary>True = only admins may send messages (announcement).</summary>
+        Task UpdateGroupAnnouncementAsync(string groupJid, bool adminsOnly);
+
+        /// <summary>True = only admins may add members (admin_add).</summary>
+        Task UpdateGroupMemberAddModeAsync(string groupJid, bool adminsOnly);
+
+        /// <summary>True = join-by-link requires admin approval.</summary>
+        Task UpdateGroupJoinApprovalAsync(string groupJid, bool required);
     }
 }

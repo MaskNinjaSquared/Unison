@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Text;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
 using Unison.Baileys.Protocol;
@@ -22,6 +23,8 @@ namespace Unison.Background
     {
         private const string FileName =
             "socket-broker-display-names-v673b.json";
+
+        private static readonly UTF8Encoding Utf8NoBom = new UTF8Encoding(false);
 
         private sealed class Envelope
         {
@@ -64,7 +67,9 @@ namespace Unison.Background
                     CreationCollisionOption.FailIfExists);
             try
             {
-                await FileIO.WriteTextAsync(temporary, json);
+                // WriteTextAsync throws on a lone surrogate (a name cut mid-emoji);
+                // the managed encoder substitutes U+FFFD instead.
+                await FileIO.WriteBytesAsync(temporary, Utf8NoBom.GetBytes(json));
                 await temporary.RenameAsync(
                     FileName,
                     NameCollisionOption.ReplaceExisting);

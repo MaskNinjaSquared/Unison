@@ -13,7 +13,9 @@ namespace Unison.Core.Helpers
     public static class ChatAuthorStripMaps
     {
         /// <summary>
-        /// 1:1 chat JID (raw + canonical) → display name. Skips groups and empty/fallback labels.
+        /// 1:1 chat JID (raw + canonical + alias) → display name. Skips groups and empty/fallback
+        /// labels. The alias key matters when direct chats are LID-keyed but a group tip arrives
+        /// in PN form: canonical collapses the pair to PN, so the LID key is the only join left.
         /// </summary>
         public static Dictionary<string, string> BuildDirectChatNames(
             IEnumerable<ChatItem> chats,
@@ -44,11 +46,17 @@ namespace Unison.Core.Helpers
                 IndexName(names, raw, label);
 
                 string canonical = jids != null
-                    ? jids.GetCanonicalJid(chat.JID)
+                    ? jids.PeekCanonicalJid(chat.JID)
                     : raw;
                 if (!string.IsNullOrWhiteSpace(canonical))
                 {
                     IndexName(names, canonical, label);
+                }
+
+                string alias;
+                if (jids != null && jids.TryGetAlias(raw, out alias) && !string.IsNullOrWhiteSpace(alias))
+                {
+                    IndexName(names, JidHelper.Normalize(alias) ?? alias, label);
                 }
             }
 
@@ -107,7 +115,7 @@ namespace Unison.Core.Helpers
                 return hit;
             }
 
-            string tipCanonical = jids.GetCanonicalJid(participantJid);
+            string tipCanonical = jids.PeekCanonicalJid(participantJid);
             if (!string.IsNullOrWhiteSpace(tipCanonical) &&
                 !string.Equals(tipCanonical, tip, StringComparison.OrdinalIgnoreCase))
             {
@@ -127,7 +135,7 @@ namespace Unison.Core.Helpers
             return hit;
         }
 
-        /// <summary>O(1) 1:1 name lookup under tip or canonical key.</summary>
+        /// <summary>O(1) 1:1 name lookup under tip, canonical, or alias key.</summary>
         public static bool TryGetDirectName(
             IReadOnlyDictionary<string, string> directChatNames,
             string participantJid,
@@ -147,10 +155,22 @@ namespace Unison.Core.Helpers
             }
 
             string canonical = jids != null
-                ? jids.GetCanonicalJid(participantJid)
+                ? jids.PeekCanonicalJid(participantJid)
                 : tip;
             if (!string.IsNullOrWhiteSpace(canonical) &&
                 directChatNames.TryGetValue(canonical, out name) &&
+                !string.IsNullOrWhiteSpace(name))
+            {
+                return true;
+            }
+
+            // Same join FindRosterTip makes: the 1:1 row may be filed under the other half of
+            // the PN/LID pair, which canonical never produces once it has settled on the PN.
+            string alias;
+            if (jids != null &&
+                jids.TryGetAlias(tip, out alias) &&
+                !string.IsNullOrWhiteSpace(alias) &&
+                directChatNames.TryGetValue(alias, out name) &&
                 !string.IsNullOrWhiteSpace(name))
             {
                 return true;
@@ -191,7 +211,7 @@ namespace Unison.Core.Helpers
             }
 
             string canonical = jids != null
-                ? jids.GetCanonicalJid(key)
+                ? jids.PeekCanonicalJid(key)
                 : normalized;
             if (!string.IsNullOrWhiteSpace(canonical) && !roster.ContainsKey(canonical))
             {

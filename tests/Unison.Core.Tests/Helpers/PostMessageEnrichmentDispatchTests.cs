@@ -131,8 +131,56 @@ namespace Unison.Core.Tests.Helpers
                     "defer-avatars:replay",
                     "quiet:post-message-enrich-groups",
                     "clear-status",
-                    "group-listing"
+                    "group-listing",
+                    "quiet:post-message-enrich-titles",
+                    "reconcile-community-titles",
+                    "clear-status"
                 },
+                host.Log);
+        }
+
+        [Fact]
+        public async Task Serialized_clears_the_settling_banner_after_the_final_phase()
+        {
+            var host = new FakeHost();
+
+            await PostMessageEnrichmentDispatch.RunSerializedAsync(
+                host,
+                TimeSpan.FromSeconds(1),
+                CancellationToken.None);
+
+            Assert.Equal("clear-status", host.Log[host.Log.Count - 1]);
+        }
+
+        [Fact]
+        public async Task Serial_run_clears_the_banner_before_reporting_complete()
+        {
+            var host = new FakeHost { Serialize = true };
+
+            await PostMessageEnrichmentDispatch.RunAsync(
+                host,
+                "r4",
+                CancellationToken.None);
+
+            int cleared = host.Log.LastIndexOf("clear-status");
+            int complete = host.Log.IndexOf("complete:r4:True");
+
+            Assert.True(cleared >= 0);
+            Assert.True(cleared < complete);
+        }
+
+        [Fact]
+        public async Task Failure_clears_the_banner()
+        {
+            var host = new FakeHost { ThrowOnResolve = true };
+
+            await PostMessageEnrichmentDispatch.RunAsync(
+                host,
+                "r5",
+                CancellationToken.None);
+
+            Assert.Equal(
+                new[] { "quiet:post-message-enrich", "clear-status", "failed:r5" },
                 host.Log);
         }
 
@@ -170,6 +218,8 @@ namespace Unison.Core.Tests.Helpers
             public bool DeferAvatars { get; set; }
 
             public string AvatarDeferReason { get; set; }
+
+            public bool ThrowOnResolve { get; set; }
 
             public bool EnrichmentAwaitingHeavyHistory => AwaitingHeavy;
 
@@ -219,6 +269,11 @@ namespace Unison.Core.Tests.Helpers
 
             public Task ResolveMissingNamesAsync(CancellationToken token)
             {
+                if (ThrowOnResolve)
+                {
+                    throw new InvalidOperationException("resolve failed");
+                }
+
                 Log.Add("resolve-names");
                 return Task.CompletedTask;
             }
@@ -247,6 +302,12 @@ namespace Unison.Core.Tests.Helpers
             }
 
             public void NotifyGroupListingDue() => Log.Add("group-listing");
+
+            public Task ReconcileGroupCommunityTitlesAsync(CancellationToken token)
+            {
+                Log.Add("reconcile-community-titles");
+                return Task.CompletedTask;
+            }
 
             public void WriteComplete(string reason, bool serialized) =>
                 Log.Add("complete:" + reason + ":" + serialized);

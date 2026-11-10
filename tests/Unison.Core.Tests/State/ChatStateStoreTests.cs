@@ -39,6 +39,31 @@ public class ChatStateStoreTests
     }
 
     [Fact]
+    public void Bulk_catalogue_mutation_nests_and_raises_ended_once()
+    {
+        var store = NewStore();
+        int ended = 0;
+        store.BulkCatalogueMutationEnded += (s, e) => ended++;
+
+        Assert.False(store.IsBulkCatalogueMutating);
+        using (store.BeginBulkCatalogueMutation())
+        {
+            Assert.True(store.IsBulkCatalogueMutating);
+            using (store.BeginBulkCatalogueMutation())
+            {
+                Assert.True(store.IsBulkCatalogueMutating);
+                Assert.Equal(0, ended);
+            }
+
+            Assert.True(store.IsBulkCatalogueMutating);
+            Assert.Equal(0, ended);
+        }
+
+        Assert.False(store.IsBulkCatalogueMutating);
+        Assert.Equal(1, ended);
+    }
+
+    [Fact]
     public async Task Upserting_messages_registers_their_ids_in_the_cache()
     {
         var store = NewStore();

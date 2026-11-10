@@ -133,6 +133,17 @@ namespace Unison.Uwp.Services.Themes
         }
 
         /// <summary>
+        /// Full-screen pages (covering sidebar / pivot / detail), or null when
+        /// <paramref name="destination"/> stays in the shell frame for this theme.
+        /// </summary>
+        public virtual Type ResolveFullScreenPage(NavigationDestination destination)
+        {
+            return destination == NavigationDestination.StatusComposer
+                ? typeof(UI.Views.StatusComposerView)
+                : null;
+        }
+
+        /// <summary>
         /// Opens settings for this shell. Unison/WhatsApp both navigate to their
         /// <c>Shell/*/Views/SettingsView</c> today; WhatsApp may switch to a dialog later.
         /// </summary>

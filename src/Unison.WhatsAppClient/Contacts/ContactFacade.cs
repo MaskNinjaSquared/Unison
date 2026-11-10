@@ -23,7 +23,10 @@ using System.Threading.Tasks;
 using Unison.Core.Contracts;
 using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Helpers;
+using Unison.Core.Helpers.Chats;
+using Unison.Core.Helpers.Contacts;
 using Unison.Core.Helpers.Groups;
+using Unison.Core.Helpers.Ui;
 using Unison.Core.Models;
 using Unison.Core.State;
 using Unison.Core.Constants;
@@ -59,6 +62,12 @@ namespace Unison.WhatsAppClient.Contacts
         private readonly AliasFollowUpQueue _aliasFollowUps = new AliasFollowUpQueue();
         private readonly CoalescedDebounceScheduler _aliasFollowUpDebounce =
             new CoalescedDebounceScheduler(TimeSpan.FromMilliseconds(750));
+        private readonly PushNameUiCoalesce _pushNameUiPending = new PushNameUiCoalesce();
+        private readonly CoalescedDebounceScheduler _pushNameUiDebounce =
+            new CoalescedDebounceScheduler(TimeSpan.FromMilliseconds(180));
+        private readonly SyncBudget _syncBudget;
+        private readonly ChatTimelineLoadPriorityGate _timelinePriority;
+        private int _aliasFollowUpDeferredDuringBulk;
 
         private readonly ContactDirectory _directory;
         private readonly AddressBookOverlay _addressBook;
@@ -74,6 +83,7 @@ namespace Unison.WhatsAppClient.Contacts
         private readonly BackgroundResolutionPass _backgroundResolution;
         private readonly IRuntimeDiagnostics _diagnostics;
         private readonly IContactBlockActions _blockActions;
+        private readonly IUiWorkHolds _uiHolds;
         private DateTime _lastWindowsPublishUtc = DateTime.MinValue;
         private int _lastWindowsPublishCount;
         private int _windowsPublishBusy;
@@ -115,10 +125,16 @@ namespace Unison.WhatsAppClient.Contacts
             IJidAliasPersistence aliasPersist,
             IChatIdentityPersistence identity,
             IResolvedNameApplyHost resolvedNames,
+            ChatTimelineLoadPriorityGate timelinePriority = null,
             IRuntimeDiagnostics diagnostics = null,
-            IContactBlockActions blockActions = null)
+            IContactBlockActions blockActions = null,
+            Func<bool> isOfflineReplayTipBusy = null,
+            IUiWorkHolds uiHolds = null,
+            IAppMemoryInfo memory = null)
         {
             _blockActions = blockActions;
+            Func<bool> tipBusy = isOfflineReplayTipBusy ?? (() => false);
+            _uiHolds = uiHolds ?? new UiWorkHolds(() => new UiHoldSnapshot { WindowVisible = true, OfflineTipBusy = tipBusy() }, diagnostics);
             _displayNames = displayNames ?? throw new ArgumentNullException(nameof(displayNames));
             _nameRefresh = nameRefresh ?? throw new ArgumentNullException(nameof(nameRefresh));
             _deduper = deduper ?? throw new ArgumentNullException(nameof(deduper));
@@ -131,7 +147,9 @@ namespace Unison.WhatsAppClient.Contacts
             _syncStatus = syncStatus ?? throw new ArgumentNullException(nameof(syncStatus));
             _syncWork = syncWork ?? throw new ArgumentNullException(nameof(syncWork));
             _deferredAvatars = deferredAvatars ?? throw new ArgumentNullException(nameof(deferredAvatars));
+            _timelinePriority = timelinePriority;
             _diagnostics = diagnostics;
+            _syncBudget = syncBudget ?? throw new ArgumentNullException(nameof(syncBudget));
             _ui = ui ?? throw new ArgumentNullException(nameof(ui));
             _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
             if (sessions == null) throw new ArgumentNullException(nameof(sessions));
@@ -186,7 +204,9 @@ namespace Unison.WhatsAppClient.Contacts
                 _syncWork,
                 sessions,
                 nameRefresh,
-                workload ?? throw new ArgumentNullException(nameof(workload)));
+                workload ?? throw new ArgumentNullException(nameof(workload)),
+                memory: memory,
+                diagnostics: diagnostics);
             _avatars = new ChatAvatarPolicy(
                 _deferredAvatars,
                 jids,
@@ -210,6 +230,50 @@ namespace Unison.WhatsAppClient.Contacts
 
             // Lives as long as the app does, so there is nothing to unhook from.
             _nameRefresh.Applied += OnChatNamesApplied;
+            _nameRefresh.TitlesChanged += OnChatTitlesChanged;
+        }
+
+        private const int MaxJournaledTitleChanges = 20;
+
+        private void OnChatTitlesChanged(object sender, ChatTitleChanges e)
+        {
+            if (_diagnostics == null)
+            {
+                return;
+            }
+
+            int count = Math.Min(e.Changes.Count, MaxJournaledTitleChanges);
+            for (int i = 0; i < count; i++)
+            {
+                ResolvedNameChange change = e.Changes[i];
+                _diagnostics.Write(
+                    "names",
+                    "title-changed",
+                    "pass=" + e.Pass +
+                    "; jid=" + DiagnosticJidMask.Apply(change.Jid) +
+                    "; from=" + TitleForJournal(change.Previous) +
+                    "; to=" + TitleForJournal(change.Name) +
+                    "; toBroken=" + ContactLabelSanitizer.HasBrokenSurrogate(change.Name));
+            }
+
+            if (e.Changes.Count > count)
+            {
+                _diagnostics.Write(
+                    "names",
+                    "title-changed-truncated",
+                    "pass=" + e.Pass + "; total=" + e.Changes.Count);
+            }
+        }
+
+        private static string TitleForJournal(string title)
+        {
+            string trimmed = title?.Trim();
+            if (string.IsNullOrEmpty(trimmed))
+            {
+                return "-";
+            }
+
+            return ContactLabelSanitizer.IsPhoneLikeLabel(trimmed) ? "<number>" : trimmed;
         }
 
         private void OnChatNamesApplied(object sender, int updated)
@@ -218,6 +282,12 @@ namespace Unison.WhatsAppClient.Contacts
             if (_diagnostics != null)
             {
                 _diagnostics.Write("names", "list-names-applied", "count=" + updated);
+            }
+
+            // Titles ride on chat.Name in the catalogue; GroupSubjects is memory-only.
+            if (updated > 0)
+            {
+                _catalog.Schedule();
             }
 
             NotifyDisplayNamesUpdated();
@@ -241,7 +311,28 @@ namespace Unison.WhatsAppClient.Contacts
             ClearAvatarAttempted(phoneJid);
             ClearAvatarAttempted(_jids.GetCanonicalJid(phoneJid));
             _aliasFollowUps.NoteAvatarTarget(phoneJid);
+            // Bulk history-sqlite LID dumps call this per pair; one Schedule after the import.
+            if (_aliases != null && _aliases.IsBulkImporting)
+            {
+                Interlocked.Exchange(ref _aliasFollowUpDeferredDuringBulk, 1);
+                return;
+            }
+
             ScheduleAliasFollowUp(source);
+        }
+
+        /// <summary>
+        /// Arms the coalesced follow-up once after <see cref="IJidAliasPersistence.RegisterAliasMappings"/>
+        /// finishes a bulk import that deferred per-pair notifies.
+        /// </summary>
+        public void FlushDeferredAliasFollowUp(string source)
+        {
+            if (Interlocked.Exchange(ref _aliasFollowUpDeferredDuringBulk, 0) == 0)
+            {
+                return;
+            }
+
+            ScheduleAliasFollowUp(source ?? "bulk-alias");
         }
 
         /// <inheritdoc />
@@ -537,17 +628,96 @@ namespace Unison.WhatsAppClient.Contacts
                 Debug.WriteLine(
                     "[ContactFacade] Captured pushname from notify: " +
                     targetNotifyJid + " -> " + sanitizedNotify);
+
+                if (_jids.IsSelfLinked(normalizedNotifyTarget))
+                {
+                    CaptureSelfPushName(sanitizedNotify, "stanza-notify");
+                }
             }
 
-            if (_jids.IsSelfLinked(normalizedNotifyTarget))
+            // Flood: same notify= on every message must not enqueue a Normal UI hop
+            // (Lumia 1520: ApplyStanzaNotifyPushName held the dispatcher for 20–30s).
+            if (!StanzaNotifyPushNameUiPolicy.ShouldSchedulePlaceholderNameUi(changed))
             {
-                CaptureSelfPushName(sanitizedNotify, "stanza-notify");
+                return;
             }
 
             string canonical = _jids.GetCanonicalJid(normalizedNotifyTarget);
-            _ = _ui.RunAsync(() =>
+            if (string.IsNullOrWhiteSpace(canonical))
             {
-                foreach (ChatItem chat in _chatRows.FindConversation(canonical))
+                canonical = normalizedNotifyTarget;
+            }
+
+            // Latest-wins per JID; one hop drains the pending book (catch-up notify flood).
+            _pushNameUiPending.Note(canonical, sanitizedNotify);
+            _pushNameUiDebounce.Schedule(FlushPendingPushNameUi);
+        }
+
+        private void FlushPendingPushNameUi()
+        {
+            IReadOnlyList<KeyValuePair<string, string>> batch = _pushNameUiPending.Take();
+            if (batch.Count == 0)
+            {
+                return;
+            }
+
+            // PreferFrugal: Low + sliced hops so push-name cannot monopolize Normal while
+            // ReleaseNextBatch paints VisibleChats (ad243a19: FlushPendingPushNameUi ~24s).
+            _ = DrainPendingPushNameUiAsync(batch);
+        }
+
+        private async Task DrainPendingPushNameUiAsync(
+            IReadOnlyList<KeyValuePair<string, string>> batch)
+        {
+            if (batch == null || batch.Count == 0)
+            {
+                return;
+            }
+
+            ILowPriorityDispatcher lowUi = _ui as ILowPriorityDispatcher;
+            bool useLow = lowUi != null && _syncBudget.IsFrugal;
+            int sliceSize = useLow ? ResolvedNameUiSliceSize : batch.Count;
+
+            for (int offset = 0; offset < batch.Count; offset += sliceSize)
+            {
+                int count = Math.Min(sliceSize, batch.Count - offset);
+                IReadOnlyList<KeyValuePair<string, string>> slice =
+                    offset == 0 && count == batch.Count
+                        ? batch
+                        : TakePushNameSlice(batch, offset, count);
+
+                Action work = () => ApplyPushNameUiSlice(slice);
+                if (useLow)
+                {
+                    await lowUi.RunLowAsync(work).ConfigureAwait(false);
+                }
+                else
+                {
+                    await _ui.RunAsync(work).ConfigureAwait(false);
+                }
+            }
+        }
+
+        private static IReadOnlyList<KeyValuePair<string, string>> TakePushNameSlice(
+            IReadOnlyList<KeyValuePair<string, string>> batch,
+            int offset,
+            int count)
+        {
+            var slice = new List<KeyValuePair<string, string>>(count);
+            for (int i = 0; i < count; i++)
+            {
+                slice.Add(batch[offset + i]);
+            }
+
+            return slice;
+        }
+
+        private void ApplyPushNameUiSlice(IReadOnlyList<KeyValuePair<string, string>> slice)
+        {
+            for (int i = 0; i < slice.Count; i++)
+            {
+                KeyValuePair<string, string> entry = slice[i];
+                foreach (ChatItem chat in _chatRows.FindConversation(entry.Key))
                 {
                     if (chat != null &&
                         PlaceholderChatLabel.IsPlaceholder(
@@ -556,10 +726,10 @@ namespace Unison.WhatsAppClient.Contacts
                             SelfChatNaming.IsSelfMarkerLabel(chat.Name) ||
                             (_selfMarkers != null && _selfMarkers.IsMarkerLabel(chat.Name))))
                     {
-                        chat.Name = sanitizedNotify;
+                        chat.Name = entry.Value;
                     }
                 }
-            });
+            }
         }
 
         private async Task PersistObservedPersonNameAsync(string jid, string displayName)
@@ -645,8 +815,16 @@ namespace Unison.WhatsAppClient.Contacts
         /// <inheritdoc />
         public Task ApplyResolvedNamesToChatListAsync() => _nameRefresh.ApplyAsync();
 
+        // One UI hop with a full-catalogue walk starved create-busy dismiss for minutes
+        // (e7f675d0). Tiny subject post-create stays Normal; large batches go Low + sliced.
+        private const int ResolvedNameTinyBatchMax = 4;
+        private const int ResolvedNameUiSliceSize = 24;
+
+        /// <summary>Alias follow-up steps slower than this are journaled.</summary>
+        private const int AliasFollowUpSlowStepMs = 500;
+
         /// <summary>
-        /// Fills push / subject caches and relabels matching list rows once on the UI thread.
+        /// Fills push / subject caches and relabels matching list rows on the UI thread.
         /// </summary>
         public async Task ApplyResolvedNameBatchAsync(IList<ResolvedNameEntry> entries)
         {
@@ -655,6 +833,7 @@ namespace Unison.WhatsAppClient.Contacts
                 return;
             }
 
+            var unique = new List<ResolvedNameEntry>();
             var byCanonical = new Dictionary<string, ResolvedNameEntry>(StringComparer.OrdinalIgnoreCase);
             foreach (ResolvedNameEntry entry in entries)
             {
@@ -666,60 +845,133 @@ namespace Unison.WhatsAppClient.Contacts
                 byCanonical[entry.Canonical] = entry;
             }
 
-            await _ui.RunAsync(() =>
+            foreach (KeyValuePair<string, ResolvedNameEntry> pair in byCanonical)
             {
-                foreach (ResolvedNameEntry entry in entries)
+                unique.Add(pair.Value);
+            }
+
+            if (unique.Count == 0)
+            {
+                return;
+            }
+
+            // Tip-first: do not relabel rows while offline tip flush owns the list.
+            IUiWaitRun holds = _uiHolds.BeginRun("resolved-names");
+            await holds.WaitAsync(UiWorkKind.SilentNames).ConfigureAwait(false);
+
+            ILowPriorityDispatcher lowUi = _ui as ILowPriorityDispatcher;
+            bool useLow = lowUi != null &&
+                (TipUiPipelineGate.PreferLowSilentUi(_syncBudget.IsFrugal) ||
+                 unique.Count > ResolvedNameTinyBatchMax);
+            int namesUpdated = 0;
+
+            for (int offset = 0; offset < unique.Count; offset += ResolvedNameUiSliceSize)
+            {
+                int count = Math.Min(ResolvedNameUiSliceSize, unique.Count - offset);
+                List<ResolvedNameEntry> slice = unique.GetRange(offset, count);
+                int sliceUpdated = 0;
+                Action work = () => sliceUpdated = ApplyResolvedNameSliceOnUi(slice);
+                if (useLow)
                 {
-                    if (entry == null)
+                    await lowUi.RunLowAsync(work).ConfigureAwait(false);
+                }
+                else
+                {
+                    await _ui.RunAsync(work).ConfigureAwait(false);
+                }
+
+                namesUpdated += sliceUpdated;
+
+                // Tip may have re-armed between slices — yield the list back.
+                await holds.WaitAsync(UiWorkKind.SilentNames).ConfigureAwait(false);
+
+                // Let High create-dismiss hops run between slices; one monolithic hop cannot.
+                if (offset + count < unique.Count)
+                {
+                    await Task.Yield();
+                }
+            }
+
+            // Durable path is chat.Name (GroupSubjects is never written to disk).
+            if (namesUpdated > 0)
+            {
+                _catalog.Schedule();
+            }
+
+            NotifyDisplayNamesUpdated();
+            _chatState.NotifyDisplayNamesChanged();
+        }
+
+        /// <summary>
+        /// Cache fill + O(entries) row relabel via <see cref="ChatRowIndex.FindConversation"/> —
+        /// never walk the full chat catalogue per batch.
+        /// </summary>
+        /// <returns>How many row titles actually changed (catalogue Schedule only when &gt; 0).</returns>
+        private int ApplyResolvedNameSliceOnUi(IList<ResolvedNameEntry> slice)
+        {
+            if (slice == null || slice.Count == 0)
+            {
+                return 0;
+            }
+
+            for (int i = 0; i < slice.Count; i++)
+            {
+                ResolvedNameEntry entry = slice[i];
+                if (entry == null)
+                {
+                    continue;
+                }
+
+                if (entry.IsSubject)
+                {
+                    if (!GroupNameSyncBlacklist.ShouldCacheSyncedSubject(
+                            entry.Name,
+                            GroupMeaningfulLabel.Has(
+                                entry.Canonical,
+                                DuplicateChatRowPick.FirstNonBlankName(
+                                    _chatRows.FindConversation(entry.Canonical)),
+                                jid =>
+                                {
+                                    string cached;
+                                    return _pushNames.TryGetValue(jid, out cached) ? cached : null;
+                                },
+                                IsMeaningfulChatLabel)))
                     {
                         continue;
                     }
 
-                    if (entry.IsSubject)
-                    {
-                        if (!GroupNameSyncBlacklist.ShouldCacheSyncedSubject(
-                                entry.Name,
-                                GroupMeaningfulLabel.Has(
-                                    entry.Canonical,
-                                    DuplicateChatRowPick.FirstNonBlankName(
-                                        _chatRows.FindConversation(entry.Canonical)),
-                                    jid =>
-                                    {
-                                        string cached;
-                                        return _pushNames.TryGetValue(jid, out cached) ? cached : null;
-                                    },
-                                    IsMeaningfulChatLabel)))
-                        {
-                            continue;
-                        }
-
-                        _groupSubjects.Set(entry.Canonical, entry.Name);
-                        if (!string.IsNullOrEmpty(entry.Normalized) &&
-                            !string.Equals(entry.Normalized, entry.Canonical, StringComparison.OrdinalIgnoreCase))
-                        {
-                            _groupSubjects.Set(entry.Normalized, entry.Name);
-                        }
-
-                        continue;
-                    }
-
-                    _pushNames.Set(entry.Canonical, entry.Name);
+                    _groupSubjects.Set(entry.Canonical, entry.Name);
                     if (!string.IsNullOrEmpty(entry.Normalized) &&
                         !string.Equals(entry.Normalized, entry.Canonical, StringComparison.OrdinalIgnoreCase))
                     {
-                        _pushNames.Set(entry.Normalized, entry.Name);
+                        _groupSubjects.Set(entry.Normalized, entry.Name);
                     }
+
+                    continue;
                 }
 
-                foreach (ChatItem chat in _chatState.Chats)
+                _pushNames.Set(entry.Canonical, entry.Name);
+                if (!string.IsNullOrEmpty(entry.Normalized) &&
+                    !string.Equals(entry.Normalized, entry.Canonical, StringComparison.OrdinalIgnoreCase))
                 {
-                    if (chat == null)
-                    {
-                        continue;
-                    }
+                    _pushNames.Set(entry.Normalized, entry.Name);
+                }
+            }
 
-                    ResolvedNameEntry entry;
-                    if (!byCanonical.TryGetValue(_jids.GetCanonicalJid(chat.JID), out entry))
+            int updated = 0;
+            for (int i = 0; i < slice.Count; i++)
+            {
+                ResolvedNameEntry entry = slice[i];
+                if (entry == null || string.IsNullOrWhiteSpace(entry.Canonical))
+                {
+                    continue;
+                }
+
+                List<ChatItem> rows = _chatRows.FindConversation(entry.Canonical);
+                for (int r = 0; r < rows.Count; r++)
+                {
+                    ChatItem chat = rows[r];
+                    if (chat == null)
                     {
                         continue;
                     }
@@ -728,23 +980,28 @@ namespace Unison.WhatsAppClient.Contacts
                     {
                         bool incomingMeaningful = IsMeaningfulChatLabel(entry.Name, chat.JID, true);
                         bool existingMeaningful = IsMeaningfulChatLabel(chat.Name, chat.JID, true);
-                        if (GroupNameSyncBlacklist.ShouldApplySyncedSubject(
+                        if (GroupSubjectRowWrite.TryWrite(
+                                chat,
                                 entry.Name,
                                 incomingMeaningful,
                                 existingMeaningful))
                         {
-                            chat.Name = entry.Name;
+                            updated++;
                         }
                     }
                     else if (!chat.IsGroup)
                     {
+                        string before = chat.Name;
                         chat.Name = ResolveDisplayName(chat.JID, "chat");
+                        if (!string.Equals(before, chat.Name, StringComparison.Ordinal))
+                        {
+                            updated++;
+                        }
                     }
                 }
-            }).ConfigureAwait(false);
+            }
 
-            NotifyDisplayNamesUpdated();
-            _chatState.NotifyDisplayNamesChanged();
+            return updated;
         }
 
         private bool IsMeaningfulChatLabel(string label, string contextJid, bool isGroup) =>
@@ -754,6 +1011,8 @@ namespace Unison.WhatsAppClient.Contacts
                 isGroup,
                 _selfMarkers.IsMarkerLabel(label));
 
+        private bool IsSilentUiHeld => _uiHolds.Describe(UiWorkKind.SilentNames) != null;
+
         private void ScheduleAliasFollowUp(string source)
         {
             _aliasFollowUps.Request(source);
@@ -762,50 +1021,180 @@ namespace Unison.WhatsAppClient.Contacts
 
         private async Task RunAliasFollowUpAsync()
         {
-            if (!_aliasFollowUps.TryBegin(out AliasFollowUpBatch batch))
+            // Tip-first: do not take the avatar batch while offline tip flush owns the list.
+            if (IsSilentUiHeld)
             {
-                ScheduleAliasFollowUp(_aliasFollowUps.PendingSource);
+                if (AliasFollowUpPassPolicy.ShouldRearmAfterPass(_aliasFollowUps.HasPendingTargets))
+                {
+                    ScheduleAliasFollowUp(_aliasFollowUps.PendingSource ?? "tip-busy");
+                }
+
+                return;
+            }
+
+            // Listing hub ensure Owns Low/UI — defer avatar collect until bulk ends.
+            if (AliasFollowUpPassPolicy.ShouldDeferForBulkCatalogue(_chatState.IsBulkCatalogueMutating))
+            {
+                if (AliasFollowUpPassPolicy.ShouldRearmAfterPass(_aliasFollowUps.HasPendingTargets))
+                {
+                    TimeSpan gap = AliasFollowUpPassPolicy.RearmGapBeforeSchedule(
+                        _syncBudget.IsFrugal,
+                        hasMoreAvatarTargets: true,
+                        bulkCatalogueMutating: true);
+                    if (gap > TimeSpan.Zero)
+                    {
+                        await Task.Delay(gap).ConfigureAwait(false);
+                    }
+
+                    ScheduleAliasFollowUp(_aliasFollowUps.PendingSource ?? "bulk-catalogue");
+                }
+
+                return;
+            }
+
+            if (!_aliasFollowUps.TryBegin(
+                    AliasFollowUpAvatarCap.MaxTargets(_syncBudget.IsFrugal),
+                    out AliasFollowUpBatch batch,
+                    out bool hasMoreAvatarTargets))
+            {
+                if (AliasFollowUpPassPolicy.ShouldRearmAfterPass(_aliasFollowUps.HasPendingTargets))
+                {
+                    ScheduleAliasFollowUp(_aliasFollowUps.PendingSource);
+                }
+
                 return;
             }
 
             string source = batch.Source;
+            bool yieldedToTip = false;
             try
             {
-                await _aliasPersist.PersistAliasesAsync("alias:" + source).ConfigureAwait(false);
-
-                if (batch.AvatarTargets.Count > 0)
+                // PersistAliases + Deduper must not race chat-open timeline paint / OnDemand merge.
+                if (_timelinePriority != null && _timelinePriority.IsHeld)
                 {
-                    await _ui.RunAsync(() =>
+                    _diagnostics?.Write(
+                        "contacts",
+                        "alias-follow-up-wait-timeline",
+                        "source=" + (source ?? "?"));
+                    await _timelinePriority.WaitWhileHeldAsync().ConfigureAwait(false);
+                }
+
+                // Tip may have armed while we waited on timeline — yield before Normal work.
+                if (IsSilentUiHeld)
+                {
+                    _aliasFollowUps.Restore(batch);
+                    yieldedToTip = true;
+                    hasMoreAvatarTargets = true;
+                    _diagnostics?.Write(
+                        "contacts",
+                        "alias-follow-up-yield-tip",
+                        "source=" + (source ?? "?") + "; stage=pre-begin");
+                }
+                else
+                {
+                    _diagnostics?.Write(
+                        "contacts",
+                        "alias-follow-up-begin",
+                        "source=" + (source ?? "?") +
+                        "; avatars=" + batch.AvatarTargets.Count +
+                        "; more=" + hasMoreAvatarTargets);
+                    var persistWatch = System.Diagnostics.Stopwatch.StartNew();
+                    await _aliasPersist.PersistAliasesAsync("alias:" + source).ConfigureAwait(false);
+                    if (persistWatch.ElapsedMilliseconds >= AliasFollowUpSlowStepMs)
                     {
-                        List<ChatItem> rows = AliasFollowUpAvatarRows.CollectMissing(
-                            batch.AvatarTargets,
-                            jid => _chatRows.FindConversation(jid));
-                        foreach (ChatItem chat in rows)
+                        _diagnostics?.Write(
+                            "contacts",
+                            "alias-follow-up-persist-slow",
+                            "source=" + (source ?? "?") + "; ms=" + persistWatch.ElapsedMilliseconds);
+                    }
+
+                    if (batch.AvatarTargets.Count > 0)
+                    {
+                        IReadOnlyList<string> targets = batch.AvatarTargets;
+                        // One ChatRowIndex build for the whole burst — FindConversation per target
+                        // used to rebuild the map on every miss while aliases kept Invalidating
+                        // (~22s RunAliasFollowUpAsync on Mobile). PreferFrugal: Low so Collect
+                        // cannot sit ahead of tip paint on Normal (ea23bb7b).
+                        List<ChatItem> rows = null;
+                        Action collect = () =>
                         {
-                            RequestAvatarRefresh(chat, force: true);
+                            rows = AliasFollowUpAvatarRows.CollectMissing(
+                                targets,
+                                jid => _chatRows.FindConversation(jid));
+                        };
+                        ILowPriorityDispatcher lowUi = _ui as ILowPriorityDispatcher;
+                        if (lowUi != null && _syncBudget.IsFrugal)
+                        {
+                            await lowUi.RunLowAsync(collect).ConfigureAwait(false);
                         }
-                    }).ConfigureAwait(false);
-                }
+                        else
+                        {
+                            await _ui.RunAsync(collect).ConfigureAwait(false);
+                        }
 
-                ChatListDeduperResult result = await _deduper.RunAsync("alias:" + source)
-                    .ConfigureAwait(false);
-                if (result.SkippedUnchangedAliases)
-                {
-                    // Alias map unchanged since the last fold — no list / author work owed.
-                }
-                else if (result.Merged > 0 || result.NormalizedKeys > 0)
-                {
-                    _catalog.Schedule();
-                    _chatState.NotifyDisplayNamesChanged();
-                    NotifyDisplayNamesUpdated();
-                    if (result.Merged > 0)
+                        if (rows != null && rows.Count > 0)
+                        {
+                            for (int start = 0; start < rows.Count; start += ResolvedNameUiSliceSize)
+                            {
+                                if (IsSilentUiHeld)
+                                {
+                                    _aliasFollowUps.Restore(batch);
+                                    yieldedToTip = true;
+                                    hasMoreAvatarTargets = true;
+                                    _diagnostics?.Write(
+                                        "contacts",
+                                        "alias-follow-up-yield-tip",
+                                        "source=" + (source ?? "?") +
+                                        "; stage=avatar-slice; at=" + start);
+                                    break;
+                                }
+
+                                int from = start;
+                                int end = Math.Min(rows.Count, start + ResolvedNameUiSliceSize);
+                                Action paint = () =>
+                                {
+                                    for (int i = from; i < end; i++)
+                                    {
+                                        RequestAvatarRefresh(rows[i], force: true);
+                                    }
+                                };
+                                if (lowUi != null && _syncBudget.IsFrugal)
+                                {
+                                    await lowUi.RunLowAsync(paint).ConfigureAwait(false);
+                                }
+                                else
+                                {
+                                    await _ui.RunAsync(paint).ConfigureAwait(false);
+                                }
+                            }
+                        }
+                    }
+
+                    // Mid-drain / tip-yield: skip Deduper (journal skip-unchanged storm).
+                    if (!yieldedToTip &&
+                        AliasFollowUpPassPolicy.ShouldRunDeduper(hasMoreAvatarTargets))
                     {
-                        _identity.PersistNow("dedupe:alias:" + source);
+                        ChatListDeduperResult result = await _deduper.RunAsync("alias:" + source)
+                            .ConfigureAwait(false);
+                        if (result.SkippedUnchangedAliases)
+                        {
+                            // Alias map unchanged since the last fold — no list / author work owed.
+                        }
+                        else if (result.Merged > 0 || result.NormalizedKeys > 0)
+                        {
+                            _catalog.Schedule();
+                            _chatState.NotifyDisplayNamesChanged();
+                            NotifyDisplayNamesUpdated();
+                            if (result.Merged > 0)
+                            {
+                                _identity.PersistNow("dedupe:alias:" + source);
+                            }
+                        }
+                        // Empty plan (generation bumped, 0 merges): do not NotifyDisplayNamesChanged —
+                        // each alias:app-state-contact follow-up was rebuilding author strips / list
+                        // after a 6–8s BuildPlan on Lumia 950 XL with nothing to fold.
                     }
                 }
-                // Empty plan (generation bumped, 0 merges): do not NotifyDisplayNamesChanged —
-                // each alias:app-state-contact follow-up was rebuilding author strips / list
-                // after a 6–8s BuildPlan on Lumia 950 XL with nothing to fold.
             }
             catch (Exception ex)
             {
@@ -815,6 +1204,18 @@ namespace Unison.WhatsAppClient.Contacts
             finally
             {
                 _aliasFollowUps.End();
+                if (AliasFollowUpPassPolicy.ShouldRearmAfterPass(_aliasFollowUps.HasPendingTargets))
+                {
+                    TimeSpan gap = AliasFollowUpPassPolicy.RearmGapBeforeSchedule(
+                        _syncBudget.IsFrugal,
+                        hasMoreAvatarTargets || yieldedToTip);
+                    if (gap > TimeSpan.Zero)
+                    {
+                        await Task.Delay(gap).ConfigureAwait(false);
+                    }
+
+                    ScheduleAliasFollowUp(_aliasFollowUps.PendingSource ?? source);
+                }
             }
         }
 

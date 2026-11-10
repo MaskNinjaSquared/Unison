@@ -28,6 +28,18 @@ namespace Unison.Uwp.Data.Entities
         /// <summary>Unix seconds; null = not muted.</summary>
         public long? MutedUntil { get; set; }
 
+        /// <summary><see cref="Unison.Core.Models.ChannelViewerRole"/> as int; null = never fetched.</summary>
+        public int? ChannelRole { get; set; }
+
+        /// <summary>
+        /// Group description from <c>w:g2</c> metadata. NULL = never fetched; empty string =
+        /// the group has no description.
+        /// </summary>
+        public string GroupDescription { get; set; }
+
+        /// <summary>Wire id of <see cref="GroupDescription"/>; NULL when none was carried.</summary>
+        public string GroupDescriptionId { get; set; }
+
         public DateTime UpdatedAtUtc { get; set; }
     }
 }

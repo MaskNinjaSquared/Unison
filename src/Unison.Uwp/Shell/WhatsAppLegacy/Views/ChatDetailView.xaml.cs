@@ -111,7 +111,6 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
         private List<ChatMessageViewModel> _activePinnedMessages = new List<ChatMessageViewModel>();
         private int _displayedPinnedIndex;
         /// <summary>Lazy camera overlay — not in XAML so Creators/Mobile chat open skips CaptureElement.</summary>
-        private CameraPickView _cameraPickOverlay;
         private DispatcherTimer _dateSeparatorTimer;
         private DateTime _dateSeparatorTimerDay;
         private bool _cancelRecordingAnimating;
@@ -189,6 +188,8 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             StartDateSeparatorTimer();
             ApplyLegacyComposerChrome();
             ViewModel?.AttachAudioPlaybackUi(AudioPlayer);
+            // Legacy has no dual-pane chat list beside detail — back is always on.
+            UpdateChatBackButtonsVisibility();
         }
 
         /// <summary>
@@ -421,7 +422,6 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             ViewModel.MessageSent += ViewModel_MessageSent;
             ViewModel.MessagePinnedChanged += ViewModel_MessagePinnedChanged;
             ViewModel.PresenceAnimationRequested += ViewModel_PresenceAnimationRequested;
-            ViewModel.CameraPickRequested += ViewModel_CameraPickRequested;
             ViewModel.PropertyChanged += ViewModel_PropertyChanged;
             SyncRecordingPauseGlyph();
         }
@@ -438,7 +438,6 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             ViewModel.MessageSent -= ViewModel_MessageSent;
             ViewModel.MessagePinnedChanged -= ViewModel_MessagePinnedChanged;
             ViewModel.PresenceAnimationRequested -= ViewModel_PresenceAnimationRequested;
-            ViewModel.CameraPickRequested -= ViewModel_CameraPickRequested;
             ViewModel.PropertyChanged -= ViewModel_PropertyChanged;
         }
 
@@ -1086,7 +1085,7 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
         /// <summary>Closes fullscreen media or the info pane; returns true if consumed.</summary>
         public bool TryConsumeBack()
         {
-            if (TryCloseCameraPick() || TryCloseVideoViewer() || TryCloseImageViewer())
+            if (TryCloseVideoViewer() || TryCloseImageViewer())
             {
                 return true;
             }
@@ -1344,7 +1343,7 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             _isLoadingMoreFromScroll = true;
             try
             {
-                string requestedJid = Jids.GetCanonicalJid(_activeChat.JID);
+                string requestedJid = Jids.PeekCanonicalJid(_activeChat.JID);
                 Debug.WriteLine($"[ChatDetailView] Loading more messages for {requestedJid}. Current: {_messages.Count}");
                 WriteTimelineDiagnostics(
                     "load-more-start",
@@ -1360,7 +1359,7 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                     "; reachedStart=" + (result?.ReachedStart ?? false) +
                     "; detached=" + ViewModel.IsDetachedFromEnd);
                 if (_activeChat == null ||
-                    !string.Equals(Jids.GetCanonicalJid(_activeChat.JID), requestedJid, StringComparison.OrdinalIgnoreCase))
+                    !string.Equals(Jids.PeekCanonicalJid(_activeChat.JID), requestedJid, StringComparison.OrdinalIgnoreCase))
                 {
                     return;
                 }
@@ -1516,24 +1515,28 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             }
         }
 
-        private void UpdateEmptyBackButtonVisibility()
+        /// <summary>
+        /// Legacy never keeps the chat list beside the detail, so the arrow is always on —
+        /// header when a chat is open, empty-state otherwise. (Unison/WhatsApp still hide it
+        /// on wide dual-pane via <see cref="ShellViewModel.ShowChatDetailBackButton"/>.)
+        /// </summary>
+        private void UpdateChatBackButtonsVisibility()
         {
-            if (EmptyBackButton == null)
+            bool hasChat = ActiveChatGrid != null &&
+                           ActiveChatGrid.Visibility == Visibility.Visible;
+            if (BackButton != null)
             {
-                return;
+                BackButton.Visibility = hasChat
+                    ? Visibility.Visible
+                    : Visibility.Collapsed;
             }
 
-            bool narrow = false;
-            try
+            if (EmptyBackButton != null)
             {
-                var shell = App.Services?.GetService<ShellViewModel>();
-                narrow = shell != null && shell.IsNarrowWindow;
+                EmptyBackButton.Visibility = hasChat
+                    ? Visibility.Collapsed
+                    : Visibility.Visible;
             }
-            catch
-            {
-            }
-
-            EmptyBackButton.Visibility = narrow ? Visibility.Visible : Visibility.Collapsed;
         }
 
         /// <summary>Invoked from <see cref="Templates.MessageTemplates"/> when a loaded image is tapped.</summary>
@@ -1658,80 +1661,6 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             ImageViewerOverlay.CloseRequested -= ImageViewerOverlay_CloseRequested;
             ImageViewerOverlay.ViewModel = null;
             ImageViewerOverlay.Visibility = Visibility.Collapsed;
-            return true;
-        }
-
-        private void ViewModel_CameraPickRequested(object sender, EventArgs e)
-        {
-            OpenCameraPick();
-        }
-
-        private void OpenCameraPick()
-        {
-            if (CameraPickPresenter == null)
-            {
-                return;
-            }
-
-            SetAttachMenuOpen(false);
-            TryCloseVideoViewer();
-            TryCloseImageViewer();
-
-            CameraPickView overlay = EnsureCameraPickOverlay();
-            var pickVm = new CameraPickViewModel();
-            overlay.CloseRequested -= CameraPickOverlay_CloseRequested;
-            overlay.PhotoCaptured -= CameraPickOverlay_PhotoCaptured;
-            overlay.ViewModel = pickVm;
-            overlay.CloseRequested += CameraPickOverlay_CloseRequested;
-            overlay.PhotoCaptured += CameraPickOverlay_PhotoCaptured;
-            CameraPickPresenter.Visibility = Visibility.Visible;
-        }
-
-        private CameraPickView EnsureCameraPickOverlay()
-        {
-            if (_cameraPickOverlay != null)
-            {
-                return _cameraPickOverlay;
-            }
-
-            _cameraPickOverlay = new CameraPickView();
-            CameraPickPresenter.Content = _cameraPickOverlay;
-            return _cameraPickOverlay;
-        }
-
-        private void CameraPickOverlay_CloseRequested(object sender, EventArgs e)
-        {
-            TryCloseCameraPick();
-        }
-
-        private async void CameraPickOverlay_PhotoCaptured(object sender, CameraPhotoCapturedEventArgs e)
-        {
-            TryCloseCameraPick();
-            if (ViewModel == null || e?.Bytes == null)
-            {
-                return;
-            }
-
-            await ViewModel.AcceptCapturedPhotoAsync(e.Bytes);
-        }
-
-        private bool TryCloseCameraPick()
-        {
-            if (CameraPickPresenter == null || CameraPickPresenter.Visibility != Visibility.Visible)
-            {
-                return false;
-            }
-
-            if (_cameraPickOverlay != null)
-            {
-                _cameraPickOverlay.CloseRequested -= CameraPickOverlay_CloseRequested;
-                _cameraPickOverlay.PhotoCaptured -= CameraPickOverlay_PhotoCaptured;
-                _cameraPickOverlay.ViewModel = null;
-                CameraPickPresenter.Content = null;
-                _cameraPickOverlay = null;
-            }
-
-            CameraPickPresenter.Visibility = Visibility.Collapsed;
             return true;
         }
 
@@ -1934,12 +1863,12 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             var contacts = Contacts;
             if (chat != null)
             {
-                string canonicalJid = Jids.GetCanonicalJid(chat.JID);
+                string canonicalJid = Jids.PeekCanonicalJid(chat.JID);
                 if (!string.IsNullOrWhiteSpace(canonicalJid) &&
                     !string.Equals(canonicalJid, chat.JID, StringComparison.OrdinalIgnoreCase))
                 {
                     var canonicalChat = ChatState?.Chats.FirstOrDefault(c =>
-                        string.Equals(Jids.GetCanonicalJid(c.JID), canonicalJid, StringComparison.OrdinalIgnoreCase));
+                        string.Equals(Jids.PeekCanonicalJid(c.JID), canonicalJid, StringComparison.OrdinalIgnoreCase));
                     if (canonicalChat != null)
                     {
                         chat = canonicalChat;
@@ -1954,8 +1883,8 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                 // List rebuilds often replace ChatItem instances; only rebind the reference.
                 if (_activeChat != null &&
                     string.Equals(
-                        Jids.GetCanonicalJid(_activeChat.JID),
-                        Jids.GetCanonicalJid(chat.JID),
+                        Jids.PeekCanonicalJid(_activeChat.JID),
+                        Jids.PeekCanonicalJid(chat.JID),
                         StringComparison.OrdinalIgnoreCase))
                 {
                     if (!ReferenceEquals(_activeChat, chat))
@@ -1980,7 +1909,6 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
 
             // After the same-chat return: the list re-reports the open chat after every reorder,
             // and that must not close a picture the user is looking at.
-            TryCloseCameraPick();
             TryCloseVideoViewer();
             TryCloseImageViewer();
 
@@ -2020,7 +1948,7 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                 ClearTimelineMessages();
                 ActiveChatGrid.Visibility = Visibility.Collapsed;
                 EmptyStateGrid.Visibility = Visibility.Visible;
-                UpdateEmptyBackButtonVisibility();
+                UpdateChatBackButtonsVisibility();
                 PinnedMessageButton.Visibility = Visibility.Collapsed;
                 _displayedPinnedMessage = null;
                 _activePinnedMessages.Clear();
@@ -2037,10 +1965,7 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             _activeChat.PropertyChanged += ActiveChat_PropertyChanged;
             ActiveChatGrid.Visibility = Visibility.Visible;
             EmptyStateGrid.Visibility = Visibility.Collapsed;
-            if (EmptyBackButton != null)
-            {
-                EmptyBackButton.Visibility = Visibility.Collapsed;
-            }
+            UpdateChatBackButtonsVisibility();
 
             ChatStatusText.Text = "";
             ChatStatusText.Opacity = 0;
@@ -2138,7 +2063,7 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                     return;
                 }
 
-                string requestedJid = Jids.GetCanonicalJid(chat.JID);
+                string requestedJid = Jids.PeekCanonicalJid(chat.JID);
                 Debug.WriteLine($"[ChatDetailView] Loading messages for {requestedJid}");
 
                 List<ChatMessage> messages;
@@ -2155,7 +2080,7 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                 }
 
                 if (token.IsCancellationRequested || _activeChat == null ||
-                    !string.Equals(Jids.GetCanonicalJid(_activeChat.JID), requestedJid, StringComparison.OrdinalIgnoreCase))
+                    !string.Equals(Jids.PeekCanonicalJid(_activeChat.JID), requestedJid, StringComparison.OrdinalIgnoreCase))
                 {
                     WriteChatOpenDiagnostics(
                         "aborted",
@@ -2218,7 +2143,7 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                 // ChangeView needs scroll enabled; lock is cleared in finally above.
                 if (!token.IsCancellationRequested &&
                     _activeChat != null &&
-                    string.Equals(Jids.GetCanonicalJid(_activeChat.JID), requestedJid, StringComparison.OrdinalIgnoreCase))
+                    string.Equals(Jids.PeekCanonicalJid(_activeChat.JID), requestedJid, StringComparison.OrdinalIgnoreCase))
                 {
                     ScrollToBottom();
                     _ = StickScrollToBottomOnOpenAsync(token);
@@ -2284,8 +2209,8 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             }
 
             bool sameChat = string.Equals(
-                Jids.GetCanonicalJid(_activeChat.JID),
-                Jids.GetCanonicalJid(chat?.JID),
+                Jids.PeekCanonicalJid(_activeChat.JID),
+                Jids.PeekCanonicalJid(chat?.JID),
                 StringComparison.OrdinalIgnoreCase);
             return sameChat ? "same-chat-new-instance" : "chat-switched";
         }
@@ -2868,8 +2793,8 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                 return;
             }
 
-            string activeCanonical = Jids.GetCanonicalJid(_activeChat.JID);
-            string updatedCanonical = Jids.GetCanonicalJid(updatedJid);
+            string activeCanonical = Jids.PeekCanonicalJid(_activeChat.JID);
+            string updatedCanonical = Jids.PeekCanonicalJid(updatedJid);
             if (!string.Equals(activeCanonical, updatedCanonical, StringComparison.OrdinalIgnoreCase))
             {
                 return;
@@ -2947,13 +2872,15 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             }
 
             _isSyncingFromService = true;
-            string requestedJid = Jids.GetCanonicalJid(_activeChat.JID);
+            string requestedJid = Jids.PeekCanonicalJid(_activeChat.JID);
             try
             {
                 bool stickToBottom = IsFollowingTimelineEnd();
-                List<ChatMessage> serviceMessages = await MessagesFacade.LoadRecentMessagesForSyncAsync(requestedJid);
+                List<ChatMessage> serviceMessages = await MessagesFacade
+                    .LoadRecentMessagesForSyncAsync(requestedJid)
+                    .ConfigureAwait(false);
                 if (_activeChat == null ||
-                    !string.Equals(Jids.GetCanonicalJid(_activeChat.JID), requestedJid, StringComparison.OrdinalIgnoreCase) ||
+                    !string.Equals(Jids.PeekCanonicalJid(_activeChat.JID), requestedJid, StringComparison.OrdinalIgnoreCase) ||
                     serviceMessages == null || serviceMessages.Count == 0)
                 {
                     return;
@@ -2962,7 +2889,7 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                 await Dispatcher.RunAsync(CoreDispatcherPriority.Normal, () =>
                 {
                     if (_activeChat == null ||
-                        !string.Equals(Jids.GetCanonicalJid(_activeChat.JID), requestedJid, StringComparison.OrdinalIgnoreCase))
+                        !string.Equals(Jids.PeekCanonicalJid(_activeChat.JID), requestedJid, StringComparison.OrdinalIgnoreCase))
                     {
                         return;
                     }
@@ -2970,7 +2897,27 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                     try
                     {
                         bool followingEnd = stickToBottom || IsFollowingTimelineEnd();
-                        bool changed = ViewModel.MergeTimelineFromService(serviceMessages, requestedJid, followingEnd);
+                        bool changed;
+                        if (HistoryListUiRefresh.ShouldReplaceTimelineOnHistorySync(
+                                _messages.Count,
+                                ViewModel.InitialUiMessageWindow))
+                        {
+                            var window = ChatDetailViewModel.TakeLastWindow(
+                                serviceMessages,
+                                ViewModel.InitialUiMessageWindow);
+                            ViewModel.StampGroupRemoteJid(window, requestedJid);
+                            ViewModel.ReplaceTimelineWindow(window);
+                            changed = true;
+                            followingEnd = true;
+                        }
+                        else
+                        {
+                            changed = ViewModel.MergeTimelineFromService(
+                                serviceMessages,
+                                requestedJid,
+                                followingEnd);
+                        }
+
                         UpdatePinnedBanner();
 
                         if (changed)
@@ -3109,7 +3056,7 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                 _displayedPinnedIndex = 0;
                 PinnedMessageButton.Visibility = Visibility.Collapsed;
                 PinnedMessageTitleText.Text = LocalizedStrings.Get("ChatDetail_Pinned.Text");
-                PinnedMessagePreviewText.Text = string.Empty;
+                EmojiRichRuns.SetTextBlock(PinnedMessagePreviewText, string.Empty);
                 return;
             }
 
@@ -3136,9 +3083,17 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             _displayedPinnedMessage = _activePinnedMessages[_displayedPinnedIndex];
             string preview = _displayedPinnedMessage.Caption;
             if (string.IsNullOrWhiteSpace(preview)) preview = _displayedPinnedMessage.Content;
-            PinnedMessagePreviewText.Text = string.IsNullOrWhiteSpace(preview)
-                ? "[Mídia]"
-                : preview.Replace("\r", " ").Replace("\n", " ");
+            // Mentions resolve to display names and emoji get the packaged face, but links stay
+            // inert: the banner is a Button whose tap jumps to the pinned message, and a live
+            // Hyperlink inside it would swallow that gesture.
+            EmojiRichRuns.SetTextBlock(
+                PinnedMessagePreviewText,
+                string.IsNullOrWhiteSpace(preview)
+                    ? "[Mídia]"
+                    : CommentRichService.FormatMentionsPlain(
+                        preview.Replace("\r", " ").Replace("\n", " "),
+                        _displayedPinnedMessage.MentionedJids,
+                        _displayedPinnedMessage.MentionLookup));
             PinnedMessageTitleText.Text = _activePinnedMessages.Count > 1
                 ? LocalizedStrings.Format("ChatDetail_PinnedIndex", _displayedPinnedIndex + 1, _activePinnedMessages.Count)
                 : LocalizedStrings.Get("ChatDetail_Pinned.Text");

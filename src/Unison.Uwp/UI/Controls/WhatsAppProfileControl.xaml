@@ -9,60 +9,67 @@
     d:DesignHeight="420"
     d:DesignWidth="400"
     HorizontalAlignment="Stretch"
-    VerticalAlignment="Top"
+    VerticalAlignment="Stretch"
     Background="Transparent">
 
     <!-- Static WhatsApp settings section. No back row and no motion. -->
     <Grid>
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-        </Grid.RowDefinitions>
-
-        <!-- Avatar stays centered; name/status rows stretch with the host. -->
-        <Grid Grid.Row="0"
-              HorizontalAlignment="Stretch"
-              Margin="0,16,0,0">
-            <Grid Width="120"
-                  Height="120"
-                  HorizontalAlignment="Center">
-                <controls:ChatAvatarControl Size="120"
-                                            HorizontalAlignment="Stretch"
-                                            VerticalAlignment="Stretch"
-                                            AvatarUrl="{Binding CurrentUserAvatar}"/>
-                <controls:ProfilePhotoButton HorizontalAlignment="Right"
-                                             VerticalAlignment="Bottom"/>
-            </Grid>
-        </Grid>
-
-        <Grid Grid.Row="1"
-              HorizontalAlignment="Stretch"
-              Margin="0,20,0,0">
+        <Grid Visibility="{Binding IsProfileEditOpen, Converter={StaticResource InvertedBooleanToVisibilityConverter}}">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="Auto"/>
-                <RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
-            <controls:ProfileBox x:Uid="Settings_ProfileName"
-                                 Title="Name"
-                                 Glyph="&#xE77B;"
-                                 Margin="0,0,0,8"
-                                 HorizontalAlignment="Stretch"
-                                 Value="{Binding CurrentUserName}"/>
-            <controls:ProfileBox x:Uid="Settings_ProfilePhone"
-                                 Grid.Row="1"
-                                 Title="Phone"
-                                 Glyph="&#xE717;"
-                                 Margin="0,0,0,8"
-                                 HorizontalAlignment="Stretch"
-                                 Value="{Binding CurrentUserPhone}"/>
-            <controls:ProfileBox x:Uid="Settings_ProfileStatus"
-                                 Grid.Row="2"
-                                 Title="About"
-                                 Glyph="&#xE8BD;"
-                                 Margin="0,0,0,8"
-                                 HorizontalAlignment="Stretch"
-                                 Value="{Binding ProfileStatus}"/>
+
+            <Grid Grid.Row="0"
+                  HorizontalAlignment="Stretch"
+                  Margin="0,16,0,0">
+                <Grid Width="120"
+                      Height="120"
+                      HorizontalAlignment="Center">
+                    <controls:ChatAvatarControl Size="120"
+                                                HorizontalAlignment="Stretch"
+                                                VerticalAlignment="Stretch"
+                                                AvatarUrl="{Binding CurrentUserAvatar}"/>
+                    <controls:ProfilePhotoButton HorizontalAlignment="Right"
+                                                 VerticalAlignment="Bottom"/>
+                </Grid>
+            </Grid>
+
+            <Grid Grid.Row="1"
+                  HorizontalAlignment="Stretch"
+                  Margin="0,20,0,0">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+                <controls:ProfileBox x:Uid="Settings_ProfileName"
+                                     Title="Name"
+                                     Glyph="&#xE77B;"
+                                     Margin="0,0,0,8"
+                                     HorizontalAlignment="Stretch"
+                                     Value="{Binding CurrentUserName}"
+                                     Click="NameBox_Click"/>
+                <controls:ProfileBox x:Uid="Settings_ProfilePhone"
+                                     Grid.Row="1"
+                                     Title="Phone"
+                                     Glyph="&#xE717;"
+                                     Margin="0,0,0,8"
+                                     HorizontalAlignment="Stretch"
+                                     Value="{Binding CurrentUserPhone}"/>
+                <controls:ProfileBox x:Uid="Settings_ProfileStatus"
+                                     Grid.Row="2"
+                                     Title="About"
+                                     Glyph="&#xE8BD;"
+                                     Margin="0,0,0,8"
+                                     HorizontalAlignment="Stretch"
+                                     Value="{Binding ProfileStatus}"
+                                     Click="AboutBox_Click"/>
+            </Grid>
         </Grid>
+
+        <controls:ProfileEditOverlay x:Name="EditOverlay"
+                                     Canvas.ZIndex="20"
+                                     Visibility="{Binding IsProfileEditOpen, Converter={StaticResource BooleanToVisibilityConverter}}"/>
     </Grid>
 </UserControl>

@@ -85,11 +85,13 @@ namespace Unison.Core.ViewModels
             _lastQueuedProfileJid = null;
 
             // Prefer navigating onto Chats first so ChatsView is hooked before PropertyChanged.
+            // Unison/WhatsApp: opening a chat from Favorites/Archived/etc must push Chats without
+            // AndClear so the list header back can return to that section. Legacy pivot: unchanged.
             if (string.Equals(AppSurface, SurfaceConnected, StringComparison.Ordinal))
             {
                 try
                 {
-                    NavigateToSection(NavigationRoutes.Chats);
+                    NavigateToChatsForOpenChat();
                 }
                 catch (Exception ex)
                 {

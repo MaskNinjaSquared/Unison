@@ -402,8 +402,9 @@ namespace Unison.Uwp.UI.Views
 
             if (string.Equals(e.PropertyName, nameof(CallsViewModel.IsCallDetailsOpen), StringComparison.Ordinal) ||
                 string.Equals(e.PropertyName, nameof(CallsViewModel.SelectedSubject), StringComparison.Ordinal) ||
-                string.Equals(e.PropertyName, nameof(CallsViewModel.SelectedHistory), StringComparison.Ordinal) ||
-                string.Equals(e.PropertyName, nameof(CallsViewModel.GroupedHistory), StringComparison.Ordinal))
+                string.Equals(e.PropertyName, nameof(CallsViewModel.SelectedLatest), StringComparison.Ordinal) ||
+                string.Equals(e.PropertyName, nameof(CallsViewModel.SelectedHistoryRest), StringComparison.Ordinal) ||
+                string.Equals(e.PropertyName, nameof(CallsViewModel.SelectedHistory), StringComparison.Ordinal))
             {
                 UpdateDetails();
             }
@@ -423,8 +424,9 @@ namespace Unison.Uwp.UI.Views
             {
                 DetailsPane.BindSubject(
                     ViewModel.SelectedSubject,
-                    ViewModel.SelectedHistory,
-                    ViewModel.GroupedHistory);
+                    ViewModel.SelectedLatest,
+                    ViewModel.SelectedHistoryRest,
+                    ViewModel.HistorySectionTitle);
             }
 
             _shell?.SelectCallDetail(open);
@@ -468,6 +470,17 @@ namespace Unison.Uwp.UI.Views
             ViewModel?.CloseDetailsCommand?.Execute(null);
             _shell?.SelectCallDetail(false);
             ApplyChatPaneState();
+        }
+
+        private void SectionBackButton_Click(object sender, RoutedEventArgs e)
+        {
+            var shell = App.Services?.GetService<ShellViewModel>();
+            if (shell != null && shell.TryHandleShellBack())
+            {
+                return;
+            }
+
+            shell?.NavigateToSectionCommand?.Execute(NavigationRoutes.Chats);
         }
 
         private void MenuButton_Click(object sender, RoutedEventArgs e)

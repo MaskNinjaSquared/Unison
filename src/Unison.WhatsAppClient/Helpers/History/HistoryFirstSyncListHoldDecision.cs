@@ -1,15 +1,11 @@
-using Unison.Core.Helpers;
-
 // =============================================================================
 // HistoryFirstSyncListHoldDecision
 //
 // Whether the first-sync SQLite quiet timer may publish IsCompleted (and thus
-// release the chat-list hold / DisplayRequest), or must wait for FULL_HISTORY
-// catch-up to finish. Completing too early is the erratic 1.8.3-style paint:
-// chats appear while pages still arrive in the background with no spinner.
-//
-// When catch-up is idle, the host still resolves directory names before
-// IsCompleted — list unlock shows chats with names, then network photos.
+// release the chat-list hold / DisplayRequest), or must wait. Completing with
+// zero conversations while catch-up pages still arrive is the erratic early
+// paint. Once SQLite has conversation rows, unlock the list — catch-up may keep
+// its banner, and directory names resolve in the background after unlock.
 // =============================================================================
 
 namespace Unison.WhatsAppClient.Helpers
@@ -18,27 +14,47 @@ namespace Unison.WhatsAppClient.Helpers
     {
         /// <summary>
         /// True when quiet-finalize must keep initial-sync active (no <c>IsCompleted</c>)
-        /// because catch-up still owes work while the first-sync list hold is up.
+        /// because catch-up still owes work and the store has no conversations yet.
+        /// Enrichment awaiting heavy history is not a defer gate — it is a consumer of
+        /// unlock; catch-up hand-off / banner already cover "Bootstrap still coming".
         /// </summary>
         public static bool ShouldDeferInitialSyncCompleted(
             bool firstSyncInProgress,
             bool handOffCatchUp,
             bool catchUpActive,
-            bool enrichmentAwaitingHeavyHistory)
+            bool enrichmentAwaitingHeavyHistory,
+            int processedConversations)
         {
             if (!firstSyncInProgress)
             {
                 return false;
             }
 
-            return handOffCatchUp || catchUpActive || enrichmentAwaitingHeavyHistory;
+            // Rows already on disk — unlock the list; catch-up / names continue.
+            if (processedConversations > 0)
+            {
+                return false;
+            }
+
+            // enrichmentAwaitingHeavyHistory is intentionally unused: keeping it as a
+            // parameter preserves call-site ABI while catch-up owns the empty-store hold.
+            _ = enrichmentAwaitingHeavyHistory;
+            return handOffCatchUp || catchUpActive;
         }
 
         /// <summary>
-        /// True when the first-sync list may unlock only after directory names are resolved
-        /// (catch-up already idle — caller runs names, then publishes <c>IsCompleted</c>).
+        /// Legacy gate: names must not block list unlock. Prefer
+        /// <see cref="ShouldScheduleNamesAfterListRelease"/>.
         /// </summary>
         public static bool ShouldResolveNamesBeforeListRelease(bool firstSyncInProgress)
+        {
+            return false;
+        }
+
+        /// <summary>
+        /// True when directory names should run after <c>IsCompleted</c> (list already unlocked).
+        /// </summary>
+        public static bool ShouldScheduleNamesAfterListRelease(bool firstSyncInProgress)
         {
             return firstSyncInProgress;
         }

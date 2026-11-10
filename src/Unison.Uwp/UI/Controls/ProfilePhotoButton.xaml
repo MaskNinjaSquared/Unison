@@ -60,9 +60,16 @@
                   Foreground="White"/>
         <Button.Flyout>
             <MenuFlyout>
-                <MenuFlyoutItem x:Uid="Settings_ProfilePhotoCamera" Text="Camera"/>
-                <MenuFlyoutItem x:Uid="Settings_ProfilePhotoGallery" Text="Gallery"/>
-                <MenuFlyoutItem x:Uid="Settings_ProfilePhotoDelete" Text="Delete" Foreground="#E81123"/>
+                <MenuFlyoutItem x:Uid="Settings_ProfilePhotoCamera"
+                               Text="Camera"
+                               Click="CameraItem_Click"/>
+                <MenuFlyoutItem x:Uid="Settings_ProfilePhotoGallery"
+                               Text="Gallery"
+                               Click="GalleryItem_Click"/>
+                <MenuFlyoutItem x:Uid="Settings_ProfilePhotoDelete"
+                               Text="Delete"
+                               Foreground="#E81123"
+                               Click="DeleteItem_Click"/>
             </MenuFlyout>
         </Button.Flyout>
     </Button>

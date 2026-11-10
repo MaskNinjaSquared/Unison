@@ -19,13 +19,15 @@ using Unison.Core.Helpers;
 using Unison.Core.Models;
 using Unison.Core.State;
 using Unison.Core.ViewModels;
+using Unison.Uwp.UI.Helpers;
 using Unison.Uwp.UI.Views;
 
 namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
 {
     /// <summary>
     /// Legacy shell: pivot hosts each section after its index is opened.
-    /// ContentFrame is Settings / Debug / Profile overlay only.
+    /// ContentFrame is the full-screen frame (Settings / Debug / status composer, via
+    /// <see cref="INavigator.NavigateFullScreen"/>) and the Profile overlay.
     /// </summary>
     public sealed partial class ShellView : Page
     {
@@ -39,6 +41,7 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
 
         private ShellViewModel _shell;
         private INavigator _navigator;
+        private ShellCameraPickHost _cameraPickHost;
         private IDialogService _dialogs;
         private INewChatDialogViewModelFactory _newChatFactory;
         private IChatService _chats;
@@ -96,6 +99,16 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
         private void OnLoaded(object sender, RoutedEventArgs e)
         {
             _navigator?.AttachShellFrame(ContentFrame);
+            _navigator?.AttachFullScreenFrame(ContentFrame);
+            if (_navigator != null)
+            {
+                _navigator.FullScreenChanged -= Navigator_FullScreenChanged;
+                _navigator.FullScreenChanged += Navigator_FullScreenChanged;
+                _navigator.LocalBackChanged -= Navigator_LocalBackChanged;
+                _navigator.LocalBackChanged += Navigator_LocalBackChanged;
+            }
+
+            AttachCameraPickHost();
             _pivotReady = true;
             ApplyPivotHeaders();
             EnsureBrandUppercase();
@@ -128,10 +141,58 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                 _shell.PropertyChanged -= Shell_PropertyChanged;
             }
 
+            if (_navigator != null)
+            {
+                _navigator.FullScreenChanged -= Navigator_FullScreenChanged;
+                _navigator.LocalBackChanged -= Navigator_LocalBackChanged;
+            }
+
+            DetachCameraPickHost();
             UnhookListChrome();
             UnhookDetail();
             SystemNavigationManager.GetForCurrentView().BackRequested -= ShellView_BackRequested;
         }
+
+        private void AttachCameraPickHost()
+        {
+            if (_cameraPickHost != null || _shell == null || App.Services == null)
+            {
+                return;
+            }
+
+            ICameraPickService camera = App.Services.GetService<ICameraPickService>();
+            if (camera == null)
+            {
+                return;
+            }
+
+            _cameraPickHost = new ShellCameraPickHost(
+                _shell,
+                camera,
+                _navigator,
+                () => CameraPickPresenter);
+            _cameraPickHost.Attach();
+        }
+
+        private void DetachCameraPickHost()
+        {
+            _cameraPickHost?.Detach();
+            _cameraPickHost = null;
+        }
+
+        private void Navigator_FullScreenChanged(object sender, EventArgs e)
+        {
+            if (_navigator != null && _navigator.IsFullScreenOpen)
+            {
+                SyncOverlayFromFrame();
+            }
+            else
+            {
+                DismissOverlay();
+            }
+        }
+
+        private void Navigator_LocalBackChanged(object sender, EventArgs e) => ApplyShellChrome();
 
         private void HookDetail()
         {
@@ -195,6 +256,13 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
 
         private void ShellView_BackRequested(object sender, BackRequestedEventArgs e)
         {
+            // Virtual overlay backs (New Conversation, share/favorites pickers) before Frame chrome.
+            if (_navigator != null && _navigator.TryHandleLocalBack())
+            {
+                e.Handled = true;
+                return;
+            }
+
             // Overlay first: Settings/Debug sit above the list and any open chat. Checking
             // _detailOpen before them left the hardware back closing the chat underneath
             // while the overlay stayed up (CloseDetailAsync is async and can still be mid-flight).
@@ -232,6 +300,14 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                 return;
             }
 
+            if (ActivePivotContent() is StatusView statusSection &&
+                statusSection.ListChrome != null &&
+                statusSection.ListChrome.TryHandleBack())
+            {
+                e.Handled = true;
+                return;
+            }
+
             if (ActivePivotContent() is IConversationShellPage conversation &&
                 conversation.TryHandleBack())
             {
@@ -265,6 +341,16 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             if (_overlayOpen && ContentFrame?.Content is DebugView)
             {
                 DismissOverlay();
+                return true;
+            }
+
+            if (_overlayOpen && ContentFrame?.Content is IFullScreenShellPage page)
+            {
+                if (!page.TryHandleBack())
+                {
+                    _navigator?.CloseFullScreen();
+                }
+
                 return true;
             }
 
@@ -571,6 +657,7 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             {
                 bool showBack = hideChrome || _searchState || _detailOpen ||
                     _statusDetailHostOpen || _callDetailHostOpen || settingsPage ||
+                    (_navigator != null && _navigator.HasLocalBack) ||
                     (_shell != null && _shell.ShowSystemBackButton);
                 SystemNavigationManager.GetForCurrentView().AppViewBackButtonVisibility =
                     showBack
@@ -594,6 +681,11 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                 ListColumn.Width = new GridLength(1, GridUnitType.Star);
                 DetailHost.Visibility = Visibility.Collapsed;
                 ListChromeRoot.Visibility = Visibility.Visible;
+                if (ShellStatusDetail != null && !_statusDetailHostOpen)
+                {
+                    ShellStatusDetail.Visibility = Visibility.Collapsed;
+                }
+
                 ApplyListDesktopDivider(narrow);
                 return;
             }
@@ -611,12 +703,20 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                 }
             }
 
+            // Status viewer is a shell overlay (ColumnSpan 2) — always cover list + detail.
+            if (ShellStatusDetail != null)
+            {
+                ShellStatusDetail.Visibility = _statusDetailHostOpen
+                    ? Visibility.Visible
+                    : Visibility.Collapsed;
+            }
+
             DetailHost.Visibility = Visibility.Visible;
-            bool fullscreenDetail = narrow &&
-                (_detailOpen || _statusDetailHostOpen || _callDetailHostOpen);
+            bool fullscreenDetail = _statusDetailHostOpen ||
+                (narrow && (_detailOpen || _callDetailHostOpen));
             if (fullscreenDetail)
             {
-                // Fullscreen detail: list column gone, pivot hidden via HidesLegacyShellChrome.
+                // Fullscreen detail / status overlay: list column gone, pivot hidden via chrome.
                 ListColumn.MinWidth = 0;
                 ListColumn.MaxWidth = 10000;
                 ListColumn.Width = new GridLength(0);
@@ -664,9 +764,9 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                 ShellChatDetail.Visibility = Visibility.Visible;
             }
 
-            if (ShellStatusDetail != null)
+            if (ShellStatusPaneEmpty != null)
             {
-                ShellStatusDetail.Visibility = Visibility.Collapsed;
+                ShellStatusPaneEmpty.Visibility = Visibility.Collapsed;
             }
 
             if (ShellCallsDetailRoot != null)
@@ -675,6 +775,9 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             }
         }
 
+        /// <summary>
+        /// Wide empty Status pane in DetailHost. Open viewer uses <see cref="ShellStatusDetail"/> overlay.
+        /// </summary>
         private void ShowStatusDetailSurface()
         {
             if (ShellChatDetail != null)
@@ -682,9 +785,9 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                 ShellChatDetail.Visibility = Visibility.Collapsed;
             }
 
-            if (ShellStatusDetail != null)
+            if (ShellStatusPaneEmpty != null)
             {
-                ShellStatusDetail.Visibility = Visibility.Visible;
+                ShellStatusPaneEmpty.Visibility = Visibility.Visible;
             }
 
             if (ShellCallsDetailRoot != null)
@@ -700,9 +803,9 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                 ShellChatDetail.Visibility = Visibility.Collapsed;
             }
 
-            if (ShellStatusDetail != null)
+            if (ShellStatusPaneEmpty != null)
             {
-                ShellStatusDetail.Visibility = Visibility.Collapsed;
+                ShellStatusPaneEmpty.Visibility = Visibility.Collapsed;
             }
 
             if (ShellCallsDetailRoot != null)
@@ -1021,7 +1124,7 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             }
         }
 
-        private async Task OpenStatusDetailAsync(StatusAuthorItem author)
+        private async Task OpenStatusDetailAsync(StatusAuthorItem author, string startMessageId = null)
         {
             if (author == null || ShellStatusDetail == null)
             {
@@ -1037,13 +1140,17 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
 
                 await CloseCallDetailAsync();
 
-                ShowStatusDetailSurface();
+                if (ShellStatusPaneEmpty != null)
+                {
+                    ShellStatusPaneEmpty.Visibility = Visibility.Collapsed;
+                }
+
                 _shell?.SelectStatusDetail(true);
                 _statusDetailHostOpen = true;
                 ApplyDetailLayout();
                 ApplyShellChrome();
 
-                await ShellStatusDetail.OpenAuthorAsync(author);
+                await ShellStatusDetail.OpenAuthorAsync(author, startMessageId);
                 if (!ShellStatusDetail.HasOpenAuthor)
                 {
                     _hookedStatusBar?.ClearSelection();
@@ -1116,8 +1223,9 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                 ShowCallsDetailSurface(detailsOpen: true);
                 ShellCallDetails.BindSubject(
                     vm.SelectedSubject,
-                    vm.SelectedHistory,
-                    vm.GroupedHistory);
+                    vm.SelectedLatest,
+                    vm.SelectedHistoryRest,
+                    vm.HistorySectionTitle);
                 _shell?.SelectCallDetail(true);
                 _callDetailHostOpen = true;
                 ApplyDetailLayout();
@@ -1224,6 +1332,7 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
 
             _overlayOpen = content is SettingsView
                 || content is DebugView
+                || content is IFullScreenShellPage
                 || IsLegacyProfilePage(content);
             if (_overlayOpen && (_detailOpen || _statusDetailHostOpen || _callDetailHostOpen))
             {
@@ -1314,6 +1423,8 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                 status.SettingsRequested += List_SettingsRequested;
                 status.AuthorOpenRequested += Status_AuthorOpenRequested;
                 status.StatusClosed += Status_StatusClosed;
+                status.NewStatusPickerOpenChanged += Status_NewStatusPickerOpenChanged;
+                BindNewStatusPicker(status);
             }
 
             if (_hookedList != null)
@@ -1384,7 +1495,12 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                 _hookedStatusBar.SettingsRequested -= List_SettingsRequested;
                 _hookedStatusBar.AuthorOpenRequested -= Status_AuthorOpenRequested;
                 _hookedStatusBar.StatusClosed -= Status_StatusClosed;
+                _hookedStatusBar.NewStatusPickerOpenChanged -= Status_NewStatusPickerOpenChanged;
                 _hookedStatusBar = null;
+                if (NewStatusPickerOverlay != null)
+                {
+                    NewStatusPickerOverlay.ViewModel = null;
+                }
             }
 
             if (_hookedList != null)
@@ -1417,12 +1533,35 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                 return;
             }
 
-            _ = OpenStatusDetailAsync(e.Author);
+            _ = OpenStatusDetailAsync(e.Author, e.StartMessageId);
         }
 
         private void Status_StatusClosed(object sender, EventArgs e)
         {
             _ = CloseStatusDetailAsync();
+        }
+
+        private void Status_NewStatusPickerOpenChanged(object sender, bool isOpen)
+        {
+            // Overlay already watches IsNewStatusPickerOpen on the list VM; keep ViewModel wired.
+            if (sender is StatusView status)
+            {
+                BindNewStatusPicker(status);
+            }
+            else if (!isOpen && NewStatusPickerOverlay != null && _hookedStatusBar == null)
+            {
+                NewStatusPickerOverlay.ViewModel = null;
+            }
+        }
+
+        private void BindNewStatusPicker(StatusView status)
+        {
+            if (NewStatusPickerOverlay == null)
+            {
+                return;
+            }
+
+            NewStatusPickerOverlay.ViewModel = status?.ListChrome?.ViewModel;
         }
 
         private void Calls_CallDetailRequested(object sender, EventArgs e)
@@ -1717,7 +1856,7 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                 return;
             }
 
-            SetSectionLoadingVisible(true);
+            SetSectionLoadingVisible(true, tag);
             try
             {
                 await YieldForSectionPaintAsync();
@@ -1733,7 +1872,7 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             }
             finally
             {
-                SetSectionLoadingVisible(false);
+                SetSectionLoadingVisible(false, tag);
             }
         }
 
@@ -1802,31 +1941,40 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             return Task.CompletedTask;
         }
 
-        private void SetSectionLoadingVisible(bool visible)
+        /// <param name="visible">Show spinner.</param>
+        /// <param name="tag">
+        /// First materialize of any tab uses the global <see cref="SectionLoadingOverlay"/>
+        /// (sibling of the Pivot — in-item rings never painted during the pivot switch).
+        /// </param>
+        private void SetSectionLoadingVisible(bool visible, string tag = null)
         {
             if (SectionLoadingOverlay == null)
             {
                 return;
             }
 
+            bool chats = string.Equals(tag, "chats", StringComparison.OrdinalIgnoreCase);
+            if (SectionLoadingText != null)
+            {
+                SectionLoadingText.Visibility = chats ? Visibility.Visible : Visibility.Collapsed;
+            }
+
             SectionLoadingOverlay.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
+            if (SectionLoadingRing != null)
+            {
+                // Toggle so the ring starts when the overlay becomes visible (Collapsed→Visible alone is flaky).
+                SectionLoadingRing.IsActive = visible;
+            }
         }
 
         /// <summary>
         /// Lets the pivot spinner paint before InitializeComponent / Attach freeze the UI thread.
-        /// Mobile needs a real delay — one dispatcher turn is not enough (same as chat detail).
+        /// A real delay is required on all SKUs — one dispatcher turn is not enough.
         /// </summary>
         private async Task YieldForSectionPaintAsync()
         {
             await Dispatcher.RunAsync(CoreDispatcherPriority.Low, () => { });
-            if (_isWindowsMobile)
-            {
-                await Task.Delay(48);
-            }
-            else
-            {
-                await Task.Yield();
-            }
+            await Task.Delay(_isWindowsMobile ? 80 : 60);
         }
 
         private void SelectPivotIndex(string tag)
@@ -2201,7 +2349,7 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             }
 
             await CloseDetailAsync();
-            _navigator?.NavigateInShell(NavigationDestination.Debug);
+            _navigator?.NavigateFullScreen(NavigationDestination.Debug);
             SyncOverlayFromFrame();
         }
 
@@ -2213,7 +2361,7 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             }
 
             await CloseDetailAsync();
-            _navigator?.OpenSettings();
+            _navigator?.NavigateFullScreen(NavigationDestination.Settings);
             SyncOverlayFromFrame();
         }
 

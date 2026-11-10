@@ -50,12 +50,15 @@ namespace Unison.Core.Helpers.Calls
         {
             return kind == CallEventChromeKind.Incoming
                 || kind == CallEventChromeKind.Missed
-                || kind == CallEventChromeKind.Completed;
+                || kind == CallEventChromeKind.Completed
+                || kind == CallEventChromeKind.AnsweredElsewhere;
         }
 
         public static bool ShouldWriteChatChrome(CallEventChromeKind kind)
         {
-            return kind == CallEventChromeKind.Missed || kind == CallEventChromeKind.Completed;
+            return kind == CallEventChromeKind.Missed
+                || kind == CallEventChromeKind.Completed
+                || kind == CallEventChromeKind.AnsweredElsewhere;
         }
     }
 }

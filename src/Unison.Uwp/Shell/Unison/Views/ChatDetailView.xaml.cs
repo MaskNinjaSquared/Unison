@@ -110,8 +110,6 @@ namespace Unison.Uwp.Shell.Unison.Views
         private ChatMessageViewModel _displayedPinnedMessage;
         private List<ChatMessageViewModel> _activePinnedMessages = new List<ChatMessageViewModel>();
         private int _displayedPinnedIndex;
-        /// <summary>Lazy camera overlay — not in XAML so Creators/Mobile chat open skips CaptureElement.</summary>
-        private UiViews.CameraPickView _cameraPickOverlay;
         private DispatcherTimer _dateSeparatorTimer;
         private DateTime _dateSeparatorTimerDay;
         private bool _cancelRecordingAnimating;
@@ -139,6 +137,9 @@ namespace Unison.Uwp.Shell.Unison.Views
 
         /// <summary>The slide in flight, kept so a fast second tap can cut the first one short.</summary>
         private Storyboard _attachMenuStoryboard;
+
+        private ShellViewModel _shellForBack;
+        private bool _shellBackHooked;
 
         public ChatDetailView()
         {
@@ -187,6 +188,7 @@ namespace Unison.Uwp.Shell.Unison.Views
             HookLayoutStateChanges();
             StartDateSeparatorTimer();
             ViewModel?.AttachAudioPlaybackUi(AudioPlayer);
+            AttachShellBackVisibility();
         }
 
         /// <summary>
@@ -206,7 +208,6 @@ namespace Unison.Uwp.Shell.Unison.Views
             ViewModel.MessageSent += ViewModel_MessageSent;
             ViewModel.MessagePinnedChanged += ViewModel_MessagePinnedChanged;
             ViewModel.PresenceAnimationRequested += ViewModel_PresenceAnimationRequested;
-            ViewModel.CameraPickRequested += ViewModel_CameraPickRequested;
             ViewModel.PropertyChanged += ViewModel_PropertyChanged;
         }
 
@@ -222,7 +223,6 @@ namespace Unison.Uwp.Shell.Unison.Views
             ViewModel.MessageSent -= ViewModel_MessageSent;
             ViewModel.MessagePinnedChanged -= ViewModel_MessagePinnedChanged;
             ViewModel.PresenceAnimationRequested -= ViewModel_PresenceAnimationRequested;
-            ViewModel.CameraPickRequested -= ViewModel_CameraPickRequested;
             ViewModel.PropertyChanged -= ViewModel_PropertyChanged;
         }
 
@@ -545,6 +545,7 @@ namespace Unison.Uwp.Shell.Unison.Views
                 _serviceEventsAttached = false;
             }
 
+            DetachShellBackVisibility();
             _chatLoadCts?.Cancel();
             _chatLoadCts?.Dispose();
             _chatLoadCts = null;
@@ -978,7 +979,7 @@ namespace Unison.Uwp.Shell.Unison.Views
         /// <summary>Closes fullscreen media or the info pane; returns true if consumed.</summary>
         public bool TryConsumeBack()
         {
-            if (TryCloseCameraPick() || TryCloseVideoViewer() || TryCloseImageViewer())
+            if (TryCloseVideoViewer() || TryCloseImageViewer())
             {
                 return true;
             }
@@ -1236,7 +1237,7 @@ namespace Unison.Uwp.Shell.Unison.Views
             _isLoadingMoreFromScroll = true;
             try
             {
-                string requestedJid = Jids.GetCanonicalJid(_activeChat.JID);
+                string requestedJid = Jids.PeekCanonicalJid(_activeChat.JID);
                 Debug.WriteLine($"[ChatDetailView] Loading more messages for {requestedJid}. Current: {_messages.Count}");
                 WriteTimelineDiagnostics(
                     "load-more-start",
@@ -1252,7 +1253,7 @@ namespace Unison.Uwp.Shell.Unison.Views
                     "; reachedStart=" + (result?.ReachedStart ?? false) +
                     "; detached=" + ViewModel.IsDetachedFromEnd);
                 if (_activeChat == null ||
-                    !string.Equals(Jids.GetCanonicalJid(_activeChat.JID), requestedJid, StringComparison.OrdinalIgnoreCase))
+                    !string.Equals(Jids.PeekCanonicalJid(_activeChat.JID), requestedJid, StringComparison.OrdinalIgnoreCase))
                 {
                     return;
                 }
@@ -1407,24 +1408,90 @@ namespace Unison.Uwp.Shell.Unison.Views
             }
         }
 
-        private void UpdateEmptyBackButtonVisibility()
+        private void AttachShellBackVisibility()
         {
-            if (EmptyBackButton == null)
+            if (_shellBackHooked)
             {
                 return;
             }
 
-            bool narrow = false;
             try
             {
-                var shell = App.Services?.GetService<ShellViewModel>();
-                narrow = shell != null && shell.IsNarrowWindow;
+                _shellForBack = App.Services?.GetService<ShellViewModel>();
+            }
+            catch
+            {
+                _shellForBack = null;
+            }
+
+            if (_shellForBack == null)
+            {
+                UpdateChatBackButtonsVisibility();
+                return;
+            }
+
+            _shellForBack.PropertyChanged += Shell_PropertyChangedForBack;
+            _shellBackHooked = true;
+            UpdateChatBackButtonsVisibility();
+        }
+
+        private void DetachShellBackVisibility()
+        {
+            if (!_shellBackHooked)
+            {
+                return;
+            }
+
+            if (_shellForBack != null)
+            {
+                _shellForBack.PropertyChanged -= Shell_PropertyChangedForBack;
+            }
+
+            _shellForBack = null;
+            _shellBackHooked = false;
+        }
+
+        private void Shell_PropertyChangedForBack(object sender, PropertyChangedEventArgs e)
+        {
+            if (string.IsNullOrEmpty(e.PropertyName) ||
+                e.PropertyName == nameof(ShellViewModel.ShowChatDetailBackButton) ||
+                e.PropertyName == nameof(ShellViewModel.IsNarrowWindow))
+            {
+                UpdateChatBackButtonsVisibility();
+            }
+        }
+
+        /// <summary>
+        /// Header + empty-state back: only when <see cref="ShellViewModel.ShowChatDetailBackButton"/>
+        /// (narrow / handset). Wide dual-pane keeps the list visible — no arrow.
+        /// </summary>
+        private void UpdateChatBackButtonsVisibility()
+        {
+            bool show = false;
+            try
+            {
+                var shell = _shellForBack ?? App.Services?.GetService<ShellViewModel>();
+                show = shell != null && shell.ShowChatDetailBackButton;
             }
             catch
             {
             }
 
-            EmptyBackButton.Visibility = narrow ? Visibility.Visible : Visibility.Collapsed;
+            bool hasChat = ActiveChatGrid != null &&
+                           ActiveChatGrid.Visibility == Visibility.Visible;
+            if (BackButton != null)
+            {
+                BackButton.Visibility = show && hasChat
+                    ? Visibility.Visible
+                    : Visibility.Collapsed;
+            }
+
+            if (EmptyBackButton != null)
+            {
+                EmptyBackButton.Visibility = show && !hasChat
+                    ? Visibility.Visible
+                    : Visibility.Collapsed;
+            }
         }
 
         /// <summary>Invoked from <see cref="Templates.MessageTemplates"/> when a loaded image is tapped.</summary>
@@ -1549,80 +1616,6 @@ namespace Unison.Uwp.Shell.Unison.Views
             ImageViewerOverlay.CloseRequested -= ImageViewerOverlay_CloseRequested;
             ImageViewerOverlay.ViewModel = null;
             ImageViewerOverlay.Visibility = Visibility.Collapsed;
-            return true;
-        }
-
-        private void ViewModel_CameraPickRequested(object sender, EventArgs e)
-        {
-            OpenCameraPick();
-        }
-
-        private void OpenCameraPick()
-        {
-            if (CameraPickPresenter == null)
-            {
-                return;
-            }
-
-            SetAttachMenuOpen(false);
-            TryCloseVideoViewer();
-            TryCloseImageViewer();
-
-            UiViews.CameraPickView overlay = EnsureCameraPickOverlay();
-            var pickVm = new CameraPickViewModel();
-            overlay.CloseRequested -= CameraPickOverlay_CloseRequested;
-            overlay.PhotoCaptured -= CameraPickOverlay_PhotoCaptured;
-            overlay.ViewModel = pickVm;
-            overlay.CloseRequested += CameraPickOverlay_CloseRequested;
-            overlay.PhotoCaptured += CameraPickOverlay_PhotoCaptured;
-            CameraPickPresenter.Visibility = Visibility.Visible;
-        }
-
-        private UiViews.CameraPickView EnsureCameraPickOverlay()
-        {
-            if (_cameraPickOverlay != null)
-            {
-                return _cameraPickOverlay;
-            }
-
-            _cameraPickOverlay = new UiViews.CameraPickView();
-            CameraPickPresenter.Content = _cameraPickOverlay;
-            return _cameraPickOverlay;
-        }
-
-        private void CameraPickOverlay_CloseRequested(object sender, EventArgs e)
-        {
-            TryCloseCameraPick();
-        }
-
-        private async void CameraPickOverlay_PhotoCaptured(object sender, CameraPhotoCapturedEventArgs e)
-        {
-            TryCloseCameraPick();
-            if (ViewModel == null || e?.Bytes == null)
-            {
-                return;
-            }
-
-            await ViewModel.AcceptCapturedPhotoAsync(e.Bytes);
-        }
-
-        private bool TryCloseCameraPick()
-        {
-            if (CameraPickPresenter == null || CameraPickPresenter.Visibility != Visibility.Visible)
-            {
-                return false;
-            }
-
-            if (_cameraPickOverlay != null)
-            {
-                _cameraPickOverlay.CloseRequested -= CameraPickOverlay_CloseRequested;
-                _cameraPickOverlay.PhotoCaptured -= CameraPickOverlay_PhotoCaptured;
-                _cameraPickOverlay.ViewModel = null;
-                CameraPickPresenter.Content = null;
-                _cameraPickOverlay = null;
-            }
-
-            CameraPickPresenter.Visibility = Visibility.Collapsed;
             return true;
         }
 
@@ -1825,12 +1818,12 @@ namespace Unison.Uwp.Shell.Unison.Views
             var contacts = Contacts;
             if (chat != null)
             {
-                string canonicalJid = Jids.GetCanonicalJid(chat.JID);
+                string canonicalJid = Jids.PeekCanonicalJid(chat.JID);
                 if (!string.IsNullOrWhiteSpace(canonicalJid) &&
                     !string.Equals(canonicalJid, chat.JID, StringComparison.OrdinalIgnoreCase))
                 {
                     var canonicalChat = ChatState?.Chats.FirstOrDefault(c =>
-                        string.Equals(Jids.GetCanonicalJid(c.JID), canonicalJid, StringComparison.OrdinalIgnoreCase));
+                        string.Equals(Jids.PeekCanonicalJid(c.JID), canonicalJid, StringComparison.OrdinalIgnoreCase));
                     if (canonicalChat != null)
                     {
                         chat = canonicalChat;
@@ -1845,8 +1838,8 @@ namespace Unison.Uwp.Shell.Unison.Views
                 // List rebuilds often replace ChatItem instances; only rebind the reference.
                 if (_activeChat != null &&
                     string.Equals(
-                        Jids.GetCanonicalJid(_activeChat.JID),
-                        Jids.GetCanonicalJid(chat.JID),
+                        Jids.PeekCanonicalJid(_activeChat.JID),
+                        Jids.PeekCanonicalJid(chat.JID),
                         StringComparison.OrdinalIgnoreCase))
                 {
                     if (!ReferenceEquals(_activeChat, chat))
@@ -1874,7 +1867,6 @@ namespace Unison.Uwp.Shell.Unison.Views
 
             // After the same-chat return: the list re-reports the open chat after every reorder,
             // and that must not close a picture the user is looking at.
-            TryCloseCameraPick();
             TryCloseVideoViewer();
             TryCloseImageViewer();
 
@@ -1900,6 +1892,7 @@ namespace Unison.Uwp.Shell.Unison.Views
 
             // Bind only — roster/avatar enrich runs after NarrowDetail + ProgressBar paint.
             ViewModel?.BindActiveChatForOpen(chat);
+            ApplyChannelOpenChrome(chat);
 
             // A menu belongs to the conversation it was opened over, so a different one arriving
             // takes it down with everything else that was on screen.
@@ -1914,7 +1907,7 @@ namespace Unison.Uwp.Shell.Unison.Views
                 ClearTimelineMessages();
                 ActiveChatGrid.Visibility = Visibility.Collapsed;
                 EmptyStateGrid.Visibility = Visibility.Visible;
-                UpdateEmptyBackButtonVisibility();
+                UpdateChatBackButtonsVisibility();
                 PinnedMessageButton.Visibility = Visibility.Collapsed;
                 _displayedPinnedMessage = null;
                 _activePinnedMessages.Clear();
@@ -1939,10 +1932,7 @@ namespace Unison.Uwp.Shell.Unison.Views
             _activeChat.PropertyChanged += ActiveChat_PropertyChanged;
             ActiveChatGrid.Visibility = Visibility.Visible;
             EmptyStateGrid.Visibility = Visibility.Collapsed;
-            if (EmptyBackButton != null)
-            {
-                EmptyBackButton.Visibility = Visibility.Collapsed;
-            }
+            UpdateChatBackButtonsVisibility();
 
             ChatStatusText.Text = "";
             ChatStatusText.Opacity = 0;
@@ -2042,7 +2032,7 @@ namespace Unison.Uwp.Shell.Unison.Views
                     return;
                 }
 
-                string requestedJid = Jids.GetCanonicalJid(chat.JID);
+                string requestedJid = Jids.PeekCanonicalJid(chat.JID);
                 Debug.WriteLine($"[ChatDetailView] Loading messages for {requestedJid}");
 
                 List<ChatMessage> messages;
@@ -2059,7 +2049,7 @@ namespace Unison.Uwp.Shell.Unison.Views
                 }
 
                 if (token.IsCancellationRequested || _activeChat == null ||
-                    !string.Equals(Jids.GetCanonicalJid(_activeChat.JID), requestedJid, StringComparison.OrdinalIgnoreCase))
+                    !string.Equals(Jids.PeekCanonicalJid(_activeChat.JID), requestedJid, StringComparison.OrdinalIgnoreCase))
                 {
                     WriteChatOpenDiagnostics(
                         "aborted",
@@ -2109,7 +2099,7 @@ namespace Unison.Uwp.Shell.Unison.Views
                 {
                     ViewModel.StopPresenceWatch();
                 }
-                else if (!_isWindowsMobile)
+                else
                 {
                     ViewModel.StartPresenceWatch(chat.JID);
                 }
@@ -2122,7 +2112,7 @@ namespace Unison.Uwp.Shell.Unison.Views
                 // ChangeView needs scroll enabled; lock is cleared in finally above.
                 if (!token.IsCancellationRequested &&
                     _activeChat != null &&
-                    string.Equals(Jids.GetCanonicalJid(_activeChat.JID), requestedJid, StringComparison.OrdinalIgnoreCase))
+                    string.Equals(Jids.PeekCanonicalJid(_activeChat.JID), requestedJid, StringComparison.OrdinalIgnoreCase))
                 {
                     ScrollToBottom();
                     _ = StickScrollToBottomOnOpenAsync(token);
@@ -2188,8 +2178,8 @@ namespace Unison.Uwp.Shell.Unison.Views
             }
 
             bool sameChat = string.Equals(
-                Jids.GetCanonicalJid(_activeChat.JID),
-                Jids.GetCanonicalJid(chat?.JID),
+                Jids.PeekCanonicalJid(_activeChat.JID),
+                Jids.PeekCanonicalJid(chat?.JID),
                 StringComparison.OrdinalIgnoreCase);
             return sameChat ? "same-chat-new-instance" : "chat-switched";
         }
@@ -2394,6 +2384,40 @@ namespace Unison.Uwp.Shell.Unison.Views
             }
         }
 
+        private void ApplyChannelOpenChrome(ChatItem chat)
+        {
+            if (MessageInput != null && ViewModel != null)
+            {
+                MessageInput.PlaceholderText = ViewModel.ComposerPlaceholderText;
+            }
+
+            bool isChannel = chat != null && chat.IsChannel;
+            Brush background = isChannel
+                ? (TryFindThemeBrush("ChatDetailChannelBackgroundBrush")
+                   ?? TryFindThemeBrush("ChatDetailBackgroundBrush"))
+                : TryFindThemeBrush("ChatDetailBackgroundBrush");
+            if (background != null && ActiveChatGrid != null)
+            {
+                ActiveChatGrid.Background = background;
+            }
+        }
+
+        private static Brush TryFindThemeBrush(string key)
+        {
+            try
+            {
+                if (Application.Current.Resources.ContainsKey(key))
+                {
+                    return Application.Current.Resources[key] as Brush;
+                }
+            }
+            catch
+            {
+            }
+
+            return null;
+        }
+
         private void ApplyHeaderAvatar(ChatItem chat)
         {
             if (chat == null || (HeaderAvatar == null && HeaderAnnouncementsAvatar == null))
@@ -2410,7 +2434,8 @@ namespace Unison.Uwp.Shell.Unison.Views
 
             if (HeaderAvatar != null)
             {
-                HeaderAvatar.IsGroup = isGroup;
+                HeaderAvatar.IsGroup = isGroup && !chat.IsChannel;
+                HeaderAvatar.IsChannel = chat.IsChannel;
                 HeaderAvatar.AvatarUrl = url;
                 HeaderAvatar.Visibility = announce ? Visibility.Collapsed : Visibility.Visible;
             }
@@ -2786,8 +2811,8 @@ namespace Unison.Uwp.Shell.Unison.Views
                 return;
             }
 
-            string activeCanonical = Jids.GetCanonicalJid(_activeChat.JID);
-            string updatedCanonical = Jids.GetCanonicalJid(updatedJid);
+            string activeCanonical = Jids.PeekCanonicalJid(_activeChat.JID);
+            string updatedCanonical = Jids.PeekCanonicalJid(updatedJid);
             if (!string.Equals(activeCanonical, updatedCanonical, StringComparison.OrdinalIgnoreCase))
             {
                 return;
@@ -2866,13 +2891,15 @@ namespace Unison.Uwp.Shell.Unison.Views
             }
 
             _isSyncingFromService = true;
-            string requestedJid = Jids.GetCanonicalJid(_activeChat.JID);
+            string requestedJid = Jids.PeekCanonicalJid(_activeChat.JID);
             try
             {
                 bool stickToBottom = IsFollowingTimelineEnd();
-                List<ChatMessage> serviceMessages = await MessagesFacade.LoadRecentMessagesForSyncAsync(requestedJid);
+                List<ChatMessage> serviceMessages = await MessagesFacade
+                    .LoadRecentMessagesForSyncAsync(requestedJid)
+                    .ConfigureAwait(false);
                 if (_activeChat == null ||
-                    !string.Equals(Jids.GetCanonicalJid(_activeChat.JID), requestedJid, StringComparison.OrdinalIgnoreCase) ||
+                    !string.Equals(Jids.PeekCanonicalJid(_activeChat.JID), requestedJid, StringComparison.OrdinalIgnoreCase) ||
                     serviceMessages == null || serviceMessages.Count == 0)
                 {
                     return;
@@ -2881,7 +2908,7 @@ namespace Unison.Uwp.Shell.Unison.Views
                 await Dispatcher.RunAsync(CoreDispatcherPriority.Normal, () =>
                 {
                     if (_activeChat == null ||
-                        !string.Equals(Jids.GetCanonicalJid(_activeChat.JID), requestedJid, StringComparison.OrdinalIgnoreCase))
+                        !string.Equals(Jids.PeekCanonicalJid(_activeChat.JID), requestedJid, StringComparison.OrdinalIgnoreCase))
                     {
                         return;
                     }
@@ -2889,7 +2916,27 @@ namespace Unison.Uwp.Shell.Unison.Views
                     try
                     {
                         bool followingEnd = stickToBottom || IsFollowingTimelineEnd();
-                        bool changed = ViewModel.MergeTimelineFromService(serviceMessages, requestedJid, followingEnd);
+                        bool changed;
+                        if (HistoryListUiRefresh.ShouldReplaceTimelineOnHistorySync(
+                                _messages.Count,
+                                ViewModel.InitialUiMessageWindow))
+                        {
+                            var window = ChatDetailViewModel.TakeLastWindow(
+                                serviceMessages,
+                                ViewModel.InitialUiMessageWindow);
+                            ViewModel.StampGroupRemoteJid(window, requestedJid);
+                            ViewModel.ReplaceTimelineWindow(window);
+                            changed = true;
+                            followingEnd = true;
+                        }
+                        else
+                        {
+                            changed = ViewModel.MergeTimelineFromService(
+                                serviceMessages,
+                                requestedJid,
+                                followingEnd);
+                        }
+
                         UpdatePinnedBanner();
 
                         if (changed)
@@ -3028,7 +3075,7 @@ namespace Unison.Uwp.Shell.Unison.Views
                 _displayedPinnedIndex = 0;
                 PinnedMessageButton.Visibility = Visibility.Collapsed;
                 PinnedMessageTitleText.Text = LocalizedStrings.Get("ChatDetail_Pinned.Text");
-                PinnedMessagePreviewText.Text = string.Empty;
+                EmojiRichRuns.SetTextBlock(PinnedMessagePreviewText, string.Empty);
                 return;
             }
 
@@ -3055,9 +3102,17 @@ namespace Unison.Uwp.Shell.Unison.Views
             _displayedPinnedMessage = _activePinnedMessages[_displayedPinnedIndex];
             string preview = _displayedPinnedMessage.Caption;
             if (string.IsNullOrWhiteSpace(preview)) preview = _displayedPinnedMessage.Content;
-            PinnedMessagePreviewText.Text = string.IsNullOrWhiteSpace(preview)
-                ? "[Mídia]"
-                : preview.Replace("\r", " ").Replace("\n", " ");
+            // Mentions resolve to display names and emoji get the packaged face, but links stay
+            // inert: the banner is a Button whose tap jumps to the pinned message, and a live
+            // Hyperlink inside it would swallow that gesture.
+            EmojiRichRuns.SetTextBlock(
+                PinnedMessagePreviewText,
+                string.IsNullOrWhiteSpace(preview)
+                    ? "[Mídia]"
+                    : CommentRichService.FormatMentionsPlain(
+                        preview.Replace("\r", " ").Replace("\n", " "),
+                        _displayedPinnedMessage.MentionedJids,
+                        _displayedPinnedMessage.MentionLookup));
             PinnedMessageTitleText.Text = _activePinnedMessages.Count > 1
                 ? LocalizedStrings.Format("ChatDetail_PinnedIndex", _displayedPinnedIndex + 1, _activePinnedMessages.Count)
                 : LocalizedStrings.Get("ChatDetail_Pinned.Text");
@@ -3647,11 +3702,19 @@ namespace Unison.Uwp.Shell.Unison.Views
                     (_activeChat.IsGroup ||
                      (!string.IsNullOrWhiteSpace(_activeChat.JID) &&
                       _activeChat.JID.IndexOf("@g.us", StringComparison.OrdinalIgnoreCase) >= 0));
+                bool isChannel = _activeChat != null &&
+                    (_activeChat.IsChannel ||
+                     (!string.IsNullOrWhiteSpace(_activeChat.JID) &&
+                      _activeChat.JID.IndexOf("@newsletter", StringComparison.OrdinalIgnoreCase) >= 0));
 
                 // Loop every ~90s while this chat stays open (cancel on leave / Unloaded).
                 while (!ct.IsCancellationRequested)
                 {
-                    if (isGroup)
+                    if (isChannel)
+                    {
+                        await AnimateChannelStatusSequenceAsync(statusText, ct);
+                    }
+                    else if (isGroup)
                     {
                         await AnimateGroupStatusSequenceAsync(statusText, ct);
                     }
@@ -3678,6 +3741,62 @@ namespace Unison.Uwp.Shell.Unison.Views
             catch (Exception ex)
             {
                 Debug.WriteLine("[ChatDetailView] Presence animation: " + ex.Message);
+            }
+        }
+
+        /// <summary>
+        /// Channel: hint → "{0} followers" → fade out (then the outer loop waits ~90s).
+        /// </summary>
+        private async Task AnimateChannelStatusSequenceAsync(string statusText, CancellationToken ct)
+        {
+            try
+            {
+                if (ct.IsCancellationRequested)
+                {
+                    return;
+                }
+
+                string hint = !string.IsNullOrWhiteSpace(statusText)
+                    ? statusText
+                    : (_strings != null
+                        ? _strings.Get("ChatDetail_SelectForChannelInfo", "tap here for channel info")
+                        : "tap here for channel info");
+
+                ChatStatusText.Text = hint;
+                AnimateSlideUp();
+                AnimateFadeIn(ChatStatusText);
+
+                await Task.Delay(5000, ct);
+                if (ct.IsCancellationRequested)
+                {
+                    return;
+                }
+
+                AnimateFadeOut(ChatStatusText);
+                await Task.Delay(250, ct);
+                if (ct.IsCancellationRequested)
+                {
+                    return;
+                }
+
+                string followers = ViewModel?.FormatChannelFollowersSummary(_activeChat);
+                if (!string.IsNullOrWhiteSpace(followers))
+                {
+                    ChatStatusText.Text = followers;
+                    AnimateFadeIn(ChatStatusText);
+
+                    await Task.Delay(6000, ct);
+                    if (ct.IsCancellationRequested)
+                    {
+                        return;
+                    }
+
+                    AnimateFadeOut(ChatStatusText);
+                    await Task.Delay(250, ct);
+                }
+            }
+            catch (OperationCanceledException)
+            {
             }
         }
 

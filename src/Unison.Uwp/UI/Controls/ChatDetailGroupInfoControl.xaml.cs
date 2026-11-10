@@ -1,6 +1,8 @@
-﻿using System.ComponentModel;
+﻿using System.Collections.Generic;
+using System.ComponentModel;
 using Unison.Core.Models;
 using Unison.Core.ViewModels;
+using Windows.ApplicationModel.Resources;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
 using Windows.UI.Xaml.Media;
@@ -20,6 +22,8 @@ namespace Unison.Uwp.UI.Controls
         private bool _infoHooked;
         private bool _isLoaded;
         private bool _notificationsToggleQuiet;
+        private bool _pivotsCatalogued;
+        private IReadOnlyList<ChatDetailInfoPivotKind> _appliedPivots;
 
         public ChatDetailGroupInfoControl()
         {
@@ -44,14 +48,15 @@ namespace Unison.Uwp.UI.Controls
         {
             UnhookInfo();
             _boundInfo = newVm;
+            _appliedPivots = null;
             HookInfo();
+
+            ApplyInfoViewModel();
 
             if (newVm != null)
             {
                 ChatDetailInfoPivotHelper.ResetToRoot(InfoPivot);
             }
-
-            ApplyInfoViewModel();
         }
 
         private void OnControlLoaded(object sender, RoutedEventArgs e)
@@ -239,10 +244,27 @@ namespace Unison.Uwp.UI.Controls
             FilesPane?.AttachPaging(vm);
             BindMediaPanes();
 
+            RebuildPivotCollection(vm.VisiblePivots);
+
             if (InfoAvatar != null)
             {
                 InfoAvatar.AvatarUrl = vm.AvatarUrl;
-                InfoAvatar.IsGroup = true;
+                InfoAvatar.IsGroup = !vm.IsChannel;
+                InfoAvatar.IsChannel = vm.IsChannel;
+            }
+
+            if (NameLabel != null)
+            {
+                NameLabel.Text = vm.IsChannel
+                    ? ResolveString("ChatDetailInfo_ChannelName", "CHANNEL NAME")
+                    : ResolveString("ChatDetailInfo_GroupName", "GROUP NAME");
+            }
+
+            if (ProfilePivotItem != null)
+            {
+                ProfilePivotItem.Header = vm.IsChannel
+                    ? ResolveString("ChatDetailInfo_ChannelInfo.Header", "CHANNEL INFO")
+                    : ResolveString("ChatDetailInfo_GroupInfo.Header", "GROUP INFO");
             }
 
             if (NameValue != null)
@@ -259,6 +281,13 @@ namespace Unison.Uwp.UI.Controls
                 NotificationsToggle,
                 vm,
                 ref _notificationsToggleQuiet);
+
+            if (MembersLabel != null)
+            {
+                MembersLabel.Text = vm.IsChannel
+                    ? ResolveString("ChatDetailInfo_FollowersLabel", "FOLLOWERS")
+                    : ResolveString("ChatDetailInfo_MembersLabel.Text", "MEMBERS");
+            }
 
             if (MembersValue != null)
             {
@@ -288,6 +317,121 @@ namespace Unison.Uwp.UI.Controls
             bool loading = vm.IsMediaIndexLoading;
             MediaPane?.Bind(vm.MediaItems, vm.HasMedia, loading);
             FilesPane?.Bind(vm.FileItems, vm.HasFiles, loading);
+        }
+
+        /// <summary>
+        /// Rebuilds <see cref="InfoPivot"/> from <see cref="ChatDetailInfoViewModel.VisiblePivots"/>.
+        /// Visibility on PivotItem does not hide headers in UWP — only Items membership does.
+        /// </summary>
+        private void RebuildPivotCollection(IReadOnlyList<ChatDetailInfoPivotKind> wanted)
+        {
+            if (InfoPivot == null || wanted == null || wanted.Count == 0)
+            {
+                return;
+            }
+
+            EnsurePivotCatalog();
+            if (SamePivotSet(_appliedPivots, wanted) && InfoPivot.Items.Count == wanted.Count)
+            {
+                return;
+            }
+
+            InfoPivot.SelectionChanged -= InfoPivot_SelectionChanged;
+            try
+            {
+                InfoPivot.Items.Clear();
+                for (int i = 0; i < wanted.Count; i++)
+                {
+                    PivotItem item = ResolvePivotItem(wanted[i]);
+                    if (item != null)
+                    {
+                        InfoPivot.Items.Add(item);
+                    }
+                }
+
+                if (InfoPivot.Items.Count > 0)
+                {
+                    InfoPivot.SelectedIndex = 0;
+                }
+
+                _appliedPivots = wanted;
+            }
+            finally
+            {
+                InfoPivot.SelectionChanged += InfoPivot_SelectionChanged;
+            }
+        }
+
+        private void EnsurePivotCatalog()
+        {
+            if (_pivotsCatalogued || InfoPivot == null)
+            {
+                return;
+            }
+
+            // XAML already parented every tab under the Pivot; capture the named instances once
+            // so Clear/Add can rebuild from the ViewModel list without recreating content.
+            _pivotsCatalogued = true;
+        }
+
+        private PivotItem ResolvePivotItem(ChatDetailInfoPivotKind kind)
+        {
+            switch (kind)
+            {
+                case ChatDetailInfoPivotKind.Profile:
+                    return ProfilePivotItem;
+                case ChatDetailInfoPivotKind.Members:
+                    return MembersPivotItem;
+                case ChatDetailInfoPivotKind.Media:
+                    return MediaPivotItem;
+                case ChatDetailInfoPivotKind.Files:
+                    return FilesPivotItem;
+                default:
+                    return null;
+            }
+        }
+
+        private static bool SamePivotSet(
+            IReadOnlyList<ChatDetailInfoPivotKind> current,
+            IReadOnlyList<ChatDetailInfoPivotKind> wanted)
+        {
+            if (current == null || wanted == null || current.Count != wanted.Count)
+            {
+                return false;
+            }
+
+            for (int i = 0; i < current.Count; i++)
+            {
+                if (current[i] != wanted[i])
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        private static string ResolveString(string key, string fallback)
+        {
+            try
+            {
+                ResourceLoader loader;
+                try
+                {
+                    loader = ResourceLoader.GetForCurrentView();
+                }
+                catch
+                {
+                    loader = ResourceLoader.GetForViewIndependentUse();
+                }
+
+                string value = loader.GetString(key.Replace('.', '/'));
+                return string.IsNullOrWhiteSpace(value) ? fallback : value;
+            }
+            catch
+            {
+                return fallback;
+            }
         }
     }
 }

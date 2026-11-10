@@ -59,6 +59,10 @@ namespace Unison.Core.ViewModels
                 () => SetFlash(false),
                 () => IsFlashAvailable && !IsBusy && !IsCancelled);
 
+            ToggleFlashCommand = new RelayCommand(
+                () => SetFlash(!IsFlashOn),
+                () => IsFlashAvailable && !IsBusy && !IsCancelled);
+
             SwitchCameraCommand = new RelayCommand(
                 () => SwitchCameraRequested?.Invoke(this, EventArgs.Empty),
                 () => IsMultipleCameras && !IsBusy && !IsCancelled);
@@ -82,6 +86,9 @@ namespace Unison.Core.ViewModels
         public ICommand FlashOnCommand { get; }
 
         public ICommand FlashOffCommand { get; }
+
+        /// <summary>Toggles flash for the next still; disabled when <see cref="IsFlashAvailable"/> is false.</summary>
+        public ICommand ToggleFlashCommand { get; }
 
         public ICommand SwitchCameraCommand { get; }
 
@@ -223,6 +230,7 @@ namespace Unison.Core.ViewModels
         {
             (FlashOnCommand as RelayCommand)?.RaiseCanExecuteChanged();
             (FlashOffCommand as RelayCommand)?.RaiseCanExecuteChanged();
+            (ToggleFlashCommand as RelayCommand)?.RaiseCanExecuteChanged();
         }
 
         private void RaiseAllCommands()

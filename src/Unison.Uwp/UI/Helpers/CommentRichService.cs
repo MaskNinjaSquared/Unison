@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Text.RegularExpressions;
+using System.Threading;
 using Microsoft.Extensions.DependencyInjection;
 using Unison.Core.Contracts;
 using Unison.Core.Contracts.WhatsApp;
@@ -331,8 +333,17 @@ namespace Unison.Uwp.UI.Helpers
             public bool IsEmpty => Jids == null && Contacts == null;
         }
 
+        // Both are DI singletons: once found they never change, and every bubble render asked again.
+        private static MentionResolvers _mentionResolvers;
+
         private static MentionResolvers ResolveMentionServices()
         {
+            MentionResolvers cached = Volatile.Read(ref _mentionResolvers);
+            if (cached != null)
+            {
+                return cached;
+            }
+
             var resolvers = new MentionResolvers();
             try
             {
@@ -343,8 +354,14 @@ namespace Unison.Uwp.UI.Helpers
                     resolvers.Contacts = services.GetService<IContactService>();
                 }
             }
-            catch
+            catch (Exception ex)
             {
+                Debug.WriteLine("[CommentRichService] Mention services unavailable: " + ex.Message);
+            }
+
+            if (resolvers.Jids != null && resolvers.Contacts != null)
+            {
+                Volatile.Write(ref _mentionResolvers, resolvers);
             }
 
             return resolvers;
@@ -381,7 +398,9 @@ namespace Unison.Uwp.UI.Helpers
                 {
                     try
                     {
-                        return jids.GetCanonicalJid(jid);
+                        // Row binding runs inside UI hops: promoting a LidMapping miss here
+                        // mutates the alias table and invalidates ChatRowIndex mid-hop.
+                        return jids.PeekCanonicalJid(jid);
                     }
                     catch
                     {

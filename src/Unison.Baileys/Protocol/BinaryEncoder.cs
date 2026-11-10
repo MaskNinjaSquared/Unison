@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
@@ -127,6 +127,16 @@ namespace Unison.Baileys.Protocol
             if (IsNibbleString(str))
             {
                 WriteNibbleString(str);
+                return;
+            }
+
+            // Server-only JID ("@g.us"): rc14 jidDecode accepts an empty user. As a raw string
+            // the server drops the IQ without answering.
+            if (str.Length > 1 && str[0] == '@' && str.IndexOf('@', 1) < 0)
+            {
+                WriteByte(250); // JID_PAIR
+                WriteByte(0); // LIST_EMPTY for empty user
+                WriteString(str.Substring(1));
                 return;
             }
 

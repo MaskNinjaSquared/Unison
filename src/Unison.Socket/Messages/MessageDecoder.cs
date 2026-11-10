@@ -107,10 +107,12 @@ namespace Unison.Socket.Messages
             }
             else if (JidUtils.IsNewsletter(from))
             {
+                // Channel updates are posts, not peer chat: the timeline always shows them
+                // as outgoing (sent) bubbles, including history fetched for a channel we follow.
                 kind = MessageEnvelopeKind.Newsletter;
                 chatId = from;
                 author = from;
-                fromMe = IsSelf(from, meId, meLid);
+                fromMe = true;
             }
             else
             {

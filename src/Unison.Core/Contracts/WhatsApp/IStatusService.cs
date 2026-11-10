@@ -33,6 +33,15 @@ namespace Unison.Core.Contracts.WhatsApp
         Task MarkViewedAsync(string authorJid, string messageId);
 
         /// <summary>
+        /// A status@broadcast read/played receipt from another account: counts one view of each
+        /// of the account's own Status items in <paramref name="messageIds"/>.
+        /// </summary>
+        Task RecordViewersAsync(IEnumerable<string> messageIds, string viewerJid, DateTime viewedAtUtc);
+
+        /// <summary>The account's own unexpired Status items, newest first, with view counts.</summary>
+        Task<IReadOnlyList<OwnStatusItem>> GetOwnStatusesAsync(string selfJid);
+
+        /// <summary>
         /// URI the Status viewer should bind: downloaded media, else poster/thumb already on disk.
         /// </summary>
         string ResolveMediaDisplayUri(string downloadedUri, HistoryStatus item);
@@ -51,5 +60,13 @@ namespace Unison.Core.Contracts.WhatsApp
         /// ingest (thumb + store).
         /// </summary>
         Task IngestLiveFromDecryptedAsync(IncomingLiveStatusRequest request);
+
+        /// <summary>
+        /// Publishes a text Status to <see cref="StatusTextPost.RecipientJids"/> plus the
+        /// account's own devices. Throws when not connected or when there is nobody to send to.
+        /// On success, persists the item locally (status@broadcast does not echo own posts on
+        /// this companion) and raises <see cref="StatusUpdated"/> so the list refreshes.
+        /// </summary>
+        Task<string> PublishTextStatusAsync(StatusTextPost post);
     }
 }

@@ -54,6 +54,13 @@ namespace Unison.WhatsAppClient.Helpers
                 return false;
             }
 
+            // A truncated copy of a real name must not count as one, or it would replace the
+            // whole name under "a better name always wins".
+            if (ContactLabelSanitizer.HasBrokenSurrogate(trimmed))
+            {
+                return false;
+            }
+
             if (isGroup)
             {
                 if (GroupNameSyncBlacklist.IsBlacklisted(trimmed))
@@ -61,10 +68,18 @@ namespace Unison.WhatsAppClient.Helpers
                     return false;
                 }
 
+                // Wire/history sometimes sticks this stand-in after a failed member-name pass.
+                // Treat as non-meaningful so NeedsMetadata can re-query a real subject.
+                if (string.Equals(trimmed, "Group Owner", StringComparison.OrdinalIgnoreCase))
+                {
+                    return false;
+                }
+
                 return !GroupIdPlaceholder.IsIdPlaceholder(trimmed, contextJid);
             }
 
-            return !ContactLabelSanitizer.IsPhoneEcho(trimmed, contextJid);
+            return !ContactLabelSanitizer.IsPhoneEcho(trimmed, contextJid) &&
+                   !ContactLabelSanitizer.IsPhoneLikeLabel(trimmed);
         }
     }
 }

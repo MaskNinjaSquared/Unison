@@ -345,6 +345,7 @@ namespace Unison.Core.ViewModels
                 {
                     SyncChatPane();
                     OnPropertyChanged(nameof(HidesLegacyShellChrome));
+                    OnPropertyChanged(nameof(ShowChatDetailBackButton));
                 }
             }
         }
@@ -358,6 +359,48 @@ namespace Unison.Core.ViewModels
         public bool HidesLegacyShellChrome =>
             IsNarrowWindow &&
             string.Equals(ChatPane, PaneNarrowDetail, StringComparison.Ordinal);
+
+        /// <summary>
+        /// Header / empty-state back in chat detail. True when the list is not side-by-side
+        /// (narrow / handset). This is pane layout — not <see cref="INavigator.CanGoBack"/>.
+        /// </summary>
+        public bool ShowChatDetailBackButton =>
+            ShouldShowChatDetailBackButton(IsNarrowWindow);
+
+        /// <summary>
+        /// Pure rule for <see cref="ShowChatDetailBackButton"/> (wide dual-pane hides the arrow).
+        /// </summary>
+        public static bool ShouldShowChatDetailBackButton(bool isNarrowWindow) =>
+            isNarrowWindow;
+
+        /// <summary>
+        /// Chats list header back (Unison/WhatsApp only). True when the shell Frame can
+        /// return to Favorites/Archived/etc. Legacy pivot never shows this.
+        /// </summary>
+        public bool ShowChatListBackButton =>
+            ShouldShowChatListBackButton(
+                IsWhatsAppLegacyShell(),
+                ActiveSection,
+                _navigator != null && _navigator.CanGoBackInShell);
+
+        /// <summary>
+        /// Pure rule for <see cref="ShowChatListBackButton"/>.
+        /// </summary>
+        public static bool ShouldShowChatListBackButton(
+            bool isLegacyShell,
+            string activeSection,
+            bool canGoBackInShell)
+        {
+            if (isLegacyShell || !canGoBackInShell)
+            {
+                return false;
+            }
+
+            return string.Equals(
+                activeSection,
+                NavigationRoutes.Chats,
+                StringComparison.OrdinalIgnoreCase);
+        }
 
         public bool HasActiveChat
         {
@@ -383,6 +426,7 @@ namespace Unison.Core.ViewModels
             string.Equals(ActiveSection, NavigationRoutes.Debug, StringComparison.OrdinalIgnoreCase) ||
             string.Equals(ActiveSection, NavigationRoutes.Settings, StringComparison.OrdinalIgnoreCase) ||
             string.Equals(ActiveSection, NavigationRoutes.Profile, StringComparison.OrdinalIgnoreCase) ||
+            ShouldHandleSecondaryListBack() ||
             (IsNarrowWindow && string.Equals(ChatPane, PaneNarrowDetail, StringComparison.Ordinal)) ||
             (!IsNarrowWindow && HasActiveChat);
 

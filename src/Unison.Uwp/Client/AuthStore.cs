@@ -103,6 +103,7 @@ namespace Unison.Uwp.Client
                     PairingCode = state.PairingCode,
                     RoutingInfo = state.RoutingInfo != null ? Convert.ToBase64String(state.RoutingInfo) : null,
                     NextPreKeyId = state.NextPreKeyId,
+                    FirstUnuploadedPreKeyId = state.FirstUnuploadedPreKeyId,
                     MeId = state.Me?.Id,
                     MeName = state.Me?.Name,
                     MePhone = ResolveMePhone(state.Me?.Phone, state.Me?.Id),
@@ -201,6 +202,7 @@ namespace Unison.Uwp.Client
                         ? Convert.FromBase64String(dto.RoutingInfo) 
                         : null,
                     NextPreKeyId = dto.NextPreKeyId,
+                    FirstUnuploadedPreKeyId = dto.FirstUnuploadedPreKeyId,
                     Registered = dto.Registered,
                     MyAppStateKeyId = dto.MyAppStateKeyId,
                     LastAccountSyncTimestamp = dto.LastAccountSyncTimestamp
@@ -395,6 +397,7 @@ namespace Unison.Uwp.Client
             public string PairingCode { get; set; }
             public string RoutingInfo { get; set; }
             public int NextPreKeyId { get; set; }
+            public int FirstUnuploadedPreKeyId { get; set; }
             public string MeId { get; set; }
             public string MeName { get; set; }
             public string MePhone { get; set; }

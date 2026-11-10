@@ -19,6 +19,20 @@ namespace Unison.Core.Models
         WidgetPin = 4,
         Status = 8,
         Favorite = 16,
+
+        /// <summary>
+        /// Outside <see cref="All"/>: most rows are not channels, and a row read from disk without
+        /// a fetched role must not answer <see cref="ChannelViewerRole.Unknown"/> for it.
+        /// </summary>
+        ChannelRole = 32,
+
+        /// <summary>
+        /// Outside <see cref="All"/> for the same reason as <see cref="ChannelRole"/>: a row
+        /// written before the description column existed carries NULL, and reading that NULL as
+        /// "this group has no description" would wipe one just fetched off the wire.
+        /// </summary>
+        GroupDescription = 64,
+
         All = Pin | Mute | WidgetPin | Status | Favorite
     }
 }

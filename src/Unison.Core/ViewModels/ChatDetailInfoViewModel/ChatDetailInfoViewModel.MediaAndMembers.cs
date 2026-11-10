@@ -706,6 +706,13 @@ namespace Unison.Core.ViewModels
                 return;
             }
 
+            if (e.PropertyName == nameof(ChatItem.GroupDescription))
+            {
+                OnPropertyChanged(nameof(StatusOrDescription));
+                OnPropertyChanged(nameof(HasStatusOrDescription));
+                return;
+            }
+
             if (e.PropertyName == nameof(ChatItem.Name) ||
                 e.PropertyName == nameof(ChatItem.Kind) ||
                 e.PropertyName == nameof(ChatItem.JID))
@@ -735,6 +742,11 @@ namespace Unison.Core.ViewModels
                 OnPropertyChanged(nameof(Members));
                 OnPropertyChanged(nameof(HasMembers));
                 OnPropertyChanged(nameof(MentionLookup));
+            }
+            else if (e.PropertyName == nameof(ChatItem.ChannelFollowerCount))
+            {
+                OnPropertyChanged(nameof(HasMembersCount));
+                OnPropertyChanged(nameof(MembersCountText));
             }
             else if (e.PropertyName == nameof(ChatItem.MutedUntil) ||
                      e.PropertyName == nameof(ChatItem.IsMutedLocally))

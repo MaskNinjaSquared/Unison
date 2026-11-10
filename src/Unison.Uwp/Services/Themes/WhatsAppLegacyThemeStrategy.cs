@@ -64,6 +64,22 @@ namespace Unison.Uwp.Services.Themes
             }
         }
 
+        /// <summary>Settings, Debug and the status composer all cover the pivot full-screen.</summary>
+        public override Type ResolveFullScreenPage(NavigationDestination destination)
+        {
+            switch (destination)
+            {
+                case NavigationDestination.Settings:
+                    return typeof(Shell.WhatsAppLegacy.Views.SettingsView);
+                case NavigationDestination.Debug:
+                    return typeof(Shell.WhatsAppLegacy.Views.DebugView);
+                case NavigationDestination.StatusComposer:
+                    return typeof(Shell.WhatsAppLegacy.Views.StatusComposerView);
+                default:
+                    return null;
+            }
+        }
+
         public override bool TryResolveShellDestination(object content, out NavigationDestination destination)
         {
             if (content is Shell.WhatsAppLegacy.Views.ChatsView)

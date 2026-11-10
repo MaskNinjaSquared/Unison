@@ -25,6 +25,7 @@ namespace Unison.Uwp.Shell.Unison.Views
         private bool _stickyVisible;
         private bool _syncingLanguageCombo;
         private bool _leaveHooked;
+        private bool _profilePhotoHooked;
         private bool _profileExpanded;
         private bool _openProfileOnLoad;
         private bool _profileBusy;
@@ -126,13 +127,20 @@ namespace Unison.Uwp.Shell.Unison.Views
 
         private void ViewModel_LeaveRequested(object sender, EventArgs e)
         {
-            App.Services?.GetService<ShellViewModel>()?.NavigateToSectionCommand.Execute(NavigationRoutes.Chats);
+            var shell = App.Services?.GetService<ShellViewModel>();
+            if (shell != null && shell.TryHandleShellBack())
+            {
+                return;
+            }
+
+            shell?.NavigateToSectionCommand?.Execute(NavigationRoutes.Chats);
         }
 
         private void SettingsView_Loaded(object sender, RoutedEventArgs e)
         {
             Activate();
             ViewModel?.Attach();
+            HookProfilePhotoButtons();
             SetStickyVisible(false, animate: false);
             if (_openProfileOnLoad)
             {
@@ -161,7 +169,83 @@ namespace Unison.Uwp.Shell.Unison.Views
             }
 
             StopProfileStoryboard();
+            UnhookProfilePhotoButtons();
             _viewModel?.Detach();
+        }
+
+        private void HookProfilePhotoButtons()
+        {
+            if (_profilePhotoHooked)
+            {
+                return;
+            }
+
+            HookProfilePhotoButton(MinimalProfilePhotoButton);
+            HookProfilePhotoButton(ExtendedProfilePhotoButton);
+            _profilePhotoHooked = true;
+        }
+
+        private void UnhookProfilePhotoButtons()
+        {
+            if (!_profilePhotoHooked)
+            {
+                return;
+            }
+
+            UnhookProfilePhotoButton(MinimalProfilePhotoButton);
+            UnhookProfilePhotoButton(ExtendedProfilePhotoButton);
+            _profilePhotoHooked = false;
+        }
+
+        private void HookProfilePhotoButton(UI.Controls.ProfilePhotoButton button)
+        {
+            if (button == null)
+            {
+                return;
+            }
+
+            button.CameraRequested += ProfilePhotoButton_CameraRequested;
+            button.GalleryRequested += ProfilePhotoButton_GalleryRequested;
+            button.DeleteRequested += ProfilePhotoButton_DeleteRequested;
+        }
+
+        private void UnhookProfilePhotoButton(UI.Controls.ProfilePhotoButton button)
+        {
+            if (button == null)
+            {
+                return;
+            }
+
+            button.CameraRequested -= ProfilePhotoButton_CameraRequested;
+            button.GalleryRequested -= ProfilePhotoButton_GalleryRequested;
+            button.DeleteRequested -= ProfilePhotoButton_DeleteRequested;
+        }
+
+        private void ProfilePhotoButton_CameraRequested(object sender, EventArgs e)
+        {
+            if (ViewModel?.PickProfilePhotoFromCameraCommand != null &&
+                ViewModel.PickProfilePhotoFromCameraCommand.CanExecute(null))
+            {
+                ViewModel.PickProfilePhotoFromCameraCommand.Execute(null);
+            }
+        }
+
+        private void ProfilePhotoButton_GalleryRequested(object sender, EventArgs e)
+        {
+            if (ViewModel?.PickProfilePhotoFromGalleryCommand != null &&
+                ViewModel.PickProfilePhotoFromGalleryCommand.CanExecute(null))
+            {
+                ViewModel.PickProfilePhotoFromGalleryCommand.Execute(null);
+            }
+        }
+
+        private void ProfilePhotoButton_DeleteRequested(object sender, EventArgs e)
+        {
+            if (ViewModel?.RemoveProfilePhotoCommand != null &&
+                ViewModel.RemoveProfilePhotoCommand.CanExecute(null))
+            {
+                ViewModel.RemoveProfilePhotoCommand.Execute(null);
+            }
         }
 
         private void Activate()

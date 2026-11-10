@@ -34,10 +34,19 @@ namespace Unison.Uwp.Services.WhatsApp
 
         public void RememberPair(string jidA, string jidB)
         {
-            RememberPairs(new[] { new KeyValuePair<string, string>(jidA, jidB) });
+            Remember(new[] { new KeyValuePair<string, string>(jidA, jidB) }, cacheInMemory: true);
         }
 
+        /// <summary>
+        /// Bulk import of the alias table's own snapshot: the table already holds these in
+        /// RAM, so they go to storage only and do not churn the store's memory cache.
+        /// </summary>
         public void RememberPairs(IEnumerable<KeyValuePair<string, string>> pairs)
+        {
+            Remember(pairs, cacheInMemory: false);
+        }
+
+        private void Remember(IEnumerable<KeyValuePair<string, string>> pairs, bool cacheInMemory)
         {
             if (pairs == null)
             {
@@ -62,7 +71,7 @@ namespace Unison.Uwp.Services.WhatsApp
             }
 
             // Same posture as SocketBridge.Store: announce from sync paths, do not await.
-            _ = ObserveStoreAsync(_store.StoreMappingsAsync(mappings));
+            _ = ObserveStoreAsync(_store.StoreMappingsAsync(mappings, cacheInMemory));
         }
 
         private static async Task ObserveStoreAsync(Task write)

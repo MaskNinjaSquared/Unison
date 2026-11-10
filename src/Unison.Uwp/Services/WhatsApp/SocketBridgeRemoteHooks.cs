@@ -54,6 +54,11 @@ namespace Unison.Uwp.Services.WhatsApp
                     : Task.CompletedTask;
             bridge.GroupSubjectChanged = change =>
                 ApplyGroupSubjectChangedAsync(contacts, messages, change);
+            bridge.GroupDescriptionChanged = change =>
+                change != null && groups != null
+                    ? groups.ApplyRemoteGroupDescriptionAsync(
+                        change.GroupJid, change.NewDescription, change.DescriptionId)
+                    : Task.CompletedTask;
             bridge.GroupParticipantsJoined = joins =>
                 messages != null
                     ? messages.NotifyGroupJoinsAsync(joins)

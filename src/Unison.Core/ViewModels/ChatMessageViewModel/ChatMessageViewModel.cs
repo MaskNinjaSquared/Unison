@@ -148,6 +148,10 @@ namespace Unison.Core.ViewModels
 
             CopyCommand = new RelayCommand(CopyText, () => !string.IsNullOrWhiteSpace(CopyableText));
             ReplyCommand = new RelayCommand(() => ReplyRequested?.Invoke(this, EventArgs.Empty));
+            CallBackCommand = new RelayCommand(() => CallBackRequested?.Invoke(this, EventArgs.Empty));
+            ViewDeletedContentCommand = new RelayCommand(
+                () => _ = ViewDeletedContentAsync(),
+                () => IsRevoked && _dialogs != null);
             ForwardCommand = new RelayCommand(
                 () =>
                 {
@@ -271,6 +275,7 @@ namespace Unison.Core.ViewModels
                 (DeleteCommand as RelayCommand)?.RaiseCanExecuteChanged();
                 (DeleteForMeCommand as RelayCommand)?.RaiseCanExecuteChanged();
                 (DeleteForEveryoneCommand as RelayCommand)?.RaiseCanExecuteChanged();
+                (ViewDeletedContentCommand as RelayCommand)?.RaiseCanExecuteChanged();
             }
 
             if (name == nameof(ChatMessage.MentionedJids))
@@ -283,6 +288,14 @@ namespace Unison.Core.ViewModels
                 RaiseCore(nameof(IsForwarded));
                 RaiseCore(nameof(ShowForwardedLabel));
                 RaiseCore(nameof(ForwardedLabelText));
+            }
+
+            if (name == nameof(ChatMessage.ViewCount) ||
+                name == nameof(ChatMessage.ShowViewCount) ||
+                name == nameof(ChatMessage.ViewCountText))
+            {
+                RaiseCore(nameof(ShowViewCount));
+                RaiseCore(nameof(ViewCountText));
             }
 
             if (name == nameof(ChatMessage.ShowQuotedAuthorLink))
@@ -322,6 +335,16 @@ namespace Unison.Core.ViewModels
             {
                 Raise(nameof(IsGroupJoin));
                 Raise(nameof(IsCallEvent));
+            }
+
+            if (IsCallEventProperty(name))
+            {
+                Raise(nameof(IsCallEvent));
+                Raise(nameof(IsMissedCall));
+                Raise(nameof(CallTitle));
+                Raise(nameof(CallSubtitle));
+                Raise(nameof(HasCallSubtitle));
+                Raise(nameof(CallGlyph));
             }
 
             if (IsAudioProperty(name))
@@ -432,6 +455,16 @@ namespace Unison.Core.ViewModels
             name == nameof(ChatMessage.GroupJoinPhone) ||
             name == nameof(ChatMessage.Kind);
 
+        private static bool IsCallEventProperty(string name) =>
+            name == nameof(ChatMessage.IsCallEvent) ||
+            name == nameof(ChatMessage.IsMissedCall) ||
+            name == nameof(ChatMessage.CallChromeKind) ||
+            name == nameof(ChatMessage.CallDurationSeconds) ||
+            name == nameof(ChatMessage.CallTitle) ||
+            name == nameof(ChatMessage.CallSubtitle) ||
+            name == nameof(ChatMessage.CallGlyph) ||
+            name == nameof(ChatMessage.Kind);
+
         private static bool IsAudioProperty(string name) =>
             name == nameof(ChatMessage.NeedsAudioDownload) ||
             name == nameof(ChatMessage.CanDownloadAudio) ||
@@ -477,6 +510,15 @@ namespace Unison.Core.ViewModels
         /// <summary>Reply to this bubble. The conversation opens the composer bar.</summary>
         public ICommand ReplyCommand { get; }
 
+        /// <summary>Call-back from a call-event bubble (host shows confirm dialog).</summary>
+        public ICommand CallBackCommand { get; }
+
+        /// <summary>
+        /// Eye on a revoked bubble: shows the retained original body, or explains that the
+        /// message arrived already deleted when nothing was ever stored.
+        /// </summary>
+        public ICommand ViewDeletedContentCommand { get; }
+
         /// <summary>Forward this bubble. The shell opens the people picker titled Forward.</summary>
         public ICommand ForwardCommand { get; }
 
@@ -490,6 +532,8 @@ namespace Unison.Core.ViewModels
         public ICommand DeleteForEveryoneCommand { get; }
 
         public event EventHandler ReplyRequested;
+
+        public event EventHandler CallBackRequested;
 
         public event EventHandler ForwardRequested;
 
@@ -594,6 +638,10 @@ namespace Unison.Core.ViewModels
 
         public string StatusCheckmarkUri => Model.StatusCheckmarkUri;
         public string StatusGlyph => Model.StatusGlyph;
+
+        public bool ShowViewCount => Model.ShowViewCount;
+
+        public string ViewCountText => Model.ViewCountText;
         public bool HasStatusCheckmark => Model.HasStatusCheckmark;
         public bool IsReadStatus => Model.IsReadStatus;
         public bool ShowReadStatusCheckmark => Model.ShowReadStatusCheckmark;
@@ -1445,6 +1493,24 @@ namespace Unison.Core.ViewModels
         public bool IsGroupJoin => Model.IsGroupJoin;
 
         public bool IsCallEvent => Model.IsCallEvent;
+
+        public bool IsMissedCall => Model.IsMissedCall;
+
+        public string CallTitle =>
+            !string.IsNullOrWhiteSpace(Model.CallTitle)
+                ? Model.CallTitle
+                : (Model.Content ?? string.Empty);
+
+        public string CallSubtitle => Model.CallSubtitle ?? string.Empty;
+
+        public bool HasCallSubtitle => !string.IsNullOrWhiteSpace(Model.CallSubtitle);
+
+        public string CallGlyph =>
+            !string.IsNullOrEmpty(Model.CallGlyph)
+                ? Model.CallGlyph
+                : (Model.IsFromMe
+                    ? Unison.Core.Helpers.Calls.CallDirectionGlyphs.Outgoing
+                    : Unison.Core.Helpers.Calls.CallDirectionGlyphs.Incoming);
 
         public string ContactCardDisplayName
         {

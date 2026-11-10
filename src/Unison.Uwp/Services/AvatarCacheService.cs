@@ -10,6 +10,7 @@
 // client.
 // =============================================================================
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
@@ -17,6 +18,7 @@ using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
 using Unison.Core.Contracts;
+using Unison.Core.State;
 using Windows.Storage;
 
 namespace Unison.Uwp.Services
@@ -36,6 +38,15 @@ namespace Unison.Uwp.Services
         private static readonly HttpClient AvatarHttpClient =
             new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
 
+        // TryGet runs per chat row; the index replaces a File.Exists + stat per call.
+        // A file removed behind our back fails to load and comes out via DeleteIfCached.
+        private readonly FileStampIndex _index = new FileStampIndex();
+
+        public AvatarCacheService()
+        {
+            _ = Task.Run(() => LoadIndex());
+        }
+
         public bool TryGet(string jid, AvatarVariant variant, out string localUri, out DateTime fetchedAtUtc)
         {
             localUri = null;
@@ -49,19 +60,28 @@ namespace Unison.Uwp.Services
             try
             {
                 string fileName = BuildFileName(jid, variant);
-                string filePath = Path.Combine(
-                    ApplicationData.Current.LocalFolder.Path,
-                    MediaFolderName,
-                    AvatarFolderName,
-                    fileName);
-
-                if (!File.Exists(filePath))
+                FileStampIndex.Stamp? indexed = _index.Lookup(fileName);
+                if (indexed.HasValue)
                 {
-                    return false;
+                    if (!indexed.Value.Exists)
+                    {
+                        return false;
+                    }
+
+                    fetchedAtUtc = indexed.Value.WrittenUtc;
+                }
+                else
+                {
+                    string filePath = Path.Combine(AvatarFolderPath, fileName);
+                    if (!File.Exists(filePath))
+                    {
+                        return false;
+                    }
+
+                    fetchedAtUtc = File.GetLastWriteTimeUtc(filePath);
                 }
 
                 localUri = LocalUriPrefix + fileName;
-                fetchedAtUtc = File.GetLastWriteTimeUtc(filePath);
                 if (fetchedAtUtc == DateTime.MinValue)
                 {
                     fetchedAtUtc = DateTime.UtcNow;
@@ -102,6 +122,7 @@ namespace Unison.Uwp.Services
             string fileName = BuildFileName(jid, variant);
             var file = await avatarFolder.CreateFileAsync(fileName, CreationCollisionOption.ReplaceExisting);
             await FileIO.WriteBytesAsync(file, bytes);
+            _index.Set(fileName, DateTime.UtcNow);
 
             string localUri = LocalUriPrefix + fileName;
             Debug.WriteLine($"[AvatarCache] Cached avatar for {jid}: bytes={bytes.Length}, uri={localUri}");
@@ -122,13 +143,10 @@ namespace Unison.Uwp.Services
                 return;
             }
 
+            _index.Remove(fileName);
             try
             {
-                string filePath = Path.Combine(
-                    ApplicationData.Current.LocalFolder.Path,
-                    MediaFolderName,
-                    AvatarFolderName,
-                    fileName);
+                string filePath = Path.Combine(AvatarFolderPath, fileName);
                 if (File.Exists(filePath))
                 {
                     File.Delete(filePath);
@@ -137,6 +155,36 @@ namespace Unison.Uwp.Services
             catch (Exception ex)
             {
                 Debug.WriteLine($"[AvatarCache] Failed to remove broken avatar {fileName}: {ex.Message}");
+            }
+        }
+
+        private static string AvatarFolderPath => Path.Combine(
+            ApplicationData.Current.LocalFolder.Path,
+            MediaFolderName,
+            AvatarFolderName);
+
+        private void LoadIndex()
+        {
+            var watch = Stopwatch.StartNew();
+            try
+            {
+                var folder = new DirectoryInfo(AvatarFolderPath);
+                var listing = new List<KeyValuePair<string, DateTime>>();
+                if (folder.Exists)
+                {
+                    foreach (FileInfo file in folder.EnumerateFiles("*.jpg"))
+                    {
+                        listing.Add(new KeyValuePair<string, DateTime>(file.Name, file.LastWriteTimeUtc));
+                    }
+                }
+
+                _index.Load(listing);
+                Debug.WriteLine($"[AvatarCache] Index loaded: files={listing.Count}, ms={watch.ElapsedMilliseconds}");
+            }
+            catch (Exception ex)
+            {
+                // Unloaded index: TryGet keeps asking the disk, as before.
+                Debug.WriteLine($"[AvatarCache] Index load failed; per-file checks stay: {ex.Message}");
             }
         }
 

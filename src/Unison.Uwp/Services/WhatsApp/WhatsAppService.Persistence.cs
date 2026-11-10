@@ -133,16 +133,22 @@ namespace Unison.Uwp.Services.WhatsApp
                 return;
             }
 
-            var slice = new List<ChatItem>(chats.Count);
-            for (int i = 0; i < chats.Count; i++)
+            // Author-strip + tip + OnDemand LID sweeps used to fire PersistRows(1) dozens
+            // of times under chat-open; each took the catalog write lock beside history apply.
+            if (_rowPersistBuffer.Enqueue(chats) <= 0)
             {
-                if (chats[i] != null)
-                {
-                    slice.Add(chats[i]);
-                }
+                return;
             }
 
-            if (slice.Count == 0)
+            _rowPersistDebounce.Arm(
+                ChatCatalogRowPersistBuffer.DebounceMilliseconds,
+                FlushPendingCatalogRows);
+        }
+
+        private void FlushPendingCatalogRows()
+        {
+            IList<ChatItem> slice = _rowPersistBuffer.TakeAll();
+            if (slice == null || slice.Count == 0)
             {
                 return;
             }

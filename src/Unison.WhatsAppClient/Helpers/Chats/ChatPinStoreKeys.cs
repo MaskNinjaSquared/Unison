@@ -19,7 +19,10 @@ namespace Unison.WhatsAppClient.Helpers
 
             if (jids != null)
             {
-                string canonical = jids.GetCanonicalJid(jid);
+                // Peek only: pin-key expansion must not promote LidMapping misses on the UI
+                // thread (ApplyLocalStateAliasFallback during Archived/Channels Attach under
+                // alias-follow-up held the alias lock and billed ~14s as buildMs).
+                string canonical = jids.PeekCanonicalJid(jid);
                 Add(keys, canonical);
 
                 string alias;
