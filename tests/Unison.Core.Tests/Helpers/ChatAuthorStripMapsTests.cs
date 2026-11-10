@@ -110,6 +110,62 @@ namespace Unison.Core.Tests.Helpers
             Assert.Same(member, roster["5511988887777@s.whatsapp.net"]);
         }
 
+        [Fact]
+        public void BuildDirectChatNames_indexes_the_alias_when_canonical_does_not_promote()
+        {
+            // Device shape: direct chats are LID-keyed, the group tip arrives in PN form, and the
+            // pair is known to the alias table but canonical has not settled on the PN.
+            var jids = new AliasOnlyJids();
+            jids.Pair("1999@lid", "5511988887777@s.whatsapp.net");
+
+            var chats = new List<ChatItem>
+            {
+                new ChatItem { JID = "1999@lid", Name = "Ana Souza", IsGroup = false }
+            };
+
+            Dictionary<string, string> map = ChatAuthorStripMaps.BuildDirectChatNames(chats, jids);
+
+            Assert.Equal("Ana Souza", map["1999@lid"]);
+            Assert.Equal("Ana Souza", map["5511988887777@s.whatsapp.net"]);
+        }
+
+        [Fact]
+        public void TryGetDirectName_joins_a_phone_participant_to_a_lid_keyed_chat()
+        {
+            var jids = new AliasOnlyJids();
+            jids.Pair("1999@lid", "5511988887777@s.whatsapp.net");
+            var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["1999@lid"] = "Ana Souza"
+            };
+
+            string name;
+            Assert.True(ChatAuthorStripMaps.TryGetDirectName(
+                map,
+                "5511988887777@s.whatsapp.net",
+                jids,
+                out name));
+            Assert.Equal("Ana Souza", name);
+        }
+
+        [Fact]
+        public void TryGetDirectName_still_misses_when_nothing_joins()
+        {
+            var jids = new AliasOnlyJids();
+            var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["1999@lid"] = "Ana Souza"
+            };
+
+            string name;
+            Assert.False(ChatAuthorStripMaps.TryGetDirectName(
+                map,
+                "5511911112222@s.whatsapp.net",
+                jids,
+                out name));
+            Assert.Null(name);
+        }
+
         private sealed class AliasJids : IJidResolver
         {
             private readonly Dictionary<string, string> _pairs =
@@ -136,6 +192,44 @@ namespace Unison.Core.Tests.Helpers
 
                 return key;
             }
+
+            public string PeekCanonicalJid(string jid) => GetCanonicalJid(jid);
+
+            public bool TryGetAlias(string jid, out string alias)
+            {
+                string key = JidHelper.Normalize(jid);
+                if (key != null && _pairs.TryGetValue(key, out alias))
+                {
+                    return true;
+                }
+
+                alias = null;
+                return false;
+            }
+
+            public bool IsSelfLinked(string jid) => false;
+        }
+
+        /// <summary>
+        /// Knows the PN/LID pair but never promotes it: canonical is the identity. This is the
+        /// half of the alias table the strip could not reach before.
+        /// </summary>
+        private sealed class AliasOnlyJids : IJidResolver
+        {
+            private readonly Dictionary<string, string> _pairs =
+                new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+            public Profile Self => null;
+
+            public void Pair(string left, string right)
+            {
+                string a = JidHelper.Normalize(left);
+                string b = JidHelper.Normalize(right);
+                _pairs[a] = b;
+                _pairs[b] = a;
+            }
+
+            public string GetCanonicalJid(string jid) => JidHelper.Normalize(jid) ?? jid;
 
             public string PeekCanonicalJid(string jid) => GetCanonicalJid(jid);
 
