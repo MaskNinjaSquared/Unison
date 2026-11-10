@@ -22,14 +22,16 @@
                 Grid.Row="1"
                 Text="{x:Bind UnreadDividerText, Mode=OneWay}"
                 Visibility="{x:Bind IsUnreadDivider, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
-            <!-- Stretch slot constrains measure; Auto bubble columns alone ignore Wrap. -->
+            <!-- Stretch slot constrains measure; Auto bubble columns alone ignore Wrap.
+                 ManipulationMode keeps System: without it a pan starting on the bubble never
+                 reaches the list's ScrollViewer (touch scroll only worked in the side margin). -->
             <Grid x:Name="SentBubbleSlot"
                   Grid.Row="2"
                   HorizontalAlignment="Stretch"
                   Margin="48,0,12,0"
                   Loaded="MessageBubbleSlot_Loaded"
                   SizeChanged="MessageBubbleSlot_SizeChanged"
-                  ManipulationMode="TranslateX"
+                  ManipulationMode="TranslateX,System"
                   ManipulationDelta="MessageBubble_ManipulationDelta"
                   ManipulationCompleted="MessageBubble_ManipulationCompleted"
                   Tapped="MessageBubble_Tapped"
@@ -745,7 +747,7 @@
                   Margin="12,0,48,0"
                   Loaded="MessageBubbleSlot_Loaded"
                   SizeChanged="MessageBubbleSlot_SizeChanged"
-                  ManipulationMode="TranslateX"
+                  ManipulationMode="TranslateX,System"
                   ManipulationDelta="MessageBubble_ManipulationDelta"
                   ManipulationCompleted="MessageBubble_ManipulationCompleted"
                   Tapped="MessageBubble_Tapped"
