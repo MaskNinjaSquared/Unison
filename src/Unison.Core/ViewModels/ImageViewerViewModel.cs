@@ -63,6 +63,19 @@ namespace Unison.Core.ViewModels
 
         public bool HasCaption => Message.HasCaption;
 
+        /// <summary>
+        /// Caption mentions, straight off the bubble view model. The caption is the message text
+        /// for a media message, so it carries the same @mentions and URLs the bubble renders.
+        /// </summary>
+        public System.Collections.Generic.IList<string> MentionedJids => Message.MentionedJids;
+
+        /// <summary>Digit → name map the bubble was given; same instance, not a parallel copy.</summary>
+        public System.Collections.Generic.IReadOnlyDictionary<string, string> MentionLookup =>
+            Message.MentionLookup;
+
+        /// <summary>Bumped by the bubble when the roster lookup is replaced.</summary>
+        public int MentionRefreshKey => Message.MentionRefreshKey;
+
         public string SenderDisplayName
         {
             get
