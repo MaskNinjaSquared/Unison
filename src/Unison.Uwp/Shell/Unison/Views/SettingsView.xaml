@@ -3,6 +3,7 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:controls="using:Unison.Uwp.UI.Controls"
+    xmlns:helpers="using:Unison.Uwp.UI.Helpers"
     xmlns:toolkit="using:Microsoft.Toolkit.Uwp.UI.Controls"
     xmlns:Interactivity="using:Microsoft.Xaml.Interactivity"
     xmlns:Core="using:Microsoft.Xaml.Interactions.Core"
@@ -171,7 +172,7 @@
                                                              Canvas.ZIndex="1"
                                                              Visibility="{x:Bind ViewProfileState, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
                             </Grid>
-                            <TextBlock Text="{Binding ProfileDisplayName}"
+                            <TextBlock helpers:EmojiTextBlock.Text="{Binding ProfileDisplayName}"
                                        Margin="0,14,0,0"
                                        FontSize="18"
                                        FontWeight="SemiBold"
@@ -241,7 +242,7 @@
                             <StackPanel Margin="30,12,0,0"
                                         VerticalAlignment="Center"
                                         Visibility="{x:Bind ViewProfileState, Mode=OneWay, Converter={StaticResource InvertedBooleanToVisibilityConverter}}">
-                                <TextBlock Text="{Binding ProfileDisplayName}"
+                                <TextBlock helpers:EmojiTextBlock.Text="{Binding ProfileDisplayName}"
                                            FontSize="30"
                                            FontWeight="SemiBold"
                                            TextWrapping="Wrap"
