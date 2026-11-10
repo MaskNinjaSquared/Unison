@@ -1035,6 +1035,10 @@ namespace Unison.Core.Tests.ViewModels
 
             public Task ShowPairingCodeAsync(LoginViewModel loginVm, string code) => Task.CompletedTask;
 
+            public void DismissLoginPairingDialogs()
+            {
+            }
+
             public Task<string> ShowNewChatDialogAsync(NewChatDialogViewModel newChatVm) =>
                 Task.FromResult<string>(null);
 

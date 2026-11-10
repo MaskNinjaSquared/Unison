@@ -33,7 +33,9 @@ namespace Unison.WhatsAppClient.Helpers
                 releaseEnrichment,
                 host.IsFirstSyncListHoldInProgress,
                 host.IsListAwaitingFirstHistorySync,
-                host.IsPairingBootstrapChunkSeenOrApplying);
+                host.IsPairingBootstrapChunkSeenOrApplying,
+                host.FirstSyncListReleaseDeferred,
+                host.IsHistoryApplyBusy);
             if (next == HistoryCatchUpFinishNext.None)
             {
                 return;

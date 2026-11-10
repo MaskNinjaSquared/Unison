@@ -30,6 +30,18 @@ namespace Unison.WhatsAppClient.Abstractions
         /// </summary>
         bool IsPairingBootstrapChunkSeenOrApplying { get; }
 
+        /// <summary>
+        /// Quiet-finalize already deferred <c>IsCompleted</c> (empty store + catch-up).
+        /// Combined with an idle apply pipe, catch-up finish may escape the hold.
+        /// </summary>
+        bool FirstSyncListReleaseDeferred { get; }
+
+        /// <summary>
+        /// True while a history chunk apply is in flight on the wire apply pipe
+        /// or a pairing-bootstrap apply counter is up.
+        /// </summary>
+        bool IsHistoryApplyBusy { get; }
+
         int SqliteHistoryConversationsAccumulated { get; }
 
         int InitialSyncProcessedConversations { get; }

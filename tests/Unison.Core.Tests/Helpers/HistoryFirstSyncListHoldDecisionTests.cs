@@ -39,9 +39,10 @@ namespace Unison.Core.Tests.Helpers
         }
 
         [Fact]
-        public void Quiet_with_empty_store_defers_while_enrichment_awaits_heavy_history()
+        public void Quiet_with_empty_store_does_not_defer_on_enrichment_awaiting_alone()
         {
-            Assert.True(HistoryFirstSyncListHoldDecision.ShouldDeferInitialSyncCompleted(
+            // Enrichment is a consumer of unlock; catch-up hand-off / banner gate the hold.
+            Assert.False(HistoryFirstSyncListHoldDecision.ShouldDeferInitialSyncCompleted(
                 firstSyncInProgress: true,
                 handOffCatchUp: false,
                 catchUpActive: false,

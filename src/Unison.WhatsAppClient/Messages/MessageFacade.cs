@@ -1910,7 +1910,14 @@ namespace Unison.WhatsAppClient.Messages
 
             // Same LID↔PN pairs the preview builder uses: store the name under both so
             // ChatAuthorProjection can resolve a group strip that still holds the LID.
-            if (sync.PhoneNumberToLidMappings != null)
+            // LID-directory chunks (PushName): skip — Pushnames already upserted above;
+            // mirroring onto every PhoneNumberToLidMappings row storms Mobile SQLite.
+            string syncType = sync.SyncType.ToString();
+            int conversationCount = sync.Conversations?.Count ?? 0;
+            if (HistorySyncApplyPipelineDecision.ShouldUpsertPeopleFromPhoneNumberLidMappings(
+                    syncType,
+                    conversationCount) &&
+                sync.PhoneNumberToLidMappings != null)
             {
                 foreach (var mapping in sync.PhoneNumberToLidMappings)
                 {

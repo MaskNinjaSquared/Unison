@@ -80,6 +80,25 @@ namespace Unison.Core.Tests.Helpers
             Assert.True(host.BannerEnded);
         }
 
+        [Fact]
+        public void Deferred_pairing_hold_escapes_when_apply_idle()
+        {
+            var host = new FakeHost
+            {
+                FirstSyncHold = true,
+                AwaitingFirstHistory = true,
+                BootstrapChunkSeenOrApplying = true,
+                ListReleaseDeferred = true,
+                HistoryApplyBusy = false,
+                Accumulated = 12
+            };
+            HistoryCatchUpFinishDispatch.Run(host, "stagnant-progress", releaseEnrichment: true);
+
+            Assert.True(host.ListReleaseRequested);
+            Assert.Equal(12, host.ListReleaseProcessed);
+            Assert.False(host.EnrichmentScheduled);
+        }
+
         private sealed class FakeHost : IHistoryCatchUpFinishHost
         {
             public bool FirstSyncHold;
@@ -97,9 +116,14 @@ namespace Unison.Core.Tests.Helpers
             public bool AvatarsScheduled;
             public string SilentNotifyReason;
 
+            public bool ListReleaseDeferred;
+            public bool HistoryApplyBusy;
+
             public bool IsFirstSyncListHoldInProgress => FirstSyncHold;
             public bool IsListAwaitingFirstHistorySync => AwaitingFirstHistory;
             public bool IsPairingBootstrapChunkSeenOrApplying => BootstrapChunkSeenOrApplying;
+            public bool FirstSyncListReleaseDeferred => ListReleaseDeferred;
+            public bool IsHistoryApplyBusy => HistoryApplyBusy;
             public int SqliteHistoryConversationsAccumulated => Accumulated;
             public int InitialSyncProcessedConversations => InitialProcessed;
 

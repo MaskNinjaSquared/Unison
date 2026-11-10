@@ -40,7 +40,9 @@ namespace Unison.WhatsAppClient.Helpers
             bool releaseEnrichment,
             bool firstSyncListHoldInProgress,
             bool listAwaitingFirstHistory = false,
-            bool pairingBootstrapChunkSeenOrApplying = false)
+            bool pairingBootstrapChunkSeenOrApplying = false,
+            bool firstSyncListReleaseDeferred = false,
+            bool historyApplyBusy = false)
         {
             if (!releaseEnrichment)
             {
@@ -48,9 +50,24 @@ namespace Unison.WhatsAppClient.Helpers
             }
 
             // PairingBootstrap already received/is applying history — quiet-finalize owns unlock.
+            // Escape: quiet already deferred unlock, catch-up is done, and apply is idle —
+            // do not leave the list held waiting for another quiet lot that may never come.
             if (pairingBootstrapChunkSeenOrApplying &&
                 (listAwaitingFirstHistory || firstSyncListHoldInProgress))
             {
+                if (firstSyncListReleaseDeferred && !historyApplyBusy)
+                {
+                    if (firstSyncListHoldInProgress)
+                    {
+                        return HistoryCatchUpFinishNext.ReleaseListAfterNames;
+                    }
+
+                    if (listAwaitingFirstHistory)
+                    {
+                        return HistoryCatchUpFinishNext.ReleaseListThenEnrichment;
+                    }
+                }
+
                 return HistoryCatchUpFinishNext.None;
             }
 

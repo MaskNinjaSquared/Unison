@@ -2749,6 +2749,12 @@ namespace Unison.Uwp.Services.WhatsApp
         bool IHistoryCatchUpFinishHost.IsPairingBootstrapChunkSeenOrApplying =>
             History?.IsPairingBootstrapChunkSeenOrApplying ?? false;
 
+        bool IHistoryCatchUpFinishHost.FirstSyncListReleaseDeferred =>
+            _firstSyncListReleaseDeferred;
+
+        bool IHistoryCatchUpFinishHost.IsHistoryApplyBusy =>
+            HistorySyncWireApply.IsApplyBusy;
+
         int IHistoryCatchUpFinishHost.SqliteHistoryConversationsAccumulated =>
             _sqliteHistoryConversationsAccumulated;
 

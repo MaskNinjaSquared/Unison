@@ -88,5 +88,33 @@ namespace Unison.Core.Tests.Helpers
                     listAwaitingFirstHistory: true,
                     pairingBootstrapChunkSeenOrApplying: false));
         }
+
+        [Fact]
+        public void Deferred_release_escapes_when_apply_idle_after_catch_up()
+        {
+            Assert.Equal(
+                HistoryCatchUpFinishNext.ReleaseListAfterNames,
+                HistoryCatchUpFinishDecision.Decide(
+                    true,
+                    firstSyncListHoldInProgress: true,
+                    listAwaitingFirstHistory: true,
+                    pairingBootstrapChunkSeenOrApplying: true,
+                    firstSyncListReleaseDeferred: true,
+                    historyApplyBusy: false));
+        }
+
+        [Fact]
+        public void Deferred_release_stays_held_while_apply_busy()
+        {
+            Assert.Equal(
+                HistoryCatchUpFinishNext.None,
+                HistoryCatchUpFinishDecision.Decide(
+                    true,
+                    firstSyncListHoldInProgress: true,
+                    listAwaitingFirstHistory: true,
+                    pairingBootstrapChunkSeenOrApplying: true,
+                    firstSyncListReleaseDeferred: true,
+                    historyApplyBusy: true));
+        }
     }
 }

@@ -506,7 +506,7 @@ namespace Unison.WhatsAppClient.History
 
             try
             {
-                ApplyLidMappingsFromHistory(sync);
+                ApplyLidMappingsFromHistory(sync, result.SyncType, result.ConversationCount);
             }
             catch (Exception ex)
             {
@@ -556,7 +556,11 @@ namespace Unison.WhatsAppClient.History
             // Persist finished off-UI — one tip heal for chats in this block only (not full list).
             try
             {
-                await ApplyHistoryChunkTipFinalAsync(result).ConfigureAwait(false);
+                if (HistorySyncApplyPipelineDecision.ShouldRunHistoryChunkTipReconcile(
+                        result.ConversationCount))
+                {
+                    await ApplyHistoryChunkTipFinalAsync(result).ConfigureAwait(false);
+                }
             }
             catch (Exception ex)
             {
@@ -670,7 +674,10 @@ namespace Unison.WhatsAppClient.History
             return jids;
         }
 
-        private void ApplyLidMappingsFromHistory(HistorySync sync)
+        private void ApplyLidMappingsFromHistory(
+            HistorySync sync,
+            string syncType,
+            int conversationCount)
         {
             if (sync == null)
             {
@@ -679,7 +686,10 @@ namespace Unison.WhatsAppClient.History
 
             var pairs = new List<KeyValuePair<string, string>>();
 
-            if (sync.PhoneNumberToLidMappings != null)
+            if (HistorySyncApplyPipelineDecision.ShouldRegisterPhoneNumberLidAliases(
+                    syncType,
+                    conversationCount) &&
+                sync.PhoneNumberToLidMappings != null)
             {
                 foreach (var mapping in sync.PhoneNumberToLidMappings)
                 {
@@ -696,7 +706,9 @@ namespace Unison.WhatsAppClient.History
                 }
             }
 
-            if (sync.Conversations != null)
+            if (HistorySyncApplyPipelineDecision.ShouldHarvestConversationLidAliases(
+                    conversationCount) &&
+                sync.Conversations != null)
             {
                 foreach (var conv in sync.Conversations)
                 {

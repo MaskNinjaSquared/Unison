@@ -21,6 +21,57 @@ namespace Unison.Uwp.Services
     /// </summary>
     public class DialogService : IDialogService
     {
+        /// <summary>
+        /// Active QR / phone-input / pairing-code dialog from Login. At most one ContentDialog
+        /// may be open; we keep the reference so SessionEstablished can Hide before navigate.
+        /// </summary>
+        private ContentDialog _loginPairingDialog;
+
+        public void DismissLoginPairingDialogs()
+        {
+            ContentDialog dialog = _loginPairingDialog;
+            if (dialog == null)
+            {
+                return;
+            }
+
+            try
+            {
+                dialog.Hide();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine(
+                    "[DialogService] DismissLoginPairingDialogs Hide failed: " + ex.Message);
+            }
+        }
+
+        private void TrackLoginPairingDialog(ContentDialog dialog)
+        {
+            if (dialog == null)
+            {
+                return;
+            }
+
+            if (_loginPairingDialog != null && !ReferenceEquals(_loginPairingDialog, dialog))
+            {
+                DismissLoginPairingDialogs();
+            }
+
+            _loginPairingDialog = dialog;
+            dialog.Closed -= LoginPairingDialog_Closed;
+            dialog.Closed += LoginPairingDialog_Closed;
+        }
+
+        private void LoginPairingDialog_Closed(ContentDialog sender, ContentDialogClosedEventArgs args)
+        {
+            sender.Closed -= LoginPairingDialog_Closed;
+            if (ReferenceEquals(_loginPairingDialog, sender))
+            {
+                _loginPairingDialog = null;
+            }
+        }
+
         public async Task<bool> ShowConfirmAsync(
             string title,
             string content,
@@ -192,6 +243,9 @@ namespace Unison.Uwp.Services
                     CloseButtonText = closeButtonText
                 };
 
+                // Only Login uses ShowInputAsync today (phone pairing) — track for dismiss.
+                TrackLoginPairingDialog(dialog);
+
                 var result = await dialog.ShowAsync();
                 if (result != ContentDialogResult.Primary)
                 {
@@ -209,12 +263,31 @@ namespace Unison.Uwp.Services
 
         public async Task ShowPairingCodeAsync(LoginViewModel loginVm, string code)
         {
-            // loginVm kept for Imgur-style targeting / future expansion of the dialog.
+            // loginVm kept for Imgur-style targeting; dismiss runs via DismissLoginPairingDialogs.
             string shown = string.IsNullOrEmpty(code) ? "—" : code;
-            await ShowMessageAsync(
-                LocalizedStrings.Get("Login_PairPhoneCodeTitle"),
-                LocalizedStrings.Format("Login_PairPhoneCodeBody", shown),
-                LocalizedStrings.Get("Common_OK"));
+            try
+            {
+                var dialog = new ContentDialog
+                {
+                    Title = LocalizedStrings.Get("Login_PairPhoneCodeTitle"),
+                    Content = LocalizedStrings.Format("Login_PairPhoneCodeBody", shown),
+                    CloseButtonText = LocalizedStrings.Get("Common_OK")
+                };
+                TrackLoginPairingDialog(dialog);
+                await dialog.ShowAsync();
+            }
+            catch (System.Runtime.InteropServices.COMException ex)
+                when (ex.Message.Contains("single ContentDialog") ||
+                      ex.HResult == unchecked((int)0x80070057))
+            {
+                System.Diagnostics.Debug.WriteLine(
+                    "[DialogService] Another dialog is already open (pairing code).");
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine(
+                    "[DialogService] ShowPairingCodeAsync: " + ex.Message);
+            }
         }
 
         public async Task<string> ShowNewChatDialogAsync(NewChatDialogViewModel newChatVm)
@@ -549,6 +622,7 @@ namespace Unison.Uwp.Services
                     dialog.SetQrPayload(qrData);
                 }
 
+                TrackLoginPairingDialog(dialog);
                 await dialog.ShowAsync();
             }
             catch (System.Runtime.InteropServices.COMException ex)

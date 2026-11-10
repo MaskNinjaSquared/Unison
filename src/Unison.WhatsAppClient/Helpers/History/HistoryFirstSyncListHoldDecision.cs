@@ -15,6 +15,8 @@ namespace Unison.WhatsAppClient.Helpers
         /// <summary>
         /// True when quiet-finalize must keep initial-sync active (no <c>IsCompleted</c>)
         /// because catch-up still owes work and the store has no conversations yet.
+        /// Enrichment awaiting heavy history is not a defer gate — it is a consumer of
+        /// unlock; catch-up hand-off / banner already cover "Bootstrap still coming".
         /// </summary>
         public static bool ShouldDeferInitialSyncCompleted(
             bool firstSyncInProgress,
@@ -34,7 +36,10 @@ namespace Unison.WhatsAppClient.Helpers
                 return false;
             }
 
-            return handOffCatchUp || catchUpActive || enrichmentAwaitingHeavyHistory;
+            // enrichmentAwaitingHeavyHistory is intentionally unused: keeping it as a
+            // parameter preserves call-site ABI while catch-up owns the empty-store hold.
+            _ = enrichmentAwaitingHeavyHistory;
+            return handOffCatchUp || catchUpActive;
         }
 
         /// <summary>

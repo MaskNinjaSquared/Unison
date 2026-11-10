@@ -68,6 +68,12 @@ namespace Unison.Core.Contracts
         /// <summary>Shows the pairing code for the given login VM context.</summary>
         Task ShowPairingCodeAsync(LoginViewModel loginVm, string code);
 
+        /// <summary>
+        /// Hides any open login pairing ContentDialog (QR fullscreen, phone input, or
+        /// pairing code). Safe no-op when none is showing. Call before leaving Login.
+        /// </summary>
+        void DismissLoginPairingDialogs();
+
         /// <summary>Opens the new-chat dialog bound to the supplied VM. Returns resolved JID or null.</summary>
         Task<string> ShowNewChatDialogAsync(NewChatDialogViewModel newChatVm);
 
