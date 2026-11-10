@@ -445,6 +445,73 @@ namespace Unison.Core.Tests.State
         }
 
         [Fact]
+        public async Task A_burst_of_name_changes_on_a_frugal_device_traces_one_deferral()
+        {
+            // Frugal defers every unnamed sweep, so a line per deferral was a journal write per
+            // name event during first sync on the 512MB Lumias.
+            var chatState = new ChatStateStore(new CountingDispatcher());
+            chatState.Chats.Add(new ChatItem
+            {
+                JID = Group,
+                Name = "Família",
+                IsGroup = true,
+                LastMessageParticipantJid = Lid
+            });
+            var diagnostics = new CountingDiagnostics();
+            var projection = new ChatAuthorProjection(
+                chatState,
+                new MemoryPersonStore(),
+                new AliasJids(),
+                strings: null,
+                new CountingDispatcher(),
+                preferFrugalUi: () => true,
+                diagnostics: diagnostics);
+
+            projection.Start();
+            for (int i = 0; i < 10; i++)
+            {
+                chatState.NotifyDisplayNamesChanged();
+            }
+
+            Assert.Equal(1, diagnostics.Count("sweep-deferred"));
+            await Task.CompletedTask;
+        }
+
+        private sealed class CountingDiagnostics : IRuntimeDiagnostics
+        {
+            private readonly List<string> _events = new List<string>();
+
+            public int Count(string eventName)
+            {
+                lock (_events)
+                {
+                    return _events.FindAll(e => e == eventName).Count;
+                }
+            }
+
+            public bool IsVerboseLoggingEnabled => false;
+            public void SetVerboseLogging(bool enabled, string source) { }
+            public void Start() { }
+            public void StartHealthSampling() { }
+
+            public void Write(string category, string eventName, string details = null)
+            {
+                lock (_events)
+                {
+                    _events.Add(eventName);
+                }
+            }
+
+            public void RecordException(string category, string eventName, Exception exception, string details = null) { }
+            public string GetRecentText() => string.Empty;
+            public RuntimeDiagnosticsSnapshot CaptureSnapshot() => null;
+            public Task FlushAsync(string reason) => Task.CompletedTask;
+            public Task<string> ExportReportAsync() => Task.FromResult(string.Empty);
+            public Task<string> SaveReportToLocalFolderAsync() => Task.FromResult(string.Empty);
+            public Task ClearAsync() => Task.CompletedTask;
+        }
+
+        [Fact]
         public async Task DisplayNamesChanged_under_Hold_does_not_schedule_unnamed_until_Release()
         {
             var jids = new AliasJids();

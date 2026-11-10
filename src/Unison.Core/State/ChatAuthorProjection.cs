@@ -107,6 +107,9 @@ namespace Unison.Core.State
         private int _sweepNoParticipant;
         private int _sweepCatalogue;
 
+        // Deferrals since the last sweep-done; written under _gate.
+        private int _sweepDeferrals;
+
         public ChatAuthorProjection(
             IChatStateStore chatState,
             IPersonStore personStore,
@@ -211,13 +214,14 @@ namespace Unison.Core.State
         private void OnDisplayNamesChanged(object sender, EventArgs e)
         {
             bool defer;
+            bool firstDeferral = false;
             lock (_gate)
             {
                 _retryWarmForUnnamed = true;
                 defer = ShouldDeferUnnamedSweep();
                 if (defer)
                 {
-                    _unnamedDeferred = true;
+                    firstDeferral = MarkUnnamedDeferred();
                 }
                 else
                 {
@@ -227,7 +231,7 @@ namespace Unison.Core.State
 
             if (defer)
             {
-                ArmFrugalUnnamedFlush();
+                ArmFrugalUnnamedFlush(firstDeferral);
                 return;
             }
 
@@ -313,6 +317,7 @@ namespace Unison.Core.State
         private void ScheduleUnnamedSweep()
         {
             bool defer;
+            bool firstDeferral = false;
             lock (_gate)
             {
                 defer = ShouldDeferUnnamedSweep();
@@ -320,7 +325,7 @@ namespace Unison.Core.State
                 {
                     // Do not set _unnamedPassRequested yet — a concurrent RefreshChat must stay
                     // on the pending-chat fast path while Hold/frugal is active.
-                    _unnamedDeferred = true;
+                    firstDeferral = MarkUnnamedDeferred();
                 }
                 else
                 {
@@ -330,11 +335,20 @@ namespace Unison.Core.State
 
             if (defer)
             {
-                ArmFrugalUnnamedFlush();
+                ArmFrugalUnnamedFlush(firstDeferral);
                 return;
             }
 
             SchedulePass();
+        }
+
+        /// <summary>Call under <c>_gate</c>. True only when the sweep was not already deferred.</summary>
+        private bool MarkUnnamedDeferred()
+        {
+            bool first = !_unnamedDeferred;
+            _unnamedDeferred = true;
+            _sweepDeferrals++;
+            return first;
         }
 
         private bool ShouldDeferUnnamedSweep()
@@ -357,14 +371,19 @@ namespace Unison.Core.State
             FlushDeferredUnnamed();
         }
 
-        private void ArmFrugalUnnamedFlush()
+        private void ArmFrugalUnnamedFlush(bool traceDeferral)
         {
             // The silent case: a deferred sweep leaves no trace at all, and on a frugal device
-            // this is the normal path, not the exception. One line per deferral.
-            TraceStrip(
-                "sweep-deferred",
-                "hold=" + (_timelinePriority != null && _timelinePriority.IsHeld) +
-                "; frugal=" + (_preferFrugalUi != null && _preferFrugalUi()));
+            // this is the normal path, not the exception. One line when the sweep becomes
+            // deferred: frugal defers on every name event, so a line each was a journal write
+            // per event during sync. The rest are counted into sweep-done.
+            if (traceDeferral)
+            {
+                TraceStrip(
+                    "sweep-deferred",
+                    "hold=" + (_timelinePriority != null && _timelinePriority.IsHeld) +
+                    "; frugal=" + (_preferFrugalUi != null && _preferFrugalUi()));
+            }
 
             int generation = Interlocked.Increment(ref _frugalFlushGeneration);
             _ = FlushFrugalUnnamedAsync(generation);
@@ -856,6 +875,13 @@ namespace Unison.Core.State
             _sweepNumbered = 0;
             _sweepResynced = 0;
             _sweepRows = 0;
+            int deferrals;
+            lock (_gate)
+            {
+                deferrals = _sweepDeferrals;
+                _sweepDeferrals = 0;
+            }
+
             _sweepWork = null;
             _sweepDirectNames = null;
             _sweepSelfLabel = null;
@@ -872,7 +898,8 @@ namespace Unison.Core.State
                 "; named=" + named +
                 "; number=" + numbered +
                 "; resync=" + resynced +
-                "; warm=" + (needsStoreLookup == null ? 0 : needsStoreLookup.Count));
+                "; warm=" + (needsStoreLookup == null ? 0 : needsStoreLookup.Count) +
+                "; deferrals=" + deferrals);
 
             if (dirtyStrips != null && _chats != null)
             {
