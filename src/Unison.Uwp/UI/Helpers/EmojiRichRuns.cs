@@ -35,6 +35,14 @@ namespace Unison.Uwp.UI.Helpers
                 return;
             }
 
+            // Virtualised rows realise this per item. A name with no emoji cannot need
+            // mixed runs, so paint it flat and skip the grapheme walk entirely.
+            if (!EmojiText.MayContainEmoji(text))
+            {
+                block.Text = text;
+                return;
+            }
+
             AppendInlines(block.Inlines, text);
         }
 
@@ -58,6 +66,12 @@ namespace Unison.Uwp.UI.Helpers
             FontWeight? weight = null,
             Brush foreground = null)
         {
+            if (!EmojiText.MayContainEmoji(text))
+            {
+                inlines.Add(BuildRun(text, weight, foreground, false, null));
+                return;
+            }
+
             FontFamily emojiFont = ResolveEmojiFont();
             IReadOnlyList<EmojiText.Segment> segments = EmojiText.Split(text);
             for (int i = 0; i < segments.Count; i++)
@@ -68,24 +82,34 @@ namespace Unison.Uwp.UI.Helpers
                     continue;
                 }
 
-                var run = new Run { Text = segment.Text };
-                if (weight.HasValue)
-                {
-                    run.FontWeight = weight.Value;
-                }
-
-                if (foreground != null)
-                {
-                    run.Foreground = foreground;
-                }
-
-                if (segment.IsEmoji && emojiFont != null)
-                {
-                    run.FontFamily = emojiFont;
-                }
-
-                inlines.Add(run);
+                inlines.Add(BuildRun(segment.Text, weight, foreground, segment.IsEmoji, emojiFont));
             }
+        }
+
+        private static Run BuildRun(
+            string text,
+            FontWeight? weight,
+            Brush foreground,
+            bool isEmoji,
+            FontFamily emojiFont)
+        {
+            var run = new Run { Text = text };
+            if (weight.HasValue)
+            {
+                run.FontWeight = weight.Value;
+            }
+
+            if (foreground != null)
+            {
+                run.Foreground = foreground;
+            }
+
+            if (isEmoji && emojiFont != null)
+            {
+                run.FontFamily = emojiFont;
+            }
+
+            return run;
         }
 
         public static void AppendToHyperlink(
@@ -95,6 +119,12 @@ namespace Unison.Uwp.UI.Helpers
         {
             if (hyperlink == null || string.IsNullOrEmpty(text))
             {
+                return;
+            }
+
+            if (!EmojiText.MayContainEmoji(text))
+            {
+                hyperlink.Inlines.Add(new Run { Text = text });
                 return;
             }
 
