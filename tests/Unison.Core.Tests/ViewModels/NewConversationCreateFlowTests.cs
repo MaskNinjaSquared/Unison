@@ -898,6 +898,10 @@ namespace Unison.Core.Tests.ViewModels
             public Task ApplyGroupMetadataAsync(string groupJid, GroupMetadataSnapshot metadata) =>
                 Task.CompletedTask;
 
+            public Task ApplyRemoteGroupDescriptionAsync(
+                string groupJid, string description, string descriptionId) =>
+                Task.CompletedTask;
+
             public Task ApplyGroupMetadataFromResponseAsync(string groupJid, Unison.Baileys.Protocol.BinaryNode response) =>
                 Task.CompletedTask;
 

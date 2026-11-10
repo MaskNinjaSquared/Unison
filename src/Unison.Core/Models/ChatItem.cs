@@ -329,6 +329,38 @@ namespace Unison.Core.Models
             }
         }
 
+        private string _groupDescription;
+        /// <summary>
+        /// Group description (<c>description/body</c> from a <c>w:g2</c> reply, or a live
+        /// description notification). Null = never learned; empty = the group has none.
+        /// </summary>
+        public string GroupDescription
+        {
+            get => _groupDescription;
+            set
+            {
+                if (string.Equals(_groupDescription, value, StringComparison.Ordinal)) return;
+                _groupDescription = value;
+                OnPropertyChanged();
+            }
+        }
+
+        private string _groupDescriptionId;
+        /// <summary>
+        /// Wire id of the current description. Needed to edit it later, and lets a repeated
+        /// notification be recognised as the one already stored.
+        /// </summary>
+        public string GroupDescriptionId
+        {
+            get => _groupDescriptionId;
+            set
+            {
+                if (string.Equals(_groupDescriptionId, value, StringComparison.Ordinal)) return;
+                _groupDescriptionId = value;
+                OnPropertyChanged();
+            }
+        }
+
         private int _channelFollowerCount;
         /// <summary>
         /// Channel <c>subscribers_count</c> from newsletter metadata. 0 = not yet known.

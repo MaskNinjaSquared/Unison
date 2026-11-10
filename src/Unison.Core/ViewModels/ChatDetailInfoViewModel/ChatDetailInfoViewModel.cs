@@ -404,8 +404,12 @@ namespace Unison.Core.ViewModels
             _contacts != null &&
             _contacts.CanAddToAddressBook(LookupJid, PhoneValue);
 
-        /// <summary>Contact about / group description — local-only placeholder until synced.</summary>
-        public string StatusOrDescription => string.Empty;
+        /// <summary>
+        /// Group description, fetched with the group metadata and stored per chat. Contact
+        /// "about" is a separate source and is not wired yet, so non-groups stay empty.
+        /// </summary>
+        public string StatusOrDescription =>
+            _isGroup && _source != null ? _source.GroupDescription : string.Empty;
 
         public bool HasStatusOrDescription => !string.IsNullOrWhiteSpace(StatusOrDescription);
 

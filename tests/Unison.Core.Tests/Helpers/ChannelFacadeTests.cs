@@ -221,6 +221,16 @@ namespace Unison.Core.Tests.Helpers
 
             public Task SetStatusAsync(string jid, ChatStatus status) => Task.CompletedTask;
 
+            public Task SetGroupDescriptionAsync(string jid, string description, string descriptionId)
+            {
+                _cache.Mutate(jid, state =>
+                {
+                    state.GroupDescription = description;
+                    state.GroupDescriptionId = descriptionId;
+                });
+                return Task.CompletedTask;
+            }
+
             public void RememberChatPinned(string jid, bool pinned, long? pinnedTimestamp = null)
             {
             }

@@ -107,6 +107,8 @@ namespace Unison.WhatsAppClient.Groups
             {
                 Jid = jid,
                 Subject = subject,
+                Description = ReadDescription(groupNode),
+                DescriptionId = ReadDescriptionId(groupNode),
                 AnnounceOnly = IsAnnounceOnly(groupNode),
                 IsCommunityAnnounce = IsCommunityAnnounce(groupNode),
                 IsCommunityParent = IsCommunityParent(groupNode),
@@ -235,6 +237,33 @@ namespace Unison.WhatsAppClient.Groups
         public bool IsCommunityParent(BinaryNode groupNode)
         {
             return groupNode?.GetChild("parent") != null;
+        }
+
+        /// <summary>
+        /// The group description text from <c>description/body</c>.
+        /// </summary>
+        /// <returns>
+        /// Null when the node carries no <c>description</c> child, which is how a reply says
+        /// nothing about the description rather than saying it is empty. A <c>description</c>
+        /// node with no readable body reads as an empty string — the group has none.
+        /// </returns>
+        public string ReadDescription(BinaryNode groupNode)
+        {
+            BinaryNode description = groupNode?.GetChild("description");
+            if (description == null)
+            {
+                return null;
+            }
+
+            BinaryNode body = description.GetChild("body");
+            return body != null ? (body.GetContentString() ?? string.Empty) : string.Empty;
+        }
+
+        /// <summary>Wire <c>description/@id</c>; null when the node or attribute is absent.</summary>
+        public string ReadDescriptionId(BinaryNode groupNode)
+        {
+            BinaryNode description = groupNode?.GetChild("description");
+            return description?.GetAttribute("id");
         }
 
         /// <summary>

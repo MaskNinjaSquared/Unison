@@ -516,6 +516,15 @@ namespace Unison.WhatsAppClient.Groups
         }
 
         /// <inheritdoc />
+        public Task ApplyRemoteGroupDescriptionAsync(
+            string groupJid,
+            string description,
+            string descriptionId)
+        {
+            return _apply.ApplyDescriptionAsync(groupJid, description, descriptionId);
+        }
+
+        /// <inheritdoc />
         public Task ApplyGroupMetadataFromResponseAsync(string groupJid, BinaryNode response)
         {
             if (string.IsNullOrWhiteSpace(groupJid) || response == null)

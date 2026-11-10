@@ -182,6 +182,16 @@ namespace Unison.Core.Contracts.WhatsApp
         Task ApplyGroupMetadataAsync(string groupJid, GroupMetadataSnapshot metadata);
 
         /// <summary>
+        /// A group description arriving outside a metadata reply — an admin edited it while the
+        /// app is running. Updates the open row and stores it. Pass an empty string for a
+        /// description that was cleared; null is ignored.
+        /// </summary>
+        Task ApplyRemoteGroupDescriptionAsync(
+            string groupJid,
+            string description,
+            string descriptionId);
+
+        /// <summary>
         /// Receipt path: parse a w:g2 metadata IQ the host already fetched and apply it.
         /// Does not query the network.
         /// </summary>

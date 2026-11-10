@@ -52,6 +52,8 @@ namespace Unison.Uwp.Data
                 await _connection.CreateTableAsync<ChatRow>().ConfigureAwait(false);
                 await EnsureColumnAsync(nameof(ChatRow.PinnedTimestamp)).ConfigureAwait(false);
                 await EnsureColumnAsync(nameof(ChatRow.ChannelRole)).ConfigureAwait(false);
+                await EnsureTextColumnAsync(nameof(ChatRow.GroupDescription)).ConfigureAwait(false);
+                await EnsureTextColumnAsync(nameof(ChatRow.GroupDescriptionId)).ConfigureAwait(false);
                 _initialized = true;
                 Debug.WriteLine("[ChatStore] Initialized at " + dbPath);
             }
@@ -150,6 +152,15 @@ namespace Unison.Uwp.Data
         public Task SetChannelRoleAsync(string jid, ChannelViewerRole role)
         {
             return WriteAsync(jid, existing => existing.ChannelRole = role);
+        }
+
+        public Task SetGroupDescriptionAsync(string jid, string description, string descriptionId)
+        {
+            return WriteAsync(jid, existing =>
+            {
+                existing.GroupDescription = description ?? string.Empty;
+                existing.GroupDescriptionId = descriptionId;
+            });
         }
 
         public void RememberChatPinned(string jid, bool pinned, long? pinnedTimestamp = null)
@@ -258,7 +269,23 @@ namespace Unison.Uwp.Data
         }
 
         /// <summary>Adds a nullable INTEGER column that a database from an older build lacks.</summary>
-        private async Task EnsureColumnAsync(string column)
+        private Task EnsureColumnAsync(string column)
+        {
+            return EnsureColumnAsync(column, "INTEGER");
+        }
+
+        /// <summary>Adds a nullable TEXT column that a database from an older build lacks.</summary>
+        private Task EnsureTextColumnAsync(string column)
+        {
+            return EnsureColumnAsync(column, "TEXT");
+        }
+
+        /// <remarks>
+        /// Idempotent: <c>PRAGMA table_info</c> first, <c>ALTER TABLE</c> only when the column is
+        /// genuinely absent, so a database that already migrated is left alone. SQLite has no
+        /// "add column if not exists".
+        /// </remarks>
+        private async Task EnsureColumnAsync(string column, string sqlType)
         {
             try
             {
@@ -281,7 +308,7 @@ namespace Unison.Uwp.Data
                 if (!exists)
                 {
                     await _connection.ExecuteAsync(
-                            "ALTER TABLE Chat ADD COLUMN " + column + " INTEGER NULL")
+                            "ALTER TABLE Chat ADD COLUMN " + column + " " + sqlType + " NULL")
                         .ConfigureAwait(false);
                     Debug.WriteLine("[ChatStore] Added " + column + " column");
                 }
@@ -327,6 +354,14 @@ namespace Unison.Uwp.Data
                 state.ChannelRole = (ChannelViewerRole)row.ChannelRole.Value;
             }
 
+            // NULL is "this row predates the column", not "no description" — leave the field
+            // unknown so ChatLocalStateApply does not blank a freshly fetched description.
+            if (row.GroupDescription != null)
+            {
+                state.GroupDescription = row.GroupDescription;
+                state.GroupDescriptionId = row.GroupDescriptionId;
+            }
+
             return state;
         }
 
@@ -343,6 +378,12 @@ namespace Unison.Uwp.Data
                 MutedUntil = state.MutedUntil,
                 ChannelRole = state.Knows(ChatLocalStateFields.ChannelRole)
                     ? (int?)state.ChannelRole
+                    : null,
+                GroupDescription = state.Knows(ChatLocalStateFields.GroupDescription)
+                    ? (state.GroupDescription ?? string.Empty)
+                    : null,
+                GroupDescriptionId = state.Knows(ChatLocalStateFields.GroupDescription)
+                    ? state.GroupDescriptionId
                     : null,
                 UpdatedAtUtc = DateTime.UtcNow
             };
