@@ -96,6 +96,7 @@ namespace Unison.Core.State
         private List<string> _sweepWarm;
 
         private readonly ISessionLogger _sessionLog;
+        private readonly IRuntimeDiagnostics _diagnostics;
 
         // Per-sweep tallies for the one summary line in FinishSweep. Plain ints on the sweep
         // thread — no allocation and no formatting on the per-row path.
@@ -115,7 +116,9 @@ namespace Unison.Core.State
             IContactService contacts = null,
             IChatService chats = null,
             ChatTimelineLoadPriorityGate timelinePriority = null,
-            Func<bool> preferFrugalUi = null)
+            Func<bool> preferFrugalUi = null,
+            ISessionLogger sessionLog = null,
+            IRuntimeDiagnostics diagnostics = null)
         {
             _chatState = chatState ?? throw new ArgumentNullException(nameof(chatState));
             _personStore = personStore ?? throw new ArgumentNullException(nameof(personStore));
@@ -125,11 +128,35 @@ namespace Unison.Core.State
             _chats = chats;
             _timelinePriority = timelinePriority;
             _preferFrugalUi = preferFrugalUi;
+            _sessionLog = sessionLog;
+            _diagnostics = diagnostics;
             _participants = new ParticipantResolutionContext(jids, contacts, chatState, personStore);
 
             if (_timelinePriority != null)
             {
                 _timelinePriority.Changed += OnTimelinePriorityChanged;
+            }
+        }
+
+        /// <summary>
+        /// One trace line to both sinks. The session log is a capped rolling buffer, so anything
+        /// emitted near launch — <see cref="Start"/> above all — can be evicted before the capture
+        /// is taken, leaving "never ran" and "ran and rolled off" indistinguishable. Diagnostics
+        /// retains the launch window, so lifecycle answers survive there.
+        /// </summary>
+        /// <remarks>One call per sweep or per lifecycle event. Never on the per-row path.</remarks>
+        private void TraceStrip(string eventName, string details = null)
+        {
+            if (_sessionLog != null)
+            {
+                _sessionLog.WriteAlways(
+                    "[AuthorStrip] " + eventName +
+                    (string.IsNullOrEmpty(details) ? string.Empty : " " + details));
+            }
+
+            if (_diagnostics != null)
+            {
+                _diagnostics.Write("author-strip", eventName, details);
             }
         }
 
@@ -153,10 +180,7 @@ namespace Unison.Core.State
             // Persisted strips that already carry a name are left alone unless their rendered
             // prefix disagrees with that name; a full catalogue walk at Start was the 30–100s
             // Mobile stall.
-            if (_sessionLog != null)
-            {
-                _sessionLog.WriteAlways("[AuthorStrip] start");
-            }
+            TraceStrip("start");
 
             ScheduleUnnamedSweep();
         }
@@ -337,13 +361,10 @@ namespace Unison.Core.State
         {
             // The silent case: a deferred sweep leaves no trace at all, and on a frugal device
             // this is the normal path, not the exception. One line per deferral.
-            if (_sessionLog != null)
-            {
-                _sessionLog.WriteAlways(
-                    "[AuthorStrip] sweep-deferred hold=" +
-                    (_timelinePriority != null && _timelinePriority.IsHeld) +
-                    " frugal=" + (_preferFrugalUi != null && _preferFrugalUi()));
-            }
+            TraceStrip(
+                "sweep-deferred",
+                "hold=" + (_timelinePriority != null && _timelinePriority.IsHeld) +
+                "; frugal=" + (_preferFrugalUi != null && _preferFrugalUi()));
 
             int generation = Interlocked.Increment(ref _frugalFlushGeneration);
             _ = FlushFrugalUnnamedAsync(generation);
@@ -362,10 +383,7 @@ namespace Unison.Core.State
                 if (_timelinePriority != null && _timelinePriority.IsHeld)
                 {
                     // Dead end until OnTimelinePriorityChanged fires: this does not re-arm.
-                    if (_sessionLog != null)
-                    {
-                        _sessionLog.WriteAlways("[AuthorStrip] sweep-flush-abandoned hold=True");
-                    }
+                    TraceStrip("sweep-flush-abandoned", "hold=True");
 
                     return;
                 }
@@ -730,14 +748,12 @@ namespace Unison.Core.State
             // Unconditional: the absence of a conditional line cannot distinguish "the sweep
             // never ran" from "it ran and had nothing to report", and that is the one thing a
             // device log has to be able to say. One line per sweep, never per row.
-            if (_sessionLog != null)
-            {
-                _sessionLog.WriteAlways(
-                    "[AuthorStrip] sweep-start path=" + (prepared.Path ?? "?") +
-                    " work=" + _sweepWork.Count +
-                    " catalogue=" + _sweepCatalogue +
-                    " noParticipant=" + _sweepNoParticipant);
-            }
+            TraceStrip(
+                "sweep-start",
+                "path=" + (prepared.Path ?? "?") +
+                "; work=" + _sweepWork.Count +
+                "; catalogue=" + _sweepCatalogue +
+                "; noParticipant=" + _sweepNoParticipant);
 
             ProcessSweepChunk();
         }
@@ -850,15 +866,13 @@ namespace Unison.Core.State
             // One line per sweep, unconditional — see BeginSweepChunks. "rows" is how many the
             // decision actually reached; named + number + resync < rows means the rest were
             // genuinely left alone.
-            if (_sessionLog != null)
-            {
-                _sessionLog.WriteAlways(
-                    "[AuthorStrip] sweep-done rows=" + rowsDecided +
-                    " named=" + named +
-                    " number=" + numbered +
-                    " resync=" + resynced +
-                    " warm=" + (needsStoreLookup == null ? 0 : needsStoreLookup.Count));
-            }
+            TraceStrip(
+                "sweep-done",
+                "rows=" + rowsDecided +
+                "; named=" + named +
+                "; number=" + numbered +
+                "; resync=" + resynced +
+                "; warm=" + (needsStoreLookup == null ? 0 : needsStoreLookup.Count));
 
             if (dirtyStrips != null && _chats != null)
             {
