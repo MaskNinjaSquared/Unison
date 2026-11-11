@@ -1,12 +1,12 @@
+using Unison.Uwp.UI.Controls;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
 
 namespace Unison.Uwp.UI.TemplateSelectors
 {
     /// <summary>
-    /// <see cref="Controls.SettingBox"/> layout: compact (title + control on one row)
-    /// when there is no description; expanded when <c>HasDescription</c> is true.
-    /// Bind <c>Content</c> to <c>HasDescription</c>.
+    /// <see cref="SettingBox"/> layout: compact vs with-description.
+    /// <c>Content</c> must be a <see cref="SettingBoxFace"/> (never a bool, never the box itself).
     /// </summary>
     public sealed class SettingBoxLayoutTemplateSelector : DataTemplateSelector
     {
@@ -26,7 +26,8 @@ namespace Unison.Uwp.UI.TemplateSelectors
 
         private DataTemplate Select(object item)
         {
-            bool hasDescription = item is bool flag && flag;
+            var face = item as SettingBoxFace;
+            bool hasDescription = face != null && face.HasDescription;
             if (hasDescription)
             {
                 return WithDescriptionTemplate ?? CompactTemplate;
