@@ -7,21 +7,33 @@ namespace Unison.Uwp.UI.Controls
     /// <summary>
     /// Settings row box (Imgur SettingBox layout: header/body + control column).
     /// Localizes Header/Text from <see cref="LocalizationUid"/> via ResourceLoader on Loaded.
-    /// Layout swaps via <c>SettingBoxLayoutTemplateSelector</c>: compact (toggle beside title)
-    /// when <see cref="Text"/> is empty; expanded when there is a description.
+    /// Layout swaps via <c>SettingBoxLayoutTemplateSelector</c> over a <see cref="SettingBoxFace"/>
+    /// payload — never <c>Content=this</c> (that nests the host in itself and hangs the UI).
     /// </summary>
     public sealed partial class SettingBox : UserControl
     {
+        private bool _layoutReady;
+
         public SettingBox()
         {
             this.InitializeComponent();
             this.Loaded += SettingBox_Loaded;
+            this.DataContextChanged += SettingBox_DataContextChanged;
+            _layoutReady = true;
+            RestampLayout();
         }
 
         private void SettingBox_Loaded(object sender, RoutedEventArgs e)
         {
             ApplyUidResources();
             RefreshHasDescription();
+            RestampLayout();
+            ApplyControlDataContext();
+        }
+
+        private void SettingBox_DataContextChanged(FrameworkElement sender, DataContextChangedEventArgs args)
+        {
+            ApplyControlDataContext();
         }
 
         /// <summary>
@@ -80,7 +92,11 @@ namespace Unison.Uwp.UI.Controls
         }
 
         public static readonly DependencyProperty GlyphProperty =
-            DependencyProperty.Register(nameof(Glyph), typeof(string), typeof(SettingBox), new PropertyMetadata(null));
+            DependencyProperty.Register(
+                nameof(Glyph),
+                typeof(string),
+                typeof(SettingBox),
+                new PropertyMetadata(null, OnFaceFieldChanged));
 
         public string Header
         {
@@ -89,7 +105,11 @@ namespace Unison.Uwp.UI.Controls
         }
 
         public static readonly DependencyProperty HeaderProperty =
-            DependencyProperty.Register(nameof(Header), typeof(string), typeof(SettingBox), new PropertyMetadata(null));
+            DependencyProperty.Register(
+                nameof(Header),
+                typeof(string),
+                typeof(SettingBox),
+                new PropertyMetadata(null, OnFaceFieldChanged));
 
         public string Text
         {
@@ -106,7 +126,14 @@ namespace Unison.Uwp.UI.Controls
 
         private static void OnTextChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
         {
-            ((SettingBox)d).RefreshHasDescription();
+            var box = (SettingBox)d;
+            box.RefreshHasDescription();
+            box.RestampLayout();
+        }
+
+        private static void OnFaceFieldChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+        {
+            ((SettingBox)d).RestampLayout();
         }
 
         /// <summary>True when <see cref="Text"/> has content — drives the layout template.</summary>
@@ -121,11 +148,38 @@ namespace Unison.Uwp.UI.Controls
                 nameof(HasDescription),
                 typeof(bool),
                 typeof(SettingBox),
-                new PropertyMetadata(false));
+                new PropertyMetadata(false, OnHasDescriptionChanged));
+
+        private static void OnHasDescriptionChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+        {
+            ((SettingBox)d).RestampLayout();
+        }
 
         private void RefreshHasDescription()
         {
             HasDescription = !string.IsNullOrWhiteSpace(Text);
+        }
+
+        /// <summary>
+        /// Push a fresh <see cref="SettingBoxFace"/> so the selector re-runs.
+        /// Never assign <c>this</c> as Content — the host lives inside this control.
+        /// </summary>
+        private void RestampLayout()
+        {
+            if (!_layoutReady || LayoutHost == null)
+            {
+                return;
+            }
+
+            LayoutHost.Content = new SettingBoxFace
+            {
+                HasDescription = HasDescription,
+                Glyph = Glyph,
+                Header = Header,
+                Text = Text,
+                Control = Control
+            };
+            ApplyControlDataContext();
         }
 
         public object Control
@@ -135,6 +189,31 @@ namespace Unison.Uwp.UI.Controls
         }
 
         public static readonly DependencyProperty ControlProperty =
-            DependencyProperty.Register(nameof(Control), typeof(object), typeof(SettingBox), new PropertyMetadata(null));
+            DependencyProperty.Register(
+                nameof(Control),
+                typeof(object),
+                typeof(SettingBox),
+                new PropertyMetadata(null, OnControlChanged));
+
+        private static void OnControlChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+        {
+            var box = (SettingBox)d;
+            box.RestampLayout();
+            box.ApplyControlDataContext();
+        }
+
+        /// <summary>
+        /// Face template DataContext must not leak onto the toggle/combo — keep the page VM.
+        /// </summary>
+        private void ApplyControlDataContext()
+        {
+            var fe = Control as FrameworkElement;
+            if (fe == null)
+            {
+                return;
+            }
+
+            fe.DataContext = DataContext;
+        }
     }
 }
