@@ -91,6 +91,9 @@ namespace Unison.Core.ViewModels
         /// <summary>Shell camera pick for the create-group avatar.</summary>
         public ICommand PickGroupPhotoFromCameraCommand { get; private set; }
 
+        /// <summary>Clears the create-group avatar bytes.</summary>
+        public ICommand ClearGroupPhotoCommand { get; private set; }
+
         /// <summary>Opens the disappearing-messages dialog for create-group.</summary>
         public ICommand EditGroupEphemeralCommand { get; private set; }
 
@@ -174,6 +177,7 @@ namespace Unison.Core.ViewModels
                 _groupPhotoBytes = value;
                 OnPropertyChanged(nameof(GroupPhotoBytes));
                 OnPropertyChanged(nameof(HasGroupPhoto));
+                (ClearGroupPhotoCommand as RelayCommand)?.RaiseCanExecuteChanged();
             }
         }
 
@@ -493,6 +497,9 @@ namespace Unison.Core.ViewModels
             PickGroupPhotoFromCameraCommand = new RelayCommand(
                 () => _ = PickGroupPhotoFromCameraAsync(),
                 () => _cameraPick != null);
+            ClearGroupPhotoCommand = new RelayCommand(
+                () => GroupPhotoBytes = null,
+                () => IsCreateGroup && GroupPhotoBytes != null);
             EditGroupEphemeralCommand = new RelayCommand(() => _ = EditGroupEphemeralAsync());
             OpenGroupPermissionsCommand = new RelayCommand(() => IsGroupPermissionsOpen = true);
             CloseGroupPermissionsCommand = new RelayCommand(() => IsGroupPermissionsOpen = false);

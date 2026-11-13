@@ -660,9 +660,9 @@
 
         <!-- Legacy create scaffold (SemanticZoom members + CommandBar). -->
         <legacyControls:CreateConversationFlowView x:Name="CreateFlowPart"
+                                             x:Load="{x:Bind ViewModel.IsCreateFlowOpen, Mode=OneWay}"
                                              Grid.Row="0"
-                                             Grid.RowSpan="4"
-                                             Visibility="Collapsed"/>
+                                             Grid.RowSpan="4"/>
 
     </Grid>
 </UserControl>

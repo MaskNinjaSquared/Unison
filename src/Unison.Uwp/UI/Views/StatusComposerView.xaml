@@ -213,7 +213,7 @@
                                           Grid.RowSpan="3"
                                           Canvas.ZIndex="5"
                                           ViewModel="{Binding}"
-                                          Visibility="{Binding IsContactPickerOpen, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                                          x:Load="{Binding IsContactPickerOpen}"/>
 
         <Grid Grid.RowSpan="3"
               Canvas.ZIndex="10"

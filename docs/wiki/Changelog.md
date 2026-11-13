@@ -2,6 +2,19 @@
 
 Newest first.
 
+## Views — 512 MB paint / x:Load pass
+
+Deferred heavy XAML on Lumia-class devices: `ChatDetailView` hosts use
+`x:Load` until first open or WideBoth (`IsChatDetailMaterialized` +
+`DeferredXaml.Ensure`); inner overlays (image/video viewers, sticker box,
+attach/reaction docks, info pane) gate on `ChatDetailViewModel` flags;
+`NewConversationOverlay` / `CreateFlowPart`, community hub, status contact
+picker, and New Status picker follow the same pattern. `SurfacePaintPolicy`
+(per `DeviceCategory`) drives `SurfacePaintSchedule` / `ChatOpenPaintSchedule`
+and Legacy pivot yields. Deep-link open uses `ChatListDeepLinkWait` instead of
+a Delay poll. Archive/mute list commands and share apply go through the VM /
+`ShellViewModel.ApplyShareToChatDetailAsync`.
+
 ## Status list — text avatars (color + Viewbox)
 
 Text Status rows use a colored circle with the body scaled via `Viewbox`

@@ -249,9 +249,10 @@
             ItemClickCommand="{x:Bind ViewModel.SelectShareChatCommand}"
             BackCommand="{x:Bind ViewModel.CloseSharePickerCommand}"/>
 
-        <!-- New conversation: warm chrome; A–Z list x:Loads inside after first Open yield. -->
+        <!-- New conversation: x:Load host; A–Z list x:Loads inside after first Open yield. -->
         <controls:NewConversationView
             x:Name="NewConversationOverlay"
+            x:Load="{x:Bind ViewModel.NewConversation.IsOpen, Mode=OneWay}"
             Canvas.ZIndex="101"
             ViewModel="{x:Bind ViewModel.NewConversation, Mode=OneWay}"/>
 

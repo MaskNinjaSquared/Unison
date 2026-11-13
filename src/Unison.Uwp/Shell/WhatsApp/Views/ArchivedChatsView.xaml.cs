@@ -30,6 +30,10 @@ namespace Unison.Uwp.Shell.WhatsApp.Views
         private CoreCursor _previousCursor;
         private string _appliedChatPane;
 
+        private ChatDetailView _chatDetailCache;
+        private bool _chatDetailMaterialized;
+        private bool _chatDetailBackHooked;
+
         public event EventHandler MenuClicked;
 
         public ArchivedChatsView()
@@ -43,7 +47,47 @@ namespace Unison.Uwp.Shell.WhatsApp.Views
             Column1.MinWidth = ChatPaneLayoutConstants.MinDetailWidth;
         }
 
-        public bool HasActiveChat => ChatDetailPart?.HasActiveChat == true;
+        public bool HasActiveChat => ChatDetailOrNull?.HasActiveChat == true;
+
+        /// <summary>x:Load gate for ChatDetailView — false until first open or WideBoth.</summary>
+        public bool IsChatDetailMaterialized => _chatDetailMaterialized;
+
+        /// <summary>Realized detail or null when still x:Load deferred.</summary>
+        private ChatDetailView ChatDetailOrNull => _chatDetailCache ?? ChatDetailPart;
+
+        private void MaterializeChatDetail()
+        {
+            if (_chatDetailMaterialized)
+            {
+                return;
+            }
+
+            _chatDetailMaterialized = true;
+            Bindings.Update();
+        }
+
+        private ChatDetailView EnsureChatDetail()
+        {
+            return DeferredXaml.Ensure(
+                ref _chatDetailCache,
+                _chatDetailMaterialized,
+                MaterializeChatDetail,
+                () => ChatDetailPart,
+                this,
+                "ChatDetailPart",
+                onFirstRealize: d =>
+                {
+                    if (_chatDetailBackHooked)
+                    {
+                        return;
+                    }
+
+                    d.BackRequested += ChatDetailPart_BackRequested;
+                    _chatDetailBackHooked = true;
+                });
+        }
+
+
 
         protected override void OnNavigatedTo(NavigationEventArgs e)
         {
@@ -77,9 +121,9 @@ namespace Unison.Uwp.Shell.WhatsApp.Views
             {
                 NavigationCacheMode = NavigationCacheMode.Disabled;
                 ChatListPart?.ClearSelection();
-                if (ChatDetailPart != null)
+                if (ChatDetailOrNull != null)
                 {
-                    await ChatDetailPart.SetActiveChatAsync(null);
+                    await ChatDetailOrNull.SetActiveChatAsync(null);
                 }
             }
             catch (Exception ex)
@@ -100,9 +144,9 @@ namespace Unison.Uwp.Shell.WhatsApp.Views
         {
             try
             {
-                if (ChatDetailPart != null)
+                if (ChatDetailOrNull != null)
                 {
-                    await ChatDetailPart.SetActiveChatAsync(null);
+                    await ChatDetailOrNull.SetActiveChatAsync(null);
                 }
             }
             catch (Exception ex)
@@ -150,7 +194,7 @@ namespace Unison.Uwp.Shell.WhatsApp.Views
                 return;
             }
 
-            bool detailEmpty = ChatDetailPart == null || !ChatDetailPart.HasActiveChat;
+            bool detailEmpty = ChatDetailOrNull == null || !ChatDetailOrNull.HasActiveChat;
             if (!detailEmpty && _shell.HasActiveChat)
             {
                 return;
@@ -177,13 +221,19 @@ namespace Unison.Uwp.Shell.WhatsApp.Views
             ReconcileMinimalEmptyDetail();
 
             string pane = _shell.ChatPane;
+            if (string.Equals(pane, ShellViewModel.PaneWideBoth, StringComparison.Ordinal) ||
+                string.Equals(pane, ShellViewModel.PaneNarrowDetail, StringComparison.Ordinal))
+            {
+                EnsureChatDetail();
+            }
+
             bool paneChanged = ChatPaneLayoutApply.ApplyIfChanged(
                 ref _appliedChatPane,
                 pane,
                 Column0,
                 Column1,
                 ChatListPart,
-                ChatDetailPart,
+                ChatDetailHost,
                 PaneSplitter);
 
             ChatPaneWideBothChrome.AfterPaneApplied(
@@ -434,7 +484,7 @@ namespace Unison.Uwp.Shell.WhatsApp.Views
             ChatListPart.ClearSelection();
             try
             {
-                await ChatDetailPart.SetActiveChatAsync(null);
+                await ChatDetailOrNull.SetActiveChatAsync(null);
             }
             catch (Exception ex)
             {
@@ -455,24 +505,24 @@ namespace Unison.Uwp.Shell.WhatsApp.Views
             try
             {
                 ChatItem selected = e.SelectedChat;
-                if (IsSameActiveConversation(selected) && ChatDetailPart.HasActiveChat)
+                if (IsSameActiveConversation(selected) && ChatDetailOrNull?.HasActiveChat == true)
                 {
-                    await ChatDetailPart.PrepareActiveChatAsync(selected);
+                    await EnsureChatDetail().PrepareActiveChatAsync(selected);
                     _shell?.SelectChat(selected);
                     _shell?.ReportActiveChat(true);
                     return;
                 }
 
-                await ChatDetailPart.PrepareActiveChatAsync(selected);
-                bool opened = ChatDetailPart.HasActiveChat && IsSameActiveConversation(selected);
+                await EnsureChatDetail().PrepareActiveChatAsync(selected);
+                bool opened = ChatDetailOrNull?.HasActiveChat == true && IsSameActiveConversation(selected);
                 if (opened)
                 {
                     _shell?.SelectChat(selected);
                     _shell?.ReportActiveChat(true);
                     ApplyChatPaneState();
-                    await ChatOpenHostSequence.CompleteListTapOpenAsync(ChatDetailPart);
+                    await ChatOpenHostSequence.CompleteListTapOpenAsync(EnsureChatDetail());
                 }
-                else if (ChatDetailPart.HasActiveChat)
+                else if (ChatDetailOrNull?.HasActiveChat == true)
                 {
                     TryRecoverListSelectionFromActiveChat();
                 }
@@ -485,7 +535,7 @@ namespace Unison.Uwp.Shell.WhatsApp.Views
             catch (Exception ex)
             {
                 Debug.WriteLine("[ArchivedChatsView] Failed to open chat: " + ex);
-                if (ChatDetailPart?.HasActiveChat == true)
+                if (ChatDetailOrNull?.HasActiveChat == true)
                 {
                     TryRecoverListSelectionFromActiveChat();
                     return;
@@ -494,7 +544,7 @@ namespace Unison.Uwp.Shell.WhatsApp.Views
                 try
                 {
                     ChatListPart.ClearSelection();
-                    await ChatDetailPart.SetActiveChatAsync(null);
+                    await ChatDetailOrNull.SetActiveChatAsync(null);
                 }
                 catch
                 {
@@ -512,7 +562,7 @@ namespace Unison.Uwp.Shell.WhatsApp.Views
                 return false;
             }
 
-            ChatItem active = ChatDetailPart?.ActiveChatItem ?? _shell?.PendingChat;
+            ChatItem active = ChatDetailOrNull?.ActiveChatItem ?? _shell?.PendingChat;
             if (active == null || string.IsNullOrWhiteSpace(active.JID) || string.IsNullOrWhiteSpace(chat.JID))
             {
                 return false;
@@ -538,7 +588,7 @@ namespace Unison.Uwp.Shell.WhatsApp.Views
 
         private void TryRecoverListSelectionFromActiveChat()
         {
-            ChatItem active = ChatDetailPart?.ActiveChatItem ?? _shell?.PendingChat;
+            ChatItem active = ChatDetailOrNull?.ActiveChatItem ?? _shell?.PendingChat;
             if (active == null || string.IsNullOrWhiteSpace(active.JID))
             {
                 return;
@@ -589,7 +639,7 @@ namespace Unison.Uwp.Shell.WhatsApp.Views
 
         public bool TryHandleBack()
         {
-            if (ChatDetailPart != null && ChatDetailPart.TryConsumeBack())
+            if (ChatDetailOrNull != null && ChatDetailOrNull.TryConsumeBack())
             {
                 return true;
             }

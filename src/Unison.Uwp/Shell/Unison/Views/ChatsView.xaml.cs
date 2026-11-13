@@ -30,6 +30,9 @@ namespace Unison.Uwp.Shell.Unison.Views
         private double _dragStartListWidth;
         private CoreCursor _previousCursor;
         private string _appliedChatPane;
+        private ChatDetailView _chatDetailCache;
+        private bool _chatDetailMaterialized;
+        private bool _chatDetailBackHooked;
 
         public event EventHandler MenuClicked;
 
@@ -45,7 +48,45 @@ namespace Unison.Uwp.Shell.Unison.Views
             Loaded += ChatsView_Loaded;
         }
 
-        public bool HasActiveChat => ChatDetailPart?.HasActiveChat == true;
+        /// <summary>x:Load gate for ChatDetailView — false until first open or WideBoth.</summary>
+        public bool IsChatDetailMaterialized => _chatDetailMaterialized;
+
+        public bool HasActiveChat => ChatDetailOrNull?.HasActiveChat == true;
+
+        /// <summary>Realized detail or null when still x:Load deferred.</summary>
+        private ChatDetailView ChatDetailOrNull => _chatDetailCache ?? ChatDetailPart;
+
+        private void MaterializeChatDetail()
+        {
+            if (_chatDetailMaterialized)
+            {
+                return;
+            }
+
+            _chatDetailMaterialized = true;
+            Bindings.Update();
+        }
+
+        private ChatDetailView EnsureChatDetail()
+        {
+            return DeferredXaml.Ensure(
+                ref _chatDetailCache,
+                _chatDetailMaterialized,
+                MaterializeChatDetail,
+                () => ChatDetailPart,
+                this,
+                "ChatDetailPart",
+                onFirstRealize: d =>
+                {
+                    if (_chatDetailBackHooked)
+                    {
+                        return;
+                    }
+
+                    d.BackRequested += ChatDetailPart_BackRequested;
+                    _chatDetailBackHooked = true;
+                });
+        }
 
         protected override void OnNavigatedTo(NavigationEventArgs e)
         {
@@ -56,11 +97,6 @@ namespace Unison.Uwp.Shell.Unison.Views
                 if (_shell != null)
                 {
                     _shell.PropertyChanged += Shell_PropertyChanged;
-                }
-
-                if (ChatDetailPart != null)
-                {
-                    ChatDetailPart.BackRequested += ChatDetailPart_BackRequested;
                 }
 
                 if (ChatListPart != null)
@@ -85,9 +121,10 @@ namespace Unison.Uwp.Shell.Unison.Views
                     _shell.PropertyChanged -= Shell_PropertyChanged;
                 }
 
-                if (ChatDetailPart != null)
+                if (ChatDetailOrNull != null && _chatDetailBackHooked)
                 {
-                    ChatDetailPart.BackRequested -= ChatDetailPart_BackRequested;
+                    ChatDetailOrNull.BackRequested -= ChatDetailPart_BackRequested;
+                    _chatDetailBackHooked = false;
                 }
 
                 if (ChatListPart != null)
@@ -106,9 +143,9 @@ namespace Unison.Uwp.Shell.Unison.Views
             {
                 NavigationCacheMode = NavigationCacheMode.Disabled;
                 ChatListPart?.ClearSelection();
-                if (ChatDetailPart != null)
+                if (ChatDetailOrNull != null)
                 {
-                    await ChatDetailPart.SetActiveChatAsync(null);
+                    await ChatDetailOrNull.SetActiveChatAsync(null);
                 }
             }
             catch (Exception ex)
@@ -129,9 +166,9 @@ namespace Unison.Uwp.Shell.Unison.Views
         {
             try
             {
-                if (ChatDetailPart != null)
+                if (ChatDetailOrNull != null)
                 {
-                    await ChatDetailPart.SetActiveChatAsync(null);
+                    await ChatDetailOrNull.SetActiveChatAsync(null);
                 }
             }
             catch (Exception ex)
@@ -194,7 +231,7 @@ namespace Unison.Uwp.Shell.Unison.Views
                 return;
             }
 
-            bool detailEmpty = ChatDetailPart == null || !ChatDetailPart.HasActiveChat;
+            bool detailEmpty = ChatDetailOrNull == null || !ChatDetailOrNull.HasActiveChat;
             if (!detailEmpty && _shell.HasActiveChat)
             {
                 return;
@@ -235,23 +272,17 @@ namespace Unison.Uwp.Shell.Unison.Views
             _openingDeepLink = true;
             try
             {
-                ChatItem chat = null;
-                for (int i = 0; i < 50; i++)
+                jid = _shell.PendingOpenChatJid;
+                if (string.IsNullOrWhiteSpace(jid))
                 {
-                    jid = _shell.PendingOpenChatJid;
-                    if (string.IsNullOrWhiteSpace(jid))
-                    {
-                        return;
-                    }
-
-                    chat = ChatListPart?.FindChatByJid(jid);
-                    if (chat != null)
-                    {
-                        break;
-                    }
-
-                    await Task.Delay(100);
+                    return;
                 }
+
+                ChatItem chat = await ChatListDeepLinkWait.WaitForChatAsync(
+                    j => ChatListPart?.FindChatByJid(j),
+                    ChatListPart?.ViewModel,
+                    jid,
+                    TimeSpan.FromSeconds(5));
 
                 if (chat == null)
                 {
@@ -262,13 +293,19 @@ namespace Unison.Uwp.Shell.Unison.Views
                 _shell.ClearPendingOpenChatJid();
                 ChatListPart?.HighlightChatQuiet(chat);
 
-                await ChatDetailPart.PrepareActiveChatAsync(chat);
-                if (ChatDetailPart.HasActiveChat)
+                ChatDetailView detail = EnsureChatDetail();
+                if (detail == null)
+                {
+                    return;
+                }
+
+                await detail.PrepareActiveChatAsync(chat);
+                if (detail.HasActiveChat)
                 {
                     _shell.SelectChat(chat);
                     ApplyChatPaneState();
                     _shell.ReportActiveChat(true);
-                    await ChatOpenHostSequence.CompleteListTapOpenAsync(ChatDetailPart);
+                    await ChatOpenHostSequence.CompleteListTapOpenAsync(detail);
                     await TryApplyPendingShareAsync();
                 }
                 else
@@ -289,23 +326,15 @@ namespace Unison.Uwp.Shell.Unison.Views
             }
         }
 
-        private async Task TryApplyPendingShareAsync()
+                private async Task TryApplyPendingShareAsync()
         {
-            IncomingSharePayload share = _shell?.TakeShareAwaitingChatApply();
-            if (share == null || share.IsEmpty || ChatDetailPart?.ViewModel == null)
+            ChatDetailView detail = EnsureChatDetail();
+            if (_shell == null || detail?.ViewModel == null)
             {
                 return;
             }
 
-            try
-            {
-                await ChatDetailPart.ViewModel.ApplyIncomingShareAsync(share);
-                _shell?.NotifyShareContentApplied(share);
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine("[ChatsView] ApplyIncomingShare failed: " + ex.Message);
-            }
+            await _shell.ApplyShareToChatDetailAsync(detail.ViewModel);
         }
 
         private void ApplyChatPaneState()
@@ -318,13 +347,19 @@ namespace Unison.Uwp.Shell.Unison.Views
             ReconcileMinimalEmptyDetail();
 
             string pane = _shell.ChatPane;
+            if (string.Equals(pane, ShellViewModel.PaneWideBoth, StringComparison.Ordinal) ||
+                string.Equals(pane, ShellViewModel.PaneNarrowDetail, StringComparison.Ordinal))
+            {
+                EnsureChatDetail();
+            }
+
             bool paneChanged = ChatPaneLayoutApply.ApplyIfChanged(
                 ref _appliedChatPane,
                 pane,
                 Column0,
                 Column1,
                 ChatListPart,
-                ChatDetailPart,
+                ChatDetailHost,
                 PaneSplitter);
 
             ChatPaneWideBothChrome.AfterPaneApplied(
@@ -340,7 +375,7 @@ namespace Unison.Uwp.Shell.Unison.Views
                 {
                     _splitterDragging = false;
                     _splitterHover = false;
-                    SplitterChrome.Opacity = 0;
+                    UpdateSplitterChrome();
                     RestoreCursor();
                 });
         }
@@ -414,7 +449,10 @@ namespace Unison.Uwp.Shell.Unison.Views
                 return;
             }
 
-            SplitterChrome.Opacity = (_splitterHover || _splitterDragging) ? 1 : 0;
+            string state = _splitterDragging
+                ? "SplitterDragging"
+                : (_splitterHover ? "SplitterHover" : "SplitterIdle");
+            VisualStateManager.GoToState(SplitterChrome, state, true);
         }
 
         private void PaneSplitter_PointerEntered(object sender, PointerRoutedEventArgs e)
@@ -582,7 +620,10 @@ namespace Unison.Uwp.Shell.Unison.Views
             ChatListPart.ClearSelection();
             try
             {
-                await ChatDetailPart.SetActiveChatAsync(null);
+                if (ChatDetailOrNull != null)
+                {
+                    await ChatDetailOrNull.SetActiveChatAsync(null);
+                }
             }
             catch (Exception ex)
             {
@@ -603,18 +644,24 @@ namespace Unison.Uwp.Shell.Unison.Views
 
             try
             {
+                ChatDetailView detail = EnsureChatDetail();
+                if (detail == null)
+                {
+                    return;
+                }
+
                 ChatItem selected = e.SelectedChat;
-                if (IsSameActiveConversation(selected) && ChatDetailPart.HasActiveChat)
+                if (IsSameActiveConversation(selected) && detail.HasActiveChat)
                 {
                     // Keep shell PendingChat on the live list instance; detail rebinds without reload.
-                    await ChatDetailPart.PrepareActiveChatAsync(selected);
+                    await detail.PrepareActiveChatAsync(selected);
                     _shell?.SelectChat(selected);
                     _shell?.ReportActiveChat(true);
                     return;
                 }
 
-                await ChatDetailPart.PrepareActiveChatAsync(selected);
-                bool opened = ChatDetailPart.HasActiveChat && IsSameActiveConversation(selected);
+                await detail.PrepareActiveChatAsync(selected);
+                bool opened = detail.HasActiveChat && IsSameActiveConversation(selected);
                 if (opened)
                 {
                     _shell?.SelectChat(selected);
@@ -622,9 +669,9 @@ namespace Unison.Uwp.Shell.Unison.Views
                     // SelectChat already flips ChatPane → PropertyChanged may Apply once;
                     // call again only applies when pane string changed (skip duplicate layout).
                     ApplyChatPaneState();
-                    await ChatOpenHostSequence.CompleteListTapOpenAsync(ChatDetailPart);
+                    await ChatOpenHostSequence.CompleteListTapOpenAsync(detail);
                 }
-                else if (ChatDetailPart.HasActiveChat)
+                else if (detail.HasActiveChat)
                 {
                     // Open race/cancel while another (or same) chat remains visible — keep it.
                     TryRecoverListSelectionFromActiveChat();
@@ -639,7 +686,7 @@ namespace Unison.Uwp.Shell.Unison.Views
             catch (Exception ex)
             {
                 Debug.WriteLine("[ChatsView] Failed to open chat: " + ex);
-                if (ChatDetailPart?.HasActiveChat == true)
+                if (ChatDetailOrNull?.HasActiveChat == true)
                 {
                     TryRecoverListSelectionFromActiveChat();
                     return;
@@ -648,7 +695,10 @@ namespace Unison.Uwp.Shell.Unison.Views
                 try
                 {
                     ChatListPart.ClearSelection();
-                    await ChatDetailPart.SetActiveChatAsync(null);
+                    if (ChatDetailOrNull != null)
+                    {
+                        await ChatDetailOrNull.SetActiveChatAsync(null);
+                    }
                 }
                 catch
                 {
@@ -666,7 +716,7 @@ namespace Unison.Uwp.Shell.Unison.Views
                 return false;
             }
 
-            ChatItem active = ChatDetailPart?.ActiveChatItem ?? _shell?.PendingChat;
+            ChatItem active = ChatDetailOrNull?.ActiveChatItem ?? _shell?.PendingChat;
             if (active == null || string.IsNullOrWhiteSpace(active.JID) || string.IsNullOrWhiteSpace(chat.JID))
             {
                 return false;
@@ -692,7 +742,7 @@ namespace Unison.Uwp.Shell.Unison.Views
 
         private void TryRecoverListSelectionFromActiveChat()
         {
-            ChatItem active = ChatDetailPart?.ActiveChatItem ?? _shell?.PendingChat;
+            ChatItem active = ChatDetailOrNull?.ActiveChatItem ?? _shell?.PendingChat;
             if (active == null || string.IsNullOrWhiteSpace(active.JID))
             {
                 return;
@@ -744,7 +794,7 @@ namespace Unison.Uwp.Shell.Unison.Views
 
         public bool TryHandleBack()
         {
-            if (ChatDetailPart != null && ChatDetailPart.TryConsumeBack())
+            if (ChatDetailOrNull != null && ChatDetailOrNull.TryConsumeBack())
             {
                 return true;
             }

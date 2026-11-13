@@ -76,7 +76,7 @@ namespace Unison.Core.ViewModels
                 _ui,
                 logTag: "CallsFavorites");
 
-            OpenNewCallCommand = new RelayCommand(() => NewCallRequested?.Invoke(this, EventArgs.Empty));
+            OpenNewCallCommand = new RelayCommand(() => _ = NotifyNewCallUnavailableAsync());
             OpenMenuCommand = new RelayCommand(() => MenuRequested?.Invoke(this, EventArgs.Empty));
             ShowAllFavoritesCommand = new RelayCommand(ShowAllFavorites);
             SelectFavoriteCommand = new RelayCommand<CallFavoriteItem>(SelectFavorite);
@@ -700,6 +700,22 @@ namespace Unison.Core.ViewModels
 
             FavoritePreview = new ObservableCollection<CallFavoriteItem>(
                 take.Select(c => new CallFavoriteItem(c, _strings)));
+        }
+
+        private async System.Threading.Tasks.Task NotifyNewCallUnavailableAsync()
+        {
+            NewCallRequested?.Invoke(this, EventArgs.Empty);
+            if (_dialogs == null)
+            {
+                return;
+            }
+
+            string title = _strings?.Get("Calls_Header", "Calls") ?? "Calls";
+            string body = _strings?.Get(
+                "Calls_NewCallUnavailable",
+                "Calling is not available yet.") ?? "Calling is not available yet.";
+            string close = _strings?.Get("Common_OK", "OK") ?? "OK";
+            await _dialogs.ShowMessageAsync(title, body, close).ConfigureAwait(false);
         }
 
         private void OnPropertyChanged(string name) =>

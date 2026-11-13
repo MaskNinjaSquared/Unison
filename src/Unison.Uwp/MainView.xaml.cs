@@ -11,6 +11,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Unison.Core.Constants;
 using Unison.Core.Contracts;
 using Unison.Core.Contracts.WhatsApp;
+using Unison.Core.State;
 using Unison.Core.ViewModels;
 using Unison.Uwp.Services;
 using Unison.Uwp.Services.WhatsApp;
@@ -222,9 +223,35 @@ namespace Unison.Uwp
             ApplyShellBrand();
             EnsureOrientationHook();
             ApplySystemBackButton();
-            ViewModel.RefreshUserInfo();
-            EnsureOpenPendingProfileFromActivation();
-            EnsureOpenPendingChatFromActivation();
+            _ = CompleteMainViewLoadedAsync();
+        }
+
+        /// <summary>Chrome first, then profile/deep-link work (SurfacePaintPolicy).</summary>
+        private async void CompleteMainViewLoadedAsync()
+        {
+            try
+            {
+                bool mobile = false;
+                try
+                {
+                    mobile = App.Services?.GetService<ISystemInfoProvider>()?.IsMobile() == true;
+                }
+                catch
+                {
+                }
+
+                await SurfacePaintSchedule.YieldForSurfacePaintAsync(
+                    Dispatcher,
+                    SurfacePaintPolicy.ForMobileFlag(mobile));
+
+                ViewModel?.RefreshUserInfo();
+                EnsureOpenPendingProfileFromActivation();
+                EnsureOpenPendingChatFromActivation();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[MainView] CompleteMainViewLoadedAsync: " + ex.Message);
+            }
         }
 
         private void AttachCameraPickHost()

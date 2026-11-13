@@ -595,6 +595,9 @@
     <Compile Include="UI\Helpers\ChatPaneLayoutApply.cs" />
     <Compile Include="UI\Helpers\ChatPaneWideBothChrome.cs" />
     <Compile Include="UI\Helpers\ChatOpenPaintSchedule.cs" />
+    <Compile Include="UI\Helpers\SurfacePaintSchedule.cs" />
+    <Compile Include="UI\Helpers\DeferredXaml.cs" />
+    <Compile Include="UI\Helpers\ChatListDeepLinkWait.cs" />
     <Compile Include="UI\Helpers\ChatOpenHostSequence.cs" />
     <Compile Include="UI\Helpers\RosterUiRefreshCoalescer.cs" />
     <Compile Include="Services\StartupLaunchService.cs" />

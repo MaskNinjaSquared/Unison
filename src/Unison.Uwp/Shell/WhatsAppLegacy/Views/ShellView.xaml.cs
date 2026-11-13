@@ -63,6 +63,8 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
         private bool _statusDetailHostOpen;
         private bool _callDetailHostOpen;
         private bool _detailHooked;
+        private ChatDetailView _chatDetailCache;
+        private bool _chatDetailMaterialized;
         private bool _overlayOpen;
         private StatusView _statusSection;
         private int _sectionLoadGeneration;
@@ -193,6 +195,37 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
         }
 
         private void Navigator_LocalBackChanged(object sender, EventArgs e) => ApplyShellChrome();
+
+        
+        public bool IsChatDetailMaterialized => _chatDetailMaterialized;
+
+        private bool _statusPickerMaterialized;
+
+        /// <summary>x:Load gate for NewStatusPickerOverlay.</summary>
+        public bool IsStatusPickerMaterialized => _statusPickerMaterialized;
+
+        private void MaterializeChatDetail()
+        {
+            if (_chatDetailMaterialized)
+            {
+                return;
+            }
+
+            _chatDetailMaterialized = true;
+            Bindings.Update();
+        }
+
+        private ChatDetailView EnsureShellChatDetail()
+        {
+            return DeferredXaml.Ensure(
+                ref _chatDetailCache,
+                _chatDetailMaterialized,
+                MaterializeChatDetail,
+                () => ShellChatDetail,
+                this,
+                "ShellChatDetail",
+                onFirstRealize: _ => HookDetail());
+        }
 
         private void HookDetail()
         {
@@ -449,23 +482,16 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             }
 
             string jid = _shell.PendingOpenChatJid;
-            ChatItem chat = null;
-            for (int i = 0; i < 50; i++)
+            if (string.IsNullOrWhiteSpace(jid))
             {
-                jid = _shell.PendingOpenChatJid;
-                if (string.IsNullOrWhiteSpace(jid))
-                {
-                    return;
-                }
-
-                chat = FindChatByJid(jid);
-                if (chat != null)
-                {
-                    break;
-                }
-
-                await Task.Delay(100);
+                return;
             }
+
+            ChatItem chat = await ChatListDeepLinkWait.WaitForChatAsync(
+                FindChatByJid,
+                TryGetActiveChatListViewModel(),
+                jid,
+                TimeSpan.FromSeconds(5));
 
             if (chat == null)
             {
@@ -498,21 +524,13 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
 
         private async Task TryApplyPendingShareAsync()
         {
-            IncomingSharePayload share = _shell?.TakeShareAwaitingChatApply();
-            if (share == null || share.IsEmpty || ShellChatDetail?.ViewModel == null)
+            EnsureShellChatDetail();
+            if (_shell == null || ShellChatDetail?.ViewModel == null)
             {
                 return;
             }
 
-            try
-            {
-                await ShellChatDetail.ViewModel.ApplyIncomingShareAsync(share);
-                _shell?.NotifyShareContentApplied(share);
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine("[WhatsAppLegacy] ApplyIncomingShare failed: " + ex.Message);
-            }
+            await _shell.ApplyShareToChatDetailAsync(ShellChatDetail.ViewModel);
         }
 
         private void EnsureOpenPendingProfileFromActivation()
@@ -1076,6 +1094,7 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
 
         private async Task OpenDetailAsync(ChatItem chat)
         {
+            EnsureShellChatDetail();
             if (chat == null || ShellChatDetail == null)
             {
                 return;
@@ -1556,12 +1575,24 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
 
         private void BindNewStatusPicker(StatusView status)
         {
-            if (NewStatusPickerOverlay == null)
+            if (!_statusPickerMaterialized)
+            {
+                _statusPickerMaterialized = true;
+                Bindings.Update();
+            }
+
+            var overlay = NewStatusPickerOverlay
+                ?? FindName("NewStatusPickerOverlay") as FrameworkElement;
+            if (overlay == null)
             {
                 return;
             }
 
-            NewStatusPickerOverlay.ViewModel = status?.ListChrome?.ViewModel;
+            // Typed field after x:Load
+            if (NewStatusPickerOverlay != null)
+            {
+                NewStatusPickerOverlay.ViewModel = status?.ListChrome?.ViewModel;
+            }
         }
 
         private void Calls_CallDetailRequested(object sender, EventArgs e)
@@ -1973,8 +2004,9 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
         /// </summary>
         private async Task YieldForSectionPaintAsync()
         {
-            await Dispatcher.RunAsync(CoreDispatcherPriority.Low, () => { });
-            await Task.Delay(_isWindowsMobile ? 80 : 60);
+            await Dispatcher.RunAsync(CoreDispatcherPriority.Normal, () => { });
+            var policy = SurfacePaintPolicy.ForMobileFlag(_isWindowsMobile);
+            await SurfacePaintSchedule.YieldForSectionPaintAsync(policy);
         }
 
         private void SelectPivotIndex(string tag)

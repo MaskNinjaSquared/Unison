@@ -124,7 +124,7 @@
 
         <Grid x:Name="CommunityHubPanel"
               Grid.RowSpan="4"
-              Visibility="{x:Bind ViewModel.IsCommunityHubOpen, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"
+              x:Load="{x:Bind ViewModel.IsCommunityHubOpen, Mode=OneWay}"
               Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>

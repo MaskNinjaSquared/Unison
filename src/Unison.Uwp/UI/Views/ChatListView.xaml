@@ -255,7 +255,7 @@
         <!-- Community hub: covers the list chrome; DataContext stays the list VM. -->
         <Grid x:Name="CommunityHubPanel"
               Grid.RowSpan="3"
-              Visibility="{x:Bind ViewModel.IsCommunityHubOpen, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"
+              x:Load="{x:Bind ViewModel.IsCommunityHubOpen, Mode=OneWay}"
               Background="{ThemeResource ChatListBackgroundBrush}">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>

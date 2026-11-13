@@ -63,7 +63,12 @@ namespace Unison.Uwp.UI.Controls
             }
 
             DataContext = newVm;
-            CreateFlowPart.ViewModel = newVm;
+            Bindings.Update();
+            if (CreateFlowPart != null)
+            {
+                CreateFlowPart.ViewModel = newVm;
+            }
+
             _hookedVm = newVm;
             ApplyCreateFlowVisibility();
             if (_hookedVm == null)
@@ -220,7 +225,12 @@ namespace Unison.Uwp.UI.Controls
                 ContactsZoom.Visibility = catalog;
             }
 
-            CreateFlowPart.Visibility = isCreateFlowOpen ? Visibility.Visible : Visibility.Collapsed;
+            // CreateFlowPart is x:Load'd on IsCreateFlowOpen — push VM when realized.
+            Bindings.Update();
+            if (CreateFlowPart != null)
+            {
+                CreateFlowPart.ViewModel = ViewModel;
+            }
         }
 
         private void RunOpenFade()

@@ -288,6 +288,29 @@ namespace Unison.Core.ViewModels
             return payload;
         }
 
+        /// <summary>
+        /// Host pages call this instead of reaching into ChatDetailViewModel directly.
+        /// </summary>
+        public async System.Threading.Tasks.Task ApplyShareToChatDetailAsync(
+            ChatDetailViewModel detail)
+        {
+            IncomingSharePayload share = TakeShareAwaitingChatApply();
+            if (share == null || share.IsEmpty || detail == null)
+            {
+                return;
+            }
+
+            try
+            {
+                await detail.ApplyIncomingShareAsync(share).ConfigureAwait(true);
+                NotifyShareContentApplied(share);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[ShellViewModel] ApplyShareToChatDetail failed: " + ex.Message);
+            }
+        }
+
         private void OpenSharePicker()
         {
             Debug.WriteLine(

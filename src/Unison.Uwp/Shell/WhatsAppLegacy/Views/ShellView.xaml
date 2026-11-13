@@ -208,7 +208,8 @@
                 Background="{ThemeResource ApplicationPageBackgroundThemeBrush}"
                 Visibility="Collapsed">
             <Grid>
-                <local:ChatDetailView x:Name="ShellChatDetail"/>
+                <local:ChatDetailView x:Name="ShellChatDetail"
+                                  x:Load="{x:Bind IsChatDetailMaterialized, Mode=OneWay}"/>
                 <!-- Empty Status pane (wide, no author). Open viewer is ShellStatusDetail overlay. -->
                 <views:StatusDetailView x:Name="ShellStatusPaneEmpty"
                                         Visibility="Collapsed"/>
@@ -252,9 +253,10 @@
             ItemClickCommand="{x:Bind ViewModel.SelectShareChatCommand}"
             BackCommand="{x:Bind ViewModel.CloseSharePickerCommand}"/>
 
-        <!-- Warm chrome; A–Z list x:Loads inside NewConversationView after first Open yield. -->
+        <!-- x:Load host; A–Z list x:Loads inside NewConversationView after first Open yield. -->
         <legacyControls:NewConversationView
             x:Name="NewConversationOverlay"
+            x:Load="{x:Bind ViewModel.NewConversation.IsOpen, Mode=OneWay}"
             Grid.Column="0"
             Grid.ColumnSpan="2"
             Canvas.ZIndex="101"
@@ -263,6 +265,7 @@
         <!-- New Status dock: shell root (covers pivot + detail); Status list raises open/close. -->
         <legacyControls:NewStatusPickerOverlay
             x:Name="NewStatusPickerOverlay"
+            x:Load="{x:Bind IsStatusPickerMaterialized, Mode=OneWay}"
             Grid.Column="0"
             Grid.ColumnSpan="2"
             Canvas.ZIndex="102"

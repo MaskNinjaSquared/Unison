@@ -661,7 +661,7 @@
         <controls:CreateConversationFlowView x:Name="CreateFlowPart"
                                              Grid.Row="0"
                                              Grid.RowSpan="4"
-                                             Visibility="Collapsed"/>
+                                             x:Load="{x:Bind ViewModel.IsCreateFlowOpen, Mode=OneWay}"/>
 
     </Grid>
 </UserControl>

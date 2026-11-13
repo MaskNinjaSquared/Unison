@@ -86,7 +86,11 @@ Whoever mutates `ChatDetailViewModel.Messages` is the ViewModel — merge, dedup
 
 **Forbidden in code-behind:** calling Socket/Baileys, building send payloads, parsing protocol nodes, `WhatsAppService.Instance`, business policy (when to refresh names, when to mark read).
 
+**Shell coordination (allowed):** child pages may resolve `ShellViewModel` from `App.Services` for pane/back/share routing (not as a substitute for their own `DataContext` VM). Share handoff into an open chat goes through `ShellViewModel.ApplyShareToChatDetailAsync`, not `ChatDetailPart.ViewModel` from the host page.
+
 Prefer Behaviors over `Click=` handlers.
+
+**x:Load:** heavy collapsed trees (detail hosts, viewers, docks, overlays) use `x:Load` + an `Ensure*` accessor (`DeferredXaml` / `FindName`). Do not touch the generated `x:Name` field until realized.
 
 ### Page vs control
 

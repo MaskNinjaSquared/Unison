@@ -56,7 +56,7 @@ namespace Unison.Uwp.UI.Views
             {
                 ViewModel.PropertyChanged += ViewModel_PropertyChanged;
                 ViewModel.MenuRequested += (_, __) => MenuClicked?.Invoke(this, EventArgs.Empty);
-                ViewModel.NewCallRequested += (_, __) => _ = ShowNewCallUnavailableAsync();
+                // OpenNewCallCommand shows the unavailable dialog in the VM.
                 DetailsPane.BackRequested += DetailsPane_BackRequested;
                 DetailsPane.OpenChatRequested += DetailsPane_OpenChatRequested;
                 ViewModel.OpenChatRequested += ViewModel_OpenChatRequested;
@@ -515,22 +515,15 @@ namespace Unison.Uwp.UI.Views
             return false;
         }
 
-        private async System.Threading.Tasks.Task ShowNewCallUnavailableAsync()
+        private System.Threading.Tasks.Task ShowNewCallUnavailableAsync()
         {
-            NewCallRequested?.Invoke(this, EventArgs.Empty);
-            IDialogService dialogs = App.Services?.GetService<IDialogService>();
-            if (dialogs == null)
+            if (ViewModel?.OpenNewCallCommand != null &&
+                ViewModel.OpenNewCallCommand.CanExecute(null))
             {
-                return;
+                ViewModel.OpenNewCallCommand.Execute(null);
             }
 
-            IStringResources strings = App.Services?.GetService<IStringResources>();
-            string title = strings?.Get("Calls_Header", "Calls") ?? "Calls";
-            string body = strings?.Get(
-                "Calls_NewCallUnavailable",
-                "Calling is not available yet.") ?? "Calling is not available yet.";
-            string close = strings?.Get("Common_OK", "OK") ?? "OK";
-            await dialogs.ShowMessageAsync(title, body, close);
+            return System.Threading.Tasks.Task.CompletedTask;
         }
     }
 }

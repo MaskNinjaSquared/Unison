@@ -92,6 +92,7 @@
 
         <controls:ContactsVisualizerControl
             x:Name="PickerOverlay"
+            x:Load="{x:Bind ViewModel.IsPickerOpen, Mode=OneWay}"
             Grid.RowSpan="2"
             Canvas.ZIndex="10"
             IsOpen="{x:Bind ViewModel.IsPickerOpen, Mode=TwoWay}"

@@ -132,6 +132,77 @@ namespace Unison.Uwp.UI.Views
         /// </summary>
         private bool _attachMenuOpen;
 
+        private ImageViewerView _imageViewerCache;
+        private VideoViewerView _videoViewerCache;
+        private FrameworkElement _attachMenuBarCache;
+        private FrameworkElement _reactionDockCache;
+        private FrameworkElement _infoPaneCache;
+
+        private async Task YieldForDeferredLoadAsync()
+        {
+            await Dispatcher.RunAsync(Windows.UI.Core.CoreDispatcherPriority.Normal, () => { });
+        }
+
+        private ImageViewerView EnsureImageViewer()
+        {
+            if (ViewModel != null)
+            {
+                ViewModel.IsImageViewerOpen = true;
+            }
+
+            Bindings.Update();
+            if (_imageViewerCache != null)
+            {
+                return _imageViewerCache;
+            }
+
+            _imageViewerCache = ImageViewerOverlay ?? FindName("ImageViewerOverlay") as ImageViewerView;
+            return _imageViewerCache;
+        }
+
+        private void UnloadImageViewerIfNeeded()
+        {
+            if (ViewModel == null)
+            {
+                return;
+            }
+
+            ViewModel.IsImageViewerOpen = false;
+            _imageViewerCache = null;
+            Bindings.Update();
+        }
+
+        private VideoViewerView EnsureVideoViewer()
+        {
+            if (ViewModel != null)
+            {
+                ViewModel.IsVideoViewerOpen = true;
+            }
+
+            Bindings.Update();
+            if (_videoViewerCache != null)
+            {
+                return _videoViewerCache;
+            }
+
+            _videoViewerCache = VideoViewerOverlay ?? FindName("VideoViewerOverlay") as VideoViewerView;
+            return _videoViewerCache;
+        }
+
+        private void UnloadVideoViewerIfNeeded()
+        {
+            if (ViewModel == null)
+            {
+                return;
+            }
+
+            ViewModel.IsVideoViewerOpen = false;
+            _videoViewerCache = null;
+            Bindings.Update();
+        }
+
+
+
         /// <summary>The slide in flight, kept so a fast second tap can cut the first one short.</summary>
         private Storyboard _attachMenuStoryboard;
 
@@ -321,7 +392,19 @@ namespace Unison.Uwp.UI.Views
         /// </remarks>
         private void SetAttachMenuOpen(bool open)
         {
-            if (_attachMenuOpen == open || AttachMenuBar == null)
+            if (_attachMenuOpen == open)
+            {
+                return;
+            }
+
+            if (ViewModel != null)
+            {
+                ViewModel.IsAttachMenuOpen = open;
+            }
+
+            Bindings.Update();
+            FrameworkElement attachBar = AttachMenuBar ?? FindName("AttachMenuBar") as FrameworkElement;
+            if (open && attachBar == null)
             {
                 return;
             }
@@ -1439,7 +1522,7 @@ namespace Unison.Uwp.UI.Views
 
         private void OpenImageViewer(ChatMessageViewModel messageVm)
         {
-            if (ImageViewerOverlay == null || App.Services == null)
+            if (App.Services == null)
             {
                 return;
             }
@@ -1453,11 +1536,17 @@ namespace Unison.Uwp.UI.Views
                 return;
             }
 
+            ImageViewerView overlay = EnsureImageViewer();
+            if (overlay == null)
+            {
+                return;
+            }
+
             var viewerVm = new ImageViewerViewModel(messageVm, share, files, _strings);
-            ImageViewerOverlay.CloseRequested -= ImageViewerOverlay_CloseRequested;
-            ImageViewerOverlay.ViewModel = viewerVm;
-            ImageViewerOverlay.CloseRequested += ImageViewerOverlay_CloseRequested;
-            ImageViewerOverlay.Visibility = Visibility.Visible;
+            overlay.CloseRequested -= ImageViewerOverlay_CloseRequested;
+            overlay.ViewModel = viewerVm;
+            overlay.CloseRequested += ImageViewerOverlay_CloseRequested;
+            overlay.Visibility = Visibility.Visible;
         }
 
         private void ImageViewerOverlay_CloseRequested(object sender, EventArgs e)
@@ -1467,14 +1556,16 @@ namespace Unison.Uwp.UI.Views
 
         private bool TryCloseImageViewer()
         {
-            if (ImageViewerOverlay == null || ImageViewerOverlay.Visibility != Visibility.Visible)
+            ImageViewerView overlay = _imageViewerCache ?? ImageViewerOverlay;
+            if (overlay == null || overlay.Visibility != Visibility.Visible)
             {
                 return false;
             }
 
-            ImageViewerOverlay.CloseRequested -= ImageViewerOverlay_CloseRequested;
-            ImageViewerOverlay.ViewModel = null;
-            ImageViewerOverlay.Visibility = Visibility.Collapsed;
+            overlay.CloseRequested -= ImageViewerOverlay_CloseRequested;
+            overlay.ViewModel = null;
+            overlay.Visibility = Visibility.Collapsed;
+            UnloadImageViewerIfNeeded();
             return true;
         }
 
@@ -1578,7 +1669,7 @@ namespace Unison.Uwp.UI.Views
 
         private void OpenVideoViewer(ChatMessageViewModel messageVm)
         {
-            if (VideoViewerOverlay == null || messageVm == null)
+            if (messageVm == null)
             {
                 return;
             }
@@ -1586,12 +1677,18 @@ namespace Unison.Uwp.UI.Views
             TryCloseImageViewer();
             ViewModel?.StopAudioPlayback();
 
+            VideoViewerView overlay = EnsureVideoViewer();
+            if (overlay == null)
+            {
+                return;
+            }
+
             var viewerVm = new VideoViewerViewModel(messageVm, _strings);
-            VideoViewerOverlay.CloseRequested -= VideoViewerOverlay_CloseRequested;
-            VideoViewerOverlay.ResolveSmtcMetadata = ResolveVideoSmtcMetadata;
-            VideoViewerOverlay.ViewModel = viewerVm;
-            VideoViewerOverlay.CloseRequested += VideoViewerOverlay_CloseRequested;
-            VideoViewerOverlay.Visibility = Visibility.Visible;
+            overlay.CloseRequested -= VideoViewerOverlay_CloseRequested;
+            overlay.ResolveSmtcMetadata = ResolveVideoSmtcMetadata;
+            overlay.ViewModel = viewerVm;
+            overlay.CloseRequested += VideoViewerOverlay_CloseRequested;
+            overlay.Visibility = Visibility.Visible;
         }
 
         private void ResolveVideoOrAudioSmtcMetadata(ChatMessage message, out string title, out string artist)
@@ -1638,15 +1735,17 @@ namespace Unison.Uwp.UI.Views
 
         private bool TryCloseVideoViewer()
         {
-            if (VideoViewerOverlay == null || VideoViewerOverlay.Visibility != Visibility.Visible)
+            VideoViewerView overlay = _videoViewerCache ?? VideoViewerOverlay;
+            if (overlay == null || overlay.Visibility != Visibility.Visible)
             {
                 return false;
             }
 
-            VideoViewerOverlay.CloseRequested -= VideoViewerOverlay_CloseRequested;
-            VideoViewerOverlay.ResolveSmtcMetadata = null;
-            VideoViewerOverlay.ViewModel = null;
-            VideoViewerOverlay.Visibility = Visibility.Collapsed;
+            overlay.CloseRequested -= VideoViewerOverlay_CloseRequested;
+            overlay.ResolveSmtcMetadata = null;
+            overlay.ViewModel = null;
+            overlay.Visibility = Visibility.Collapsed;
+            UnloadVideoViewerIfNeeded();
             return true;
         }
 

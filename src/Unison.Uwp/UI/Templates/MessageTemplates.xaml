@@ -707,7 +707,7 @@
                 <Border IsHitTestVisible="False"
                         Background="#55FFFFFF"
                         CornerRadius="8"
-                        Visibility="{x:Bind IsHighlighted, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                        x:Load="{x:Bind IsHighlighted, Mode=OneWay}"/>
                 </Grid>
             </Grid>
 
@@ -717,7 +717,7 @@
                     Style="{StaticResource ChatDetailSentReactionChipButtonStyle}"
                     Background="{ThemeResource ChatDetailReactionChipSentBrush}"
                     BorderBrush="{ThemeResource ChatDetailReactionChipSentBorderBrush}"
-                    Visibility="{x:Bind HasReactions, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"
+                    x:Load="{x:Bind HasReactions, Mode=OneWay}"
                     Command="{x:Bind ShowReactionsCommand, Mode=OneWay}"
                     Content="{x:Bind ReactionsDisplayText, Mode=OneWay}"/>
             </Grid>
@@ -1401,7 +1401,7 @@
                 <Border IsHitTestVisible="False"
                         Background="#55FFFFFF"
                         CornerRadius="8"
-                        Visibility="{x:Bind IsHighlighted, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                        x:Load="{x:Bind IsHighlighted, Mode=OneWay}"/>
                 </Grid>
             </Grid>
 
@@ -1419,7 +1419,7 @@
                         Style="{StaticResource ChatDetailReactionChipButtonStyle}"
                         Background="{ThemeResource ChatDetailReactionChipReceivedBrush}"
                         BorderBrush="{ThemeResource ChatDetailReactionChipReceivedBorderBrush}"
-                        Visibility="{x:Bind HasReactions, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"
+                        x:Load="{x:Bind HasReactions, Mode=OneWay}"
                         Command="{x:Bind ShowReactionsCommand, Mode=OneWay}"
                         Content="{x:Bind ReactionsDisplayText, Mode=OneWay}"/>
             </Grid>

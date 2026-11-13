@@ -391,9 +391,10 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Controls
 
         private void GroupPhotoButton_DeleteRequested(object sender, EventArgs e)
         {
-            if (ViewModel != null)
+            if (ViewModel?.ClearGroupPhotoCommand != null &&
+                ViewModel.ClearGroupPhotoCommand.CanExecute(null))
             {
-                ViewModel.GroupPhotoBytes = null;
+                ViewModel.ClearGroupPhotoCommand.Execute(null);
             }
         }
 

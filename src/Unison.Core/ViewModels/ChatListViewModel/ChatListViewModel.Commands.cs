@@ -678,6 +678,26 @@ namespace Unison.Core.ViewModels
             }
         }
 
+        private async Task SetChatStatusAsync(ChatItem chat, ChatStatus status)
+        {
+            if (chat == null || string.IsNullOrWhiteSpace(chat.JID) || _chatStore == null)
+            {
+                return;
+            }
+
+            try
+            {
+                _chatStore.ApplyTo(chat);
+                chat.Status = status;
+                await _chatStore.SetStatusAsync(chat.JID, status);
+                RefreshVisibleChats();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine("[ChatListViewModel] SetChatStatus failed: " + ex.Message);
+            }
+        }
+
         private bool CanExecuteMenuAction()
         {
             return !_menuActionBusy && !IsInSafeMode;

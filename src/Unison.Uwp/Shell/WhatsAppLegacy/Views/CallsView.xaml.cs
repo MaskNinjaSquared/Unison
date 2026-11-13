@@ -55,7 +55,6 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             if (ViewModel != null)
             {
                 ViewModel.PropertyChanged += ViewModel_PropertyChanged;
-                ViewModel.NewCallRequested += (_, __) => _ = ShowNewCallUnavailableAsync();
                 ViewModel.OpenChatRequested += ViewModel_OpenChatRequested;
                 CallsList.Bind(ViewModel);
             }
@@ -152,24 +151,11 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
 
         private void CallsAppBar_NewCallRequested(object sender, EventArgs e)
         {
-            _ = ShowNewCallUnavailableAsync();
-        }
-
-        private async Task ShowNewCallUnavailableAsync()
-        {
-            IDialogService dialogs = App.Services?.GetService<IDialogService>();
-            if (dialogs == null)
+            if (ViewModel?.OpenNewCallCommand != null &&
+                ViewModel.OpenNewCallCommand.CanExecute(null))
             {
-                return;
+                ViewModel.OpenNewCallCommand.Execute(null);
             }
-
-            IStringResources strings = App.Services?.GetService<IStringResources>();
-            string title = strings?.Get("Calls_Header", "Calls") ?? "Calls";
-            string body = strings?.Get(
-                "Calls_NewCallUnavailable",
-                "Calling is not available yet.") ?? "Calling is not available yet.";
-            string close = strings?.Get("Common_OK", "OK") ?? "OK";
-            await dialogs.ShowMessageAsync(title, body, close);
         }
     }
 }

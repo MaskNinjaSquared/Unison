@@ -74,7 +74,6 @@ namespace Unison.Uwp.Shell.WhatsApp.Dialogs
             Activate();
             HookLeaveRequested();
             ShowSection(OpenOnProfile ? "profile" : "general");
-            _ = _viewModel?.LoadDiskUsageAsync();
         }
 
         private void SettingsDialog_Closed(ContentDialog sender, ContentDialogClosedEventArgs args)
@@ -675,6 +674,10 @@ namespace Unison.Uwp.Shell.WhatsApp.Dialogs
             if (DiskUsagePanel != null)
             {
                 DiskUsagePanel.Visibility = tag == "disk" ? Visibility.Visible : Visibility.Collapsed;
+                if (tag == "disk")
+                {
+                    _ = _viewModel?.LoadDiskUsageAsync();
+                }
             }
 
             if (AboutPanel != null)

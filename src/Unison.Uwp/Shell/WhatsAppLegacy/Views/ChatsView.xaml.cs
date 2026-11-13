@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
 using Windows.UI.Xaml.Navigation;
+using Unison.Uwp.UI.Helpers;
 using Microsoft.Extensions.DependencyInjection;
 using Unison.Core.Contracts;
 using Unison.Core.Contracts.WhatsApp;
@@ -147,23 +148,17 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             _openingDeepLink = true;
             try
             {
-                ChatItem chat = null;
-                for (int i = 0; i < 50; i++)
+                jid = _shell.PendingOpenChatJid;
+                if (string.IsNullOrWhiteSpace(jid))
                 {
-                    jid = _shell.PendingOpenChatJid;
-                    if (string.IsNullOrWhiteSpace(jid))
-                    {
-                        return;
-                    }
-
-                    chat = ChatListPart?.FindChatByJid(jid);
-                    if (chat != null)
-                    {
-                        break;
-                    }
-
-                    await Task.Delay(100);
+                    return;
                 }
+
+                ChatItem chat = await ChatListDeepLinkWait.WaitForChatAsync(
+                    j => ChatListPart?.FindChatByJid(j),
+                    ChatListPart?.ViewModel,
+                    jid,
+                    TimeSpan.FromSeconds(5));
 
                 if (chat == null)
                 {

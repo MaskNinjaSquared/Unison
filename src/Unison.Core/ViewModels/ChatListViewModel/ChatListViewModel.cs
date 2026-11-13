@@ -347,15 +347,17 @@ namespace Unison.Core.ViewModels
                         !string.IsNullOrWhiteSpace(chat.JID) &&
                         _chatService != null);
             ArchiveChatCommand = new RelayCommand<ChatItem>(
-                chat => { },
+                chat => _ = SetChatStatusAsync(chat, ChatStatus.Archived),
                 chat => chat != null &&
                         !string.IsNullOrWhiteSpace(chat.JID) &&
-                        chat.Status == ChatStatus.Active);
+                        chat.Status == ChatStatus.Active &&
+                        _chatStore != null);
             UnarchiveChatCommand = new RelayCommand<ChatItem>(
-                chat => { },
+                chat => _ = SetChatStatusAsync(chat, ChatStatus.Active),
                 chat => chat != null &&
                         !string.IsNullOrWhiteSpace(chat.JID) &&
-                        chat.Status == ChatStatus.Archived);
+                        chat.Status == ChatStatus.Archived &&
+                        _chatStore != null);
             SetLocalMuteCommand = new RelayCommand<ChatMuteRequest>(
                 request => _ = SetLocalMuteAsync(request),
                 request => request?.Chat != null &&

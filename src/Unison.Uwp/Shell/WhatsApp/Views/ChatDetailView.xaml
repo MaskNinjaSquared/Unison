@@ -896,8 +896,8 @@
 
                 <Grid x:Name="ReactionEmojiDock"
                       Grid.Row="2"
-                      Visibility="Collapsed"
-                      Background="{ThemeResource ChatDetailInputBarBackgroundBrush}">
+                      Background="{ThemeResource ChatDetailInputBarBackgroundBrush}"
+                  x:Load="{x:Bind ViewModel.IsReactionDockOpen, Mode=OneWay}">
                     <Grid.RenderTransform>
                         <TranslateTransform x:Name="ReactionEmojiTranslate" Y="1000"/>
                     </Grid.RenderTransform>
@@ -947,7 +947,7 @@
 
                 <controls:ChatStickerBox x:Name="StickerBox"
                                          Grid.Row="3"
-                                         Visibility="{Binding IsStickerBoxOpen, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                                         x:Load="{x:Bind ViewModel.IsStickerBoxOpen, Mode=OneWay}"/>
             </Grid><!-- composer / recording share row 3 -->
 
             <!-- Announce-only group lock (replaces composer). Channels hide the whole footer. -->
@@ -995,7 +995,7 @@
 
             <Grid x:Name="ChatDetailInfoPaneHost"
                   Grid.Column="1"
-                  Visibility="Collapsed">
+                  x:Load="{x:Bind ViewModel.IsChatDetailInfoOpen, Mode=OneWay}">
                 <Grid.RenderTransform>
                     <TranslateTransform x:Name="ChatDetailInfoSlideTransform" X="0"/>
                 </Grid.RenderTransform>
@@ -1036,13 +1036,13 @@
 
         <!-- Full-screen image viewer (Imgur-style chrome) -->
         <views:ImageViewerView x:Name="ImageViewerOverlay"
-                               Visibility="Collapsed"
-                               Canvas.ZIndex="100"/>
+                               Canvas.ZIndex="100"
+                               x:Load="{x:Bind ViewModel.IsImageViewerOpen, Mode=OneWay}"/>
 
         <!-- Full-screen video viewer (Imgur FullScreenMediaView layout) -->
         <views:VideoViewerView x:Name="VideoViewerOverlay"
-                               Visibility="Collapsed"
-                               Canvas.ZIndex="101"/>
+                               Canvas.ZIndex="101"
+                               x:Load="{x:Bind ViewModel.IsVideoViewerOpen, Mode=OneWay}"/>
 
     </Grid>
 </UserControl>

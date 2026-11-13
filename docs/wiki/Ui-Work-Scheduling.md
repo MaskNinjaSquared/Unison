@@ -66,6 +66,8 @@ Never coalesce a new message, the live strip (`RunUrgentAsync`) or the open chat
 
 - `refresh-visible` (`ChatListViewModel`) sets a deferred flag while the timeline gate is held or the window is hidden, and reruns on release. It is bounded because the timeline gate always has a deadline.
 - `ChatOpenPaintSchedule` only holds fixed paint delays (surface yield, Mobile materialize delay, scroll settle). Those are UX timings, not gates.
+- `SurfacePaintPolicy.For(DeviceCategory)` (Core) owns those numbers per tier: Unsupported is more conservative than Low; High skips delays. `SurfacePaintSchedule` (UWP) runs the Normal dispatcher yield + delay; Legacy pivot section yield and chat-open paint both consume it. Prefer `ShowLoadingAfterFirstPaint` so chrome paints before `IsLoading` on Low/Unsupported.
+- Deep-link open waits with `ChatListDeepLinkWait` (one `CollectionChanged` + a single timeout), not a `Task.Delay` poll loop.
 
 ## Repeated reads: RAM caches
 
