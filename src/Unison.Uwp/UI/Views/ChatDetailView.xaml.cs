@@ -397,15 +397,33 @@ namespace Unison.Uwp.UI.Views
                 return;
             }
 
-            if (ViewModel != null)
+            // x:Load: raise the gate before touching AttachMenuBar. Keep IsAttachMenuOpen true
+            // through the close slide; unload only in AttachMenuHide_Completed.
+            if (open)
             {
-                ViewModel.IsAttachMenuOpen = open;
-            }
+                if (ViewModel != null)
+                {
+                    ViewModel.IsAttachMenuOpen = true;
+                }
 
-            Bindings.Update();
-            FrameworkElement attachBar = AttachMenuBar ?? FindName("AttachMenuBar") as FrameworkElement;
-            if (open && attachBar == null)
+                Bindings.Update();
+                FrameworkElement attachBar = AttachMenuBar
+                    ?? FindName("AttachMenuBar") as FrameworkElement;
+                if (attachBar == null)
+                {
+                    return;
+                }
+            }
+            else if (AttachMenuBar == null)
             {
+                _attachMenuOpen = false;
+                if (ViewModel != null)
+                {
+                    ViewModel.IsAttachMenuOpen = false;
+                }
+
+                Bindings.Update();
+                UpdateScrollToBottomButton();
                 return;
             }
 
@@ -480,7 +498,17 @@ namespace Unison.Uwp.UI.Views
                 return;
             }
 
-            AttachMenuBar.Visibility = Visibility.Collapsed;
+            if (AttachMenuBar != null)
+            {
+                AttachMenuBar.Visibility = Visibility.Collapsed;
+            }
+
+            if (ViewModel != null)
+            {
+                ViewModel.IsAttachMenuOpen = false;
+            }
+
+            Bindings.Update();
         }
 
         private void ChatDetailView_Unloaded(object sender, RoutedEventArgs e)
@@ -2051,6 +2079,9 @@ namespace Unison.Uwp.UI.Views
                 {
                     ViewModel.SyncListStripFromTimeline(chat, requestedJid, visibleMessages);
                 }
+
+                // Prepare may have deferred receipts when ChatState had no tail yet.
+                _ = ViewModel.EnsurePendingMarkReadReceiptsAsync(chat);
 
                 if (chat.IsPersonal)
                 {

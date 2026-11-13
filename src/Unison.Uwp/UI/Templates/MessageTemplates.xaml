@@ -704,14 +704,16 @@
                 </Border>
 
                 <!-- Brief flash when scrolled-to from a reply/quote tap. -->
-                <Border IsHitTestVisible="False"
+                <Border x:Name="SentHighlightFlash"
+                        IsHitTestVisible="False"
                         Background="#55FFFFFF"
                         CornerRadius="8"
                         x:Load="{x:Bind IsHighlighted, Mode=OneWay}"/>
                 </Grid>
             </Grid>
 
-            <Button Grid.Row="2"
+            <Button x:Name="SentReactionChip"
+                    Grid.Row="2"
                     HorizontalAlignment="Left"
                     Margin="40,-2,10,0"
                     Style="{StaticResource ChatDetailSentReactionChipButtonStyle}"
@@ -1398,7 +1400,8 @@
                 </Border>
 
                 <!-- Brief flash when scrolled-to from a reply/quote tap. -->
-                <Border IsHitTestVisible="False"
+                <Border x:Name="ReceivedHighlightFlash"
+                        IsHitTestVisible="False"
                         Background="#55FFFFFF"
                         CornerRadius="8"
                         x:Load="{x:Bind IsHighlighted, Mode=OneWay}"/>
@@ -1414,7 +1417,8 @@
                 <Border Grid.Column="0"
                         Width="40"
                         Visibility="{x:Bind ShowContactSlot, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
-                <Button Grid.Column="1"
+                <Button x:Name="ReceivedReactionChip"
+                        Grid.Column="1"
                         Margin="0,-4,4,0"
                         Style="{StaticResource ChatDetailReactionChipButtonStyle}"
                         Background="{ThemeResource ChatDetailReactionChipReceivedBrush}"

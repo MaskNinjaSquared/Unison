@@ -19,5 +19,12 @@ namespace Unison.Core.Tests.Constants
 
             Assert.Empty(missing);
         }
+
+        [Fact]
+        public void IconitoMode_defaults_to_off_so_opens_notify()
+        {
+            Assert.True(LocalSettingsConstants.Defaults.ContainsKey(LocalSettingsConstants.IconitoMode));
+            Assert.Equal(false, LocalSettingsConstants.Defaults[LocalSettingsConstants.IconitoMode]);
+        }
     }
 }

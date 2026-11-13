@@ -328,6 +328,19 @@ namespace Unison.Core.ViewModels
             }
         }
 
+        /// <summary>
+        /// Open and read chats without sending read receipts / app-state mark-read to WhatsApp.
+        /// </summary>
+        public bool IconitoMode
+        {
+            get => _localSettings.Get<bool>(LocalSettingsConstants.IconitoMode);
+            set
+            {
+                _localSettings.Set(LocalSettingsConstants.IconitoMode, value);
+                OnPropertyChanged();
+            }
+        }
+
         public bool LiveTilesEnabled
         {
             get => _localSettings.Get<bool>(LocalSettingsConstants.LiveTilesEnabled);
@@ -811,6 +824,7 @@ namespace Unison.Core.ViewModels
                 nameof(NotificationsEnabled),
                 nameof(CallNotificationsEnabled),
                 nameof(ShowSyncStatus),
+                nameof(IconitoMode),
                 nameof(LiveTilesEnabled),
                 nameof(LocationKeepAliveEnabled),
                 nameof(AutoUnlinkOnLogoutEnabled),

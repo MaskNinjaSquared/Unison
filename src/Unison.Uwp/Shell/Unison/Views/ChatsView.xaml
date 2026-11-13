@@ -9,7 +9,8 @@
     <Grid x:Name="RootContentGrid"
           Background="{ThemeResource WhatsAppBackgroundBrush}"
           SizeChanged="RootContentGrid_SizeChanged">
-        <!-- ChatPaneStates: pane modes (not LayoutStates Minimal/Extended/ExtendedWide). -->
+        <!-- ChatPaneStates: pane modes (not LayoutStates Minimal/Extended/ExtendedWide).
+             SplitterChromeStates live on the Page (GoToState needs Control, not Border). -->
         <VisualStateManager.VisualStateGroups>
             <VisualStateGroup x:Name="ChatPaneStates">
                 <VisualState x:Name="WideBoth">
@@ -49,6 +50,23 @@
                     </VisualState.Setters>
                 </VisualState>
             </VisualStateGroup>
+            <VisualStateGroup x:Name="SplitterChromeStates">
+                <VisualState x:Name="SplitterIdle">
+                    <VisualState.Setters>
+                        <Setter Target="SplitterChrome.Opacity" Value="0"/>
+                    </VisualState.Setters>
+                </VisualState>
+                <VisualState x:Name="SplitterHover">
+                    <VisualState.Setters>
+                        <Setter Target="SplitterChrome.Opacity" Value="1"/>
+                    </VisualState.Setters>
+                </VisualState>
+                <VisualState x:Name="SplitterDragging">
+                    <VisualState.Setters>
+                        <Setter Target="SplitterChrome.Opacity" Value="1"/>
+                    </VisualState.Setters>
+                </VisualState>
+            </VisualStateGroup>
         </VisualStateManager.VisualStateGroups>
 
         <Grid.ColumnDefinitions>
@@ -84,25 +102,6 @@
                     Background="{ThemeResource ChatPaneSplitterBackgroundBrush}"
                     Opacity="0"
                     IsHitTestVisible="False">
-                <VisualStateManager.VisualStateGroups>
-                    <VisualStateGroup x:Name="SplitterChromeStates">
-                        <VisualState x:Name="SplitterIdle"/>
-                        <VisualState x:Name="SplitterHover">
-                            <Storyboard>
-                                <DoubleAnimation Storyboard.TargetName="SplitterChrome"
-                                                 Storyboard.TargetProperty="Opacity"
-                                                 To="1" Duration="0:0:0.12"/>
-                            </Storyboard>
-                        </VisualState>
-                        <VisualState x:Name="SplitterDragging">
-                            <Storyboard>
-                                <DoubleAnimation Storyboard.TargetName="SplitterChrome"
-                                                 Storyboard.TargetProperty="Opacity"
-                                                 To="1" Duration="0:0:0.05"/>
-                            </Storyboard>
-                        </VisualState>
-                    </VisualStateGroup>
-                </VisualStateManager.VisualStateGroups>
                 <StackPanel VerticalAlignment="Center"
                             HorizontalAlignment="Center">
                     <Ellipse Width="3" Height="3" Margin="0,2"

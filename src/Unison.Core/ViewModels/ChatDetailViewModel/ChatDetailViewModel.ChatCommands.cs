@@ -42,6 +42,28 @@ namespace Unison.Core.ViewModels
         }
 
         /// <summary>
+        /// After the timeline hydrates, finish any mark-read receipts deferred from
+        /// <see cref="MarkChatOpenedAsync"/> (empty tail at Prepare).
+        /// </summary>
+        public async Task EnsurePendingMarkReadReceiptsAsync(ChatItem chat)
+        {
+            if (chat == null || _chatService == null)
+            {
+                return;
+            }
+
+            try
+            {
+                await _chatService.EnsurePendingMarkReadReceiptsAsync(chat);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine(
+                    "[ChatDetailViewModel] EnsurePendingMarkReadReceipts failed: " + ex.Message);
+            }
+        }
+
+        /// <summary>
         /// Full bind used for same-chat rebind (no pane flip). New opens use
         /// <see cref="BindActiveChatForOpen"/> then <see cref="EnrichActiveChatAfterPaint"/> after
         /// NarrowDetail + ProgressBar have painted.

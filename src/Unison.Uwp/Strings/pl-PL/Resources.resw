@@ -712,6 +712,12 @@ Wyłącz po zakończeniu diagnozy: pozostawienie włączonego spowalnia aplikacj
   <data name="Settings_ShowSyncStatus.Text" xml:space="preserve">
     <value>Pokazuje stan synchronizacji na liście czatów.</value>
   </data>
+  <data name="Settings_IconitoMode.Header" xml:space="preserve">
+    <value>Iconito Mode</value>
+  </data>
+  <data name="Settings_IconitoMode.Text" xml:space="preserve">
+    <value>Open and read chats without sending read receipts to WhatsApp.</value>
+  </data>
   <data name="Settings_Notifications.Header" xml:space="preserve">
     <value>Powiadomienia</value>
   </data>

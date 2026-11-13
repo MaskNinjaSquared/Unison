@@ -1887,9 +1887,16 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                 return;
             }
 
-            SetSectionLoadingVisible(true, tag);
             try
             {
+                // Chrome (empty presenter) first on Low/Unsupported, then spinner, then create.
+                SurfacePaintPolicy policy = SurfacePaintSchedule.ResolvePolicy();
+                if (policy.ShowLoadingAfterFirstPaint)
+                {
+                    await SurfacePaintSchedule.YieldForSectionPaintAsync(policy);
+                }
+
+                SetSectionLoadingVisible(true, tag);
                 await YieldForSectionPaintAsync();
                 FrameworkElement section = CreateSectionView(tag);
                 presenter.Content = section;
@@ -2005,8 +2012,7 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
         private async Task YieldForSectionPaintAsync()
         {
             await Dispatcher.RunAsync(CoreDispatcherPriority.Normal, () => { });
-            var policy = SurfacePaintPolicy.ForMobileFlag(_isWindowsMobile);
-            await SurfacePaintSchedule.YieldForSectionPaintAsync(policy);
+            await SurfacePaintSchedule.YieldForSectionPaintAsync();
         }
 
         private void SelectPivotIndex(string tag)

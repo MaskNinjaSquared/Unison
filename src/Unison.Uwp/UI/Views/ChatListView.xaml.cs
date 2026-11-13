@@ -234,8 +234,51 @@ namespace Unison.Uwp.UI.Views
             ViewModel.BeforeLocalConversationsCleared += ViewModel_BeforeLocalConversationsCleared;
             ViewModel.SelectionRestored += ViewModel_SelectionRestored;
             ViewModel.PropertyChanged += ViewModel_PropertyChanged;
-            ViewModel.Attach();
             AttachShellBackVisibility();
+
+            if (ViewModel.DefersLoadingOverlayForFirstPaint)
+            {
+                _ = AttachAfterFirstPaintAsync();
+                return;
+            }
+
+            ViewModel.Attach();
+        }
+
+        /// <summary>
+        /// Mobile Low/Unsupported: paint header chrome, then show preparing overlay, then Attach.
+        /// </summary>
+        private async Task AttachAfterFirstPaintAsync()
+        {
+            try
+            {
+                await SurfacePaintSchedule.YieldForSurfacePaintAsync(Dispatcher);
+                if (!_hooked || ViewModel == null)
+                {
+                    return;
+                }
+
+                ViewModel.RevealLoadingOverlayAfterFirstPaint();
+                await SurfacePaintSchedule.YieldForSurfacePaintAsync(Dispatcher);
+                if (!_hooked || ViewModel == null)
+                {
+                    return;
+                }
+
+                ViewModel.Attach();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[ChatListView] AttachAfterFirstPaintAsync: " + ex.Message);
+                try
+                {
+                    ViewModel?.RevealLoadingOverlayAfterFirstPaint();
+                    ViewModel?.Attach();
+                }
+                catch
+                {
+                }
+            }
         }
 
         private void ChatListView_Unloaded(object sender, RoutedEventArgs e)

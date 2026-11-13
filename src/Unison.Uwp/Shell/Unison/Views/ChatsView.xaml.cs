@@ -452,7 +452,7 @@ namespace Unison.Uwp.Shell.Unison.Views
             string state = _splitterDragging
                 ? "SplitterDragging"
                 : (_splitterHover ? "SplitterHover" : "SplitterIdle");
-            VisualStateManager.GoToState(SplitterChrome, state, true);
+            VisualStateManager.GoToState(this, state, true);
         }
 
         private void PaneSplitter_PointerEntered(object sender, PointerRoutedEventArgs e)

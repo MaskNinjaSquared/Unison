@@ -48,9 +48,17 @@ namespace Unison.Core.Contracts.WhatsApp
         /// <summary>
         /// Marks everything in the conversation as read: the senders are told, and the unread
         /// badge is cleared here and on the phone. Does nothing when there was nothing unread,
-        /// so it is safe to call every time a chat is opened.
+        /// so it is safe to call every time a chat is opened. When Iconito Mode is on, only the
+        /// local badge is cleared.
         /// </summary>
         Task MarkReadAsync(ChatItem chat);
+
+        /// <summary>
+        /// Retries read receipts / app-state mark-read after the timeline has hydrated, when
+        /// <see cref="MarkReadAsync"/> ran before messages were in memory. No-op when nothing
+        /// is pending or Iconito Mode is on.
+        /// </summary>
+        Task EnsurePendingMarkReadReceiptsAsync(ChatItem chat);
 
         /// <summary>
         /// After the open-session unread chip is placed, mark inbound history rows as read

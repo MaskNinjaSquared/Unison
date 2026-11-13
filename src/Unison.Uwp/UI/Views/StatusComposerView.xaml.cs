@@ -30,7 +30,9 @@ namespace Unison.Uwp.UI.Views
                 return false;
             }
 
-            if (ViewModel.IsContactPickerOpen && ContactPicker.TryHandleZoomBack())
+            if (ViewModel.IsContactPickerOpen &&
+                ContactPicker != null &&
+                ContactPicker.TryHandleZoomBack())
             {
                 return true;
             }

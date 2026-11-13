@@ -3,11 +3,14 @@
 //
 // Reports back what we did with a message: received it, read it, played it.
 //
-// Unison currently sends none of these. That is why contacts never see the app's
-// blue ticks, and why the phone keeps considering messages unread after they
-// have been opened here. The shape is fiddly in one place - a "sender" receipt
-// addressed to another of our own devices swaps the to and recipient attributes
-// - which is exactly the kind of detail worth porting rather than guessing.
+// Chat open sends read / read-self via ChatFacade.MarkReadAsync (and a retry after
+// the timeline hydrates when the Prepare pass saw an empty tail). Iconito Mode
+// skips that network half so the companion can clear the local badge without
+// telling the sender. Delivery acks on receive are a separate path.
+//
+// The shape is fiddly in one place - a "sender" receipt addressed to another of
+// our own devices swaps the to and recipient attributes - which is exactly the
+// kind of detail worth porting rather than guessing.
 //
 // Ports: rc14 sendReceipt / sendReceipts / readMessages in src/Socket/messages-send.ts
 // =============================================================================

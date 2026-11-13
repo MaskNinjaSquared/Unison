@@ -45,6 +45,12 @@ namespace Unison.Core.Constants
         public const string ShowSyncStatus = "ShowSyncStatus";
 
         /// <summary>
+        /// When true, opening a chat clears the local unread badge without sending read receipts
+        /// or an app-state mark-read patch (stealth companion). Off by default so opens notify.
+        /// </summary>
+        public const string IconitoMode = "IconitoMode";
+
+        /// <summary>
         /// Toast sound for 1:1 messages (<see cref="NotificationSound"/> as int).
         /// Same key string is read by Unison.Background.
         /// </summary>
@@ -163,7 +169,9 @@ namespace Unison.Core.Constants
                 { LockScreenNotificationScope, (int)Models.LockScreenNotificationScope.All },
                 { NotificationFilter, "groups;direct;favorites" },
                 { ShowSyncStatus, true },
+                { IconitoMode, false },
                 { MessageNotificationSound, (int)NotificationSound.SystemDefault },
+
                 { GroupNotificationSound, (int)NotificationSound.SystemDefault },
                 { LiveTilesEnabled, true },
                 { StartTileMark, (int)Models.StartTileMark.Unison },

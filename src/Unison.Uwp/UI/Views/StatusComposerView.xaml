@@ -213,7 +213,7 @@
                                           Grid.RowSpan="3"
                                           Canvas.ZIndex="5"
                                           ViewModel="{Binding}"
-                                          x:Load="{Binding IsContactPickerOpen}"/>
+                                          x:Load="{x:Bind ViewModel.IsContactPickerOpen, Mode=OneWay}"/>
 
         <Grid Grid.RowSpan="3"
               Canvas.ZIndex="10"

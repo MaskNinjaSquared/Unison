@@ -871,7 +871,8 @@ namespace Unison.Uwp
                 sp.GetRequiredService<SessionTipAuthorCache>(),
                 sp.GetRequiredService<IPersonStore>(),
                 sp.GetRequiredService<IUiWorkHolds>(),
-                () => sp.GetRequiredService<SyncWorkGate>().IsReplayDrainActive));
+                () => sp.GetRequiredService<SyncWorkGate>().IsReplayDrainActive,
+                sp.GetRequiredService<ILocalSettings>()));
             // After IChatService: the projection persists resolved strip rows so cold start keeps names.
             // AttachedUiDispatcher (not IDispatcher/DispatcherService): same live frame as
             // GroupMetadataApply / ChatFacade so strip passes share the pump; DispatcherService

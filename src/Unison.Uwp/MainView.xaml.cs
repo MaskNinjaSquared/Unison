@@ -217,32 +217,27 @@ namespace Unison.Uwp
             _navigator?.AttachShellFrame(ShellContentFrame);
             _navigator?.AttachFullScreenFrame(FullScreenFrame);
             ApplyFullScreenVisibility();
-            EnsureShellContent();
 
             _shellViewModel.ReportWindowNarrow(IsNarrowWindow());
             ApplyShellBrand();
             EnsureOrientationHook();
             ApplySystemBackButton();
-            _ = CompleteMainViewLoadedAsync();
+            // Do not EnsureShellContent here — paint shell chrome first, then navigate to Chats.
+            CompleteMainViewLoadedAsync();
         }
 
-        /// <summary>Chrome first, then profile/deep-link work (SurfacePaintPolicy).</summary>
+        /// <summary>Chrome first, then Chats content / profile / deep-link (SurfacePaintPolicy).</summary>
         private async void CompleteMainViewLoadedAsync()
         {
             try
             {
-                bool mobile = false;
-                try
+                SurfacePaintPolicy policy = SurfacePaintSchedule.ResolvePolicy();
+                if (policy.ShowLoadingAfterFirstPaint)
                 {
-                    mobile = App.Services?.GetService<ISystemInfoProvider>()?.IsMobile() == true;
-                }
-                catch
-                {
+                    await SurfacePaintSchedule.YieldForSurfacePaintAsync(Dispatcher, policy);
                 }
 
-                await SurfacePaintSchedule.YieldForSurfacePaintAsync(
-                    Dispatcher,
-                    SurfacePaintPolicy.ForMobileFlag(mobile));
+                EnsureShellContent();
 
                 ViewModel?.RefreshUserInfo();
                 EnsureOpenPendingProfileFromActivation();

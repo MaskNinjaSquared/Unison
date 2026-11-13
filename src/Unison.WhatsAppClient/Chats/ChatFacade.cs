@@ -24,6 +24,7 @@ using System.Diagnostics;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Unison.Core.Constants;
 using Unison.Core.Contracts;
 using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Helpers;
@@ -141,10 +142,19 @@ namespace Unison.WhatsAppClient.Chats
         }
 
         private readonly IUiWorkHolds _uiHolds;
+        private readonly ILocalSettings _localSettings;
         private readonly Func<bool> _isReplayDrainActive;
         private readonly KeyedLatestCoalescer<string, RemoteChatSettings> _remoteChatSettings;
         private const int RemoteChatSettingsTraceMin = 10;
         private const int ChatFlagUiSliceSize = 32;
+
+        /// <summary>
+        /// Unread counts captured when mark-read ran before the conversation tail was in memory.
+        /// Complete-after-load retries the network half once the timeline hydrates.
+        /// </summary>
+        private readonly object _pendingMarkReadGate = new object();
+        private readonly Dictionary<string, int> _pendingMarkReadUnreadByJid =
+            new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
 
         public ChatFacade(
             IChatAccountActions account,
@@ -179,7 +189,8 @@ namespace Unison.WhatsAppClient.Chats
             SessionTipAuthorCache tipAuthorCache = null,
             IPersonStore people = null,
             IUiWorkHolds uiHolds = null,
-            Func<bool> isReplayDrainActive = null)
+            Func<bool> isReplayDrainActive = null,
+            ILocalSettings localSettings = null)
         {
             // Null → assume drain active so PreferFrugal still defers when tests omit the gate.
             _isReplayDrainActive = isReplayDrainActive ?? (() => true);
@@ -218,6 +229,7 @@ namespace Unison.WhatsAppClient.Chats
             _diagnostics = diagnostics;
             _tipAuthorCache = tipAuthorCache ?? new SessionTipAuthorCache();
             _people = people;
+            _localSettings = localSettings;
             if (_people != null)
             {
                 _people.PersonChanged += OnTipAuthorPersonChanged;
@@ -1095,8 +1107,22 @@ namespace Unison.WhatsAppClient.Chats
             await ClearUnreadForChatAsync(jid).ConfigureAwait(false);
             long clearMs = openSw.ElapsedMilliseconds;
 
+            if (IsIconitoMode)
+            {
+                ClearPendingMarkRead(jid);
+                DiagWrite(
+                    "chat-open",
+                    "mark-read",
+                    "chat=" + DiagnosticJidMask.Apply(jid) +
+                    "; unreadWas=" + unread +
+                    "; clearMs=" + clearMs +
+                    "; receipts=iconito-skipped");
+                return;
+            }
+
             if (!_account.IsAvailable || unread <= 0)
             {
+                ClearPendingMarkRead(jid);
                 DiagWrite(
                     "chat-open",
                     "mark-read",
@@ -1110,6 +1136,8 @@ namespace Unison.WhatsAppClient.Chats
             var recent = CollectTail(jid, Math.Min(MaxMarkReadMessages, Math.Max(unread + 1, 1)));
             if (recent.Count == 0)
             {
+                // Timeline may not be in ChatState yet (Prepare runs before Complete loads).
+                SetPendingMarkRead(jid, unread);
                 DiagWrite(
                     "chat-open",
                     "mark-read",
@@ -1120,6 +1148,95 @@ namespace Unison.WhatsAppClient.Chats
                 return;
             }
 
+            ClearPendingMarkRead(jid);
+            await SendMarkReadNetworkHalfAsync(jid, unread, recent, openSw, clearMs, "mark-read")
+                .ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// Retries the network half of mark-read after the timeline hydrates, when Prepare saw an
+        /// empty tail. No-op when Iconito Mode is on or nothing is pending for this chat.
+        /// </summary>
+        public async Task EnsurePendingMarkReadReceiptsAsync(ChatItem chat)
+        {
+            if (chat == null || string.IsNullOrWhiteSpace(chat.JID))
+            {
+                return;
+            }
+
+            var jid = _jids.GetCanonicalJid(chat.JID);
+            if (IsIconitoMode)
+            {
+                ClearPendingMarkRead(jid);
+                return;
+            }
+
+            int unread;
+            lock (_pendingMarkReadGate)
+            {
+                if (!_pendingMarkReadUnreadByJid.TryGetValue(jid, out unread) || unread <= 0)
+                {
+                    return;
+                }
+
+                _pendingMarkReadUnreadByJid.Remove(jid);
+            }
+
+            if (!_account.IsAvailable)
+            {
+                DiagWrite(
+                    "chat-open",
+                    "mark-read-retry",
+                    "chat=" + DiagnosticJidMask.Apply(jid) +
+                    "; unreadWas=" + unread +
+                    "; receipts=skipped");
+                return;
+            }
+
+            var openSw = Stopwatch.StartNew();
+            var recent = CollectTail(jid, Math.Min(MaxMarkReadMessages, Math.Max(unread + 1, 1)));
+            if (recent.Count == 0)
+            {
+                DiagWrite(
+                    "chat-open",
+                    "mark-read-retry",
+                    "chat=" + DiagnosticJidMask.Apply(jid) +
+                    "; unreadWas=" + unread +
+                    "; receipts=no-tail");
+                return;
+            }
+
+            await SendMarkReadNetworkHalfAsync(jid, unread, recent, openSw, clearMs: 0, "mark-read-retry")
+                .ConfigureAwait(false);
+        }
+
+        private bool IsIconitoMode =>
+            _localSettings != null && _localSettings.Get<bool>(LocalSettingsConstants.IconitoMode);
+
+        private void SetPendingMarkRead(string jid, int unread)
+        {
+            lock (_pendingMarkReadGate)
+            {
+                _pendingMarkReadUnreadByJid[jid] = unread;
+            }
+        }
+
+        private void ClearPendingMarkRead(string jid)
+        {
+            lock (_pendingMarkReadGate)
+            {
+                _pendingMarkReadUnreadByJid.Remove(jid);
+            }
+        }
+
+        private async Task SendMarkReadNetworkHalfAsync(
+            string jid,
+            int unread,
+            List<ChatMessage> recent,
+            Stopwatch openSw,
+            long clearMs,
+            string stage)
+        {
             try
             {
                 var incoming = recent.Where(m => !m.IsFromMe).ToList();
@@ -1131,7 +1248,7 @@ namespace Unison.WhatsAppClient.Chats
                 await _account.MarkChatReadAsync(jid, recent.Select(m => ToRangeMessage(jid, m))).ConfigureAwait(false);
                 DiagWrite(
                     "chat-open",
-                    "mark-read",
+                    stage,
                     "chat=" + DiagnosticJidMask.Apply(jid) +
                     "; unreadWas=" + unread +
                     "; clearMs=" + clearMs +
@@ -1147,7 +1264,7 @@ namespace Unison.WhatsAppClient.Chats
                 Debug.WriteLine("[ChatFacade] Mark read failed: " + ex.GetBaseException().Message);
                 DiagWrite(
                     "chat-open",
-                    "mark-read",
+                    stage,
                     "chat=" + DiagnosticJidMask.Apply(jid) +
                     "; unreadWas=" + unread +
                     "; clearMs=" + clearMs +

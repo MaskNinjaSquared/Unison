@@ -138,6 +138,7 @@ namespace Unison.Core.ViewModels
         private bool _isSyncStatusVisible;
         private bool _isLoadingOverlayVisible;
         private string _loadingOverlayText;
+        private bool _deferLoadingOverlayForFirstPaint;
         private bool _isRefreshing;
         private string _lastSelectedChatJid;
         private ChatItem _selectedChat;
@@ -315,9 +316,12 @@ namespace Unison.Core.ViewModels
             VisibleChats = new ObservableCollection<ChatItem>();
             CloseCommunityHubCommand = new RelayCommand(CloseCommunityHub);
 
-            // The overlay starts on: a cold start has nothing to show and the alternative is a
-            // blank pane. The key is the one the markup used to carry as x:Uid.
-            _isLoadingOverlayVisible = true;
+            // Low/Unsupported: chrome first (header only), overlay after first paint.
+            // High: overlay on immediately so the pane is never blank.
+            SurfacePaintPolicy paint = SurfacePaintPolicy.For(
+                _systemInfo != null ? _systemInfo.GetDeviceCategory() : DeviceCategory.High);
+            _deferLoadingOverlayForFirstPaint = paint.ShowLoadingAfterFirstPaint;
+            _isLoadingOverlayVisible = !_deferLoadingOverlayForFirstPaint;
             _loadingOverlayText = _strings == null
                 ? string.Empty
                 : _strings.Get("ChatList_Loading.Text", "Preparing conversations...");
@@ -542,6 +546,34 @@ namespace Unison.Core.ViewModels
         {
             get => _isLoadingOverlayVisible;
             private set => Set(ref _isLoadingOverlayVisible, value);
+        }
+
+        /// <summary>
+        /// True when the host should paint chrome, yield, then call
+        /// <see cref="RevealLoadingOverlayAfterFirstPaint"/> before <see cref="Attach"/>.
+        /// </summary>
+        public bool DefersLoadingOverlayForFirstPaint => _deferLoadingOverlayForFirstPaint;
+
+        /// <summary>
+        /// After the first chrome frame on Low/Unsupported: show the preparing overlay.
+        /// No-op when already visible or when the tier paints and loads together.
+        /// </summary>
+        public void RevealLoadingOverlayAfterFirstPaint()
+        {
+            if (!_deferLoadingOverlayForFirstPaint || _isLoadingOverlayVisible)
+            {
+                return;
+            }
+
+            if (string.IsNullOrEmpty(_loadingOverlayText) && _strings != null)
+            {
+                _loadingOverlayText = _strings.Get(
+                    "ChatList_Loading.Text",
+                    "Preparing conversations...");
+                OnPropertyChanged(nameof(LoadingOverlayText));
+            }
+
+            IsLoadingOverlayVisible = true;
         }
 
         /// <summary>

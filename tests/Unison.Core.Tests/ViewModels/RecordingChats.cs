@@ -50,6 +50,8 @@ namespace Unison.Core.Tests.ViewModels
 
         public Task MarkReadAsync(ChatItem chat) => Task.CompletedTask;
 
+        public Task EnsurePendingMarkReadReceiptsAsync(ChatItem chat) => Task.CompletedTask;
+
         public Task CommitInboundHistoryReadAsync(ChatItem chat) => Task.CompletedTask;
 
         public Task DeleteChatAsync(ChatItem chat) => Task.CompletedTask;

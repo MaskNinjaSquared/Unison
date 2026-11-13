@@ -1285,6 +1285,12 @@ Desative depois de diagnosticar: manter ligado deixa o app lento.</value>
   <data name="Settings_ShowSyncStatus.Text" xml:space="preserve">
     <value>Exibe o status da sincronização na lista de conversas.</value>
   </data>
+  <data name="Settings_IconitoMode.Header" xml:space="preserve">
+    <value>Modo Iconito</value>
+  </data>
+  <data name="Settings_IconitoMode.Text" xml:space="preserve">
+    <value>Abra e leia conversas sem enviar recibos de visualização ao WhatsApp.</value>
+  </data>
   <data name="Settings_Notifications.Header" xml:space="preserve">
     <value>Notificações</value>
   </data>

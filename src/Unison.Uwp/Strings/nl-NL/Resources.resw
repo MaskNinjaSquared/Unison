@@ -841,6 +841,12 @@ Schakel uit na diagnostiseren: het ingeschakeld laten vertraagd de app.</value>
   <data name="Settings_ShowSyncStatus.Text" xml:space="preserve">
     <value>Toont de synchronisatiestatus in de chatlijst.</value>
   </data>
+  <data name="Settings_IconitoMode.Header" xml:space="preserve">
+    <value>Iconito Mode</value>
+  </data>
+  <data name="Settings_IconitoMode.Text" xml:space="preserve">
+    <value>Open and read chats without sending read receipts to WhatsApp.</value>
+  </data>
   <data name="Settings_Notifications.Header" xml:space="preserve">
     <value>Meldingen</value>
   </data>

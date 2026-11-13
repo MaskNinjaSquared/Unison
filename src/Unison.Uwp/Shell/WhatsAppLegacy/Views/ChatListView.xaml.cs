@@ -314,7 +314,47 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             ViewModel.BeforeLocalConversationsCleared += ViewModel_BeforeLocalConversationsCleared;
             ViewModel.SelectionRestored += ViewModel_SelectionRestored;
             ViewModel.PropertyChanged += ViewModel_PropertyChanged;
+
+            if (ViewModel.DefersLoadingOverlayForFirstPaint)
+            {
+                _ = AttachAfterFirstPaintAsync();
+                return;
+            }
+
             ViewModel.Attach();
+        }
+
+        private async System.Threading.Tasks.Task AttachAfterFirstPaintAsync()
+        {
+            try
+            {
+                await SurfacePaintSchedule.YieldForSurfacePaintAsync(Dispatcher);
+                if (!_hooked || ViewModel == null)
+                {
+                    return;
+                }
+
+                ViewModel.RevealLoadingOverlayAfterFirstPaint();
+                await SurfacePaintSchedule.YieldForSurfacePaintAsync(Dispatcher);
+                if (!_hooked || ViewModel == null)
+                {
+                    return;
+                }
+
+                ViewModel.Attach();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[LegacyChatListView] AttachAfterFirstPaintAsync: " + ex.Message);
+                try
+                {
+                    ViewModel?.RevealLoadingOverlayAfterFirstPaint();
+                    ViewModel?.Attach();
+                }
+                catch
+                {
+                }
+            }
         }
 
         private void ChatListView_Unloaded(object sender, RoutedEventArgs e)

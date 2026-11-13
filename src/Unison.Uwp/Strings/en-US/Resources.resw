@@ -181,7 +181,7 @@ Enter this code:
     <value>Failed to pair by number</value>
   </data>
   <data name="Login_LogEmpty" xml:space="preserve">
-    <value>(log still empty â€” pairing already writes [Pairing] milestones automatically. Tap Reload QR and open the log again; turn on full session logging only if you need complete traffic.)</value>
+    <value>(log still empty — pairing already writes [Pairing] milestones automatically. Tap Reload QR and open the log again; turn on full session logging only if you need complete traffic.)</value>
   </data>
   <data name="Login_LogReadFail" xml:space="preserve">
     <value>Failed to read log: {0}</value>
@@ -276,7 +276,7 @@ Disable after diagnosing: keeping it on slows the app.</value>
     <value>This message was deleted before it could be delivered, so its content is not available.</value>
   </data>
   <data name="ChatList_Loading.Text" xml:space="preserve">
-    <value>Preparing conversationsâ€¦</value>
+    <value>Preparing conversations…</value>
   </data>
   <data name="ChatList_RefreshingNames" xml:space="preserve">
     <value>Refreshing contact names...</value>
@@ -291,31 +291,31 @@ Disable after diagnosing: keeping it on slows the app.</value>
     <value>Updating...</value>
   </data>
   <data name="ChatList_SyncProgress" xml:space="preserve">
-    <value>Syncing conversationsâ€¦ {0} of {1}</value>
+    <value>Syncing conversations… {0} of {1}</value>
   </data>
   <data name="ChatList_SyncProgressCount" xml:space="preserve">
-    <value>Syncing conversationsâ€¦ {0} loaded</value>
+    <value>Syncing conversations… {0} loaded</value>
   </data>
   <data name="ChatList_SyncDone" xml:space="preserve">
     <value>Sync complete</value>
   </data>
   <data name="ChatList_Settling" xml:space="preserve">
-    <value>Finishing startupâ€¦</value>
+    <value>Finishing startup…</value>
   </data>
   <data name="ChatList_ResolvingNames" xml:space="preserve">
-    <value>Resolving namesâ€¦ {0} of {1}</value>
+    <value>Resolving names… {0} of {1}</value>
   </data>
   <data name="ChatList_FetchingAvatars" xml:space="preserve">
-    <value>Loading photosâ€¦ {0} of {1}</value>
+    <value>Loading photos… {0} of {1}</value>
   </data>
   <data name="ChatList_FetchingGroups" xml:space="preserve">
-    <value>Loading group infoâ€¦ {0} of {1}</value>
+    <value>Loading group info… {0} of {1}</value>
   </data>
   <data name="ChatList_PausedLowMemory" xml:space="preserve">
-    <value>Paused â€” low memory</value>
+    <value>Paused — low memory</value>
   </data>
   <data name="ChatList_Organizing" xml:space="preserve">
-    <value>Organizing chatsâ€¦</value>
+    <value>Organizing chats…</value>
   </data>
   <data name="ChatDetail_SelectChat.Text" xml:space="preserve">
     <value>Select a chat</value>
@@ -495,7 +495,7 @@ Disable after diagnosing: keeping it on slows the app.</value>
     <value>Announcements</value>
   </data>
   <data name="Chat_CommunityHubSubtitle" xml:space="preserve">
-    <value>Community Â· {0} groups</value>
+    <value>Community · {0} groups</value>
   </data>
   <data name="Chat_CommunityFallbackName" xml:space="preserve">
     <value>Community</value>
@@ -1028,7 +1028,7 @@ Disable after diagnosing: keeping it on slows the app.</value>
     <value>My status</value>
   </data>
   <data name="StatusList_MyStatusHint.Text" xml:space="preserve">
-    <value>Tap to update your statusâ€¦</value>
+    <value>Tap to update your status…</value>
   </data>
   <data name="StatusList_MyStatusCount" xml:space="preserve">
     <value>{0} updates</value>
@@ -1136,7 +1136,7 @@ Disable after diagnosing: keeping it on slows the app.</value>
     <value>Add people or groups</value>
   </data>
   <data name="Share_PickChat.Text" xml:space="preserve">
-    <value>Send toâ€¦</value>
+    <value>Send to…</value>
   </data>
   <data name="Favorites_SortAlphabetical.Text" xml:space="preserve">
     <value>A-Z</value>
@@ -1175,7 +1175,7 @@ Disable after diagnosing: keeping it on slows the app.</value>
     <value>Voice and video calls</value>
   </data>
   <data name="Calls_EmptyBody.Text" xml:space="preserve">
-    <value>Share your screen, react with emojis and much more with up to 32 peopleâ€¦</value>
+    <value>Share your screen, react with emojis and much more with up to 32 people…</value>
   </data>
   <data name="Calls_FavoritesSection.Text" xml:space="preserve">
     <value>FAVORITES</value>
@@ -1271,7 +1271,7 @@ Disable after diagnosing: keeping it on slows the app.</value>
     <value>Background apps</value>
   </data>
   <data name="Login_BackgroundAccessBody" xml:space="preserve">
-    <value>Unison needs permission to run in the background to connect to WhatsApp. Turn Unison on under Settings â†’ Privacy â†’ Background apps, then return here.</value>
+    <value>Unison needs permission to run in the background to connect to WhatsApp. Turn Unison on under Settings ? Privacy ? Background apps, then return here.</value>
   </data>
   <data name="Login_BackgroundAccessRetry" xml:space="preserve">
     <value>Background access is on. Tap Reload QR to connect.</value>
@@ -1320,6 +1320,12 @@ Disable after diagnosing: keeping it on slows the app.</value>
   </data>
   <data name="Settings_ShowSyncStatus.Text" xml:space="preserve">
     <value>Show the synchronization status in the chat list.</value>
+  </data>
+  <data name="Settings_IconitoMode.Header" xml:space="preserve">
+    <value>Iconito Mode</value>
+  </data>
+  <data name="Settings_IconitoMode.Text" xml:space="preserve">
+    <value>Open and read chats without sending read receipts to WhatsApp.</value>
   </data>
   <data name="Settings_Notifications.Header" xml:space="preserve">
     <value>Notifications</value>
@@ -1425,7 +1431,7 @@ Disable after diagnosing: keeping it on slows the app.</value>
     <value>Background mode</value>
   </data>
   <data name="Settings_KeepAlive.Text" xml:space="preserve">
-    <value>Uses location only so Windows 10 Mobile wonâ€™t freeze the app (Unogram trick). Position is not read or sent. Uses more battery.</value>
+    <value>Uses location only so Windows 10 Mobile won’t freeze the app (Unogram trick). Position is not read or sent. Uses more battery.</value>
   </data>
   <data name="Settings_StartupLaunch.Header" xml:space="preserve">
     <value>Start with Windows</value>
@@ -1913,7 +1919,7 @@ Disable after diagnosing: keeping it on slows the app.</value>
     <value>Export chat</value>
   </data>
   <data name="ChatExport_OptionsBody" xml:space="preserve">
-    <value>Export this chat without media. Messages that had photos, videos, or documents will show as &lt;MÃ­dia oculta&gt;.</value>
+    <value>Export this chat without media. Messages that had photos, videos, or documents will show as &lt;Mídia oculta&gt;.</value>
   </data>
   <data name="ChatExport_WithoutMedia" xml:space="preserve">
     <value>Export without media</value>
@@ -1955,7 +1961,7 @@ Disable after diagnosing: keeping it on slows the app.</value>
     <value>Close</value>
   </data>
   <data name="ChatList_SyncingHistory" xml:space="preserve">
-    <value>Synchronizing historyâ€¦</value>
+    <value>Synchronizing history…</value>
   </data>
   <data name="Debug_RuntimeDialogHint.Text" xml:space="preserve">
     <value>Hold / right-click Chats (or the QR) to open. No message text is included.</value>
@@ -1973,7 +1979,7 @@ Disable after diagnosing: keeping it on slows the app.</value>
     <value>Request Full History On-demand</value>
   </data>
   <data name="Debug_FullHistoryRequesting" xml:space="preserve">
-    <value>Requesting full historyâ€¦</value>
+    <value>Requesting full history…</value>
   </data>
   <data name="Debug_FullHistoryRequested" xml:space="preserve">
     <value>Full history on-demand requested.</value>
@@ -2075,7 +2081,7 @@ Disable after diagnosing: keeping it on slows the app.</value>
     <value>Play audio</value>
   </data>
 <data name="ChatDetail_DocumentSaveAs.Label" xml:space="preserve">
-    <value>Save asâ€¦</value>
+    <value>Save as…</value>
   </data>
   <data name="ChatDetail_Back.ToolTip" xml:space="preserve">
     <value>Back</value>

@@ -2,6 +2,24 @@
 
 Newest first.
 
+## ChatDetail docks — x:Load Ensure on open
+
+`AttachMenuBar` / `ReactionEmojiDock` were gated with `x:Load`, but Unison and
+Legacy `SetAttachMenuOpen` (and reaction open on all three shells) returned early
+when the named field was still null, so the gate never flipped true. Open now
+sets the VM flag + `Bindings.Update` / `FindName` first; unload waits until the
+close slide completes.
+
+## Read receipts on chat open + Iconito Mode
+
+Opening a chat already cleared the local unread badge via
+`ChatFacade.MarkReadAsync`, but receipts often never left because Prepare ran
+before the timeline seeded `ChatState` (`receipts=no-tail`). The network half
+(read receipts + app-state mark-read) now retries once after
+`CompleteActiveChatLoad` when that pending case applied. Advanced settings add
+**Iconito Mode** (off by default): same local clear, no receipts / no
+app-state mark — stealth companion.
+
 ## Views — 512 MB paint / x:Load pass
 
 Deferred heavy XAML on Lumia-class devices: `ChatDetailView` hosts use

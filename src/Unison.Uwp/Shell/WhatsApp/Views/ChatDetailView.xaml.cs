@@ -1859,6 +1859,9 @@ private readonly IStringResources _strings;
                     ViewModel.SyncListStripFromTimeline(chat, requestedJid, visibleMessages);
                 }
 
+                // Prepare may have deferred receipts when ChatState had no tail yet.
+                _ = ViewModel.EnsurePendingMarkReadReceiptsAsync(chat);
+
                 if (chat.IsPersonal)
                 {
                     ViewModel.StopPresenceWatch();
@@ -3176,14 +3179,44 @@ private readonly IStringResources _strings;
 
         private void SetReactionEmojiDockOpen(bool open)
         {
-            if (_reactionEmojiDockOpen == open || ReactionEmojiDock == null)
+            if (_reactionEmojiDockOpen == open)
             {
                 return;
             }
 
             if (open)
             {
+                if (ViewModel != null)
+                {
+                    ViewModel.IsReactionDockOpen = true;
+                }
+
+                Bindings.Update();
+                FrameworkElement dock = ReactionEmojiDock
+                    ?? FindName("ReactionEmojiDock") as FrameworkElement;
+                if (dock == null)
+                {
+                    return;
+                }
+
                 ViewModel?.CloseStickerBox();
+            }
+            else if (ReactionEmojiDock == null)
+            {
+                _reactionEmojiDockOpen = false;
+                _reactionPickTarget = null;
+                if (ViewModel != null)
+                {
+                    ViewModel.IsReactionDockOpen = false;
+                }
+
+                Bindings.Update();
+                if (ComposerHost != null)
+                {
+                    ComposerHost.Visibility = Visibility.Visible;
+                }
+
+                return;
             }
 
             _reactionEmojiDockOpen = open;
@@ -3200,9 +3233,7 @@ private readonly IStringResources _strings;
 
             if (open)
             {
-                if (ViewModel != null) { ViewModel.IsReactionDockOpen = true; }
-            Bindings.Update();
-            ReactionEmojiDock.Visibility = Visibility.Visible;
+                ReactionEmojiDock.Visibility = Visibility.Visible;
                 ReactionEmojiDock.UpdateLayout();
             }
             else
@@ -3231,12 +3262,22 @@ private readonly IStringResources _strings;
             {
                 _reactionEmojiDockStoryboard.Completed += (s, e) =>
                 {
-                    if (!_reactionEmojiDockOpen && ReactionEmojiDock != null)
+                    if (_reactionEmojiDockOpen)
+                    {
+                        return;
+                    }
+
+                    if (ReactionEmojiDock != null)
                     {
                         ReactionEmojiDock.Visibility = Visibility.Collapsed;
-            if (ViewModel != null) { ViewModel.IsReactionDockOpen = false; }
-            Bindings.Update();
                     }
+
+                    if (ViewModel != null)
+                    {
+                        ViewModel.IsReactionDockOpen = false;
+                    }
+
+                    Bindings.Update();
                 };
             }
 

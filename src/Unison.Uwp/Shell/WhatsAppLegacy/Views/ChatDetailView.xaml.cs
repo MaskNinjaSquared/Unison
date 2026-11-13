@@ -133,7 +133,7 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
         /// </summary>
         private bool _attachMenuOpen;
 
-        private ImageViewerView _imageViewerCache;
+        private LegacyImageViewerView _imageViewerCache;
         private VideoViewerView _videoViewerCache;
         private FrameworkElement _attachMenuBarCache;
         private FrameworkElement _reactionDockCache;
@@ -144,7 +144,7 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             await Dispatcher.RunAsync(Windows.UI.Core.CoreDispatcherPriority.Normal, () => { });
         }
 
-        private ImageViewerView EnsureImageViewer()
+        private LegacyImageViewerView EnsureImageViewer()
         {
             if (ViewModel != null)
             {
@@ -157,7 +157,8 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                 return _imageViewerCache;
             }
 
-            _imageViewerCache = ImageViewerOverlay ?? FindName("ImageViewerOverlay") as ImageViewerView;
+            _imageViewerCache = ImageViewerOverlay
+                ?? FindName("ImageViewerOverlay") as LegacyImageViewerView;
             return _imageViewerCache;
         }
 
@@ -609,14 +610,42 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
         /// </remarks>
         private void SetAttachMenuOpen(bool open)
         {
-            if (_attachMenuOpen == open || AttachMenuBar == null)
+            if (_attachMenuOpen == open)
             {
                 return;
             }
 
+            // x:Load: raise the gate before touching AttachMenuBar / AttachMenuScrim.
+            // Do not drop IsAttachMenuOpen on close until the slide completes — unloading mid
+            // animation nulls the named fields the storyboard still targets.
             if (open)
             {
+                if (ViewModel != null)
+                {
+                    ViewModel.IsAttachMenuOpen = true;
+                }
+
+                Bindings.Update();
+                FrameworkElement attachBar = AttachMenuBar
+                    ?? FindName("AttachMenuBar") as FrameworkElement;
+                if (attachBar == null)
+                {
+                    return;
+                }
+
                 SetReactionEmojiDockOpen(false);
+            }
+            else if (AttachMenuBar == null)
+            {
+                _attachMenuOpen = false;
+                if (ViewModel != null)
+                {
+                    ViewModel.IsAttachMenuOpen = false;
+                }
+
+                Bindings.Update();
+                UpdateScrollToBottomButton();
+                return;
             }
 
             _attachMenuOpen = open;
@@ -693,7 +722,17 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                 return;
             }
 
-            AttachMenuBar.Visibility = Visibility.Collapsed;
+            if (AttachMenuBar != null)
+            {
+                AttachMenuBar.Visibility = Visibility.Collapsed;
+            }
+
+            if (ViewModel != null)
+            {
+                ViewModel.IsAttachMenuOpen = false;
+            }
+
+            Bindings.Update();
         }
 
         private void ChatDetailView_Unloaded(object sender, RoutedEventArgs e)
@@ -1710,7 +1749,7 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                 return;
             }
 
-            ImageViewerView overlay = EnsureImageViewer();
+            LegacyImageViewerView overlay = EnsureImageViewer();
             if (overlay == null)
             {
                 return;
@@ -1730,7 +1769,7 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
 
         private bool TryCloseImageViewer()
         {
-            ImageViewerView overlay = _imageViewerCache ?? ImageViewerOverlay;
+            LegacyImageViewerView overlay = _imageViewerCache ?? ImageViewerOverlay;
             if (overlay == null || overlay.Visibility != Visibility.Visible)
             {
                 return false;
@@ -2212,6 +2251,9 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                 {
                     ViewModel.SyncListStripFromTimeline(chat, requestedJid, visibleMessages);
                 }
+
+                // Prepare may have deferred receipts when ChatState had no tail yet.
+                _ = ViewModel.EnsurePendingMarkReadReceiptsAsync(chat);
 
                 if (chat.IsPersonal)
                 {
@@ -3469,13 +3511,26 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
 
         private void SetReactionEmojiDockOpen(bool open)
         {
-            if (_reactionEmojiDockOpen == open || ReactionEmojiDock == null)
+            if (_reactionEmojiDockOpen == open)
             {
                 return;
             }
 
             if (open)
             {
+                if (ViewModel != null)
+                {
+                    ViewModel.IsReactionDockOpen = true;
+                }
+
+                Bindings.Update();
+                FrameworkElement dock = ReactionEmojiDock
+                    ?? FindName("ReactionEmojiDock") as FrameworkElement;
+                if (dock == null)
+                {
+                    return;
+                }
+
                 if (_attachMenuOpen)
                 {
                     _attachMenuOpen = false;
@@ -3485,12 +3540,34 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                         _attachMenuStoryboard = null;
                     }
 
-                    AttachMenuBar.Visibility = Visibility.Collapsed;
+                    if (AttachMenuBar != null)
+                    {
+                        AttachMenuBar.Visibility = Visibility.Collapsed;
+                    }
+
+                    if (ViewModel != null)
+                    {
+                        ViewModel.IsAttachMenuOpen = false;
+                    }
+
+                    Bindings.Update();
                 }
 
                 // Reaction chrome + Legacy command bar share the bubble hold; dock replaces the bar.
                 ViewModel?.DismissMessageActions();
                 ViewModel?.CloseStickerBox();
+            }
+            else if (ReactionEmojiDock == null)
+            {
+                _reactionEmojiDockOpen = false;
+                _reactionPickTarget = null;
+                if (ViewModel != null)
+                {
+                    ViewModel.IsReactionDockOpen = false;
+                }
+
+                Bindings.Update();
+                return;
             }
 
             _reactionEmojiDockOpen = open;
@@ -3510,9 +3587,7 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
 
             if (open)
             {
-                if (ViewModel != null) { ViewModel.IsReactionDockOpen = true; }
-            Bindings.Update();
-            ReactionEmojiDock.Visibility = Visibility.Visible;
+                ReactionEmojiDock.Visibility = Visibility.Visible;
                 ReactionEmojiDock.UpdateLayout();
             }
             else
@@ -3541,12 +3616,22 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             {
                 _reactionEmojiDockStoryboard.Completed += (s, e) =>
                 {
-                    if (!_reactionEmojiDockOpen && ReactionEmojiDock != null)
+                    if (_reactionEmojiDockOpen)
+                    {
+                        return;
+                    }
+
+                    if (ReactionEmojiDock != null)
                     {
                         ReactionEmojiDock.Visibility = Visibility.Collapsed;
-            if (ViewModel != null) { ViewModel.IsReactionDockOpen = false; }
-            Bindings.Update();
                     }
+
+                    if (ViewModel != null)
+                    {
+                        ViewModel.IsReactionDockOpen = false;
+                    }
+
+                    Bindings.Update();
                 };
             }
 

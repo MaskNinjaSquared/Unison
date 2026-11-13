@@ -41,7 +41,9 @@ namespace Unison.Uwp.UI.Helpers
             string reason = "prepare-active-chat") =>
             ReleaseTimelinePriorityAfterSettleAsync(
                 gate,
-                SurfacePaintPolicy.ForMobileFlag(isWindowsMobile),
+                App.Services != null
+                    ? SurfacePaintSchedule.ResolvePolicy()
+                    : SurfacePaintPolicy.ForMobileFlag(isWindowsMobile),
                 reason);
 
         public static async Task ReleaseTimelinePriorityAfterSettleAsync(
@@ -86,7 +88,10 @@ namespace Unison.Uwp.UI.Helpers
             bool isWindowsMobile) =>
             SurfacePaintSchedule.YieldForSurfacePaintAsync(
                 dispatcher,
-                SurfacePaintPolicy.ForMobileFlag(isWindowsMobile));
+                // Prefer real DeviceCategory when DI is up; mobile bool is legacy fallback.
+                App.Services != null
+                    ? SurfacePaintSchedule.ResolvePolicy()
+                    : SurfacePaintPolicy.ForMobileFlag(isWindowsMobile));
 
         public static Task YieldForSurfacePaintAsync(
             CoreDispatcher dispatcher,
@@ -112,7 +117,9 @@ namespace Unison.Uwp.UI.Helpers
             Action onSkipped = null,
             Action onWaiting = null) =>
             AwaitMaterializeDelayAsync(
-                SurfacePaintPolicy.ForMobileFlag(isWindowsMobile),
+                App.Services != null
+                    ? SurfacePaintSchedule.ResolvePolicy()
+                    : SurfacePaintPolicy.ForMobileFlag(isWindowsMobile),
                 preferFastTimelineLoad,
                 deepLinkListHeld,
                 token,
