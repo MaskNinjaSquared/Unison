@@ -1709,14 +1709,35 @@ namespace Unison.Uwp
 
         private void App_UnhandledException(object sender, Windows.UI.Xaml.UnhandledExceptionEventArgs e)
         {
+            object rootContent = (Window.Current?.Content as Frame)?.Content;
+            bool pastBoot = IsPastBoot(rootContent);
             RuntimeDiagnosticsService.Instance.RecordException(
                 "runtime",
                 "xaml-unhandled-exception",
-                e.Exception);
+                e.Exception,
+                "phase=" + (pastBoot ? "runtime" : "boot")
+                    + "; root=" + (rootContent?.GetType().Name ?? "-")
+                    + "; message=" + e.Message);
             _ = RuntimeDiagnosticsService.Instance.FlushAsync("xaml-unhandled");
             LogStartupFailure("UnhandledException", e.Exception);
-            ShowStartupFailureFallback("Unhandled startup error", e.Exception);
+
+            // The startup screen replaces Window.Current.Content. Mid-session (e.g. a
+            // LayoutCycleException while a chat timeline lays out) that detached the live
+            // shell and left the last frame on screen with no working navigation.
+            if (!pastBoot)
+            {
+                ShowStartupFailureFallback("Unhandled startup error", e.Exception);
+            }
+
             e.Handled = true;
+        }
+
+        /// <summary>True once the root frame hosts a shell or entry page other than Boot.</summary>
+        private bool IsPastBoot(object rootContent)
+        {
+            return rootContent != null
+                && !(rootContent is UI.Views.BootView)
+                && IsKnownRootContent(rootContent);
         }
 
         private static async void LogStartupFailure(string stage, Exception ex)
