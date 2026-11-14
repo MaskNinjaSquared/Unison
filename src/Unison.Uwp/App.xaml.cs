@@ -464,6 +464,8 @@ namespace Unison.Uwp
                 maxMessagesPerChatBatch: 1500));
             // Shared by send/receipt/pin/open — one hold table for statuses and pins.
             services.AddSingleton(_ => new PendingMessageState());
+            services.AddSingleton(sp => new HeldStatusPersist(
+                sp.GetRequiredService<IHistoryMessageStore>().PromoteOutgoingSendStatesAsync));
             // Concrete first so host ports resolve WhatsAppService without an aggregating façade contract.
             // Decrypted inbound queue owns enqueue + drain; the client only forwards health/reset.
             services.AddSingleton(sp => new IncomingMessagePump(
@@ -732,7 +734,8 @@ namespace Unison.Uwp
                 sp.GetRequiredService<ISystemInfoProvider>(),
                 sp.GetRequiredService<IRuntimeDiagnostics>(),
                 sp.GetRequiredService<IGroupNaming>(),
-                sp.GetRequiredService<ICallLogService>()));
+                sp.GetRequiredService<ICallLogService>(),
+                sp.GetRequiredService<HeldStatusPersist>()));
             // AttachedUiDispatcher (not IDispatcher/DispatcherService): PropertyChanged from the
             // incoming pump must marshal onto the live frame dispatcher, or IsRevoked/HasReactions
             // bindings throw RPC_E_WRONG_THREAD on Mobile.
@@ -1910,6 +1913,20 @@ namespace Unison.Uwp
                 {
                     System.Diagnostics.Debug.WriteLine(
                         "[App] LID mapping flush on suspend failed: " + lidEx.Message);
+                }
+
+                try
+                {
+                    HeldStatusPersist heldStatuses = Services?.GetService<HeldStatusPersist>();
+                    if (heldStatuses != null)
+                    {
+                        await heldStatuses.FlushAsync();
+                    }
+                }
+                catch (Exception statusEx)
+                {
+                    System.Diagnostics.Debug.WriteLine(
+                        "[App] Held receipt flush on suspend failed: " + statusEx.Message);
                 }
 
                 var connection = App.GetConnectionService();

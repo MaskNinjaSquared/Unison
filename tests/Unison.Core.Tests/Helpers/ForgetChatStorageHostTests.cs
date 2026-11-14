@@ -216,6 +216,10 @@ namespace Unison.Core.Tests.Helpers
 
             public Task MarkInboundReadAsync(IReadOnlyList<string> chatJids) =>
                 Task.CompletedTask;
+
+            public Task<int> PromoteOutgoingSendStatesAsync(
+                IReadOnlyList<KeyValuePair<string, MessageSendState>> states) =>
+                Task.FromResult(0);
         }
 
         private sealed class SpyMessageStore : IMessageStore

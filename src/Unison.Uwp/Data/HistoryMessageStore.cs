@@ -969,6 +969,10 @@ namespace Unison.Uwp.Data
                 await _connection.ExecuteAsync(
                         "CREATE INDEX IF NOT EXISTS ix_hm_chat_kind ON history_message (ChatJid, Kind, TimestampUtc)")
                     .ConfigureAwait(false);
+                // Receipts carry no chat key; outgoing rows only keeps the index small.
+                await _connection.ExecuteAsync(
+                        "CREATE INDEX IF NOT EXISTS ix_hm_out_msgid ON history_message (MessageId) WHERE IsFromMe = 1")
+                    .ConfigureAwait(false);
             }
             catch (Exception ex)
             {
@@ -1513,6 +1517,49 @@ namespace Unison.Uwp.Data
             {
                 _writeLock.Release();
             }
+        }
+
+        public async Task<int> PromoteOutgoingSendStatesAsync(
+            IReadOnlyList<KeyValuePair<string, MessageSendState>> states)
+        {
+            if (states == null || states.Count == 0)
+            {
+                return 0;
+            }
+
+            await EnsureInitializedAsync().ConfigureAwait(false);
+            int failed = (int)MessageSendState.Failed;
+            int changed = 0;
+            await _writeLock.WaitAsync().ConfigureAwait(false);
+            try
+            {
+                await _connection.RunInTransactionAsync(conn =>
+                {
+                    for (int i = 0; i < states.Count; i++)
+                    {
+                        string messageId = states[i].Key;
+                        if (string.IsNullOrEmpty(messageId))
+                        {
+                            continue;
+                        }
+
+                        int target = (int)states[i].Value;
+                        changed += conn.Execute(
+                            "UPDATE history_message SET SendState = ? " +
+                            "WHERE MessageId = ? AND IsFromMe = 1 AND (SendState < ? OR SendState = ?)",
+                            target,
+                            messageId,
+                            target,
+                            failed);
+                    }
+                }).ConfigureAwait(false);
+            }
+            finally
+            {
+                _writeLock.Release();
+            }
+
+            return changed;
         }
 
         private static HistoryMessageRow ToRow(HistoryMessage model)
