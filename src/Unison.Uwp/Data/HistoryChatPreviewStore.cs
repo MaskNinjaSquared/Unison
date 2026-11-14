@@ -149,6 +149,11 @@ namespace Unison.Uwp.Data
                             continue;
                         }
 
+                        // A 1:1 conversation without a name in the chunk falls back to the
+                        // phone digits (HistoryChatPreviewBuilder); that must not replace a
+                        // real name already stored for the row.
+                        model.Name = KeepNamedOverNumber(model.Name, prior.Name);
+
                         bool tipNewer = IsIncomingTipNewer(prior, model);
                         bool statusChanged = prior.Status != (int)status ||
                                              !NullableDateEquals(prior.DeletedAtUtc, carried);
@@ -486,6 +491,38 @@ namespace Unison.Uwp.Data
         private static string Carry(string incoming, string stored)
         {
             return string.IsNullOrWhiteSpace(incoming) ? stored : incoming;
+        }
+
+        private static string KeepNamedOverNumber(string incoming, string stored)
+        {
+            if (string.IsNullOrWhiteSpace(incoming))
+            {
+                return Carry(incoming, stored);
+            }
+
+            return IsNumberOnly(incoming) &&
+                   !string.IsNullOrWhiteSpace(stored) &&
+                   !IsNumberOnly(stored)
+                ? stored
+                : incoming;
+        }
+
+        private static bool IsNumberOnly(string value)
+        {
+            bool digit = false;
+            foreach (char c in value.Trim())
+            {
+                if (char.IsDigit(c))
+                {
+                    digit = true;
+                }
+                else if (c != '+' && c != ' ' && c != '-' && c != '(' && c != ')')
+                {
+                    return false;
+                }
+            }
+
+            return digit;
         }
 
         private static bool NullableDateEquals(DateTime? left, DateTime? right)
