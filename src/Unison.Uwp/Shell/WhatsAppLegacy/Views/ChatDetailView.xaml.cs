@@ -2626,7 +2626,7 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             }
 
             string display = service != null
-                ? service.ResolveDisplayName(chat.JID, "header")
+                ? DirectChatHeaderName.Pick(service.ResolveDisplayName(chat.JID, "header"), chat.Name, chat.JID)
                 : chat.GetNameResolved(_strings);
             SetTitlePlain(display);
         }
