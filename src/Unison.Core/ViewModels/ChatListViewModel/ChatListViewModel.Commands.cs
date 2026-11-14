@@ -534,6 +534,11 @@ namespace Unison.Core.ViewModels
                 return;
             }
 
+            // An empty list has not painted yet (tile/toast launch, or a fresh page before
+            // attach). Seeding one row here makes every paint path treat it as already painted
+            // and the list stays at that one chat. The first paint includes the chat and
+            // RestoreSelection reselects it.
+            bool unpainted = VisibleChats.Count == 0 && string.IsNullOrWhiteSpace(SearchQuery);
             if (!VisibleChats.Contains(chat))
             {
                 if (!MatchesScope(chat))
@@ -541,7 +546,10 @@ namespace Unison.Core.ViewModels
                     return;
                 }
 
-                VisibleChats.Insert(0, chat);
+                if (!unpainted)
+                {
+                    VisibleChats.Insert(0, chat);
+                }
             }
 
             _lastSelectedChatJid = chat.JID;
