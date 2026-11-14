@@ -1,7 +1,7 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <Package xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10" xmlns:mp="http://schemas.microsoft.com/appx/2014/phone/manifest" xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10" xmlns:uap4="http://schemas.microsoft.com/appx/manifest/uap/windows10/4" xmlns:uap5="http://schemas.microsoft.com/appx/manifest/uap/windows10/5" IgnorableNamespaces="uap uap4 uap5 mp">
     <Identity Name="10039MarcosLalala.UnisonMobileMessanger" Publisher="CN=B9548D47-A5D1-48B0-9583-3E4ECEE97886" Version="2.5.28.0" />
-  <mp:PhoneIdentity PhoneProductId="ef630cfb-4aab-429a-842a-fc205cf015c3" PhonePublisherId="00000000-0000-0000-0000-000000000000" />
+  <mp:PhoneIdentity PhoneProductId="8c75c4ee-84b2-4f16-b4b6-d1b1061e9ecc" PhonePublisherId="00000000-0000-0000-0000-000000000000" />
   <Properties>
     <DisplayName>Unison Mobile Messanger</DisplayName>
     <PublisherDisplayName>Tiago Araújo</PublisherDisplayName>
