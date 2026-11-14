@@ -341,7 +341,7 @@ namespace Unison.Core.ViewModels
                     return FormatPhaseWithCount(
                         "ChatList_FetchingGroups", "Loading group info... {0} of {1}", current, total);
                 case SyncPhaseStatus.HistoryCatchUp:
-                    return GetPhaseString("ChatList_SyncingHistory", "Synchronizing historyâ€¦");
+                    return GetPhaseString("ChatList_SyncingHistory", "Synchronizing history…");
                 default:
                     return null;
             }
