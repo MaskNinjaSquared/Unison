@@ -5,7 +5,8 @@
 // open page, or in a chat never opened. Touching disk on every receipt is too
 // much for a 512 MB phone, so the change is held here and applied when the
 // message is next loaded. A held change applies once and is then dropped, even
-// when the message already carried it.
+// when the message already carried it. Held receipts are also written behind in
+// batches by HeldStatusPersist so they survive a restart; held pins are not.
 // =============================================================================
 using System;
 using System.Collections.Generic;

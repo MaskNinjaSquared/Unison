@@ -33,6 +33,7 @@ namespace Unison.WhatsAppClient.Messages
         private readonly IReactionMapper _reactionMapper;
         private readonly IHistoryService _history;
         private readonly IHistoryMessageStore _historyMessageStore;
+        private readonly HeldStatusPersist _heldStatusPersist;
         private readonly IJidResolver _jids;
         /// <summary>
         /// Concrete store: AcceptIncomingTimeline needs transitional
@@ -133,9 +134,11 @@ namespace Unison.WhatsAppClient.Messages
             ISystemInfoProvider systemInfo = null,
             IRuntimeDiagnostics diagnostics = null,
             IGroupNaming groupNaming = null,
-            ICallLogService callLog = null)
+            ICallLogService callLog = null,
+            HeldStatusPersist heldStatusPersist = null)
         {
             _diagnostics = diagnostics;
+            _heldStatusPersist = heldStatusPersist;
             _callLog = callLog;
             _ui = ui ?? throw new ArgumentNullException(nameof(ui));
             _syncWork = syncWork ?? throw new ArgumentNullException(nameof(syncWork));
@@ -593,6 +596,7 @@ namespace Unison.WhatsAppClient.Messages
                 if (changedMessages.Count == 0)
                 {
                     _pendingMessageState.HoldStatus(statuses[s].Key, statuses[s].Value);
+                    _heldStatusPersist?.Hold(statuses[s].Key, statuses[s].Value);
                 }
                 else
                 {

@@ -130,6 +130,13 @@ namespace Unison.Core.Contracts
         /// </summary>
         Task MarkInboundReadAsync(IReadOnlyList<string> chatJids);
 
+        /// <summary>
+        /// Raises <c>SendState</c> on outgoing rows by message id, in one transaction. Only moves
+        /// forward (a late receipt may also lift a failed row). Missing rows are ignored.
+        /// </summary>
+        /// <returns>Rows changed.</returns>
+        Task<int> PromoteOutgoingSendStatesAsync(IReadOnlyList<KeyValuePair<string, MessageSendState>> states);
+
         event EventHandler<HistoryMessageChunkEventArgs> ChunkPersisted;
     }
 }
