@@ -48,6 +48,7 @@
     <AppxPackageSigningTimestampDigestAlgorithm>SHA256</AppxPackageSigningTimestampDigestAlgorithm>
     <GenerateTestArtifacts>False</GenerateTestArtifacts>
     <HoursBetweenUpdateChecks>0</HoursBetweenUpdateChecks>
+    <GenerateTemporaryStoreCertificate>True</GenerateTemporaryStoreCertificate>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|x86'">
     <DebugSymbols>true</DebugSymbols>
@@ -812,6 +813,7 @@
     <Content Include="Assets\Sounds\voice_note_start.wav" />
     <Content Include="Assets\Sounds\voice_note_stop.wav" />
     <Content Include="Assets\Sounds\voice_note_error.wav" />
+    <None Include="Package.StoreAssociation.xml" />
     <Content Include="Properties\Default.rd.xml" />
   </ItemGroup>
   <!-- libwebp for W10M (ARM): DllImport("libwebp.dll") needs package root.
