@@ -9,6 +9,7 @@ using Windows.Foundation;
 using Windows.Foundation.Metadata;
 using Windows.Graphics.Display;
 using Windows.Storage;
+using Windows.Storage.Pickers;
 using Windows.UI;
 using Windows.UI.Core;
 using Windows.UI.Core.Preview;
@@ -577,7 +578,8 @@ namespace Unison.Uwp
                     sp.GetRequiredService<AppSessionProvider>()));
             services.AddSingleton<Unison.Core.Contracts.WhatsApp.ICallService>(sp =>
                 new Unison.WhatsAppClient.Calls.CallFacade(
-                    sp.GetRequiredService<Unison.Voip.Abstractions.ICallSignalingChannel>()));
+                    sp.GetRequiredService<Unison.Voip.Abstractions.ICallSignalingChannel>(),
+                    jid => sp.GetRequiredService<JidAliasTable>().IsSelfJid(jid)));
             services.AddSingleton<IHistoryOnDemandSocket>(sp => new BridgeHistoryOnDemandSocket(
                 sp.GetRequiredService<UwpSessionProvider>()));
             services.AddSingleton<ISelfIdentityHealHost>(
@@ -1119,6 +1121,17 @@ namespace Unison.Uwp
             services.AddSingleton<ShellViewModel>();
             services.AddSingleton<IForwardMessagePicker>(sp =>
                 sp.GetRequiredService<ShellViewModel>());
+            services.AddSingleton(sp => new CallScreenViewModel(
+                sp.GetRequiredService<Unison.Core.Contracts.WhatsApp.ICallService>(),
+                sp.GetRequiredService<ChatStateStore>(),
+                sp.GetRequiredService<IDispatcher>(),
+                sp.GetRequiredService<IStringResources>(),
+                sp.GetService<IContactService>()));
+            services.AddSingleton<ICallScreenPresenter>(sp => new Unison.Uwp.Services.Calls.CallScreenPresenter(
+                sp.GetRequiredService<CallScreenViewModel>(),
+                jid => sp.GetRequiredService<ShellViewModel>().QueueOpenChatFromActivation(
+                    "chat=" + Uri.EscapeDataString(jid),
+                    delayChatListUntilConversationReady: false)));
             services.AddSingleton<IAppActivationRouter>(sp => new AppActivationRouter(
                 sp.GetRequiredService<ShellViewModel>(),
                 sp.GetRequiredService<IChatService>(),
@@ -1160,6 +1173,7 @@ namespace Unison.Uwp
             Services.GetRequiredService<IChatAuthorProjection>().Start();
             // Call Recents survive process restarts (unison.db call_log).
             _ = Services.GetRequiredService<ICallLogService>().InitializeAsync();
+            Services.GetRequiredService<ICallScreenPresenter>().Start();
 #if DEBUG
             Services.GetRequiredService<IDebugSendService>().Start();
 #endif
@@ -1802,15 +1816,32 @@ namespace Unison.Uwp
         {
             try
             {
+                // Match BootView splash green so a failed boot still looks like Unison.
+                var brandGreen = Color.FromArgb(0xFF, 0x20, 0xC0, 0x64);
+                var whiteBrush = new SolidColorBrush(Colors.White);
+                var greenBrush = new SolidColorBrush(brandGreen);
+
+                string report =
+                    $"[{DateTimeOffset.Now:O}] {stage}{Environment.NewLine}" +
+                    (ex?.ToString() ?? "<no exception>");
+
                 var root = new Grid
                 {
-                    Background = new SolidColorBrush(Colors.White)
+                    Background = greenBrush
+                };
+
+                var scroll = new ScrollViewer
+                {
+                    VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+                    HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+                    ZoomMode = ZoomMode.Disabled
                 };
 
                 var stack = new StackPanel
                 {
-                    Width = 520,
-                    HorizontalAlignment = HorizontalAlignment.Center,
+                    MaxWidth = 520,
+                    Margin = new Thickness(24, 32, 24, 32),
+                    HorizontalAlignment = HorizontalAlignment.Stretch,
                     VerticalAlignment = VerticalAlignment.Center
                 };
 
@@ -1828,21 +1859,66 @@ namespace Unison.Uwp
                     Margin = new Thickness(0, 24, 0, 8),
                     TextAlignment = TextAlignment.Center,
                     FontSize = 24,
-                    Foreground = new SolidColorBrush(Colors.Black)
+                    Foreground = whiteBrush
                 };
 
                 var details = new TextBlock
                 {
-                    Text = $"{stage}{Environment.NewLine}{ex?.GetType().Name}: {ex?.Message}{Environment.NewLine}{Environment.NewLine}Details were saved to StartupFailure.txt in LocalState.",
+                    Text =
+                        $"{stage}{Environment.NewLine}{ex?.GetType().Name}: {ex?.Message}" +
+                        $"{Environment.NewLine}{Environment.NewLine}" +
+                        "A copy was also appended to StartupFailure.txt in LocalState.",
                     TextAlignment = TextAlignment.Center,
                     TextWrapping = TextWrapping.Wrap,
-                    Foreground = new SolidColorBrush(Colors.Black)
+                    Foreground = whiteBrush
+                };
+
+                var saveStatus = new TextBlock
+                {
+                    Margin = new Thickness(0, 8, 0, 0),
+                    TextAlignment = TextAlignment.Center,
+                    TextWrapping = TextWrapping.Wrap,
+                    Foreground = whiteBrush
+                };
+
+                var saveButton = new Button
+                {
+                    Content = "Save to disk",
+                    Margin = new Thickness(0, 24, 0, 0),
+                    HorizontalAlignment = HorizontalAlignment.Stretch,
+                    HorizontalContentAlignment = HorizontalAlignment.Center,
+                    Background = whiteBrush,
+                    Foreground = greenBrush,
+                    Padding = new Thickness(16, 10, 16, 10)
+                };
+                saveButton.Click += async (sender, args) =>
+                {
+                    saveButton.IsEnabled = false;
+                    saveStatus.Text = "Saving…";
+                    try
+                    {
+                        string path = await SaveStartupFailureReportAsync(report).ConfigureAwait(true);
+                        saveStatus.Text = string.IsNullOrWhiteSpace(path)
+                            ? "Save failed."
+                            : "Saved: " + path;
+                    }
+                    catch (Exception saveEx)
+                    {
+                        saveStatus.Text = "Save failed: " + saveEx.Message;
+                    }
+                    finally
+                    {
+                        saveButton.IsEnabled = true;
+                    }
                 };
 
                 stack.Children.Add(logo);
                 stack.Children.Add(title);
                 stack.Children.Add(details);
-                root.Children.Add(stack);
+                stack.Children.Add(saveButton);
+                stack.Children.Add(saveStatus);
+                scroll.Content = stack;
+                root.Children.Add(scroll);
 
                 Window.Current.Content = root;
                 Window.Current.Activate();
@@ -1851,6 +1927,34 @@ namespace Unison.Uwp
             {
                 // Nothing else we can do here.
             }
+        }
+
+        private static async Task<string> SaveStartupFailureReportAsync(string report)
+        {
+            try
+            {
+                var picker = new FileSavePicker();
+                picker.SuggestedStartLocation = PickerLocationId.DocumentsLibrary;
+                picker.FileTypeChoices.Add("Text report", new[] { ".txt" });
+                picker.SuggestedFileName =
+                    "unison_startup_failure_" + DateTime.Now.ToString("yyyyMMdd_HHmmss");
+                StorageFile picked = await picker.PickSaveFileAsync();
+                if (picked != null)
+                {
+                    await FileIO.WriteTextAsync(picked, report ?? string.Empty);
+                    return picked.Path;
+                }
+            }
+            catch
+            {
+                // Mobile / picker unavailable: fall through to LocalState.
+            }
+
+            StorageFile local = await ApplicationData.Current.LocalFolder.CreateFileAsync(
+                "StartupFailure_" + DateTime.Now.ToString("yyyyMMdd_HHmmss") + ".txt",
+                CreationCollisionOption.GenerateUniqueName);
+            await FileIO.WriteTextAsync(local, report ?? string.Empty);
+            return local.Path;
         }
 
 
