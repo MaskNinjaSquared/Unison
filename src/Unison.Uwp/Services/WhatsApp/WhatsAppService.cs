@@ -48,7 +48,7 @@ using Unison.WhatsAppClient.Helpers;
 
 namespace Unison.Uwp.Services.WhatsApp
 {
-    public partial class WhatsAppService : INotifyPropertyChanged, IConnectionEventSource, IConnectionSessionHost, IOfflineReplayHost, IOfflineReplayFlushIoHost, IChatCatalogPersistHost, IPostReplayMaintenanceHost, IPostMessageEnrichmentHost, IPlaceholderResendSocket, IRuntimeSnapshotSource, IBackgroundResolutionGate, IConversationResyncHost, IHistorySyncHost, IHistoryCatchUpHost, IConnectionEnsureHost, IConnectionResumeHost, IConnectionPairingStage2Host, IConnectionBrokerTransferHost, IConnectionSoftReconnectHost, IConnectionLifecycleHost, IConnectionConnectGateSource, IConnectionConnectPrepareHost, IConnectionSocketAssignment, IConnectionAssignedSocketClearHost, ISelfIdentityHealHost, IStartupUiHost, IResolvedNameApplyHost, IHistoryHydrationBackfillHost, ISqliteHistoryQuietFinalizeHost, IAutoReconnectLoopHost, IInitializeConnectionStateHost, IHydrationDayRetryIoHost, ISoftReconnectIoHost, IBrokerReconnectConsumeHost, IPublishConnectionUpdateHost, IMarkPairingRestartPendingHost, IDropCurrentSocketForFastResumeHost, IPersistAuthStateHost, IWaitForSessionEstablishedHost, IConnectionHealthMonitorIoHost, ITryStartPairingStage2ReconnectHost, IIsCurrentSocketHealthyHost, IConnectAsyncHost, IPostSyncMaintenanceIoHost
+    public partial class WhatsAppService : INotifyPropertyChanged, IConnectionEventSource, IConnectionSessionHost, IOfflineReplayHost, IOfflineReplayFlushIoHost, IChatCatalogPersistHost, IPostReplayMaintenanceHost, IPostMessageEnrichmentHost, IPlaceholderResendSocket, IRuntimeSnapshotSource, IBackgroundResolutionGate, IConversationResyncHost, IHistorySyncHost, IHistoryCatchUpHost, IConnectionEnsureHost, IConnectionResumeHost, IConnectionPairingStage2Host, IConnectionBrokerTransferHost, IConnectionSoftReconnectHost, IConnectionLifecycleHost, IConnectionConnectGateSource, IConnectionConnectPrepareHost, IConnectionSocketAssignment, IConnectionAssignedSocketClearHost, ISelfIdentityHealHost, IStartupUiHost, IResolvedNameApplyHost, IHistoryHydrationBackfillHost, ISqliteHistoryQuietFinalizeHost, IAutoReconnectLoopHost, IInitializeConnectionStateHost, IHydrationDayRetryIoHost, ISoftReconnectIoHost, IBrokerReconnectConsumeHost, IPublishConnectionUpdateHost, IDropCurrentSocketForFastResumeHost, IConnectionHealthMonitorIoHost, ITryStartPairingStage2ReconnectHost, IIsCurrentSocketHealthyHost, IConnectAsyncHost, IPostSyncMaintenanceIoHost
     {
         public event PropertyChangedEventHandler PropertyChanged;
         protected void OnPropertyChanged([CallerMemberName] string propertyName = null)
@@ -687,6 +687,9 @@ namespace Unison.Uwp.Services.WhatsApp
         private readonly HydrationFallbackPipelineOwner _hydrationFallback;
         private readonly HistoryHydrationCandidatesOwner _hydrationCandidates;
         private readonly HistoryHydrationSettleOwner _hydrationSettle;
+        private readonly PersistAuthStateOwner _persistAuthState;
+        private readonly WaitForSessionEstablishedOwner _waitForSessionEstablished;
+        private readonly MarkPairingRestartPendingOwner _markPairingRestartPending;
         private DateTime _lastHistorySyncReceivedUtc = DateTime.MinValue;
         private Proto.HistorySync.Types.HistorySyncType? _lastHistorySyncTypeReceived = null;
         private readonly ResyncConversationsOwner _resyncConversations;
@@ -1196,6 +1199,19 @@ namespace Unison.Uwp.Services.WhatsApp
                 _historyRequests,
                 isConnected: () => IsConnected,
                 settleBudget: HistoryHydrationSettleBudget);
+            _persistAuthState = new PersistAuthStateOwner(
+                resolveAuthToSave: ResolveAuthToSave,
+                assignAndSaveAuthAsync: AssignAndSaveAuthAsync,
+                log: message => Debug.WriteLine("[WhatsAppService] " + message));
+            _waitForSessionEstablished = new WaitForSessionEstablishedOwner(
+                sessionEstablishedGate: () => _sessionEstablishedTcs.Task,
+                log: message => Log("[WhatsAppService] " + message));
+            _markPairingRestartPending = new MarkPairingRestartPendingOwner(
+                getPairingRestartPending: () => _pairingRestartPending,
+                setPairingRestartPending: value => _pairingRestartPending = value,
+                clearPreSessionCloseAsFatal: () => _countPreSessionCloseAsFatal = false,
+                resetPreSessionCloseStreak: () => Interlocked.Exchange(ref _preSessionCloseStreak, 0),
+                trace: PairingTrace);
             _socketTearDown = new TearDownSocketForSoftReconnectOwner(
                 () =>
                 {

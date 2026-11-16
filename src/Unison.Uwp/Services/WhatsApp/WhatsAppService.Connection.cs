@@ -49,21 +49,15 @@ namespace Unison.Uwp.Services.WhatsApp
         }
 
         private Task PersistAuthStateAsync(IWhatsAppSocket sourceSocket, string reason) =>
-            PersistAuthStateDispatch.RunAsync(this, sourceSocket, reason);
+            _persistAuthState.RunAsync(sourceSocket, reason);
 
-        // --- IPersistAuthStateHost -------------------------------------------
-
-        object IPersistAuthStateHost.ResolveAuthToSave(object sourceSocket)
+        private object ResolveAuthToSave(object sourceSocket)
         {
             var typed = sourceSocket as IWhatsAppSocket;
             return typed?.Auth ?? _socket?.Auth ?? _authState;
         }
 
-        void IPersistAuthStateHost.LogSkipAuthStateSave(string reason) =>
-            Debug.WriteLine(
-                $"[WhatsAppService] Skipping auth-state save for {reason}: no live auth state");
-
-        async Task IPersistAuthStateHost.AssignAndSaveAuthAsync(object auth)
+        private async Task AssignAndSaveAuthAsync(object auth)
         {
             var authToSave = auth as AuthState;
             if (authToSave == null)
@@ -76,19 +70,7 @@ namespace Unison.Uwp.Services.WhatsApp
         }
 
         private Task WaitForSessionEstablishedAsync(string reason) =>
-            WaitForSessionEstablishedDispatch.RunAsync(this, reason);
-
-        // --- IWaitForSessionEstablishedHost ----------------------------------
-
-        void IWaitForSessionEstablishedHost.LogWaitingForSession(string reason) =>
-            Log($"[WhatsAppService] Waiting for session establishment before processing {reason}.");
-
-        Task IWaitForSessionEstablishedHost.WaitSessionEstablishedGateAsync() =>
-            _sessionEstablishedTcs.Task;
-
-        void IWaitForSessionEstablishedHost.LogSessionGateAborted(string reason, Exception error) =>
-            Log(
-                $"[WhatsAppService] Startup gate completed abnormally while waiting to process {reason}; aborting gated work. {error.Message}");
+            _waitForSessionEstablished.WaitAsync(reason);
 
         private void PublishConnectionUpdate(string status) =>
             PublishConnectionUpdateDispatch.Run(this, status);
@@ -386,24 +368,7 @@ namespace Unison.Uwp.Services.WhatsApp
         /// premature close must not schedule the generic AutoReconnect loop.
         /// </summary>
         private void MarkPairingRestartPending(string reason) =>
-            MarkPairingRestartPendingDispatch.Run(this, reason);
-
-        // --- IMarkPairingRestartPendingHost ----------------------------------
-
-        bool IMarkPairingRestartPendingHost.PairingRestartPending
-        {
-            get => _pairingRestartPending;
-            set => _pairingRestartPending = value;
-        }
-
-        void IMarkPairingRestartPendingHost.ClearPreSessionCloseAsFatal() =>
-            _countPreSessionCloseAsFatal = false;
-
-        void IMarkPairingRestartPendingHost.ResetPreSessionCloseStreak() =>
-            Interlocked.Exchange(ref _preSessionCloseStreak, 0);
-
-        void IMarkPairingRestartPendingHost.TracePairingRestartPending(string reason) =>
-                PairingTrace("pairingRestartPending=true reason=" + (reason ?? string.Empty));
+            _markPairingRestartPending.Run(reason);
 
         /// <summary>
         /// Owns stage-2 reconnect after pair-success / 515. Idempotent under
