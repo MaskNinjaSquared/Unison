@@ -543,10 +543,7 @@ namespace Unison.Uwp
                 sp.GetRequiredService<IncomingMessagePump>(),
                 sp.GetRequiredService<LiveMessagePersist>(),
                 sp.GetRequiredService<IRuntimeDiagnostics>(),
-                healthMonitors: null,
-                postSyncMaintenanceOwner: null,
-                hydrationDayRetryOwner: null,
-                initGate: sp.GetRequiredService<InitGateOwner>()));
+                sp.GetRequiredService<InitGateOwner>()));
             // The send flow lives on MessageFacade; the timeline caches and the socket it writes
             // through are still the client's, reached only through this narrow port.
             services.AddSingleton<IOutgoingMessageHost>(

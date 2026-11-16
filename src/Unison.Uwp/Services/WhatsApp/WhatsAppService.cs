@@ -613,7 +613,6 @@ namespace Unison.Uwp.Services.WhatsApp
                 snapshot.LidCacheMaxLockWaitMs = lidStore.MemoryCacheMaxLockWaitMs;
             }
 
-            snapshot.UiHoldTimeoutCount = RuntimeDiagnosticsService.Instance.UiHoldTimeoutCount;
             try
             {
                 IChatService chatsFacade = ChatFacade;
@@ -898,9 +897,6 @@ namespace Unison.Uwp.Services.WhatsApp
             IncomingMessagePump incomingPump = null,
             LiveMessagePersist liveMessages = null,
             IRuntimeDiagnostics diagnostics = null,
-            ConnectionHealthMonitorOwner healthMonitors = null,
-            PostSyncMaintenanceOwner postSyncMaintenanceOwner = null,
-            HydrationDayRetryOwner hydrationDayRetryOwner = null,
             InitGateOwner initGate = null)
         {
             if (chatState == null)
@@ -908,8 +904,8 @@ namespace Unison.Uwp.Services.WhatsApp
                 throw new ArgumentNullException(nameof(chatState));
             }
 
-            _diagnostics = diagnostics ?? RuntimeDiagnosticsService.Instance;
-            _initGate = initGate ?? new InitGateOwner();
+            _diagnostics = diagnostics ?? throw new ArgumentNullException(nameof(diagnostics));
+            _initGate = initGate ?? throw new ArgumentNullException(nameof(initGate));
             _lidMappings = lidMappings;
             _socketSessions = socketSessions
                 ?? throw new ArgumentNullException(nameof(socketSessions));
@@ -926,9 +922,9 @@ namespace Unison.Uwp.Services.WhatsApp
             _historyHydrationBackfill = new HistoryHydrationBackfill(this);
             _sqliteHistoryQuietFinalize = new SqliteHistoryQuietFinalize(this);
             _softReconnect = new SoftReconnectCoordinator(this);
-            _healthMonitors = healthMonitors ?? new ConnectionHealthMonitorOwner(this);
-            _postSyncMaintenance = postSyncMaintenanceOwner ?? new PostSyncMaintenanceOwner(this);
-            _hydrationDayRetry = hydrationDayRetryOwner ?? new HydrationDayRetryOwner(this);
+            _healthMonitors = new ConnectionHealthMonitorOwner(this);
+            _postSyncMaintenance = new PostSyncMaintenanceOwner(this);
+            _hydrationDayRetry = new HydrationDayRetryOwner(this);
             _freshnessRepair = new HistoryFreshnessRepairPersistence(
                 localSettings ?? throw new ArgumentNullException(nameof(localSettings)));
             _chatState = chatState;
@@ -1946,14 +1942,11 @@ namespace Unison.Uwp.Services.WhatsApp
             IncomingMessagePump incomingPump = null,
             LiveMessagePersist liveMessages = null,
             IRuntimeDiagnostics diagnostics = null,
-            ConnectionHealthMonitorOwner healthMonitors = null,
-            PostSyncMaintenanceOwner postSyncMaintenanceOwner = null,
-            HydrationDayRetryOwner hydrationDayRetryOwner = null,
             InitGateOwner initGate = null)
         {
             return _instance ?? (_instance = new WhatsAppService(
                 chatState, chatRows, activeChat, syncStatus, syncWork, historyMessages, chatPreviews, usyncGate, avatarFetcher, mediaCache, jidAlias, displayNames, historyRequests,
-                catchUp, initialSync, productPolicy, startupMaintenance, postReplayMaintenance, selfProfile, personStore, groupRosterStore, chatStore, systemInfo, ui, pendingMessages, lidMappings, socketSessions, listPaintGate, appMemory, localSettings, resolveContacts, resolveMessages, resolveChats, resolveGroups, resolveHistory, resolveDeferredAvatars, incomingPump, liveMessages, diagnostics, healthMonitors, postSyncMaintenanceOwner, hydrationDayRetryOwner, initGate));
+                catchUp, initialSync, productPolicy, startupMaintenance, postReplayMaintenance, selfProfile, personStore, groupRosterStore, chatStore, systemInfo, ui, pendingMessages, lidMappings, socketSessions, listPaintGate, appMemory, localSettings, resolveContacts, resolveMessages, resolveChats, resolveGroups, resolveHistory, resolveDeferredAvatars, incomingPump, liveMessages, diagnostics, initGate));
         }
 
         /// <summary>

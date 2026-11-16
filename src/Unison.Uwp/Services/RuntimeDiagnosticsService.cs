@@ -200,7 +200,9 @@ namespace Unison.Uwp.Services
                     };
                 }
 
-                return source.CaptureRuntimeSnapshot();
+                RuntimeDiagnosticsSnapshot snapshot = source.CaptureRuntimeSnapshot();
+                snapshot.UiHoldTimeoutCount = UiHoldTimeoutCount;
+                return snapshot;
             }
             catch (Exception ex)
             {
