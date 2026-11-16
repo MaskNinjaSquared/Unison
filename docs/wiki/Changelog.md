@@ -2,6 +2,10 @@
 
 Newest first.
 
+## VoIP skeleton — Unison.Voip + reject/terminate (Opus review next)
+
+New Unison.Voip package (ports ICallAudioSource/Sink, ICallUdpTransport, ICallSignalingChannel, CallSession). Socket UseCases RejectCall / TerminateCall match meowcaller stanza shape. CallFacade / ICallService + UWP stub IO factory and SocketCallSignalingChannel in DI. Engine modules (stun/relay/srtp/mlow) are scaffolds only — no audio yet. Primary SOT: [purpshell/meowcaller](https://github.com/purpshell/meowcaller); Baileys.cpp discarded. See [VoIP](Voip).
+
 ## Phase D — socket/auth slots and reconnect adapter leave WhatsAppService
 
 `_socket` / `_authState` are now `ConnectionSlot<T>` DI singletons (WhatsAppClient). Health hosts read the slot (`ConnectionHealthSocketHost`, new `CurrentSocketHealthHost`). Soft / auto reconnect and pairing stage-2 host I/O moved to `ReconnectHostAdapter` (owns `SoftReconnectCoordinator`) behind `IReconnectLifecyclePort`. Wire-owner assembly stays in the constructor. No policy, threshold or ordering change; needs an on-device pass (QR / 515 stage 2, network-drop reconnect, live + offline replay, suspend/resume, pump stall, phone logout).

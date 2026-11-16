@@ -12,4 +12,5 @@
 * [Migration](Migration)
 * [WhatsAppService extraction](WhatsAppService-Extraction)
 * [Netstandard WhatsApp client](Netstandard-WhatsApp-Client)
+* [VoIP](Voip)
 * [Changelog](Changelog)
