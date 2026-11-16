@@ -202,7 +202,7 @@ namespace Unison.Uwp.Services.WhatsApp
         {
             // Always disarm — Arm is Low/Mobile-only, but Stop is cheap and keeps
             // a leftover schedule from firing after socket teardown.
-            SilentFullHistoryChainDispatch.Stop(this, reason ?? string.Empty);
+            _silentChain.Stop(reason ?? string.Empty);
             _healthMonitors.Stop(reason);
         }
 
@@ -215,7 +215,7 @@ namespace Unison.Uwp.Services.WhatsApp
                     _workload.AllowStagnantHistoryRepairCascade))
             {
                 // Arm only — first fire waits for loud catch-up finish + tip stale.
-                SilentFullHistoryChainDispatch.Arm(this, "post-init", fireSoon: false);
+                _silentChain.Arm("post-init", fireSoon: false);
             }
         }
 
