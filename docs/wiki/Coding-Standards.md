@@ -157,7 +157,7 @@ Composition root: `App.ConfigureServices` in `Unison.Uwp/App.xaml.cs`.
 
 **Required:**
 
-- New service → interface in `Unison.Core/Contracts` (WhatsApp domain → `Contracts/WhatsApp/`).
+- New service → interface in `Unison.Core/Contracts` (WhatsApp façade a ViewModel consumes → `Contracts/WhatsApp/`). Host ports, `*Host` / `*Socket` interfaces and dispatch helpers only the client and UWP use go in `Unison.WhatsAppClient/Abstractions` — `Core/Contracts/WhatsApp` keeps only what Core itself references.
 - Implementation in UWP `Services/` (WhatsApp → `Services/WhatsApp/<Area>/` as a **Facade**).
 - Register in `ConfigureServices`. Constructor-inject everywhere else.
 - After adding a façade that listens to client events, resolve it once at startup (see Profile/History) so it does not miss the first events.
@@ -166,7 +166,7 @@ Composition root: `App.ConfigureServices` in `Unison.Uwp/App.xaml.cs`.
 
 - New `Foo.Instance` / service locator except `App.Services` and `App.GetWhatsAppService()` at the existing composition edges.
 - Registering leftover `MessageService` / `ContactService` / `ConnectionService` / `ProfileService` under `Services/WhatsApp/` (not façades). Those files were deleted; do not recreate them.
-- `WhatsAppService.Instance` in new code. Resolve the façade that owns the subject (`IConnectionService`, `IMessageService`, …).
+- A static `WhatsAppService.Instance` (removed). Resolve the façade that owns the subject (`IConnectionService`, `IMessageService`, …).
 
 Existing singletons (`SocketBrokerCoordinator.Instance`, `RuntimeDiagnosticsService.Instance`, `LiveTilesService.Instance`) are **legacy**. New code takes the interface (`ISocketBrokerService`, `IRuntimeDiagnostics`, `ILiveTilesService`). Do not add more `.Instance` services.
 

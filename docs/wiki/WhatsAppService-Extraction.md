@@ -179,6 +179,7 @@ Full agent boundary table: [Netstandard WhatsApp client — Agent execution boun
 - Product knobs: socket bootstrap, profile-picture cache, roster memory, LID persist, chat-list UI, chat-window UI via `SyncProductPolicy`.
 - Host ports: drain/control, QR/auth/session/error/update/inbound/facade wire, post-replay, offline release/flush, history sync/catch-up, enrichment, media download, sqlite quiet finalize, catalogue persist hosts → `WhatsAppClient.Abstractions`; `IMediaSocketDownload`.
 - `InitGateOwner` DI; `IRuntimeDiagnostics` on `WhatsAppService` + factory; `WhatsAppService.HostAdapters` partial.
+- Follow-up: static `WhatsAppService.Instance`, replay-diagnostics suppression, `AutoReconnectAsync` and 16 unused private members deleted; no `RuntimeDiagnosticsService.Instance` left under `Services/WhatsApp`.
 
 ### Recent slice (reactions plan +10)
 

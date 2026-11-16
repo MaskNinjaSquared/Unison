@@ -2,9 +2,14 @@
 
 Newest first.
 
+## Core keeps only façade contracts; WhatsAppService dead code out
+
+`PlaceholderResendDispatch`, `HistoryOnDemandDispatch` (+ `HistoryFullRequestResult`) and `OfflineReplayTips` moved from Core State to WhatsAppClient with their host ports. Another 29 connection / persistence / alias / thumbnail ports left `Core/Contracts/WhatsApp` for `WhatsAppClient.Abstractions`; Core now holds only the façades ViewModels consume plus `IConnectionEventSource`, `IConnectionSoftReconnect`, `ILidMappingMemory`, `IGroupNaming`, `IGroupParticipantLookup`, `IDebugSendService`. `WhatsAppService`: always-null owner parameters gone, `IRuntimeDiagnostics` / `InitGateOwner` required, the snapshot's UI-hold count is filled by `RuntimeDiagnosticsService`; dead code removed (static `Instance`, replay-diagnostics suppression + `ReplayDiagnosticNoise`, `AutoReconnectAsync`, 16 unused private members). No behaviour change; pump / reconnect untouched.
+See [Netstandard WhatsApp client](Netstandard-WhatsApp-Client).
+
 ## Auto-safe refactor batch — knobs + host ports off Core
 
-Fifty mechanical steps: product tuning interfaces (`ISocketBootstrapTuning`, `IProfilePictureCacheTuning`, `IGroupRosterStoreTuning`, `ILidMappingPersistTuning`, `IChatListUiTuning`, `IChatWindowTuning`) on `SyncProductPolicy` so UWP adapters and list/detail VMs stop taking `SyncWorkloadStrategy`; ~21 host ports moved from `Core/Contracts/WhatsApp` to `WhatsAppClient.Abstractions` (`IBaileysMediaDownload` → `IMediaSocketDownload`); `InitGateOwner` + `IRuntimeDiagnostics` wired into `WhatsAppService`; `HostAdapters` partial; Core still keeps hosts consumed by Core State (`IOfflineReplayHost`, `IHistoryOnDemandSocket`, `IPlaceholderResendSocket`).
+Fifty mechanical steps: product tuning interfaces (`ISocketBootstrapTuning`, `IProfilePictureCacheTuning`, `IGroupRosterStoreTuning`, `ILidMappingPersistTuning`, `IChatListUiTuning`, `IChatWindowTuning`) on `SyncProductPolicy` so UWP adapters and list/detail VMs stop taking `SyncWorkloadStrategy`; ~21 host ports moved from `Core/Contracts/WhatsApp` to `WhatsAppClient.Abstractions` (`IBaileysMediaDownload` → `IMediaSocketDownload`); `InitGateOwner` + `IRuntimeDiagnostics` wired into `WhatsAppService`; `HostAdapters` partial.
 See [Netstandard WhatsApp client](Netstandard-WhatsApp-Client).
 
 ## Slice B — Core no longer references Unison.Proto

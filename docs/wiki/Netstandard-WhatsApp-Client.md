@@ -379,7 +379,7 @@ marked **Opus / human** stays out of that session unless the developer explicitl
 | Revive `SocketClient.cs` or put WinRT in Core / WhatsAppClient | **Forbidden** | Architecture hard rule |
 | `ConnectionHandler` calling use cases or holding chats | **Forbidden** | Architecture hard rule |
 
-**Progress (Auto-safe batch after Slice B).** Six more tuning contracts on `SyncProductPolicy`; UWP `ProfilePictureQueryCache` / `GroupRosterStore` / `UwpConnectionSocketSessionFactory` / lid-mapping persist policy and Core chat list/detail VMs no longer take `SyncWorkloadStrategy`. Another ~21 `I*Host` ports live under `WhatsAppClient.Abstractions` (`IMediaSocketDownload` rename). Hosts still referenced from Core State stay in Core.
+**Progress (Auto-safe batch after Slice B).** Six more tuning contracts on `SyncProductPolicy`; UWP `ProfilePictureQueryCache` / `GroupRosterStore` / `UwpConnectionSocketSessionFactory` / lid-mapping persist policy and Core chat list/detail VMs no longer take `SyncWorkloadStrategy`. Another ~21 `I*Host` ports live under `WhatsAppClient.Abstractions` (`IMediaSocketDownload` rename). The last three Core-State dispatches (placeholder resend, history on-demand, offline replay tips) and 29 more ports followed, so `Core/Contracts/WhatsApp` keeps only the ViewModel façades and the few contracts Core itself references. Wire owners (QR / auth / session / socket error / connection update) stay constructed inside `WhatsAppService`: they close over pairing and reconnect state, so moving them to DI means a host interface over that state — Opus + on-device, same rule as reconnect.
 
 **Cheaper-model definition of done for a coordinator PR**
 

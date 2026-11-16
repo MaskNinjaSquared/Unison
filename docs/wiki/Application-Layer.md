@@ -11,7 +11,7 @@ netstandard2.0, no XAML, no WinRT.
 ```
 Unison.Core/
   Contracts/           platform adapters + stores
-  Contracts/WhatsApp/  domain façades
+  Contracts/WhatsApp/  domain façades ViewModels consume (host ports live in WhatsAppClient/Abstractions)
   ViewModels/
   Models/
   Factories/
