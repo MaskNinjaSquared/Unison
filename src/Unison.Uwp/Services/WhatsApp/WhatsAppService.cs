@@ -81,32 +81,6 @@ namespace Unison.Uwp.Services.WhatsApp
             Unison.Uwp.App.Services?.GetService<IAppVisibility>()?.IsWindowVisible
             ?? Unison.Uwp.App.IsWindowVisible;
         
-        private static WhatsAppService _instance;
-
-        /// <summary>
-        /// The one instance, built by the container in <c>App.ConfigureServices</c>.
-        /// </summary>
-        /// <remarks>
-        /// It no longer creates itself on first read. The chat state is owned by the container
-        /// now, and a lazily built instance would quietly carry a second, empty store while the
-        /// views bound to the first - so reaching this before composition is an ordering bug and
-        /// says so, rather than producing an app that half works.
-        /// </remarks>
-        public static WhatsAppService Instance
-        {
-            get
-            {
-                var instance = _instance;
-                if (instance == null)
-                {
-                    throw new InvalidOperationException(
-                        "WhatsAppService was read before App.ConfigureServices built it.");
-                }
-
-                return instance;
-            }
-        }
-
         /// <summary>
         /// Logs a message to the debug output if <see cref="VerboseLog"/> is on.
         /// </summary>
@@ -1911,9 +1885,9 @@ namespace Unison.Uwp.Services.WhatsApp
             IRuntimeDiagnostics diagnostics = null,
             InitGateOwner initGate = null)
         {
-            return _instance ?? (_instance = new WhatsAppService(
+            return new WhatsAppService(
                 chatState, chatRows, activeChat, syncStatus, syncWork, historyMessages, chatPreviews, usyncGate, avatarFetcher, mediaCache, jidAlias, displayNames, historyRequests,
-                catchUp, initialSync, productPolicy, startupMaintenance, postReplayMaintenance, selfProfile, personStore, groupRosterStore, chatStore, systemInfo, ui, pendingMessages, lidMappings, socketSessions, listPaintGate, appMemory, localSettings, resolveContacts, resolveMessages, resolveChats, resolveGroups, resolveHistory, resolveDeferredAvatars, incomingPump, liveMessages, diagnostics, initGate));
+                catchUp, initialSync, productPolicy, startupMaintenance, postReplayMaintenance, selfProfile, personStore, groupRosterStore, chatStore, systemInfo, ui, pendingMessages, lidMappings, socketSessions, listPaintGate, appMemory, localSettings, resolveContacts, resolveMessages, resolveChats, resolveGroups, resolveHistory, resolveDeferredAvatars, incomingPump, liveMessages, diagnostics, initGate);
         }
 
         /// <summary>
