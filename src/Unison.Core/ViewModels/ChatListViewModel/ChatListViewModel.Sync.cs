@@ -418,13 +418,21 @@ namespace Unison.Core.ViewModels
 
                 // OnDemand is tip/timeline for chats already on screen — RefreshVisibleChats
                 // recycled ~250 list containers under an open detail (Mobile freeze).
+                // After first unlock, trailing Full/Recent chunks must not rebuild either —
+                // hydrate owns tips; InitialSyncProgress already released the batch once.
                 bool onDemand = sync != null &&
                     HistoryListUiRefresh.IsOnDemandSyncType(sync.SyncType);
-                if (!HistoryListUiRefresh.ShouldRefreshVisibleChatsOnHistorySync(onDemand))
+                bool listPainted = VisibleChats.Count > 0 || IsChatListMaterialized;
+                if (!HistoryListUiRefresh.ShouldRefreshVisibleChatsOnHistorySync(
+                        onDemand,
+                        listAlreadyMaterialized: listPainted))
                 {
                     TraceListLifecycle(
-                        "history-sync-ondemand-skip-refresh",
-                        BuildListSnapshot("type=" + (sync?.SyncType ?? "null")));
+                        "history-sync-skip-refresh",
+                        BuildListSnapshot(
+                            "type=" + (sync?.SyncType ?? "null") +
+                            "; onDemand=" + onDemand +
+                            "; painted=" + listPainted));
                     return;
                 }
 
@@ -852,6 +860,28 @@ namespace Unison.Core.ViewModels
 
             if (!_batchRendering)
             {
+                // Joined tip-hydrate slices: one order pass after the queue empties.
+                if (_visibleOrderDirty &&
+                    VisibleChats.Count > 1 &&
+                    !IsListHeldForSync &&
+                    !IsInSafeMode)
+                {
+                    if (VisibleMoveMissPolicy.PreferInPlaceReorder(
+                            PreferFrugalUi,
+                            VisibleChats.Count,
+                            filterIsAll: _activeFilter == ChatListFilter.All,
+                            searchEmpty: string.IsNullOrWhiteSpace(SearchQuery)))
+                    {
+                        ReorderVisibleChatsInPlace();
+                    }
+                    else
+                    {
+                        ScheduleRefreshVisibleChats(
+                            PreferFrugalUi ? MoveMissRefreshDebounceFrugal : (TimeSpan?)null,
+                            coalesceIfArmed: true);
+                    }
+                }
+
                 return;
             }
 
@@ -947,22 +977,29 @@ namespace Unison.Core.ViewModels
                 return;
             }
 
-            // Tip-only updates leave VisibleChats full; still re-pin order this turn —
-            // unless chat-open owns the timeline gate (Moves recycle list under detail).
+            // Tip-only updates leave VisibleChats full; never Move mid-wave — join slices and
+            // re-pin once in OnPreviewHydrateQueueDrained (offline-style settle paint).
             bool timelineHeld = _timelinePriority != null && _timelinePriority.IsHeld;
+            bool settling = _batchRendering || IsInSafeMode || IsListHeldForSync;
             if (updated > 0 &&
                 createdCount == 0 &&
                 VisibleChats.Count > 0 &&
-                HistoryListUiRefresh.ShouldReorderVisibleOnTipHydrate(timelineHeld))
+                HistoryListUiRefresh.ShouldReorderVisibleOnTipHydrate(
+                    timelineHeld,
+                    settling,
+                    hydrateQueueStillPending: true))
             {
                 ReorderVisibleChatsInPlace();
             }
-            else if (updated > 0 && createdCount == 0 && timelineHeld)
+            else if (updated > 0 && createdCount == 0 && VisibleChats.Count > 0)
             {
                 _visibleOrderDirty = true;
                 TraceListLifecycle(
                     "hydrate-tip-skip-reorder",
-                    BuildListSnapshot("updated=" + updated + "; reason=timeline-priority"));
+                    BuildListSnapshot(
+                        "updated=" + updated +
+                        "; timeline=" + timelineHeld +
+                        "; settling=" + settling));
             }
 
             // Painted list + tip-only hydrate (OnDemand 1 chat, live preview chunk): do not

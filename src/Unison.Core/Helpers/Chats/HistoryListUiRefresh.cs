@@ -23,7 +23,24 @@ namespace Unison.Core.Helpers.Chats
         /// ChatMessagesChanged.
         /// </summary>
         public static bool ShouldRefreshVisibleChatsOnHistorySync(bool syncIsOnDemand) =>
-            !syncIsOnDemand;
+            ShouldRefreshVisibleChatsOnHistorySync(syncIsOnDemand, listAlreadyMaterialized: false);
+
+        /// <summary>
+        /// After the first unlock, Full/Recent <c>HistorySyncReceived</c> must not rebuild
+        /// Visible on every chunk — that flickered the list while tips still arrived via
+        /// hydrate. First paint stays on InitialSyncProgress → batch release.
+        /// </summary>
+        public static bool ShouldRefreshVisibleChatsOnHistorySync(
+            bool syncIsOnDemand,
+            bool listAlreadyMaterialized)
+        {
+            if (syncIsOnDemand || listAlreadyMaterialized)
+            {
+                return false;
+            }
+
+            return true;
+        }
 
         /// <summary>
         /// Sqlite OnDemand apply must not raise a null HistorySyncReceived — that
@@ -37,7 +54,27 @@ namespace Unison.Core.Helpers.Chats
         /// owns the timeline gate the list must stay still.
         /// </summary>
         public static bool ShouldReorderVisibleOnTipHydrate(bool timelineLoadPriorityHeld) =>
-            !timelineLoadPriorityHeld;
+            ShouldReorderVisibleOnTipHydrate(
+                timelineLoadPriorityHeld,
+                batchOrSafeModeSettling: false,
+                hydrateQueueStillPending: false);
+
+        /// <summary>
+        /// Join tip-hydrate slices (and batch/safe-mode settle) into one order pass —
+        /// same idea as offline <c>DeferTipPaintUntilSettle</c>, for the painted list.
+        /// </summary>
+        public static bool ShouldReorderVisibleOnTipHydrate(
+            bool timelineLoadPriorityHeld,
+            bool batchOrSafeModeSettling,
+            bool hydrateQueueStillPending)
+        {
+            if (timelineLoadPriorityHeld || batchOrSafeModeSettling || hydrateQueueStillPending)
+            {
+                return false;
+            }
+
+            return true;
+        }
 
         /// <summary>
         /// OnDemand fills older SQLite pages for scroll-up. ChatMessagesChanged →

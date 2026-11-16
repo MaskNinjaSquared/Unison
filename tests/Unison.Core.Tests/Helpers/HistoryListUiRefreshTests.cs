@@ -32,6 +32,17 @@ namespace Unison.Core.Tests.Helpers
         }
 
         [Fact]
+        public void Materialized_list_skips_visible_refresh_on_trailing_history_chunks()
+        {
+            Assert.False(HistoryListUiRefresh.ShouldRefreshVisibleChatsOnHistorySync(
+                syncIsOnDemand: false,
+                listAlreadyMaterialized: true));
+            Assert.True(HistoryListUiRefresh.ShouldRefreshVisibleChatsOnHistorySync(
+                syncIsOnDemand: false,
+                listAlreadyMaterialized: false));
+        }
+
+        [Fact]
         public void OnDemand_skips_null_history_sync_received()
         {
             Assert.False(HistoryListUiRefresh.ShouldRaiseNullHistorySyncReceived(syncIsOnDemand: true));
@@ -43,6 +54,23 @@ namespace Unison.Core.Tests.Helpers
         {
             Assert.False(HistoryListUiRefresh.ShouldReorderVisibleOnTipHydrate(timelineLoadPriorityHeld: true));
             Assert.True(HistoryListUiRefresh.ShouldReorderVisibleOnTipHydrate(timelineLoadPriorityHeld: false));
+        }
+
+        [Fact]
+        public void Tip_hydrate_skips_reorder_while_batch_or_hydrate_queue_pending()
+        {
+            Assert.False(HistoryListUiRefresh.ShouldReorderVisibleOnTipHydrate(
+                timelineLoadPriorityHeld: false,
+                batchOrSafeModeSettling: true,
+                hydrateQueueStillPending: false));
+            Assert.False(HistoryListUiRefresh.ShouldReorderVisibleOnTipHydrate(
+                timelineLoadPriorityHeld: false,
+                batchOrSafeModeSettling: false,
+                hydrateQueueStillPending: true));
+            Assert.True(HistoryListUiRefresh.ShouldReorderVisibleOnTipHydrate(
+                timelineLoadPriorityHeld: false,
+                batchOrSafeModeSettling: false,
+                hydrateQueueStillPending: false));
         }
 
         [Fact]
