@@ -267,17 +267,16 @@ namespace Unison.Uwp.Services.WhatsApp
             Debug.WriteLine(line);
         }
 
-        /// <summary>
-        /// Marks the 515 pairing-restart window. Must run as early as possible — on Mobile the
-        /// transport often closes with 1006 BEFORE the "restart" status is published, and that
-        /// premature close must not schedule the generic AutoReconnect loop.
-        /// </summary>
-
         // --- ITryStartPairingStage2ReconnectHost -----------------------------
 
         void ITryStartPairingStage2ReconnectHost.TracePairingStage2(string message) =>
             PairingTrace(message);
 
+        /// <summary>
+        /// Marks the 515 pairing-restart window. Must run as early as possible — on Mobile the
+        /// transport often closes with 1006 BEFORE the "restart" status is published, and that
+        /// premature close must not schedule the generic AutoReconnect loop.
+        /// </summary>
         void ITryStartPairingStage2ReconnectHost.MarkPairingRestartPending(string reason) =>
             _markPairingRestartPending.Run(reason);
 
@@ -287,6 +286,10 @@ namespace Unison.Uwp.Services.WhatsApp
         void ITryStartPairingStage2ReconnectHost.StopConnectionHealthMonitor(string reason) =>
             StopConnectionHealthMonitor(reason);
 
+        /// <summary>
+        /// Reconnects after close code 515 to complete pairing stage 2.
+        /// Orchestration lives in <see cref="ConnectionPairingStage2"/>.
+        /// </summary>
         void ITryStartPairingStage2ReconnectHost.FireAndForgetPairingStage2Reconnect() =>
             _ = ConnectionPairingStage2.RunAsync(this);
 
@@ -828,13 +831,6 @@ namespace Unison.Uwp.Services.WhatsApp
         void IConnectionBrokerTransferHost.RecordBrokerException(string eventName, Exception error) =>
             _diagnostics.RecordException("socket-broker", eventName, error);
 
-        /// <summary>
-        /// The verified keep-alive normally produces an inbound IQ result every
-        /// twenty seconds. Fresh frames alone are not sufficient when the ordered
-        /// protocol queue stopped making progress: in that state the socket can
-        /// answer pings while user messages never reach the application.
-        /// </summary>
-
         // --- IIsCurrentSocketHealthyHost -------------------------------------
 
         object IIsCurrentSocketHealthyHost.CurrentSocket => _socket;
@@ -924,6 +920,12 @@ namespace Unison.Uwp.Services.WhatsApp
         Task IConnectionEnsureHost.EnsureConnectedAsync(int timeoutMs, bool forceFreshTransport) =>
             EnsureConnectedAsync(timeoutMs, forceFreshTransport);
 
+        /// <summary>
+        /// The verified keep-alive normally produces an inbound IQ result every
+        /// twenty seconds. Fresh frames alone are not sufficient when the ordered
+        /// protocol queue stopped making progress: in that state the socket can
+        /// answer pings while user messages never reach the application.
+        /// </summary>
         Task<bool> IConnectionEnsureHost.IsCurrentSocketHealthyAsync() =>
             IsCurrentSocketHealthyDispatch.RunAsync(this);
 
@@ -1093,11 +1095,6 @@ namespace Unison.Uwp.Services.WhatsApp
 
         void IAutoReconnectLoopHost.RaiseReconnectLoopError(Exception error) =>
             OnError?.Invoke(this, error);
-
-        /// <summary>
-        /// Reconnects after close code 515 to complete pairing stage 2.
-        /// Orchestration lives in <see cref="ConnectionPairingStage2"/>.
-        /// </summary>
 
         bool IConnectionPairingStage2Host.ShouldAbortPairingRestart =>
             ConnectionSoftReconnectGates.ShouldAbortPairingRestart(

@@ -271,12 +271,5 @@ namespace Unison.Uwp.Services.WhatsApp
             string messageId) =>
             _persistedLookup.ResolveSentForRetryAsync(remoteJid, messageId);
 
-        /// <summary>
-        /// Stops the reconnect loop before the close handler or a ping waiter can schedule
-        /// another attempt. 401 arrives as a &lt;failure&gt; after Noise, FailPendingWaiters
-        /// unblocks the health probe, and the loop would otherwise already be in its backoff
-        /// before the facade runs.
-        /// </summary>
-
     }
 }

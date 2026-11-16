@@ -1918,12 +1918,6 @@ namespace Unison.Uwp.Services.WhatsApp
             }
         }
 
-        /// <summary>
-        /// Sends FULL_HISTORY_SYNC_ON_DEMAND after a manual wipe. Retries once on a
-        /// forced fresh transport ? a live socket that already completed pull will not
-        /// spontaneously re-bootstrap like pairing.
-        /// </summary>
-
         // --- IOfflineReplayFlushIoHost ---------------------------------------
 
         Task IOfflineReplayFlushIoHost.PersistLiveMessagesAsync(
@@ -2029,6 +2023,10 @@ namespace Unison.Uwp.Services.WhatsApp
         void IHistoryCatchUpHost.NotifySilentFullLotQuiet(string triggerReason, int appliedCount) =>
             _silentChain.OnLotQuiet(triggerReason, appliedCount);
 
+        /// <summary>
+        /// Leaves a latch so the next session / offline-complete path can resume FULL_HISTORY
+        /// after Mobile hits its adjacent-page cap while tips are still owed.
+        /// </summary>
         void IHistoryCatchUpHost.MarkForceHistoryRepairPending(string reason) =>
             _forceHistoryRepair.MarkPending(reason);
 
@@ -2069,13 +2067,12 @@ namespace Unison.Uwp.Services.WhatsApp
         void IConnectionSoftReconnectHost.ScheduleSoftReconnect(string reason) =>
             _softReconnect.Schedule(reason);
 
-        void IConnectionSoftReconnectHost.ScheduleCatchUpContinueReconnect(string reason) =>
-            _historyReconnectFallback.ScheduleCatchUpContinue(reason);
-
         /// <summary>
         /// Soft-reconnect to pull another offline catch-up lot while the history banner stays up.
         /// Distinct from the long-cooldown freshness failure fallback.
         /// </summary>
+        void IConnectionSoftReconnectHost.ScheduleCatchUpContinueReconnect(string reason) =>
+            _historyReconnectFallback.ScheduleCatchUpContinue(reason);
 
         /// <summary>
         /// Single forward to <see cref="IDeferredAvatarResolution"/> for enrichment / catch-up /
@@ -2226,11 +2223,6 @@ namespace Unison.Uwp.Services.WhatsApp
         }
 
         /// <summary>
-        /// Leaves a latch so the next session / offline-complete path can resume FULL_HISTORY
-        /// after Mobile hits its adjacent-page cap while tips are still owed.
-        /// </summary>
-
-        /// <summary>
         /// After MessageStore epoch upgrade (legacy JSON abandoned), request a one-shot
         /// full history sync instead of migrating old LocalFolder files.
         /// </summary>
@@ -2242,12 +2234,6 @@ namespace Unison.Uwp.Services.WhatsApp
 
         private void LogHistoryFreshnessAfterOfflineDrain(int offlineCount) =>
             _ = _postOfflineFreshness.RunAsync(offlineCount);
-
-        /// <summary>
-        /// After FULL_HISTORY quiet fails while tips stay stale: per-JID ON_DEMAND hydration
-        /// (Pending ? syncing ? HasMore/Synced), then natural FULL_HISTORY again. Day retries
-        /// keep going until tips look fresh (max 5 / day, every 3h).
-        /// </summary>
 
         private void NoteHydrationDayAttempt(DateTime nowUtc) =>
             _hydrationDayRetry.NoteAttempt(nowUtc);
@@ -2262,6 +2248,11 @@ namespace Unison.Uwp.Services.WhatsApp
             out string staleReason) =>
             TryGetHistoryFreshnessStaleReason(nowUtc, out staleReason);
 
+        /// <summary>
+        /// After FULL_HISTORY quiet fails while tips stay stale: per-JID ON_DEMAND hydration
+        /// (Pending ? syncing ? HasMore/Synced), then natural FULL_HISTORY again. Day retries
+        /// keep going until tips look fresh (max 5 / day, every 3h).
+        /// </summary>
         Task IHydrationDayRetryIoHost.RunHydrationFallbackPipelineAsync(string reason) =>
             _hydrationFallback.RunAsync(reason);
 
@@ -2279,7 +2270,13 @@ namespace Unison.Uwp.Services.WhatsApp
         private Task<int> StartBackgroundHistoryBackfillAsync(string reason) =>
             _historyHydrationBackfill.StartAsync(reason);
 
-                private void LatchFatalSession(string reason)
+        /// <summary>
+        /// Stops the reconnect loop before the close handler or a ping waiter can schedule
+        /// another attempt. 401 arrives as a &lt;failure&gt; after Noise, FailPendingWaiters
+        /// unblocks the health probe, and the loop would otherwise already be in its backoff
+        /// before the facade runs.
+        /// </summary>
+        private void LatchFatalSession(string reason)
         {
             _sessionFlags.FatalSessionEnded = true;
             _sessionFlags.SuppressReconnect = true;

@@ -578,9 +578,9 @@ Further shrinking those rows is **State/contract seams** (or Phase E), not anoth
 
 ### Auto batch after Phase D — Opus quick review
 
-**Status:** executed on Auto (low/medium). **Opus: quick pass only** — behaviour should be identical; check the seams below, not a full re-read of WhatsAppService.
+**Status:** executed on Auto (low/medium); **Opus quick review done** — see "Review result" below.
 
-**Done (count ≈ 100 mechanical steps):**
+**Done (about 45 mechanical edits — 27 forwards, 11 flag getters, 4 block moves, usings/csproj; not 100):**
 
 1. **~27 one-liner forwards inlined** onto owners/dispatches (`PublishConnectionUpdateDispatch`, `_softReconnect.Schedule`, `_catchUpFinish.Run`, `ConnectionPairingStage2.RunAsync`, …). Method-group ctor ports rewritten to the same targets.
 2. **IncomingPump hygiene** — unused usings removed; summary fixed; file is ports-only.
@@ -597,6 +597,8 @@ Further shrinking those rows is **State/contract seams** (or Phase E), not anoth
 - [ ] `HistoryHosts` / `HostAdapters` / `Identity` usings complete (no silent wrong-type resolve).
 - [ ] Wire-owner accessors still `internal` and reachable from `SocketEventHandlerWiring`.
 - [ ] No FULL / pump / broker threshold changed (diff should be moves + deletes of wrappers only).
+
+**Review result (Opus):** every inlined call targets the same owner/dispatch as the deleted wrapper, string literals untouched; the partial split is move-only (diffed removed vs added lines). Fixed: 8 XML doc comments orphaned by the wrapper deletions — 7 re-attached to the explicit host member that now carries the behaviour (515 window, keep-alive health, FULL latch, catch-up reconnect, hydration fallback, pairing stage 2, `LatchFatalSession` which the cut had dragged into `HistoryHosts`), 1 stale since before the batch deleted; `LatchFatalSession` indentation restored.
 
 **Still Opus + on-device (do not Auto):** `ISoftReconnectIoHost` / `IAutoReconnectLoopHost` bodies, `_socket` field, wire owners to DI, adjacent FULL / silent chain pacing, broker transfer.
 
