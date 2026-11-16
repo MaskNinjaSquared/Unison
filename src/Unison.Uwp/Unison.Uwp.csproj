@@ -345,6 +345,8 @@
     <Compile Include="Services\LocalContactsService.cs" />
     <Compile Include="Services\WindowsContactListPublisher.cs" />
     <Compile Include="Services\NotificationService.cs" />
+    <Compile Include="Services\Calls\UwpCallIoFactory.cs" />
+    <Compile Include="Services\Calls\SocketCallSignalingChannel.cs" />
     <Compile Include="Services\LiveTilesService.cs" />
     <Compile Include="Services\ShortcutService.cs" />
     <Compile Include="Services\RuntimeDiagnosticsService.cs" />
@@ -1564,6 +1566,10 @@
     <ProjectReference Include="..\Unison.WhatsAppClient\Unison.WhatsAppClient.csproj">
       <Project>{B7E4C291-5A8F-4D3E-9C16-0F2A8E7D4B51}</Project>
       <Name>Unison.WhatsAppClient</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\Unison.Voip\Unison.Voip.csproj">
+      <Project>{C8A1F2E3-4B5D-6E7F-8091-A2B3C4D5E6F7}</Project>
+      <Name>Unison.Voip</Name>
     </ProjectReference>
   </ItemGroup>
   <ItemGroup>

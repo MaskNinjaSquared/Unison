@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <RootNamespace>Unison.Voip</RootNamespace>
+    <AssemblyName>Unison.Voip</AssemblyName>
+    <ProjectGuid>{C8A1F2E3-4B5D-6E7F-8091-A2B3C4D5E6F7}</ProjectGuid>
+  </PropertyGroup>
+
+</Project>

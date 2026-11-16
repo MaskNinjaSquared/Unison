@@ -10,6 +10,7 @@
   <ItemGroup>
     <ProjectReference Include="..\Unison.Core\Unison.Core.csproj" />
     <ProjectReference Include="..\Unison.Socket\Unison.Socket.csproj" />
+    <ProjectReference Include="..\Unison.Voip\Unison.Voip.csproj" />
   </ItemGroup>
 
 </Project>

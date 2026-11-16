@@ -33,4 +33,5 @@
   <Project Path="src/Unison.Proto/Unison.Proto.csproj" Id="ebcd2395-fc7f-4750-a81e-0f931283e9e4" />
   <Project Path="src/Unison.Socket/Unison.Socket.csproj" Id="3f5c1a82-9d4e-4b67-8c31-2e7a6b0d9f14" />
   <Project Path="src/Unison.WhatsAppClient/Unison.WhatsAppClient.csproj" Id="b7e4c291-5a8f-4d3e-9c16-0f2a8e7d4b51" />
+  <Project Path="src/Unison.Voip/Unison.Voip.csproj" Id="c8a1f2e3-4b5d-6e7f-8091-a2b3c4d5e6f7" />
 </Solution>
