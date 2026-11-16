@@ -47,11 +47,6 @@ namespace Unison.Uwp.Services.WhatsApp
             QueueMessagesForPersist(jid, new[] { message });
         }
 
-        private List<ChatMessage> GetPendingPersistMessagesSnapshot(string chatJid)
-        {
-            return _pendingMessages.SnapshotFor(chatJid, jid => GetCanonicalJid(NormalizeJid(jid)));
-        }
-
         private Task PersistLiveMessagesAsync(string chatJid, IList<ChatMessage> messages) =>
             _liveMessages.PersistAsync(chatJid, messages);
 

@@ -366,8 +366,6 @@ namespace Unison.Uwp.Services.WhatsApp
         /// </summary>
         private readonly HydrationDayRetryOwner _hydrationDayRetry;
         // Default retry delay for the deferred background-resolution pass (names+avatars+groups).
-        private DateTime _replayDrainCompletedUtc = DateTime.MinValue;
-        private DateTime _lastPostReplayLiveActivityUtc = DateTime.MinValue;
         
         // Debounce timer for persisting data (5 seconds)
 
@@ -668,7 +666,6 @@ namespace Unison.Uwp.Services.WhatsApp
         private readonly ResyncConversationsOwner _resyncConversations;
         private readonly UserResyncHistoryWaitOwner _userResyncWait;
         private readonly UserResyncFullHistoryOwner _userResyncFullHistory;
-        private readonly GroupReceiptTally _groupReceipts = new GroupReceiptTally();
         private readonly GroupRecipientCountCache _groupRecipientCounts = new GroupRecipientCountCache();
         // Field initializers run in declaration order, so _selfMarkers is set before it is read below.
         private readonly ISelfMarkerNaming _selfMarkers = new SelfMarkerNaming();
@@ -676,14 +673,6 @@ namespace Unison.Uwp.Services.WhatsApp
         private readonly ContactDisplayNames _displayNames;
 
         private bool ShouldDeferReconnectReplayWork() => _syncWork.IsReplayDrainActive;
-
-        /// <summary>
-        /// Every row that stands for the same conversation - a chat addressed by LID and the same
-        /// chat addressed by phone number are two rows until they are merged.
-        /// </summary>
-        private List<ChatItem> GetChatRowsForCanonicalJid(string jid) => _chatRows.FindConversation(jid);
-
-
 
         /// <summary>
         /// Drops the row index. Called whenever the list changes or a JID stops resolving to what
@@ -725,7 +714,6 @@ namespace Unison.Uwp.Services.WhatsApp
 
         private static readonly TimeSpan HistoryBackfillStaleThreshold = TimeSpan.FromHours(8);
         private static readonly TimeSpan HistoryFreshnessStaleThreshold = TimeSpan.FromMinutes(30);
-        private static readonly TimeSpan FullHistoryRepairCooldown = TimeSpan.FromHours(6);
         private static readonly TimeSpan HistoryHydrationSettleBudget = TimeSpan.FromSeconds(25);
         private const int HistoryBackfillMaxStaleTopChats = 40;
         private const int HistoryHydrationBatchSize = 10;
@@ -739,7 +727,6 @@ namespace Unison.Uwp.Services.WhatsApp
 
         private static readonly TimeSpan FullHistoryCatchUpProgressPoll = TimeSpan.FromSeconds(8);
 
-        private int CatchUpContinueMaxRounds => HistoryTuning.MaxFullHistoryCatchUpRounds;
         /// <summary>Tip watermark must stall this many idle cycles before catch-up stops.</summary>
         private int CatchUpStagnantCyclesBeforeStop => HistoryTuning.CatchUpStagnantCyclesBeforeStop;
 
@@ -1939,9 +1926,6 @@ namespace Unison.Uwp.Services.WhatsApp
         private void EnsureSelfPhonePersisted() =>
             _selfProfileAuth.EnsureSelfPhonePersisted();
 
-        private void PersistSelfAvatarUrl(string avatarUrl) =>
-            _selfProfileAuth.PersistAvatarUrl(avatarUrl);
-
         /// <summary>
         /// Clears local chats/messages and asks WhatsApp for a fresh history sync.
         /// Auth / Noise session stay intact (unlike <see cref="ClearSessionAsync"/>).
@@ -2396,17 +2380,6 @@ namespace Unison.Uwp.Services.WhatsApp
             }
         }
 
-        private Task<ChatMessage> FindPersistedChatMessageAsync(string chatJid, string messageId) =>
-            _persistedLookup.FindAsync(chatJid, messageId);
-
-        /// <summary>
-        /// Watches an accepted FULL_HISTORY request and aborts only after a stretch with
-        /// no catch-up progress (tips / SQLite chunks / offline apply). Progress resets
-        /// the idle clock ? Mobile often needs several minutes of slow peer delivery.
-        /// </summary>
-        private void ScheduleFullHistoryCatchUpWatchdog(HistoryOnDemandRequest state) =>
-            _catchUpWatchdogOwner.Schedule(state);
-
         private void ScheduleAcceptedHistoryRequestTimeout(HistoryOnDemandRequest state) =>
             _acceptedHistoryTimeout.Schedule(state);
 
@@ -2493,9 +2466,6 @@ namespace Unison.Uwp.Services.WhatsApp
         /// </summary>
         private void ScheduleCatchUpContinueReconnect(string triggerReason) =>
             _historyReconnectFallback.ScheduleCatchUpContinue(triggerReason);
-
-        private void ScheduleFreshnessReconnectFallback(string triggerReason) =>
-            _historyReconnectFallback.ScheduleFreshnessFallback(triggerReason);
 
         private void TearDownSocketForSoftReconnect() => _socketTearDown.Run();
 
@@ -2638,11 +2608,6 @@ namespace Unison.Uwp.Services.WhatsApp
             string reason,
             bool isFreshnessRepair) =>
             _requestFullTracked.RunAsync(reason, isFreshnessRepair);
-
-        private Task<bool> RequestFullHistoryBootstrapIfNeededAsync(string reason)
-        {
-            return RequestFullHistoryOnDemandTrackedAsync(reason, false);
-        }
 
         /// <inheritdoc />
         public Task<bool> RequestFullHistoryOnDemandAsync(string reason = null, bool force = false)
@@ -3065,14 +3030,6 @@ namespace Unison.Uwp.Services.WhatsApp
         }
 
         /// <summary>
-        /// The self name we already trust, or null while the sidebar is still falling back to the
-        /// phone number. A phone echo is not a name, which is why the credentials are read through
-        /// <see cref="IsOwnPhoneEchoLabel"/> rather than tested for emptiness.
-        /// </summary>
-        private string ResolveEstablishedSelfName() =>
-            SelfDisplayNameResolution.Established(CurrentUserName, _authState?.Me?.Name, IsOwnPhoneEchoLabel);
-
-        /// <summary>
         /// Proactively merges duplicate chats when a new identity mapping is found.
         /// </summary>
         /// <remarks>
@@ -3087,29 +3044,6 @@ namespace Unison.Uwp.Services.WhatsApp
         }
 
         private bool IsSelfJid(string jid) => JidAlias.IsSelfJid(jid);
-
-        /// <summary>Direct / Group / Personal (self PN or LID, including aliases).</summary>
-        private ChatKind ResolveChatKind(string jid) =>
-            JidHelper.ResolveKind(jid, IsSelfLinkedJid(jid));
-
-        private void ApplyChatKind(ChatItem chat)
-        {
-            chat?.ApplyKind(chat.JID, IsSelfLinkedJid(chat.JID));
-        }
-
-        private void ApplyChatKindsToAll()
-        {
-            foreach (ChatItem chat in Chats)
-            {
-                ApplyChatKind(chat);
-            }
-        }
-
-        /// <summary>
-        /// Corrects a status the wire reported against what the conversation makes possible.
-        /// </summary>
-        private string ApplyChatStatusPolicy(string chatJid, string status) =>
-            SelfChatStatusPolicy.Resolve(status, IsSelfLinkedJid(chatJid));
 
         private bool IsSelfLinkedJid(string jid) => JidAlias.IsSelfLinked(jid);
 
