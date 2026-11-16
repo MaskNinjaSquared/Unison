@@ -1,6 +1,6 @@
 using System.Threading.Tasks;
 
-namespace Unison.Core.Contracts.WhatsApp
+namespace Unison.WhatsAppClient.Abstractions
 {
     /// <summary>The socket calls an on-demand history request makes. The sends may throw when the socket is gone.</summary>
     public interface IHistoryOnDemandSocket

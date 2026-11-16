@@ -464,7 +464,7 @@ namespace Unison.Core.Contracts.WhatsApp
 
         /// <summary>
         /// Host socket path after pending-notification release: first-release synced/persist
-        /// (via <see cref="IOfflineReplayHost"/>) then tips + optional placeholder drain.
+        /// (via the client offline-replay host) then tips + optional placeholder drain.
         /// </summary>
         Task NotifyOfflineReplayReleasedAsync(
             int offlineCount,

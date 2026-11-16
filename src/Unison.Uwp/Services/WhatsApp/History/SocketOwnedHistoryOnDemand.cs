@@ -8,7 +8,9 @@
 using System;
 using System.Threading.Tasks;
 using Unison.Core.Contracts.WhatsApp;
-using Unison.Uwp.Client;
+using Unison.Uwp.Client;
+using Unison.WhatsAppClient.Helpers;
+using Unison.WhatsAppClient.Abstractions;
 
 namespace Unison.Uwp.Services.WhatsApp.History
 {

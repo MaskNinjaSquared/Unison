@@ -10,8 +10,10 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using Unison.Core.Contracts.WhatsApp;
+using Unison.Core.State;
+using Unison.WhatsAppClient.Abstractions;
 
-namespace Unison.Core.State
+namespace Unison.WhatsAppClient.Helpers
 {
     public sealed class PlaceholderResendDispatch
     {

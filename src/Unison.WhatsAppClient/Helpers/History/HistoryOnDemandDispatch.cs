@@ -14,10 +14,12 @@ using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Unison.Core.Contracts.WhatsApp;
+using Unison.Core.State;
+using Unison.WhatsAppClient.Abstractions;
 using Unison.Core.Helpers;
 using Unison.Core.Models;
 
-namespace Unison.Core.State
+namespace Unison.WhatsAppClient.Helpers
 {
     public enum HistoryFullRequestOutcome
     {

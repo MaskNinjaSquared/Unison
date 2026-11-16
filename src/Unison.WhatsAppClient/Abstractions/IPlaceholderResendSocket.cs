@@ -1,7 +1,7 @@
 using System.Threading.Tasks;
 using Unison.Core.State;
 
-namespace Unison.Core.Contracts.WhatsApp
+namespace Unison.WhatsAppClient.Abstractions
 {
     /// <summary>The socket half of a placeholder resend. Wire send may throw when the socket is gone.</summary>
     public interface IPlaceholderResendSocket

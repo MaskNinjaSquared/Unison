@@ -5,7 +5,8 @@
 // =============================================================================
 using System;
 using System.Threading.Tasks;
-using Unison.Core.State;
+using Unison.Core.State;
+using Unison.WhatsAppClient.Helpers;
 
 namespace Unison.WhatsAppClient.Abstractions
 {

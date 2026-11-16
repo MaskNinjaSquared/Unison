@@ -1,6 +1,6 @@
 using System;
 
-namespace Unison.Core.Contracts.WhatsApp
+namespace Unison.WhatsAppClient.Abstractions
 {
     /// <summary>
     /// What the offline replay tips need from the client that still owns the open chat,
