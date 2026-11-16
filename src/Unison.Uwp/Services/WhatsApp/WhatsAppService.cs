@@ -48,7 +48,7 @@ using Unison.WhatsAppClient.Helpers;
 
 namespace Unison.Uwp.Services.WhatsApp
 {
-    public partial class WhatsAppService : INotifyPropertyChanged, IConnectionEventSource, IConnectionSessionHost, IOfflineReplayHost, IOfflineReplayFlushIoHost, IChatCatalogPersistHost, IPostReplayMaintenanceHost, IPostMessageEnrichmentHost, IPlaceholderResendSocket, IRuntimeSnapshotSource, IBackgroundResolutionGate, IConversationResyncHost, IHistorySyncHost, IHistoryCatchUpHost, IConnectionEnsureHost, IConnectionResumeHost, IConnectionPairingStage2Host, IConnectionBrokerTransferHost, IConnectionSoftReconnectHost, IConnectionLifecycleHost, IConnectionConnectGateSource, IConnectionConnectPrepareHost, IConnectionSocketAssignment, IConnectionAssignedSocketClearHost, ISelfIdentityHealHost, IStartupUiHost, IResolvedNameApplyHost, IHistoryHydrationBackfillHost, ISqliteHistoryQuietFinalizeHost, IHistoryPostOfflineFreshnessHost, IHistoryCatchUpFinishHost, IFreshnessReconnectFallbackHost, ICatchUpContinueReconnectHost, IFirstSyncListReleaseHost, IFullHistoryCatchUpProgressHost, IAutoReconnectLoopHost, IInitializeConnectionStateHost, IPeriodicFullHistorySafetyHost, IReconnectHistoryCatchUpHost, IHydrationFallbackPipelineHost, IHydrationDayRetryIoHost, ISoftReconnectIoHost, IRequestFullHistoryOnDemandTrackedHost, IBrokerReconnectConsumeHost, IForceHistoryRepairConsumeHost, IForceHistoryRepairPendingHost, ISessionOpenOnDemandPendingConsumeHost, IPublishConnectionUpdateHost, ITearDownSocketForSoftReconnectHost, IMarkPairingRestartPendingHost, IDropCurrentSocketForFastResumeHost, IPersistAuthStateHost, IWaitForSessionEstablishedHost, IConnectionHealthMonitorIoHost, ITryStartPairingStage2ReconnectHost, IIsCurrentSocketHealthyHost, IConnectAsyncHost, IPostSyncMaintenanceIoHost, IBuildHistoryHydrationCandidatesHost, IPeriodicFullHistorySafetyLoopHost, IWaitForHistoryHydrationSettleHost, ISilentFullHistoryChainHost
+    public partial class WhatsAppService : INotifyPropertyChanged, IConnectionEventSource, IConnectionSessionHost, IOfflineReplayHost, IOfflineReplayFlushIoHost, IChatCatalogPersistHost, IPostReplayMaintenanceHost, IPostMessageEnrichmentHost, IPlaceholderResendSocket, IRuntimeSnapshotSource, IBackgroundResolutionGate, IConversationResyncHost, IHistorySyncHost, IHistoryCatchUpHost, IConnectionEnsureHost, IConnectionResumeHost, IConnectionPairingStage2Host, IConnectionBrokerTransferHost, IConnectionSoftReconnectHost, IConnectionLifecycleHost, IConnectionConnectGateSource, IConnectionConnectPrepareHost, IConnectionSocketAssignment, IConnectionAssignedSocketClearHost, ISelfIdentityHealHost, IStartupUiHost, IResolvedNameApplyHost, IHistoryHydrationBackfillHost, ISqliteHistoryQuietFinalizeHost, IHistoryPostOfflineFreshnessHost, IFullHistoryCatchUpProgressHost, IAutoReconnectLoopHost, IInitializeConnectionStateHost, IPeriodicFullHistorySafetyHost, IReconnectHistoryCatchUpHost, IHydrationFallbackPipelineHost, IHydrationDayRetryIoHost, ISoftReconnectIoHost, IRequestFullHistoryOnDemandTrackedHost, IBrokerReconnectConsumeHost, IForceHistoryRepairConsumeHost, IForceHistoryRepairPendingHost, ISessionOpenOnDemandPendingConsumeHost, IPublishConnectionUpdateHost, IMarkPairingRestartPendingHost, IDropCurrentSocketForFastResumeHost, IPersistAuthStateHost, IWaitForSessionEstablishedHost, IConnectionHealthMonitorIoHost, ITryStartPairingStage2ReconnectHost, IIsCurrentSocketHealthyHost, IConnectAsyncHost, IPostSyncMaintenanceIoHost, IBuildHistoryHydrationCandidatesHost, IPeriodicFullHistorySafetyLoopHost, IWaitForHistoryHydrationSettleHost, ISilentFullHistoryChainHost
     {
         public event PropertyChangedEventHandler PropertyChanged;
         protected void OnPropertyChanged([CallerMemberName] string propertyName = null)
@@ -365,9 +365,11 @@ namespace Unison.Uwp.Services.WhatsApp
         private readonly LiveMessagePersist _liveMessages;
         private PersistedMessageLookup _persistedLookup;
         private ActiveChatCacheSideEffects _activeChatSideEffects;
-        private volatile bool _freshnessReconnectFallbackInProgress = false;
         private readonly HistoryCatchUpContinuation _catchUp;
-        private DateTime _lastCatchUpContinueUtc = DateTime.MinValue;
+        private readonly HistoryCatchUpFinishOwner _catchUpFinish;
+        private readonly HistoryReconnectFallbackOwner _historyReconnectFallback;
+        private readonly TearDownSocketForSoftReconnectOwner _socketTearDown;
+        private readonly FirstSyncListReleaseOwner _firstSyncListRelease;
         /// <summary>
         /// Background ON_DEMAND hydration lock / active ? owned by
         /// <see cref="HistoryHydrationBackfill"/>. Client only implements
@@ -472,7 +474,6 @@ namespace Unison.Uwp.Services.WhatsApp
         private bool _firstSyncListHoldOwned;
         /// <summary>After the first-sync list unlock this session ? reconnect chunks must not re-arm it.</summary>
         private bool _firstSyncListAlreadyReleased;
-        private int _firstSyncUnlockInFlight;
         private int SqliteHistoryFinalizeQuietMs =>
             Math.Max(200, _workload.HistoryFinalizeQuietMs);
 
@@ -738,8 +739,6 @@ namespace Unison.Uwp.Services.WhatsApp
         private static readonly TimeSpan HistoryBackfillStaleThreshold = TimeSpan.FromHours(8);
         private static readonly TimeSpan HistoryFreshnessStaleThreshold = TimeSpan.FromMinutes(30);
         private static readonly TimeSpan FullHistoryRepairCooldown = TimeSpan.FromHours(6);
-        private static readonly TimeSpan FreshnessReconnectFallbackCooldown =
-            FreshnessReconnectFallbackGates.DefaultCooldown;
         private static readonly TimeSpan HistoryHydrationSettleBudget = TimeSpan.FromSeconds(25);
         private const int HistoryBackfillMaxStaleTopChats = 40;
         private const int HistoryHydrationBatchSize = 10;
@@ -753,10 +752,6 @@ namespace Unison.Uwp.Services.WhatsApp
             TimeSpan.FromSeconds(CurrentSyncPacing.CatchUpIdleAbortSeconds);
 
         private static readonly TimeSpan FullHistoryCatchUpProgressPoll = TimeSpan.FromSeconds(8);
-        private static readonly TimeSpan CatchUpContinueReconnectDelay =
-            CatchUpContinueReconnectGates.DefaultDelay;
-        private static readonly TimeSpan CatchUpContinueReconnectCooldown =
-            CatchUpContinueReconnectGates.DefaultCooldown;
 
         private int CatchUpContinueMaxRounds =>
             Math.Max(0, _workload.MaxFullHistoryCatchUpRounds);
@@ -853,7 +848,7 @@ namespace Unison.Uwp.Services.WhatsApp
         /// <c>IsCompleted</c> (list x:Load) ? network photos. Never paints the list on raw JIDs.
         /// </summary>
         private void RequestFirstSyncListReleaseAfterNames(string stage, int processed, int total) =>
-            FirstSyncListReleaseDispatch.Schedule(this, stage, processed, total);
+            _firstSyncListRelease.Schedule(stage, processed, total);
 
         private void ResetFirstSyncListHoldFlags(string reason) =>
             _resetFirstSyncHold.Run(reason);
@@ -1075,6 +1070,68 @@ namespace Unison.Uwp.Services.WhatsApp
                 _historyRequests,
                 EndHistoryCatchUpBanner,
                 message => Debug.WriteLine("[WhatsAppService] " + message));
+            _socketTearDown = new TearDownSocketForSoftReconnectOwner(
+                () =>
+                {
+                    var staleSocket = _socket;
+                    _socket = null;
+                    return staleSocket;
+                },
+                socket =>
+                {
+                    var typed = socket as IWhatsAppSocket;
+                    if (typed == null)
+                    {
+                        return;
+                    }
+
+                    try { typed.Disconnect(); } catch { }
+                    try { typed.Dispose(); } catch { }
+                });
+            _firstSyncListRelease = new FirstSyncListReleaseOwner(
+                historyChunks: _historyChunks,
+                heavyHistoryEnrichment: _heavyHistoryEnrichment,
+                contacts: () => Contacts,
+                isFirstSyncListHoldInProgress: () => IsFirstSyncListHoldInProgress,
+                markReleaseDeferred: () => _firstSyncListReleaseDeferred = true,
+                publishProgress: PublishInitialSyncProgress,
+                scheduleDeferredAvatars: (reason, delay) => ScheduleDeferredAvatarsCore(reason, delay),
+                trySchedulePostMessageEnrichment: TrySchedulePostMessageEnrichment,
+                diagnostics: RuntimeDiagnosticsService.Instance,
+                log: message => Debug.WriteLine("[WhatsAppService] " + message));
+            _catchUpFinish = new HistoryCatchUpFinishOwner(
+                catchUp: _catchUp,
+                initialSync: _initialSync,
+                historyChunks: _historyChunks,
+                heavyHistoryEnrichment: _heavyHistoryEnrichment,
+                history: () => History,
+                isFirstSyncListHoldInProgress: () => IsFirstSyncListHoldInProgress,
+                firstSyncListReleaseDeferred: () => _firstSyncListReleaseDeferred,
+                endCatchUpBanner: EndHistoryCatchUpBanner,
+                requestFirstSyncListRelease: RequestFirstSyncListReleaseAfterNames,
+                scheduleDeferredAvatars: (reason, delay) => ScheduleDeferredAvatarsCore(reason, delay),
+                trySchedulePostMessageEnrichment: TrySchedulePostMessageEnrichment,
+                notifySilentChainAfterLoudFinish: finishReason =>
+                    SilentFullHistoryChainDispatch.OnLoudCatchUpFinished(this, finishReason),
+                diagnostics: RuntimeDiagnosticsService.Instance);
+            _historyReconnectFallback = new HistoryReconnectFallbackOwner(
+                catchUp: _catchUp,
+                syncStatus: _syncStatus,
+                freshnessRepair: _freshnessRepair,
+                heavyHistoryEnrichment: _heavyHistoryEnrichment,
+                suppressReconnect: () => _suppressReconnect,
+                isAuthRegistered: () => _authState != null && _authState.Registered,
+                tryGetStaleReason: TryGetHistoryFreshnessStaleReason,
+                finishCatchUpContinue: FinishHistoryCatchUpContinue,
+                beginCatchUpBanner: BeginHistoryCatchUpBanner,
+                startHydrationFallback: reason => _ = RunHydrationFallbackPipelineAsync(reason),
+                publishConnectionStatus: PublishConnectionUpdate,
+                stopHealthMonitor: StopConnectionHealthMonitor,
+                tearDownSocket: TearDownSocketForSoftReconnect,
+                scheduleAutoReconnect: ScheduleAutoReconnect,
+                raiseError: error => OnError?.Invoke(this, error),
+                diagnostics: RuntimeDiagnosticsService.Instance,
+                log: message => Debug.WriteLine("[WhatsAppService] " + message));
             _catalogDisk = new ChatCatalogDiskPersistence(
                 _chatState,
                 JidAlias,
@@ -1161,7 +1218,7 @@ namespace Unison.Uwp.Services.WhatsApp
                     _firstSyncListReleaseDeferred = false;
                     _firstSyncListHoldOwned = false;
                     _firstSyncListAlreadyReleased = false;
-                    Interlocked.Exchange(ref _firstSyncUnlockInFlight, 0);
+                    _firstSyncListRelease.ResetUnlockInFlight();
                 },
                 reason => Debug.WriteLine(
                     "[WhatsAppService] First-sync list hold flags reset (" +
@@ -2415,68 +2472,7 @@ namespace Unison.Uwp.Services.WhatsApp
         }
 
         private void FinishHistoryCatchUpContinue(string reason, bool releaseEnrichment) =>
-            HistoryCatchUpFinishDispatch.Run(this, reason, releaseEnrichment);
-
-        // --- IHistoryCatchUpFinishHost ---------------------------------------
-
-        HistoryCatchUpProgress IHistoryCatchUpFinishHost.FinishCatchUpProgress() =>
-            _catchUp.Finish();
-
-        void IHistoryCatchUpFinishHost.WriteCatchUpFinishJournal(
-            string reason,
-            HistoryCatchUpProgress last)
-        {
-            RuntimeDiagnosticsService.Instance.Write(
-                "history",
-                "catch-up-finish",
-                "reason=" + (reason ?? string.Empty) +
-                "; rounds=" + last.Round +
-                "; stagnant=" + last.StagnantCycles +
-                "; watermark=" + FreshnessTimestampFormat.ForLog(last.WatermarkUtc));
-        }
-
-        void IHistoryCatchUpFinishHost.EndHistoryCatchUpBanner(string reason) =>
-            EndHistoryCatchUpBanner(reason);
-
-        bool IHistoryCatchUpFinishHost.IsFirstSyncListHoldInProgress =>
-            IsFirstSyncListHoldInProgress;
-
-        bool IHistoryCatchUpFinishHost.IsListAwaitingFirstHistorySync =>
-            History?.IsAwaitingFirstHistorySync ?? false;
-
-        bool IHistoryCatchUpFinishHost.IsPairingBootstrapChunkSeenOrApplying =>
-            History?.IsPairingBootstrapChunkSeenOrApplying ?? false;
-
-        bool IHistoryCatchUpFinishHost.FirstSyncListReleaseDeferred =>
-            _firstSyncListReleaseDeferred;
-
-        bool IHistoryCatchUpFinishHost.IsHistoryApplyBusy =>
-            HistorySyncWireApply.IsApplyBusy;
-
-        int IHistoryCatchUpFinishHost.SqliteHistoryConversationsAccumulated =>
-            SqliteHistoryConversationsAccumulated;
-
-        int IHistoryCatchUpFinishHost.InitialSyncProcessedConversations =>
-            _initialSync.ProcessedConversations;
-
-        void IHistoryCatchUpFinishHost.RequestFirstSyncListReleaseAfterNames(
-            string reason,
-            int processed,
-            int total) =>
-            RequestFirstSyncListReleaseAfterNames(reason, processed, total);
-
-        void IHistoryCatchUpFinishHost.ScheduleDeferredAvatars(string reason, TimeSpan delay) =>
-            ScheduleDeferredAvatarsCore(reason, delay);
-
-        void IHistoryCatchUpFinishHost.ClearEnrichmentAwaitingHeavyHistory() =>
-            _heavyHistoryEnrichment.SetAwaitingHeavyHistory(false);
-
-        void IHistoryCatchUpFinishHost.TrySchedulePostMessageEnrichment(string reason) =>
-            TrySchedulePostMessageEnrichment(reason);
-
-        void IHistoryCatchUpFinishHost.NotifySilentChainAfterLoudCatchUpFinish(
-            string finishReason) =>
-            SilentFullHistoryChainDispatch.OnLoudCatchUpFinished(this, finishReason);
+            _catchUpFinish.Run(reason, releaseEnrichment);
 
         void IConnectionSoftReconnectHost.ScheduleSoftReconnect(string reason) =>
             ScheduleAutoReconnect(reason);
@@ -2489,236 +2485,12 @@ namespace Unison.Uwp.Services.WhatsApp
         /// Distinct from the long-cooldown freshness failure fallback.
         /// </summary>
         private void ScheduleCatchUpContinueReconnect(string triggerReason) =>
-            CatchUpContinueReconnectDispatch.Schedule(this, triggerReason);
+            _historyReconnectFallback.ScheduleCatchUpContinue(triggerReason);
 
         private void ScheduleFreshnessReconnectFallback(string triggerReason) =>
-            FreshnessReconnectFallbackDispatch.Schedule(this, triggerReason);
+            _historyReconnectFallback.ScheduleFreshnessFallback(triggerReason);
 
-        // --- IFreshnessReconnectFallbackHost ---------------------------------
-
-        bool IFreshnessReconnectFallbackHost.FreshnessReconnectFallbackInProgress
-        {
-            get => _freshnessReconnectFallbackInProgress;
-            set => _freshnessReconnectFallbackInProgress = value;
-        }
-
-        bool IFreshnessReconnectFallbackHost.SuppressReconnect => _suppressReconnect;
-
-        bool IFreshnessReconnectFallbackHost.IsAuthRegistered =>
-            _authState != null && _authState.Registered;
-
-        DateTime IFreshnessReconnectFallbackHost.LastFreshnessReconnectFallbackUtc =>
-            _freshnessRepair.LastFreshnessReconnectFallbackUtc;
-
-        TimeSpan IFreshnessReconnectFallbackHost.FreshnessReconnectFallbackCooldown =>
-            FreshnessReconnectFallbackCooldown;
-
-        TimeSpan IFreshnessReconnectFallbackHost.FreshnessReconnectDelay =>
-            FreshnessReconnectFallbackGates.ReconnectDelay;
-
-        bool IFreshnessReconnectFallbackHost.TryGetFreshnessStaleReason(
-            DateTime nowUtc,
-            out string staleReason) =>
-            TryGetHistoryFreshnessStaleReason(nowUtc, out staleReason);
-
-        void IFreshnessReconnectFallbackHost.PersistFreshnessReconnectFallbackUtc(DateTime utc) =>
-            PersistFreshnessReconnectFallbackUtc(utc);
-
-        void IFreshnessReconnectFallbackHost.LogFreshnessFallback(string message) =>
-            Debug.WriteLine("[WhatsAppService] " + message);
-
-        void IFreshnessReconnectFallbackHost.StartHydrationFallbackPipeline(string reason) =>
-            _ = RunHydrationFallbackPipelineAsync(reason);
-
-        void IFreshnessReconnectFallbackHost.PublishFreshnessReconnectStatus(string status) =>
-            PublishConnectionUpdate(status);
-
-        void IFreshnessReconnectFallbackHost.StopConnectionHealthMonitor(string reason) =>
-            StopConnectionHealthMonitor(reason);
-
-        void IFreshnessReconnectFallbackHost.TearDownSocketForReconnect() =>
-            TearDownSocketForSoftReconnect();
-
-        void IFreshnessReconnectFallbackHost.ScheduleAutoReconnect(string reason) =>
-            ScheduleAutoReconnect(reason);
-
-        void IFreshnessReconnectFallbackHost.RaiseFreshnessFallbackError(Exception error) =>
-            OnError?.Invoke(this, error);
-
-        void IFreshnessReconnectFallbackHost.FireAndForgetFreshnessReconnect(Func<Task> work) =>
-            _ = Task.Run(work);
-
-        // --- ICatchUpContinueReconnectHost -----------------------------------
-
-        bool ICatchUpContinueReconnectHost.FreshnessReconnectFallbackInProgress
-        {
-            get => _freshnessReconnectFallbackInProgress;
-            set => _freshnessReconnectFallbackInProgress = value;
-        }
-
-        bool ICatchUpContinueReconnectHost.SuppressReconnect => _suppressReconnect;
-
-        bool ICatchUpContinueReconnectHost.IsAuthRegistered =>
-            _authState != null && _authState.Registered;
-
-        DateTime ICatchUpContinueReconnectHost.LastCatchUpContinueUtc
-        {
-            get => _lastCatchUpContinueUtc;
-            set => _lastCatchUpContinueUtc = value;
-        }
-
-        TimeSpan ICatchUpContinueReconnectHost.CatchUpContinueReconnectCooldown =>
-            CatchUpContinueReconnectCooldown;
-
-        TimeSpan ICatchUpContinueReconnectHost.CatchUpContinueReconnectDelay =>
-            CatchUpContinueReconnectDelay;
-
-        int ICatchUpContinueReconnectHost.CatchUpRound => _catchUp.Snapshot().Round;
-
-        bool ICatchUpContinueReconnectHost.IsHistoryCatchUpBannerActive =>
-            IsHistoryCatchUpBannerActive;
-
-        bool ICatchUpContinueReconnectHost.IsHistoryCatchUpActive() => IsHistoryCatchUpActive();
-
-        bool ICatchUpContinueReconnectHost.TryGetFreshnessStaleReason(
-            DateTime nowUtc,
-            out string staleReason) =>
-            TryGetHistoryFreshnessStaleReason(nowUtc, out staleReason);
-
-        void ICatchUpContinueReconnectHost.FinishHistoryCatchUpContinue(
-            string reason,
-            bool releaseEnrichment) =>
-            FinishHistoryCatchUpContinue(reason, releaseEnrichment);
-
-        void ICatchUpContinueReconnectHost.MarkEnrichmentAwaitingHeavyHistory() =>
-            _heavyHistoryEnrichment.SetAwaitingHeavyHistory(true);
-
-        void ICatchUpContinueReconnectHost.BeginHistoryCatchUpBanner(string reason) =>
-            BeginHistoryCatchUpBanner(reason);
-
-        void ICatchUpContinueReconnectHost.PublishHistoryCatchUpStatus() =>
-                PublishSyncStatus(SyncPhaseStatus.Format(SyncPhaseStatus.HistoryCatchUp));
-
-        void ICatchUpContinueReconnectHost.WriteCatchUpContinueJournal(
-            string triggerReason,
-            int delayMs) =>
-            RuntimeDiagnosticsService.Instance.Write(
-                "history",
-                "catch-up-continue-reconnect",
-                "trigger=" + (triggerReason ?? string.Empty) +
-                "; round=" + _catchUp.Snapshot().Round +
-                "; delayMs=" + delayMs);
-
-        void ICatchUpContinueReconnectHost.LogCatchUpContinue(string message) =>
-            Debug.WriteLine("[WhatsAppService] " + message);
-
-        void ICatchUpContinueReconnectHost.StopConnectionHealthMonitor(string reason) =>
-            StopConnectionHealthMonitor(reason);
-
-        void ICatchUpContinueReconnectHost.TearDownSocketForReconnect() =>
-            TearDownSocketForSoftReconnect();
-
-        void ICatchUpContinueReconnectHost.ScheduleAutoReconnect(string reason) =>
-            ScheduleAutoReconnect(reason);
-
-        void ICatchUpContinueReconnectHost.RecordCatchUpContinueException(
-            Exception error,
-            string triggerReason) =>
-                    RuntimeDiagnosticsService.Instance.RecordException(
-                        "history",
-                        "catch-up-continue-failed",
-                error,
-                        triggerReason);
-
-        void ICatchUpContinueReconnectHost.FireAndForgetCatchUpContinue(Func<Task> work) =>
-            _ = Task.Run(work);
-
-        private void TearDownSocketForSoftReconnect() =>
-            TearDownSocketForSoftReconnectDispatch.Run(this);
-
-        // --- ITearDownSocketForSoftReconnectHost -----------------------------
-
-        object ITearDownSocketForSoftReconnectHost.DetachCurrentSocket()
-        {
-            var staleSocket = _socket;
-            _socket = null;
-            return staleSocket;
-        }
-
-        void ITearDownSocketForSoftReconnectHost.DisconnectAndDisposeSocket(object socket)
-        {
-            var typed = socket as IWhatsAppSocket;
-            if (typed == null)
-            {
-                return;
-            }
-
-            try { typed.Disconnect(); } catch { }
-            try { typed.Dispose(); } catch { }
-        }
-
-        // --- IFirstSyncListReleaseHost ---------------------------------------
-
-        bool IFirstSyncListReleaseHost.IsFirstSyncListHoldInProgress =>
-            IsFirstSyncListHoldInProgress;
-
-        bool IFirstSyncListReleaseHost.IsFirstSyncUnlockInFlight =>
-            Interlocked.CompareExchange(ref _firstSyncUnlockInFlight, 0, 0) == 1;
-
-        bool IFirstSyncListReleaseHost.TryClaimFirstSyncUnlockInFlight() =>
-            Interlocked.Exchange(ref _firstSyncUnlockInFlight, 1) == 0;
-
-        void IFirstSyncListReleaseHost.MarkFirstSyncListReleaseDeferred() =>
-            _firstSyncListReleaseDeferred = true;
-
-        void IFirstSyncListReleaseHost.PublishInitialSyncProgress(
-            bool isActive,
-            bool isCompleted,
-            int processed,
-            int total,
-            string stage) =>
-            PublishInitialSyncProgress(isActive, isCompleted, processed, total, stage);
-
-        void IFirstSyncListReleaseHost.WriteFirstSyncNamesJournal(string stage, int processed) =>
-            RuntimeDiagnosticsService.Instance.Write(
-                "history",
-                "first-sync-names-before-list",
-                "stage=" + (stage ?? string.Empty) + "; processed=" + processed);
-
-        void IFirstSyncListReleaseHost.LogFirstSyncListRelease(string message) =>
-            Debug.WriteLine("[WhatsAppService] " + message);
-
-        async Task IFirstSyncListReleaseHost.ResolveNamesBeforeListReleaseAsync()
-        {
-            // Runs after list unlock. force: gate would otherwise skip during replay.
-            // includeGroupListing: false — QueryAllGroups belongs to the groups phase
-            // (embedding it here starved Mobile ~200s). Placeholders resolve in usync lots;
-            // group subjects follow the dedicated listing pass.
-            await (Contacts?.ResolveMissingNamesAsync(force: true, includeGroupListing: false)
-                ?? Task.CompletedTask).ConfigureAwait(false);
-            await (Contacts?.RefreshContactNamesAsync(includeGroups: false, force: true)
-                ?? Task.CompletedTask).ConfigureAwait(false);
-        }
-
-        void IFirstSyncListReleaseHost.RecordFirstSyncNamesException(
-            Exception error,
-            string stage) =>
-            RuntimeDiagnosticsService.Instance.RecordException(
-                "history",
-                "first-sync-names-before-list-failed",
-                error,
-                "stage=" + (stage ?? string.Empty));
-
-        void IFirstSyncListReleaseHost.ClearSqliteHistoryConversationsAccumulated() =>
-            SqliteHistoryConversationsAccumulated = 0;
-
-        void IFirstSyncListReleaseHost.ScheduleDeferredAvatarsAfterUnlock(string stage) =>
-            ScheduleDeferredAvatarsCore(
-                "after-first-sync-unlock:" + (stage ?? string.Empty),
-                FirstSyncUnlockDeferredAvatarDelay);
-
-        /// <summary>Quiet gap after first-sync list unlock before deferred avatar wake.</summary>
-        private static readonly TimeSpan FirstSyncUnlockDeferredAvatarDelay = TimeSpan.FromSeconds(2);
+        private void TearDownSocketForSoftReconnect() => _socketTearDown.Run();
 
         /// <summary>
         /// Single forward to <see cref="IDeferredAvatarResolution"/> for enrichment / catch-up /
@@ -2729,29 +2501,17 @@ namespace Unison.Uwp.Services.WhatsApp
             IDeferredAvatarResolution deferred = DeferredAvatars;
             if (deferred == null)
             {
-                        return;
-                    }
+                return;
+            }
 
             if (delay.HasValue)
-                    {
+            {
                 deferred.Schedule(reason, delay.Value);
-                        return;
-                    }
+                return;
+            }
 
             deferred.Schedule(reason);
         }
-
-        void IFirstSyncListReleaseHost.ClearEnrichmentAwaitingHeavyHistory() =>
-            _heavyHistoryEnrichment.SetAwaitingHeavyHistory(false);
-
-        void IFirstSyncListReleaseHost.TrySchedulePostMessageEnrichment(string reason) =>
-            TrySchedulePostMessageEnrichment(reason);
-
-        void IFirstSyncListReleaseHost.ClearFirstSyncUnlockInFlight() =>
-            Interlocked.Exchange(ref _firstSyncUnlockInFlight, 0);
-
-        void IFirstSyncListReleaseHost.FireAndForgetFirstSyncUnlock(Func<Task> work) =>
-            _ = Task.Run(work);
 
         // --- IFullHistoryCatchUpProgressHost ---------------------------------
 
