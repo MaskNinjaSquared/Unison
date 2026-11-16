@@ -8,6 +8,7 @@ using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Models;
 using Unison.Core.State;
 using Unison.Uwp.Services;
+using Unison.Uwp.Client;
 using Unison.WhatsAppClient.Abstractions;
 using Unison.WhatsAppClient.Helpers;
 
@@ -15,15 +16,6 @@ namespace Unison.Uwp.Services.WhatsApp
 {
     public partial class WhatsAppService : IChatCatalogPersistence
     {
-        private void LoadHistoryFreshnessRepairState() =>
-            _freshnessRepair.Load();
-
-        private void PersistFullHistoryRepairCompletedUtc(DateTime timestampUtc) =>
-            _freshnessRepair.PersistFullHistoryRepairCompletedUtc(timestampUtc);
-
-        private void PersistFreshnessReconnectFallbackUtc(DateTime timestampUtc) =>
-            _freshnessRepair.PersistFreshnessReconnectFallbackUtc(timestampUtc);
-
         internal void EnableScheduledPersist(string reason) =>
             ChatCatalogPersistDispatch.EnableAfterStartup(this, reason);
 
@@ -34,9 +26,6 @@ namespace Unison.Uwp.Services.WhatsApp
         public Task LoadPersistedUiStateAsync() =>
             _persistedUiState.RunAsync();
 
-        private Task PersistBackgroundDisplayNamesAsync() =>
-            _backgroundDisplayNames.PersistAsync();
-
         private void QueueOfflineReplayMessageForPersist(string jid, ChatMessage message)
         {
             if (message == null)
@@ -46,9 +35,6 @@ namespace Unison.Uwp.Services.WhatsApp
 
             QueueMessagesForPersist(jid, new[] { message });
         }
-
-        private Task PersistLiveMessagesAsync(string chatJid, IList<ChatMessage> messages) =>
-            _liveMessages.PersistAsync(chatJid, messages);
 
         private void QueueMessagesForPersist(string jid, IEnumerable<ChatMessage> messages, bool queueIncomingJournal = true, bool scheduleFlush = true)
         {
@@ -61,25 +47,10 @@ namespace Unison.Uwp.Services.WhatsApp
         }
 
         /// <summary>
-        /// Drains the pending queue to SQLite. Suspension does not come through here:
-        /// it flushes the append-only journal and skips the per-chat rewrite that would
-        /// blow the suspend deadline.
-        /// </summary>
-        private Task FlushOfflineReplayMessagesAsync(string reason) =>
-            _offlineReplayFlush.FlushOfflineReplayAsync(reason);
-
-        /// <summary>
         /// Persists current chats and contact metadata to disk.
         /// </summary>
         public Task<bool> PersistDataAsync() =>
             _catalogDisk.PersistFullAsync();
-
-        /// <summary>
-        /// Writes only the given chat-list rows to <c>history_chat_preview</c>. Used after
-        /// mark-read so clearing a badge does not rewrite the whole catalogue and contact maps.
-        /// </summary>
-        private Task PersistChatCatalogSliceAsync(IList<ChatItem> chats) =>
-            _catalogDisk.PersistSliceAsync(chats);
 
         /// <summary>
         /// Schedules a debounced persist operation. Multiple calls within 3 seconds will batch into one save.
@@ -148,7 +119,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 return;
             }
 
-            _ = PersistChatCatalogSliceAsync(slice);
+            _ = _catalogDisk.PersistSliceAsync(slice);
         }
 
         private Task PersistChatCatalogAsync(IList<ChatItem> chats) =>
@@ -157,10 +128,60 @@ namespace Unison.Uwp.Services.WhatsApp
         private Task PersistChatCatalogAsync(ChatCatalogSnapshot snapshot) =>
             ChatCatalogPreviewPersist.UpsertAsync(_chatPreviews, snapshot);
 
-        private Task LoadPersistedChatsAsync() =>
-            _catalogDisk.LoadPersistedChatsAsync();
+        async Task IConversationResyncHost.ResyncChatListAppStateFlagsAsync()
+        {
+            try
+            {
+                var bridge = _socketSlot.Current as SocketBridge;
+                if (bridge == null)
+                {
+                    return;
+                }
 
-        private Task PersistSuspendTailAsync() =>
-            _catalogDisk.PersistSuspendTailAsync();
+                await bridge.ResyncAppStateReportingAllAsync().ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[WhatsAppService] ResyncChatListAppStateFlags failed: " + ex.Message);
+            }
+        }
+
+        // --- IOfflineReplayFlushIoHost ---------------------------------------
+
+        Task IOfflineReplayFlushIoHost.PersistLiveMessagesAsync(
+            string chatJid,
+            IList<ChatMessage> messages) =>
+            _liveMessages.PersistAsync(chatJid, messages);
+
+        Task IOfflineReplayFlushIoHost.RemovePendingOutgoingAsync(IEnumerable<string> ids) =>
+            _messageStore.RemovePendingOutgoingAsync(ids);
+
+        Task IOfflineReplayFlushIoHost.RemovePendingIncomingAsync(IEnumerable<string> ids) =>
+            _messageStore.RemovePendingIncomingAsync(ids);
+
+        void IOfflineReplayFlushIoHost.ScheduleCatalogPersist() => SchedulePersist();
+
+        void IOfflineReplayFlushIoHost.LogFlushed(
+            int saved,
+            int chatCount,
+            int dirtyChatCount,
+            string reason) =>
+                    Debug.WriteLine(
+                "[WhatsAppService] Flushed " + saved + " queued message(s) across " +
+                chatCount + " chat(s), dirtyChats=" + dirtyChatCount + ", reason=" + reason);
+
+        void IOfflineReplayFlushIoHost.RecordFlushDeferred(
+            Exception ex,
+            string reason,
+            int chatCount) =>
+            _diagnostics.RecordException(
+                "messages",
+                "message-batch-flush-deferred",
+                ex,
+                "reason=" + reason + "; chats=" + chatCount);
+
+        void IOfflineReplayFlushIoHost.LogNonFatalIdleFlushFailure(Exception ex) =>
+                        Debug.WriteLine(
+                "[WhatsAppService] Non-fatal message batch flush failure: " + ex.Message);
     }
 }

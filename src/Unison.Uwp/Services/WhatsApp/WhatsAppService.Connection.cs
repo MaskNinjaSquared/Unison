@@ -209,7 +209,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
         Task IConnectionHealthMonitorIoHost.RunPeriodicFullHistorySafetyLoopAsync(
             CancellationToken token) =>
-            PeriodicFullHistorySafetyLoopAsync(token);
+            _periodicFullSafety.RunLoopAsync(token);
 
         private Task ConnectionHealthLoopAsync(IWhatsAppSocket socket, CancellationToken token)
         {
@@ -326,7 +326,7 @@ namespace Unison.Uwp.Services.WhatsApp
             _messageStore.InitializeAsync();
 
         void IInitializeConnectionStateHost.LoadHistoryFreshnessRepairState() =>
-                LoadHistoryFreshnessRepairState();
+                _freshnessRepair.Load();
 
         async Task IInitializeConnectionStateHost.RecoverPendingIncomingJournalAsync()
         {
@@ -741,7 +741,7 @@ namespace Unison.Uwp.Services.WhatsApp
         }
 
         Task IConnectionBrokerTransferHost.PersistBackgroundDisplayNamesAsync() =>
-                    PersistBackgroundDisplayNamesAsync();
+                    _backgroundDisplayNames.PersistAsync();
 
         Task IConnectionBrokerTransferHost.PrepareForSuspendAsync() =>
             PrepareForSuspendAsync();
@@ -1278,7 +1278,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
         async Task IConnectionLifecycleHost.PersistSuspendTailWithBudgetAsync(int budgetMs)
         {
-            var persistTail = PersistSuspendTailAsync();
+            var persistTail = _catalogDisk.PersistSuspendTailAsync();
             var completed = await Task.WhenAny(persistTail, Task.Delay(budgetMs)).ConfigureAwait(false);
             if (completed == persistTail)
             {

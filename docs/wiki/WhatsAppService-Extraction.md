@@ -180,6 +180,13 @@ already exists, the wiki lists it as a next step, and the path is **not** the in
 or auto-reconnect / health timers. Those two stay until Opus + on-device + explicit ask.
 Full agent boundary table: [Netstandard WhatsApp client — Agent execution boundaries](Netstandard-WhatsApp-Client#agent-execution-boundaries-opus-vs-cheaper-models).
 
+### Recent slice (Auto batch 2 — Build 33 host hygiene)
+
+- Remaining one-liner private forwards inlined onto owners/dispatches (banner, first-sync progress, FULL tracked request, enrichment, Persistence Persist*/Load*).
+- `HistoryHosts` took catch-up / history-sync / hydration-day-retry hosts; `Persistence` took offline-flush Io; new `DiagnosticsHost` + `CtorWiring` partials. Main file ~820 lines.
+- Wire-owner assembly still in the ctor (not DI). Pump / reconnect timers / broker / FULL pacing untouched.
+- Details: [Netstandard WhatsApp client — Auto batch 2](Netstandard-WhatsApp-Client#auto-batch-2-after-phase-d--host-hygiene-forwards--partials).
+
 ### Recent slice (Auto-safe batch after Slice B)
 
 - Product knobs: socket bootstrap, profile-picture cache, roster memory, LID persist, chat-list UI, chat-window UI via `SyncProductPolicy`.

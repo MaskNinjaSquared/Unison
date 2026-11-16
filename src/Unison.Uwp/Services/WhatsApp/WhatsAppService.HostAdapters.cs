@@ -39,7 +39,7 @@ namespace Unison.Uwp.Services.WhatsApp
             CancellationToken token) =>
             WaitForMemoryHeadroomAsync("post-replay", token);
 
-        void IPostReplayMaintenanceHost.ClearSyncStatus() => RaiseSyncStatus(null);
+        void IPostReplayMaintenanceHost.ClearSyncStatus() => _syncStatus.Raise(null);
 
         void IPostReplayMaintenanceHost.WriteMemorySkipped() =>
             _diagnostics.Write(
@@ -93,7 +93,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 "offlineCount=" + offlineCount);
 
         void IPostReplayMaintenanceHost.TrySchedulePostMessageEnrichment(string reason) =>
-            TrySchedulePostMessageEnrichment(reason);
+            PostMessageEnrichmentDispatch.TrySchedule(this, reason);
 
         void IPostReplayMaintenanceHost.RecordFailed(Exception ex, int offlineCount) =>
             _diagnostics.RecordException(
@@ -113,7 +113,7 @@ namespace Unison.Uwp.Services.WhatsApp
         bool IBackgroundResolutionGate.IsHandshakeReady =>
             _socketSlot.Current != null && _socketSlot.Current.IsHandshakeComplete;
 
-        bool IBackgroundResolutionGate.ShouldDeferReplay => ShouldDeferReconnectReplayWork();
+        bool IBackgroundResolutionGate.ShouldDeferReplay => _syncWork.IsReplayDrainActive;
 
         bool IBackgroundResolutionGate.IsHistoryCatchUpActive => IsHistoryCatchUpActive();
 
@@ -123,9 +123,9 @@ namespace Unison.Uwp.Services.WhatsApp
         void IBackgroundResolutionGate.MarkEnrichmentAwaitingHeavyHistory() =>
             _heavyHistoryEnrichment.SetAwaitingHeavyHistory(true);
 
-        void IBackgroundResolutionGate.ClearSyncStatus() => RaiseSyncStatus(null);
+        void IBackgroundResolutionGate.ClearSyncStatus() => _syncStatus.Raise(null);
 
-        void IBackgroundResolutionGate.PublishClearedSyncStatus() => PublishSyncStatus(null);
+        void IBackgroundResolutionGate.PublishClearedSyncStatus() => _syncStatus.Publish(null);
 
         IDisposable IBackgroundResolutionGate.TracePhase(string phase) => TraceStartupPhase(phase);
 
@@ -165,9 +165,6 @@ namespace Unison.Uwp.Services.WhatsApp
         /// Names / groups / avatars after messages. Skips while a heavy history catch-up is owed
         /// or in flight so reconnect does not spend the socket on USync before the backlog.
         /// </summary>
-        private void TrySchedulePostMessageEnrichment(string reason) =>
-            PostMessageEnrichmentDispatch.TrySchedule(this, reason);
-
         private void OnChatListInitialPaintReleased(object sender, EventArgs e)
         {
             if (Interlocked.Exchange(ref _enrichmentAwaitingListPaint, 0) != 1)
@@ -175,11 +172,8 @@ namespace Unison.Uwp.Services.WhatsApp
                 return;
             }
 
-            TrySchedulePostMessageEnrichment("list-paint-released");
+            PostMessageEnrichmentDispatch.TrySchedule(this, "list-paint-released");
         }
-
-        private void SchedulePostMessageEnrichment(string reason) =>
-            _postSyncMaintenance.ScheduleEnrichment(reason);
 
         bool IPostMessageEnrichmentHost.EnrichmentAwaitingHeavyHistory =>
             _heavyHistoryEnrichment.IsAwaitingHeavyHistory;
@@ -243,7 +237,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 }
 
         void IPostMessageEnrichmentHost.BeginEnrichmentSchedule(string reason) =>
-            SchedulePostMessageEnrichment(reason);
+            _postSyncMaintenance.ScheduleEnrichment(reason);
 
         Task<bool> IPostMessageEnrichmentHost.WaitForStartupQuietAsync(
             TimeSpan timeout,
@@ -251,7 +245,7 @@ namespace Unison.Uwp.Services.WhatsApp
             CancellationToken token) =>
             WaitForStartupQuietAsync(timeout, phase, token);
 
-        void IPostMessageEnrichmentHost.ClearSyncStatus() => RaiseSyncStatus(null);
+        void IPostMessageEnrichmentHost.ClearSyncStatus() => _syncStatus.Raise(null);
 
         async Task IPostMessageEnrichmentHost.ResolveMissingNamesAsync(CancellationToken token)
         {
@@ -368,7 +362,7 @@ namespace Unison.Uwp.Services.WhatsApp
             {
                 try
                 {
-                await FlushOfflineReplayMessagesAsync(reason).ConfigureAwait(false);
+                await _offlineReplayFlush.FlushOfflineReplayAsync(reason).ConfigureAwait(false);
             }
             catch (Exception ex)
             {

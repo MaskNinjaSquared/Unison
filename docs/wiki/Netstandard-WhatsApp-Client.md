@@ -604,6 +604,20 @@ Further shrinking those rows is **State/contract seams** (or Phase E), not anoth
 
 **Still Opus + on-device (do not Auto):** `ISoftReconnectIoHost` / `IAutoReconnectLoopHost` bodies, `_socket` field, wire owners to DI, adjacent FULL / silent chain pacing, broker transfer.
 
+### Auto batch 2 after Phase D — host hygiene (forwards + partials)
+
+**Status:** executed on Auto (Build 33); move/delete only — no FULL / pump / broker threshold change.
+
+1. **Remaining one-liner forwards inlined** onto owners/dispatches (`RaiseSyncStatus` / catch-up banner / first-sync progress / FULL tracked request / hydration day retry / post-message enrichment / Persistence Persist*/Load* → `_freshnessRepair` / `_catalogDisk` / …). Method-group ctor ports rewritten to lambdas on the same targets. `NoteFullHistoryCatchUpProgress` kept (non-trivial).
+2. **`WhatsAppService.HistoryHosts`** grew `IHistoryCatchUpHost` + `IHistorySyncHost` + `IHydrationDayRetryIoHost` (+ soft-reconnect thin forwards and catch-up helpers that only those hosts used).
+3. **`WhatsAppService.Persistence`** grew `IOfflineReplayFlushIoHost` + `ResyncChatListAppStateFlagsAsync`.
+4. **`WhatsAppService.DiagnosticsHost`** — `IRuntimeSnapshotSource.CaptureRuntimeSnapshot` left the main blob.
+5. **`WhatsAppService.CtorWiring`** — private constructor body (~owners wiring) moved for navigation; ~48 wire owners still constructed there (not DI).
+6. **`SessionFlagsHost`** left as-is (only `IConnectionResumeHost` members; inventing accessors for ctor lambdas was skipped).
+7. Main `WhatsAppService.cs` ~2290 → ~820 lines. UWP ARM Debug + Core tests 4186 pass / 3 known fails.
+
+**Still Opus + on-device (unchanged):** wire owners → DI, soft/auto-reconnect bodies, pump, broker transfer, FULL/silent pacing, deleting `WhatsAppService`.
+
 ### Phase E (future) — client-owned public I/O
 
 **Not** Phase C/D work. Long-term goal: `Unison.WhatsAppClient` publishable / reusable without dragging Unison UI models — a portable WhatsApp **policy** library whose **entry and exit** types live on the client (or a thin contracts package next to it), not on Unison.Core ViewModel-shaped models.

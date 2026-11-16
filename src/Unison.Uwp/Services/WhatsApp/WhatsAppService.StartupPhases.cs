@@ -40,16 +40,16 @@ namespace Unison.Uwp.Services.WhatsApp
         {
             // Do not paint "Finishing startup…" over an open conversation.
             Action begin = string.IsNullOrWhiteSpace(_activeChat.Jid)
-                ? (Action)(() => RaiseSyncStatus(SyncPhaseStatus.Format(SyncPhaseStatus.Settling)))
+                ? (Action)(() => _syncStatus.Raise(SyncPhaseStatus.Format(SyncPhaseStatus.Settling)))
                 : null;
 
             return StartupQuietGate.WaitUntilQuietAsync(
                 budget,
                 StartupQuietFloor,
                 token,
-                () => _initialSync.IsActive || ShouldDeferReconnectReplayWork(),
+                () => _initialSync.IsActive || _syncWork.IsReplayDrainActive,
                 begin,
-                () => RaiseSyncStatus(null),
+                () => _syncStatus.Raise(null),
                 (waitedMs, budgetMs) => _diagnostics.Write(
                     "startup-phase",
                     "quiet-wait",
@@ -76,7 +76,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 () => _appMemory.IsLow,
                 attempt =>
                 {
-                    RaiseSyncStatus(SyncPhaseStatus.Format(SyncPhaseStatus.LowMemory));
+                    _syncStatus.Raise(SyncPhaseStatus.Format(SyncPhaseStatus.LowMemory));
                     _diagnostics.Write(
                         "startup-phase",
                         "memory-retry",

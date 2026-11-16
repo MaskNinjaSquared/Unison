@@ -2,6 +2,10 @@
 
 Newest first.
 
+## Build 33 — call screen + Phase D host hygiene
+
+Startup failure screen (green + save-to-disk) and package `2.5.33.0`. Call screen from live offers (see entry below). Phase D Auto batch 2: remaining one-liner host forwards inlined onto owners; catch-up / offline / diagnostics hosts and the constructor wiring moved to `WhatsAppService` partials (main ~820 lines). No FULL / pump / broker / silent-chain change. Wire owners stay constructed in the host ctor until on-device + Opus.
+
 ## Call screen (Legacy) — ringing from live offers
 
 `CallFacade` now tracks the one active call from the socket's live call statuses (`ActiveCallEventPolicy`: fresh offer from someone else rings, terminal status for the same id ends it, stale replays never ring). `CallScreenViewModel` + `LegacyCallView` show it in a full-window popup over any theme: square photo/placeholder with WHATSAPP CALL brand, status (dialing / receiving / running time), name, number, and a square-key dock (speaker, mute, bluetooth, end call ×2, message). Media is still not ported: the screen can reject or hang up, not answer. See [VoIP](Voip).
