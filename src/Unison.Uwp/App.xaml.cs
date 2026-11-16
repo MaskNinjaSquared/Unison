@@ -429,6 +429,62 @@ namespace Unison.Uwp
             services.AddSingleton<ConnectionSessionFlags>();
             services.AddSingleton<ConnectionSlot<IWhatsAppSocket>>();
             services.AddSingleton<ConnectionSlot<AuthState>>();
+            services.AddSingleton<ConnectionEventHub>();
+            services.AddSingleton<SessionEstablishedGate>();
+            services.AddSingleton<FirstSyncListHoldState>();
+            services.AddSingleton<DecryptedEventCounter>();
+            services.AddSingleton(sp =>
+            {
+                ConnectionSessionFlags flags = sp.GetRequiredService<ConnectionSessionFlags>();
+                ConnectionEventHub events = sp.GetRequiredService<ConnectionEventHub>();
+                ISessionLogger sessionLog = sp.GetRequiredService<ISessionLogger>();
+                Action<string> writePairing = line =>
+                {
+                    try { sessionLog.WriteAlways(line); } catch { }
+                };
+                return new QrCodeWireOwner(
+                    () => writePairing("[Pairing] Ignoring QR from stale socket"),
+                    length => writePairing(
+                        "[Pairing] WhatsAppService raising OnQRCodeReceived len=" + length),
+                    () => flags.QrDeliveredThisConnection = true,
+                    events.RaiseQrCodeReceived);
+            });
+            services.AddSingleton(sp => new SocketFacadeWireOwner(
+                sp.GetRequiredService<IJidResolver>(),
+                args => sp.GetRequiredService<IMessageWireIngress>().NotifyPresenceUpdated(args),
+                (chatJid, participant, messageId, isFromMe, timestamp, reason) =>
+                    _ = sp.GetRequiredService<IMessageWireIngress>().NoteMissingMessageAndRequestResendAsync(
+                        chatJid,
+                        participant,
+                        messageId,
+                        isFromMe,
+                        timestamp,
+                        reason,
+                        "socket:" + (reason ?? string.Empty)),
+                (messageId, status, error) => sp.GetRequiredService<IMessageWireIngress>()
+                    .NotifyOutgoingStatusAsync(messageId, status, error),
+                receipt => sp.GetRequiredService<IMessageWireIngress>().NotifyReceiptAsync(receipt)));
+            services.AddSingleton(sp => new InboundWireNodeOwner(
+                (ackClass, ackId, ackError) => sp.GetRequiredService<IMessageWireIngress>()
+                    .NotifyInboundWireAck(ackClass, ackId, ackError),
+                (fromJid, notify, participantJid) => sp.GetRequiredService<IContactService>()
+                    .NotifyInboundMessageNode(fromJid, notify, participantJid)));
+            services.AddSingleton(sp =>
+            {
+                DecryptedEventCounter counter = sp.GetRequiredService<DecryptedEventCounter>();
+                return new DecryptedMessageWireOwner(
+                    () => counter.Observe(DateTime.UtcNow),
+                    sp.GetRequiredService<IncomingMessagePump>().Enqueue);
+            });
+            services.AddSingleton(sp => new ConnectionWireDependencies(
+                sp.GetRequiredService<ConnectionEventHub>(),
+                sp.GetRequiredService<SessionEstablishedGate>(),
+                sp.GetRequiredService<FirstSyncListHoldState>(),
+                sp.GetRequiredService<DecryptedEventCounter>(),
+                sp.GetRequiredService<QrCodeWireOwner>(),
+                sp.GetRequiredService<SocketFacadeWireOwner>(),
+                sp.GetRequiredService<InboundWireNodeOwner>(),
+                sp.GetRequiredService<DecryptedMessageWireOwner>()));
             services.AddSingleton(sp => new ChatPreviewReconciler(
                 sp.GetRequiredService<IHistoryMessageStore>(),
                 sp.GetRequiredService<JidAliasTable>(),
@@ -551,7 +607,8 @@ namespace Unison.Uwp
                 sp.GetRequiredService<InitGateOwner>(),
                 sp.GetRequiredService<ConnectionSessionFlags>(),
                 sp.GetRequiredService<ConnectionSlot<IWhatsAppSocket>>(),
-                sp.GetRequiredService<ConnectionSlot<AuthState>>()));
+                sp.GetRequiredService<ConnectionSlot<AuthState>>(),
+                sp.GetRequiredService<ConnectionWireDependencies>()));
             // The send flow lives on MessageFacade; the timeline caches and the socket it writes
             // through are still the client's, reached only through this narrow port.
             services.AddSingleton<IOutgoingMessageHost>(
@@ -687,7 +744,7 @@ namespace Unison.Uwp
             services.AddSingleton<IConnectionBrokerTransferHost>(
                 sp => sp.GetRequiredService<WhatsAppService>());
             services.AddSingleton<IConnectionEventSource>(
-                sp => sp.GetRequiredService<WhatsAppService>());
+                sp => sp.GetRequiredService<ConnectionEventHub>());
             services.AddSingleton<IConnectionSessionHost>(
                 sp => sp.GetRequiredService<WhatsAppService>());
             services.AddSingleton<IUsyncAliasHost>(sp => new UsyncAliasHost(

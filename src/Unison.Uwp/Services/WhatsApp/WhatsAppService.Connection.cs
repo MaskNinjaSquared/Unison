@@ -42,12 +42,6 @@ namespace Unison.Uwp.Services.WhatsApp
 {
     public partial class WhatsAppService : IConnectionHealthOwnerPort, IReconnectLifecyclePort
     {
-
-        private static TaskCompletionSource<bool> CreateSessionEstablishedTcs()
-        {
-            return new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-        }
-
         private object ResolveAuthToSave(object sourceSocket)
         {
             var typed = sourceSocket as IWhatsAppSocket;
@@ -105,7 +99,7 @@ namespace Unison.Uwp.Services.WhatsApp
             Debug.WriteLine("[WhatsAppService] Connection status -> " + status);
 
         void IPublishConnectionUpdateHost.RaiseConnectionUpdate(string status) =>
-            OnConnectionUpdate?.Invoke(this, status);
+            _events.RaiseConnectionUpdate(status);
 
         void IPublishConnectionUpdateHost.SyncOfflineSyncedWatchdog(string status)
         {
@@ -270,7 +264,7 @@ namespace Unison.Uwp.Services.WhatsApp
             PublishConnectionUpdateDispatch.Run(this, "reconnecting");
 
         void IReconnectLifecyclePort.RaiseReconnectLoopError(Exception error) =>
-            OnError?.Invoke(this, error);
+            _events.RaiseError(error);
 
         void IReconnectLifecyclePort.PairingTrace(string message) => PairingTrace(message);
 
@@ -820,7 +814,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
         async Task IConnectionEnsureHost.WaitForSessionEstablishedAsync(int timeoutMs)
         {
-            Task gate = _sessionEstablishedTcs.Task;
+            Task gate = _sessionEstablished.Task;
             Task gateCompleted = await Task.WhenAny(gate, Task.Delay(timeoutMs)).ConfigureAwait(false);
             if (gateCompleted != gate)
             {
@@ -977,7 +971,7 @@ namespace Unison.Uwp.Services.WhatsApp
             Debug.WriteLine(
                 "[WhatsAppService] Pairing stage 2 reconnect failed: " +
                 (error != null ? error.Message : string.Empty));
-            OnError?.Invoke(this, error);
+            _events.RaiseError(error);
         }
 
         void IConnectionPairingStage2Host.TracePairing(string detail)
@@ -1068,7 +1062,7 @@ namespace Unison.Uwp.Services.WhatsApp
             }
 
             _sessionFlags.SessionEstablishedThisConnection = false;
-            _sessionEstablishedTcs = CreateSessionEstablishedTcs();
+            _sessionEstablished.Renew();
             _historyIdentityRefreshTriggeredThisSession = false;
             _sessionFlags.QrDeliveredThisConnection = false;
             _postSyncMaintenance.ResetEnrichmentStarted();

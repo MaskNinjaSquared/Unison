@@ -50,7 +50,7 @@ using Unison.WhatsAppClient.Helpers;
 
 namespace Unison.Uwp.Services.WhatsApp
 {
-    public partial class WhatsAppService : INotifyPropertyChanged, IConnectionEventSource, IConnectionSessionHost, IOfflineReplayHost, IOfflineReplayFlushIoHost, IChatCatalogPersistHost, IPostReplayMaintenanceHost, IPostMessageEnrichmentHost, IPlaceholderResendSocket, IRuntimeSnapshotSource, IBackgroundResolutionGate, IConversationResyncHost, IHistorySyncHost, IHistoryCatchUpHost, IConnectionEnsureHost, IConnectionResumeHost, IConnectionPairingStage2Host, IConnectionBrokerTransferHost, IConnectionSoftReconnectHost, IConnectionLifecycleHost, IConnectionConnectGateSource, IConnectionConnectPrepareHost, IConnectionSocketAssignment, IConnectionAssignedSocketClearHost, ISelfIdentityHealHost, IStartupUiHost, IResolvedNameApplyHost, IHistoryHydrationBackfillHost, ISqliteHistoryQuietFinalizeHost, IInitializeConnectionStateHost, IHydrationDayRetryIoHost, IBrokerReconnectConsumeHost, IPublishConnectionUpdateHost, IDropCurrentSocketForFastResumeHost, IConnectionHealthMonitorIoHost, IConnectAsyncHost, IPostSyncMaintenanceIoHost
+    public partial class WhatsAppService : INotifyPropertyChanged, IConnectionSessionHost, IOfflineReplayHost, IOfflineReplayFlushIoHost, IChatCatalogPersistHost, IPostReplayMaintenanceHost, IPostMessageEnrichmentHost, IPlaceholderResendSocket, IRuntimeSnapshotSource, IBackgroundResolutionGate, IConversationResyncHost, IHistorySyncHost, IHistoryCatchUpHost, IConnectionEnsureHost, IConnectionResumeHost, IConnectionPairingStage2Host, IConnectionBrokerTransferHost, IConnectionSoftReconnectHost, IConnectionLifecycleHost, IConnectionConnectGateSource, IConnectionConnectPrepareHost, IConnectionSocketAssignment, IConnectionAssignedSocketClearHost, ISelfIdentityHealHost, IStartupUiHost, IResolvedNameApplyHost, IHistoryHydrationBackfillHost, ISqliteHistoryQuietFinalizeHost, IInitializeConnectionStateHost, IHydrationDayRetryIoHost, IBrokerReconnectConsumeHost, IPublishConnectionUpdateHost, IDropCurrentSocketForFastResumeHost, IConnectionHealthMonitorIoHost, IConnectAsyncHost, IPostSyncMaintenanceIoHost
     {
         public event PropertyChangedEventHandler PropertyChanged;
         protected void OnPropertyChanged([CallerMemberName] string propertyName = null)
@@ -268,18 +268,18 @@ namespace Unison.Uwp.Services.WhatsApp
 
         // Refactor Phase A: always-on counters. They are intentionally independent
         // from verbose protocol logging and contain no message text or contact data.
-        // Applied-message counts live on IncomingMessagePump.
-        private long _diagnosticsDecryptedEventCount;
+        // Applied-message counts live on IncomingMessagePump; decrypted counts on DecryptedEventCounter.
+        private readonly DecryptedEventCounter _decryptedEvents;
         private long _diagnosticsSendAttemptCount;
         private long _diagnosticsSendSuccessCount;
         private long _diagnosticsSendFailureCount;
         private long _diagnosticsLastConnectionEventUtcTicks;
-        private long _diagnosticsLastDecryptedEventUtcTicks;
         private long _diagnosticsLastSendAttemptUtcTicks;
         private long _diagnosticsLastSendSuccessUtcTicks;
         private long _diagnosticsLastSendFailureUtcTicks;
 
-        private TaskCompletionSource<bool> _sessionEstablishedTcs = CreateSessionEstablishedTcs();
+        private readonly SessionEstablishedGate _sessionEstablished;
+        private readonly ConnectionEventHub _events;
         private volatile bool _historyIdentityRefreshTriggeredThisSession = false;
 
         private readonly SyncWorkGate _syncWork;
@@ -389,15 +389,7 @@ namespace Unison.Uwp.Services.WhatsApp
             set => _historyChunks.ConversationsAccumulated = value;
         }
 
-        /// <summary>
-        /// First-sync quiet deferred <c>IsCompleted</c> because FULL_HISTORY catch-up still
-        /// owes pages ? list hold / DisplayRequest stay until catch-up finishes and names resolve.
-        /// </summary>
-        private bool _firstSyncListReleaseDeferred;
-        /// <summary>True from the first active initial-sync publish until list <c>IsCompleted</c>.</summary>
-        private bool _firstSyncListHoldOwned;
-        /// <summary>After the first-sync list unlock this session ? reconnect chunks must not re-arm it.</summary>
-        private bool _firstSyncListAlreadyReleased;
+        private readonly FirstSyncListHoldState _firstSyncHold;
         private int SqliteHistoryFinalizeQuietMs => HistoryTuning.HistoryFinalizeQuietMs;
 
         private int SqliteHistoryFullFinalizeDelayMs => HistoryTuning.HistoryFullFinalizeDelayMs;
@@ -560,15 +552,6 @@ namespace Unison.Uwp.Services.WhatsApp
             }
         }
 
-        public event EventHandler<string> OnQRCodeReceived;
-        public event EventHandler OnQrExpired;
-        public event EventHandler<string> OnConnectionUpdate;
-        public event EventHandler OnSessionInitialized;
-        public event EventHandler<SessionClearedEventArgs> OnSessionCleared;
-        public event EventHandler<Exception> OnError;
-        public event EventHandler<string> OnStreamError;
-        public event EventHandler<string> OnInvalidSessionSuspected;
-
         /// <summary>
         /// These are raised from the socket's own threads, so a facade that throws would otherwise
         /// take the read loop down with it. The client reports and keeps going either way.
@@ -587,14 +570,17 @@ namespace Unison.Uwp.Services.WhatsApp
 
         private void ReportStreamError(string code)
         {
-            RaiseReport(() => OnStreamError?.Invoke(this, code), nameof(OnStreamError));
+            RaiseReport(() => _events.RaiseStreamError(code), nameof(ConnectionEventHub.OnStreamError));
         }
 
-        public string CurrentConnectionStatus { get; private set; }
+        public string CurrentConnectionStatus
+        {
+            get => _events.CurrentConnectionStatus;
+            private set => _events.CurrentConnectionStatus = value;
+        }
 
         private bool IsFirstSyncListHoldInProgress =>
-            !_firstSyncListAlreadyReleased &&
-            (_initialSync.IsActive || _firstSyncListReleaseDeferred || _firstSyncListHoldOwned);
+            _firstSyncHold.IsInProgress(_initialSync.IsActive);
 
 
         /// <summary>
@@ -644,11 +630,12 @@ namespace Unison.Uwp.Services.WhatsApp
             InitGateOwner initGate = null,
             ConnectionSessionFlags sessionFlags = null,
             ConnectionSlot<IWhatsAppSocket> socketSlot = null,
-            ConnectionSlot<AuthState> authSlot = null)
+            ConnectionSlot<AuthState> authSlot = null,
+            ConnectionWireDependencies wire = null)
         {
             return new WhatsAppService(
                 chatState, chatRows, activeChat, syncStatus, syncWork, historyMessages, chatPreviews, usyncGate, avatarFetcher, mediaCache, jidAlias, displayNames, historyRequests,
-                catchUp, initialSync, productPolicy, startupMaintenance, postReplayMaintenance, selfProfile, personStore, groupRosterStore, chatStore, systemInfo, ui, pendingMessages, lidMappings, socketSessions, listPaintGate, appMemory, localSettings, resolveContacts, resolveMessages, resolveChats, resolveGroups, resolveHistory, resolveDeferredAvatars, incomingPump, liveMessages, diagnostics, initGate, sessionFlags, socketSlot, authSlot);
+                catchUp, initialSync, productPolicy, startupMaintenance, postReplayMaintenance, selfProfile, personStore, groupRosterStore, chatStore, systemInfo, ui, pendingMessages, lidMappings, socketSessions, listPaintGate, appMemory, localSettings, resolveContacts, resolveMessages, resolveChats, resolveGroups, resolveHistory, resolveDeferredAvatars, incomingPump, liveMessages, diagnostics, initGate, sessionFlags, socketSlot, authSlot, wire);
         }
 
         /// <summary>

@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Helpers;
 using Unison.Core.Models;
-using Unison.Uwp.Client;
+using Unison.Uwp.Client;
 using Unison.WhatsAppClient.Abstractions;
 
 namespace Unison.Uwp.Services.WhatsApp
@@ -158,6 +158,6 @@ namespace Unison.Uwp.Services.WhatsApp
             Debug.WriteLine($"[WhatsAppService] Message {messageId} failed before/while leaving client: {error?.Message}");
         }
 
-        void IOutgoingMessageHost.ReportError(Exception error) => OnError?.Invoke(this, error);
+        void IOutgoingMessageHost.ReportError(Exception error) => _events.RaiseError(error);
     }
 }

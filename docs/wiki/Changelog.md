@@ -2,6 +2,10 @@
 
 Newest first.
 
+## Phase D stage 1 — connection events and first wire owners in DI
+
+`IConnectionEventSource` is now `ConnectionEventHub` (DI) instead of `WhatsAppService`. Session-established gate, first-sync list-hold latches and decrypted counters moved out of host fields into DI singletons. QR / socket-facade / inbound-node / decrypted-message wire owners are built in `App.ConfigureServices`. No reconnect / FULL / pump / broker behaviour change.
+
 ## Build 33 — call screen + Phase D host hygiene
 
 Startup failure screen (green + save-to-disk) and package `2.5.33.0`. Call screen from live offers (see entry below). Phase D Auto batch 2: remaining one-liner host forwards inlined onto owners; catch-up / offline / diagnostics hosts and the constructor wiring moved to `WhatsAppService` partials (main ~820 lines). No FULL / pump / broker / silent-chain change. Wire owners stay constructed in the host ctor until on-device + Opus.

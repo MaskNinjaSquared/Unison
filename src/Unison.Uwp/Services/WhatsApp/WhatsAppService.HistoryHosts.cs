@@ -108,8 +108,8 @@ namespace Unison.Uwp.Services.WhatsApp
 
         bool ISqliteHistoryQuietFinalizeHost.FirstSyncListReleaseDeferred
         {
-            get => _firstSyncListReleaseDeferred;
-            set => _firstSyncListReleaseDeferred = value;
+            get => _firstSyncHold.ReleaseDeferred;
+            set => _firstSyncHold.ReleaseDeferred = value;
         }
 
         bool ISqliteHistoryQuietFinalizeHost.IsHistoryCatchUpActive =>

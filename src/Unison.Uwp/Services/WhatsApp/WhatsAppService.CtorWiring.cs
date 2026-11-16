@@ -82,12 +82,27 @@ namespace Unison.Uwp.Services.WhatsApp
             InitGateOwner initGate = null,
             ConnectionSessionFlags sessionFlags = null,
             ConnectionSlot<IWhatsAppSocket> socketSlot = null,
-            ConnectionSlot<AuthState> authSlot = null)
+            ConnectionSlot<AuthState> authSlot = null,
+            ConnectionWireDependencies wire = null)
         {
             if (chatState == null)
             {
                 throw new ArgumentNullException(nameof(chatState));
             }
+
+            if (wire == null)
+            {
+                throw new ArgumentNullException(nameof(wire));
+            }
+
+            _events = wire.Events;
+            _sessionEstablished = wire.SessionEstablished;
+            _firstSyncHold = wire.FirstSyncHold;
+            _decryptedEvents = wire.DecryptedEvents;
+            _qrCodeWire = wire.QrCode;
+            _socketFacadeWire = wire.SocketFacade;
+            _inboundWireNode = wire.InboundWireNode;
+            _decryptedMessageWire = wire.DecryptedMessage;
 
             _diagnostics = diagnostics ?? throw new ArgumentNullException(nameof(diagnostics));
             _initGate = initGate ?? throw new ArgumentNullException(nameof(initGate));
@@ -241,7 +256,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 heavyHistoryEnrichment: _heavyHistoryEnrichment,
                 finalizeQuietMs: () => SqliteHistoryFinalizeQuietMs,
                 fullFinalizeDelayMs: () => SqliteHistoryFullFinalizeDelayMs,
-                firstSyncListAlreadyReleased: () => _firstSyncListAlreadyReleased,
+                firstSyncListAlreadyReleased: () => _firstSyncHold.AlreadyReleased,
                 noteCatchUpProgress: NoteFullHistoryCatchUpProgress,
                 publishProgress: (active, completed, processed, total, stage) =>
                     _initialSyncProgress.Run(active, completed, processed, total, stage),
@@ -408,7 +423,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 assignAndSaveAuthAsync: AssignAndSaveAuthAsync,
                 log: message => Debug.WriteLine("[WhatsAppService] " + message));
             _waitForSessionEstablished = new WaitForSessionEstablishedOwner(
-                sessionEstablishedGate: () => _sessionEstablishedTcs.Task,
+                sessionEstablishedGate: () => _sessionEstablished.Task,
                 log: message => Log("[WhatsAppService] " + message));
             _markPairingRestartPending = new MarkPairingRestartPendingOwner(
                 getPairingRestartPending: () => _sessionFlags.PairingRestartPending,
@@ -439,7 +454,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 heavyHistoryEnrichment: _heavyHistoryEnrichment,
                 contacts: () => Contacts,
                 isFirstSyncListHoldInProgress: () => IsFirstSyncListHoldInProgress,
-                markReleaseDeferred: () => _firstSyncListReleaseDeferred = true,
+                markReleaseDeferred: () => _firstSyncHold.ReleaseDeferred = true,
                 publishProgress: (active, completed, processed, total, stage) =>
                     _initialSyncProgress.Run(active, completed, processed, total, stage),
                 scheduleDeferredAvatars: (reason, delay) => ScheduleDeferredAvatarsCore(reason, delay),
@@ -454,7 +469,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 heavyHistoryEnrichment: _heavyHistoryEnrichment,
                 history: () => History,
                 isFirstSyncListHoldInProgress: () => IsFirstSyncListHoldInProgress,
-                firstSyncListReleaseDeferred: () => _firstSyncListReleaseDeferred,
+                firstSyncListReleaseDeferred: () => _firstSyncHold.ReleaseDeferred,
                 endCatchUpBanner: reason => _catchUpBanner.End(reason),
                 requestFirstSyncListRelease: (stage, processed, total) =>
                     _firstSyncListRelease.Schedule(stage, processed, total),
@@ -479,7 +494,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 stopHealthMonitor: StopConnectionHealthMonitor,
                 tearDownSocket: () => _socketTearDown.Run(),
                 scheduleAutoReconnect: _softReconnect.Schedule,
-                raiseError: error => OnError?.Invoke(this, error),
+                raiseError: _events.RaiseError,
                 diagnostics: _diagnostics,
                 log: message => Debug.WriteLine("[WhatsAppService] " + message));
             _catalogDisk = new ChatCatalogDiskPersistence(
@@ -565,21 +580,19 @@ namespace Unison.Uwp.Services.WhatsApp
             _resetFirstSyncHold = new ResetFirstSyncListHoldFlagsOwner(
                 () =>
                 {
-                    _firstSyncListReleaseDeferred = false;
-                    _firstSyncListHoldOwned = false;
-                    _firstSyncListAlreadyReleased = false;
+                    _firstSyncHold.Reset();
                     _firstSyncListRelease.ResetUnlockInFlight();
                 },
                 reason => Debug.WriteLine(
                     "[WhatsAppService] First-sync list hold flags reset (" +
                     (reason ?? string.Empty) + ")"));
             _initialSyncProgress = new PublishInitialSyncProgressOwner(
-                () => _firstSyncListAlreadyReleased,
-                value => _firstSyncListAlreadyReleased = value,
-                () => _firstSyncListHoldOwned,
-                value => _firstSyncListHoldOwned = value,
-                () => _firstSyncListReleaseDeferred,
-                value => _firstSyncListReleaseDeferred = value,
+                () => _firstSyncHold.AlreadyReleased,
+                value => _firstSyncHold.AlreadyReleased = value,
+                () => _firstSyncHold.HoldOwned,
+                value => _firstSyncHold.HoldOwned = value,
+                () => _firstSyncHold.ReleaseDeferred,
+                value => _firstSyncHold.ReleaseDeferred = value,
                 (active, completed, processed, total, stage) =>
                     _diagnostics.Write(
                         "history",
@@ -734,7 +747,7 @@ namespace Unison.Uwp.Services.WhatsApp
                     {
                         try
                         {
-                            OnSessionCleared?.Invoke(this, args);
+                            _events.RaiseSessionCleared(args);
                         }
                         catch (Exception ex)
                         {
@@ -785,11 +798,7 @@ namespace Unison.Uwp.Services.WhatsApp
                         try { socket.Dispose(); } catch { /* ignore */ }
                     }
                 },
-                () =>
-                {
-                    _sessionEstablishedTcs.TrySetCanceled();
-                    _sessionEstablishedTcs = CreateSessionEstablishedTcs();
-                },
+                _sessionEstablished.CancelAndRenew,
                 startPairing => _sessionCleared.RunAsync(startPairing),
                 async () => await Task.Yield(),
                 async () =>
@@ -880,32 +889,6 @@ namespace Unison.Uwp.Services.WhatsApp
                             ex.Message);
                     }
                 });
-            _qrCodeWire = new QrCodeWireOwner(
-                () =>
-                {
-                    try
-                    {
-                        SessionLogger.Instance.WriteAlways(
-                            "[Pairing] Ignoring QR from stale socket");
-                    }
-                    catch
-                    {
-                    }
-                },
-                length =>
-                {
-                    try
-                    {
-                        SessionLogger.Instance.WriteAlways(
-                            "[Pairing] WhatsAppService raising OnQRCodeReceived len=" +
-                            length);
-                    }
-                    catch
-                    {
-                    }
-                },
-                () => _sessionFlags.QrDeliveredThisConnection = true,
-                qr => OnQRCodeReceived?.Invoke(this, qr));
             _authStateWire = new AuthStateWireOwner(
                 () => Debug.WriteLine("[WhatsAppService] Auth state updated, saving..."),
                 FileSelfIdentityAliases,
@@ -916,7 +899,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 () => _sessionFlags.PairingRestartPending = false,
                 () => _sessionFlags.CountPreSessionCloseAsFatal = true,
                 () => _sessionFlags.ResetPreSessionCloseStreak(),
-                () => _sessionEstablishedTcs.TrySetResult(true),
+                _sessionEstablished.Signal,
                 () => _selfProfileAuth.EnsureSelfPhonePersisted(),
                 () => _persistAuthState.RunAsync(_socketSlot.Current, "session-initialized"),
                 () => _syncWork.IsReplayDrainActive,
@@ -924,7 +907,7 @@ namespace Unison.Uwp.Services.WhatsApp
                     "[WhatsAppService] Deferring reconnect name/group work until replay drain completes."),
                 () => _postSyncMaintenance.SchedulePostReplay(0),
                 reason => _ = TryConsumeMessageStoreForceHistoryRepairAsync(reason),
-                () => OnSessionInitialized?.Invoke(this, EventArgs.Empty),
+                _events.RaiseSessionInitialized,
                 PairingTrace,
                 () => Debug.WriteLine(
                     "[WhatsAppService] Session initialized - triggering missing name resolution"));
@@ -951,7 +934,7 @@ namespace Unison.Uwp.Services.WhatsApp
                     "[WhatsAppService] Transport failure detected; persistent reconnect scheduled"),
                 milliseconds => Task.Delay(milliseconds),
                 _softReconnect.Schedule,
-                ex => OnError?.Invoke(this, ex));
+                _events.RaiseError);
             _connectionUpdateWire = new ConnectionUpdateOwner(
                 () => _sessionFlags.SuppressReconnect,
                 () => _sessionFlags.FatalSessionEnded,
@@ -986,56 +969,15 @@ namespace Unison.Uwp.Services.WhatsApp
                     "pre-session-close",
                     "streak=" + streak + "; threshold=" + PreSessionCloseFatalThreshold),
                 reason => RaiseReport(
-                    () => OnInvalidSessionSuspected?.Invoke(this, reason),
-                    nameof(OnInvalidSessionSuspected)),
+                    () => _events.RaiseInvalidSessionSuspected(reason),
+                    nameof(ConnectionEventHub.OnInvalidSessionSuspected)),
                 () => _sessionFlags.ResetPreSessionCloseStreak(),
                 _softReconnect.Schedule,
                 trigger => _diagnostics.Write(
                     "connection",
                     "qr-expired",
                     "trigger=" + trigger),
-                () => OnQrExpired?.Invoke(this, EventArgs.Empty));
-            _socketFacadeWire = new SocketFacadeWireOwner(
-                _jids,
-                args => Messages?.NotifyPresenceUpdated(args),
-                (chatJid, participant, messageId, isFromMe, timestamp, reason) =>
-                {
-                    if (Messages == null)
-                    {
-                        return;
-                    }
-
-                    _ = Messages.NoteMissingMessageAndRequestResendAsync(
-                        chatJid,
-                        participant,
-                        messageId,
-                        isFromMe,
-                        timestamp,
-                        reason,
-                        "socket:" + (reason ?? string.Empty));
-                },
-                (messageId, status, error) =>
-                    Messages == null
-                        ? Task.CompletedTask
-                        : Messages.NotifyOutgoingStatusAsync(messageId, status, error),
-                receipt =>
-                    Messages == null
-                        ? Task.CompletedTask
-                        : Messages.NotifyReceiptAsync(receipt));
-            _inboundWireNode = new InboundWireNodeOwner(
-                (ackClass, ackId, ackError) =>
-                    Messages?.NotifyInboundWireAck(ackClass, ackId, ackError),
-                (fromJid, notify, participantJid) =>
-                    Contacts?.NotifyInboundMessageNode(fromJid, notify, participantJid));
-            _decryptedMessageWire = new DecryptedMessageWireOwner(
-                () =>
-                {
-                    Interlocked.Increment(ref _diagnosticsDecryptedEventCount);
-                    Interlocked.Exchange(
-                        ref _diagnosticsLastDecryptedEventUtcTicks,
-                        DateTime.UtcNow.Ticks);
-                },
-                _incomingPump.Enqueue);
+                _events.RaiseQrExpired);
             _historySyncWire = new HistorySyncWireOwner(
                 () => _sessionFlags.FatalSessionEnded,
                 () => _authSlot.Current != null,

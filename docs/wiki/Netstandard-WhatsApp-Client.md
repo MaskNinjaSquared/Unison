@@ -618,6 +618,15 @@ Further shrinking those rows is **State/contract seams** (or Phase E), not anoth
 
 **Still Opus + on-device (unchanged):** wire owners → DI, soft/auto-reconnect bodies, pump, broker transfer, FULL/silent pacing, deleting `WhatsAppService`.
 
+### Phase D stage 1 — connection state + first wire owners from DI
+
+**Status:** Opus, needs on-device check (pairing QR, logout from phone, network drop). One commit; roll back by reverting it.
+
+1. **`ConnectionEventHub`** (`WhatsAppClient.Helpers`) is the `IConnectionEventSource` DI singleton. `WhatsAppService` no longer declares the eight connection events; it raises on the hub. `CurrentConnectionStatus` lives on the hub (the host property forwards). Raise semantics unchanged: direct invoke, `RaiseReport` wrapping only where it already was.
+2. **Shared latches out of host fields** (DI singletons): `SessionEstablishedGate` (was `_sessionEstablishedTcs`), `FirstSyncListHoldState` (was the three `_firstSyncList*` bools), `DecryptedEventCounter` (was the two decrypted diagnostics longs).
+3. **Wire owners built in `App.ConfigureServices`:** `QrCodeWireOwner`, `SocketFacadeWireOwner`, `InboundWireNodeOwner`, `DecryptedMessageWireOwner`. The host gets them through `ConnectionWireDependencies` (UWP-only parameter object; dies with the host). `SocketEventHandlerWiring` still reaches them through the host accessors.
+4. Still built in the host ctor: owners whose ports close over host-only state or methods (session init / socket error / connection update / auth / history sync / offline release / clear session / catch-up and FULL owners). Each needs its remaining host port extracted first.
+
 ### Phase E (future) — client-owned public I/O
 
 **Not** Phase C/D work. Long-term goal: `Unison.WhatsAppClient` publishable / reusable without dragging Unison UI models — a portable WhatsApp **policy** library whose **entry and exit** types live on the client (or a thin contracts package next to it), not on Unison.Core ViewModel-shaped models.
