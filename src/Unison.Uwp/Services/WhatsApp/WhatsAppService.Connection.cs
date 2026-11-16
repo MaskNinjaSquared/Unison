@@ -264,7 +264,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
             public void RestartIncomingPumpIfStalled()
             {
-                if (!_owner.IsIncomingMessagePumpStalled(ConnectionHealthPolicy.IncomingPumpStallLimit))
+                if (!_owner._incomingPump.IsStalled(ConnectionHealthPolicy.IncomingPumpStallLimit))
                 {
                         return;
                     }
@@ -272,9 +272,9 @@ namespace Unison.Uwp.Services.WhatsApp
                         _owner._diagnostics.Write(
                             "messages",
                             "incoming-pump-health-restart",
-                    "stage=" + _owner.IncomingPumpStage);
-                _owner.ResetIncomingMessagePump("health-stall", requeueCurrent: true);
-                _owner.RestartIncomingMessagePumpIfNeeded();
+                    "stage=" + _owner._incomingPump.Stage);
+                _owner._incomingPump.Reset("health-stall", requeueCurrent: true);
+                _owner._incomingPump.RestartIfNeeded();
             }
 
             public bool IsNodeProcessingStalled =>
@@ -739,7 +739,7 @@ namespace Unison.Uwp.Services.WhatsApp
                     {
                         Interlocked.Exchange(ref _forceFreshConnectOnResume, 0);
                         StartConnectionHealthMonitor(brokerSocket);
-                        RestartIncomingMessagePumpIfNeeded();
+                        _incomingPump.RestartIfNeeded();
                         PublishConnectionUpdate("connected");
                         _diagnostics.Write(
                             "socket-broker",
@@ -767,7 +767,7 @@ namespace Unison.Uwp.Services.WhatsApp
             EnsureConnectedAsync(timeoutMs, forceFreshTransport);
 
         void IConnectionResumeHost.RestartIncomingMessagePumpIfNeeded() =>
-                RestartIncomingMessagePumpIfNeeded();
+                _incomingPump.RestartIfNeeded();
 
         void IConnectionResumeHost.RequestSoftReconnect(string reason) =>
             ScheduleAutoReconnect(reason);
@@ -1553,7 +1553,7 @@ namespace Unison.Uwp.Services.WhatsApp
         }
 
         Task IConnectionLifecycleHost.WaitForIncomingQueueDrainAsync(int timeoutMs) =>
-            WaitForIncomingMessageQueueDrainAsync(timeoutMs);
+            _incomingPump.WaitForDrainAsync(timeoutMs);
 
         void IConnectionLifecycleHost.DisconnectAndDisposeSocket()
             {
@@ -1570,7 +1570,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 PublishConnectionUpdate("suspended");
 
         void IConnectionLifecycleHost.ResetIncomingPumpForSuspend() =>
-                ResetIncomingMessagePump("suspend", requeueCurrent: true);
+                _incomingPump.Reset("suspend", requeueCurrent: true);
 
         async Task IConnectionLifecycleHost.PersistSuspendTailWithBudgetAsync(int budgetMs)
         {

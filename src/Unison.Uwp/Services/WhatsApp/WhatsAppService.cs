@@ -280,7 +280,7 @@ namespace Unison.Uwp.Services.WhatsApp
         private readonly ConnectionGateLocks _connectionGates = new ConnectionGateLocks();
 
         // Live/offline decrypted drain ? owned by IncomingMessagePump (WhatsAppClient).
-        private IncomingMessagePump _incomingPump;
+        private readonly IncomingMessagePump _incomingPump;
         private readonly AttachedUiDispatcher _ui;
         private readonly IRuntimeDiagnostics _diagnostics;
         private readonly ChatStateStore _chatState;
@@ -503,14 +503,14 @@ namespace Unison.Uwp.Services.WhatsApp
                 InitialSyncProcessedConversations = _initialSync.ProcessedConversations,
                 InitialSyncTotalConversations = _initialSync.TotalConversations,
                 DecryptedEventCount = Interlocked.Read(ref _diagnosticsDecryptedEventCount),
-                AppliedMessageCount = _incomingPump != null ? _incomingPump.AppliedCount : 0,
+                AppliedMessageCount = _incomingPump.AppliedCount,
                 SendAttemptCount = Interlocked.Read(ref _diagnosticsSendAttemptCount),
                 SendSuccessCount = Interlocked.Read(ref _diagnosticsSendSuccessCount),
                 SendFailureCount = Interlocked.Read(ref _diagnosticsSendFailureCount),
                 LastConnectionEventUtc = DiagnosticUtcTicks.ToDateTime(Interlocked.Read(ref _diagnosticsLastConnectionEventUtcTicks)),
                 LastDecryptedEventUtc = DiagnosticUtcTicks.ToDateTime(Interlocked.Read(ref _diagnosticsLastDecryptedEventUtcTicks)),
                 LastAppliedMessageUtc = DiagnosticUtcTicks.ToDateTime(
-                    _incomingPump != null ? _incomingPump.LastAppliedUtcTicks : 0),
+                    _incomingPump.LastAppliedUtcTicks),
                 LastSendAttemptUtc = DiagnosticUtcTicks.ToDateTime(Interlocked.Read(ref _diagnosticsLastSendAttemptUtcTicks)),
                 LastSendSuccessUtc = DiagnosticUtcTicks.ToDateTime(Interlocked.Read(ref _diagnosticsLastSendSuccessUtcTicks)),
                 LastSendFailureUtc = DiagnosticUtcTicks.ToDateTime(Interlocked.Read(ref _diagnosticsLastSendFailureUtcTicks)),
@@ -527,9 +527,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
             snapshot.IsReconnecting = _softReconnect.IsReconnecting;
 
-            IncomingQueueSnapshot incoming = _incomingPump != null
-                ? _incomingPump.Snapshot()
-                : default(IncomingQueueSnapshot);
+            IncomingQueueSnapshot incoming = _incomingPump.Snapshot();
             snapshot.LiveIncomingQueueDepth = incoming.LiveDepth;
             snapshot.OfflineIncomingQueueDepth = incoming.OfflineDepth;
             snapshot.IncomingPumpRunning = incoming.Running;
@@ -882,10 +880,7 @@ namespace Unison.Uwp.Services.WhatsApp
             _resolveHistory = resolveHistory;
             _resolveDeferredAvatars = resolveDeferredAvatars;
             _historyOnDemandSocket = new SocketOwnedHistoryOnDemand(() => _socket);
-            _incomingPump = incomingPump
-                ?? new IncomingMessagePump(
-                    () => Messages,
-                    _diagnostics);
+            _incomingPump = incomingPump ?? throw new ArgumentNullException(nameof(incomingPump));
             _ui = ui ?? throw new ArgumentNullException(nameof(ui));
             _listPaintGate = listPaintGate ?? new ChatListInitialPaintGate();
             _listPaintGate.Released += OnChatListInitialPaintReleased;
@@ -1764,7 +1759,7 @@ namespace Unison.Uwp.Services.WhatsApp
                         ref _diagnosticsLastDecryptedEventUtcTicks,
                         DateTime.UtcNow.Ticks);
                 },
-                EnqueueDecryptedFromWire);
+                _incomingPump.Enqueue);
             _historySyncWire = new HistorySyncWireOwner(
                 () => _fatalSessionEnded,
                 () => _authState != null,
@@ -2184,43 +2179,6 @@ namespace Unison.Uwp.Services.WhatsApp
         internal HistorySyncWireOwner HistorySyncWire => _historySyncWire;
 
         internal OfflineReplayReleaseOwner OfflineReplayReleaseWire => _offlineReplayRelease;
-
-        private void EnqueueDecryptedFromWire(
-            string fromJid,
-            string participant,
-            string participantAlt,
-            string addressingMode,
-            string messageId,
-            Message message,
-            DateTime timestamp,
-            bool isFromMe,
-            string pushName,
-            string verifiedName,
-            string senderLid,
-            string peerRecipientPn,
-            string peerRecipientLid,
-            string recipientJid,
-            bool isOffline)
-        {
-            // addressingMode is wire-only diagnostics today; the Core pump envelope omits it.
-            _ = addressingMode;
-            EnqueueDecryptedMessage(
-                IncomingDecryptedNotifyMap.FromPump(
-                    message,
-                    messageId,
-                    fromJid,
-                    recipientJid,
-                    peerRecipientPn,
-                    peerRecipientLid,
-                    senderLid,
-                    participant,
-                    participantAlt,
-                    verifiedName,
-                    pushName,
-                    timestamp,
-                    isOffline,
-                    isFromMe));
-        }
 
         private Task ApplyHistorySyncFromWireAsync(HistorySync sync)
         {

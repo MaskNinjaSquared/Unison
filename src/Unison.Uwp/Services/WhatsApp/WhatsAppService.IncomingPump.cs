@@ -13,7 +13,7 @@ namespace Unison.Uwp.Services.WhatsApp
 {
         /// <summary>
     /// Thin host ports for placeholder resend and bound mutation. The decrypted
-    /// queue/drain live on <see cref="IncomingMessagePump"/>; offline-replay flush
+    /// queue/drain live on the injected <see cref="IncomingMessagePump"/>; offline-replay flush
     /// ownership is <see cref="OfflineReplayFlush"/>.
         /// </summary>
     public partial class WhatsAppService : IBoundMutationGate
@@ -52,25 +52,6 @@ namespace Unison.Uwp.Services.WhatsApp
                 action();
             }
         }
-
-        private void EnqueueDecryptedMessage(IncomingDecryptedNotifyRequest message) =>
-            _incomingPump.Enqueue(message);
-
-        private void RestartIncomingMessagePumpIfNeeded() =>
-            _incomingPump.RestartIfNeeded();
-
-        private void ResetIncomingMessagePump(string reason, bool requeueCurrent) =>
-            _incomingPump.Reset(reason, requeueCurrent);
-
-        private bool IsIncomingMessagePumpStalled(TimeSpan limit) =>
-            _incomingPump.IsStalled(limit);
-
-        private Task WaitForIncomingMessageQueueDrainAsync(int timeoutMs) =>
-            _incomingPump.WaitForDrainAsync(timeoutMs);
-
-        /// <summary>Stage string for connection-health stall diagnostics.</summary>
-        internal string IncomingPumpStage =>
-            _incomingPump != null ? _incomingPump.Stage : "idle";
 
         bool IOfflineReplayHost.IsActiveChat(string canonicalJid) => IsActiveChatJid(canonicalJid);
 
