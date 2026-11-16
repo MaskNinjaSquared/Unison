@@ -18,6 +18,7 @@ Cursor project rules in `.cursor/rules/` repeat the must-not-break bits. The wik
 
 - Put WinRT or XAML in `Unison.Core`.
 - Reference Core or Socket from `Unison.Background`.
+- Reference `Unison.Baileys` or `Unison.Socket` from `Unison.Core` (Core takes only `Unison.Proto`).
 - Call use cases from `ConnectionHandler` or store chats there.
 - Subscribe ViewModels to raw client / host-port events (façades only).
 - Add `Foo.Instance` services; use constructor DI in `App.ConfigureServices`.
@@ -31,6 +32,7 @@ Cursor project rules in `.cursor/rules/` repeat the must-not-break bits. The wik
 | `src/Unison.Uwp` | App, views, DI, façades, SocketBridge |
 | `src/Unison.Core` | Contracts, models, ViewModels |
 | `src/Unison.Socket` | Session / protocol (Baileys 7.0.0-rc14) |
-| `src/Unison.Baileys` | Noise, Signal, binary XML, proto |
+| `src/Unison.Baileys` | Noise, Signal, binary XML |
+| `src/Unison.Proto` | Generated WAProto; the only protocol project Core references |
 | `src/Unison.Background` | Out-of-process socket activity task |
 | `docs/wiki/` | Architecture + coding spec (GitHub wiki source) |

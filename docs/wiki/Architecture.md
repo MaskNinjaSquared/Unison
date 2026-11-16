@@ -8,7 +8,7 @@ Unison is split so that **WhatsApp protocol and session** live in a portable lib
 2. **Session ≠ host.** `WhatsAppSession` is the small composition root (`makeWASocket` over `makeSocket`). Feature modules attach to its dispatcher. Reconnect policy lives in the UWP host.
 3. **Facades own policy.** Screens subscribe to `IConnectionService`, `IMessageService`, `IContactService`, and the other WhatsApp contracts — not to raw client events.
 4. **Core has no XAML.** `Unison.Core` is netstandard2.0. WinRT types stay in `Unison.Uwp` behind interfaces.
-5. **Background has no Core.** The out-of-process task references only `Unison.Baileys`, so it can decode frames and show toasts without pulling in ViewModels.
+5. **Background has no Core.** The out-of-process task references only `Unison.Baileys` (plus the generated `Unison.Proto`), so it can decode frames and show toasts without pulling in ViewModels.
 
 ## Project graph
 

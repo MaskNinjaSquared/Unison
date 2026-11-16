@@ -27,7 +27,8 @@ The client is still under development. Note: None of the early users who tested 
 | `src/Unison.Uwp` | UWP app, views, DI adapters, SocketBridge |
 | `src/Unison.Core` | Contracts, models, ViewModels |
 | `src/Unison.Socket` | WhatsApp session / protocol (Baileys 7.0.0-rc14) |
-| `src/Unison.Baileys` | Noise, Signal, binary XML, protobuf, crypto |
+| `src/Unison.Baileys` | Noise, Signal, binary XML, crypto |
+| `src/Unison.Proto` | Generated WAProto (Google.Protobuf only) |
 | `src/Unison.Background` | Out-of-process socket activity task |
 
 Solution: `Unison.slnx`. Docs: [`docs/wiki/`](docs/wiki/Home.md) (architecture) · [`Coding-Standards`](docs/wiki/Coding-Standards.md) (how to write code). Agents: [`AGENTS.md`](AGENTS.md).

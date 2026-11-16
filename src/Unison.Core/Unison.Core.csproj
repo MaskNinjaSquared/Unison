@@ -13,7 +13,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Unison.Baileys\Unison.Baileys.csproj" />
+    <ProjectReference Include="..\Unison.Proto\Unison.Proto.csproj" />
   </ItemGroup>
 
 </Project>

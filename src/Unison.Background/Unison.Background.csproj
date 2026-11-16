@@ -145,6 +145,10 @@
       <Project>{A65F1D27-E2C9-410F-A892-015A7A9699EE}</Project>
       <Name>Unison.Baileys</Name>
     </ProjectReference>
+    <ProjectReference Include="..\Unison.Proto\Unison.Proto.csproj">
+      <Project>{EBCD2395-FC7F-4750-A81E-0F931283E9E4}</Project>
+      <Name>Unison.Proto</Name>
+    </ProjectReference>
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.NETCore.UniversalWindowsPlatform" Version="6.2.14" />

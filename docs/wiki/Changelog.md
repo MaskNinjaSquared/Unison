@@ -2,6 +2,11 @@
 
 Newest first.
 
+## P4 done — Core no longer references Baileys
+
+Generated `WAProto.cs` moved unchanged to a new `src/Unison.Proto` project (netstandard2.0, `Google.Protobuf` only). `Unison.Core.csproj` references `Unison.Proto` instead of `Unison.Baileys`; Baileys, UWP and Background reference `Unison.Proto` too (old-style csproj files need it explicitly so the DLL is packaged). Layer table, `AGENTS.md` and layout docs updated.
+See [Netstandard WhatsApp client](Netstandard-WhatsApp-Client).
+
 ## P4 steps 1–4 — no Baileys protocol types on Core contracts
 
 `IGroupService` no longer takes a group IQ node (`MessageFacade` parses with `GroupMetadataReader`). Receipts reach Core as `ReceiptFacts` (moved to `Core.Models`), read in `SocketFacadeWireOwner`. The link-code relay (`ISocketFacadeWireHost.RaiseLinkCodeCompanionReg`, `WhatsAppService.OnLinkCodeCompanionReg`) was removed: `SocketBridge` never raised it and `PairingFlow` owns link-code pairing. `ConnectionSocketSessionRequest.AuthState` is an opaque `object`. The Core → Baileys reference stays: Core still uses the generated `Proto` types.

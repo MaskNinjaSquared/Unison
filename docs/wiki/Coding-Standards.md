@@ -10,11 +10,12 @@ Agents: read this before adding a view, service, façade, or socket use case.
 
 | Project | May reference | Must not |
 |---|---|---|
-| `Unison.Core` | `Unison.Baileys` | XAML, WinRT, `Unison.Uwp`, `Unison.WhatsAppClient` |
+| `Unison.Core` | `Unison.Proto` | XAML, WinRT, `Unison.Baileys`, `Unison.Socket`, `Unison.Uwp`, `Unison.WhatsAppClient` |
 | `Unison.WhatsAppClient` | `Unison.Core`, `Unison.Socket` | XAML, WinRT, `Unison.Uwp` |
 | `Unison.Socket` | `Unison.Baileys` | WinRT, SQLite, Core ViewModels |
-| `Unison.Baileys` | NuGet only | Other Unison projects |
-| `Unison.Background` | `Unison.Baileys` | Core, Socket, Application, XAML |
+| `Unison.Baileys` | `Unison.Proto` | Other Unison projects |
+| `Unison.Proto` | `Google.Protobuf` only (generated `WAProto.cs`) | Every Unison project |
+| `Unison.Background` | `Unison.Baileys`, `Unison.Proto` | Core, Socket, Application, XAML |
 | `Unison.Uwp` | All of the above | Protocol logic that belongs in Socket |
 
 - Contracts and ViewModels live in **Core** (presentation helpers only under `Helpers/`).

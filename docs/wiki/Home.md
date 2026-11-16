@@ -46,7 +46,8 @@ Unison.slnx
 ├── src/Unison.Core           Contracts, models, ViewModels (no XAML)
 ├── src/Unison.WhatsAppClient    Facades + domain helpers (scaffold; phase C)
 ├── src/Unison.Socket         WhatsApp session / protocol (netstandard2.0)
-├── src/Unison.Baileys        Noise, Signal, binary XML, protobuf, crypto
+├── src/Unison.Baileys        Noise, Signal, binary XML, crypto
+├── src/Unison.Proto          Generated WAProto (Google.Protobuf only)
 └── src/Unison.Background     Out-of-process SocketActivity task
 ```
 

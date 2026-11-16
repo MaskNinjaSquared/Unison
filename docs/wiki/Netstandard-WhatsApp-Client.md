@@ -56,7 +56,7 @@ flowchart TB
 | Noise / Signal / proto | `Unison.Baileys` | Yes |
 | Facades, `WhatsAppService`, `SocketBridge` | `Unison.Uwp` | No — still mixed with WinRT |
 | `StreamSocket` / broker transfer | `Unison.Uwp/Transport` | No — stays behind `IWaTransport` |
-| Background decode + toasts | `Unison.Background` → Baileys only | Must stay free of Core / Socket / Application |
+| Background decode + toasts | `Unison.Background` → Baileys (+ `Unison.Proto`) only | Must stay free of Core / Socket / Application |
 
 `IWaTransport` ([`src/Unison.Socket/Abstractions/IWaTransport.cs`](../../src/Unison.Socket/Abstractions/IWaTransport.cs)) is a **behaviour port** (connect / send / close / `TransferToBrokerAsync` / `ReclaimFromBrokerAsync`), not a DTO of WinRT handles. The UWP concrete type (`StreamSocketWebSocketTransport`) keeps `StreamSocket` private. Domain code must never take `StreamSocket` in a constructor.
 
@@ -157,9 +157,8 @@ flowchart TB
    **values** come from the product layer.
 4. Hot-path pacing (inter-chunk delays inside a running pass) is passed as an options snapshot
    when the pass starts — no per-chunk call up into Core.
-5. Core stops referencing protocol types: `Unison.Core` → `Unison.Baileys` (today: 5 files,
-   e.g. `ConnectionSocketSessionRequest`, `IMessageService`, `IGroupService`,
-   `ISocketFacadeWireHost`) is debt to close, not a pattern to grow.
+5. Core does not reference `Unison.Baileys` (done in P4). It references only `Unison.Proto`,
+   the generated message schema. Do not add a Baileys reference back.
 
 **Current leakage (Nov 2026 inventory)** — 27 files in `src/Unison.WhatsAppClient` read tier /
 frugal / memory. Classify each as **knob** (becomes an option/parameter), **decision** (moves up
@@ -186,7 +185,7 @@ receiving it; the product layer maps it to client options.
 | P1 | Neutral options types on the client surface (`HistorySyncOptions`, `EnrichmentPacingOptions`, …) — numbers and flags only, no tier names | Types compile with no `DeviceCategory` |
 | P2 | Swap `SyncWorkloadStrategy` injection in WhatsAppClient for those options, one façade at a time (History chain first: it was just extracted) | `rg SyncWorkloadStrategy src/Unison.WhatsAppClient` shrinks per step |
 | P3 | Core product services (e.g. `ISyncProductPolicy` / `StartupProductPolicy`) own the decisions: frugal gate, startup quiet, post-replay maintenance, avatar/roster policy by tier. They read tier / frugal / memory and call façade contracts | Gates gone from `Helpers/Connection`; decisions unit-tested in `Unison.Core.Tests` without a client |
-| P4 | Core contracts stop exposing Baileys types (own DTOs at the contract edge). Inventory + per-contract plan is below; **do not drop the reference until that plan is executed** | `Unison.Core.csproj` drops the Baileys reference |
+| P4 | **Done.** Core contracts stop exposing Baileys types; generated `Proto` split into `Unison.Proto` (see inventory below) | `Unison.Core.csproj` references `Unison.Proto` only |
 | Exit | `rg "SyncWorkloadStrategy\|DeviceCategory\|SyncBudget\|UseFrugalSyncBudget\|IsMobile" src/Unison.WhatsAppClient src/Unison.Socket src/Unison.Baileys` returns 0. Neutral `Func<bool> preferFrugal` / `ISyncLoadMode` knobs (slice, pause) and `IAppMemoryInfo` read only for diagnostics are allowed | — |
 
 **Progress (Nov 2026).** P1–P3 done for the client:
@@ -225,11 +224,11 @@ startup and post-replay orchestration, quiet/memory waits, contact name tables s
 host/dispatch). That move is Phase D and touches Mobile-sensitive deferred startup — Opus +
 on-device.
 
-#### P4 inventory (steps 1–4 done — Baileys reference stays, blocked on `Proto`)
+#### P4 inventory (done — Core references `Unison.Proto`, not Baileys)
 
 **Status.** Steps 1–4 below are done: no Core contract names `BinaryNode` or `AuthState`. `ReceiptFacts` lives in `Unison.Core.Models`; `SocketFacadeWireOwner` runs `ReceiptReader` before the host sees the receipt. Link-code turned out to be dead on the live path (`SocketBridge` never raises `OnLinkCodeCompanionReg`; `PairingFlow` in `Unison.Socket` handles it, and `PairingHandler` is not in the csproj), so the relay was **deleted** instead of getting a DTO. `ConnectionSocketSessionRequest.AuthState` is `object`; the UWP factory casts and throws on a wrong type.
 
-**Step 5 is blocked.** The inventory only searched `Unison.Baileys`. Core also uses the generated `Proto` namespace (`WAProto.cs` lives in the Baileys project) in 20 files: mappers (`ChatMessageMapper`, `ReactionMapper`), `IMessageService`, `IHistoryService`, the incoming `*Request` models, `ProtoMessageUnwrap`, `SentMessageRetryRebuild`, a chat-list ViewModel partial. Dropping the reference needs a decision on `Proto` first.
+**Step 5 — `Proto` split.** The inventory only searched `Unison.Baileys`; Core also uses the generated `Proto` namespace in 20 files (mappers, `IMessageService`, `IHistoryService`, the incoming `*Request` models, `ProtoMessageUnwrap`, `SentMessageRetryRebuild`, a chat-list ViewModel partial). Replacing those with Core DTOs would move the whole message mapping out of Core. Instead `WAProto.cs` moved, unchanged, to a new `src/Unison.Proto` project (netstandard2.0, `Google.Protobuf` only). Baileys, Core, UWP and Background reference it; `Unison.Core.csproj` no longer references Baileys. The old-style UWP and Background csproj files need the explicit `Unison.Proto` reference so the DLL lands in the package.
 
 `Unison.Core.csproj` still references `Unison.Baileys`. Every `using Unison.Baileys` /
 `BinaryNode` / `AuthState` under `src/Unison.Core` is in the four contracts below. Nothing else
@@ -283,7 +282,7 @@ but lives in `Unison.WhatsAppClient/Messages/ReceiptReader.cs` — not yet a Cor
    as done.
 
 **Out of P4 (client/UWP may still name `BinaryNode`):** `IOutgoingReceiptHost.QueryGroupMetadataAsync`,
-`IWhatsAppSocket.OnLinkCodeCompanionReg`, `SocketBridge`, `SocketClient` (not in the csproj).
+`IWhatsAppSocket.OnLinkCodeCompanionReg` (never raised by `SocketBridge`), `SocketClient` (not in the csproj).
 Those stay until a later socket-edge pass. Background keeps its Baileys reference on purpose.
 
 **Agent boundary:** steps 1–3 are mechanical once this plan is accepted (cheaper model OK,
@@ -361,7 +360,7 @@ marked **Opus / human** stays out of that session unless the developer explicitl
 | Move a remaining **decision** out of WhatsAppClient into tuning + host members (same pattern as deferred startup / post-replay) | **OK** with exit grep | Mirror `DeferredStartupGate` / `IStartupMaintenanceTuning`; keep values identical |
 | Leave `Func<bool> preferFrugal` / `ISyncLoadMode` slice-and-pause knobs on client | **OK leave** | Accepted Exit rule; do not "fix" by inventing coordinators that only forward the bool |
 | Shrink `WhatsAppService` connection-only by extracting another **Owner** that already has a host interface and no Mobile hot-path | **OK** if listed in [WhatsAppService extraction](WhatsAppService-Extraction) as next safe step | Follow owner pattern + `XDispatch`; do not invent new reconnect policy |
-| P4 — drop Baileys types from Core contracts | **Opus / planned pass** | Touches contract edges (`IMessageService`, …); easy to break hosts |
+| P4 — drop Baileys types from Core contracts | **Done** (Opus) | Touches contract edges (`IMessageService`, …); easy to break hosts |
 | Move **incoming pump** or **auto-reconnect / health timers** off `WhatsAppService` | **Opus + on-device + explicit ask** | Mobile hot path; wiki already forbids without confirmation |
 | Broker transfer / `SocketBridge` ownership / fake handoff | **Never invent** | True only when ownership moved; cold restore not wired |
 | Change silent FULL / periodic FULL / catch-up finish behaviour (not just knob injection) | **Opus + on-device** | Highest Mobile risk; knobs already extracted — do not retune numbers without a device run |

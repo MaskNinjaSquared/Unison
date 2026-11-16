@@ -66,13 +66,12 @@ SocketBridge
 
 ## Unison.Baileys
 
-Shared leaf library. No project references.
+Shared library. Its only project reference is `Unison.Proto` (generated `WAProto.cs`, `Google.Protobuf` only), which Core also references without taking Baileys.
 
 | Folder | Responsibility |
 |---|---|
 | `Protocol/` | `NoiseHandler`, `NoiseSessionState`, `BinaryNode`, encoder/decoder |
 | `Crypto/` | Curve25519, AES-GCM, HMAC, HKDF, XEdDSA |
-| `Proto/` | Generated `WAProto.cs` |
 | `Client/` | `AuthState`, `SignalHandler`, `IAuthPersistence`, `IKeyStore` |
 
 The socket **orchestrates**; Baileys **implements primitives**. Signal ratchet encrypt/decrypt stays in `SignalHandler`. The socket talks to it through `ISignalRepository` (UWP adapter).
