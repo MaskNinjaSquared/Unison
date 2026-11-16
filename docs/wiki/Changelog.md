@@ -2,6 +2,17 @@
 
 Newest first.
 
+## WhatsAppService extraction — 30 history/connection host interfaces to owners
+
+Manual resync, SQLite lot progress, FULL watchdogs, catch-up finish and reconnect
+fallbacks, the silent / periodic / tracked FULL_HISTORY chain, force-repair and
+session-open latches, post-offline freshness, hydration fallback and three
+connection seams (auth persist, session gate wait, pairing-restart mark) moved from
+`WhatsAppService` into `…Owner` classes in `Unison.WhatsAppClient`. State that only
+those paths touched (resync waiter, silent-chain state, reconnect-fallback stamps,
+first-sync unlock latch) now lives in the owner. No behaviour change intended.
+See [WhatsAppService extraction](WhatsAppService-Extraction).
+
 ## ChatDetail docks — x:Load Ensure on open
 
 `AttachMenuBar` / `ReactionEmojiDock` were gated with `x:Load`, but Unison and

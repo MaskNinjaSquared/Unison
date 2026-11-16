@@ -218,6 +218,24 @@ Group listing hide-abort is a real CTS (`GroupListingCancellation`) through
 `IGroupWireActions` / `ConnectionHandler.QueryAllowingErrorAsync` (cancels the
 waiter, not the stanza on the wire).
 
+History catch-up host interfaces (30) left the client as owners in
+`Unison.WhatsAppClient/Helpers/{History,Connection}`:
+
+| Area | Owners |
+|---|---|
+| Manual resync | `ResyncConversationsOwner`, `UserResyncHistoryWaitOwner` (owns the waiter TCS; arm/wait + complete), `UserResyncFullHistoryOwner` |
+| SQLite lot / FULL watchdogs | `HistorySqliteChunkOwner` (owns accumulated conversations), `FullHistoryCatchUpWatchdogOwner`, `AcceptedHistoryRequestTimeoutOwner`, `FullHistoryOnDemandClearOwner` |
+| Catch-up finish / reconnect | `HistoryCatchUpFinishOwner`, `HistoryReconnectFallbackOwner` (owns in-progress flag + catch-up-continue stamp), `TearDownSocketForSoftReconnectOwner`, `FirstSyncListReleaseOwner` (owns unlock latch) |
+| FULL request chain | `FullHistoryCatchUpProgressOwner`, `SilentFullHistoryChainOwner` (owns armed / quiet / empty-streak / schedule CTS), `PeriodicFullHistorySafetyOwner`, `RequestFullHistoryTrackedOwner` |
+| Latches | `ForceHistoryRepairOwner` (pending + consume over `ILocalSettings`), `SessionOpenOnDemandPendingConsumeOwner` |
+| Freshness / hydration | `HistoryPostOfflineFreshnessOwner`, `ReconnectHistoryCatchUpOwner`, `HydrationFallbackPipelineOwner`, `HistoryHydrationCandidatesOwner`, `HistoryHydrationSettleOwner` |
+| Connection | `PersistAuthStateOwner`, `WaitForSessionEstablishedOwner`, `MarkPairingRestartPendingOwner` |
+
+Stale probes share `TryGetHistoryStaleReason`. The connection three are ports only:
+auth state, the session-established TCS and the pairing flags stay on the host with
+the reconnect path. Incoming pump and auto-reconnect / health timers were not moved
+(Mobile risk).
+
 ### Facades still depend on the client
 
 `ConnectionFacade` takes `IConnectionEventSource` + `IConnectionSessionHost` (+ ensure /
