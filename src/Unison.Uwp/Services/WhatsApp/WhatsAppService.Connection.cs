@@ -275,10 +275,6 @@ namespace Unison.Uwp.Services.WhatsApp
 
         // --- ITryStartPairingStage2ReconnectHost -----------------------------
 
-        bool ITryStartPairingStage2ReconnectHost.SuppressReconnect => _sessionFlags.SuppressReconnect;
-
-        bool ITryStartPairingStage2ReconnectHost.FatalSessionEnded => _sessionFlags.FatalSessionEnded;
-
         void ITryStartPairingStage2ReconnectHost.TracePairingStage2(string message) =>
             PairingTrace(message);
 
@@ -295,12 +291,6 @@ namespace Unison.Uwp.Services.WhatsApp
             _ = ConnectionPairingStage2.RunAsync(this);
 
         // --- ISoftReconnectIoHost --------------------------------------------
-
-        bool ISoftReconnectIoHost.SuppressReconnect => _sessionFlags.SuppressReconnect;
-
-        bool ISoftReconnectIoHost.FatalSessionEnded => _sessionFlags.FatalSessionEnded;
-
-        bool ISoftReconnectIoHost.PairingRestartPending => _sessionFlags.PairingRestartPending;
 
         bool ISoftReconnectIoHost.IsAuthPresent => _authState != null;
 
@@ -602,11 +592,7 @@ namespace Unison.Uwp.Services.WhatsApp
         /// </summary>
         public Task ResumeAsync() => ConnectionResume.RunAsync(this);
 
-        bool IConnectionResumeHost.IsFatalSessionEnded => _sessionFlags.FatalSessionEnded;
-
         Task<bool> IConnectionResumeHost.IsRegisteredAsync() => IsRegisteredAsync();
-
-        void IConnectionResumeHost.ClearSuppressReconnect() => _sessionFlags.SuppressReconnect = false;
 
         Task<bool> IConnectionResumeHost.ConsumeBrokerReconnectRequestAsync() =>
             BrokerReconnectConsumeDispatch.RunAsync(this);
@@ -891,12 +877,6 @@ namespace Unison.Uwp.Services.WhatsApp
             return typed.ProbeConnectionAsync(ConnectionHealthProfile.OnDemand.ProbeTimeoutMs);
         }
 
-        bool IIsCurrentSocketHealthyHost.SuppressReconnect
-        {
-            get => _sessionFlags.SuppressReconnect;
-            set => _sessionFlags.SuppressReconnect = value;
-        }
-
         void IIsCurrentSocketHealthyHost.DisconnectSocket(object socket)
         {
             var typed = socket as IWhatsAppSocket;
@@ -1087,12 +1067,6 @@ namespace Unison.Uwp.Services.WhatsApp
             ConnectionConnectOpen.RunAsync(_connectionOpen, _socketSessions, reuseLoadedKeyState);
 
         // --- IAutoReconnectLoopHost ------------------------------------------
-
-        bool IAutoReconnectLoopHost.SuppressReconnect => _sessionFlags.SuppressReconnect;
-
-        bool IAutoReconnectLoopHost.FatalSessionEnded => _sessionFlags.FatalSessionEnded;
-
-        bool IAutoReconnectLoopHost.PairingRestartPending => _sessionFlags.PairingRestartPending;
 
         bool IAutoReconnectLoopHost.IsAuthStatePresent => _authState != null;
 

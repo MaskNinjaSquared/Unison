@@ -36,16 +36,20 @@ No behaviour change for users. Prep so later diffs are one cluster, not a 16k-li
 
 | File | Cluster |
 |---|---|
-| `WhatsAppService.cs` | Fields, properties, ctor/`Create`/`Func<>` façades, pin-in-chat send, history SQLite notify, leftovers |
+| `WhatsAppService.cs` | Fields, properties, ctor/`Create`/`Func<>` façades, leftovers (~2.1k lines after Auto batch) |
 | `WhatsAppService.Connection.cs` | Connect / resume / pairing / reconnect / suspend / broker transfer |
-| `WhatsAppService.Media.cs` | On-demand decrypt + cache (`Ensure*AvailableAsync`) |
+| ~~`WhatsAppService.Media.cs`~~ | Removed earlier — media on façades / cache services |
 | `WhatsAppService.StartupPhases.cs` | Quiet-wait / memory-headroom host wiring (`StartupQuietGate`) |
-| `WhatsAppService.Identity.cs` | Canonical JID, alias LID/PN, `ResolveDisplayName`, usync |
+| `WhatsAppService.Identity.cs` | Canonical JID, alias LID/PN, `IResolvedNameApplyHost`, `ISelfIdentityHealHost` |
 | ~~`WhatsAppService.AppState.cs`~~ | Removed — `ForgetChatStorageHost` + `AppStateLocalHost` |
 | `WhatsAppService.Persistence.cs` | chats.json debounce, load persisted UI, suspend tail |
 | `WhatsAppService.Receipts.cs` | Receipt nodes → send state; receipt-path group metadata apply via `IGroupService` |
-| `WhatsAppService.IncomingPump.cs` | Decrypted-message queue, placeholders, offline replay summaries |
+| `WhatsAppService.IncomingPump.cs` | Thin ports only (~70 lines): placeholder resend, bound mutation, offline-replay host — queue/drain on DI `IncomingMessagePump` |
+| `WhatsAppService.HostAdapters.cs` | `IPostReplayMaintenanceHost`, `IBackgroundResolutionGate`, `IPostSyncMaintenanceIoHost`, `IPostMessageEnrichmentHost`, wire-owner accessors |
+| `WhatsAppService.SessionFlagsHost.cs` | Reconnect/pairing flag getters over `ConnectionSessionFlags` (no policy) |
+| `WhatsAppService.HistoryHosts.cs` | `IHistoryHydrationBackfillHost` + `ISqliteHistoryQuietFinalizeHost` |
 | `WhatsAppService.OutgoingHost.cs` | Explicit `IOutgoingMessageHost`: the caches and socket the send flows on `MessageFacade` reach (3.4) |
+| `ConnectionHealthSocketHost.cs` | Health-monitor socket adapter (Phase D) behind `IConnectionHealthOwnerPort` |
 
 `WhatsAppService.Groups.cs` and `WhatsAppService.Avatars.cs` are gone: group apply lives on `GroupFacade` / `GroupMetadataApply`; avatar fetch/apply moved earlier in phase 3.
 

@@ -2,6 +2,10 @@
 
 Newest first.
 
+## Auto batch after Phase D — host forwards + partials (Opus quick review)
+
+~100 low/medium mechanical steps: WhatsAppService one-liner private forwards inlined onto owners/dispatches; `SessionFlagsHost`, `HistoryHosts` partials; Identity + HostAdapters absorbed more host surfaces; IncomingPump stays ports-only. No policy/threshold change. Marked for a short Opus pass in [Netstandard WhatsApp client](Netstandard-WhatsApp-Client) § Auto batch after Phase D.
+
 ## Phase D — pump, connection latches and health adapter leave WhatsAppService
 
 The host now drains through the injected `IncomingMessagePump` (no private forwards, no fallback pump); `DecryptedMessageWireOwner` maps the wire envelope onto the pump request. Reconnect / pairing / logout latches moved to `ConnectionSessionFlags` (WhatsAppClient, DI singleton). The nested health-monitor adapter is now `ConnectionHealthSocketHost` behind `IConnectionHealthOwnerPort`. No policy, threshold or ordering change; needs an on-device pass (pairing, reconnect, offline replay, suspend/resume, pump stall).

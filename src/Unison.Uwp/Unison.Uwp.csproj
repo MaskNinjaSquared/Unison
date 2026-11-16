@@ -335,6 +335,8 @@
     <Compile Include="Services\WhatsApp\WhatsAppService.Receipts.cs" />
     <Compile Include="Services\WhatsApp\WhatsAppService.IncomingPump.cs" />
     <Compile Include="Services\WhatsApp\WhatsAppService.HostAdapters.cs" />
+    <Compile Include="Services\WhatsApp\WhatsAppService.SessionFlagsHost.cs" />
+    <Compile Include="Services\WhatsApp\WhatsAppService.HistoryHosts.cs" />
     <Compile Include="Services\WhatsApp\WhatsAppService.OutgoingHost.cs" />
     <Compile Include="Services\WhatsApp\Diagnostics\DebugSendService.cs" />
     <Compile Include="Services\LocalContactsService.cs" />

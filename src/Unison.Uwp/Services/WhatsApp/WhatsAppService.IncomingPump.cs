@@ -1,7 +1,5 @@
 using System;
-using System.Diagnostics;
 using System.Threading.Tasks;
-using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Models;
 using Unison.Core.State;
 using Unison.WhatsAppClient.Abstractions;
@@ -11,11 +9,11 @@ using Unison.WhatsAppClient.Messages;
 
 namespace Unison.Uwp.Services.WhatsApp
 {
-        /// <summary>
+    /// <summary>
     /// Thin host ports for placeholder resend and bound mutation. The decrypted
     /// queue/drain live on the injected <see cref="IncomingMessagePump"/>; offline-replay flush
     /// ownership is <see cref="OfflineReplayFlush"/>.
-        /// </summary>
+    /// </summary>
     public partial class WhatsAppService : IBoundMutationGate
     {
         bool IPlaceholderResendSocket.IsHandshakeComplete =>

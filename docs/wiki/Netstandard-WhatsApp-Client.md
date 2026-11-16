@@ -576,6 +576,30 @@ Further shrinking those rows is **State/contract seams** (or Phase E), not anoth
 | Health-monitor socket adapter | **Done** — `ConnectionHealthSocketHost` (UWP, own file) over `IConnectionHealthOwnerPort` (current socket slot, catch-up, soft reconnect, latch fatal + report). Loop policy unchanged in `ConnectionHealthMonitor` |
 | Health / reconnect timers | Policy already in WhatsAppClient (`ConnectionHealthMonitorOwner`, `SoftReconnectCoordinator`, `AutoReconnectLoopDispatch`). Still on the host: `ISoftReconnectIoHost` / `IAutoReconnectLoopHost` adapters (they call `InitializeAsync` / `ConnectAsync` on the client) and the `_socket` field. Next: move those once the connect path leaves `WhatsAppService` |
 
+### Auto batch after Phase D — Opus quick review
+
+**Status:** executed on Auto (low/medium). **Opus: quick pass only** — behaviour should be identical; check the seams below, not a full re-read of WhatsAppService.
+
+**Done (count ≈ 100 mechanical steps):**
+
+1. **~27 one-liner forwards inlined** onto owners/dispatches (`PublishConnectionUpdateDispatch`, `_softReconnect.Schedule`, `_catchUpFinish.Run`, `ConnectionPairingStage2.RunAsync`, …). Method-group ctor ports rewritten to the same targets.
+2. **IncomingPump hygiene** — unused usings removed; summary fixed; file is ports-only.
+3. **`WhatsAppService.SessionFlagsHost`** — suppress/fatal/pairing getters for soft-reconnect / auto-reconnect / resume / healthy-socket hosts.
+4. **`WhatsAppService.HistoryHosts`** — `IHistoryHydrationBackfillHost` + `ISqliteHistoryQuietFinalizeHost` left the main blob.
+5. **`WhatsAppService.Identity`** grew `IResolvedNameApplyHost` + `ISelfIdentityHealHost`.
+6. **`WhatsAppService.HostAdapters`** grew `IPostSyncMaintenanceIoHost`, `IPostMessageEnrichmentHost`, wire-owner accessors + `ApplyHistorySyncFromWireAsync` / offline-replay notify helpers (moved as one contiguous block).
+7. **csproj** registers the new partials; UWP ARM Debug builds; Core tests 4135 pass / 3 known fails.
+
+**Opus checklist (minutes, not hours):**
+
+- [ ] Spot-check 3–5 inlined call sites still match former private bodies (esp. `ScheduleAutoReconnect` → `_softReconnect.Schedule`, `TryStartPairingStage2Reconnect` → dispatch with `this`).
+- [ ] `SessionFlagsHost` getters are pure; no reconnect body moved.
+- [ ] `HistoryHosts` / `HostAdapters` / `Identity` usings complete (no silent wrong-type resolve).
+- [ ] Wire-owner accessors still `internal` and reachable from `SocketEventHandlerWiring`.
+- [ ] No FULL / pump / broker threshold changed (diff should be moves + deletes of wrappers only).
+
+**Still Opus + on-device (do not Auto):** `ISoftReconnectIoHost` / `IAutoReconnectLoopHost` bodies, `_socket` field, wire owners to DI, adjacent FULL / silent chain pacing, broker transfer.
+
 ### Phase E (future) — client-owned public I/O
 
 **Not** Phase C/D work. Long-term goal: `Unison.WhatsAppClient` publishable / reusable without dragging Unison UI models — a portable WhatsApp **policy** library whose **entry and exit** types live on the client (or a thin contracts package next to it), not on Unison.Core ViewModel-shaped models.
