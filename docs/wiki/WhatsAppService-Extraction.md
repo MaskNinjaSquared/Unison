@@ -234,7 +234,9 @@ History catch-up host interfaces (30) left the client as owners in
 Stale probes share `TryGetHistoryStaleReason`. The connection three are ports only:
 auth state, the session-established TCS and the pairing flags stay on the host with
 the reconnect path. Incoming pump and auto-reconnect / health timers were not moved
-(Mobile risk).
+(Mobile risk). Debt: `SilentFullHistoryChainOwner` and `PeriodicFullHistorySafetyOwner` still
+take `SyncWorkloadStrategy` — first targets of phase P in
+[Netstandard WhatsApp client](Netstandard-WhatsApp-Client#product-policy-layer-unison-vs-the-whatsapp-client).
 
 ### Facades still depend on the client
 

@@ -66,7 +66,7 @@ Platform contracts already exist in Core for several host concerns (`IDispatcher
 
 ## Target architecture
 
-Style: TDLib-like — the UWP **handler** (composition root) creates WinRT adapters; a portable **Application** library receives ports and owns façades / policy; protocol stays in Socket + Baileys.
+Style: TDLib-like — the UWP **handler** (composition root) creates WinRT adapters; a portable **Application** library receives ports and owns façades and the WhatsApp flow; protocol stays in Socket + Baileys. **Unison product decisions** (device tier, frugal mode, memory budget) sit one layer above, in Core — see [Product policy layer](#product-policy-layer-unison-vs-the-whatsapp-client).
 
 ```mermaid
 flowchart TB
@@ -118,6 +118,85 @@ Baileys (+ Socket) stay the protocol stack — separate from this app-domain Cor
 4. Inject **ports** (`IWaTransport`, factory, `IDispatcher`, stores), not WinRT types, into Application.
 5. [WhatsAppService extraction](WhatsAppService-Extraction) phases 3 → 4 remain the mechanical prerequisite before moving types into `Unison.WhatsAppClient`.
 6. Core keeps **presentation** helpers; **domain** helpers leave Core for Application alongside façades.
+7. "Domain" above means **WhatsApp flow** (how the protocol behaves: history mapping, usync filing, receipts, catch-up sequencing). **Unison product** rules (how much / when, given tier, frugal, memory) are not client domain — they go to the product policy layer below.
+
+### Product policy layer (Unison vs the WhatsApp client)
+
+Goal: `Unison.WhatsAppClient` + Socket + Baileys are the **pristine** WhatsApp stack — a
+Baileys-style client that any host could drive. Decisions that exist because Unison is a
+Windows 10 Mobile–first product (device tier, frugal mode, Kind GIFs / 512 MB, memory
+headroom, "Mobile waits longer") live in **Core**, in product services that consult the
+façade **contracts** and decide what to ask the client for.
+
+```mermaid
+flowchart TB
+  VMs["ViewModels (Core)"]
+  Product["Product policy services (Core)<br/>tier / frugal / memory"]
+  Contracts["Façade contracts (Core today)"]
+  Client["Unison.WhatsAppClient<br/>façades + WhatsApp flow"]
+  Socket["Unison.Socket + Baileys"]
+
+  VMs --> Contracts
+  VMs --> Product
+  Product --> Contracts
+  Client -. implements .-> Contracts
+  Client --> Socket
+```
+
+**Rules**
+
+1. WhatsAppClient / Socket / Baileys never read `DeviceCategory`, `SyncWorkloadStrategy`,
+   frugal settings, `IAppMemoryInfo` or "is Mobile". They take **neutral knobs** (options or
+   per-call parameters: batch sizes, delays, quotas, enable flags) with sane defaults, and
+   expose **facts** (progress, quiet, pending counts, freshness) for the layer above.
+2. The product service **decides**; the client **executes**. A gate like "skip deferred
+   startup maintenance in frugal mode" is a product call that chooses whether to invoke a
+   façade method — not a branch inside the client.
+3. Knobs that are protocol inputs (`HistoryStorageQuotaMb` in `HistorySyncConfig`,
+   `InitialPreKeyUploadCount`, per-chat persist cap) stay **parameters** of the client. Their
+   **values** come from the product layer.
+4. Hot-path pacing (inter-chunk delays inside a running pass) is passed as an options snapshot
+   when the pass starts — no per-chunk call up into Core.
+5. Core stops referencing protocol types: `Unison.Core` → `Unison.Baileys` (today: 5 files,
+   e.g. `ConnectionSocketSessionRequest`, `IMessageService`, `IGroupService`,
+   `ISocketFacadeWireHost`) is debt to close, not a pattern to grow.
+
+**Current leakage (Nov 2026 inventory)** — 27 files in `src/Unison.WhatsAppClient` read tier /
+frugal / memory. Classify each as **knob** (becomes an option/parameter), **decision** (moves up
+to a Core product service) or **fact** (stays, exposed upward):
+
+| Area | Files | Likely class |
+|---|---|---|
+| Deferred startup / frugal | `DeferredStartupFrugalGate`, `DeferredStartupMaintenanceOwner` / `Dispatch`, `IDeferredStartupMaintenanceHost`, `StartupQuietGate`, `StartupPhaseTrace` | decision (frugal gate, quiet window) + fact (phase trace) |
+| Post-replay maintenance | `PostReplayMaintenanceGates`, `PostReplayMaintenanceDispatch` | decision |
+| History FULL chain | `SilentFullHistoryChainOwner` / `Dispatch`, `ISilentFullHistoryChainHost`, `PeriodicFullHistorySafetyOwner`, `IHistoryCatchUpFinishHost`, `HistoryFacade` | knob (`MaxFullHistoryCatchUpRounds`, `AllowStagnantHistoryRepairCascade`, pacing) |
+| Chats / previews | `ChatFacade` (16 refs), `ChatPreviewReconciler`, `ChatPreviewMemoryTip`, `ChatCatalogDiskPersistence`, `ChatNameRefresh` (14) | knob (batch sizes) + decision (memory-tip trim) |
+| Contacts / avatars / groups | `ContactFacade` (11), `ContactNameResolver`, `ChatAvatarPolicy`, `GroupRosterPolicy`, `DeferredAvatarResolution`, `GroupFacade`, `GroupMetadataApply` | knob (fetch batch / delay, roster batch) + decision (avatar policy by tier) |
+| Messages | `MessageFacade` | knob |
+
+`SyncWorkloadStrategy` (`Core/State`, one subclass per tier: `Unsupported` / `Low` / `High`) is
+already the right **product** object — it stays in Core. What changes is that the client stops
+receiving it; the product layer maps it to client options.
+
+**Phases (P — runs alongside Phase B/D, before E)**
+
+| Step | Work | Done check |
+|---|---|---|
+| P0 | Freeze: no new tier / frugal / memory reads in WhatsAppClient (review rule) | New owners take knobs, not `SyncWorkloadStrategy` |
+| P1 | Neutral options types on the client surface (`HistorySyncOptions`, `EnrichmentPacingOptions`, …) — numbers and flags only, no tier names | Types compile with no `DeviceCategory` |
+| P2 | Swap `SyncWorkloadStrategy` injection in WhatsAppClient for those options, one façade at a time (History chain first: it was just extracted) | `rg SyncWorkloadStrategy src/Unison.WhatsAppClient` shrinks per step |
+| P3 | Core product services (e.g. `ISyncProductPolicy` / `StartupProductPolicy`) own the decisions: frugal gate, startup quiet, post-replay maintenance, avatar/roster policy by tier. They read tier / frugal / memory and call façade contracts | Gates gone from `Helpers/Connection`; decisions unit-tested in `Unison.Core.Tests` without a client |
+| P4 | Core contracts stop exposing Baileys types (own DTOs at the contract edge) | `Unison.Core.csproj` drops the Baileys reference |
+| Exit | `rg "SyncWorkloadStrategy\|DeviceCategory\|Frugal\|IAppMemoryInfo\|IsMobile" src/Unison.WhatsAppClient src/Unison.Socket src/Unison.Baileys` returns 0 | — |
+
+**Open decision:** the dependency direction. Today WhatsAppClient → Core (contracts in Core).
+Recommended: keep contracts in Core through P, but make them tier-free; flip in Phase E
+(client owns its I/O, Core → WhatsAppClient, product services consult the client directly).
+Flipping earlier would mean moving every `Contracts/WhatsApp` interface in one pass.
+
+**Risk:** the History FULL chain and deferred startup are the paths Mobile is most sensitive
+to. P2/P3 there need on-device runs (first sync, reconnect with stale tips, frugal on/off),
+not only unit tests.
 
 ### UWP handler
 
@@ -288,6 +367,7 @@ Until E ships, façades **keep** returning Core `Models` / `Contracts` (dependen
 | B | Extraction wiki phase 4 target surface; no policy growth on `IWhatsAppService` |
 | C | `Unison.WhatsAppClient` builds as `netstandard2.0` with no WinRT |
 | D | UWP is host-only; Background → Baileys only (unchanged rule) |
+| P | WhatsAppClient / Socket / Baileys free of tier / frugal / memory reads; product decisions in Core services over façade contracts; Core drops the Baileys reference |
 | E | Client public I/O types owned by WhatsAppClient (or sibling contracts); Core maps at the host edge; second host can call client without Core UI models |
 
 ---
