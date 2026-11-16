@@ -1,10 +1,11 @@
+using Unison.Core.Contracts.WhatsApp;
 // =============================================================================
 // ISelfIdentityHealHost
 //
 // Auth-side heal/purge when usync files a pair that touches Me. Socket alias
 // registration stays on ISocketAliasRegistrar.
 // =============================================================================
-namespace Unison.Core.Contracts.WhatsApp
+namespace Unison.WhatsAppClient.Abstractions
 {
     public interface ISelfIdentityHealHost
     {

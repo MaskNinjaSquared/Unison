@@ -1,4 +1,5 @@
-namespace Unison.Core.Contracts.WhatsApp
+using Unison.Core.Contracts.WhatsApp;
+namespace Unison.WhatsAppClient.Abstractions
 {
     /// <summary>
     /// Drops pending placeholder repairs when a conversation row goes away.

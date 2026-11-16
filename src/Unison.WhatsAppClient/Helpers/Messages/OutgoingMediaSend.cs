@@ -13,7 +13,8 @@ using Unison.Baileys.Crypto;
 using Unison.Core.Contracts;
 using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Helpers;
-using Unison.Core.Models;
+using Unison.Core.Models;
+using Unison.WhatsAppClient.Abstractions;
 
 namespace Unison.WhatsAppClient.Helpers
 {

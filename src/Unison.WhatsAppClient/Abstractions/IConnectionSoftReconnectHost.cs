@@ -1,4 +1,5 @@
-namespace Unison.Core.Contracts.WhatsApp
+using Unison.Core.Contracts.WhatsApp;
+namespace Unison.WhatsAppClient.Abstractions
 {
     /// <summary>
     /// Transport primitives <see cref="IConnectionSoftReconnect"/> needs from the connection

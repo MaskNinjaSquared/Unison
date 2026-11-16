@@ -8,7 +8,8 @@
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
-using Unison.Core.Contracts.WhatsApp;
+using Unison.Core.Contracts.WhatsApp;
+using Unison.WhatsAppClient.Abstractions;
 
 namespace Unison.WhatsAppClient.Helpers
 {

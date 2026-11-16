@@ -8,7 +8,8 @@ using System.Collections.Generic;
 using System.Threading.Tasks;
 using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Models;
-using Unison.Uwp.Services.WhatsApp.History;
+using Unison.Uwp.Services.WhatsApp.History;
+using Unison.WhatsAppClient.Abstractions;
 
 namespace Unison.Uwp.Services.WhatsApp.Status
 {

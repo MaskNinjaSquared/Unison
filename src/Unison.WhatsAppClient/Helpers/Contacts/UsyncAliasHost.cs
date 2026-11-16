@@ -4,7 +4,8 @@
 // Files an accepted usync pair in the table, then asks the connection client to
 // register it on the socket and heal Me when the pair touches our identity.
 // =============================================================================
-using Unison.Core.Contracts.WhatsApp;
+using Unison.Core.Contracts.WhatsApp;
+using Unison.WhatsAppClient.Abstractions;
 
 namespace Unison.WhatsAppClient.Helpers
 {

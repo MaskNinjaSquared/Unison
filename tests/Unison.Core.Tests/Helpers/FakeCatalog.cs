@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using Unison.Core.Contracts.WhatsApp;
-using Unison.Core.Models;
+using Unison.Core.Models;
+using Unison.WhatsAppClient.Abstractions;
 
 namespace Unison.Core.Tests.Helpers
 {

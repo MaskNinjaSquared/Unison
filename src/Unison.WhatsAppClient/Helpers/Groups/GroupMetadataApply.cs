@@ -10,7 +10,8 @@ using Unison.Core.Helpers;
 using Unison.Core.Helpers.Chats;
 using Unison.Core.Helpers.Groups;
 using Unison.Core.Models;
-using Unison.Core.State;
+using Unison.Core.State;
+using Unison.WhatsAppClient.Abstractions;
 
 namespace Unison.WhatsAppClient.Helpers
 {

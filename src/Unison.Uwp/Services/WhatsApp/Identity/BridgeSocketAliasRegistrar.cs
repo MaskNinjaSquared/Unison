@@ -8,7 +8,8 @@ using System;
 using System.Collections.Generic;
 using Unison.Core.Contracts.WhatsApp;
 using Unison.Uwp.Client;
-using UwpSessionProvider = Unison.Uwp.Services.Socket.IWhatsAppSessionProvider;
+using UwpSessionProvider = Unison.Uwp.Services.Socket.IWhatsAppSessionProvider;
+using Unison.WhatsAppClient.Abstractions;
 
 namespace Unison.Uwp.Services.WhatsApp.Identity
 {

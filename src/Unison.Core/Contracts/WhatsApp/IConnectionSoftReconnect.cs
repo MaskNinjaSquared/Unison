@@ -5,7 +5,7 @@ namespace Unison.Core.Contracts.WhatsApp
     /// </summary>
     /// <remarks>
     /// Implemented by <c>ConnectionFacade</c>. The connection client runs the loops behind
-    /// <see cref="IConnectionSoftReconnectHost"/>.
+    /// <c>IConnectionSoftReconnectHost</c>.
     /// </remarks>
     public interface IConnectionSoftReconnect
     {

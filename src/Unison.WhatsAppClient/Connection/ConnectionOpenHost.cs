@@ -8,7 +8,8 @@
 // =============================================================================
 using System;
 using Unison.Core.Contracts;
-using Unison.Core.Contracts.WhatsApp;
+using Unison.Core.Contracts.WhatsApp;
+using Unison.WhatsAppClient.Abstractions;
 
 namespace Unison.WhatsAppClient.Connection
 {

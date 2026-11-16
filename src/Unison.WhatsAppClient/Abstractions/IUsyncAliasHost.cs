@@ -1,4 +1,5 @@
-namespace Unison.Core.Contracts.WhatsApp
+using Unison.Core.Contracts.WhatsApp;
+namespace Unison.WhatsAppClient.Abstractions
 {
     /// <summary>
     /// Files an accepted usync LID/phone pair and registers it with the live session.

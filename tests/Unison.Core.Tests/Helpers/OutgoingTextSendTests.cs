@@ -7,7 +7,8 @@ using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Helpers;
 using Unison.Core.Models;
 using Unison.WhatsAppClient.Helpers;
-using Xunit;
+using Xunit;
+using Unison.WhatsAppClient.Abstractions;
 
 namespace Unison.Core.Tests.Helpers
 {

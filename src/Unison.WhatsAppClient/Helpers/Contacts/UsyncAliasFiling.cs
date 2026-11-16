@@ -1,5 +1,6 @@
 using Unison.Core.Helpers;
-using Unison.Core.State;
+using Unison.Core.State;
+using Unison.WhatsAppClient.Abstractions;
 
 namespace Unison.WhatsAppClient.Helpers
 {

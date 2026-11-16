@@ -1,4 +1,5 @@
-namespace Unison.Core.Contracts.WhatsApp
+using Unison.Core.Contracts.WhatsApp;
+namespace Unison.WhatsAppClient.Abstractions
 {
     /// <summary>
     /// Writes the chat catalogue, the name tables and the alias map now, not on the debounce

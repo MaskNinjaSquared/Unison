@@ -5,7 +5,8 @@
 // QR, abort on fatal. Opening the socket stays on the host.
 // =============================================================================
 using System;
-using Unison.Core.Contracts.WhatsApp;
+using Unison.Core.Contracts.WhatsApp;
+using Unison.WhatsAppClient.Abstractions;
 
 namespace Unison.WhatsAppClient.Helpers
 {
