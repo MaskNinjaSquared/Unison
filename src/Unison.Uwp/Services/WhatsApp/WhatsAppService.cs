@@ -111,7 +111,7 @@ namespace Unison.Uwp.Services.WhatsApp
         private readonly IConnectionSocketSessionFactory _socketSessions;
         private readonly ConnectionOpenHost _connectionOpen;
         private AuthStore _authStore = new AuthStore();
-        private IMessageStore _messageStore = new MessageStore();
+        private readonly IMessageStore _messageStore;
         private readonly IHistoryMessageStore _historyMessages;
         private readonly IHistoryChatPreviewStore _chatPreviews;
         private readonly IUsyncGate _usyncGate;
@@ -469,6 +469,7 @@ namespace Unison.Uwp.Services.WhatsApp
             IPersonStore personStore,
             IGroupRosterStore groupRosterStore,
             IChatStore chatStore,
+            IMessageStore messageStore,
             ISystemInfoProvider systemInfo,
             AttachedUiDispatcher ui,
             PendingMessageQueue pendingMessages,
@@ -494,7 +495,7 @@ namespace Unison.Uwp.Services.WhatsApp
         {
             return new WhatsAppService(
                 chatState, chatRows, activeChat, syncStatus, syncWork, historyMessages, chatPreviews, usyncGate, avatarFetcher, mediaCache, jidAlias, displayNames, historyRequests,
-                catchUp, initialSync, productPolicy, startupMaintenance, postReplayMaintenance, selfProfile, personStore, groupRosterStore, chatStore, systemInfo, ui, pendingMessages, lidMappings, socketSessions, listPaintGate, appMemory, localSettings, resolveContacts, resolveMessages, resolveChats, resolveGroups, resolveHistory, resolveDeferredAvatars, incomingPump, liveMessages, diagnostics, initGate, sessionFlags, socketSlot, authSlot, wire);
+                catchUp, initialSync, productPolicy, startupMaintenance, postReplayMaintenance, selfProfile, personStore, groupRosterStore, chatStore, messageStore, systemInfo, ui, pendingMessages, lidMappings, socketSessions, listPaintGate, appMemory, localSettings, resolveContacts, resolveMessages, resolveChats, resolveGroups, resolveHistory, resolveDeferredAvatars, incomingPump, liveMessages, diagnostics, initGate, sessionFlags, socketSlot, authSlot, wire);
         }
 
         /// <summary>

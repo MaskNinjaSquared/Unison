@@ -644,6 +644,7 @@ namespace Unison.Uwp
                 sp.GetRequiredService<IPersonStore>(),
                 sp.GetRequiredService<IGroupRosterStore>(),
                 sp.GetRequiredService<IChatStore>(),
+                sp.GetRequiredService<IMessageStore>(),
                 sp.GetRequiredService<ISystemInfoProvider>(),
                 sp.GetRequiredService<AttachedUiDispatcher>(),
                 sp.GetRequiredService<PendingMessageQueue>(),

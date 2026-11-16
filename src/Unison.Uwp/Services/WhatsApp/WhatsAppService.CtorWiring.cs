@@ -61,6 +61,7 @@ namespace Unison.Uwp.Services.WhatsApp
             IPersonStore personStore,
             IGroupRosterStore groupRosterStore,
             IChatStore chatStore,
+            IMessageStore messageStore,
             ISystemInfoProvider systemInfo,
             AttachedUiDispatcher ui,
             PendingMessageQueue pendingMessages,
@@ -132,6 +133,7 @@ namespace Unison.Uwp.Services.WhatsApp
             _personStore = personStore ?? throw new ArgumentNullException(nameof(personStore));
             _groupRosterStore = groupRosterStore ?? throw new ArgumentNullException(nameof(groupRosterStore));
             _chatStore = chatStore ?? throw new ArgumentNullException(nameof(chatStore));
+            _messageStore = messageStore ?? throw new ArgumentNullException(nameof(messageStore));
             _isWindowsMobile = systemInfo.IsMobile();
             _appMemory = appMemory ?? new WinRtAppMemoryInfo();
             _localSettings = localSettings ?? throw new ArgumentNullException(nameof(localSettings));
