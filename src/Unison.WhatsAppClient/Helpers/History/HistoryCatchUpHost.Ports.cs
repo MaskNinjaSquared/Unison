@@ -6,12 +6,11 @@ using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Helpers;
 using Unison.Core.State;
 using Unison.WhatsAppClient.Abstractions;
-using Unison.WhatsAppClient.Helpers;
 using Unison.WhatsAppClient.History;
 
-namespace Unison.Uwp.Services.WhatsApp.History
+namespace Unison.WhatsAppClient.Helpers
 {
-    internal sealed partial class HistoryCatchUpHost :
+    public sealed partial class HistoryCatchUpHost :
         IHistorySyncHost,
         IHistoryCatchUpHost,
         IHistoryHydrationBackfillHost,
@@ -116,7 +115,7 @@ namespace Unison.Uwp.Services.WhatsApp.History
 
         async Task<bool> IHistoryCatchUpHost.TryRequestAdjacentLiveFullHistoryAsync(string reason)
         {
-            if (_socketSlot.Current == null || !_socketSlot.Current.IsHandshakeComplete || !IsConnected)
+            if (!IsConnected)
             {
                 return false;
             }

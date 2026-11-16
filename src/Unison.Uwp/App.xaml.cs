@@ -517,13 +517,16 @@ namespace Unison.Uwp
                 sp.GetRequiredService<FirstSyncListHoldState>(),
                 sp.GetRequiredService<ChatListInitialPaintGate>(),
                 sp.GetRequiredService<ConnectionSessionFlags>(),
-                sp.GetRequiredService<ConnectionSlot<IWhatsAppSocket>>(),
+                sp.GetRequiredService<IConnectionSocketControl>(),
+                sp.GetRequiredService<IHistoryOnDemandSocket>(),
                 sp.GetRequiredService<ConnectionSlot<AuthState>>(),
-                sp.GetRequiredService<ReconnectHostAdapter>(),
+                sp.GetRequiredService<ReconnectHostAdapter>().Coordinator,
                 sp.GetRequiredService<ConnectionEventHub>(),
                 sp.GetRequiredService<IAppVisibility>(),
                 sp.GetRequiredService<ILocalSettings>(),
                 sp.GetRequiredService<IRuntimeDiagnostics>()));
+            services.AddSingleton<IConnectionSocketControl>(sp => new SlotConnectionSocketControl(
+                sp.GetRequiredService<ConnectionSlot<IWhatsAppSocket>>()));
             services.AddSingleton(sp => new ChatPreviewReconciler(
                 sp.GetRequiredService<IHistoryMessageStore>(),
                 sp.GetRequiredService<JidAliasTable>(),

@@ -16,7 +16,6 @@ using Unison.Core.State;
 using Unison.Core.Product;
 using Unison.Uwp.Services;
 using Unison.Uwp.Services.WhatsApp.Chats;
-using Unison.Uwp.Services.WhatsApp.History;
 using Unison.Uwp.Services.WhatsApp.Contacts;
 using Unison.WhatsAppClient.Chats;
 using Unison.WhatsAppClient.Groups;

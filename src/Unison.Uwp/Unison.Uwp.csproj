@@ -188,6 +188,7 @@
     <Compile Include="Services\WhatsApp\SocketBridgeRemoteHooks.cs" />
     <Compile Include="Services\WhatsApp\ConnectionHealthSocketHost.cs" />
     <Compile Include="Services\WhatsApp\CurrentSocketHealthHost.cs" />
+    <Compile Include="Services\WhatsApp\SlotConnectionSocketControl.cs" />
     <Compile Include="Services\WhatsApp\IReconnectLifecyclePort.cs" />
     <Compile Include="Services\WhatsApp\ReconnectHostAdapter.cs" />
     <Compile Include="Services\WhatsApp\IConnectionHealthOwnerPort.cs" />
@@ -207,10 +208,6 @@
     <Compile Include="Services\WhatsApp\History\HistoryThumbnailMaterializer.cs" />
     <Compile Include="Services\WhatsApp\History\WinRtHistoryMessageThumbnailMaterializer.cs" />
     <Compile Include="Services\WhatsApp\History\BridgeHistoryOnDemandSocket.cs" />
-    <Compile Include="Services\WhatsApp\History\SocketOwnedHistoryOnDemand.cs" />
-    <Compile Include="Services\WhatsApp\History\IHistoryCatchUpHostPort.cs" />
-    <Compile Include="Services\WhatsApp\History\HistoryCatchUpHost.cs" />
-    <Compile Include="Services\WhatsApp\History\HistoryCatchUpHost.Ports.cs" />
     <Compile Include="Services\WhatsApp\Identity\BridgeSocketAliasRegistrar.cs" />
     <Compile Include="Services\WhatsApp\Chats\ChatCatalogDebounceTimer.cs" />
     <Compile Include="Services\WhatsApp\Status\WinRtStatusThumbnailMaterializer.cs" />

@@ -2,6 +2,10 @@
 
 Newest first.
 
+## Phase D stage 4 — `HistoryCatchUpHost` moves to netstandard
+
+`HistoryCatchUpHost` now lives in `Unison.WhatsAppClient` (`Helpers/History`). The live socket reaches it through `IConnectionSocketControl` (UWP: `SlotConnectionSocketControl` over the socket slot), on-demand stanzas through the DI `IHistoryOnDemandSocket` (the bridge, same socket), and soft reconnect through `SoftReconnectCoordinator`. `SocketOwnedHistoryOnDemand` is gone. Verbose log goes through `ProtocolRuntimeLog`, which the host already routes to `WhatsAppService.Log`.
+
 ## Phase D stage 4 — history catch-up cluster leaves the host
 
 `HistoryCatchUpHost` (UWP, DI) owns the FULL / catch-up / silent chain / hydration / first-sync release owners and implements the history host ports; `WhatsAppService` loses about 900 lines and five interfaces. Move-only: no threshold or order change.

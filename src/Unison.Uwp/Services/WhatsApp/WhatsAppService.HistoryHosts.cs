@@ -1,7 +1,6 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
-using Unison.Uwp.Services.WhatsApp.History;
 using Unison.WhatsAppClient.Abstractions;
 using Unison.WhatsAppClient.Helpers;
 

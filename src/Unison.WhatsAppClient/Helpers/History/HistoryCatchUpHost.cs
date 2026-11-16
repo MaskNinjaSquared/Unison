@@ -8,21 +8,20 @@ using Unison.Core.Contracts.Tuning;
 using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Helpers;
 using Unison.Core.Product;
+using Unison.Baileys.Diagnostics;
 using Unison.Core.State;
-using Unison.Uwp.Client;
 using Unison.WhatsAppClient.Abstractions;
 using Unison.WhatsAppClient.Connection;
-using Unison.WhatsAppClient.Helpers;
 using Unison.WhatsAppClient.History;
 
-namespace Unison.Uwp.Services.WhatsApp.History
+namespace Unison.WhatsAppClient.Helpers
 {
     /// <summary>
     /// FULL_HISTORY catch-up, silent chain, ON_DEMAND hydration and first-sync list release:
     /// the owners and the per-session state they share. Policy stays in the WhatsAppClient
     /// owners; this class wires them and answers their host ports.
     /// </summary>
-    internal sealed partial class HistoryCatchUpHost
+    public sealed partial class HistoryCatchUpHost
     {
         private readonly Func<IHistoryCatchUpHostPort> _resolveHost;
         private readonly Func<IConnectionEnsureHost> _resolveEnsure;
@@ -42,7 +41,7 @@ namespace Unison.Uwp.Services.WhatsApp.History
         private readonly FirstSyncListHoldState _firstSyncHold;
         private readonly ChatListInitialPaintGate _listPaintGate;
         private readonly ConnectionSessionFlags _sessionFlags;
-        private readonly ConnectionSlot<IWhatsAppSocket> _socketSlot;
+        private readonly IConnectionSocketControl _socket;
         private readonly ConnectionSlot<AuthState> _authSlot;
         private readonly SoftReconnectCoordinator _softReconnect;
         private readonly ConnectionEventHub _events;
@@ -110,9 +109,10 @@ namespace Unison.Uwp.Services.WhatsApp.History
             FirstSyncListHoldState firstSyncHold,
             ChatListInitialPaintGate listPaintGate,
             ConnectionSessionFlags sessionFlags,
-            ConnectionSlot<IWhatsAppSocket> socketSlot,
+            IConnectionSocketControl socket,
+            IHistoryOnDemandSocket historyOnDemandSocket,
             ConnectionSlot<AuthState> authSlot,
-            ReconnectHostAdapter reconnect,
+            SoftReconnectCoordinator softReconnect,
             ConnectionEventHub events,
             IAppVisibility visibility,
             ILocalSettings localSettings,
@@ -137,14 +137,15 @@ namespace Unison.Uwp.Services.WhatsApp.History
             _firstSyncHold = firstSyncHold ?? throw new ArgumentNullException(nameof(firstSyncHold));
             _listPaintGate = listPaintGate ?? throw new ArgumentNullException(nameof(listPaintGate));
             _sessionFlags = sessionFlags ?? throw new ArgumentNullException(nameof(sessionFlags));
-            _socketSlot = socketSlot ?? throw new ArgumentNullException(nameof(socketSlot));
+            _socket = socket ?? throw new ArgumentNullException(nameof(socket));
+            _historyOnDemandSocket = historyOnDemandSocket
+                ?? throw new ArgumentNullException(nameof(historyOnDemandSocket));
             _authSlot = authSlot ?? throw new ArgumentNullException(nameof(authSlot));
-            _softReconnect = (reconnect ?? throw new ArgumentNullException(nameof(reconnect))).Coordinator;
+            _softReconnect = softReconnect ?? throw new ArgumentNullException(nameof(softReconnect));
             _events = events ?? throw new ArgumentNullException(nameof(events));
             _visibility = visibility ?? throw new ArgumentNullException(nameof(visibility));
             _localSettings = localSettings ?? throw new ArgumentNullException(nameof(localSettings));
             _diagnostics = diagnostics ?? throw new ArgumentNullException(nameof(diagnostics));
-            _historyOnDemandSocket = new SocketOwnedHistoryOnDemand(() => _socketSlot.Current);
 
             _historyHydrationBackfill = new HistoryHydrationBackfill(this);
             _sqliteHistoryQuietFinalize = new SqliteHistoryQuietFinalize(this);
@@ -234,13 +235,7 @@ namespace Unison.Uwp.Services.WhatsApp.History
             _silentChain = new SilentFullHistoryChainOwner(
                 historyRequests: _historyRequests,
                 silentLotDelay: HistoryTuning.SilentFullHistoryDelay,
-                isSocketReady: () =>
-                {
-                    var socket = _socketSlot.Current;
-                    return IsConnected &&
-                           socket != null &&
-                           socket.IsHandshakeComplete;
-                },
+                isSocketReady: () => IsConnected,
                 isHistoryCatchUpActive: () => IsHistoryCatchUpActive,
                 tryGetStaleReason: TryGetHistoryFreshnessStaleReason,
                 requestSilentFullHistoryAsync: reason => _requestFullTracked.RunAsync(
@@ -254,14 +249,7 @@ namespace Unison.Uwp.Services.WhatsApp.History
                 historyRequests: _historyRequests,
                 allowStagnantRepairCascade: HistoryTuning.AllowStagnantRepairCascade,
                 settings: _localSettings,
-                isSocketReady: () =>
-                {
-                    var socket = _socketSlot.Current;
-                    return IsConnected &&
-                           socket != null &&
-                           socket.IsConnected &&
-                           socket.IsHandshakeComplete;
-                },
+                isSocketReady: () => IsConnected,
                 isHistoryCatchUpActive: () => IsHistoryCatchUpActive,
                 tryGetStaleReason: TryGetHistoryFreshnessStaleReason,
                 requestFullHistoryTrackedAsync: (reason, isFreshnessRepair) =>
@@ -337,23 +325,8 @@ namespace Unison.Uwp.Services.WhatsApp.History
                 isConnected: () => IsConnected,
                 settleBudget: HistoryOnDemandPacing.HydrationSettleBudget);
             _socketTearDown = new TearDownSocketForSoftReconnectOwner(
-                () =>
-                {
-                    var staleSocket = _socketSlot.Current;
-                    _socketSlot.Current = null;
-                    return staleSocket;
-                },
-                socket =>
-                {
-                    var typed = socket as IWhatsAppSocket;
-                    if (typed == null)
-                    {
-                        return;
-                    }
-
-                    try { typed.Disconnect(); } catch { }
-                    try { typed.Dispose(); } catch { }
-                });
+                _socket.DetachCurrent,
+                _socket.DisconnectAndDispose);
             _firstSyncListRelease = new FirstSyncListReleaseOwner(
                 historyChunks: _historyChunks,
                 heavyHistoryEnrichment: _heavyHistoryEnrichment,
@@ -473,20 +446,13 @@ namespace Unison.Uwp.Services.WhatsApp.History
         // Idle must outlast slow Mobile SQLite/UI between chunks (15s was aborting too early).
         private TimeSpan FullHistoryCatchUpIdleAbort => PhaseTuning.CatchUpIdleAbort;
 
-        private bool IsConnected
-        {
-            get
-            {
-                var socket = _socketSlot.Current;
-                return socket != null && socket.IsConnected && socket.IsHandshakeComplete;
-            }
-        }
+        private bool IsConnected => _socket.IsConnected;
 
         private bool IsHistoryCatchUpBannerActive => _syncStatus.IsHistoryCatchUpShown;
 
         private bool IsFirstSyncListHoldInProgress => _firstSyncHold.IsInProgress(_initialSync.IsActive);
 
-        private static void Log(string message) => WhatsAppService.Log(LogPrefix + message);
+        private static void Log(string message) => ProtocolRuntimeLog.Write(LogPrefix + message);
 
         /// <summary>
         /// Raised from socket threads: a subscriber that throws must not take the caller down.
@@ -630,10 +596,10 @@ namespace Unison.Uwp.Services.WhatsApp.History
         }
 
         private HistoryOnDemandDispatch HistoryDispatch =>
-            _historyDispatch ??= new HistoryOnDemandDispatch(
+            _historyDispatch ?? (_historyDispatch = new HistoryOnDemandDispatch(
                 _historyRequests,
                 _historyOnDemandSocket,
-                line => Debug.WriteLine(LogPrefix + line));
+                line => Debug.WriteLine(LogPrefix + line)));
 
         private Task<bool> RequestHistoryOnDemandIfNeededAsync(string normJid, int count, string triggerReason = null)
         {

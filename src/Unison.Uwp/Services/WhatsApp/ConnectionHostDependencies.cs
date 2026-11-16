@@ -6,7 +6,6 @@
 // and goes away with the host.
 // =============================================================================
 using System;
-using Unison.Uwp.Services.WhatsApp.History;
 using Unison.WhatsAppClient.Helpers;
 
 namespace Unison.Uwp.Services.WhatsApp
