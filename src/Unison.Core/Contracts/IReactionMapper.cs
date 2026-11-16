@@ -1,22 +1,14 @@
 using System.Collections.Generic;
 using Unison.Core.Models;
-using Proto;
 
 namespace Unison.Core.Contracts
 {
     /// <summary>
-    /// Maps reaction envelopes onto parent <see cref="ChatMessage.Reactions"/> and applies batches.
+    /// Applies <see cref="PendingReaction"/> onto parent <see cref="ChatMessage.Reactions"/>.
+    /// Proto → pending mapping lives on the WhatsAppClient payload mapper.
     /// </summary>
     public interface IReactionMapper
     {
-        PendingReaction MapFromReactionMessage(
-            Message.Types.ReactionMessage reactionMessage,
-            ChatMessageMapContext context);
-
-        PendingReaction MapFromHistoryReaction(
-            Reaction reaction,
-            ChatMessageMapContext parentContext);
-
         /// <summary>
         /// Upsert/remove a single pending reaction on the matching parent in <paramref name="messages"/>.
         /// </summary>

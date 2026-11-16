@@ -515,7 +515,7 @@ Do in order. Each phase has a done check.
 | Unread / app-state flags / preview age | `ChatUnreadTally`, `AppStateChatMutation` (+ `ChatFlagChange`), `ChatPreviewStaleness` | — |
 | Chat title replace / invite-subject blacklist | `ChatNameReplacement`, `GroupNameSyncBlacklist` | — |
 | Live history map / usync alias file | `HistoryLiveMessageMapper`, `UsyncAliasFiling` | — |
-| History listable / render / participant | `HistorySyncContentFilter`, `MessageRenderReader` (+ `MessageRenderInfo`), `WebMessageParticipant`, `MessageKeyAltJidScan` | `ProtoMessageUnwrap` stays in Core for `ChatMessageMapper`; `MediaPreviewTag` stays (presentation) |
+| History listable / render / participant | `HistorySyncContentFilter`, `MessageRenderReader` (+ `MessageRenderInfo`), `WebMessageParticipant`, `MessageKeyAltJidScan`, `ProtoMessageUnwrap`, `ChatMessageMapper` / `ReactionPayloadMapper` (proto→domain) | Core keeps domain-only `IReactionMapper` / `IChatMessageMapper` (`MapIndividual`, Apply); `MediaPreviewTag` stays (presentation) |
 | History row map / list tip | `HistoryMessageMapper`, `ChatPreviewTip` | `MessageTimestampValidity` / `LegacyDeletedPreview` stay (State + `ChatPreviewNormalizer`); `ChatMessageOrder` stays (State / VMs) |
 | Deep-link list UI / reorder / timeline merge | `ChatListDeepLinkSyncUi`, `ChatListNamesAppliedRefresh`, `ChatListReorderTrigger`, `ChatTimelineLiveMerge`; `IChatService` / `IMessageService` APIs | `ChatTimelineMergeMode` stays in Core; `ListEnrichmentPhase` / `SyncPhaseStatus` stay (State + list localize) |
 | List hold / self identity | `ChatListSyncHold`; `IChatService.ShouldHoldChatListRows`; `IContactService.IsSelf` | `SelfIdentity` stays (GroupParticipantLookup / State) |

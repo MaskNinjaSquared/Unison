@@ -2,6 +2,11 @@
 
 Newest first.
 
+## Slice A — proto→domain mappers live in WhatsAppClient
+
+`ProtoMessageUnwrap`, `ChatMessageMapper` (incl. `TryMapReaction`) and `ReactionPayloadMapper` moved to `Unison.WhatsAppClient`. Core `IChatMessageMapper` / `IReactionMapper` are domain-only (`MapIndividual`, Apply). `Unison.Proto` reference on Core stays until the incoming/history fatia B.
+See [Netstandard WhatsApp client](Netstandard-WhatsApp-Client).
+
 ## P4 done — Core no longer references Baileys
 
 Generated `WAProto.cs` moved unchanged to a new `src/Unison.Proto` project (netstandard2.0, `Google.Protobuf` only). `Unison.Core.csproj` references `Unison.Proto` instead of `Unison.Baileys`; Baileys, UWP and Background reference `Unison.Proto` too (old-style csproj files need it explicitly so the DLL is packaged). Layer table, `AGENTS.md` and layout docs updated.

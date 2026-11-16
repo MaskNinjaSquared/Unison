@@ -2,9 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Proto;
+using Unison.Core.Helpers;
 using Unison.Core.Mappers;
 using Unison.Core.Models;
-using Unison.Core.Helpers;
 
 namespace Unison.WhatsAppClient.Helpers
 {

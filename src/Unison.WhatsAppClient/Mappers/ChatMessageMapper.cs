@@ -1,18 +1,18 @@
 using System;
-using Unison.Core.Contracts;
+using Proto;
 using Unison.Core.Helpers;
 using Unison.Core.Models;
-using Proto;
+using Unison.WhatsAppClient.Helpers;
 
-namespace Unison.Core.Mappers
+namespace Unison.WhatsAppClient.Mappers
 {
-    public sealed class ChatMessageMapper : IChatMessageMapper
+    public sealed class ChatMessageMapper : IChatMessagePayloadMapper
     {
         private const string LegacyReactionPrefix = "[Reaction]";
 
-        private readonly IReactionMapper _reactionMapper;
+        private readonly IReactionPayloadMapper _reactionMapper;
 
-        public ChatMessageMapper(IReactionMapper reactionMapper)
+        public ChatMessageMapper(IReactionPayloadMapper reactionMapper)
         {
             _reactionMapper = reactionMapper ?? throw new ArgumentNullException(nameof(reactionMapper));
         }
@@ -25,7 +25,7 @@ namespace Unison.Core.Mappers
                 return false;
             }
 
-            var unwrapped = UnwrapMessage(message);
+            var unwrapped = ProtoMessageUnwrap.Run(message);
             if (unwrapped?.ReactionMessage == null)
             {
                 return false;
@@ -93,11 +93,6 @@ namespace Unison.Core.Mappers
             }
 
             return message.Content.StartsWith(LegacyReactionPrefix, StringComparison.OrdinalIgnoreCase);
-        }
-
-        private static Message UnwrapMessage(Message msg)
-        {
-            return ProtoMessageUnwrap.Run(msg);
         }
     }
 }

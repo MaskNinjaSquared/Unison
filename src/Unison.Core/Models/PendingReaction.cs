@@ -4,7 +4,7 @@ namespace Unison.Core.Models
 {
     /// <summary>
     /// Reaction envelope awaiting attach to a parent <see cref="ChatMessage"/>.
-    /// Produced by <c>IChatMessageMapper</c> / <c>IReactionMapper</c>; not a timeline row.
+    /// Produced by the WhatsAppClient payload mappers; not a timeline row.
     /// </summary>
     public sealed class PendingReaction
     {

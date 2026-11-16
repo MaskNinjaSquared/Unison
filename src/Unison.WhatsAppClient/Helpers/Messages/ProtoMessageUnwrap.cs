@@ -3,12 +3,11 @@
 //
 // Peels Baileys normalizeMessageContent wrappers (device-sent, ephemeral,
 // view-once, edit, status-mention shells, …) so callers see the inner payload.
-// Kept in Core so mappers can unwrap without importing WhatsAppClient history
-// filters.
+// Lives next to the proto→domain mappers in WhatsAppClient.
 // =============================================================================
 using Proto;
 
-namespace Unison.Core.Helpers
+namespace Unison.WhatsAppClient.Helpers
 {
     public static class ProtoMessageUnwrap
     {

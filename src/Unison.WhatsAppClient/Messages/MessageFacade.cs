@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
@@ -6,6 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Proto;
 using Unison.Core.Contracts;
+using Unison.WhatsAppClient.Mappers;
 using Unison.Core.Contracts.Tuning;
 using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Helpers;
@@ -31,8 +32,8 @@ namespace Unison.WhatsAppClient.Messages
     public sealed class MessageFacade : IMessageService, IMissingMessageChatHost
     {
         private readonly IPersonStore _personStore;
-        private readonly IChatMessageMapper _chatMessageMapper;
-        private readonly IReactionMapper _reactionMapper;
+        private readonly IChatMessagePayloadMapper _chatMessageMapper;
+        private readonly IReactionPayloadMapper _reactionMapper;
         private readonly IHistoryService _history;
         private readonly ISyncLoadMode _loadMode;
         private readonly IHistoryMessageStore _historyMessageStore;
@@ -97,8 +98,8 @@ namespace Unison.WhatsAppClient.Messages
 
         public MessageFacade(
             IPersonStore personStore,
-            IChatMessageMapper chatMessageMapper,
-            IReactionMapper reactionMapper,
+            IChatMessagePayloadMapper chatMessageMapper,
+            IReactionPayloadMapper reactionMapper,
             IHistoryService history,
             IHistoryMessageStore historyMessageStore,
             IJidResolver jids,

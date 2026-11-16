@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
@@ -28,6 +28,7 @@ using Unison.Core.Factories;
 using Unison.Core.Helpers;
 using Unison.Core.Helpers.Messages;
 using Unison.Core.Mappers;
+using Unison.WhatsAppClient.Mappers;
 using Unison.Core.Models;
 using Unison.Core.State;
 using Unison.Core.ViewModels;
@@ -708,8 +709,8 @@ namespace Unison.Uwp
                 sp => sp.GetRequiredService<OfflineReplayFlush>());
             services.AddSingleton<IMessageService>(sp => new MessageFacade(
                 sp.GetRequiredService<IPersonStore>(),
-                sp.GetRequiredService<IChatMessageMapper>(),
-                sp.GetRequiredService<IReactionMapper>(),
+                sp.GetRequiredService<IChatMessagePayloadMapper>(),
+                sp.GetRequiredService<IReactionPayloadMapper>(),
                 sp.GetRequiredService<IHistoryService>(),
                 sp.GetRequiredService<IHistoryMessageStore>(),
                 sp.GetRequiredService<IJidResolver>(),
@@ -1024,8 +1025,10 @@ namespace Unison.Uwp
             services.AddSingleton<IUiSoundService, UiSoundService>();
             services.AddSingleton<IVoicePlaybackRoutingService, VoicePlaybackRoutingService>();
             services.AddSingleton<IChatAudioPlaybackService, ChatAudioPlaybackService>();
-            services.AddSingleton<IReactionMapper, ReactionMapper>();
-            services.AddSingleton<IChatMessageMapper, ChatMessageMapper>();
+            services.AddSingleton<IReactionPayloadMapper, ReactionPayloadMapper>();
+            services.AddSingleton<IReactionMapper>(sp => sp.GetRequiredService<IReactionPayloadMapper>());
+            services.AddSingleton<IChatMessagePayloadMapper, ChatMessageMapper>();
+            services.AddSingleton<IChatMessageMapper>(sp => sp.GetRequiredService<IChatMessagePayloadMapper>());
             services.AddSingleton<IStringResources, StringResourcesService>();
             services.AddSingleton<INetworkAccess, WinRtNetworkAccess>();
             services.AddSingleton<ConnectionFacade>(sp => new ConnectionFacade(
