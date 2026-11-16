@@ -2,6 +2,10 @@
 
 Newest first.
 
+## Phase D — socket/auth slots and reconnect adapter leave WhatsAppService
+
+`_socket` / `_authState` are now `ConnectionSlot<T>` DI singletons (WhatsAppClient). Health hosts read the slot (`ConnectionHealthSocketHost`, new `CurrentSocketHealthHost`). Soft / auto reconnect and pairing stage-2 host I/O moved to `ReconnectHostAdapter` (owns `SoftReconnectCoordinator`) behind `IReconnectLifecyclePort`. Wire-owner assembly stays in the constructor. No policy, threshold or ordering change; needs an on-device pass (QR / 515 stage 2, network-drop reconnect, live + offline replay, suspend/resume, pump stall, phone logout).
+
 ## Auto batch after Phase D — host forwards + partials (Opus quick review)
 
 About 45 low/medium mechanical edits: WhatsAppService one-liner private forwards inlined onto owners/dispatches; `SessionFlagsHost`, `HistoryHosts` partials; Identity + HostAdapters absorbed more host surfaces; IncomingPump stays ports-only. No policy/threshold change. Opus quick review done (orphaned doc comments re-attached); details in [Netstandard WhatsApp client](Netstandard-WhatsApp-Client) § Auto batch after Phase D.

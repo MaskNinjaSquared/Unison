@@ -46,10 +46,12 @@ No behaviour change for users. Prep so later diffs are one cluster, not a 16k-li
 | `WhatsAppService.Receipts.cs` | Receipt nodes → send state; receipt-path group metadata apply via `IGroupService` |
 | `WhatsAppService.IncomingPump.cs` | Thin ports only (~70 lines): placeholder resend, bound mutation, offline-replay host — queue/drain on DI `IncomingMessagePump` |
 | `WhatsAppService.HostAdapters.cs` | `IPostReplayMaintenanceHost`, `IBackgroundResolutionGate`, `IPostSyncMaintenanceIoHost`, `IPostMessageEnrichmentHost`, wire-owner accessors |
-| `WhatsAppService.SessionFlagsHost.cs` | Reconnect/pairing flag getters over `ConnectionSessionFlags` (no policy) |
+| `WhatsAppService.SessionFlagsHost.cs` | Resume flag getters over `ConnectionSessionFlags` (no policy) |
 | `WhatsAppService.HistoryHosts.cs` | `IHistoryHydrationBackfillHost` + `ISqliteHistoryQuietFinalizeHost` |
 | `WhatsAppService.OutgoingHost.cs` | Explicit `IOutgoingMessageHost`: the caches and socket the send flows on `MessageFacade` reach (3.4) |
-| `ConnectionHealthSocketHost.cs` | Health-monitor socket adapter (Phase D) behind `IConnectionHealthOwnerPort` |
+| `ConnectionHealthSocketHost.cs` | Health-monitor socket adapter (Phase D) on the socket slot + `IConnectionHealthOwnerPort` |
+| `CurrentSocketHealthHost.cs` | On-demand socket health probe host over socket slot + flags |
+| `ReconnectHostAdapter.cs` + `IReconnectLifecyclePort.cs` | Soft / auto reconnect + pairing stage-2 host I/O; owns `SoftReconnectCoordinator` |
 
 `WhatsAppService.Groups.cs` and `WhatsAppService.Avatars.cs` are gone: group apply lives on `GroupFacade` / `GroupMetadataApply`; avatar fetch/apply moved earlier in phase 3.
 
