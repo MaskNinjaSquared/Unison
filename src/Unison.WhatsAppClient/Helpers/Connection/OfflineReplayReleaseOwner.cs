@@ -1,4 +1,4 @@
-// =============================================================================
+﻿// =============================================================================
 // OfflineReplayReleaseOwner
 //
 // Owns IOfflineReplayReleaseHost. Flush / façade settle / post-replay schedule
@@ -7,6 +7,7 @@
 using System;
 using System.Threading.Tasks;
 using Unison.Core.Contracts.WhatsApp;
+using Unison.WhatsAppClient.Abstractions;
 
 namespace Unison.WhatsAppClient.Helpers
 {

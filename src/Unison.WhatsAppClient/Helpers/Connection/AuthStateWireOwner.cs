@@ -1,4 +1,4 @@
-// =============================================================================
+﻿// =============================================================================
 // AuthStateWireOwner
 //
 // Owns IAuthStateWireHost. Alias file / auth persist stay as ctor ports.
@@ -6,6 +6,7 @@
 using System;
 using System.Threading.Tasks;
 using Unison.Core.Contracts.WhatsApp;
+using Unison.WhatsAppClient.Abstractions;
 
 namespace Unison.WhatsAppClient.Helpers
 {

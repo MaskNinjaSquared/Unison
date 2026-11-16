@@ -84,7 +84,7 @@ namespace Unison.Core.ViewModels
         private readonly ISessionLogger _sessionLogger;
         private readonly IRuntimeDiagnostics _diagnostics;
         private readonly ILocalSettings _localSettings;
-        private readonly SyncWorkloadStrategy _workload;
+        private readonly IChatListUiTuning _chatListUi;
         private readonly ISyncLoadMode _loadMode;
         private readonly ChatListInitialPaintGate _listPaintGate;
         private readonly ChatListDeepLinkHoldGate _deepLinkHold;
@@ -169,9 +169,9 @@ namespace Unison.Core.ViewModels
         /// </summary>
         private const int BatchBudgetMs = 8;
 
-        private int BatchSize => _workload.ChatListReleaseBatchSize;
+        private int BatchSize => _chatListUi.ChatListReleaseBatchSize;
 
-        private int PreviewHydrateBatchSize => _workload.PreviewHydrateBatchSize;
+        private int PreviewHydrateBatchSize => _chatListUi.PreviewHydrateBatchSize;
         private static readonly TimeSpan VisibleRefreshDebounceGenerous = TimeSpan.FromMilliseconds(80);
         private static readonly TimeSpan VisibleRefreshDebounceFrugal = TimeSpan.FromMilliseconds(320);
         /// <summary>Longer coalesce after name-apply storms so one refresh covers many titles.</summary>
@@ -268,7 +268,7 @@ namespace Unison.Core.ViewModels
             ISessionLogger sessionLogger = null,
             IRuntimeDiagnostics diagnostics = null,
             ILocalSettings localSettings = null,
-            SyncWorkloadStrategy workload = null,
+            IChatListUiTuning chatListUi = null,
             ChatListInitialPaintGate listPaintGate = null,
             ChatListDeepLinkHoldGate deepLinkHold = null,
             ChatListColdPopulateGate coldPopulateGate = null,
@@ -292,7 +292,7 @@ namespace Unison.Core.ViewModels
             _diagnostics = diagnostics;
             _localSettings = localSettings;
             _systemInfo = systemInfo;
-            _workload = workload ?? HighSyncWorkload.Instance;
+            _chatListUi = chatListUi ?? throw new ArgumentNullException(nameof(chatListUi));
             _listPaintGate = listPaintGate;
             _deepLinkHold = deepLinkHold;
             _coldPopulateGate = coldPopulateGate;

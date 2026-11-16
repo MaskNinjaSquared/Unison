@@ -1,6 +1,7 @@
-using System.Threading.Tasks;
+﻿using System.Threading.Tasks;
+using Unison.WhatsAppClient.Abstractions;
 
-namespace Unison.Core.Contracts.WhatsApp
+namespace Unison.WhatsAppClient.Abstractions
 {
     /// <summary>
     /// Side effects <c>OfflineReplayRelease</c> needs when the socket reports

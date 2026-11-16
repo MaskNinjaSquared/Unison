@@ -1,4 +1,4 @@
-// =============================================================================
+﻿// =============================================================================
 // SocketFacadeWireOwner
 //
 // Owns ISocketFacadeWireHost. Presence / missing / status / receipt / link-code
@@ -11,6 +11,7 @@ using Unison.Core.Contracts;
 using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Models;
 using Unison.WhatsAppClient.Messages;
+using Unison.WhatsAppClient.Abstractions;
 
 namespace Unison.WhatsAppClient.Helpers
 {

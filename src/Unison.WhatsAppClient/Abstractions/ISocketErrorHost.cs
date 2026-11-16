@@ -1,12 +1,13 @@
-// =============================================================================
+﻿// =============================================================================
 // ISocketErrorHost
 //
 // Side effects for SocketErrorDispatch (OnStreamError / OnError).
 // =============================================================================
 using System;
 using System.Threading.Tasks;
+using Unison.WhatsAppClient.Abstractions;
 
-namespace Unison.Core.Contracts.WhatsApp
+namespace Unison.WhatsAppClient.Abstractions
 {
     public interface ISocketErrorHost
     {

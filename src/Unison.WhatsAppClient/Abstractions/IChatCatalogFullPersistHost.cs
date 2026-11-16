@@ -1,4 +1,4 @@
-// =============================================================================
+﻿// =============================================================================
 // IChatCatalogFullPersistHost
 //
 // Side effects for ChatCatalogFullPersistDispatch (full catalogue + name maps,
@@ -8,8 +8,9 @@ using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Unison.Core.Models;
+using Unison.WhatsAppClient.Abstractions;
 
-namespace Unison.Core.Contracts.WhatsApp
+namespace Unison.WhatsAppClient.Abstractions
 {
     public interface IChatCatalogFullPersistHost
     {

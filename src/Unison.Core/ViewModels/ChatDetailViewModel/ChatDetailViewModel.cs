@@ -12,6 +12,7 @@ using Unison.Core.Exceptions;
 using Unison.Core.Factories;
 using Unison.Core.Helpers;
 using Unison.Core.Mappers;
+using Unison.Core.Contracts.Tuning;
 using Unison.Core.Models;
 using Unison.Core.State;
 
@@ -202,7 +203,8 @@ namespace Unison.Core.ViewModels
             IProfileService profile = null,
             IShareService share = null,
             IChannelService channels = null,
-            ICameraPickService cameraPick = null)
+            ICameraPickService cameraPick = null,
+            IChatWindowTuning chatWindow = null)
         {
             _cameraPick = cameraPick;
             _channels = channels;
@@ -244,12 +246,13 @@ namespace Unison.Core.ViewModels
                 "[Forward] ChatDetailViewModel ctor; IForwardMessagePicker=" +
                 (_forwardPicker != null ? "injected" : "NULL"));
 
-            // Open-chat bubble budget follows memory tier (not DeviceFamily): Unsupported/Low keep
-            // the old Mobile 30/80 window; High keeps the desktop 50/150.
-            SyncWorkloadStrategy uiWindow = SyncWorkloadStrategy.For(
-                _systemInfo != null ? _systemInfo.GetDeviceCategory() : DeviceCategory.High);
-            InitialUiMessageWindow = uiWindow.InitialUiMessageWindow;
-            MaxUiMessageWindow = uiWindow.MaxUiMessageWindow;
+            if (chatWindow == null)
+            {
+                throw new ArgumentNullException(nameof(chatWindow));
+            }
+
+            InitialUiMessageWindow = chatWindow.InitialUiMessageWindow;
+            MaxUiMessageWindow = chatWindow.MaxUiMessageWindow;
 
             Messages = new ObservableCollection<ChatMessageViewModel>();
 

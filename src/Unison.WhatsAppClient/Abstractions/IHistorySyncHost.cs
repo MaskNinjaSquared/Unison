@@ -1,7 +1,8 @@
-using System.Threading.Tasks;
+﻿using System.Threading.Tasks;
 using Unison.Core.State;
+using Unison.WhatsAppClient.Abstractions;
 
-namespace Unison.Core.Contracts.WhatsApp
+namespace Unison.WhatsAppClient.Abstractions
 {
     /// <summary>
     /// What the history façade still needs from the client that owns catch-up progress

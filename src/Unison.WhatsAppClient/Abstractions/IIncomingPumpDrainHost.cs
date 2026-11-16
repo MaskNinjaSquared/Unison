@@ -1,4 +1,4 @@
-// =============================================================================
+﻿// =============================================================================
 // IIncomingPumpDrainHost
 //
 // Side effects for IncomingPumpDrainDispatch. The host holds the typed queue
@@ -6,8 +6,9 @@
 // =============================================================================
 using System;
 using System.Threading.Tasks;
+using Unison.WhatsAppClient.Abstractions;
 
-namespace Unison.Core.Contracts.WhatsApp
+namespace Unison.WhatsAppClient.Abstractions
 {
     public interface IIncomingPumpDrainHost
     {

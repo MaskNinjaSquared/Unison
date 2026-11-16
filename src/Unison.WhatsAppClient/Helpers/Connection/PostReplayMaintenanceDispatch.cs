@@ -1,4 +1,4 @@
-// =============================================================================
+﻿// =============================================================================
 // PostReplayMaintenanceDispatch
 //
 // Body of SchedulePostReplayMaintenance after CTS swap: quiet / memory /
@@ -11,6 +11,7 @@ using System.Threading.Tasks;
 using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Helpers;
 using Unison.Core.Product;
+using Unison.WhatsAppClient.Abstractions;
 
 namespace Unison.WhatsAppClient.Helpers
 {

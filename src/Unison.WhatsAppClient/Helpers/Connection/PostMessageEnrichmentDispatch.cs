@@ -1,4 +1,4 @@
-// =============================================================================
+﻿// =============================================================================
 // PostMessageEnrichmentDispatch
 //
 // TrySchedulePostMessageEnrichment gates + SchedulePostMessageEnrichment body
@@ -9,6 +9,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Product;
+using Unison.WhatsAppClient.Abstractions;
 
 namespace Unison.WhatsAppClient.Helpers
 {

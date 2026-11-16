@@ -1,4 +1,4 @@
-// =============================================================================
+﻿// =============================================================================
 // ChatCatalogPersistDispatch
 //
 // SchedulePersist / EnableScheduledPersist orchestration. Timer and SQLite
@@ -8,6 +8,7 @@ using System;
 using System.Threading.Tasks;
 using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.State;
+using Unison.WhatsAppClient.Abstractions;
 
 namespace Unison.WhatsAppClient.Helpers
 {

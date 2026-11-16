@@ -224,7 +224,9 @@ startup and post-replay orchestration, quiet/memory waits, contact name tables s
 host/dispatch). That move is Phase D and touches Mobile-sensitive deferred startup — Opus +
 on-device.
 
-#### P4 inventory (done — Core references `Unison.Proto`, not Baileys)
+#### P4 inventory (superseded by Slice B — Core references no protocol project)
+
+> **Superseded (Slice B).** `Unison.Core.csproj` has no `Unison.Proto` or Baileys reference. The inventory below is historical; see **Slice B** above for what shipped.
 
 **Status.** Steps 1–4 below are done: no Core contract names `BinaryNode` or `AuthState`. `ReceiptFacts` lives in `Unison.Core.Models`; `SocketFacadeWireOwner` runs `ReceiptReader` before the host sees the receipt. Link-code turned out to be dead on the live path (`SocketBridge` never raises `OnLinkCodeCompanionReg`; `PairingFlow` in `Unison.Socket` handles it, and `PairingHandler` is not in the csproj), so the relay was **deleted** instead of getting a DTO. `ConnectionSocketSessionRequest.AuthState` is `object`; the UWP factory casts and throws on a wrong type.
 
@@ -376,6 +378,8 @@ marked **Opus / human** stays out of that session unless the developer explicitl
 | Phase E dependency flip (Core → WhatsAppClient) | **Opus / dedicated pass** | Moves every `Contracts/WhatsApp` consumer |
 | Revive `SocketClient.cs` or put WinRT in Core / WhatsAppClient | **Forbidden** | Architecture hard rule |
 | `ConnectionHandler` calling use cases or holding chats | **Forbidden** | Architecture hard rule |
+
+**Progress (Auto-safe batch after Slice B).** Six more tuning contracts on `SyncProductPolicy`; UWP `ProfilePictureQueryCache` / `GroupRosterStore` / `UwpConnectionSocketSessionFactory` / lid-mapping persist policy and Core chat list/detail VMs no longer take `SyncWorkloadStrategy`. Another ~21 `I*Host` ports live under `WhatsAppClient.Abstractions` (`IMediaSocketDownload` rename). Hosts still referenced from Core State stay in Core.
 
 **Cheaper-model definition of done for a coordinator PR**
 

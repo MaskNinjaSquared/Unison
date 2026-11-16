@@ -1,9 +1,9 @@
-// =============================================================================
+﻿// =============================================================================
 // IQrCodeWireHost
 //
 // Side effects for QrCodeWireDispatch (OnQRCodeReceived).
 // =============================================================================
-namespace Unison.Core.Contracts.WhatsApp
+namespace Unison.WhatsAppClient.Abstractions
 {
     public interface IQrCodeWireHost
     {

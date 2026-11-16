@@ -1,9 +1,10 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Threading.Tasks;
 using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.State;
 using Unison.WhatsAppClient.Helpers;
 using Xunit;
+using Unison.WhatsAppClient.Abstractions;
 
 namespace Unison.Core.Tests.Helpers
 {

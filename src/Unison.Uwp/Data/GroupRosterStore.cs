@@ -6,6 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using SQLite;
 using Unison.Core.Contracts;
+using Unison.Core.Contracts.Tuning;
 using Unison.Core.Helpers;
 using Unison.Core.Models;
 using Unison.Core.State;
@@ -29,10 +30,15 @@ namespace Unison.Uwp.Data
         private SQLiteAsyncConnection _connection;
         private bool _initialized;
 
-        public GroupRosterStore(SyncWorkloadStrategy workload)
+        public GroupRosterStore(IGroupRosterStoreTuning tuning)
         {
+            if (tuning == null)
+            {
+                throw new ArgumentNullException(nameof(tuning));
+            }
+
             _rosters = new VersionedSnapshotCache<List<GroupRosterMemberRow>>(
-                workload?.GroupRosterMemoryMaxGroups ?? 16,
+                Math.Max(1, tuning.MemoryMaxGroups),
                 rows => new List<GroupRosterMemberRow>(rows));
         }
 

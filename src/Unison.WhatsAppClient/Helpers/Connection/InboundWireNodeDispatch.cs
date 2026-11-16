@@ -1,4 +1,4 @@
-// =============================================================================
+﻿// =============================================================================
 // InboundWireNodeDispatch
 //
 // OnMessage body: ack attrs → message façade; notify attrs → contact façade.
@@ -8,6 +8,7 @@ using System;
 using System.Collections.Generic;
 using Unison.Baileys.Protocol;
 using Unison.Core.Contracts.WhatsApp;
+using Unison.WhatsAppClient.Abstractions;
 
 namespace Unison.WhatsAppClient.Helpers
 {

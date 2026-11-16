@@ -1,4 +1,4 @@
-// =============================================================================
+﻿// =============================================================================
 // IIncomingPumpControl
 //
 // Stall / reset / restart / drain for the decrypted inbound queue. Connection
@@ -6,8 +6,9 @@
 // =============================================================================
 using System;
 using System.Threading.Tasks;
+using Unison.WhatsAppClient.Abstractions;
 
-namespace Unison.Core.Contracts.WhatsApp
+namespace Unison.WhatsAppClient.Abstractions
 {
     public interface IIncomingPumpControl
     {

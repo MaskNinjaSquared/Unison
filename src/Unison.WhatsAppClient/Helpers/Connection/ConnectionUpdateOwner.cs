@@ -1,10 +1,11 @@
-// =============================================================================
+﻿// =============================================================================
 // ConnectionUpdateOwner
 //
 // Owns IConnectionUpdateHost. Close disposition I/O stays as ctor ports.
 // =============================================================================
 using System;
 using Unison.Core.Contracts.WhatsApp;
+using Unison.WhatsAppClient.Abstractions;
 
 namespace Unison.WhatsAppClient.Helpers
 {

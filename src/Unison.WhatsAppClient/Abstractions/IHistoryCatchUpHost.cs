@@ -1,7 +1,8 @@
-using System;
+﻿using System;
 using System.Threading.Tasks;
+using Unison.WhatsAppClient.Abstractions;
 
-namespace Unison.Core.Contracts.WhatsApp
+namespace Unison.WhatsAppClient.Abstractions
 {
     /// <summary>
     /// Catch-up I/O and session flags the history façade still needs from the connection client.

@@ -1,4 +1,4 @@
-// =============================================================================
+﻿// =============================================================================
 // ChatCatalogPreviewPersist
 //
 // Shared UpsertMany path for history_chat_preview catalogue rows. Used by
@@ -7,6 +7,7 @@
 // =============================================================================
 using System.Threading.Tasks;
 using Unison.Core.Contracts;
+using Unison.WhatsAppClient.Abstractions;
 
 namespace Unison.WhatsAppClient.Helpers
 {

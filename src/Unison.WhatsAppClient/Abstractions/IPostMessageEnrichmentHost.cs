@@ -1,4 +1,4 @@
-// =============================================================================
+﻿// =============================================================================
 // IPostMessageEnrichmentHost
 //
 // Side effects for PostMessageEnrichmentDispatch (names / contacts / avatars /
@@ -7,8 +7,9 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
+using Unison.WhatsAppClient.Abstractions;
 
-namespace Unison.Core.Contracts.WhatsApp
+namespace Unison.WhatsAppClient.Abstractions
 {
     public interface IPostMessageEnrichmentHost
     {

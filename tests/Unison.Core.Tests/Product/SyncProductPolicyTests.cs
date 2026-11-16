@@ -167,5 +167,74 @@ namespace Unison.Core.Tests.Product
             Assert.Equal(workload.SerializePostSyncEnrichment, tuning.SerializePostSyncEnrichment);
             Assert.Equal(TimeSpan.FromSeconds(workload.PostSyncEnrichmentQuietSeconds), tuning.PostSyncEnrichmentQuietWait);
         }
+
+        [Theory]
+        [InlineData(DeviceCategory.High, 812)]
+        [InlineData(DeviceCategory.Low, 812)]
+        [InlineData(DeviceCategory.Unsupported, 100)]
+        public void Initial_pre_key_upload_follows_tier(DeviceCategory category, int expected)
+        {
+            ISocketBootstrapTuning tuning = new SyncProductPolicy(SyncWorkloadStrategy.For(category), () => false);
+
+            Assert.Equal(expected, tuning.InitialPreKeyUploadCount);
+        }
+
+        [Theory]
+        [InlineData(DeviceCategory.High, 4096)]
+        [InlineData(DeviceCategory.Low, 1024)]
+        [InlineData(DeviceCategory.Unsupported, 512)]
+        public void Profile_picture_cache_cap_follows_tier(DeviceCategory category, int expected)
+        {
+            IProfilePictureCacheTuning tuning = new SyncProductPolicy(SyncWorkloadStrategy.For(category), () => false);
+
+            Assert.Equal(expected, tuning.MaxEntries);
+        }
+
+        [Theory]
+        [InlineData(DeviceCategory.High, 128)]
+        [InlineData(DeviceCategory.Low, 32)]
+        [InlineData(DeviceCategory.Unsupported, 16)]
+        public void Group_roster_memory_cap_follows_tier(DeviceCategory category, int expected)
+        {
+            IGroupRosterStoreTuning tuning = new SyncProductPolicy(SyncWorkloadStrategy.For(category), () => false);
+
+            Assert.Equal(expected, tuning.MemoryMaxGroups);
+        }
+
+        [Fact]
+        public void Lid_mapping_persist_knobs_match_high_tier_workload()
+        {
+            SyncWorkloadStrategy workload = SyncWorkloadStrategy.For(DeviceCategory.High);
+            ILidMappingPersistTuning tuning = new SyncProductPolicy(workload, () => false);
+
+            Assert.Equal(workload.LidMappingPersistBatchSize, tuning.BatchSize);
+            Assert.Equal(workload.LidMappingPersistDelayMs, tuning.DelayMs);
+            Assert.Equal(workload.LidMappingMemoryCacheMaxEntries, tuning.MemoryCacheMaxEntries);
+            Assert.Equal(workload.LidMappingWarmMaxPairs, tuning.WarmMaxPairs);
+        }
+
+        [Theory]
+        [InlineData(DeviceCategory.High, 20, 25)]
+        [InlineData(DeviceCategory.Low, 8, 10)]
+        [InlineData(DeviceCategory.Unsupported, 6, 8)]
+        public void Chat_list_ui_batches_follow_tier(DeviceCategory category, int release, int preview)
+        {
+            IChatListUiTuning tuning = new SyncProductPolicy(SyncWorkloadStrategy.For(category), () => false);
+
+            Assert.Equal(release, tuning.ChatListReleaseBatchSize);
+            Assert.Equal(preview, tuning.PreviewHydrateBatchSize);
+        }
+
+        [Theory]
+        [InlineData(DeviceCategory.High, 50, 150)]
+        [InlineData(DeviceCategory.Low, 30, 80)]
+        [InlineData(DeviceCategory.Unsupported, 30, 80)]
+        public void Chat_window_caps_follow_tier(DeviceCategory category, int initial, int max)
+        {
+            IChatWindowTuning tuning = new SyncProductPolicy(SyncWorkloadStrategy.For(category), () => false);
+
+            Assert.Equal(initial, tuning.InitialUiMessageWindow);
+            Assert.Equal(max, tuning.MaxUiMessageWindow);
+        }
     }
 }

@@ -9,8 +9,8 @@ using System;
 using System.Threading.Tasks;
 using Unison.Baileys.Client;
 using Unison.Core.Contracts;
+using Unison.Core.Contracts.Tuning;
 using Unison.Core.Helpers;
-using Unison.Core.State;
 using Unison.Socket.Signal;
 using Unison.Uwp.Client;
 using Unison.WhatsAppClient.Helpers;
@@ -22,18 +22,21 @@ namespace Unison.Uwp.Services.WhatsApp
         private readonly IWhatsAppTransportFactory _transports;
         private readonly ISystemInfoProvider _systemInfo;
         private readonly ProfilePictureQueryCache _pictureCache;
-        private readonly SyncWorkloadStrategy _workload;
+        private readonly ISocketBootstrapTuning _bootstrap;
+        private readonly IRuntimeDiagnostics _diagnostics;
 
         public UwpConnectionSocketSessionFactory(
             IWhatsAppTransportFactory transports,
             ISystemInfoProvider systemInfo,
             ProfilePictureQueryCache pictureCache,
-            SyncWorkloadStrategy workload)
+            ISocketBootstrapTuning bootstrap,
+            IRuntimeDiagnostics diagnostics)
         {
             _transports = transports ?? throw new ArgumentNullException(nameof(transports));
             _systemInfo = systemInfo ?? throw new ArgumentNullException(nameof(systemInfo));
             _pictureCache = pictureCache ?? throw new ArgumentNullException(nameof(pictureCache));
-            _workload = workload ?? throw new ArgumentNullException(nameof(workload));
+            _bootstrap = bootstrap ?? throw new ArgumentNullException(nameof(bootstrap));
+            _diagnostics = diagnostics ?? throw new ArgumentNullException(nameof(diagnostics));
         }
 
         public object CreateAndWire(ConnectionSocketSessionRequest request)
@@ -63,19 +66,19 @@ namespace Unison.Uwp.Services.WhatsApp
                 request.ReuseLoadedKeyState,
                 request.LidMappings as LidMappingStore,
                 _pictureCache,
-                _workload.InitialPreKeyUploadCount);
+                _bootstrap.InitialPreKeyUploadCount);
 
             SocketBridgeRemoteHooks.Attach(
                 bridge,
                 owner.ChatsFacade,
-                owner.ContactsFacade,
-                owner.MessagesFacade,
+                owner.Contacts,
+                owner.Messages,
                 owner.GroupFacade,
                 owner.ResolveSentMessageForRetryAsync);
 
             SocketEventHandlerWiring.Attach(bridge, owner);
 
-            RuntimeDiagnosticsService.Instance.Write(
+            _diagnostics.Write(
                 "connection",
                 "socket-rewrite-enabled",
                 "transport=" + bridge.TransportName);
@@ -120,7 +123,7 @@ namespace Unison.Uwp.Services.WhatsApp
             // Mobile must open StreamSocket first (broker / SocketActivity). Experiment on →
             // PreferStreamSocketOnMobile; factory journals so a MessageWebSocket-only mobile
             // path cannot ship silently.
-            RuntimeDiagnosticsService.Instance.Write(
+            _diagnostics.Write(
                 "transport",
                 "connect-attempt-plan",
                 "mobile=" + mobile +

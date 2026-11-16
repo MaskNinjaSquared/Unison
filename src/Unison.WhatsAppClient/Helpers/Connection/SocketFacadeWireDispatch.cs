@@ -1,4 +1,4 @@
-// =============================================================================
+﻿// =============================================================================
 // SocketFacadeWireDispatch
 //
 // Thin façade forwards from WireSocketEventHandlers: presence, missing-message,
@@ -8,6 +8,7 @@ using System;
 using System.Threading.Tasks;
 using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Models;
+using Unison.WhatsAppClient.Abstractions;
 
 namespace Unison.WhatsAppClient.Helpers
 {

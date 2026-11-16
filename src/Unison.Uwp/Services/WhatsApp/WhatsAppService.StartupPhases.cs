@@ -50,7 +50,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 () => _initialSync.IsActive || ShouldDeferReconnectReplayWork(),
                 begin,
                 () => RaiseSyncStatus(null),
-                (waitedMs, budgetMs) => RuntimeDiagnosticsService.Instance.Write(
+                (waitedMs, budgetMs) => _diagnostics.Write(
                     "startup-phase",
                     "quiet-wait",
                     "reason=" + (reason ?? string.Empty) +
@@ -77,14 +77,14 @@ namespace Unison.Uwp.Services.WhatsApp
                 attempt =>
                 {
                     RaiseSyncStatus(SyncPhaseStatus.Format(SyncPhaseStatus.LowMemory));
-                    RuntimeDiagnosticsService.Instance.Write(
+                    _diagnostics.Write(
                         "startup-phase",
                         "memory-retry",
                         "reason=" + (reason ?? string.Empty) +
                         "; attempt=" + attempt +
                         "; level=" + _appMemory.UsageLevel);
                 },
-                () => RuntimeDiagnosticsService.Instance.Write(
+                () => _diagnostics.Write(
                     "startup-phase",
                     "memory-abandoned",
                     "reason=" + (reason ?? string.Empty) +
@@ -102,7 +102,7 @@ namespace Unison.Uwp.Services.WhatsApp
             return new StartupPhaseTrace(
                 phase,
                 _appMemory,
-                RuntimeDiagnosticsService.Instance,
+                _diagnostics,
                 visibility);
         }
     }

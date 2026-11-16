@@ -1,4 +1,4 @@
-// =============================================================================
+﻿// =============================================================================
 // QuietMediaMessagePersist
 //
 // On-demand media download writes the repaired URI back onto the row. A store
@@ -10,6 +10,7 @@ using System.Diagnostics;
 using System.Threading.Tasks;
 using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Models;
+using Unison.WhatsAppClient.Abstractions;
 
 namespace Unison.WhatsAppClient.Helpers
 {

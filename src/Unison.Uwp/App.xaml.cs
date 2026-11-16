@@ -259,7 +259,8 @@ namespace Unison.Uwp
             services.AddSingleton<IKeyStore>(_ => new FileKeyStore());
             services.AddSingleton<IMessageStore, MessageStore>();
             services.AddSingleton<IPersonStore, PersonStore>();
-            services.AddSingleton<IGroupRosterStore, GroupRosterStore>();
+            services.AddSingleton<IGroupRosterStore>(sp =>
+                new GroupRosterStore(sp.GetRequiredService<IGroupRosterStoreTuning>()));
             services.AddSingleton<IChatStore, ChatStore>();
             services.AddSingleton<IHistoryMigrationStore, HistoryMigrationStore>();
             services.AddSingleton<IHistoryChatPreviewStore, HistoryChatPreviewStore>();
@@ -277,7 +278,7 @@ namespace Unison.Uwp
             // Write-behind policy needs the memory tier; resolve workload lazily (registered below).
             services.AddSingleton<ILidMappingStorage, SqliteLidMappingStorage>();
             services.AddSingleton<ILidMappingPersistPolicy>(sp =>
-                new SyncWorkloadLidMappingPersistPolicy(sp.GetRequiredService<SyncWorkloadStrategy>()));
+                new SyncWorkloadLidMappingPersistPolicy(sp.GetRequiredService<ILidMappingPersistTuning>()));
             services.AddSingleton(sp => new LidMappingStore(
                 sp.GetRequiredService<ILidMappingStorage>(),
                 log: null,
@@ -288,7 +289,8 @@ namespace Unison.Uwp
             // Host owns WinRT transport construction; SocketBridge only asks the factory.
             services.AddSingleton<IWhatsAppTransportFactory, UwpWhatsAppTransportFactory>();
             // Host owns SocketBridge build + wire + transport open; portable connect-open only calls this.
-            services.AddSingleton(sp => new ProfilePictureQueryCache(sp.GetRequiredService<SyncWorkloadStrategy>()));
+            services.AddSingleton(sp =>
+                new ProfilePictureQueryCache(sp.GetRequiredService<IProfilePictureCacheTuning>()));
             services.AddSingleton<IConnectionSocketSessionFactory, UwpConnectionSocketSessionFactory>();
             services.AddSingleton<ILidMappingMemory>(sp =>
                 new LidMappingMemoryAdapter(sp.GetRequiredService<LidMappingStore>()));
@@ -411,10 +413,17 @@ namespace Unison.Uwp
             services.AddSingleton<IHistorySyncTuning>(sp => sp.GetRequiredService<SyncProductPolicy>());
             services.AddSingleton<IEnrichmentTuning>(sp => sp.GetRequiredService<SyncProductPolicy>());
             services.AddSingleton<IStartupMaintenanceTuning>(sp => sp.GetRequiredService<SyncProductPolicy>());
+            services.AddSingleton<ISocketBootstrapTuning>(sp => sp.GetRequiredService<SyncProductPolicy>());
+            services.AddSingleton<IProfilePictureCacheTuning>(sp => sp.GetRequiredService<SyncProductPolicy>());
+            services.AddSingleton<IGroupRosterStoreTuning>(sp => sp.GetRequiredService<SyncProductPolicy>());
+            services.AddSingleton<ILidMappingPersistTuning>(sp => sp.GetRequiredService<SyncProductPolicy>());
+            services.AddSingleton<IChatListUiTuning>(sp => sp.GetRequiredService<SyncProductPolicy>());
+            services.AddSingleton<IChatWindowTuning>(sp => sp.GetRequiredService<SyncProductPolicy>());
             services.AddSingleton(sp => new StartupMaintenanceCoordinator(
                 sp.GetRequiredService<IStartupMaintenanceTuning>()));
             services.AddSingleton(sp => new PostReplayMaintenanceCoordinator(
                 sp.GetRequiredService<IStartupMaintenanceTuning>()));
+            services.AddSingleton<InitGateOwner>();
             services.AddSingleton(sp => new ChatPreviewReconciler(
                 sp.GetRequiredService<IHistoryMessageStore>(),
                 sp.GetRequiredService<JidAliasTable>(),
@@ -485,7 +494,7 @@ namespace Unison.Uwp
             // Decrypted inbound queue owns enqueue + drain; the client only forwards health/reset.
             services.AddSingleton(sp => new IncomingMessagePump(
                 () => sp.GetRequiredService<IMessageWireIngress>(),
-                RuntimeDiagnosticsService.Instance));
+                sp.GetRequiredService<IRuntimeDiagnostics>()));
             services.AddSingleton<IIncomingMessageEnqueueHost>(
                 sp => sp.GetRequiredService<IncomingMessagePump>());
             services.AddSingleton<IIncomingPumpControl>(
@@ -532,7 +541,12 @@ namespace Unison.Uwp
                 () => sp.GetRequiredService<IHistoryWireIngress>(),
                 () => sp.GetRequiredService<IDeferredAvatarResolution>(),
                 sp.GetRequiredService<IncomingMessagePump>(),
-                sp.GetRequiredService<LiveMessagePersist>()));
+                sp.GetRequiredService<LiveMessagePersist>(),
+                sp.GetRequiredService<IRuntimeDiagnostics>(),
+                healthMonitors: null,
+                postSyncMaintenanceOwner: null,
+                hydrationDayRetryOwner: null,
+                initGate: sp.GetRequiredService<InitGateOwner>()));
             // The send flow lives on MessageFacade; the timeline caches and the socket it writes
             // through are still the client's, reached only through this narrow port.
             services.AddSingleton<IOutgoingMessageHost>(
@@ -682,7 +696,7 @@ namespace Unison.Uwp
             services.AddSingleton(sp => new MediaDownloadGate(
                 () => (sp.GetRequiredService<WhatsAppService>()).UsesSingleMediaDownloadSlot));
             // SocketBridge is owned by WhatsAppService (rebuilt on reconnect), not a DI singleton.
-            services.AddSingleton<IBaileysMediaDownload>(sp => new BaileysMediaDownload(
+            services.AddSingleton<IMediaSocketDownload>(sp => new BaileysMediaDownload(
                 () =>
                 {
                     var bridge = sp.GetRequiredService<WhatsAppService>().Socket as SocketBridge;
@@ -699,7 +713,7 @@ namespace Unison.Uwp
                 sp.GetRequiredService<MediaDerivationService>(),
                 sp.GetRequiredService<MediaDownloadGate>(),
                 sp.GetRequiredService<IChatCatalogPersistence>(),
-                sp.GetRequiredService<IBaileysMediaDownload>()));
+                sp.GetRequiredService<IMediaSocketDownload>()));
             services.AddSingleton<IMessageWireActions>(sp => new BridgeMessageWireActions(
                 sp.GetRequiredService<UwpSessionProvider>()));
             services.AddSingleton<IOutgoingReceiptHost>(
@@ -1114,6 +1128,7 @@ namespace Unison.Uwp
             services.AddTransient<LegacySettingsViewModel>();
 
             Services = services.BuildServiceProvider(validateScopes: true);
+            var runtimeDiagnostics = Services.GetRequiredService<IRuntimeDiagnostics>();
             var whatsAppImpl = Services.GetRequiredService<WhatsAppService>();
             // The root frame was built on the UI thread, so its dispatcher is the one the client
             // has to marshal onto. Done here rather than from a page's Loaded so the client is

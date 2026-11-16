@@ -1427,8 +1427,8 @@ namespace Unison.Uwp.Services
             {
                 if (!string.IsNullOrEmpty(chatJid) && !string.IsNullOrEmpty(messageId))
                 {
-                    return _owner.MessagesFacade != null
-                        && await _owner.MessagesFacade.ApplyAppStateDeleteMessageAsync(chatJid, messageId)
+                    return _owner.Messages != null
+                        && await _owner.Messages.ApplyAppStateDeleteMessageAsync(chatJid, messageId)
                             .ConfigureAwait(false);
                 }
 
@@ -1470,9 +1470,9 @@ namespace Unison.Uwp.Services
 
             if (value.PushNameSetting != null && !string.IsNullOrWhiteSpace(value.PushNameSetting.Name))
             {
-                if (_owner.ContactsFacade != null)
+                if (_owner.Contacts != null)
                 {
-                    await _owner.ContactsFacade.ApplyRemoteSelfPushNameAsync(value.PushNameSetting.Name)
+                    await _owner.Contacts.ApplyRemoteSelfPushNameAsync(value.PushNameSetting.Name)
                         .ConfigureAwait(false);
                 }
 
@@ -1497,8 +1497,8 @@ namespace Unison.Uwp.Services
 
             if (value.DeleteMessageForMeAction != null && !string.IsNullOrWhiteSpace(chatJid) && !string.IsNullOrWhiteSpace(messageId))
             {
-                return _owner.MessagesFacade != null
-                    && await _owner.MessagesFacade.ApplyAppStateDeleteMessageAsync(chatJid, messageId)
+                return _owner.Messages != null
+                    && await _owner.Messages.ApplyAppStateDeleteMessageAsync(chatJid, messageId)
                         .ConfigureAwait(false);
             }
 

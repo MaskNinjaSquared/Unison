@@ -93,7 +93,7 @@ namespace Unison.Uwp.Services.WhatsApp
         {
                 string clearError;
             bool cleared = BackgroundToastPresenter.ClearReconnectRequired(out clearError);
-                RuntimeDiagnosticsService.Instance.Write(
+                _diagnostics.Write(
                     "notifications",
                     "reconnect-required-toast-cleared",
                 "status=" + status +
@@ -105,7 +105,7 @@ namespace Unison.Uwp.Services.WhatsApp
             Interlocked.Exchange(ref _diagnosticsLastConnectionEventUtcTicks, DateTime.UtcNow.Ticks);
 
         void IPublishConnectionUpdateHost.WriteConnectionStatusJournal(string status) =>
-            RuntimeDiagnosticsService.Instance.Write(
+            _diagnostics.Write(
                 "connection",
                 "status",
                 "value=" + status + "; serviceReady=" + IsConnected);
@@ -269,7 +269,7 @@ namespace Unison.Uwp.Services.WhatsApp
                         return;
                     }
 
-                        RuntimeDiagnosticsService.Instance.Write(
+                        _owner._diagnostics.Write(
                             "messages",
                             "incoming-pump-health-restart",
                     "stage=" + _owner.IncomingPumpStage);
@@ -324,13 +324,13 @@ namespace Unison.Uwp.Services.WhatsApp
                 _owner.ScheduleAutoReconnect(reason);
 
             public void WriteHealthJournal(string eventName, string detail) =>
-                RuntimeDiagnosticsService.Instance.Write("connection", eventName, detail);
+                _owner._diagnostics.Write("connection", eventName, detail);
 
             public void LogHealth(string message) =>
                 Debug.WriteLine("[WhatsAppService] " + message);
 
             public void RecordHealthException(Exception error) =>
-                RuntimeDiagnosticsService.Instance.RecordException(
+                _owner._diagnostics.RecordException(
                             "connection",
                     "health-monitor-failed",
                     error);
@@ -420,7 +420,7 @@ namespace Unison.Uwp.Services.WhatsApp
             Debug.WriteLine("[WhatsAppService] Scheduling persistent reconnect: " + reason);
 
         void ISoftReconnectIoHost.WriteAutoReconnectScheduled(string reason) =>
-            RuntimeDiagnosticsService.Instance.Write("connection", "reconnect-scheduled", reason);
+            _diagnostics.Write("connection", "reconnect-scheduled", reason);
 
         void ISoftReconnectIoHost.TracePairingSkippedForPending(string reason) =>
                         PairingTrace(
@@ -463,12 +463,12 @@ namespace Unison.Uwp.Services.WhatsApp
             await _initGate.EnterAsync().ConfigureAwait(false);
             try
             {
-                RuntimeDiagnosticsService.Instance.Write(
+                _diagnostics.Write(
                     "startup",
                     "connection-state-init-begin",
                     "hasAuth=" + (_authState != null));
                 await InitializeConnectionStateDispatch.RunAsync(this).ConfigureAwait(false);
-                RuntimeDiagnosticsService.Instance.Write(
+                _diagnostics.Write(
                     "startup",
                     "connection-state-init-end",
                     "registered=" + (_authState != null && _authState.Registered));
@@ -484,7 +484,7 @@ namespace Unison.Uwp.Services.WhatsApp
         bool IInitializeConnectionStateHost.HasAuthState => _authState != null;
 
         void IInitializeConnectionStateHost.NoteConnectionStateInitStep(string step) =>
-            RuntimeDiagnosticsService.Instance.Write(
+            _diagnostics.Write(
                 "startup",
                 "connection-state-init-step",
                 "step=" + (step ?? string.Empty));
@@ -539,7 +539,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
             // All tiers: WarmMaxPairs == 0 — no boot seed (Mobile or High). High only
             // keeps a larger in-memory LRU; pairs enter RAM on demand.
-            RuntimeDiagnosticsService.Instance.Write(
+            _diagnostics.Write(
                 "startup",
                 "lid-warm-skipped",
                 "reason=on-demand;maxPairs=0");
@@ -559,7 +559,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 Task finished = await Task.WhenAny(load, Task.Delay(AliasBudgetMs)).ConfigureAwait(false);
                 if (finished != load)
                 {
-                    RuntimeDiagnosticsService.Instance.Write(
+                    _diagnostics.Write(
                         "startup",
                         "jid-aliases-timeout",
                         "budgetMs=" + AliasBudgetMs);
@@ -574,7 +574,7 @@ namespace Unison.Uwp.Services.WhatsApp
                             try
                             {
                                 ApplyPersistedJidAliases(t.Result);
-                                RuntimeDiagnosticsService.Instance.Write(
+                                _diagnostics.Write(
                                     "startup",
                                     "jid-aliases-deferred-done",
                                     "count=" + (t.Result != null ? t.Result.Count : 0));
@@ -595,7 +595,7 @@ namespace Unison.Uwp.Services.WhatsApp
             catch (Exception ex)
             {
                 Debug.WriteLine("[WhatsAppService] JID alias load failed: " + ex.Message);
-                RuntimeDiagnosticsService.Instance.Write(
+                _diagnostics.Write(
                     "startup",
                     "jid-aliases-failed",
                     ex.Message);
@@ -729,7 +729,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 return false;
             }
 
-                RuntimeDiagnosticsService.Instance.Write(
+                _diagnostics.Write(
                     "socket-broker",
                     "resume-reclaim-start",
                     "transport=" + brokerSocket.TransportName);
@@ -741,7 +741,7 @@ namespace Unison.Uwp.Services.WhatsApp
                         StartConnectionHealthMonitor(brokerSocket);
                         RestartIncomingMessagePumpIfNeeded();
                         PublishConnectionUpdate("connected");
-                        RuntimeDiagnosticsService.Instance.Write(
+                        _diagnostics.Write(
                             "socket-broker",
                             "resume-reclaim-complete",
                             "transport=" + brokerSocket.TransportName);
@@ -750,7 +750,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 }
                 catch (Exception ex)
                 {
-                    RuntimeDiagnosticsService.Instance.RecordException(
+                    _diagnostics.RecordException(
                         "socket-broker",
                         "resume-reclaim-failed",
                         ex);
@@ -777,7 +777,7 @@ namespace Unison.Uwp.Services.WhatsApp
             string enriched = string.Equals(eventName, "fast-resume-start", StringComparison.Ordinal)
                 ? detail + "; sharedKeyStore=" + (_sharedKeyStore != null)
                 : detail;
-            RuntimeDiagnosticsService.Instance.Write("connection", eventName, enriched);
+            _diagnostics.Write("connection", eventName, enriched);
         }
 
         void IConnectionResumeHost.RecordResumeException(string eventName, Exception error)
@@ -814,7 +814,7 @@ namespace Unison.Uwp.Services.WhatsApp
         }
 
         void IBrokerReconnectConsumeHost.WriteBrokerReconnectLockTimeout() =>
-                    RuntimeDiagnosticsService.Instance.Write(
+                    _diagnostics.Write(
                         "socket-broker",
                         "reconnect-request-lock-timeout");
 
@@ -842,7 +842,7 @@ namespace Unison.Uwp.Services.WhatsApp
         void IBrokerReconnectConsumeHost.WriteBrokerReconnectConsumed(
             BrokerReconnectOwnershipSnapshot snapshot,
             bool brokerEntryMissing) =>
-                RuntimeDiagnosticsService.Instance.Write(
+                _diagnostics.Write(
                     "socket-broker",
                     "reconnect-request-consumed",
                 "id=" + snapshot.SocketId +
@@ -869,7 +869,7 @@ namespace Unison.Uwp.Services.WhatsApp
             }
 
         void IBrokerReconnectConsumeHost.RecordBrokerReconnectConsumeFailed(Exception error) =>
-                RuntimeDiagnosticsService.Instance.RecordException(
+                _diagnostics.RecordException(
                     "socket-broker",
                     "reconnect-request-consume-failed",
                 error);
@@ -946,11 +946,11 @@ namespace Unison.Uwp.Services.WhatsApp
                     detail;
             }
 
-            RuntimeDiagnosticsService.Instance.Write("socket-broker", eventName, enriched);
+            _diagnostics.Write("socket-broker", eventName, enriched);
         }
 
         void IConnectionBrokerTransferHost.RecordBrokerException(string eventName, Exception error) =>
-            RuntimeDiagnosticsService.Instance.RecordException("socket-broker", eventName, error);
+            _diagnostics.RecordException("socket-broker", eventName, error);
 
         /// <summary>
         /// The verified keep-alive normally produces an inbound IQ result every
@@ -1137,19 +1137,19 @@ namespace Unison.Uwp.Services.WhatsApp
         }
 
         void IConnectAsyncHost.WriteConnectSkippedAlreadyHealthy() =>
-                    RuntimeDiagnosticsService.Instance.Write(
+                    _diagnostics.Write(
                         "connection",
                         "connect-skipped",
                         "reason=already-healthy");
 
         void IConnectAsyncHost.WriteConnectAbortedFatal() =>
-            RuntimeDiagnosticsService.Instance.Write(
+            _diagnostics.Write(
                 "connection",
                 "connect-aborted",
                 "reason=fatal-session-ended");
 
         void IConnectAsyncHost.WriteConnectForceFreshForQr() =>
-                    RuntimeDiagnosticsService.Instance.Write(
+                    _diagnostics.Write(
                         "connection",
                         "connect-force-fresh-for-qr",
                         "reason=unregistered-reconnect");
@@ -1171,7 +1171,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
         void IConnectAsyncHost.WriteConnectPrepareAbort(ConnectionConnectPrepareResult result)
                 {
-                    RuntimeDiagnosticsService.Instance.Write(
+                    _diagnostics.Write(
                         "connection",
                 ConnectionConnectAbortedJournal.EventName,
                 ConnectionConnectAbortedJournal.DetailForPrepareAbort(result));
@@ -1305,7 +1305,7 @@ namespace Unison.Uwp.Services.WhatsApp
         public void SuppressReconnectFromPolicy(string reason)
         {
             LatchFatalSession("policy-" + (reason ?? "fatal"));
-            RuntimeDiagnosticsService.Instance.Write(
+            _diagnostics.Write(
                     "connection",
                 "reconnect-suppressed-by-policy",
                 "reason=" + (reason ?? ""));
@@ -1462,7 +1462,7 @@ namespace Unison.Uwp.Services.WhatsApp
                         return;
             }
 
-            RuntimeDiagnosticsService.Instance.Write(
+            _diagnostics.Write(
                 "connection",
                 ConnectionKeyStoreOpenJournal.EventName(reuseLoadedKeyState),
                 ConnectionKeyStoreOpenJournal.Detail(auth.Sessions.Count, auth.PreKeys.Count));
@@ -1487,7 +1487,7 @@ namespace Unison.Uwp.Services.WhatsApp
             ConnectionAssignedSocketClear.AfterFailedConnect(this);
 
         void IConnectionAssignedSocketClearHost.NoteConnectAborted(string journalReason) =>
-            RuntimeDiagnosticsService.Instance.Write(
+            _diagnostics.Write(
                 "connection",
                 "connect-aborted",
                 "reason=" + (journalReason ?? string.Empty));
@@ -1516,7 +1516,7 @@ namespace Unison.Uwp.Services.WhatsApp
             _messageStore.FlushPendingIncomingJournalAsync();
 
         void IConnectionLifecycleHost.WriteLifecycleJournal(string eventName, string detail) =>
-            RuntimeDiagnosticsService.Instance.Write("lifecycle", eventName, detail);
+            _diagnostics.Write("lifecycle", eventName, detail);
 
         void IConnectionLifecycleHost.RecordLifecycleException(string eventName, Exception error)
         {
@@ -1528,7 +1528,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 return;
             }
 
-            RuntimeDiagnosticsService.Instance.RecordException("lifecycle", eventName, error);
+            _diagnostics.RecordException("lifecycle", eventName, error);
         }
 
         void IConnectionLifecycleHost.BeginShutdownLatch()
@@ -1585,13 +1585,13 @@ namespace Unison.Uwp.Services.WhatsApp
             if (completed == persistTail)
             {
                 await persistTail.ConfigureAwait(false);
-                RuntimeDiagnosticsService.Instance.Write(
+                _diagnostics.Write(
                     "lifecycle",
                     "suspend-persist-tail-complete");
             }
             else
             {
-                RuntimeDiagnosticsService.Instance.Write(
+                _diagnostics.Write(
                     "lifecycle",
                     "suspend-persist-tail-deferred",
                     "milliseconds=" + budgetMs + "; journal=durable");

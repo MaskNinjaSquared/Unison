@@ -1,4 +1,4 @@
-// =============================================================================
+﻿// =============================================================================
 // IChatCatalogPersistHost
 //
 // Side effects for ChatCatalogPersistDispatch (debounced catalogue save).
@@ -6,8 +6,9 @@
 // =============================================================================
 using System.Threading.Tasks;
 using Unison.Core.State;
+using Unison.WhatsAppClient.Abstractions;
 
-namespace Unison.Core.Contracts.WhatsApp
+namespace Unison.WhatsAppClient.Abstractions
 {
     public interface IChatCatalogPersistHost
     {

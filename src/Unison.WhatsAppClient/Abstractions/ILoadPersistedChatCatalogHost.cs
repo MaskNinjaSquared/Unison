@@ -1,4 +1,4 @@
-// =============================================================================
+﻿// =============================================================================
 // ILoadPersistedChatCatalogHost
 //
 // Side effects for LoadPersistedChatCatalogDispatch (startup catalogue hydrate).
@@ -7,8 +7,9 @@ using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Unison.Core.Models;
+using Unison.WhatsAppClient.Abstractions;
 
-namespace Unison.Core.Contracts.WhatsApp
+namespace Unison.WhatsAppClient.Abstractions
 {
     public interface ILoadPersistedChatCatalogHost
     {

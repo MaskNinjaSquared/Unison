@@ -1,4 +1,4 @@
-// =============================================================================
+﻿// =============================================================================
 // QrCodeWireDispatch
 //
 // OnQRCodeReceived body: stale ignore, mark delivered, raise. Handler wiring
@@ -6,6 +6,7 @@
 // =============================================================================
 using System;
 using Unison.Core.Contracts.WhatsApp;
+using Unison.WhatsAppClient.Abstractions;
 
 namespace Unison.WhatsAppClient.Helpers
 {

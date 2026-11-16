@@ -9,8 +9,8 @@
 // =============================================================================
 using System;
 using System.Threading.Tasks;
+using Unison.Core.Contracts.Tuning;
 using Unison.Core.Helpers;
-using Unison.Core.State;
 using Unison.Socket.Utils;
 
 namespace Unison.Uwp.Client
@@ -21,17 +21,17 @@ namespace Unison.Uwp.Client
 
         private readonly AsyncQueryCache<ProfilePictureResult> _answers;
 
-        public ProfilePictureQueryCache(SyncWorkloadStrategy workload)
+        public ProfilePictureQueryCache(IProfilePictureCacheTuning tuning)
         {
-            if (workload == null)
+            if (tuning == null)
             {
-                throw new ArgumentNullException(nameof(workload));
+                throw new ArgumentNullException(nameof(tuning));
             }
 
             _answers = new AsyncQueryCache<ProfilePictureResult>(
                 r => ProfilePictureCachePolicy.TtlFor(!string.IsNullOrWhiteSpace(r.Url), r.IsNotFound),
                 ProfilePictureCachePolicy.RevalidateCooldown,
-                workload.ProfilePictureQueryCacheMaxEntries);
+                tuning.MaxEntries);
         }
 
         public int Count => _answers.Count;

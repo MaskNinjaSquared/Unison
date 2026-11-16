@@ -1,10 +1,10 @@
-// =============================================================================
+﻿// =============================================================================
 // IConnectionUpdateHost
 //
 // Side effects for ConnectionUpdateDispatch (OnConnectionUpdate orchestration).
 // Policy stays in ConnectionUpdateRoute / ConnectionCloseDisposition.
 // =============================================================================
-namespace Unison.Core.Contracts.WhatsApp
+namespace Unison.WhatsAppClient.Abstractions
 {
     public interface IConnectionUpdateHost
     {

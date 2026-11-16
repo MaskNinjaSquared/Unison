@@ -1,10 +1,11 @@
-// =============================================================================
+﻿// =============================================================================
 // QrCodeWireOwner
 //
 // Owns IQrCodeWireHost. QR event raise / delivered flag stay as ctor ports.
 // =============================================================================
 using System;
 using Unison.Core.Contracts.WhatsApp;
+using Unison.WhatsAppClient.Abstractions;
 
 namespace Unison.WhatsAppClient.Helpers
 {

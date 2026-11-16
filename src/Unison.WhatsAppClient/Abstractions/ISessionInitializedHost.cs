@@ -1,11 +1,12 @@
-// =============================================================================
+﻿// =============================================================================
 // ISessionInitializedHost
 //
 // Side effects for SessionInitializedDispatch (OnSessionInitialized).
 // =============================================================================
 using System.Threading.Tasks;
+using Unison.WhatsAppClient.Abstractions;
 
-namespace Unison.Core.Contracts.WhatsApp
+namespace Unison.WhatsAppClient.Abstractions
 {
     public interface ISessionInitializedHost
     {

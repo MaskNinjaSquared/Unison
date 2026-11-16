@@ -1,4 +1,4 @@
-// =============================================================================
+﻿// =============================================================================
 // SqliteHistoryQuietFinalizeDispatch
 //
 // Body of the quiet finalize after delay + generation check.
@@ -9,6 +9,7 @@ using System.Threading.Tasks;
 using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Helpers;
 using Unison.Core.State;
+using Unison.WhatsAppClient.Abstractions;
 
 namespace Unison.WhatsAppClient.Helpers
 {

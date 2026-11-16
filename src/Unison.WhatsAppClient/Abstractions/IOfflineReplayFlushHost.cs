@@ -1,4 +1,4 @@
-// =============================================================================
+﻿// =============================================================================
 // IOfflineReplayFlushHost
 //
 // Side effects for OfflineReplayFlushDispatch (pending-message SQLite drain +
@@ -9,8 +9,9 @@ using System.Collections.Generic;
 using System.Threading.Tasks;
 using Unison.Core.Models;
 using Unison.Core.State;
+using Unison.WhatsAppClient.Abstractions;
 
-namespace Unison.Core.Contracts.WhatsApp
+namespace Unison.WhatsAppClient.Abstractions
 {
     public interface IOfflineReplayFlushHost
     {

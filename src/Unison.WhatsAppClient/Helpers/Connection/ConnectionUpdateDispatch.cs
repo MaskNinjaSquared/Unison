@@ -1,4 +1,4 @@
-// =============================================================================
+﻿// =============================================================================
 // ConnectionUpdateDispatch
 //
 // OnConnectionUpdate body: shutdown ignore, route classify, close disposition
@@ -6,6 +6,7 @@
 // =============================================================================
 using System;
 using Unison.Core.Contracts.WhatsApp;
+using Unison.WhatsAppClient.Abstractions;
 
 namespace Unison.WhatsAppClient.Helpers
 {

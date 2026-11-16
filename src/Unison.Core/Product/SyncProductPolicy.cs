@@ -18,7 +18,13 @@ namespace Unison.Core.Product
         IHistorySyncTuning,
         IEnrichmentTuning,
         IStartupMaintenanceTuning,
-        ISyncPhaseTuning
+        ISyncPhaseTuning,
+        ISocketBootstrapTuning,
+        IProfilePictureCacheTuning,
+        IGroupRosterStoreTuning,
+        ILidMappingPersistTuning,
+        IChatListUiTuning,
+        IChatWindowTuning
     {
         private const int MinHistoryFinalizeMs = 200;
 
@@ -131,5 +137,39 @@ namespace Unison.Core.Product
 
         private bool IsLowTier =>
             _workload.Category == DeviceCategory.Low || _workload.Category == DeviceCategory.Unsupported;
+
+        // --- ISocketBootstrapTuning -----------------------------------------
+
+        int ISocketBootstrapTuning.InitialPreKeyUploadCount => _workload.InitialPreKeyUploadCount;
+
+        // --- IProfilePictureCacheTuning ---------------------------------------
+
+        int IProfilePictureCacheTuning.MaxEntries => _workload.ProfilePictureQueryCacheMaxEntries;
+
+        // --- IGroupRosterStoreTuning ----------------------------------------
+
+        int IGroupRosterStoreTuning.MemoryMaxGroups => _workload.GroupRosterMemoryMaxGroups;
+
+        // --- ILidMappingPersistTuning ---------------------------------------
+
+        int ILidMappingPersistTuning.BatchSize => _workload.LidMappingPersistBatchSize;
+
+        int ILidMappingPersistTuning.DelayMs => _workload.LidMappingPersistDelayMs;
+
+        int ILidMappingPersistTuning.MemoryCacheMaxEntries => _workload.LidMappingMemoryCacheMaxEntries;
+
+        int ILidMappingPersistTuning.WarmMaxPairs => _workload.LidMappingWarmMaxPairs;
+
+        // --- IChatListUiTuning ----------------------------------------------
+
+        int IChatListUiTuning.ChatListReleaseBatchSize => _workload.ChatListReleaseBatchSize;
+
+        int IChatListUiTuning.PreviewHydrateBatchSize => _workload.PreviewHydrateBatchSize;
+
+        // --- IChatWindowTuning ------------------------------------------------
+
+        int IChatWindowTuning.InitialUiMessageWindow => _workload.InitialUiMessageWindow;
+
+        int IChatWindowTuning.MaxUiMessageWindow => _workload.MaxUiMessageWindow;
     }
 }

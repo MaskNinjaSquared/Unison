@@ -105,7 +105,7 @@ namespace Unison.Uwp.Services.WhatsApp
             }
             catch (Exception ex)
             {
-                RuntimeDiagnosticsService.Instance.RecordException(
+                _diagnostics.RecordException(
                     "send",
                     "text-transport-attempt-failed",
                     ex,
@@ -132,7 +132,7 @@ namespace Unison.Uwp.Services.WhatsApp
         {
             Interlocked.Increment(ref _diagnosticsSendAttemptCount);
             Interlocked.Exchange(ref _diagnosticsLastSendAttemptUtcTicks, DateTime.UtcNow.Ticks);
-            RuntimeDiagnosticsService.Instance.Write(
+            _diagnostics.Write(
                 "send",
                 "text-attempt",
                 "messageId=" + messageId + "; connected=" + IsConnected);
@@ -142,14 +142,14 @@ namespace Unison.Uwp.Services.WhatsApp
         {
             Interlocked.Increment(ref _diagnosticsSendSuccessCount);
             Interlocked.Exchange(ref _diagnosticsLastSendSuccessUtcTicks, DateTime.UtcNow.Ticks);
-            RuntimeDiagnosticsService.Instance.Write("send", "text-accepted", "messageId=" + messageId);
+            _diagnostics.Write("send", "text-accepted", "messageId=" + messageId);
         }
 
         void IOutgoingMessageHost.RecordSendFailure(string messageId, Exception error)
         {
             Interlocked.Increment(ref _diagnosticsSendFailureCount);
             Interlocked.Exchange(ref _diagnosticsLastSendFailureUtcTicks, DateTime.UtcNow.Ticks);
-            RuntimeDiagnosticsService.Instance.RecordException(
+            _diagnostics.RecordException(
                 "send",
                 "text-failed",
                 error,

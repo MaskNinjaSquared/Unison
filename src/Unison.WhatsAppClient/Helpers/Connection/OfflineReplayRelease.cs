@@ -1,4 +1,4 @@
-// =============================================================================
+﻿// =============================================================================
 // OfflineReplayRelease
 //
 // OnReceivedPendingNotifications: flush offline rows, settle façades, schedule
@@ -7,6 +7,7 @@
 using System;
 using System.Threading.Tasks;
 using Unison.Core.Contracts.WhatsApp;
+using Unison.WhatsAppClient.Abstractions;
 
 namespace Unison.WhatsAppClient.Helpers
 {

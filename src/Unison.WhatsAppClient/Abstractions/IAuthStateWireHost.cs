@@ -1,11 +1,12 @@
-// =============================================================================
+﻿// =============================================================================
 // IAuthStateWireHost
 //
 // Side effects for AuthStateWireDispatch (OnAuthStateUpdate).
 // =============================================================================
 using System.Threading.Tasks;
+using Unison.WhatsAppClient.Abstractions;
 
-namespace Unison.Core.Contracts.WhatsApp
+namespace Unison.WhatsAppClient.Abstractions
 {
     public interface IAuthStateWireHost
     {

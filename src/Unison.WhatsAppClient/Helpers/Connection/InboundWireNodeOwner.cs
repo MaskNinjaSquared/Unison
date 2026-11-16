@@ -1,4 +1,4 @@
-// =============================================================================
+﻿// =============================================================================
 // InboundWireNodeOwner
 //
 // Owns IInboundWireNodeHost. Ack → message façade and notify → contact façade
@@ -7,6 +7,7 @@
 using System;
 using Unison.Baileys.Protocol;
 using Unison.Core.Contracts.WhatsApp;
+using Unison.WhatsAppClient.Abstractions;
 
 namespace Unison.WhatsAppClient.Helpers
 {

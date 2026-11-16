@@ -1,7 +1,8 @@
-using System.Threading.Tasks;
+﻿using System.Threading.Tasks;
 using Unison.Core.Models;
+using Unison.WhatsAppClient.Abstractions;
 
-namespace Unison.Core.Contracts.WhatsApp
+namespace Unison.WhatsAppClient.Abstractions
 {
     /// <summary>
     /// Quiet persist for on-demand media download (repaired URI on the row).

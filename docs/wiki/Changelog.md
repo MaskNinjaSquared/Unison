@@ -2,6 +2,11 @@
 
 Newest first.
 
+## Auto-safe refactor batch — knobs + host ports off Core
+
+Fifty mechanical steps: product tuning interfaces (`ISocketBootstrapTuning`, `IProfilePictureCacheTuning`, `IGroupRosterStoreTuning`, `ILidMappingPersistTuning`, `IChatListUiTuning`, `IChatWindowTuning`) on `SyncProductPolicy` so UWP adapters and list/detail VMs stop taking `SyncWorkloadStrategy`; ~21 host ports moved from `Core/Contracts/WhatsApp` to `WhatsAppClient.Abstractions` (`IBaileysMediaDownload` → `IMediaSocketDownload`); `InitGateOwner` + `IRuntimeDiagnostics` wired into `WhatsAppService`; `HostAdapters` partial; Core still keeps hosts consumed by Core State (`IOfflineReplayHost`, `IHistoryOnDemandSocket`, `IPlaceholderResendSocket`).
+See [Netstandard WhatsApp client](Netstandard-WhatsApp-Client).
+
 ## Slice B — Core no longer references Unison.Proto
 
 Proto-shaped members left the Core contracts: wire ingress moved to `IMessageWireIngress` / `IHistoryWireIngress` / `IStatusWireIngress` in `Unison.WhatsAppClient.Abstractions` (each extends its Core contract), internal pipeline steps left `IMessageService`, `HistorySyncReceived` raises the domain `HistorySyncNotice`, host ports / `Incoming*Request` / `SentMessageRetryRebuild` moved to WhatsAppClient, and `IPlaceholderResendSocket` takes `MissingMessageCandidate`. `Unison.Core.csproj` has no project reference left.
@@ -9,7 +14,7 @@ See [Netstandard WhatsApp client](Netstandard-WhatsApp-Client).
 
 ## Slice A — proto→domain mappers live in WhatsAppClient
 
-`ProtoMessageUnwrap`, `ChatMessageMapper` (incl. `TryMapReaction`) and `ReactionPayloadMapper` moved to `Unison.WhatsAppClient`. Core `IChatMessageMapper` / `IReactionMapper` are domain-only (`MapIndividual`, Apply). `Unison.Proto` reference on Core stays until the incoming/history fatia B.
+`ProtoMessageUnwrap`, `ChatMessageMapper` (incl. `TryMapReaction`) and `ReactionPayloadMapper` moved to `Unison.WhatsAppClient`. Core `IChatMessageMapper` / `IReactionMapper` are domain-only (`MapIndividual`, Apply).
 See [Netstandard WhatsApp client](Netstandard-WhatsApp-Client).
 
 ## P4 done — Core no longer references Baileys
@@ -19,10 +24,14 @@ See [Netstandard WhatsApp client](Netstandard-WhatsApp-Client).
 
 ## P4 steps 1–4 — no Baileys protocol types on Core contracts
 
+Superseded by Slice B — Core has no protocol project reference.
+
 `IGroupService` no longer takes a group IQ node (`MessageFacade` parses with `GroupMetadataReader`). Receipts reach Core as `ReceiptFacts` (moved to `Core.Models`), read in `SocketFacadeWireOwner`. The link-code relay (`ISocketFacadeWireHost.RaiseLinkCodeCompanionReg`, `WhatsAppService.OnLinkCodeCompanionReg`) was removed: `SocketBridge` never raised it and `PairingFlow` owns link-code pairing. `ConnectionSocketSessionRequest.AuthState` is an opaque `object`. The Core → Baileys reference stays: Core still uses the generated `Proto` types.
 See [Netstandard WhatsApp client](Netstandard-WhatsApp-Client).
 
 ## P4 inventory — Core still references Baileys (plan only)
+
+Superseded by Slice B — Core has no protocol project reference.
 
 Four Core contracts still name Baileys types: group metadata apply and receipts take
 `BinaryNode`, link-code raises `BinaryNode`, connect-open carries `AuthState`. Wiki records

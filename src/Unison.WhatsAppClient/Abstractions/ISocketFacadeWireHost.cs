@@ -1,4 +1,4 @@
-// =============================================================================
+﻿// =============================================================================
 // ISocketFacadeWireHost
 //
 // Side effects for SocketFacadeWireDispatch (presence / missing / outgoing
@@ -7,8 +7,9 @@
 using System;
 using System.Threading.Tasks;
 using Unison.Core.Models;
+using Unison.WhatsAppClient.Abstractions;
 
-namespace Unison.Core.Contracts.WhatsApp
+namespace Unison.WhatsAppClient.Abstractions
 {
     public interface ISocketFacadeWireHost
     {

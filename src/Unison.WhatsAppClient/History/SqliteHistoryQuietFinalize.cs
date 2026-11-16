@@ -1,4 +1,4 @@
-// =============================================================================
+﻿// =============================================================================
 // SqliteHistoryQuietFinalize
 //
 // Owns the SQLite history quiet-finalize generation and the delayed entry that
@@ -11,6 +11,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Unison.Core.Contracts.WhatsApp;
 using Unison.WhatsAppClient.Helpers;
+using Unison.WhatsAppClient.Abstractions;
 
 namespace Unison.WhatsAppClient.History
 {

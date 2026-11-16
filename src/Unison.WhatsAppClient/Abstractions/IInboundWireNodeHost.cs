@@ -1,9 +1,9 @@
-// =============================================================================
+﻿// =============================================================================
 // IInboundWireNodeHost
 //
 // Side effects for InboundWireNodeDispatch (OnMessage ack + notify attrs).
 // =============================================================================
-namespace Unison.Core.Contracts.WhatsApp
+namespace Unison.WhatsAppClient.Abstractions
 {
     public interface IInboundWireNodeHost
     {

@@ -2,10 +2,7 @@ using Unison.Core.Models;
 
 namespace Unison.Core.Contracts
 {
-    /// <summary>
-    /// Builds <see cref="ChatMessage"/> from domain snapshots (no proto).
-    /// Proto reaction envelopes are mapped on the WhatsAppClient payload mapper.
-    /// </summary>
+    /// <summary>Domain-only mapping into <see cref="ChatMessage"/>.</summary>
     public interface IChatMessageMapper
     {
         /// <summary>Maps a non-reaction content snapshot into a <see cref="ChatMessage"/>.</summary>

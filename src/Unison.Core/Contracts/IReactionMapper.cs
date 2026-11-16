@@ -3,10 +3,7 @@ using Unison.Core.Models;
 
 namespace Unison.Core.Contracts
 {
-    /// <summary>
-    /// Applies <see cref="PendingReaction"/> onto parent <see cref="ChatMessage.Reactions"/>.
-    /// Proto → pending mapping lives on the WhatsAppClient payload mapper.
-    /// </summary>
+    /// <summary>Applies <see cref="PendingReaction"/> onto parent <see cref="ChatMessage.Reactions"/>.</summary>
     public interface IReactionMapper
     {
         /// <summary>

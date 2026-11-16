@@ -1,4 +1,4 @@
-// =============================================================================
+﻿// =============================================================================
 // BaileysMediaDownload
 //
 // Rebuilds a proto Image/Sticker envelope from ChatMessage fields and runs
@@ -14,10 +14,11 @@ using Unison.Core.Helpers;
 using Unison.Core.Models;
 using Unison.Socket.Media;
 using Unison.Socket.Messages;
+using Unison.WhatsAppClient.Abstractions;
 
 namespace Unison.Uwp.Services.WhatsApp.Messages
 {
-    internal sealed class BaileysMediaDownload : IBaileysMediaDownload
+    internal sealed class BaileysMediaDownload : IMediaSocketDownload
     {
         private readonly Func<MediaModule> _media;
 

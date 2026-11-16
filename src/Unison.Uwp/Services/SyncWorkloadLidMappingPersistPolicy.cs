@@ -1,28 +1,28 @@
 // =============================================================================
 // SyncWorkloadLidMappingPersistPolicy
 //
-// Adapts SyncWorkloadStrategy tier numbers into the Socket persist / memory
-// policy (disk batches, LRU size, optional post-boot warm window).
+// Adapts product tuning into the Socket persist / memory policy (disk batches,
+// LRU size, optional post-boot warm window).
 // =============================================================================
 using System;
-using Unison.Core.State;
+using Unison.Core.Contracts.Tuning;
 using Unison.Socket.Abstractions;
 
 namespace Unison.Uwp.Services
 {
     public sealed class SyncWorkloadLidMappingPersistPolicy : ILidMappingPersistPolicy
     {
-        public SyncWorkloadLidMappingPersistPolicy(SyncWorkloadStrategy workload)
+        public SyncWorkloadLidMappingPersistPolicy(ILidMappingPersistTuning tuning)
         {
-            if (workload == null)
+            if (tuning == null)
             {
-                throw new ArgumentNullException(nameof(workload));
+                throw new ArgumentNullException(nameof(tuning));
             }
 
-            BatchSize = workload.LidMappingPersistBatchSize;
-            DelayMs = workload.LidMappingPersistDelayMs;
-            MemoryCacheMaxEntries = workload.LidMappingMemoryCacheMaxEntries;
-            WarmMaxPairs = workload.LidMappingWarmMaxPairs;
+            BatchSize = tuning.BatchSize;
+            DelayMs = tuning.DelayMs;
+            MemoryCacheMaxEntries = tuning.MemoryCacheMaxEntries;
+            WarmMaxPairs = tuning.WarmMaxPairs;
         }
 
         public int BatchSize { get; }

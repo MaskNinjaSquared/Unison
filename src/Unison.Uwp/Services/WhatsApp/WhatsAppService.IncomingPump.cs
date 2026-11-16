@@ -6,7 +6,7 @@ using Unison.Core.Models;
 using Unison.Core.State;
 using Unison.WhatsAppClient.Abstractions;
 using Unison.WhatsAppClient.Helpers;
-using Proto;
+using Proto;
 using Unison.WhatsAppClient.Messages;
 
 namespace Unison.Uwp.Services.WhatsApp
@@ -82,7 +82,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
         void IOfflineReplayHost.ReportFlushFailure(string reason, Exception error)
         {
-            RuntimeDiagnosticsService.Instance.RecordException(
+            _diagnostics.RecordException(
                 "messages",
                 "offline-summary-apply-failed",
                 error,

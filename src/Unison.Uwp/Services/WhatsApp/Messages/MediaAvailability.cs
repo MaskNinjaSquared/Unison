@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Diagnostics;
 using System.Threading.Tasks;
 using Proto;
@@ -31,7 +31,7 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
         private readonly MediaDerivationService _derivation;
         private readonly MediaDownloadGate _gate;
         private readonly IChatCatalogPersistence _catalog;
-        private readonly IBaileysMediaDownload _baileysMedia;
+        private readonly IMediaSocketDownload _baileysMedia;
 
         public MediaAvailability(
             IConnectionService connection,
@@ -44,7 +44,7 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
             MediaDerivationService derivation,
             MediaDownloadGate gate,
             IChatCatalogPersistence catalog,
-            IBaileysMediaDownload baileysMedia = null)
+            IMediaSocketDownload baileysMedia = null)
         {
             _connection = connection ?? throw new ArgumentNullException(nameof(connection));
             _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));

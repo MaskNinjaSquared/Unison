@@ -1,4 +1,4 @@
-// =============================================================================
+﻿// =============================================================================
 // LoadPersistedChatCatalogDispatch
 //
 // LoadPersistedChatsAsync orchestration. Preview store I/O and UI list apply
@@ -9,6 +9,7 @@ using System.Collections.Generic;
 using System.Threading.Tasks;
 using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Models;
+using Unison.WhatsAppClient.Abstractions;
 
 namespace Unison.WhatsAppClient.Helpers
 {

@@ -1,4 +1,4 @@
-// =============================================================================
+﻿// =============================================================================
 // SessionInitializedDispatch
 //
 // OnSessionInitialized body: pairing flags, persist, defer post-replay vs
@@ -7,6 +7,7 @@
 using System;
 using System.Threading.Tasks;
 using Unison.Core.Contracts.WhatsApp;
+using Unison.WhatsAppClient.Abstractions;
 
 namespace Unison.WhatsAppClient.Helpers
 {
