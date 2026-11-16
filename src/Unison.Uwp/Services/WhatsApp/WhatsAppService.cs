@@ -48,7 +48,7 @@ using Unison.WhatsAppClient.Helpers;
 
 namespace Unison.Uwp.Services.WhatsApp
 {
-    public partial class WhatsAppService : INotifyPropertyChanged, IConnectionEventSource, IConnectionSessionHost, IOfflineReplayHost, IOfflineReplayFlushIoHost, IChatCatalogPersistHost, IPostReplayMaintenanceHost, IPostMessageEnrichmentHost, IPlaceholderResendSocket, IRuntimeSnapshotSource, IBackgroundResolutionGate, IConversationResyncHost, IHistorySyncHost, IHistoryCatchUpHost, IConnectionEnsureHost, IConnectionResumeHost, IConnectionPairingStage2Host, IConnectionBrokerTransferHost, IConnectionSoftReconnectHost, IConnectionLifecycleHost, IConnectionConnectGateSource, IConnectionConnectPrepareHost, IConnectionSocketAssignment, IConnectionAssignedSocketClearHost, ISelfIdentityHealHost, IStartupUiHost, IResolvedNameApplyHost, IHistoryHydrationBackfillHost, ISqliteHistoryQuietFinalizeHost, IHistoryPostOfflineFreshnessHost, IAutoReconnectLoopHost, IInitializeConnectionStateHost, IReconnectHistoryCatchUpHost, IHydrationFallbackPipelineHost, IHydrationDayRetryIoHost, ISoftReconnectIoHost, IBrokerReconnectConsumeHost, IPublishConnectionUpdateHost, IMarkPairingRestartPendingHost, IDropCurrentSocketForFastResumeHost, IPersistAuthStateHost, IWaitForSessionEstablishedHost, IConnectionHealthMonitorIoHost, ITryStartPairingStage2ReconnectHost, IIsCurrentSocketHealthyHost, IConnectAsyncHost, IPostSyncMaintenanceIoHost, IBuildHistoryHydrationCandidatesHost, IWaitForHistoryHydrationSettleHost
+    public partial class WhatsAppService : INotifyPropertyChanged, IConnectionEventSource, IConnectionSessionHost, IOfflineReplayHost, IOfflineReplayFlushIoHost, IChatCatalogPersistHost, IPostReplayMaintenanceHost, IPostMessageEnrichmentHost, IPlaceholderResendSocket, IRuntimeSnapshotSource, IBackgroundResolutionGate, IConversationResyncHost, IHistorySyncHost, IHistoryCatchUpHost, IConnectionEnsureHost, IConnectionResumeHost, IConnectionPairingStage2Host, IConnectionBrokerTransferHost, IConnectionSoftReconnectHost, IConnectionLifecycleHost, IConnectionConnectGateSource, IConnectionConnectPrepareHost, IConnectionSocketAssignment, IConnectionAssignedSocketClearHost, ISelfIdentityHealHost, IStartupUiHost, IResolvedNameApplyHost, IHistoryHydrationBackfillHost, ISqliteHistoryQuietFinalizeHost, IAutoReconnectLoopHost, IInitializeConnectionStateHost, IHydrationDayRetryIoHost, ISoftReconnectIoHost, IBrokerReconnectConsumeHost, IPublishConnectionUpdateHost, IMarkPairingRestartPendingHost, IDropCurrentSocketForFastResumeHost, IPersistAuthStateHost, IWaitForSessionEstablishedHost, IConnectionHealthMonitorIoHost, ITryStartPairingStage2ReconnectHost, IIsCurrentSocketHealthyHost, IConnectAsyncHost, IPostSyncMaintenanceIoHost
     {
         public event PropertyChangedEventHandler PropertyChanged;
         protected void OnPropertyChanged([CallerMemberName] string propertyName = null)
@@ -682,6 +682,11 @@ namespace Unison.Uwp.Services.WhatsApp
         private readonly RequestFullHistoryTrackedOwner _requestFullTracked;
         private readonly ForceHistoryRepairOwner _forceHistoryRepair;
         private readonly SessionOpenOnDemandPendingConsumeOwner _sessionOpenPendingConsume;
+        private readonly HistoryPostOfflineFreshnessOwner _postOfflineFreshness;
+        private readonly ReconnectHistoryCatchUpOwner _reconnectCatchUp;
+        private readonly HydrationFallbackPipelineOwner _hydrationFallback;
+        private readonly HistoryHydrationCandidatesOwner _hydrationCandidates;
+        private readonly HistoryHydrationSettleOwner _hydrationSettle;
         private DateTime _lastHistorySyncReceivedUtc = DateTime.MinValue;
         private Proto.HistorySync.Types.HistorySyncType? _lastHistorySyncTypeReceived = null;
         private readonly ResyncConversationsOwner _resyncConversations;
@@ -1140,6 +1145,57 @@ namespace Unison.Uwp.Services.WhatsApp
                 history: () => History,
                 claimSessionOpenOnDemand: jid => Messages?.TryClaimSessionOpenOnDemand(jid),
                 log: message => Debug.WriteLine("[WhatsAppService] " + message));
+            _postOfflineFreshness = new HistoryPostOfflineFreshnessOwner(
+                catchUp: _catchUp,
+                heavyHistoryEnrichment: _heavyHistoryEnrichment,
+                history: () => History,
+                lastHistorySyncReceivedUtc: () => _lastHistorySyncReceivedUtc,
+                lastHistorySyncTypeOrUnknown: () => _lastHistorySyncTypeReceived != null
+                    ? _lastHistorySyncTypeReceived.ToString()
+                    : "<unknown>",
+                isHistoryCatchUpActive: IsHistoryCatchUpActive,
+                catchUpStagnantCyclesBeforeStop: () => CatchUpStagnantCyclesBeforeStop,
+                noteCatchUpProgress: NoteFullHistoryCatchUpProgress,
+                tryGetStaleReason: TryGetHistoryFreshnessStaleReason,
+                newestStoredMessageUtc: GetNewestStoredMessageUtc,
+                newestNonSelfStoredMessageUtc: () => GetNewestStoredMessageUtc(jid => !IsSelfLinkedJid(jid)),
+                newestGroupStoredMessageUtc: () =>
+                    Chats.Any(c => c != null && (c.IsGroup || JidHelper.IsGroupJid(c.JID)))
+                        ? GetNewestStoredMessageUtc(JidHelper.IsGroupJid)
+                        : DateTime.MinValue,
+                requestReconnectHistoryCatchUpAsync: RequestReconnectHistoryCatchUpAsync,
+                finishHistoryCatchUpContinue: FinishHistoryCatchUpContinue,
+                log: message => Debug.WriteLine("[WhatsAppService] " + message));
+            _reconnectCatchUp = new ReconnectHistoryCatchUpOwner(
+                historyRequests: _historyRequests,
+                heavyHistoryEnrichment: _heavyHistoryEnrichment,
+                isHistoryCatchUpActive: IsHistoryCatchUpActive,
+                isConnected: () => IsConnected,
+                isWindowVisible: () => IsAppWindowVisible,
+                waitForStartupQuietAsync: WaitForStartupQuietAsync,
+                requestFullHistoryTrackedAsync: RequestFullHistoryOnDemandTrackedAsync,
+                trySchedulePostMessageEnrichment: TrySchedulePostMessageEnrichment,
+                diagnostics: RuntimeDiagnosticsService.Instance,
+                log: message => Debug.WriteLine("[WhatsAppService] " + message));
+            _hydrationFallback = new HydrationFallbackPipelineOwner(
+                isHistoryHydrationActive: () => _historyHydrationBackfill.IsActive,
+                tryGetStaleReason: TryGetHistoryFreshnessStaleReason,
+                noteHydrationDayAttempt: NoteHydrationDayAttempt,
+                startBackgroundHistoryBackfillAsync: StartBackgroundHistoryBackfillAsync,
+                requestReconnectHistoryCatchUpAsync: RequestReconnectHistoryCatchUpAsync,
+                scheduleHydrationDayRetryIfNeeded: ScheduleHydrationDayRetryIfNeeded,
+                diagnostics: RuntimeDiagnosticsService.Instance,
+                log: message => Debug.WriteLine("[WhatsAppService] " + message));
+            _hydrationCandidates = new HistoryHydrationCandidatesOwner(
+                chats: () => Chats,
+                normalizeJid: NormalizeJid,
+                getMessageCount: GetHistoryHydrationMessageCount,
+                staleThreshold: HistoryBackfillStaleThreshold,
+                maxStaleTopChats: HistoryBackfillMaxStaleTopChats);
+            _hydrationSettle = new HistoryHydrationSettleOwner(
+                _historyRequests,
+                isConnected: () => IsConnected,
+                settleBudget: HistoryHydrationSettleBudget);
             _socketTearDown = new TearDownSocketForSoftReconnectOwner(
                 () =>
                 {
@@ -2738,156 +2794,10 @@ namespace Unison.Uwp.Services.WhatsApp
         }
 
         private void LogHistoryFreshnessAfterOfflineDrain(int offlineCount) =>
-            _ = HistoryPostOfflineFreshnessDispatch.RunAsync(this, offlineCount);
-
-        // --- IHistoryPostOfflineFreshnessHost --------------------------------
-
-        DateTime IHistoryPostOfflineFreshnessHost.LastHistorySyncReceivedUtc =>
-            _lastHistorySyncReceivedUtc;
-
-        string IHistoryPostOfflineFreshnessHost.LastHistorySyncTypeOrUnknown =>
-            _lastHistorySyncTypeReceived != null
-                ? _lastHistorySyncTypeReceived.ToString()
-                : "<unknown>";
-
-        bool IHistoryPostOfflineFreshnessHost.IsHistoryCatchUpActive =>
-            IsHistoryCatchUpActive();
-
-        bool IHistoryPostOfflineFreshnessHost.IsPairingBootstrapActive =>
-            History?.IsPairingBootstrapActive ?? false;
-
-        int IHistoryPostOfflineFreshnessHost.CatchUpStagnantCyclesBeforeStop =>
-            CatchUpStagnantCyclesBeforeStop;
-
-        void IHistoryPostOfflineFreshnessHost.NoteCatchUpProgress(string reason) =>
-            NoteFullHistoryCatchUpProgress(reason);
-
-        bool IHistoryPostOfflineFreshnessHost.TryGetFreshnessStaleReason(
-            DateTime nowUtc,
-            out string staleReason) =>
-            TryGetHistoryFreshnessStaleReason(nowUtc, out staleReason);
-
-        DateTime IHistoryPostOfflineFreshnessHost.GetNewestStoredMessageUtc() =>
-            GetNewestStoredMessageUtc();
-
-        DateTime IHistoryPostOfflineFreshnessHost.GetNewestNonSelfStoredMessageUtc() =>
-            GetNewestStoredMessageUtc(jid => !IsSelfLinkedJid(jid));
-
-        DateTime IHistoryPostOfflineFreshnessHost.GetNewestGroupStoredMessageUtc() =>
-            Chats.Any(c => c != null && (c.IsGroup || JidHelper.IsGroupJid(c.JID)))
-                ? GetNewestStoredMessageUtc(JidHelper.IsGroupJid)
-                : DateTime.MinValue;
-
-        void IHistoryPostOfflineFreshnessHost.MarkEnrichmentAwaitingHeavyHistory() =>
-            _heavyHistoryEnrichment.SetAwaitingHeavyHistory(true);
-
-        HistoryCatchUpDrainAction IHistoryPostOfflineFreshnessHost.DecideAfterFreshDrain(
-            int offlineCount,
-            int stagnantStop,
-            out int stagnantCycles) =>
-            _catchUp.DecideAfterFreshDrain(offlineCount, stagnantStop, out stagnantCycles);
-
-        Task IHistoryPostOfflineFreshnessHost.RequestReconnectHistoryCatchUpAsync(string reason) =>
-            RequestReconnectHistoryCatchUpAsync(reason);
-
-        void IHistoryPostOfflineFreshnessHost.FinishHistoryCatchUpContinue(
-            string reason,
-            bool releaseEnrichment) =>
-            FinishHistoryCatchUpContinue(reason, releaseEnrichment);
-
-        void IHistoryPostOfflineFreshnessHost.LogSyncObservedThisSession(
-            DateTime syncUtc,
-            string syncType) =>
-            Debug.WriteLine(
-                "[WhatsAppService] Post-offline freshness note: history sync observed this session at " +
-                syncUtc.ToString("O") +
-                " (type=" + syncType +
-                "); freshness is evaluated by newest stored message age.");
-
-        void IHistoryPostOfflineFreshnessHost.LogFreshnessPassed(
-            string anyText,
-            string nonSelfText,
-            string groupText,
-            int offlineCount,
-            bool catchUpActive) =>
-            Debug.WriteLine(
-                "[WhatsAppService] Post-offline freshness check passed: message freshness scopes are fresh (any=" +
-                anyText + ", nonSelf=" + nonSelfText + ", group=" + groupText +
-                ", offlineCount=" + offlineCount +
-                ", catchUpActive=" + catchUpActive + ")");
-
-        void IHistoryPostOfflineFreshnessHost.LogCatchUpEmptyWhileTipFresh(
-            int stagnantCycles,
-            int stagnantStop) =>
-                    Debug.WriteLine(
-                        "[WhatsAppService] Catch-up offline drain empty while tip fresh; stagnant=" +
-                        stagnantCycles + "/" + stagnantStop);
-
-        void IHistoryPostOfflineFreshnessHost.LogFreshnessNotStaleSkip(
-            string staleReason,
-            string newestText,
-            string tipAgeMinutes,
-            int offlineCount,
-            bool catchUpActive) =>
-            Debug.WriteLine(
-                "[WhatsAppService] Post-offline freshness not stale; skipping FULL_HISTORY " +
-                "(staleReason=" + staleReason +
-                ", newestStored=" + newestText +
-                ", tipAgeMinutes=" + tipAgeMinutes +
-                ", offlineCount=" + offlineCount +
-                ", catchUpActive=" + catchUpActive + ")");
-
-        void IHistoryPostOfflineFreshnessHost.LogFreshnessStillStaleRequest(
-            string staleReason,
-            string newestText,
-            int offlineCount) =>
-            Debug.WriteLine(
-                "[WhatsAppService] Post-offline freshness check remains stale after normal replay: staleReason=" +
-                staleReason +
-                ", newestStored=" + newestText +
-                ", offlineCount=" + offlineCount +
-                ". Requesting FULL_HISTORY_SYNC_ON_DEMAND before name/group enrichment.");
+            _ = _postOfflineFreshness.RunAsync(offlineCount);
 
         private Task RequestReconnectHistoryCatchUpAsync(string reason) =>
-            ReconnectHistoryCatchUpDispatch.RunAsync(this, reason);
-
-        // --- IReconnectHistoryCatchUpHost ------------------------------------
-
-        bool IReconnectHistoryCatchUpHost.IsHistoryCatchUpActive =>
-            IsHistoryCatchUpActive();
-
-        bool IReconnectHistoryCatchUpHost.IsConnected => IsConnected;
-
-        bool IReconnectHistoryCatchUpHost.IsWindowVisible => IsAppWindowVisible;
-
-        Task<bool> IReconnectHistoryCatchUpHost.WaitForStartupQuietAsync(
-            TimeSpan timeout,
-            string reason,
-            CancellationToken token) =>
-            WaitForStartupQuietAsync(timeout, reason, token);
-
-        void IReconnectHistoryCatchUpHost.ReleaseFullHistoryIfUntracked() =>
-                _historyRequests.ReleaseFullIfUntracked();
-
-        Task<bool> IReconnectHistoryCatchUpHost.RequestFullHistoryOnDemandTrackedAsync(
-            string reason,
-            bool isFreshnessRepair) =>
-            RequestFullHistoryOnDemandTrackedAsync(reason, isFreshnessRepair);
-
-        void IReconnectHistoryCatchUpHost.ClearEnrichmentAwaitingHeavyHistory() =>
-            _heavyHistoryEnrichment.SetAwaitingHeavyHistory(false);
-
-        void IReconnectHistoryCatchUpHost.TrySchedulePostMessageEnrichment(string reason) =>
-            TrySchedulePostMessageEnrichment(reason);
-
-        void IReconnectHistoryCatchUpHost.LogReconnectHistoryCatchUp(string message) =>
-            Debug.WriteLine("[WhatsAppService] " + message);
-
-        void IReconnectHistoryCatchUpHost.WriteReconnectHistoryCatchUpJournal(string reason) =>
-                    RuntimeDiagnosticsService.Instance.Write(
-                        "startup",
-                        "reconnect-history-catchup-requested",
-                        "reason=" + reason);
+            _reconnectCatchUp.RunAsync(reason);
 
         /// <summary>
         /// After FULL_HISTORY quiet fails while tips stay stale: per-JID ON_DEMAND hydration
@@ -2895,51 +2805,7 @@ namespace Unison.Uwp.Services.WhatsApp
         /// keep going until tips look fresh (max 5 / day, every 3h).
         /// </summary>
         private Task RunHydrationFallbackPipelineAsync(string reason) =>
-            HydrationFallbackPipelineDispatch.RunAsync(this, reason);
-
-        // --- IHydrationFallbackPipelineHost ----------------------------------
-
-        bool IHydrationFallbackPipelineHost.IsHistoryHydrationActive =>
-            _historyHydrationBackfill.IsActive;
-
-        bool IHydrationFallbackPipelineHost.TryGetFreshnessStaleReason(
-            DateTime nowUtc,
-            out string staleReason) =>
-            TryGetHistoryFreshnessStaleReason(nowUtc, out staleReason);
-
-        void IHydrationFallbackPipelineHost.NoteHydrationDayAttempt(DateTime nowUtc) =>
-            NoteHydrationDayAttempt(nowUtc);
-
-        void IHydrationFallbackPipelineHost.WriteHydrationFallbackStart(
-            string reason,
-            string staleReason) =>
-                RuntimeDiagnosticsService.Instance.Write(
-                    "history",
-                    "hydration-fallback-start",
-                    "reason=" + (reason ?? string.Empty) +
-                    "; stale=" + (staleReason ?? string.Empty));
-
-        Task<int> IHydrationFallbackPipelineHost.StartBackgroundHistoryBackfillAsync(
-            string reason) =>
-            StartBackgroundHistoryBackfillAsync(reason);
-
-        void IHydrationFallbackPipelineHost.FireAndForgetReconnectHistoryCatchUp(string reason) =>
-            _ = RequestReconnectHistoryCatchUpAsync(reason);
-
-        void IHydrationFallbackPipelineHost.ScheduleHydrationDayRetryIfNeeded(string reason) =>
-                ScheduleHydrationDayRetryIfNeeded(reason);
-
-        void IHydrationFallbackPipelineHost.LogHydrationFallback(string message) =>
-            Debug.WriteLine("[WhatsAppService] " + message);
-
-        void IHydrationFallbackPipelineHost.RecordHydrationFallbackException(
-            Exception error,
-            string reason) =>
-                RuntimeDiagnosticsService.Instance.RecordException(
-                    "history",
-                    "hydration-fallback-failed",
-                error,
-                    reason);
+            _hydrationFallback.RunAsync(reason);
 
         private void NoteHydrationDayAttempt(DateTime nowUtc) =>
             _hydrationDayRetry.NoteAttempt(nowUtc);
@@ -3212,57 +3078,12 @@ namespace Unison.Uwp.Services.WhatsApp
 
         private IReadOnlyList<HistoryBackfillCandidate> BuildHistoryHydrationCandidates(
             DateTime nowUtc) =>
-            BuildHistoryHydrationCandidatesDispatch.Run(this, nowUtc);
-
-        // --- IBuildHistoryHydrationCandidatesHost ----------------------------
-
-        int IBuildHistoryHydrationCandidatesHost.GetHydrationChatCount() => Chats.Count;
-
-        HistoryHydrationChatRow IBuildHistoryHydrationCandidatesHost.GetHydrationChatAt(int index)
-        {
-            ChatItem chat = Chats[index];
-            if (chat == null)
-            {
-                return null;
-            }
-
-            return new HistoryHydrationChatRow
-            {
-                Jid = chat.JID,
-                LastMessageTimestampUtc = chat.LastMessageTimestampUtc
-            };
-        }
-
-        string IBuildHistoryHydrationCandidatesHost.NormalizeHydrationJid(string jid) =>
-            NormalizeJid(jid);
-
-        int IBuildHistoryHydrationCandidatesHost.GetHydrationMessageCount(string jid) =>
-            GetHistoryHydrationMessageCount(jid);
-
-        TimeSpan IBuildHistoryHydrationCandidatesHost.HistoryBackfillStaleThreshold =>
-            HistoryBackfillStaleThreshold;
-
-        int IBuildHistoryHydrationCandidatesHost.HistoryBackfillMaxStaleTopChats =>
-            HistoryBackfillMaxStaleTopChats;
+            _hydrationCandidates.Build(nowUtc);
 
         private int GetHistoryHydrationMessageCount(string jid) =>
             string.IsNullOrWhiteSpace(jid) ? 0 : _chatState.GetMessageCount(jid);
 
-        private Task WaitForHistoryHydrationSettleAsync() =>
-            WaitForHistoryHydrationSettleDispatch.RunAsync(this);
-
-        // --- IWaitForHistoryHydrationSettleHost ------------------------------
-
-        TimeSpan IWaitForHistoryHydrationSettleHost.HydrationSettleBudget =>
-            HistoryHydrationSettleBudget;
-
-        bool IWaitForHistoryHydrationSettleHost.IsConnected => IsConnected;
-
-        int IWaitForHistoryHydrationSettleHost.HistoryChatsInFlight =>
-            _historyRequests.ChatsInFlight;
-
-        Task IWaitForHistoryHydrationSettleHost.DelayAsync(TimeSpan delay) =>
-            Task.Delay(delay);
+        private Task WaitForHistoryHydrationSettleAsync() => _hydrationSettle.WaitAsync();
 
         /// <summary>
         /// Rebuilds a message we sent, so a retry receipt that arrives after the socket's cache
