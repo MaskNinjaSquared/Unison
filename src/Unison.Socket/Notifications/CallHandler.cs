@@ -100,7 +100,10 @@ namespace Unison.Socket.Notifications
                 Status = status,
                 Date = ParseLong(node.GetAttribute("t")),
                 Offline = !string.IsNullOrEmpty(node.GetAttribute("offline")),
-                DurationSeconds = ReadDurationSeconds(info)
+                DurationSeconds = ReadDurationSeconds(info),
+                ActionTag = info.Tag,
+                HasEncryptedPayload = info.GetChild("enc") != null,
+                OpaqueChildCount = CountChildren(info)
             };
 
             if (status == CallStatus.Offer)
@@ -132,6 +135,17 @@ namespace Unison.Socket.Notifications
             }
 
             return call;
+        }
+
+        private static int CountChildren(BinaryNode info)
+        {
+            if (info == null)
+            {
+                return 0;
+            }
+
+            var children = info.GetAllChildren();
+            return children == null ? 0 : children.Count;
         }
 
         /// <summary>

@@ -48,5 +48,14 @@ namespace Unison.Socket.Models
 
         /// <summary>Call length in seconds when the stanza carries it; otherwise 0.</summary>
         public int DurationSeconds { get; set; }
+
+        /// <summary>Child tag of the action node (offer, reject, terminate, …).</summary>
+        public string ActionTag { get; set; }
+
+        /// <summary>True when the action carried an <c>enc</c> child (opaque to Socket; for Voip).</summary>
+        public bool HasEncryptedPayload { get; set; }
+
+        /// <summary>Count of action children (opaque payload presence without copying bytes yet).</summary>
+        public int OpaqueChildCount { get; set; }
     }
 }

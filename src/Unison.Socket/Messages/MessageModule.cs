@@ -26,6 +26,7 @@ using Unison.Socket.Signal;
 using Unison.Socket.Sync;
 using Unison.Socket.UseCases.Groups;
 using Unison.Socket.UseCases.History;
+using Unison.Socket.UseCases.Calls;
 using Unison.Socket.UseCases.Messages;
 using Unison.Socket.UseCases.Peer;
 using Unison.Socket.UseCases.USync;
@@ -195,6 +196,8 @@ namespace Unison.Socket.Messages
                 GroupParticipantsChanged = update => GroupMetadata.Invalidate(update.Id)
             };
             Calls = new CallHandler(session.Events, Ack, log);
+            RejectCall = new RejectCallUseCase(session.Connection, log);
+            TerminateCall = new TerminateCallUseCase(session.Connection, log);
             SentAcks = new MessageAckHandler(session.Events, log);
             Presence = new PresenceHandler(session.Events, log);
 
@@ -273,6 +276,10 @@ namespace Unison.Socket.Messages
         public NotificationHandler Notifications { get; }
 
         public CallHandler Calls { get; }
+
+        public RejectCallUseCase RejectCall { get; }
+
+        public TerminateCallUseCase TerminateCall { get; }
 
         /// <summary>The server's answer to what we sent; the only place a refused send shows up.</summary>
         public MessageAckHandler SentAcks { get; }
