@@ -187,6 +187,8 @@ namespace Unison.Core.Tests.ViewModels
 
         public bool RequiresVisibleReorder(string propertyName) => false;
 
+        public bool RequiresCommunityProjection(string propertyName) => false;
+
         public bool ShouldHoldChatListRows(
             bool isAwaitingFirstHistorySync,
             bool deepLinkDetailFirst,

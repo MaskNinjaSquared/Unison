@@ -327,6 +327,11 @@ namespace Unison.Core.Contracts.WhatsApp
         bool RequiresVisibleReorder(string propertyName);
 
         /// <summary>
+        /// Link / parent flags need <c>CommunityListProjector</c> — not a frugal in-place reorder.
+        /// </summary>
+        bool RequiresCommunityProjection(string propertyName);
+
+        /// <summary>
         /// True when the chat-list control must not be created yet (first history sync or cold deep-link).
         /// </summary>
         bool ShouldHoldChatListRows(

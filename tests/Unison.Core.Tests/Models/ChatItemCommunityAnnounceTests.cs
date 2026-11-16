@@ -70,6 +70,37 @@ namespace Unison.Core.Tests.Models
             Assert.Equal(ChatKind.Group, hydrated.Kind);
         }
 
+        [Fact]
+        public void ApplyIfNewer_does_not_clear_IsCommunityAnnounce_once_set()
+        {
+            var target = new ChatItem
+            {
+                JID = "120363000000000001@g.us",
+                Name = "ㅤㅤ",
+                Kind = ChatKind.Group,
+                IsCommunityAnnounce = true,
+                LinkedParentJid = "120363999999999999@g.us",
+                LastMessage = "old",
+                LastMessageKind = ChatPreviewKind.Text,
+                LastMessageTimestampUtc = System.DateTime.UtcNow.AddMinutes(-1)
+            };
+
+            var preview = new HistoryChatPreview
+            {
+                Jid = target.JID,
+                Name = "ㅤㅤ",
+                IsGroup = true,
+                IsCommunityAnnounce = false,
+                LinkedParentJid = target.LinkedParentJid,
+                LastMessage = "new",
+                LastMessageKind = ChatPreviewKind.Text,
+                LastMessageTimestampUtc = System.DateTime.UtcNow
+            };
+
+            Assert.True(HistoryChatPreviewApplier.ApplyIfNewer(preview, target));
+            Assert.True(target.IsCommunityAnnounce);
+        }
+
         private sealed class StubStrings : IStringResources
         {
             private readonly string _announcements;

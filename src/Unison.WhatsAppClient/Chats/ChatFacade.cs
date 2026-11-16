@@ -3423,6 +3423,10 @@ namespace Unison.WhatsAppClient.Chats
             ChatListReorderTrigger.RequiresVisibleReorder(propertyName);
 
         /// <inheritdoc />
+        public bool RequiresCommunityProjection(string propertyName) =>
+            ChatListReorderTrigger.RequiresCommunityProjection(propertyName);
+
+        /// <inheritdoc />
         public bool ShouldHoldChatListRows(
             bool isAwaitingFirstHistorySync,
             bool deepLinkDetailFirst,

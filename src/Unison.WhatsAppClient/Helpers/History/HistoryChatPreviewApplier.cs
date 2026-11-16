@@ -519,9 +519,11 @@ namespace Unison.WhatsAppClient.Helpers
                 changed = true;
             }
 
-            if (preview.IsCommunityAnnounce != target.IsCommunityAnnounce)
+            // Sticky like IsCommunityParent / LinkedParentJid: history chunks often omit
+            // default_sub_group, and a false preview must not wipe a flag metadata already set.
+            if (preview.IsCommunityAnnounce && !target.IsCommunityAnnounce)
             {
-                target.IsCommunityAnnounce = preview.IsCommunityAnnounce;
+                target.IsCommunityAnnounce = true;
                 changed = true;
             }
 

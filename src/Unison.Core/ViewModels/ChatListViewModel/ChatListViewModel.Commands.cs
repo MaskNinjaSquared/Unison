@@ -336,6 +336,20 @@ namespace Unison.Core.ViewModels
                 hub.IsCommunityParent = true;
                 hub.SetCommunityGroups(CommunityHubPresentation.OrderMembers(members));
                 CommunityHubPresentation.ApplyMemberAvatarFallback(hub);
+
+                // Opening a catalog/synthetic hub can attach members that are still painted on
+                // the main list (frugal in-place never re-projected). Force one coalesce rebuild.
+                for (int i = 0; i < members.Count; i++)
+                {
+                    ChatItem member = members[i];
+                    if (member != null && VisibleChats.Contains(member))
+                    {
+                        ScheduleRefreshVisibleChats(
+                            PreferFrugalUi ? MoveMissRefreshDebounceFrugal : (TimeSpan?)null,
+                            coalesceIfArmed: true);
+                        break;
+                    }
+                }
             }
 
             return hub;

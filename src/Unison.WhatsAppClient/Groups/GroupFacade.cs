@@ -1040,17 +1040,25 @@ namespace Unison.WhatsAppClient.Groups
                 {
                     ChatItem chat = snapshot[i];
                     string canonical = _jids.GetCanonicalJid(chat.JID);
+                    bool notProbed = !string.IsNullOrWhiteSpace(canonical) &&
+                                     !_communityLinkProbed.Contains(canonical);
                     bool missingCommunityLink =
                         string.IsNullOrWhiteSpace(chat.LinkedParentJid) &&
                         !chat.IsCommunityParent &&
-                        !string.IsNullOrWhiteSpace(canonical) &&
-                        !_communityLinkProbed.Contains(canonical);
+                        notProbed;
+                    // Listing often sets linked_parent without default_sub_group — linked
+                    // children then sit in the hub with the wire subject instead of Avisos.
+                    bool missingCommunityAnnounce =
+                        !string.IsNullOrWhiteSpace(chat.LinkedParentJid) &&
+                        !chat.IsCommunityAnnounce &&
+                        notProbed;
 
                     if (GroupQuery.NeedsMetadata(
                             chat.IsGroup,
                             chat.JID,
                             _naming.IsMeaningfulGroupLabel(chat.Name, chat.JID),
-                            missingCommunityLink))
+                            missingCommunityLink,
+                            missingCommunityAnnounce))
                     {
                         unresolved.Add(chat);
                     }

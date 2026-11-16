@@ -10,7 +10,7 @@ using Unison.Core.Helpers;
 using Unison.Core.Helpers.Chats;
 using Unison.Core.Helpers.Groups;
 using Unison.Core.Models;
-using Unison.Core.State;
+using Unison.Core.State;
 using Unison.WhatsAppClient.Abstractions;
 
 namespace Unison.WhatsAppClient.Helpers
@@ -1016,7 +1016,14 @@ namespace Unison.WhatsAppClient.Helpers
             }
 
             chat.IsAnnounceOnly = metadata.AnnounceOnly;
-            chat.IsCommunityAnnounce = metadata.IsCommunityAnnounce;
+            // Sticky: participating / single-group replies often omit default_sub_group even
+            // for the real Avisos channel. Clearing true→false made some hubs show the wire
+            // subject instead of Chat_CommunityAnnouncements after a later refresh.
+            if (metadata.IsCommunityAnnounce)
+            {
+                chat.IsCommunityAnnounce = true;
+            }
+
             if (!string.IsNullOrWhiteSpace(metadata.LinkedParentJid))
             {
                 chat.LinkedParentJid = metadata.LinkedParentJid;

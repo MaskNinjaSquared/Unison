@@ -1324,18 +1324,30 @@ namespace Unison.Core.ViewModels
                 _visibleOrderDirty = true;
                 // While RefreshVisibleChats builds/applies, pin ApplyTo must not nest another
                 // ScheduleRefresh (that stacked Continues until enter→exit spanned tens of seconds).
-                if (IsRefreshing || _batchRendering)
+                if (IsRefreshing || _batchRendering || _chatState.IsBulkCatalogueMutating)
                 {
                     return;
                 }
 
                 // While the first sync holds the list, the release builds it sorted from scratch;
                 // a dispatcher post per preview hydrate would only queue no-ops on the UI thread.
-                if (!IsListHeldForSync)
+                if (IsListHeldForSync)
                 {
-                    _ = DeferVisibleOrderRepairAsync();
+                    return;
                 }
 
+                // LinkedParent / IsCommunityParent change list membership under hubs. Frugal
+                // PreferInPlaceReorder only Moves painted rows and left subgroups on the main
+                // list after background-groups painted the link (hub open still showed them).
+                if (_chatService.RequiresCommunityProjection(e.PropertyName))
+                {
+                    _ = _dispatcher.RunAsync(() => ScheduleRefreshVisibleChats(
+                        PreferFrugalUi ? MoveMissRefreshDebounceFrugal : (TimeSpan?)null,
+                        coalesceIfArmed: true));
+                    return;
+                }
+
+                _ = DeferVisibleOrderRepairAsync();
                 return;
             }
 

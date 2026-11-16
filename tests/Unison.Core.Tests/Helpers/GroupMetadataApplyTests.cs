@@ -243,6 +243,26 @@ namespace Unison.Core.Tests.Helpers
         }
 
         [Fact]
+        public async Task ApplyMetadata_keeps_IsCommunityAnnounce_when_a_later_reply_omits_default_sub_group()
+        {
+            var f = new Fixture();
+            var chat = f.AddChat(Group, "ㅤㅤ");
+            chat.IsCommunityAnnounce = true;
+            chat.LinkedParentJid = "120363999999999999@g.us";
+
+            await f.Apply.ApplyMetadataAsync(Group, new GroupMetadataSnapshot
+            {
+                Jid = Group,
+                LinkedParentJid = "120363999999999999@g.us",
+                IsCommunityAnnounce = false,
+                MemberCount = 3
+            });
+
+            Assert.True(chat.IsCommunityAnnounce);
+            Assert.Equal("120363999999999999@g.us", chat.LinkedParentJid);
+        }
+
+        [Fact]
         public async Task ApplyMetadata_puts_the_description_on_the_row_and_stores_it()
         {
             var f = new Fixture();

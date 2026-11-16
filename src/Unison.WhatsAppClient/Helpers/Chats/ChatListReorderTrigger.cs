@@ -27,5 +27,21 @@ namespace Unison.WhatsAppClient.Helpers
                    string.Equals(propertyName, nameof(ChatItem.LinkedParentJid), StringComparison.Ordinal) ||
                    string.Equals(propertyName, nameof(ChatItem.IsCommunityParent), StringComparison.Ordinal);
         }
+
+        /// <summary>
+        /// Link / parent flags change who is nested under a hub. Frugal in-place reorder of
+        /// <c>VisibleChats</c> cannot hide newly linked children — that needs
+        /// <c>CommunityListProjector</c> via a full visible rebuild.
+        /// </summary>
+        public static bool RequiresCommunityProjection(string propertyName)
+        {
+            if (string.IsNullOrEmpty(propertyName))
+            {
+                return false;
+            }
+
+            return string.Equals(propertyName, nameof(ChatItem.LinkedParentJid), StringComparison.Ordinal) ||
+                   string.Equals(propertyName, nameof(ChatItem.IsCommunityParent), StringComparison.Ordinal);
+        }
     }
 }

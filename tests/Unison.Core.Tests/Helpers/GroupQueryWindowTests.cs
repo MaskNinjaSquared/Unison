@@ -88,5 +88,24 @@ namespace Unison.Core.Tests.Helpers
                 hasMeaningfulName: true,
                 missingCommunityLink: true));
         }
+
+        [Fact]
+        public void NeedsMetadata_linked_named_group_still_needs_a_pass_when_announce_flag_is_missing()
+        {
+            // Listing often sets linked_parent but omits default_sub_group — Avisos stays unmarked
+            // until a per-group w:g2 pass. Named+linked must not skip that pass.
+            Assert.True(GroupQuery.NeedsMetadata(
+                isGroup: true,
+                jid: "1203@g.us",
+                hasMeaningfulName: true,
+                missingCommunityLink: false,
+                missingCommunityAnnounce: true));
+            Assert.False(GroupQuery.NeedsMetadata(
+                isGroup: true,
+                jid: "1203@g.us",
+                hasMeaningfulName: true,
+                missingCommunityLink: false,
+                missingCommunityAnnounce: false));
+        }
     }
 }

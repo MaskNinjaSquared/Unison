@@ -66,24 +66,34 @@ namespace Unison.WhatsAppClient.Helpers
 
         public static bool NeedsMetadata(bool isGroup, string jid, bool hasMeaningfulName)
         {
-            return NeedsMetadata(isGroup, jid, hasMeaningfulName, missingCommunityLink: false);
+            return NeedsMetadata(
+                isGroup,
+                jid,
+                hasMeaningfulName,
+                missingCommunityLink: false,
+                missingCommunityAnnounce: false);
         }
 
         /// <param name="missingCommunityLink">
         /// Named groups still need one w:g2 pass so <c>linked_parent</c> / <c>parent</c> can
         /// reach the catalog; the listing often omits those children.
         /// </param>
+        /// <param name="missingCommunityAnnounce">
+        /// Linked subgroups whose listing already set <c>linked_parent</c> but omitted
+        /// <c>default_sub_group</c> still need one pass so Avisos can be marked.
+        /// </param>
         public static bool NeedsMetadata(
             bool isGroup,
             string jid,
             bool hasMeaningfulName,
-            bool missingCommunityLink)
+            bool missingCommunityLink,
+            bool missingCommunityAnnounce = false)
         {
             bool looksGroup = isGroup ||
                 (!string.IsNullOrEmpty(jid) &&
                  jid.EndsWith(GroupServer, StringComparison.OrdinalIgnoreCase));
 
-            if (missingCommunityLink && looksGroup)
+            if ((missingCommunityLink || missingCommunityAnnounce) && looksGroup)
             {
                 return true;
             }
