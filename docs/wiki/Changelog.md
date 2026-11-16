@@ -2,6 +2,15 @@
 
 Newest first.
 
+## P4 inventory — Core still references Baileys (plan only)
+
+Four Core contracts still name Baileys types: group metadata apply and receipts take
+`BinaryNode`, link-code raises `BinaryNode`, connect-open carries `AuthState`. Wiki records
+the callers and the per-contract migration (reuse `GroupMetadataSnapshot`, move `ReceiptFacts`
+into Core, a three-blob link-code DTO, opaque `object` for `AuthState`). The project
+reference stays until that plan is executed.
+See [Netstandard WhatsApp client](Netstandard-WhatsApp-Client).
+
 ## WhatsAppService reads product tuning, not the device tier
 
 The host no longer computes pacing from `SyncWorkloadStrategy` / `SyncBudget`. It receives

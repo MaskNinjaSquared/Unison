@@ -186,7 +186,7 @@ receiving it; the product layer maps it to client options.
 | P1 | Neutral options types on the client surface (`HistorySyncOptions`, `EnrichmentPacingOptions`, …) — numbers and flags only, no tier names | Types compile with no `DeviceCategory` |
 | P2 | Swap `SyncWorkloadStrategy` injection in WhatsAppClient for those options, one façade at a time (History chain first: it was just extracted) | `rg SyncWorkloadStrategy src/Unison.WhatsAppClient` shrinks per step |
 | P3 | Core product services (e.g. `ISyncProductPolicy` / `StartupProductPolicy`) own the decisions: frugal gate, startup quiet, post-replay maintenance, avatar/roster policy by tier. They read tier / frugal / memory and call façade contracts | Gates gone from `Helpers/Connection`; decisions unit-tested in `Unison.Core.Tests` without a client |
-| P4 | Core contracts stop exposing Baileys types (own DTOs at the contract edge) | `Unison.Core.csproj` drops the Baileys reference |
+| P4 | Core contracts stop exposing Baileys types (own DTOs at the contract edge). Inventory + per-contract plan is below; **do not drop the reference until that plan is executed** | `Unison.Core.csproj` drops the Baileys reference |
 | Exit | `rg "SyncWorkloadStrategy\|DeviceCategory\|SyncBudget\|UseFrugalSyncBudget\|IsMobile" src/Unison.WhatsAppClient src/Unison.Socket src/Unison.Baileys` returns 0. Neutral `Func<bool> preferFrugal` / `ISyncLoadMode` knobs (slice, pause) and `IAppMemoryInfo` read only for diagnostics are allowed | — |
 
 **Progress (Nov 2026).** P1–P3 done for the client:
@@ -223,7 +223,69 @@ reading the tier are already in the product layer. `PostMessageEnrichmentGates` 
 Still open: coordinators **decide** but do not yet **drive** façades end-to-end (deferred
 startup and post-replay orchestration, quiet/memory waits, contact name tables stay on the
 host/dispatch). That move is Phase D and touches Mobile-sensitive deferred startup — Opus +
-on-device. P4 untouched.
+on-device.
+
+#### P4 inventory (plan only — Baileys reference stays)
+
+`Unison.Core.csproj` still references `Unison.Baileys`. Every `using Unison.Baileys` /
+`BinaryNode` / `AuthState` under `src/Unison.Core` is in the four contracts below. Nothing else
+in Core names a Baileys type (`HasAuthState`, `PersistAuthState*` are bools/tasks, not the type).
+WhatsAppClient and UWP may keep `BinaryNode` after P4; only the **Core contract edge** must stop.
+
+| Contract | Member | Baileys type | Callers |
+|---|---|---|---|
+| `IGroupService` | `ApplyGroupMetadataFromResponseAsync` | `BinaryNode` | `MessageFacade` (receipt path, after `QueryGroupMetadataAsync`); test fake in `NewConversationCreateFlowTests` |
+| `IMessageService` | `HandleReceiptAsync`, `NotifyReceiptAsync` | `BinaryNode` | `NotifyReceiptAsync`: `WhatsAppService` wire owner → `Messages`. `HandleReceiptAsync` is the façade body (`ReceiptReader.Read` already turns the node into `ReceiptFacts`) |
+| `ISocketFacadeWireHost` | `NotifyReceiptAsync`, `RaiseLinkCodeCompanionReg` | `BinaryNode` | `SocketFacadeWireDispatch` / `SocketFacadeWireOwner`; wiring in `SocketEventHandlerWiring`; link-code lambda raises `WhatsAppService.OnLinkCodeCompanionReg` → `PairingHandler.HandleLinkCodeCompanionRegAsync` |
+| `ConnectionSocketSessionRequest` | `AuthState` | `AuthState` (`Baileys.Client`, keys + prekeys + `Me`) | `UwpConnectionSocketSessionFactory.CreateAndWire` passes it into `SocketBridge` |
+
+`GroupMetadataSnapshot` already exists in Core (`ApplyGroupMetadataAsync`). `ReceiptFacts` exists
+but lives in `Unison.WhatsAppClient/Messages/ReceiptReader.cs` — not yet a Core model.
+
+**Per-contract migration (execute later, one contract per change, reference dropped last)**
+
+1. **`IGroupService` — no new DTO.** Delete `ApplyGroupMetadataFromResponseAsync` from the
+   contract. `MessageFacade` already has `GroupMetadataReader.ReadMetadata`; call
+   `ApplyGroupMetadataAsync(canonical, snapshot)` instead. Update the test fake. Group IQ parse
+   stays in WhatsAppClient.
+
+2. **Receipts — move `ReceiptFacts` to `Unison.Core.Models`.** Change
+   `IMessageService.HandleReceiptAsync` / `NotifyReceiptAsync` and
+   `ISocketFacadeWireHost.NotifyReceiptAsync` to take `ReceiptFacts`. `ReceiptReader.Read`
+   stays in WhatsAppClient and runs **before** the Core call (`SocketFacadeWireDispatch` or the
+   `WhatsAppService` lambda that today passes the node). Null facts = drop, same as today.
+   Do not put a generic node DTO (`Tag` / `Attrs` / `object Content`) on the contract — that
+   recreates `BinaryNode`.
+
+3. **Link-code — new Core DTO, three blobs only.** `PairingHandler` reads exactly:
+   `link_code_pairing_ref`, `primary_identity_pub`,
+   `link_code_pairing_wrapped_primary_ephemeral_pub` (each `byte[]`). Add
+   `LinkCodeCompanionReg` `{ byte[] PairingRef; byte[] PrimaryIdentityPublic; byte[] WrappedPrimaryEphemeralPublic; }`
+   in Core.Models. Parse those three children in WhatsAppClient (`SocketFacadeWireDispatch`)
+   and pass the DTO through `ISocketFacadeWireHost.RaiseLinkCodeCompanionReg`. UWP event +
+   `PairingHandler` take the DTO; crypto stays in UWP. Missing child = do not raise (same as
+   today's early return).
+
+4. **`ConnectionSocketSessionRequest.AuthState` — do not clone `AuthState`.** It is the live
+   crypto object `SocketBridge` mutates (noise key, prekeys, sessions). A DTO copy would fork
+   the session. Replace the property with `object AuthState` (same pattern as `SharedKeyStore`
+   / `LidMappings` / `WireOwner` on that type). The UWP factory casts to `Baileys.Client.AuthState`.
+   Core then has no Baileys type. Document the cast next to the other opaque handles.
+
+5. **Drop the reference last.** After 1–4, `rg "Unison\.Baileys|BinaryNode" src/Unison.Core`
+   is empty. Remove `<ProjectReference Include="..\Unison.Baileys\Unison.Baileys.csproj" />`
+   from `Unison.Core.csproj`. Build Core tests + UWP ARM. Receipt ticks, group metadata from a
+   receipt, and pairing link-code need a device or a focused test — do not treat compile-only
+   as done.
+
+**Out of P4 (client/UWP may still name `BinaryNode`):** `IOutgoingReceiptHost.QueryGroupMetadataAsync`,
+`IWhatsAppSocket.OnLinkCodeCompanionReg`, `SocketBridge`, `SocketClient` (not in the csproj).
+Those stay until a later socket-edge pass. Background keeps its Baileys reference on purpose.
+
+**Agent boundary:** steps 1–3 are mechanical once this plan is accepted (cheaper model OK,
+one contract per commit, tests updated with the signature). Step 4 is a cast-only change.
+Step 5 (drop the csproj reference) is the done check — Opus or a reviewed pass, because a
+missed `using` only shows up when the reference is gone.
 
 **Dependency direction (decided):** contracts stay in Core through P (WhatsAppClient → Core),
 tier-free; the flip happens in Phase E (client owns its I/O, Core → WhatsAppClient, product
