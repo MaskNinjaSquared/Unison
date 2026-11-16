@@ -476,7 +476,17 @@ namespace Unison.Uwp
                     () => counter.Observe(DateTime.UtcNow),
                     sp.GetRequiredService<IncomingMessagePump>().Enqueue);
             });
-            services.AddSingleton(sp => new ConnectionWireDependencies(
+            services.AddSingleton(sp => new CurrentSocketHealthHost(
+                sp.GetRequiredService<ConnectionSlot<IWhatsAppSocket>>(),
+                sp.GetRequiredService<ConnectionSessionFlags>()));
+            services.AddSingleton(sp => new ReconnectHostAdapter(
+                () => sp.GetRequiredService<WhatsAppService>(),
+                sp.GetRequiredService<ConnectionSessionFlags>(),
+                sp.GetRequiredService<ConnectionSlot<AuthState>>(),
+                sp.GetRequiredService<CurrentSocketHealthHost>(),
+                sp.GetRequiredService<ConnectionEventHub>(),
+                sp.GetRequiredService<IRuntimeDiagnostics>()));
+            services.AddSingleton(sp => new ConnectionHostDependencies(
                 sp.GetRequiredService<ConnectionEventHub>(),
                 sp.GetRequiredService<SessionEstablishedGate>(),
                 sp.GetRequiredService<FirstSyncListHoldState>(),
@@ -484,7 +494,9 @@ namespace Unison.Uwp
                 sp.GetRequiredService<QrCodeWireOwner>(),
                 sp.GetRequiredService<SocketFacadeWireOwner>(),
                 sp.GetRequiredService<InboundWireNodeOwner>(),
-                sp.GetRequiredService<DecryptedMessageWireOwner>()));
+                sp.GetRequiredService<DecryptedMessageWireOwner>(),
+                sp.GetRequiredService<ReconnectHostAdapter>(),
+                sp.GetRequiredService<CurrentSocketHealthHost>()));
             services.AddSingleton(sp => new ChatPreviewReconciler(
                 sp.GetRequiredService<IHistoryMessageStore>(),
                 sp.GetRequiredService<JidAliasTable>(),
@@ -608,7 +620,7 @@ namespace Unison.Uwp
                 sp.GetRequiredService<ConnectionSessionFlags>(),
                 sp.GetRequiredService<ConnectionSlot<IWhatsAppSocket>>(),
                 sp.GetRequiredService<ConnectionSlot<AuthState>>(),
-                sp.GetRequiredService<ConnectionWireDependencies>()));
+                sp.GetRequiredService<ConnectionHostDependencies>()));
             // The send flow lives on MessageFacade; the timeline caches and the socket it writes
             // through are still the client's, reached only through this narrow port.
             services.AddSingleton<IOutgoingMessageHost>(

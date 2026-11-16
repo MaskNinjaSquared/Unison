@@ -2,6 +2,10 @@
 
 Newest first.
 
+## Phase D stage 2 — reconnect adapter from DI
+
+`ReconnectHostAdapter` (soft reconnect + auto-reconnect loop I/O) and `CurrentSocketHealthHost` are built in `App.ConfigureServices`; the connect lifecycle port is resolved lazily. Reconnect loop errors raise on `ConnectionEventHub`. No delay or threshold change.
+
 ## Phase D stage 1 — connection events and first wire owners in DI
 
 `IConnectionEventSource` is now `ConnectionEventHub` (DI) instead of `WhatsAppService`. Session-established gate, first-sync list-hold latches and decrypted counters moved out of host fields into DI singletons. QR / socket-facade / inbound-node / decrypted-message wire owners are built in `App.ConfigureServices`. No reconnect / FULL / pump / broker behaviour change.

@@ -17,8 +17,6 @@ namespace Unison.Uwp.Services.WhatsApp
 
         void PublishReconnectingStatus();
 
-        void RaiseReconnectLoopError(Exception error);
-
         void PairingTrace(string message);
 
         void MarkPairingRestartPending(string reason);

@@ -631,7 +631,7 @@ namespace Unison.Uwp.Services.WhatsApp
             ConnectionSessionFlags sessionFlags = null,
             ConnectionSlot<IWhatsAppSocket> socketSlot = null,
             ConnectionSlot<AuthState> authSlot = null,
-            ConnectionWireDependencies wire = null)
+            ConnectionHostDependencies wire = null)
         {
             return new WhatsAppService(
                 chatState, chatRows, activeChat, syncStatus, syncWork, historyMessages, chatPreviews, usyncGate, avatarFetcher, mediaCache, jidAlias, displayNames, historyRequests,

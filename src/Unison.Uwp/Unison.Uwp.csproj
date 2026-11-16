@@ -192,7 +192,7 @@
     <Compile Include="Services\WhatsApp\ReconnectHostAdapter.cs" />
     <Compile Include="Services\WhatsApp\IConnectionHealthOwnerPort.cs" />
     <Compile Include="Services\WhatsApp\SocketEventHandlerWiring.cs" />
-    <Compile Include="Services\WhatsApp\ConnectionWireDependencies.cs" />
+    <Compile Include="Services\WhatsApp\ConnectionHostDependencies.cs" />
     <Compile Include="Services\WhatsApp\UwpConnectionSocketSessionFactory.cs" />
     <Compile Include="Services\WhatsApp\JidResolver.cs" />
     <Compile Include="Services\WhatsApp\LidMappingMemoryAdapter.cs" />

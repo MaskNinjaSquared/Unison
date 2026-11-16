@@ -20,28 +20,36 @@ namespace Unison.Uwp.Services.WhatsApp
         IAutoReconnectLoopHost,
         ITryStartPairingStage2ReconnectHost
     {
-        private readonly IReconnectLifecyclePort _lifecycle;
+        private readonly Func<IReconnectLifecyclePort> _resolveLifecycle;
         private readonly ConnectionSessionFlags _flags;
         private readonly ConnectionSlot<AuthState> _authSlot;
         private readonly IIsCurrentSocketHealthyHost _currentSocketHealth;
+        private readonly ConnectionEventHub _events;
         private readonly IRuntimeDiagnostics _diagnostics;
 
+        /// <param name="resolveLifecycle">
+        /// Lazy: the connection owner itself takes this adapter's coordinator in its ctor.
+        /// </param>
         public ReconnectHostAdapter(
-            IReconnectLifecyclePort lifecycle,
+            Func<IReconnectLifecyclePort> resolveLifecycle,
             ConnectionSessionFlags flags,
             ConnectionSlot<AuthState> authSlot,
             IIsCurrentSocketHealthyHost currentSocketHealth,
+            ConnectionEventHub events,
             IRuntimeDiagnostics diagnostics)
         {
-            _lifecycle = lifecycle ?? throw new ArgumentNullException(nameof(lifecycle));
+            _resolveLifecycle = resolveLifecycle ?? throw new ArgumentNullException(nameof(resolveLifecycle));
             _flags = flags ?? throw new ArgumentNullException(nameof(flags));
             _authSlot = authSlot ?? throw new ArgumentNullException(nameof(authSlot));
             _currentSocketHealth = currentSocketHealth ?? throw new ArgumentNullException(nameof(currentSocketHealth));
+            _events = events ?? throw new ArgumentNullException(nameof(events));
             _diagnostics = diagnostics ?? throw new ArgumentNullException(nameof(diagnostics));
             Coordinator = new SoftReconnectCoordinator(this);
         }
 
         public SoftReconnectCoordinator Coordinator { get; }
+
+        private IReconnectLifecyclePort Lifecycle => _resolveLifecycle();
 
         public bool SuppressReconnect => _flags.SuppressReconnect;
 
@@ -56,7 +64,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
         bool ISoftReconnectIoHost.IsAuthPresent => _authSlot.Current != null;
 
-        bool ISoftReconnectIoHost.IsConnected => _lifecycle.IsConnected;
+        bool ISoftReconnectIoHost.IsConnected => Lifecycle.IsConnected;
 
         void ISoftReconnectIoHost.LogAutoReconnectScheduled(string reason) =>
             Debug.WriteLine("[WhatsAppService] Scheduling persistent reconnect: " + reason);
@@ -65,7 +73,7 @@ namespace Unison.Uwp.Services.WhatsApp
             _diagnostics.Write("connection", "reconnect-scheduled", reason);
 
         void ISoftReconnectIoHost.TracePairingSkippedForPending(string reason) =>
-            _lifecycle.PairingTrace(
+            Lifecycle.PairingTrace(
                 "ScheduleAutoReconnect SKIPPED (pairingRestartPending) reason=" +
                 (reason ?? string.Empty));
 
@@ -100,28 +108,28 @@ namespace Unison.Uwp.Services.WhatsApp
         Task<bool> IAutoReconnectLoopHost.IsCurrentSocketHealthyAsync() =>
             IsCurrentSocketHealthyDispatch.RunAsync(_currentSocketHealth);
 
-        Task IAutoReconnectLoopHost.InitializeAsync() => _lifecycle.InitializeAsync();
+        Task IAutoReconnectLoopHost.InitializeAsync() => Lifecycle.InitializeAsync();
 
-        Task IAutoReconnectLoopHost.ConnectAsync() => _lifecycle.ConnectAsync();
+        Task IAutoReconnectLoopHost.ConnectAsync() => Lifecycle.ConnectAsync();
 
         TimeSpan IAutoReconnectLoopHost.ReconnectDelayForAttempt(int attempt) =>
             ConnectionHealthPolicy.ReconnectDelay(attempt);
 
         void IAutoReconnectLoopHost.PublishReconnectingStatus() =>
-            _lifecycle.PublishReconnectingStatus();
+            Lifecycle.PublishReconnectingStatus();
 
         void IAutoReconnectLoopHost.LogAutoReconnect(string message) =>
             Debug.WriteLine("[WhatsAppService] " + message);
 
-        void IAutoReconnectLoopHost.TracePairing(string detail) => _lifecycle.PairingTrace(detail);
+        void IAutoReconnectLoopHost.TracePairing(string detail) => Lifecycle.PairingTrace(detail);
 
         void IAutoReconnectLoopHost.RaiseReconnectLoopError(Exception error) =>
-            _lifecycle.RaiseReconnectLoopError(error);
+            _events.RaiseError(error);
 
         // --- ITryStartPairingStage2ReconnectHost -----------------------------
 
         void ITryStartPairingStage2ReconnectHost.TracePairingStage2(string message) =>
-            _lifecycle.PairingTrace(message);
+            Lifecycle.PairingTrace(message);
 
         /// <summary>
         /// Marks the 515 pairing-restart window. Must run as early as possible — on Mobile the
@@ -129,15 +137,15 @@ namespace Unison.Uwp.Services.WhatsApp
         /// premature close must not schedule the generic AutoReconnect loop.
         /// </summary>
         void ITryStartPairingStage2ReconnectHost.MarkPairingRestartPending(string reason) =>
-            _lifecycle.MarkPairingRestartPending(reason);
+            Lifecycle.MarkPairingRestartPending(reason);
 
         bool ITryStartPairingStage2ReconnectHost.TryClaimReconnectSlot() =>
             Coordinator.TryClaimReconnectSlot();
 
         void ITryStartPairingStage2ReconnectHost.StopConnectionHealthMonitor(string reason) =>
-            _lifecycle.StopConnectionHealthMonitor(reason);
+            Lifecycle.StopConnectionHealthMonitor(reason);
 
         void ITryStartPairingStage2ReconnectHost.FireAndForgetPairingStage2Reconnect() =>
-            _lifecycle.FireAndForgetPairingStage2Reconnect();
+            Lifecycle.FireAndForgetPairingStage2Reconnect();
     }
 }

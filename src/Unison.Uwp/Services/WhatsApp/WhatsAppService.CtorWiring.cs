@@ -83,7 +83,7 @@ namespace Unison.Uwp.Services.WhatsApp
             ConnectionSessionFlags sessionFlags = null,
             ConnectionSlot<IWhatsAppSocket> socketSlot = null,
             ConnectionSlot<AuthState> authSlot = null,
-            ConnectionWireDependencies wire = null)
+            ConnectionHostDependencies wire = null)
         {
             if (chatState == null)
             {
@@ -109,7 +109,7 @@ namespace Unison.Uwp.Services.WhatsApp
             _sessionFlags = sessionFlags ?? throw new ArgumentNullException(nameof(sessionFlags));
             _socketSlot = socketSlot ?? throw new ArgumentNullException(nameof(socketSlot));
             _authSlot = authSlot ?? throw new ArgumentNullException(nameof(authSlot));
-            _currentSocketHealth = new CurrentSocketHealthHost(_socketSlot, _sessionFlags);
+            _currentSocketHealth = wire.CurrentSocketHealth;
             _lidMappings = lidMappings;
             _socketSessions = socketSessions
                 ?? throw new ArgumentNullException(nameof(socketSessions));
@@ -125,12 +125,7 @@ namespace Unison.Uwp.Services.WhatsApp
             _offlineReplayFlush = new OfflineReplayFlush(_pendingMessages, this);
             _historyHydrationBackfill = new HistoryHydrationBackfill(this);
             _sqliteHistoryQuietFinalize = new SqliteHistoryQuietFinalize(this);
-            _reconnectHost = new ReconnectHostAdapter(
-                this,
-                _sessionFlags,
-                _authSlot,
-                _currentSocketHealth,
-                _diagnostics);
+            _reconnectHost = wire.Reconnect;
             _softReconnect = _reconnectHost.Coordinator;
             _healthMonitors = new ConnectionHealthMonitorOwner(this);
             _postSyncMaintenance = new PostSyncMaintenanceOwner(this);

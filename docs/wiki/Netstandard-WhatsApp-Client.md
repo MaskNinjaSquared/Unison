@@ -624,8 +624,12 @@ Further shrinking those rows is **State/contract seams** (or Phase E), not anoth
 
 1. **`ConnectionEventHub`** (`WhatsAppClient.Helpers`) is the `IConnectionEventSource` DI singleton. `WhatsAppService` no longer declares the eight connection events; it raises on the hub. `CurrentConnectionStatus` lives on the hub (the host property forwards). Raise semantics unchanged: direct invoke, `RaiseReport` wrapping only where it already was.
 2. **Shared latches out of host fields** (DI singletons): `SessionEstablishedGate` (was `_sessionEstablishedTcs`), `FirstSyncListHoldState` (was the three `_firstSyncList*` bools), `DecryptedEventCounter` (was the two decrypted diagnostics longs).
-3. **Wire owners built in `App.ConfigureServices`:** `QrCodeWireOwner`, `SocketFacadeWireOwner`, `InboundWireNodeOwner`, `DecryptedMessageWireOwner`. The host gets them through `ConnectionWireDependencies` (UWP-only parameter object; dies with the host). `SocketEventHandlerWiring` still reaches them through the host accessors.
+3. **Wire owners built in `App.ConfigureServices`:** `QrCodeWireOwner`, `SocketFacadeWireOwner`, `InboundWireNodeOwner`, `DecryptedMessageWireOwner`. The host gets them through `ConnectionHostDependencies` (UWP-only parameter object; dies with the host). `SocketEventHandlerWiring` still reaches them through the host accessors.
 4. Still built in the host ctor: owners whose ports close over host-only state or methods (session init / socket error / connection update / auth / history sync / offline release / clear session / catch-up and FULL owners). Each needs its remaining host port extracted first.
+
+### Phase D stage 2 — reconnect adapter from DI
+
+The soft/auto-reconnect **bodies** already lived outside the host (`SoftReconnectCoordinator` + `AutoReconnectLoopDispatch` policy, `ReconnectHostAdapter` I/O). What was left: the host built the adapter with `this`. Now `ReconnectHostAdapter` and `CurrentSocketHealthHost` are DI singletons; the adapter resolves `IReconnectLifecyclePort` lazily (the host takes the adapter's coordinator in its ctor, so an eager port would be a cycle). The loop error goes straight to `ConnectionEventHub`; `RaiseReconnectLoopError` left the port. No delay / attempt / threshold change. Health monitor timers stay on the host (not asked).
 
 ### Phase E (future) — client-owned public I/O
 

@@ -1,5 +1,5 @@
 // =============================================================================
-// ConnectionWireDependencies
+// ConnectionHostDependencies
 //
 // DI-built connection state and wire owners the host only forwards to. Each
 // member is its own DI singleton; this type just keeps the host ctor readable
@@ -10,9 +10,9 @@ using Unison.WhatsAppClient.Helpers;
 
 namespace Unison.Uwp.Services.WhatsApp
 {
-    internal sealed class ConnectionWireDependencies
+    internal sealed class ConnectionHostDependencies
     {
-        public ConnectionWireDependencies(
+        public ConnectionHostDependencies(
             ConnectionEventHub events,
             SessionEstablishedGate sessionEstablished,
             FirstSyncListHoldState firstSyncHold,
@@ -20,8 +20,13 @@ namespace Unison.Uwp.Services.WhatsApp
             QrCodeWireOwner qrCode,
             SocketFacadeWireOwner socketFacade,
             InboundWireNodeOwner inboundWireNode,
-            DecryptedMessageWireOwner decryptedMessage)
+            DecryptedMessageWireOwner decryptedMessage,
+            ReconnectHostAdapter reconnect,
+            CurrentSocketHealthHost currentSocketHealth)
         {
+            Reconnect = reconnect ?? throw new ArgumentNullException(nameof(reconnect));
+            CurrentSocketHealth = currentSocketHealth
+                ?? throw new ArgumentNullException(nameof(currentSocketHealth));
             Events = events ?? throw new ArgumentNullException(nameof(events));
             SessionEstablished = sessionEstablished
                 ?? throw new ArgumentNullException(nameof(sessionEstablished));
@@ -35,6 +40,10 @@ namespace Unison.Uwp.Services.WhatsApp
             DecryptedMessage = decryptedMessage
                 ?? throw new ArgumentNullException(nameof(decryptedMessage));
         }
+
+        public ReconnectHostAdapter Reconnect { get; }
+
+        public CurrentSocketHealthHost CurrentSocketHealth { get; }
 
         public ConnectionEventHub Events { get; }
 

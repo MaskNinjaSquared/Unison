@@ -263,9 +263,6 @@ namespace Unison.Uwp.Services.WhatsApp
         void IReconnectLifecyclePort.PublishReconnectingStatus() =>
             PublishConnectionUpdateDispatch.Run(this, "reconnecting");
 
-        void IReconnectLifecyclePort.RaiseReconnectLoopError(Exception error) =>
-            _events.RaiseError(error);
-
         void IReconnectLifecyclePort.PairingTrace(string message) => PairingTrace(message);
 
         void IReconnectLifecyclePort.MarkPairingRestartPending(string reason) =>
