@@ -51,8 +51,14 @@ namespace Unison.Uwp.Services.WhatsApp
                     nameof(request));
             }
 
+            var auth = request.AuthState as AuthState;
+            if (auth == null)
+            {
+                throw new ArgumentException("AuthState must be a Baileys AuthState.", nameof(request));
+            }
+
             var bridge = new SocketBridge(
-                request.AuthState,
+                auth,
                 request.SharedKeyStore as FileKeyStore,
                 request.ReuseLoadedKeyState,
                 request.LidMappings as LidMappingStore,

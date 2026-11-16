@@ -1,7 +1,6 @@
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
-using Unison.Baileys.Protocol;
 using Unison.Core.Helpers;
 using Unison.Core.Models;
 
@@ -190,12 +189,6 @@ namespace Unison.Core.Contracts.WhatsApp
             string groupJid,
             string description,
             string descriptionId);
-
-        /// <summary>
-        /// Receipt path: parse a w:g2 metadata IQ the host already fetched and apply it.
-        /// Does not query the network.
-        /// </summary>
-        Task ApplyGroupMetadataFromResponseAsync(string groupJid, BinaryNode response);
 
         /// <summary>
         /// Host path: background resolution reached the group listing step.

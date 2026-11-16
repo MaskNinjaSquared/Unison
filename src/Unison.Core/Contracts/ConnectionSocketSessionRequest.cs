@@ -2,17 +2,16 @@
 // ConnectionSocketSessionRequest
 //
 // Inputs the UWP socket factory needs to construct + wire one connect attempt.
-// AuthState is Baileys; SharedKeyStore / LidMappings / WireOwner stay opaque so
-// Core does not take a UWP FileKeyStore or Socket reference.
+// AuthState / SharedKeyStore / LidMappings / WireOwner stay opaque so Core does
+// not take a Baileys, UWP FileKeyStore or Socket reference.
 // =============================================================================
-using Unison.Baileys.Client;
-
 namespace Unison.Core.Contracts
 {
     /// <summary>One connect-open build: credentials + who receives wire events.</summary>
     public sealed class ConnectionSocketSessionRequest
     {
-        public AuthState AuthState { get; set; }
+        /// <summary>Baileys <c>AuthState</c>, shared and mutated by the socket — typed only in the factory.</summary>
+        public object AuthState { get; set; }
 
         /// <summary>UWP <c>FileKeyStore</c> (or null for cold load) — typed only in the factory.</summary>
         public object SharedKeyStore { get; set; }

@@ -6,7 +6,6 @@
 // =============================================================================
 using System;
 using System.Threading.Tasks;
-using Unison.Baileys.Protocol;
 using Unison.Core.Models;
 
 namespace Unison.Core.Contracts.WhatsApp
@@ -25,8 +24,6 @@ namespace Unison.Core.Contracts.WhatsApp
 
         Task NotifyOutgoingStatusAsync(string messageId, string status, string error);
 
-        Task NotifyReceiptAsync(BinaryNode node);
-
-        void RaiseLinkCodeCompanionReg(BinaryNode node);
+        Task NotifyReceiptAsync(ReceiptFacts receipt);
     }
 }

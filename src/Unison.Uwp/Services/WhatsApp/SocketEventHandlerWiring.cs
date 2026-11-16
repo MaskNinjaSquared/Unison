@@ -161,11 +161,6 @@ namespace Unison.Uwp.Services.WhatsApp
                 _ = owner.SocketFacadeWire.HandleReceiptAsync(node);
             };
 
-            socket.OnLinkCodeCompanionReg += (s, node) =>
-                owner.SocketFacadeWire.HandleLinkCodeCompanion(
-                    node,
-                    owner.IsCurrentSocket(s));
-
             socket.OnReceivedPendingNotifications += async (s, offlineCount) =>
             {
                 if (!owner.IsCurrentSocket(s))

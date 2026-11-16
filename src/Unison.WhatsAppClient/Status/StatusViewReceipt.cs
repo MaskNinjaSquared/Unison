@@ -1,5 +1,6 @@
 using System;
 using Unison.Core.Helpers;
+using Unison.Core.Models;
 using Unison.WhatsAppClient.Messages;
 
 namespace Unison.WhatsAppClient.Status

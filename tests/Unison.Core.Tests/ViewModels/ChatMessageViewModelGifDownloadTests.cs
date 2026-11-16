@@ -299,7 +299,7 @@ namespace Unison.Core.Tests.ViewModels
             public bool HasCachedMessageId(string chatJid, string messageId, bool isGroup) => false;
             public Task ApplyOutgoingStatusAsync(string messageId, string status, string error = null) =>
                 Task.CompletedTask;
-            public Task HandleReceiptAsync(Unison.Baileys.Protocol.BinaryNode node) => Task.CompletedTask;
+            public Task HandleReceiptAsync(ReceiptFacts receipt) => Task.CompletedTask;
             public void AcceptOutgoingTimeline(string chatJid, ChatMessage message) { }
             public bool ApplyHeldMessageState(string chatJid, ChatMessage message) => false;
             public Task<List<ChatMessage>> LoadLiveOverlayAsync(string chatJid) =>
@@ -359,7 +359,7 @@ namespace Unison.Core.Tests.ViewModels
             public void NotifyInboundWireAck(string ackClass, string ackId, string ackError) { }
             public Task NotifyOutgoingStatusAsync(string messageId, string status, string error) =>
                 Task.CompletedTask;
-            public Task NotifyReceiptAsync(Unison.Baileys.Protocol.BinaryNode node) => Task.CompletedTask;
+            public Task NotifyReceiptAsync(ReceiptFacts receipt) => Task.CompletedTask;
             public void SchedulePlaceholderResendDrain(string trigger, int maxRequests = 4) { }
             public Task RecoverPendingIncomingJournalAsync() => Task.CompletedTask;
             public Task NotifyOfflineReplaySettledAsync(

@@ -902,9 +902,6 @@ namespace Unison.Core.Tests.ViewModels
                 string groupJid, string description, string descriptionId) =>
                 Task.CompletedTask;
 
-            public Task ApplyGroupMetadataFromResponseAsync(string groupJid, Unison.Baileys.Protocol.BinaryNode response) =>
-                Task.CompletedTask;
-
             public void NotifyGroupListingDue() { }
 
             public Task ReconcileGroupCommunityTitlesAsync(CancellationToken cancellationToken = default) =>

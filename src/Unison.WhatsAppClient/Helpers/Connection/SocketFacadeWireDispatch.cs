@@ -6,7 +6,6 @@
 // =============================================================================
 using System;
 using System.Threading.Tasks;
-using Unison.Baileys.Protocol;
 using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Models;
 
@@ -68,32 +67,15 @@ namespace Unison.WhatsAppClient.Helpers
             return host.NotifyOutgoingStatusAsync(messageId, status, error);
         }
 
-        public static Task HandleReceiptAsync(ISocketFacadeWireHost host, BinaryNode node)
+        /// <summary>Null facts = the reader found nothing to act on (retry, unknown type).</summary>
+        public static Task HandleReceiptAsync(ISocketFacadeWireHost host, ReceiptFacts receipt)
         {
             if (host == null)
             {
                 throw new ArgumentNullException(nameof(host));
             }
 
-            return host.NotifyReceiptAsync(node);
-        }
-
-        public static void HandleLinkCodeCompanion(
-            ISocketFacadeWireHost host,
-            BinaryNode node,
-            bool isCurrentSocket)
-        {
-            if (host == null)
-            {
-                throw new ArgumentNullException(nameof(host));
-            }
-
-            if (!isCurrentSocket)
-            {
-                return;
-            }
-
-            host.RaiseLinkCodeCompanionReg(node);
+            return receipt == null ? Task.CompletedTask : host.NotifyReceiptAsync(receipt);
         }
     }
 }

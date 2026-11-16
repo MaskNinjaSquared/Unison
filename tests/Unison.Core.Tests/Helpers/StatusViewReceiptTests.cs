@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Unison.Core.Helpers;
+using Unison.Core.Models;
 using Unison.WhatsAppClient.Messages;
 using Unison.WhatsAppClient.Status;
 using Xunit;

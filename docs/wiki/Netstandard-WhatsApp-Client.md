@@ -225,7 +225,11 @@ startup and post-replay orchestration, quiet/memory waits, contact name tables s
 host/dispatch). That move is Phase D and touches Mobile-sensitive deferred startup — Opus +
 on-device.
 
-#### P4 inventory (plan only — Baileys reference stays)
+#### P4 inventory (steps 1–4 done — Baileys reference stays, blocked on `Proto`)
+
+**Status.** Steps 1–4 below are done: no Core contract names `BinaryNode` or `AuthState`. `ReceiptFacts` lives in `Unison.Core.Models`; `SocketFacadeWireOwner` runs `ReceiptReader` before the host sees the receipt. Link-code turned out to be dead on the live path (`SocketBridge` never raises `OnLinkCodeCompanionReg`; `PairingFlow` in `Unison.Socket` handles it, and `PairingHandler` is not in the csproj), so the relay was **deleted** instead of getting a DTO. `ConnectionSocketSessionRequest.AuthState` is `object`; the UWP factory casts and throws on a wrong type.
+
+**Step 5 is blocked.** The inventory only searched `Unison.Baileys`. Core also uses the generated `Proto` namespace (`WAProto.cs` lives in the Baileys project) in 20 files: mappers (`ChatMessageMapper`, `ReactionMapper`), `IMessageService`, `IHistoryService`, the incoming `*Request` models, `ProtoMessageUnwrap`, `SentMessageRetryRebuild`, a chat-list ViewModel partial. Dropping the reference needs a decision on `Proto` first.
 
 `Unison.Core.csproj` still references `Unison.Baileys`. Every `using Unison.Baileys` /
 `BinaryNode` / `AuthState` under `src/Unison.Core` is in the four contracts below. Nothing else

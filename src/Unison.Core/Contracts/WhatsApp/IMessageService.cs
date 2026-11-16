@@ -414,10 +414,10 @@ namespace Unison.Core.Contracts.WhatsApp
         Task ApplyOutgoingStatusAsync(string messageId, string status, string error = null);
 
         /// <summary>
-        /// Wire <c>receipt</c> node: direct status or group tally, then
+        /// A receipt already read off the wire: direct status or group tally, then
         /// <see cref="ApplyOutgoingStatusAsync"/>.
         /// </summary>
-        Task HandleReceiptAsync(Unison.Baileys.Protocol.BinaryNode node);
+        Task HandleReceiptAsync(ReceiptFacts receipt);
 
         /// <summary>
         /// Files an outgoing bubble in the in-memory timeline (held receipt/pin applied first).
@@ -549,9 +549,9 @@ namespace Unison.Core.Contracts.WhatsApp
         Task NotifyOutgoingStatusAsync(string messageId, string status, string error);
 
         /// <summary>
-        /// Host socket path: receipt node from the live transport. Faults are logged here.
+        /// Host socket path: receipt from the live transport. Faults are logged here.
         /// </summary>
-        Task NotifyReceiptAsync(Unison.Baileys.Protocol.BinaryNode node);
+        Task NotifyReceiptAsync(ReceiptFacts receipt);
 
         /// <summary>
         /// After offline replay (or a follow-up): schedule a deferred pass that asks the phone

@@ -2,6 +2,11 @@
 
 Newest first.
 
+## P4 steps 1–4 — no Baileys protocol types on Core contracts
+
+`IGroupService` no longer takes a group IQ node (`MessageFacade` parses with `GroupMetadataReader`). Receipts reach Core as `ReceiptFacts` (moved to `Core.Models`), read in `SocketFacadeWireOwner`. The link-code relay (`ISocketFacadeWireHost.RaiseLinkCodeCompanionReg`, `WhatsAppService.OnLinkCodeCompanionReg`) was removed: `SocketBridge` never raised it and `PairingFlow` owns link-code pairing. `ConnectionSocketSessionRequest.AuthState` is an opaque `object`. The Core → Baileys reference stays: Core still uses the generated `Proto` types.
+See [Netstandard WhatsApp client](Netstandard-WhatsApp-Client).
+
 ## P4 inventory — Core still references Baileys (plan only)
 
 Four Core contracts still name Baileys types: group metadata apply and receipts take

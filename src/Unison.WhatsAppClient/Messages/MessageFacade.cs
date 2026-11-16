@@ -16,6 +16,7 @@ using Unison.Core.Helpers.Notifications;
 using Unison.Core.Models;
 using Unison.Core.State;
 using Unison.WhatsAppClient.Abstractions;
+using Unison.WhatsAppClient.Groups;
 using Unison.WhatsAppClient.Helpers;
 using Unison.WhatsAppClient.Status;
 
@@ -81,6 +82,7 @@ namespace Unison.WhatsAppClient.Messages
         private readonly IAppVisibility _visibility;
         private readonly Func<bool> _isAwaitingInitialSync;
         private readonly ReceiptReader _receipts;
+        private readonly GroupMetadataReader _groupMetadata;
         private readonly GroupReceiptTally _groupReceipts = new GroupReceiptTally();
         private readonly KeyedLatestCoalescer<string, string> _receiptStatuses;
         private const int ReceiptBatchTraceMin = 10;
@@ -198,6 +200,7 @@ namespace Unison.WhatsAppClient.Messages
             // Optional: older hosts omit it; group toast titles then fall back to chat.Name.
             _groupNaming = groupNaming;
             _receipts = new ReceiptReader(jids);
+            _groupMetadata = new GroupMetadataReader(jids);
             _receiptStatuses = new KeyedLatestCoalescer<string, string>(
                 ApplyOutgoingStatusBatchAsync,
                 () => StormWindowPolicy.For(_loadMode != null && _loadMode.PreferFrugal),
@@ -386,11 +389,11 @@ namespace Unison.WhatsAppClient.Messages
         }
 
         /// <inheritdoc />
-        public async Task NotifyReceiptAsync(Unison.Baileys.Protocol.BinaryNode node)
+        public async Task NotifyReceiptAsync(ReceiptFacts receipt)
         {
             try
             {
-                await HandleReceiptAsync(node).ConfigureAwait(false);
+                await HandleReceiptAsync(receipt).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
@@ -400,9 +403,8 @@ namespace Unison.WhatsAppClient.Messages
         }
 
         /// <inheritdoc />
-        public async Task HandleReceiptAsync(Unison.Baileys.Protocol.BinaryNode node)
+        public async Task HandleReceiptAsync(ReceiptFacts receipt)
         {
-            ReceiptFacts receipt = _receipts.Read(node);
             if (receipt == null)
             {
                 return;
@@ -502,7 +504,9 @@ namespace Unison.WhatsAppClient.Messages
             {
                 try
                 {
-                    await groups.ApplyGroupMetadataFromResponseAsync(canonical, response)
+                    await groups.ApplyGroupMetadataAsync(
+                            canonical,
+                            _groupMetadata.ReadMetadata(response, canonical))
                         .ConfigureAwait(false);
                 }
                 catch (Exception ex)

@@ -1,6 +1,6 @@
 using System;
 using System.Threading.Tasks;
-using Unison.Baileys.Protocol;
+using Unison.Core.Contracts;
 using Unison.Core.Models;
 using Unison.WhatsAppClient.Helpers;
 using Xunit;
@@ -14,11 +14,11 @@ namespace Unison.Core.Tests.Helpers
         {
             PresenceUpdateEventArgs seen = null;
             var owner = new SocketFacadeWireOwner(
+                new IdentityJids(),
                 args => seen = args,
                 (a, b, c, d, e, f) => { },
                 (a, b, c) => Task.CompletedTask,
-                _ => Task.CompletedTask,
-                _ => { });
+                _ => Task.CompletedTask);
 
             var args = new PresenceUpdateEventArgs { Jid = "x@s.whatsapp.net" };
             owner.HandlePresence(args);
@@ -26,20 +26,21 @@ namespace Unison.Core.Tests.Helpers
             Assert.Same(args, seen);
         }
 
-        [Fact]
-        public void HandleLinkCode_skips_stale_socket()
+        private sealed class IdentityJids : IJidResolver
         {
-            bool raised = false;
-            var owner = new SocketFacadeWireOwner(
-                _ => { },
-                (a, b, c, d, e, f) => { },
-                (a, b, c) => Task.CompletedTask,
-                _ => Task.CompletedTask,
-                _ => raised = true);
+            public string GetCanonicalJid(string jid) => jid;
 
-            owner.HandleLinkCodeCompanion(new BinaryNode { Tag = "link" }, isCurrentSocket: false);
+            public string PeekCanonicalJid(string jid) => jid;
 
-            Assert.False(raised);
+            public bool TryGetAlias(string jid, out string alias)
+            {
+                alias = null;
+                return false;
+            }
+
+            public bool IsSelfLinked(string jid) => false;
+
+            public Profile Self => null;
         }
     }
 }

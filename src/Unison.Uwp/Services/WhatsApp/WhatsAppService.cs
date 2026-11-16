@@ -862,8 +862,6 @@ namespace Unison.Uwp.Services.WhatsApp
         private void ResetFirstSyncListHoldFlags(string reason) =>
             _resetFirstSyncHold.Run(reason);
 
-        public event EventHandler<BinaryNode> OnLinkCodeCompanionReg;
-
         private WhatsAppService(
             ChatStateStore chatState,
             ChatRowIndex chatRows,
@@ -1787,6 +1785,7 @@ namespace Unison.Uwp.Services.WhatsApp
                     "trigger=" + trigger),
                 () => OnQrExpired?.Invoke(this, EventArgs.Empty));
             _socketFacadeWire = new SocketFacadeWireOwner(
+                _jids,
                 args => Messages?.NotifyPresenceUpdated(args),
                 (chatJid, participant, messageId, isFromMe, timestamp, reason) =>
                 {
@@ -1808,11 +1807,10 @@ namespace Unison.Uwp.Services.WhatsApp
                     Messages == null
                         ? Task.CompletedTask
                         : Messages.NotifyOutgoingStatusAsync(messageId, status, error),
-                node =>
+                receipt =>
                     Messages == null
                         ? Task.CompletedTask
-                        : Messages.NotifyReceiptAsync(node),
-                node => OnLinkCodeCompanionReg?.Invoke(this, node));
+                        : Messages.NotifyReceiptAsync(receipt));
             _inboundWireNode = new InboundWireNodeOwner(
                 (ackClass, ackId, ackError) =>
                     Messages?.NotifyInboundWireAck(ackClass, ackId, ackError),
