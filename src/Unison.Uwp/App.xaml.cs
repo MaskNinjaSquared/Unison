@@ -424,6 +424,7 @@ namespace Unison.Uwp
             services.AddSingleton(sp => new PostReplayMaintenanceCoordinator(
                 sp.GetRequiredService<IStartupMaintenanceTuning>()));
             services.AddSingleton<InitGateOwner>();
+            services.AddSingleton<ConnectionSessionFlags>();
             services.AddSingleton(sp => new ChatPreviewReconciler(
                 sp.GetRequiredService<IHistoryMessageStore>(),
                 sp.GetRequiredService<JidAliasTable>(),
@@ -543,7 +544,8 @@ namespace Unison.Uwp
                 sp.GetRequiredService<IncomingMessagePump>(),
                 sp.GetRequiredService<LiveMessagePersist>(),
                 sp.GetRequiredService<IRuntimeDiagnostics>(),
-                sp.GetRequiredService<InitGateOwner>()));
+                sp.GetRequiredService<InitGateOwner>(),
+                sp.GetRequiredService<ConnectionSessionFlags>()));
             // The send flow lives on MessageFacade; the timeline caches and the socket it writes
             // through are still the client's, reached only through this narrow port.
             services.AddSingleton<IOutgoingMessageHost>(

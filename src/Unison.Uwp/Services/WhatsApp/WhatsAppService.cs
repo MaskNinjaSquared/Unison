@@ -213,20 +213,8 @@ namespace Unison.Uwp.Services.WhatsApp
         private AuthState _authState;
 
         private bool _isConnecting = false;
-        private volatile bool _suppressReconnect = false;
-        /// <summary>
-        /// Latches a logged-out / bad-session outcome so ConnectAsync cannot clear
-        /// <see cref="_suppressReconnect"/> and restart the reconnect storm.
-        /// Cleared when the session wipe finishes (QR pairing) or a session initializes.
-        /// </summary>
-        private volatile bool _fatalSessionEnded = false;
-        /// <summary>True after success/session-initialized for the current socket.</summary>
-        private volatile bool _sessionEstablishedThisConnection = false;
-        /// <summary>
-        /// Consecutive closes after Noise open but before WA login success.
-        /// Common for revoked companion sessions that drop without a journaled stream:error.
-        /// </summary>
-        private int _preSessionCloseStreak = 0;
+        /// <summary>Reconnect / pairing / logout latches; shared DI singleton.</summary>
+        private readonly ConnectionSessionFlags _sessionFlags;
 
         /// <summary>
         /// Two was too eager: a pair of transport blips during login - a phone changing networks,
@@ -234,15 +222,6 @@ namespace Unison.Uwp.Services.WhatsApp
         /// and the old threshold let that pair speak for the account.
         /// </summary>
         private const int PreSessionCloseFatalThreshold = 5;
-        /// <summary>
-        /// True between stream:error 515 (pair stage 1 done) and session-initialized (stage 2).
-        /// During this window Registered is already true but closes are expected ? never treat as logout.
-        /// </summary>
-        private volatile bool _pairingRestartPending = false;
-        /// <summary>
-        /// When true, pre-session closes may escalate to fatal logout. False for QR / 515 stage-2.
-        /// </summary>
-        private volatile bool _countPreSessionCloseAsFatal = false;
         /// <summary>
         /// Soft auto-reconnect slot (lock + isReconnecting) lives on
         /// <see cref="SoftReconnectCoordinator"/>. Client only implements
@@ -301,11 +280,6 @@ namespace Unison.Uwp.Services.WhatsApp
         private TaskCompletionSource<bool> _sessionEstablishedTcs = CreateSessionEstablishedTcs();
         private volatile bool _historyIdentityRefreshTriggeredThisSession = false;
 
-        /// <summary>
-        /// Whether this connection ever put a QR on screen. Tells a code that ran out of time
-        /// apart from a pairing that never got one, which need different things said to them.
-        /// </summary>
-        private volatile bool _qrDeliveredThisConnection = false;
         private readonly SyncWorkGate _syncWork;
         private readonly OfflineReplayFirstReleaseLatch _offlineReplayLatch =
             new OfflineReplayFirstReleaseLatch();
@@ -486,7 +460,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 ConnectionStatus = CurrentConnectionStatus,
                 IsServiceConnected = IsConnected,
                 IsConnecting = _isConnecting,
-                SuppressReconnect = _suppressReconnect || _fatalSessionEnded,
+                SuppressReconnect = _sessionFlags.SuppressReconnect || _sessionFlags.FatalSessionEnded,
                 HistorySyncProcessing = _initialSync.IsActive ||
                                         IsHistoryCatchUpBannerActive ||
                                         _historyRequests.IsFullClaimed,
@@ -836,7 +810,8 @@ namespace Unison.Uwp.Services.WhatsApp
             IncomingMessagePump incomingPump = null,
             LiveMessagePersist liveMessages = null,
             IRuntimeDiagnostics diagnostics = null,
-            InitGateOwner initGate = null)
+            InitGateOwner initGate = null,
+            ConnectionSessionFlags sessionFlags = null)
         {
             if (chatState == null)
             {
@@ -845,6 +820,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
             _diagnostics = diagnostics ?? throw new ArgumentNullException(nameof(diagnostics));
             _initGate = initGate ?? throw new ArgumentNullException(nameof(initGate));
+            _sessionFlags = sessionFlags ?? throw new ArgumentNullException(nameof(sessionFlags));
             _lidMappings = lidMappings;
             _socketSessions = socketSessions
                 ?? throw new ArgumentNullException(nameof(socketSessions));
@@ -1139,10 +1115,10 @@ namespace Unison.Uwp.Services.WhatsApp
                 sessionEstablishedGate: () => _sessionEstablishedTcs.Task,
                 log: message => Log("[WhatsAppService] " + message));
             _markPairingRestartPending = new MarkPairingRestartPendingOwner(
-                getPairingRestartPending: () => _pairingRestartPending,
-                setPairingRestartPending: value => _pairingRestartPending = value,
-                clearPreSessionCloseAsFatal: () => _countPreSessionCloseAsFatal = false,
-                resetPreSessionCloseStreak: () => Interlocked.Exchange(ref _preSessionCloseStreak, 0),
+                getPairingRestartPending: () => _sessionFlags.PairingRestartPending,
+                setPairingRestartPending: value => _sessionFlags.PairingRestartPending = value,
+                clearPreSessionCloseAsFatal: () => _sessionFlags.CountPreSessionCloseAsFatal = false,
+                resetPreSessionCloseStreak: () => _sessionFlags.ResetPreSessionCloseStreak(),
                 trace: PairingTrace);
             _socketTearDown = new TearDownSocketForSoftReconnectOwner(
                 () =>
@@ -1193,7 +1169,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 syncStatus: _syncStatus,
                 freshnessRepair: _freshnessRepair,
                 heavyHistoryEnrichment: _heavyHistoryEnrichment,
-                suppressReconnect: () => _suppressReconnect,
+                suppressReconnect: () => _sessionFlags.SuppressReconnect,
                 isAuthRegistered: () => _authState != null && _authState.Registered,
                 tryGetStaleReason: TryGetHistoryFreshnessStaleReason,
                 finishCatchUpContinue: FinishHistoryCatchUpContinue,
@@ -1438,8 +1414,8 @@ namespace Unison.Uwp.Services.WhatsApp
                 () => _socket != null,
                 () =>
                 {
-                    _suppressReconnect = true;
-                    _fatalSessionEnded = true;
+                    _sessionFlags.SuppressReconnect = true;
+                    _sessionFlags.FatalSessionEnded = true;
                 },
                 StopConnectionHealthMonitor,
                 reason => _socket.LogoutAsync(reason),
@@ -1491,12 +1467,12 @@ namespace Unison.Uwp.Services.WhatsApp
                 () => _authState = null,
                 () =>
                 {
-                    _suppressReconnect = true;
-                    _fatalSessionEnded = true;
-                    _pairingRestartPending = false;
-                    _countPreSessionCloseAsFatal = false;
-                    Interlocked.Exchange(ref _preSessionCloseStreak, 0);
-                    _sessionEstablishedThisConnection = false;
+                    _sessionFlags.SuppressReconnect = true;
+                    _sessionFlags.FatalSessionEnded = true;
+                    _sessionFlags.PairingRestartPending = false;
+                    _sessionFlags.CountPreSessionCloseAsFatal = false;
+                    _sessionFlags.ResetPreSessionCloseStreak();
+                    _sessionFlags.SessionEstablishedThisConnection = false;
                 },
                 StopConnectionHealthMonitor,
                 () =>
@@ -1555,8 +1531,8 @@ namespace Unison.Uwp.Services.WhatsApp
                 },
                 () =>
                 {
-                    _fatalSessionEnded = false;
-                    _suppressReconnect = false;
+                    _sessionFlags.FatalSessionEnded = false;
+                    _sessionFlags.SuppressReconnect = false;
                 },
                 () => _messageStore.WipeAllDataAsync(),
                 async () =>
@@ -1628,18 +1604,18 @@ namespace Unison.Uwp.Services.WhatsApp
                     {
                     }
                 },
-                () => _qrDeliveredThisConnection = true,
+                () => _sessionFlags.QrDeliveredThisConnection = true,
                 qr => OnQRCodeReceived?.Invoke(this, qr));
             _authStateWire = new AuthStateWireOwner(
                 () => Debug.WriteLine("[WhatsAppService] Auth state updated, saving..."),
                 FileSelfIdentityAliases,
                 () => PersistAuthStateAsync(_socket, "socket-auth-update"));
             _sessionInitializedWire = new SessionInitializedOwner(
-                () => _fatalSessionEnded,
-                () => _sessionEstablishedThisConnection = true,
-                () => _pairingRestartPending = false,
-                () => _countPreSessionCloseAsFatal = true,
-                () => Interlocked.Exchange(ref _preSessionCloseStreak, 0),
+                () => _sessionFlags.FatalSessionEnded,
+                () => _sessionFlags.SessionEstablishedThisConnection = true,
+                () => _sessionFlags.PairingRestartPending = false,
+                () => _sessionFlags.CountPreSessionCloseAsFatal = true,
+                () => _sessionFlags.ResetPreSessionCloseStreak(),
                 () => _sessionEstablishedTcs.TrySetResult(true),
                 EnsureSelfPhonePersisted,
                 () => PersistAuthStateAsync(_socket, "session-initialized"),
@@ -1653,9 +1629,9 @@ namespace Unison.Uwp.Services.WhatsApp
                 () => Debug.WriteLine(
                     "[WhatsAppService] Session initialized - triggering missing name resolution"));
             _socketErrorWire = new SocketErrorOwner(
-                () => _suppressReconnect,
-                () => _fatalSessionEnded,
-                () => _pairingRestartPending,
+                () => _sessionFlags.SuppressReconnect,
+                () => _sessionFlags.FatalSessionEnded,
+                () => _sessionFlags.PairingRestartPending,
                 MarkPairingRestartPending,
                 TryStartPairingStage2Reconnect,
                 LatchFatalSession,
@@ -1677,13 +1653,13 @@ namespace Unison.Uwp.Services.WhatsApp
                 ScheduleAutoReconnect,
                 ex => OnError?.Invoke(this, ex));
             _connectionUpdateWire = new ConnectionUpdateOwner(
-                () => _suppressReconnect,
-                () => _fatalSessionEnded,
+                () => _sessionFlags.SuppressReconnect,
+                () => _sessionFlags.FatalSessionEnded,
                 () => _authState != null && _authState.Registered,
-                () => _pairingRestartPending,
-                () => _sessionEstablishedThisConnection,
-                () => _countPreSessionCloseAsFatal,
-                () => _qrDeliveredThisConnection,
+                () => _sessionFlags.PairingRestartPending,
+                () => _sessionFlags.SessionEstablishedThisConnection,
+                () => _sessionFlags.CountPreSessionCloseAsFatal,
+                () => _sessionFlags.QrDeliveredThisConnection,
                 () => PreSessionCloseFatalThreshold,
                 status => Debug.WriteLine(
                     "[WhatsAppService] Connection update '" + status +
@@ -1704,7 +1680,7 @@ namespace Unison.Uwp.Services.WhatsApp
                     "pairing-close-before-restart",
                     "claiming-stage2=true"),
                 TryStartPairingStage2Reconnect,
-                () => Interlocked.Increment(ref _preSessionCloseStreak),
+                () => _sessionFlags.IncrementPreSessionCloseStreak(),
                 streak => _diagnostics.Write(
                     "connection",
                     "pre-session-close",
@@ -1712,7 +1688,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 reason => RaiseReport(
                     () => OnInvalidSessionSuspected?.Invoke(this, reason),
                     nameof(OnInvalidSessionSuspected)),
-                () => Interlocked.Exchange(ref _preSessionCloseStreak, 0),
+                () => _sessionFlags.ResetPreSessionCloseStreak(),
                 ScheduleAutoReconnect,
                 trigger => _diagnostics.Write(
                     "connection",
@@ -1761,7 +1737,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 },
                 _incomingPump.Enqueue);
             _historySyncWire = new HistorySyncWireOwner(
-                () => _fatalSessionEnded,
+                () => _sessionFlags.FatalSessionEnded,
                 () => _authState != null,
                 (conversations, syncType) =>
                     _diagnostics.Write(
@@ -1878,11 +1854,12 @@ namespace Unison.Uwp.Services.WhatsApp
             IncomingMessagePump incomingPump = null,
             LiveMessagePersist liveMessages = null,
             IRuntimeDiagnostics diagnostics = null,
-            InitGateOwner initGate = null)
+            InitGateOwner initGate = null,
+            ConnectionSessionFlags sessionFlags = null)
         {
             return new WhatsAppService(
                 chatState, chatRows, activeChat, syncStatus, syncWork, historyMessages, chatPreviews, usyncGate, avatarFetcher, mediaCache, jidAlias, displayNames, historyRequests,
-                catchUp, initialSync, productPolicy, startupMaintenance, postReplayMaintenance, selfProfile, personStore, groupRosterStore, chatStore, systemInfo, ui, pendingMessages, lidMappings, socketSessions, listPaintGate, appMemory, localSettings, resolveContacts, resolveMessages, resolveChats, resolveGroups, resolveHistory, resolveDeferredAvatars, incomingPump, liveMessages, diagnostics, initGate);
+                catchUp, initialSync, productPolicy, startupMaintenance, postReplayMaintenance, selfProfile, personStore, groupRosterStore, chatStore, systemInfo, ui, pendingMessages, lidMappings, socketSessions, listPaintGate, appMemory, localSettings, resolveContacts, resolveMessages, resolveChats, resolveGroups, resolveHistory, resolveDeferredAvatars, incomingPump, liveMessages, diagnostics, initGate, sessionFlags);
         }
 
         /// <summary>
@@ -2332,7 +2309,7 @@ namespace Unison.Uwp.Services.WhatsApp
         bool IHistoryCatchUpHost.IsCatchUpBannerActive => IsHistoryCatchUpBannerActive;
 
         bool IHistoryCatchUpHost.CanSolicitAdjacent =>
-            !_suppressReconnect && _authState != null && _authState.Registered;
+            !_sessionFlags.SuppressReconnect && _authState != null && _authState.Registered;
 
         void IHistoryCatchUpHost.MarkEnrichmentAwaitingHeavyHistory() =>
             _heavyHistoryEnrichment.SetAwaitingHeavyHistory(true);
@@ -2885,9 +2862,9 @@ namespace Unison.Uwp.Services.WhatsApp
         /// </summary>
         private void LatchFatalSession(string reason)
         {
-            _fatalSessionEnded = true;
-            _suppressReconnect = true;
-            Interlocked.Exchange(ref _preSessionCloseStreak, 0);
+            _sessionFlags.FatalSessionEnded = true;
+            _sessionFlags.SuppressReconnect = true;
+            _sessionFlags.ResetPreSessionCloseStreak();
             StopConnectionHealthMonitor(reason ?? "fatal");
         }
 
@@ -2897,7 +2874,7 @@ namespace Unison.Uwp.Services.WhatsApp
         /// </summary>
         private bool ShouldRefuseConnectBecauseSessionDied() =>
             SessionDiedConnectRefusal.ShouldRefuse(
-                _fatalSessionEnded,
+                _sessionFlags.FatalSessionEnded,
                 _authState == null,
                 _authState != null && _authState.Registered);
 

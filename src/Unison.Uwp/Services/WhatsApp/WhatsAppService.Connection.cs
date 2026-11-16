@@ -251,7 +251,7 @@ namespace Unison.Uwp.Services.WhatsApp
             }
 
             public bool ShouldAbortLoop =>
-                _owner._suppressReconnect || _owner._fatalSessionEnded;
+                _owner._sessionFlags.SuppressReconnect || _owner._sessionFlags.FatalSessionEnded;
 
             public bool IsMonitoredSocketCurrent =>
                 ReferenceEquals(_owner._socket, _socket);
@@ -379,9 +379,9 @@ namespace Unison.Uwp.Services.WhatsApp
 
         // --- ITryStartPairingStage2ReconnectHost -----------------------------
 
-        bool ITryStartPairingStage2ReconnectHost.SuppressReconnect => _suppressReconnect;
+        bool ITryStartPairingStage2ReconnectHost.SuppressReconnect => _sessionFlags.SuppressReconnect;
 
-        bool ITryStartPairingStage2ReconnectHost.FatalSessionEnded => _fatalSessionEnded;
+        bool ITryStartPairingStage2ReconnectHost.FatalSessionEnded => _sessionFlags.FatalSessionEnded;
 
         void ITryStartPairingStage2ReconnectHost.TracePairingStage2(string message) =>
             PairingTrace(message);
@@ -403,11 +403,11 @@ namespace Unison.Uwp.Services.WhatsApp
 
         // --- ISoftReconnectIoHost --------------------------------------------
 
-        bool ISoftReconnectIoHost.SuppressReconnect => _suppressReconnect;
+        bool ISoftReconnectIoHost.SuppressReconnect => _sessionFlags.SuppressReconnect;
 
-        bool ISoftReconnectIoHost.FatalSessionEnded => _fatalSessionEnded;
+        bool ISoftReconnectIoHost.FatalSessionEnded => _sessionFlags.FatalSessionEnded;
 
-        bool ISoftReconnectIoHost.PairingRestartPending => _pairingRestartPending;
+        bool ISoftReconnectIoHost.PairingRestartPending => _sessionFlags.PairingRestartPending;
 
         bool ISoftReconnectIoHost.IsAuthPresent => _authState != null;
 
@@ -709,11 +709,11 @@ namespace Unison.Uwp.Services.WhatsApp
         /// </summary>
         public Task ResumeAsync() => ConnectionResume.RunAsync(this);
 
-        bool IConnectionResumeHost.IsFatalSessionEnded => _fatalSessionEnded;
+        bool IConnectionResumeHost.IsFatalSessionEnded => _sessionFlags.FatalSessionEnded;
 
         Task<bool> IConnectionResumeHost.IsRegisteredAsync() => IsRegisteredAsync();
 
-        void IConnectionResumeHost.ClearSuppressReconnect() => _suppressReconnect = false;
+        void IConnectionResumeHost.ClearSuppressReconnect() => _sessionFlags.SuppressReconnect = false;
 
         Task<bool> IConnectionResumeHost.ConsumeBrokerReconnectRequestAsync() =>
             ConsumeBrokerReconnectRequestAsync();
@@ -1005,8 +1005,8 @@ namespace Unison.Uwp.Services.WhatsApp
 
         bool IIsCurrentSocketHealthyHost.SuppressReconnect
         {
-            get => _suppressReconnect;
-            set => _suppressReconnect = value;
+            get => _sessionFlags.SuppressReconnect;
+            set => _sessionFlags.SuppressReconnect = value;
         }
 
         void IIsCurrentSocketHealthyHost.DisconnectSocket(object socket)
@@ -1101,8 +1101,8 @@ namespace Unison.Uwp.Services.WhatsApp
 
         bool IDropCurrentSocketForFastResumeHost.SuppressReconnect
         {
-            get => _suppressReconnect;
-            set => _suppressReconnect = value;
+            get => _sessionFlags.SuppressReconnect;
+            set => _sessionFlags.SuppressReconnect = value;
         }
 
         void IDropCurrentSocketForFastResumeHost.DisconnectAndDisposeSocket(object socket)
@@ -1206,11 +1206,11 @@ namespace Unison.Uwp.Services.WhatsApp
 
         // --- IAutoReconnectLoopHost ------------------------------------------
 
-        bool IAutoReconnectLoopHost.SuppressReconnect => _suppressReconnect;
+        bool IAutoReconnectLoopHost.SuppressReconnect => _sessionFlags.SuppressReconnect;
 
-        bool IAutoReconnectLoopHost.FatalSessionEnded => _fatalSessionEnded;
+        bool IAutoReconnectLoopHost.FatalSessionEnded => _sessionFlags.FatalSessionEnded;
 
-        bool IAutoReconnectLoopHost.PairingRestartPending => _pairingRestartPending;
+        bool IAutoReconnectLoopHost.PairingRestartPending => _sessionFlags.PairingRestartPending;
 
         bool IAutoReconnectLoopHost.IsAuthStatePresent => _authState != null;
 
@@ -1246,19 +1246,19 @@ namespace Unison.Uwp.Services.WhatsApp
 
         bool IConnectionPairingStage2Host.ShouldAbortPairingRestart =>
             ConnectionSoftReconnectGates.ShouldAbortPairingRestart(
-                _suppressReconnect,
-                _fatalSessionEnded);
+                _sessionFlags.SuppressReconnect,
+                _sessionFlags.FatalSessionEnded);
 
         bool IConnectionPairingStage2Host.IsRegistered =>
             _authState != null && _authState.Registered;
 
         bool IConnectionPairingStage2Host.CanScheduleSoftReconnect =>
             ConnectionSoftReconnectGates.CanScheduleSoftReconnect(
-                _suppressReconnect,
-                _fatalSessionEnded);
+                _sessionFlags.SuppressReconnect,
+                _sessionFlags.FatalSessionEnded);
 
         void IConnectionPairingStage2Host.ClearPairingRestartPending() =>
-                _pairingRestartPending = false;
+                _sessionFlags.PairingRestartPending = false;
 
         void IConnectionPairingStage2Host.ClearReconnectingFlag() =>
             _softReconnect.ClearReconnectingFlag();
@@ -1308,7 +1308,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
         public void Disconnect()
         {
-            _suppressReconnect = true;
+            _sessionFlags.SuppressReconnect = true;
             StopConnectionHealthMonitor("disconnect");
             var socket = _socket;
             _socket = null;
@@ -1358,15 +1358,15 @@ namespace Unison.Uwp.Services.WhatsApp
             // Only reset per-connection gates when a new transport will actually
             // be created. Resetting them before waiting on the lock allowed a second
             // caller to invalidate the first caller's successful session gate.
-            if (!_fatalSessionEnded)
+            if (!_sessionFlags.FatalSessionEnded)
             {
-                _suppressReconnect = false;
+                _sessionFlags.SuppressReconnect = false;
             }
 
-            _sessionEstablishedThisConnection = false;
+            _sessionFlags.SessionEstablishedThisConnection = false;
             _sessionEstablishedTcs = CreateSessionEstablishedTcs();
             _historyIdentityRefreshTriggeredThisSession = false;
-            _qrDeliveredThisConnection = false;
+            _sessionFlags.QrDeliveredThisConnection = false;
             _postSyncMaintenance.ResetEnrichmentStarted();
             _heavyHistoryEnrichment.SetAwaitingHeavyHistory(false);
         }
@@ -1413,17 +1413,17 @@ namespace Unison.Uwp.Services.WhatsApp
 
             _syncWork.SetReplayDrainPending(auth.Registered);
             _offlineReplayLatch.ResetForNewOpen();
-            if (!_fatalSessionEnded)
+            if (!_sessionFlags.FatalSessionEnded)
             {
-                _suppressReconnect = false;
+                _sessionFlags.SuppressReconnect = false;
             }
 
-            _countPreSessionCloseAsFatal = ConnectionConnectPrepare.CountPreSessionCloseAsFatal(
+            _sessionFlags.CountPreSessionCloseAsFatal = ConnectionConnectPrepare.CountPreSessionCloseAsFatal(
                 auth.Registered,
-                _pairingRestartPending);
-            if (!_countPreSessionCloseAsFatal)
+                _sessionFlags.PairingRestartPending);
+            if (!_sessionFlags.CountPreSessionCloseAsFatal)
             {
-                Interlocked.Exchange(ref _preSessionCloseStreak, 0);
+                _sessionFlags.ResetPreSessionCloseStreak();
             }
 
             _historyRequests.ReleaseFull();
@@ -1528,7 +1528,7 @@ namespace Unison.Uwp.Services.WhatsApp
         void IConnectionLifecycleHost.BeginShutdownLatch()
         {
             Interlocked.Exchange(ref _forceFreshConnectOnResume, 1);
-            _suppressReconnect = true;
+            _sessionFlags.SuppressReconnect = true;
         }
 
         void IConnectionLifecycleHost.StopHealthMonitor(string reason) =>
