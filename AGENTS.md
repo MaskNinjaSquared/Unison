@@ -18,7 +18,7 @@ Cursor project rules in `.cursor/rules/` repeat the must-not-break bits. The wik
 
 - Put WinRT or XAML in `Unison.Core`.
 - Reference Core or Socket from `Unison.Background`.
-- Reference `Unison.Baileys` or `Unison.Socket` from `Unison.Core` (Core takes only `Unison.Proto`).
+- Reference `Unison.Baileys`, `Unison.Socket` or `Unison.Proto` from `Unison.Core`. Core has no protocol reference; proto-shaped contracts live in `Unison.WhatsAppClient`.
 - Call use cases from `ConnectionHandler` or store chats there.
 - Subscribe ViewModels to raw client / host-port events (façades only).
 - Add `Foo.Instance` services; use constructor DI in `App.ConfigureServices`.
@@ -33,6 +33,6 @@ Cursor project rules in `.cursor/rules/` repeat the must-not-break bits. The wik
 | `src/Unison.Core` | Contracts, models, ViewModels |
 | `src/Unison.Socket` | Session / protocol (Baileys 7.0.0-rc14) |
 | `src/Unison.Baileys` | Noise, Signal, binary XML |
-| `src/Unison.Proto` | Generated WAProto; the only protocol project Core references |
+| `src/Unison.Proto` | Generated WAProto; referenced by Baileys, WhatsAppClient, Socket, UWP, Background (not Core) |
 | `src/Unison.Background` | Out-of-process socket activity task |
 | `docs/wiki/` | Architecture + coding spec (GitHub wiki source) |

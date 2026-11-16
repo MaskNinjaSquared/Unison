@@ -38,7 +38,7 @@ using Unison.WhatsAppClient.Helpers;
 
 namespace Unison.WhatsAppClient.History
 {
-    public sealed class HistoryFacade : IHistoryService
+    public sealed class HistoryFacade : IHistoryWireIngress
     {
         /// <summary>How long the phone gets to send anything at all before we call it a failure.</summary>
         private static readonly TimeSpan FirstChunkTimeout = TimeSpan.FromSeconds(75);
@@ -89,7 +89,7 @@ namespace Unison.WhatsAppClient.History
         private readonly IHistoryMessageThumbnailMaterializer _messageThumbs;
         private readonly IStatusThumbnailMaterializer _statusThumbs;
         private readonly ILidMappingDiskPersistGate _lidDiskPersist;
-        private readonly Func<IMessageService> _resolveMessages;
+        private readonly Func<IMessageWireIngress> _resolveMessages;
 
         /// <summary>
         /// Session-scoped: one toast after repeated background history lots. Not reset until
@@ -112,7 +112,7 @@ namespace Unison.WhatsAppClient.History
         public HistoryFacade(
             IWhatsAppSessionProvider sessions,
             Func<IConnectionService> resolveConnection,
-            Func<IMessageService> resolveMessages,
+            Func<IMessageWireIngress> resolveMessages,
             IConversationResyncHost resync,
             IHistorySyncHost historySync,
             IHistoryCatchUpHost catchUpHost,
@@ -282,7 +282,7 @@ namespace Unison.WhatsAppClient.History
 
         public int InitialSyncTotalConversations => _initialSync.TotalConversations;
 
-        public event EventHandler<global::Proto.HistorySync> HistorySyncReceived;
+        public event EventHandler<HistorySyncNotice> HistorySyncReceived;
 
         public event EventHandler<InitialSyncProgressEventArgs> InitialSyncProgress;
 
@@ -1301,7 +1301,7 @@ namespace Unison.WhatsAppClient.History
             {
                 if (sync != null)
                 {
-                    IMessageService messages = _resolveMessages();
+                    IMessageWireIngress messages = _resolveMessages();
                     if (messages == null)
                     {
                         throw new InvalidOperationException(
@@ -1311,7 +1311,7 @@ namespace Unison.WhatsAppClient.History
                     await messages.SyncMessageHistoryAsync(sync).ConfigureAwait(false);
                 }
 
-                NotifyHistorySyncReceived(sync);
+                NotifyHistorySyncReceived(sync == null ? null : new HistorySyncNotice(sync.SyncType.ToString()));
 
                 bool hasContent = sync != null &&
                     ((sync.Conversations != null && sync.Conversations.Count > 0) ||
@@ -1354,9 +1354,9 @@ namespace Unison.WhatsAppClient.History
         }
 
         /// <inheritdoc />
-        public void NotifyHistorySyncReceived(HistorySync sync)
+        public void NotifyHistorySyncReceived(HistorySyncNotice notice)
         {
-            Relay(() => HistorySyncReceived?.Invoke(this, sync), "HistorySyncReceived");
+            Relay(() => HistorySyncReceived?.Invoke(this, notice), "HistorySyncReceived");
         }
 
         /// <inheritdoc />

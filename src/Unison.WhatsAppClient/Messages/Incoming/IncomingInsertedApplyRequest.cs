@@ -1,7 +1,8 @@
 using System;
 using Proto;
+using Unison.Core.Models;
 
-namespace Unison.Core.Models
+namespace Unison.WhatsAppClient.Messages
 {
     /// <summary>
     /// Post-<c>AcceptIncomingTimeline</c> insert follow-up: offline tip + persist, or live

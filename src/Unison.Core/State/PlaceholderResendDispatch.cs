@@ -79,21 +79,13 @@ namespace Unison.Core.State
             string stanzaId = null;
             try
             {
-                var key = new Proto.MessageKey
-                {
-                    RemoteJid = candidate.ChatJid,
-                    Id = candidate.MessageId,
-                    FromMe = candidate.IsFromMe,
-                    Participant = candidate.Participant ?? string.Empty
-                };
-
                 stanzaId = _socket.GenerateMessageId();
                 if (!_ledger.RecordSend(chatJid, messageId, stanzaId, trigger, DateTime.UtcNow, out candidate))
                 {
                     return;
                 }
 
-                string sentStanzaId = await _socket.RequestPlaceholderResendAsync(key, stanzaId).ConfigureAwait(false);
+                string sentStanzaId = await _socket.RequestPlaceholderResendAsync(candidate, stanzaId).ConfigureAwait(false);
                 if (!string.Equals(sentStanzaId, stanzaId, StringComparison.Ordinal))
                 {
                     _log($"PLACEHOLDER_MESSAGE_RESEND stanza id changed unexpectedly: tracked={stanzaId}, sent={sentStanzaId}");

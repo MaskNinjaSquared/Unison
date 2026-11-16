@@ -30,7 +30,7 @@ namespace Unison.WhatsAppClient.Messages
                 message => message.IsOffline,
                 message => message.MessageId);
 
-        private readonly Func<IMessageService> _resolveMessages;
+        private readonly Func<IMessageWireIngress> _resolveMessages;
         private readonly IRuntimeDiagnostics _diagnostics;
         private readonly Action _onMessageApplied;
 
@@ -38,7 +38,7 @@ namespace Unison.WhatsAppClient.Messages
         private long _appliedCount;
 
         public IncomingMessagePump(
-            Func<IMessageService> resolveMessages,
+            Func<IMessageWireIngress> resolveMessages,
             IRuntimeDiagnostics diagnostics = null,
             Action onMessageApplied = null)
         {
@@ -308,7 +308,7 @@ namespace Unison.WhatsAppClient.Messages
         Task IHandleDecryptedMessageHost.NotifyIncomingDecryptedAsync(
             IncomingDecryptedNotifyRequest request)
         {
-            IMessageService messages = _resolveMessages();
+            IMessageWireIngress messages = _resolveMessages();
             if (messages == null)
             {
                 return Task.CompletedTask;

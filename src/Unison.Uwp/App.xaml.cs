@@ -484,7 +484,7 @@ namespace Unison.Uwp
             // Concrete first so host ports resolve WhatsAppService without an aggregating façade contract.
             // Decrypted inbound queue owns enqueue + drain; the client only forwards health/reset.
             services.AddSingleton(sp => new IncomingMessagePump(
-                () => sp.GetRequiredService<IMessageService>(),
+                () => sp.GetRequiredService<IMessageWireIngress>(),
                 RuntimeDiagnosticsService.Instance));
             services.AddSingleton<IIncomingMessageEnqueueHost>(
                 sp => sp.GetRequiredService<IncomingMessagePump>());
@@ -526,10 +526,10 @@ namespace Unison.Uwp
                 sp.GetRequiredService<IAppMemoryInfo>(),
                 sp.GetRequiredService<ILocalSettings>(),
                 () => sp.GetRequiredService<IContactService>(),
-                () => sp.GetRequiredService<IMessageService>(),
+                () => sp.GetRequiredService<IMessageWireIngress>(),
                 () => sp.GetRequiredService<IChatService>(),
                 () => sp.GetRequiredService<IGroupService>(),
-                () => sp.GetRequiredService<IHistoryService>(),
+                () => sp.GetRequiredService<IHistoryWireIngress>(),
                 () => sp.GetRequiredService<IDeferredAvatarResolution>(),
                 sp.GetRequiredService<IncomingMessagePump>(),
                 sp.GetRequiredService<LiveMessagePersist>()));
@@ -582,7 +582,7 @@ namespace Unison.Uwp
             services.AddSingleton(sp => new HistoryFacade(
                 sp.GetRequiredService<AppSessionProvider>(),
                 () => sp.GetRequiredService<IConnectionService>(),
-                () => sp.GetRequiredService<IMessageService>(),
+                () => sp.GetRequiredService<IMessageWireIngress>(),
                 sp.GetRequiredService<IConversationResyncHost>(),
                 sp.GetRequiredService<IHistorySyncHost>(),
                 sp.GetRequiredService<IHistoryCatchUpHost>(),
@@ -613,6 +613,7 @@ namespace Unison.Uwp
                 sp.GetRequiredService<ILidMappingDiskPersistGate>(),
                 () => sp.GetService<IChatService>()));
             services.AddSingleton<IHistoryService>(sp => sp.GetRequiredService<HistoryFacade>());
+            services.AddSingleton<IHistoryWireIngress>(sp => sp.GetRequiredService<HistoryFacade>());
 
             services.AddSingleton<IStatusWireActions>(sp => new BridgeStatusWireActions(
                 sp.GetRequiredService<UwpSessionProvider>()));
@@ -625,6 +626,7 @@ namespace Unison.Uwp
                 sp.GetRequiredService<IStatusWireActions>(),
                 sp.GetRequiredService<IJidResolver>()));
             services.AddSingleton<IStatusService>(sp => sp.GetRequiredService<StatusFacade>());
+            services.AddSingleton<IStatusWireIngress>(sp => sp.GetRequiredService<StatusFacade>());
 
             services.AddSingleton<IMediaDownloadHost>(sp => new QuietMediaMessagePersist(
                 sp.GetRequiredService<IOutgoingMessageHost>()));
@@ -707,11 +709,13 @@ namespace Unison.Uwp
             services.AddSingleton(sp => sp.GetRequiredService<WhatsAppService>().OfflineReplayFlush);
             services.AddSingleton<IPendingMessageFlushHost>(
                 sp => sp.GetRequiredService<OfflineReplayFlush>());
-            services.AddSingleton<IMessageService>(sp => new MessageFacade(
+            services.AddSingleton<IMessageService>(sp => sp.GetRequiredService<MessageFacade>());
+            services.AddSingleton<IMessageWireIngress>(sp => sp.GetRequiredService<MessageFacade>());
+            services.AddSingleton(sp => new MessageFacade(
                 sp.GetRequiredService<IPersonStore>(),
                 sp.GetRequiredService<IChatMessagePayloadMapper>(),
                 sp.GetRequiredService<IReactionPayloadMapper>(),
-                sp.GetRequiredService<IHistoryService>(),
+                sp.GetRequiredService<IHistoryWireIngress>(),
                 sp.GetRequiredService<IHistoryMessageStore>(),
                 sp.GetRequiredService<IJidResolver>(),
                 sp.GetRequiredService<INotificationService>(),
@@ -735,7 +739,7 @@ namespace Unison.Uwp
                 sp.GetRequiredService<HistoryOnDemandRegistry>(),
                 () => sp.GetRequiredService<IChatService>(),
                 () => sp.GetRequiredService<IContactService>(),
-                () => sp.GetRequiredService<IStatusService>(),
+                () => sp.GetRequiredService<IStatusWireIngress>(),
                 () => sp.GetRequiredService<IGroupService>(),
                 () => sp.GetRequiredService<IConnectionService>(),
                 sp.GetRequiredService<IOfflineReplayHost>(),
@@ -854,7 +858,7 @@ namespace Unison.Uwp
                 sp => sp.GetRequiredService<WhatsAppService>());
             // After IMessageService: ChatFacade forgets repairs when a row is deleted/collapsed.
             services.AddSingleton<IMissingMessageChatHost>(
-                sp => (IMissingMessageChatHost)sp.GetRequiredService<IMessageService>());
+                sp => sp.GetRequiredService<MessageFacade>());
             services.AddSingleton<IChatAccountActions>(sp => new BridgeChatAccountActions(
                 sp.GetRequiredService<UwpSessionProvider>()));
             services.AddSingleton<SessionTipAuthorCache>();

@@ -29,12 +29,12 @@ namespace Unison.WhatsAppClient.Messages
     /// Owns the missing-message ledger and placeholder-resend dispatch; the host only exposes
     /// <see cref="IPlaceholderResendSocket"/>.
     /// </summary>
-    public sealed class MessageFacade : IMessageService, IMissingMessageChatHost
+    public sealed class MessageFacade : IMessageWireIngress, IMissingMessageChatHost
     {
         private readonly IPersonStore _personStore;
         private readonly IChatMessagePayloadMapper _chatMessageMapper;
         private readonly IReactionPayloadMapper _reactionMapper;
-        private readonly IHistoryService _history;
+        private readonly IHistoryWireIngress _history;
         private readonly ISyncLoadMode _loadMode;
         private readonly IHistoryMessageStore _historyMessageStore;
         private readonly HeldStatusPersist _heldStatusPersist;
@@ -71,7 +71,7 @@ namespace Unison.WhatsAppClient.Messages
         private readonly HistoryOnDemandRegistry _historyOnDemand;
         private readonly Func<IChatService> _resolveChats;
         private readonly Func<IContactService> _resolveContacts;
-        private readonly Func<IStatusService> _resolveStatus;
+        private readonly Func<IStatusWireIngress> _resolveStatus;
         private readonly Func<IGroupService> _resolveGroups;
         private readonly Func<IConnectionService> _resolveConnection;
         private readonly IGroupNaming _groupNaming;
@@ -100,7 +100,7 @@ namespace Unison.WhatsAppClient.Messages
             IPersonStore personStore,
             IChatMessagePayloadMapper chatMessageMapper,
             IReactionPayloadMapper reactionMapper,
-            IHistoryService history,
+            IHistoryWireIngress history,
             IHistoryMessageStore historyMessageStore,
             IJidResolver jids,
             INotificationService notifications,
@@ -124,7 +124,7 @@ namespace Unison.WhatsAppClient.Messages
             HistoryOnDemandRegistry historyOnDemand,
             Func<IChatService> resolveChats,
             Func<IContactService> resolveContacts,
-            Func<IStatusService> resolveStatus,
+            Func<IStatusWireIngress> resolveStatus,
             Func<IGroupService> resolveGroups,
             Func<IConnectionService> resolveConnection,
             IOfflineReplayHost offlineReplay,
@@ -3264,7 +3264,7 @@ namespace Unison.WhatsAppClient.Messages
                 IncomingEnvelopeDisposition.ClassifyAddress(request.FromJid) == IncomingEnvelopeKind.StatusBroadcast)
             {
                 trace?.Mark("status");
-                IStatusService status = _resolveStatus();
+                IStatusWireIngress status = _resolveStatus();
                 if (status != null)
                 {
                     await status.IngestLiveFromDecryptedAsync(new IncomingLiveStatusRequest

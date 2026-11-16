@@ -1,4 +1,5 @@
 using System.Threading.Tasks;
+using Unison.Core.State;
 
 namespace Unison.Core.Contracts.WhatsApp
 {
@@ -10,7 +11,10 @@ namespace Unison.Core.Contracts.WhatsApp
 
         string GenerateMessageId();
 
-        /// <summary>Sends the resend request under <paramref name="stanzaId"/> and returns the id it went out with.</summary>
-        Task<string> RequestPlaceholderResendAsync(Proto.MessageKey key, string stanzaId);
+        /// <summary>
+        /// Sends the resend request for <paramref name="target"/> (chat, id, fromMe, participant)
+        /// under <paramref name="stanzaId"/> and returns the id it went out with.
+        /// </summary>
+        Task<string> RequestPlaceholderResendAsync(MissingMessageCandidate target, string stanzaId);
     }
 }

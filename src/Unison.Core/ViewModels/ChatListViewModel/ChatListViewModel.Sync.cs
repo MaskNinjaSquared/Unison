@@ -375,7 +375,7 @@ namespace Unison.Core.ViewModels
             return _strings == null ? fallback : _strings.Get(key, fallback);
         }
 
-        private async void History_SyncReceived(object sender, global::Proto.HistorySync sync)
+        private async void History_SyncReceived(object sender, HistorySyncNotice sync)
         {
             await _dispatcher.RunAsync(() =>
             {
@@ -419,12 +419,12 @@ namespace Unison.Core.ViewModels
                 // OnDemand is tip/timeline for chats already on screen — RefreshVisibleChats
                 // recycled ~250 list containers under an open detail (Mobile freeze).
                 bool onDemand = sync != null &&
-                    HistoryListUiRefresh.IsOnDemandSyncType(sync.SyncType.ToString());
+                    HistoryListUiRefresh.IsOnDemandSyncType(sync.SyncType);
                 if (!HistoryListUiRefresh.ShouldRefreshVisibleChatsOnHistorySync(onDemand))
                 {
                     TraceListLifecycle(
                         "history-sync-ondemand-skip-refresh",
-                        BuildListSnapshot("type=" + (sync?.SyncType.ToString() ?? "null")));
+                        BuildListSnapshot("type=" + (sync?.SyncType ?? "null")));
                     return;
                 }
 

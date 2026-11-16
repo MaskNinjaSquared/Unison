@@ -56,12 +56,6 @@ namespace Unison.Core.Contracts.WhatsApp
         string DescribeStatusItem(HistoryStatus item, int index = -1);
 
         /// <summary>
-        /// Live status@broadcast: build a <see cref="HistoryStatus"/> from the envelope and
-        /// ingest (thumb + store).
-        /// </summary>
-        Task IngestLiveFromDecryptedAsync(IncomingLiveStatusRequest request);
-
-        /// <summary>
         /// Publishes a text Status to <see cref="StatusTextPost.RecipientJids"/> plus the
         /// account's own devices. Throws when not connected or when there is nobody to send to.
         /// On success, persists the item locally (status@broadcast does not echo own posts on

@@ -1,13 +1,14 @@
 using System;
 using Proto;
+using Unison.Core.Models;
 
-namespace Unison.Core.Models
+namespace Unison.WhatsAppClient.Messages
 {
     /// <summary>
-    /// Raw decrypted envelope fields from the ingest pump. Quiet-for-sync / window / active-chat
-    /// context is filled by <see cref="Contracts.WhatsApp.IMessageService.NotifyIncomingDecryptedAsync"/>.
+    /// Inbound envelope after session-only / placeholder handling: status, offline fast-path,
+    /// DM routing, revoke/pin/reaction, then chat content.
     /// </summary>
-    public sealed class IncomingDecryptedNotifyRequest
+    public sealed class IncomingRoutedEnvelopeRequest
     {
         public Message Message { get; set; }
         public string MessageId { get; set; }
@@ -24,8 +25,9 @@ namespace Unison.Core.Models
         public bool IsOffline { get; set; }
         public bool IsFromMe { get; set; }
         public string SelfDisplayName { get; set; }
-
-        /// <summary>Replaced by the pump on every handle attempt (diagnostics only).</summary>
+        public bool QuietForSync { get; set; }
+        public bool IsWindowVisible { get; set; }
+        public Func<string, bool> IsActiveChat { get; set; }
         public IncomingRouteTrace RouteTrace { get; set; }
     }
 }

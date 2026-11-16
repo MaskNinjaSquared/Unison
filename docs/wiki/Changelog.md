@@ -2,6 +2,11 @@
 
 Newest first.
 
+## Slice B — Core no longer references Unison.Proto
+
+Proto-shaped members left the Core contracts: wire ingress moved to `IMessageWireIngress` / `IHistoryWireIngress` / `IStatusWireIngress` in `Unison.WhatsAppClient.Abstractions` (each extends its Core contract), internal pipeline steps left `IMessageService`, `HistorySyncReceived` raises the domain `HistorySyncNotice`, host ports / `Incoming*Request` / `SentMessageRetryRebuild` moved to WhatsAppClient, and `IPlaceholderResendSocket` takes `MissingMessageCandidate`. `Unison.Core.csproj` has no project reference left.
+See [Netstandard WhatsApp client](Netstandard-WhatsApp-Client).
+
 ## Slice A — proto→domain mappers live in WhatsAppClient
 
 `ProtoMessageUnwrap`, `ChatMessageMapper` (incl. `TryMapReaction`) and `ReactionPayloadMapper` moved to `Unison.WhatsAppClient`. Core `IChatMessageMapper` / `IReactionMapper` are domain-only (`MapIndividual`, Apply). `Unison.Proto` reference on Core stays until the incoming/history fatia B.

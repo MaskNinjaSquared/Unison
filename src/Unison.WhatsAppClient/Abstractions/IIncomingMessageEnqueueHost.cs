@@ -1,7 +1,7 @@
 using System;
 using Proto;
 
-namespace Unison.Core.Contracts.WhatsApp
+namespace Unison.WhatsAppClient.Abstractions
 {
     /// <summary>
     /// Lets the message façade re-enter the client's decrypted ingest queue without

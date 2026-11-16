@@ -1,7 +1,8 @@
 using System;
 using Proto;
+using Unison.Core.Models;
 
-namespace Unison.Core.Models
+namespace Unison.WhatsAppClient.Messages
 {
     /// <summary>
     /// Live status@broadcast envelope fields needed to build and ingest a

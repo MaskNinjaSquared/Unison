@@ -34,9 +34,9 @@ namespace Unison.Core.Tests.State
             await NewDispatch().TryDispatch(candidate, Chat, "m1", "test");
 
             Assert.Equal(1, _socket.Sends);
-            Assert.Equal("m1", _socket.LastKey.Id);
-            Assert.Equal(Chat, _socket.LastKey.RemoteJid);
-            Assert.Equal("p@s.whatsapp.net", _socket.LastKey.Participant);
+            Assert.Equal("m1", _socket.LastTarget.MessageId);
+            Assert.Equal(Chat, _socket.LastTarget.ChatJid);
+            Assert.Equal("p@s.whatsapp.net", _socket.LastTarget.Participant);
             Assert.True(candidate.PlaceholderRequestInFlight);
             Assert.Equal(1, candidate.PlaceholderRequestCount);
             Assert.Equal("stanza-1", candidate.LastPlaceholderRequestId);
@@ -134,13 +134,13 @@ namespace Unison.Core.Tests.State
 
             public bool Fail { get; set; }
             public int Sends { get; private set; }
-            public Proto.MessageKey LastKey { get; private set; }
+            public MissingMessageCandidate LastTarget { get; private set; }
 
             public bool IsHandshakeComplete => true;
 
             public string GenerateMessageId() => "stanza-" + Interlocked.Increment(ref _ids);
 
-            public Task<string> RequestPlaceholderResendAsync(Proto.MessageKey key, string stanzaId)
+            public Task<string> RequestPlaceholderResendAsync(MissingMessageCandidate target, string stanzaId)
             {
                 if (Fail)
                 {
@@ -148,7 +148,7 @@ namespace Unison.Core.Tests.State
                 }
 
                 Sends++;
-                LastKey = key;
+                LastTarget = target;
                 return Task.FromResult(stanzaId);
             }
         }

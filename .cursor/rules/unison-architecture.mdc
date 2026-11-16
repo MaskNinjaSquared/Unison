@@ -10,7 +10,7 @@ Read `docs/wiki/Home.md` + `docs/wiki/Architecture.md` before editing. Coding sp
 - Protocol/session: `Unison.Socket` (`WhatsAppSession` / `ConnectionHandler`). UI talks to **façades**, not raw client events.
 - `WhatsAppService` is a compatibility client. Do not grow it for UI; add members on the façade that owns the subject.
 - Live connection: `SocketBridge` → `WhatsAppSession`. `SocketClient.cs` is not in the csproj — do not revive it.
-- `Unison.Core`: no XAML/WinRT. `Unison.Background`: no Core/Socket.
+- `Unison.Core`: no XAML/WinRT, no protocol project (not even `Unison.Proto`). `Unison.Background`: no Core/Socket.
 - `ConnectionHandler` never calls use cases and never holds chats. Reconnect stays in the host.
 - Broker transfer on `SocketBridge` goes through `ConnectionHandler` and answers true only when ownership moved. No cold restore. Never fake a handoff.
 - Product (tier / frugal / memory): WhatsAppClient takes **neutral knobs** only (`ISyncLoadMode`, `IHistorySyncTuning`, …). Decisions live in `Unison.Core.Product` (`SyncProductPolicy`, coordinators). Do not add new `SyncWorkloadStrategy` / `DeviceCategory` / `SyncBudget` reads under WhatsAppClient. Do not name product coordinators `UseCase` (Socket owns that word). Incoming pump and reconnect/health timers stay on the host until explicitly asked.

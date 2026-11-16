@@ -3,7 +3,8 @@ using System.Threading.Tasks;
 using Unison.Core.Models;
 using Unison.WhatsAppClient.Abstractions;
 using Unison.WhatsAppClient.Helpers;
-using Xunit;
+using Xunit;
+using Unison.WhatsAppClient.Messages;
 
 namespace Unison.Core.Tests.Helpers
 {

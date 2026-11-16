@@ -66,7 +66,7 @@ SocketBridge
 
 ## Unison.Baileys
 
-Shared library. Its only project reference is `Unison.Proto` (generated `WAProto.cs`, `Google.Protobuf` only), which Core also references without taking Baileys.
+Shared library. Its only project reference is `Unison.Proto` (generated `WAProto.cs`, `Google.Protobuf` only). Core references neither.
 
 | Folder | Responsibility |
 |---|---|

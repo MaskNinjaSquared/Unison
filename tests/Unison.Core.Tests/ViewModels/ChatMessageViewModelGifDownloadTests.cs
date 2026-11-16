@@ -6,7 +6,8 @@ using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Helpers;
 using Unison.Core.Models;
 using Unison.Core.ViewModels;
-using Unison.WhatsAppClient.Helpers;
+using Unison.WhatsAppClient.Helpers;
+using Unison.WhatsAppClient.Messages;
 
 namespace Unison.Core.Tests.ViewModels
 {
@@ -150,7 +151,6 @@ namespace Unison.Core.Tests.ViewModels
             }
 
             public Task SubscribeToPresenceAsync(string jid) => throw new NotImplementedException();
-            public Task SyncMessageHistoryAsync(HistorySync sync) => throw new NotImplementedException();
             public Task<List<ChatMessage>> LoadMessagesForChatAsync(string jid) => throw new NotImplementedException();
             public Task<List<ChatMessage>> LoadRecentMessagesForSyncAsync(string jid) => throw new NotImplementedException();
             public Task<List<ChatMessage>> LoadMoreMessagesAsync(string jid, DateTime? beforeUtc = null, string beforeMessageId = null) => throw new NotImplementedException();
@@ -221,38 +221,14 @@ namespace Unison.Core.Tests.ViewModels
             public Task<string> EnsureAudioAvailableAsync(ChatMessage message) => throw new NotImplementedException();
             public Task<string> EnsureImageAvailableAsync(ChatMessage message) => throw new NotImplementedException();
             public Task<string> EnsureDocumentAvailableAsync(ChatMessage message) => throw new NotImplementedException();
-            public Task HydrateIncomingImageAsync(ChatMessage message, Message.Types.ImageMessage image, string messageId, string chatJid) => throw new NotImplementedException();
-            public Task HydrateIncomingStickerAsync(ChatMessage message, Message.Types.StickerMessage sticker, string messageId, string chatJid) => throw new NotImplementedException();
             public Task SetMessagePinnedAsync(string chatJid, ChatMessage message, bool pin, uint durationSeconds = 604800) => throw new NotImplementedException();
-            public bool TryHandleReaction(Message message, ChatMessageMapContext context, IList<ChatMessage> chatMessages, out ChatMessage updatedParent)
-            {
-                updatedParent = null;
-                return false;
-            }
-
-            public bool TryBufferReaction(Message message, ChatMessageMapContext context, out PendingReaction pending)
-            {
-                pending = default;
-                return false;
-            }
-
             public ChatMessage GetChatMessage(ChatMessageMapContext context, ChatMessageContentSnapshot content) => throw new NotImplementedException();
-            public void AttachHistoryReactions(ChatMessage parent, IEnumerable<Reaction> reactions, ChatMessageMapContext parentContext) { }
             public IList<ChatMessage> ApplyBufferedReactions(IList<ChatMessage> chatMessages, IEnumerable<PendingReaction> pending) => chatMessages;
             public Task ResyncConversationsAsync(IProgress<ConversationResyncPhase> progress = null) => throw new NotImplementedException();
             public void NotifyLiveIncoming(string chatJid, string chatName, string senderName, string preview, bool isGroup, bool isFromMe, bool suppressToast, int totalUnread, ChatItem chat) { }
 
             public void NotifyChatMessagesChanged(string chatJid) { }
             public void NotifyPresenceUpdated(PresenceUpdateEventArgs e) { }
-            public void ScheduleIncomingMediaHydration(
-                ChatMessage message,
-                Message.Types.StickerMessage sticker,
-                Message.Types.ImageMessage image,
-                string messageId,
-                string chatJid)
-            {
-            }
-
             public Task ApplyIncomingRevocationAsync(string chatJid, string targetMessageId, string envelopeMessageId = null) =>
                 Task.CompletedTask;
             public Task ApplyIncomingPinInChatAsync(
@@ -289,8 +265,6 @@ namespace Unison.Core.Tests.ViewModels
                 string participantJid,
                 string verifiedName,
                 string pushName) => false;
-            public Task<bool> ApplyIncomingReactionAsync(Message message, ChatMessageMapContext context) =>
-                Task.FromResult(false);
             public Task FinalizeAliasConsolidateAsync(
                 string canonicalChatJid,
                 string aliasSourceChatJid,
@@ -308,8 +282,6 @@ namespace Unison.Core.Tests.ViewModels
                 Task.CompletedTask;
             public Task ApplyIncomingAliasConsolidatedAsync(IncomingAliasConsolidatedApplyRequest request) =>
                 Task.CompletedTask;
-            public Task ApplyIncomingInsertedAsync(IncomingInsertedApplyRequest request) =>
-                Task.CompletedTask;
             public bool TryHandleOfflineDuplicateFast(
                 string chatJid,
                 string messageId,
@@ -318,28 +290,6 @@ namespace Unison.Core.Tests.ViewModels
                 string participantJid,
                 string verifiedName,
                 string pushName) => false;
-            public Task<bool> ApplyIncomingReactionFromEnvelopeAsync(
-                Message message,
-                string chatJid,
-                string messageId,
-                bool isGroup,
-                bool isFromMe,
-                string participantJid,
-                string selfDisplayName,
-                DateTime timestampUtc) => Task.FromResult(false);
-            public Task ProcessIncomingChatContentAsync(IncomingChatContentProcessRequest request) =>
-                Task.CompletedTask;
-            public Task<bool> TryApplyIncomingEnvelopeControlAsync(
-                Message message,
-                string chatJid,
-                string messageId,
-                bool isGroup,
-                bool isFromMe,
-                string participantJid,
-                string selfDisplayName,
-                DateTime timestampUtc) => Task.FromResult(false);
-            public Task RouteIncomingChatEnvelopeAsync(IncomingRoutedEnvelopeRequest request) =>
-                Task.CompletedTask;
             public Task HandleIncomingPlaceholderAsync(
                 string chatJid,
                 string participantJid,
@@ -370,14 +320,6 @@ namespace Unison.Core.Tests.ViewModels
                 int offlineCount,
                 bool firstRelease,
                 bool transportReady) => Task.CompletedTask;
-            public Task NotifyIncomingDecryptedAsync(IncomingDecryptedNotifyRequest request) =>
-                Task.CompletedTask;
-            public Task ApplyPeerDataPlaceholderResendsAsync(
-                string stanzaId,
-                IEnumerable<Message.Types.PeerDataOperationRequestResponseMessage.Types.PeerDataOperationResult> results) =>
-                Task.CompletedTask;
-            public Task HandlePeerDataOperationResponseAsync(
-                Message.Types.PeerDataOperationRequestResponseMessage response) => Task.CompletedTask;
             public Task NotifyGroupJoinsAsync(System.Collections.Generic.IReadOnlyList<GroupJoinNotifyRequest> joins) =>
                 Task.CompletedTask;
             public Task NotifyCallEventsAsync(System.Collections.Generic.IReadOnlyList<CallEventNotifyRequest> events) =>

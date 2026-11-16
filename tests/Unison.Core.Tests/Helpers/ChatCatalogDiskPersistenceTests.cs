@@ -92,7 +92,7 @@ namespace Unison.Core.Tests.Helpers
             public int NotifyCount { get; private set; }
 
             public event EventHandler<string> SyncStatusChanged;
-            public event EventHandler<HistorySync> HistorySyncReceived;
+            public event EventHandler<HistorySyncNotice> HistorySyncReceived;
             public event EventHandler<InitialSyncProgressEventArgs> InitialSyncProgress;
             public event EventHandler<HistoryChatPreviewChunkEventArgs> ChatPreviewChunkPersisted;
             public event EventHandler<HistoryMessageChunkEventArgs> HistoryMessageChunkPersisted;
@@ -111,8 +111,6 @@ namespace Unison.Core.Tests.Helpers
             public Task TrackHistoryChunkCompletedAsync(string syncType, int conversationCount) =>
                 Task.CompletedTask;
             public Task ResetHistorySqliteAsync(string reason = null) => Task.CompletedTask;
-            public Task<HistorySqliteChunkResult> PersistHistorySqliteChunkAsync(HistorySync sync) =>
-                Task.FromResult<HistorySqliteChunkResult>(null);
             public void NotifySqliteHistoryChunkApplied(string syncType, int conversationCount) { }
             public Task ResyncConversationsAsync(IProgress<ConversationResyncPhase> progress = null) =>
                 Task.CompletedTask;
@@ -125,9 +123,7 @@ namespace Unison.Core.Tests.Helpers
             public int PeekSessionOpenOnDemandPendingCount() => 0;
             public IReadOnlyList<string> TakeSessionOpenOnDemandPending() => Array.Empty<string>();
             public void HandleOnDemandAck(string ackClass, string ackId, string ackError) { }
-            public Task ApplyHistorySyncAsync(HistorySync sync) => Task.CompletedTask;
-
-            public void NotifyHistorySyncReceived(HistorySync sync) => NotifyCount++;
+            public void NotifyHistorySyncReceived(HistorySyncNotice notice) => NotifyCount++;
 
             public void NotifySessionCleared() { }
             public void NotifyBackgroundHistorySyncBounced() { }

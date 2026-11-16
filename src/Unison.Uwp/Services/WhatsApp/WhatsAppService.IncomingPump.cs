@@ -6,7 +6,8 @@ using Unison.Core.Models;
 using Unison.Core.State;
 using Unison.WhatsAppClient.Abstractions;
 using Unison.WhatsAppClient.Helpers;
-using Proto;
+using Proto;
+using Unison.WhatsAppClient.Messages;
 
 namespace Unison.Uwp.Services.WhatsApp
 {
@@ -22,8 +23,18 @@ namespace Unison.Uwp.Services.WhatsApp
 
         string IPlaceholderResendSocket.GenerateMessageId() => _socket.GenerateMessageId();
 
-        Task<string> IPlaceholderResendSocket.RequestPlaceholderResendAsync(Proto.MessageKey key, string stanzaId) =>
-            _socket.RequestPlaceholderResendAsync(key, stanzaId);
+        Task<string> IPlaceholderResendSocket.RequestPlaceholderResendAsync(
+            MissingMessageCandidate target,
+            string stanzaId) =>
+            _socket.RequestPlaceholderResendAsync(
+                new Proto.MessageKey
+                {
+                    RemoteJid = target.ChatJid,
+                    Id = target.MessageId,
+                    FromMe = target.IsFromMe,
+                    Participant = target.Participant ?? string.Empty
+                },
+                stanzaId);
 
         async Task IBoundMutationGate.RunAsync(Action action)
         {

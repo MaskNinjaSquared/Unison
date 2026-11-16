@@ -7,7 +7,8 @@ using Unison.Core.Helpers;
 using Unison.Core.Models;
 using Unison.Core.Tests.Helpers;
 using Unison.Core.ViewModels;
-using Xunit;
+using Xunit;
+using Unison.WhatsAppClient.Messages;
 
 namespace Unison.Core.Tests.ViewModels
 {
@@ -218,7 +219,6 @@ namespace Unison.Core.Tests.ViewModels
 
             public string DescribeStatusItem(HistoryStatus item, int index = -1) => string.Empty;
 
-            public Task IngestLiveFromDecryptedAsync(IncomingLiveStatusRequest request) => Task.CompletedTask;
 
             public Task<string> PublishTextStatusAsync(StatusTextPost post) => Task.FromResult("id");
         }

@@ -2,7 +2,7 @@ using System.Threading.Tasks;
 using Proto;
 using Unison.Core.Models;
 
-namespace Unison.Core.Contracts.WhatsApp
+namespace Unison.WhatsAppClient.Abstractions
 {
     /// <summary>
     /// On-demand download / hydrate of message media the user opened. WinRT file work and

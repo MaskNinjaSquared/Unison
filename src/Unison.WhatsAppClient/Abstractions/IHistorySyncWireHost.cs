@@ -6,7 +6,7 @@
 using System.Threading.Tasks;
 using Proto;
 
-namespace Unison.Core.Contracts.WhatsApp
+namespace Unison.WhatsAppClient.Abstractions
 {
     public interface IHistorySyncWireHost
     {

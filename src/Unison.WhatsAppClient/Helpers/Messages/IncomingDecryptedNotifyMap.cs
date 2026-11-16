@@ -6,7 +6,8 @@
 // =============================================================================
 using System;
 using Proto;
-using Unison.Core.Models;
+using Unison.Core.Models;
+using Unison.WhatsAppClient.Messages;
 
 namespace Unison.WhatsAppClient.Helpers
 {

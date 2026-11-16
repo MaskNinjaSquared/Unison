@@ -1,7 +1,8 @@
 using System;
 using Proto;
+using Unison.Core.Models;
 
-namespace Unison.Core.Models
+namespace Unison.WhatsAppClient.Messages
 {
     /// <summary>
     /// Envelope fields for the post-routing inbound content path: render, push-name,

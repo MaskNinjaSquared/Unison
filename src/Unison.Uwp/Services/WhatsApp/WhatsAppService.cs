@@ -168,18 +168,18 @@ namespace Unison.Uwp.Services.WhatsApp
         /// <summary>The alias table as the Core rules read it. Built after <see cref="JidAlias"/>.</summary>
         private readonly IJidResolver _jids;
 
-        private readonly Func<IMessageService> _resolveMessages;
+        private readonly Func<IMessageWireIngress> _resolveMessages;
         private readonly Func<IChatService> _resolveChats;
         private readonly Func<IContactService> _resolveContacts;
         private readonly Func<IGroupService> _resolveGroups;
-        private readonly Func<IHistoryService> _resolveHistory;
+        private readonly Func<IHistoryWireIngress> _resolveHistory;
         private readonly Func<IDeferredAvatarResolution> _resolveDeferredAvatars;
         private readonly IHistoryOnDemandSocket _historyOnDemandSocket;
         private readonly ChatCatalogDebounceTimer _catalogDebounce = new ChatCatalogDebounceTimer();
         private readonly ChatCatalogDebounceTimer _rowPersistDebounce = new ChatCatalogDebounceTimer();
         private readonly ChatCatalogRowPersistBuffer _rowPersistBuffer = new ChatCatalogRowPersistBuffer();
 
-        private IMessageService Messages => _resolveMessages != null ? _resolveMessages() : null;
+        private IMessageWireIngress Messages => _resolveMessages != null ? _resolveMessages() : null;
 
         private IChatService ChatFacade => _resolveChats != null ? _resolveChats() : null;
 
@@ -191,7 +191,7 @@ namespace Unison.Uwp.Services.WhatsApp
         /// <summary>Named away from the UWP <c>Services.WhatsApp.Groups</c> namespace.</summary>
         internal IGroupService GroupFacade => _resolveGroups != null ? _resolveGroups() : null;
 
-        private IHistoryService History => _resolveHistory != null ? _resolveHistory() : null;
+        private IHistoryWireIngress History => _resolveHistory != null ? _resolveHistory() : null;
 
         /// <summary>App-state sync and other UWP hosts that still hold the concrete client.</summary>
         internal IMessageService MessagesFacade => Messages;
@@ -894,10 +894,10 @@ namespace Unison.Uwp.Services.WhatsApp
             IAppMemoryInfo appMemory = null,
             ILocalSettings localSettings = null,
             Func<IContactService> resolveContacts = null,
-            Func<IMessageService> resolveMessages = null,
+            Func<IMessageWireIngress> resolveMessages = null,
             Func<IChatService> resolveChats = null,
             Func<IGroupService> resolveGroups = null,
-            Func<IHistoryService> resolveHistory = null,
+            Func<IHistoryWireIngress> resolveHistory = null,
             Func<IDeferredAvatarResolution> resolveDeferredAvatars = null,
             IncomingMessagePump incomingPump = null,
             LiveMessagePersist liveMessages = null)
@@ -1935,10 +1935,10 @@ namespace Unison.Uwp.Services.WhatsApp
             IAppMemoryInfo appMemory = null,
             ILocalSettings localSettings = null,
             Func<IContactService> resolveContacts = null,
-            Func<IMessageService> resolveMessages = null,
+            Func<IMessageWireIngress> resolveMessages = null,
             Func<IChatService> resolveChats = null,
             Func<IGroupService> resolveGroups = null,
-            Func<IHistoryService> resolveHistory = null,
+            Func<IHistoryWireIngress> resolveHistory = null,
             Func<IDeferredAvatarResolution> resolveDeferredAvatars = null,
             IncomingMessagePump incomingPump = null,
             LiveMessagePersist liveMessages = null)

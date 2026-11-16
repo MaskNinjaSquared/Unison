@@ -6,7 +6,7 @@
 using System;
 using Proto;
 
-namespace Unison.Core.Contracts.WhatsApp
+namespace Unison.WhatsAppClient.Abstractions
 {
     public interface IDecryptedMessageWireHost
     {

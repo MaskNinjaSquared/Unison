@@ -157,8 +157,8 @@ flowchart TB
    **values** come from the product layer.
 4. Hot-path pacing (inter-chunk delays inside a running pass) is passed as an options snapshot
    when the pass starts — no per-chunk call up into Core.
-5. Core does not reference `Unison.Baileys` (done in P4). It references only `Unison.Proto`,
-   the generated message schema. Do not add a Baileys reference back.
+5. Core references no protocol project (Baileys gone in P4, `Unison.Proto` in slice B). Do not
+   add either back: proto-shaped contracts go in `Unison.WhatsAppClient`.
 
 **Current leakage (Nov 2026 inventory)** — 27 files in `src/Unison.WhatsAppClient` read tier /
 frugal / memory. Classify each as **knob** (becomes an option/parameter), **decision** (moves up
@@ -185,7 +185,7 @@ receiving it; the product layer maps it to client options.
 | P1 | Neutral options types on the client surface (`HistorySyncOptions`, `EnrichmentPacingOptions`, …) — numbers and flags only, no tier names | Types compile with no `DeviceCategory` |
 | P2 | Swap `SyncWorkloadStrategy` injection in WhatsAppClient for those options, one façade at a time (History chain first: it was just extracted) | `rg SyncWorkloadStrategy src/Unison.WhatsAppClient` shrinks per step |
 | P3 | Core product services (e.g. `ISyncProductPolicy` / `StartupProductPolicy`) own the decisions: frugal gate, startup quiet, post-replay maintenance, avatar/roster policy by tier. They read tier / frugal / memory and call façade contracts | Gates gone from `Helpers/Connection`; decisions unit-tested in `Unison.Core.Tests` without a client |
-| P4 | **Done.** Core contracts stop exposing Baileys types; generated `Proto` split into `Unison.Proto` (see inventory below) | `Unison.Core.csproj` references `Unison.Proto` only |
+| P4 | **Done.** Core contracts stop exposing Baileys types; generated `Proto` split into `Unison.Proto` (see inventory below) | `Unison.Core.csproj` has no protocol reference (slice B) |
 | Exit | `rg "SyncWorkloadStrategy\|DeviceCategory\|SyncBudget\|UseFrugalSyncBudget\|IsMobile" src/Unison.WhatsAppClient src/Unison.Socket src/Unison.Baileys` returns 0. Neutral `Func<bool> preferFrugal` / `ISyncLoadMode` knobs (slice, pause) and `IAppMemoryInfo` read only for diagnostics are allowed | — |
 
 **Progress (Nov 2026).** P1–P3 done for the client:
@@ -229,6 +229,15 @@ on-device.
 **Status.** Steps 1–4 below are done: no Core contract names `BinaryNode` or `AuthState`. `ReceiptFacts` lives in `Unison.Core.Models`; `SocketFacadeWireOwner` runs `ReceiptReader` before the host sees the receipt. Link-code turned out to be dead on the live path (`SocketBridge` never raises `OnLinkCodeCompanionReg`; `PairingFlow` in `Unison.Socket` handles it, and `PairingHandler` is not in the csproj), so the relay was **deleted** instead of getting a DTO. `ConnectionSocketSessionRequest.AuthState` is `object`; the UWP factory casts and throws on a wrong type.
 
 **Step 5 — `Proto` split.** The inventory only searched `Unison.Baileys`; Core also uses the generated `Proto` namespace in 20 files (mappers, `IMessageService`, `IHistoryService`, the incoming `*Request` models, `ProtoMessageUnwrap`, `SentMessageRetryRebuild`, a chat-list ViewModel partial). Replacing those with Core DTOs would move the whole message mapping out of Core. Instead `WAProto.cs` moved, unchanged, to a new `src/Unison.Proto` project (netstandard2.0, `Google.Protobuf` only). Baileys, Core, UWP and Background reference it; `Unison.Core.csproj` no longer references Baileys. The old-style UWP and Background csproj files need the explicit `Unison.Proto` reference so the DLL lands in the package.
+
+**Slice A — mappers.** `ProtoMessageUnwrap`, `ChatMessageMapper` and `ReactionPayloadMapper` moved to WhatsAppClient behind `IChatMessagePayloadMapper` / `IReactionPayloadMapper`, which extend the domain-only Core `IChatMessageMapper` / `IReactionMapper`.
+
+**Slice B — Core drops `Unison.Proto`.** No Core consumer needed the proto-shaped members, so they left the Core contracts instead of getting mirror DTOs:
+
+- Wire ingress contracts in `Unison.WhatsAppClient.Abstractions` extend the Core ones: `IMessageWireIngress : IMessageService` (`SyncMessageHistoryAsync`, `NotifyIncomingDecryptedAsync`), `IHistoryWireIngress : IHistoryService` (`PersistHistorySqliteChunkAsync`, `ApplyHistorySyncAsync`), `IStatusWireIngress : IStatusService` (`IngestLiveFromDecryptedAsync`). The façades implement them; `App.ConfigureServices` registers each façade once and forwards both interfaces. Internal pipeline steps (reaction buffering, envelope routing, media hydration, peer-data resends) left `IMessageService` and stay on `MessageFacade`.
+- `IHistoryService.HistorySyncReceived` raises the domain `HistorySyncNotice` (`SyncType` string only) — the chat list only read the type.
+- Host ports and incoming request models (`IDecryptedMessageWireHost`, `IHistorySyncWireHost`, `IIncomingMessageEnqueueHost`, `IMediaAvailability`, `Incoming*Request`) and `SentMessageRetryRebuild` moved to WhatsAppClient.
+- `IPlaceholderResendSocket` takes the domain `MissingMessageCandidate`; the host builds the `Proto.MessageKey`.
 
 `Unison.Core.csproj` still references `Unison.Baileys`. Every `using Unison.Baileys` /
 `BinaryNode` / `AuthState` under `src/Unison.Core` is in the four contracts below. Nothing else

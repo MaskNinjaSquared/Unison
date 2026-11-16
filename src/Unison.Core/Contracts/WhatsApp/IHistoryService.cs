@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
-using Proto;
 using Unison.Core.Models;
 
 namespace Unison.Core.Contracts.WhatsApp
@@ -67,7 +66,7 @@ namespace Unison.Core.Contracts.WhatsApp
         /// A chunk of history was applied. Null payload means "something changed, reload" -
         /// which is all any listener does with it anyway.
         /// </summary>
-        event EventHandler<HistorySync> HistorySyncReceived;
+        event EventHandler<HistorySyncNotice> HistorySyncReceived;
 
         /// <summary>How far the first sync after login has got, for the progress ring.</summary>
         event EventHandler<InitialSyncProgressEventArgs> InitialSyncProgress;
@@ -94,14 +93,8 @@ namespace Unison.Core.Contracts.WhatsApp
         Task ResetHistorySqliteAsync(string reason = null);
 
         /// <summary>
-        /// Applies LID↔PN from the chunk, writes previews + messages to SQLite, completes
-        /// resync/progress notify. Returns chat JIDs that got message rows (detail hydrate).
-        /// </summary>
-        Task<HistorySqliteChunkResult> PersistHistorySqliteChunkAsync(HistorySync sync);
-
-        /// <summary>
         /// Completes initial-sync progress / resync wait after SQLite applied a chunk
-        /// (forwards to the compatibility client). Prefer <see cref="PersistHistorySqliteChunkAsync"/>.
+        /// (forwards to the compatibility client).
         /// </summary>
         void NotifySqliteHistoryChunkApplied(string syncType, int conversationCount);
 
@@ -153,17 +146,10 @@ namespace Unison.Core.Contracts.WhatsApp
         void HandleOnDemandAck(string ackClass, string ackId, string ackError);
 
         /// <summary>
-        /// Host path: apply a history chunk (people + SQLite via message façade helpers) then
-        /// raise <see cref="HistorySyncReceived"/>. Null <paramref name="sync"/> is a surface
-        /// reload signal only (no persist).
-        /// </summary>
-        Task ApplyHistorySyncAsync(HistorySync sync);
-
-        /// <summary>
         /// Host path: raise <see cref="HistorySyncReceived"/> only (null = reload surfaces).
-        /// Prefer <see cref="ApplyHistorySyncAsync"/> when a chunk must be persisted.
+        /// Chunk persist goes through the client history ingress, not this contract.
         /// </summary>
-        void NotifyHistorySyncReceived(HistorySync sync);
+        void NotifyHistorySyncReceived(HistorySyncNotice notice);
 
         /// <summary>Host path: local session wiped — reset history SQLite tables.</summary>
         void NotifySessionCleared();

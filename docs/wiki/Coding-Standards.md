@@ -10,7 +10,7 @@ Agents: read this before adding a view, service, façade, or socket use case.
 
 | Project | May reference | Must not |
 |---|---|---|
-| `Unison.Core` | `Unison.Proto` | XAML, WinRT, `Unison.Baileys`, `Unison.Socket`, `Unison.Uwp`, `Unison.WhatsAppClient` |
+| `Unison.Core` | No project references | XAML, WinRT, `Unison.Proto`, `Unison.Baileys`, `Unison.Socket`, `Unison.Uwp`, `Unison.WhatsAppClient` |
 | `Unison.WhatsAppClient` | `Unison.Core`, `Unison.Socket` | XAML, WinRT, `Unison.Uwp` |
 | `Unison.Socket` | `Unison.Baileys` | WinRT, SQLite, Core ViewModels |
 | `Unison.Baileys` | `Unison.Proto` | Other Unison projects |

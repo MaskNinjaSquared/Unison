@@ -14,11 +14,12 @@ using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Helpers;
 using Unison.Core.Models;
 using Unison.WhatsAppClient.Abstractions;
-using Unison.WhatsAppClient.Helpers;
+using Unison.WhatsAppClient.Helpers;
+using Unison.WhatsAppClient.Messages;
 
 namespace Unison.WhatsAppClient.Status
 {
-    public sealed class StatusFacade : IStatusService
+    public sealed class StatusFacade : IStatusWireIngress
     {
         private readonly IHistoryStatusStore _store;
         private readonly IPersonStore _people;

@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
-using Proto;
 using Unison.Core.Helpers;
 using Unison.Core.Models;
 
@@ -42,11 +41,6 @@ namespace Unison.Core.Contracts.WhatsApp
         /// that asked, and only for a while, so an open conversation renews this.
         /// </summary>
         Task SubscribeToPresenceAsync(string jid);
-
-        /// <summary>
-        /// Persists people from the payload (UpsertIfChanged), then applies history sync.
-        /// </summary>
-        Task SyncMessageHistoryAsync(HistorySync sync);
 
         /// <summary>
         /// Loads messages for an open chat: SQLite <c>history_message</c> plus live RAM overlay.
@@ -205,53 +199,8 @@ namespace Unison.Core.Contracts.WhatsApp
         /// <summary>Downloads + decrypts a document on demand, caching the local URI on the message.</summary>
         Task<string> EnsureDocumentAvailableAsync(ChatMessage message);
 
-        /// <summary>Downloads an image that just arrived, beside the incoming pump.</summary>
-        Task HydrateIncomingImageAsync(
-            ChatMessage message,
-            Message.Types.ImageMessage image,
-            string messageId,
-            string chatJid);
-
-        /// <summary>Downloads a sticker that just arrived, beside the incoming pump.</summary>
-        Task HydrateIncomingStickerAsync(
-            ChatMessage message,
-            Message.Types.StickerMessage sticker,
-            string messageId,
-            string chatJid);
-
-        /// <summary>
-        /// Fire-and-forget sticker/image hydrate for a live insert. Failures are logged; the
-        /// pump only builds the plan and calls this.
-        /// </summary>
-        void ScheduleIncomingMediaHydration(
-            ChatMessage message,
-            Message.Types.StickerMessage sticker,
-            Message.Types.ImageMessage image,
-            string messageId,
-            string chatJid);
-
         /// <summary>Pins/unpins a message for the given chat (WhatsApp pin duration, default 7 days).</summary>
         Task SetMessagePinnedAsync(string chatJid, ChatMessage message, bool pin, uint durationSeconds = 604800);
-
-        /// <summary>
-        /// Business: if <paramref name="message"/> is a reaction envelope, maps + applies onto
-        /// <paramref name="chatMessages"/>. Returns true when it was a reaction (no timeline row).
-        /// <paramref name="updatedParent"/> is set when the parent was found and changed.
-        /// </summary>
-        bool TryHandleReaction(
-            Message message,
-            ChatMessageMapContext context,
-            IList<ChatMessage> chatMessages,
-            out ChatMessage updatedParent);
-
-        /// <summary>
-        /// Business: maps a reaction envelope to <see cref="PendingReaction"/> without applying
-        /// (history buffer — apply later via <see cref="ApplyBufferedReactions"/>).
-        /// </summary>
-        bool TryBufferReaction(
-            Message message,
-            ChatMessageMapContext context,
-            out PendingReaction pending);
 
         /// <summary>
         /// Facade: builds a domain <see cref="ChatMessage"/> from transport facts
@@ -259,12 +208,6 @@ namespace Unison.Core.Contracts.WhatsApp
         /// over time more message APIs should land here.
         /// </summary>
         ChatMessage GetChatMessage(ChatMessageMapContext context, ChatMessageContentSnapshot content);
-
-        /// <summary>Business: attach <see cref="WebMessageInfo"/> inline reactions onto a parent message.</summary>
-        void AttachHistoryReactions(
-            ChatMessage parent,
-            IEnumerable<Reaction> reactions,
-            ChatMessageMapContext parentContext);
 
         /// <summary>
         /// Business: apply buffered reaction envelopes after a history batch.
@@ -278,7 +221,6 @@ namespace Unison.Core.Contracts.WhatsApp
         /// (FULL_HISTORY / reconnect). Prefer this over calling WhatsAppService from VMs.
         /// </summary>
         Task ResyncConversationsAsync(System.IProgress<ConversationResyncPhase> progress = null);
-
 
         /// <summary>
         /// Live inbound announce: toast / badge / tile. From-me is a no-op. Mute is read from
@@ -382,15 +324,6 @@ namespace Unison.Core.Contracts.WhatsApp
             string pushName);
 
         /// <summary>
-        /// Inbound reaction: map onto the parent bubble (UI-thread safe), persist the parent
-        /// when found, and notify the open chat. Returns false when the envelope is not a
-        /// reaction this façade handles.
-        /// </summary>
-        Task<bool> ApplyIncomingReactionAsync(
-            Message message,
-            ChatMessageMapContext context);
-
-        /// <summary>
         /// After <see cref="AcceptIncomingTimeline"/> returns
         /// <see cref="IncomingTimelineAcceptKind.AliasConsolidated"/>: drop the source-store
         /// row, persist the survivor, and dedupe the chat list.
@@ -449,12 +382,6 @@ namespace Unison.Core.Contracts.WhatsApp
         Task ApplyIncomingAliasConsolidatedAsync(IncomingAliasConsolidatedApplyRequest request);
 
         /// <summary>
-        /// After <see cref="AcceptIncomingTimeline"/> inserts: offline tip + persist, or live
-        /// list apply + notify + persist, plus media hydrate.
-        /// </summary>
-        Task ApplyIncomingInsertedAsync(IncomingInsertedApplyRequest request);
-
-        /// <summary>
         /// Offline fast-path: when the id is already in RAM, enrich blank fields, clear
         /// missing-message, and skip the full inbound pipeline. Returns true when handled.
         /// </summary>
@@ -466,46 +393,6 @@ namespace Unison.Core.Contracts.WhatsApp
             string participantJid,
             string verifiedName,
             string pushName);
-
-        /// <summary>
-        /// Reaction envelope: builds sender naming when needed and applies. Returns true when
-        /// the envelope was a reaction this façade handled.
-        /// </summary>
-        Task<bool> ApplyIncomingReactionFromEnvelopeAsync(
-            Message message,
-            string chatJid,
-            string messageId,
-            bool isGroup,
-            bool isFromMe,
-            string participantJid,
-            string selfDisplayName,
-            DateTime timestampUtc);
-
-        /// <summary>
-        /// After routing: render → push-name → sender/attention → build bubble →
-        /// <see cref="AcceptIncomingTimeline"/> → alias/duplicate/insert follow-up.
-        /// </summary>
-        Task ProcessIncomingChatContentAsync(IncomingChatContentProcessRequest request);
-
-        /// <summary>
-        /// Revoke, pin-in-chat, or reaction: returns true when the envelope was one of those
-        /// and was applied (caller should stop). False means fall through to content.
-        /// </summary>
-        Task<bool> TryApplyIncomingEnvelopeControlAsync(
-            Message message,
-            string chatJid,
-            string messageId,
-            bool isGroup,
-            bool isFromMe,
-            string participantJid,
-            string selfDisplayName,
-            DateTime timestampUtc);
-
-        /// <summary>
-        /// After session/placeholder handling: status broadcast, offline fast-path, DM routing,
-        /// self-collapse, envelope controls, then <see cref="ProcessIncomingChatContentAsync"/>.
-        /// </summary>
-        Task RouteIncomingChatEnvelopeAsync(IncomingRoutedEnvelopeRequest request);
 
         /// <summary>
         /// Placeholder envelope: note the missing id on the host ledger and request a resend.
@@ -583,26 +470,6 @@ namespace Unison.Core.Contracts.WhatsApp
             int offlineCount,
             bool firstRelease,
             bool transportReady);
-
-        /// <summary>
-        /// Pump entry: assemble quiet/visibility/active-chat context and route the envelope.
-        /// </summary>
-        Task NotifyIncomingDecryptedAsync(IncomingDecryptedNotifyRequest request);
-
-        /// <summary>
-        /// Peer-data placeholder-resend payloads: decode WebMessageInfo bytes and re-enqueue
-        /// onto the host ingest queue (never recursive into the pump lock).
-        /// </summary>
-        Task ApplyPeerDataPlaceholderResendsAsync(
-            string stanzaId,
-            System.Collections.Generic.IEnumerable<Message.Types.PeerDataOperationRequestResponseMessage.Types.PeerDataOperationResult> results);
-
-        /// <summary>
-        /// Full peer-data operation response: history-on-demand observe logs plus
-        /// <see cref="ApplyPeerDataPlaceholderResendsAsync"/>.
-        /// </summary>
-        Task HandlePeerDataOperationResponseAsync(
-            Message.Types.PeerDataOperationRequestResponseMessage response);
 
         /// <summary>
         /// Send (or confirm) a from-me reaction. Empty <paramref name="emoji"/> removes the

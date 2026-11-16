@@ -17,7 +17,8 @@ using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
 using Unison.Core.Contracts.WhatsApp;
-using Proto;
+using Proto;
+using Unison.WhatsAppClient.Abstractions;
 
 namespace Unison.WhatsAppClient.Helpers
 {
