@@ -20,12 +20,6 @@ namespace Unison.Uwp.Services.WhatsApp
 
         void IConnectionResumeHost.ClearSuppressReconnect() => _sessionFlags.SuppressReconnect = false;
 
-        bool IIsCurrentSocketHealthyHost.SuppressReconnect
-        {
-            get => _sessionFlags.SuppressReconnect;
-            set => _sessionFlags.SuppressReconnect = value;
-        }
-
         bool IAutoReconnectLoopHost.SuppressReconnect => _sessionFlags.SuppressReconnect;
 
         bool IAutoReconnectLoopHost.FatalSessionEnded => _sessionFlags.FatalSessionEnded;

@@ -20,6 +20,7 @@ namespace Unison.Uwp.Services.WhatsApp
     {
         private readonly IConnectionHealthOwnerPort _owner;
         private readonly IWhatsAppSocket _socket;
+        private readonly ConnectionSlot<IWhatsAppSocket> _socketSlot;
         private readonly ConnectionSessionFlags _flags;
         private readonly IncomingMessagePump _incomingPump;
         private readonly IRuntimeDiagnostics _diagnostics;
@@ -28,6 +29,7 @@ namespace Unison.Uwp.Services.WhatsApp
         public ConnectionHealthSocketHost(
             IConnectionHealthOwnerPort owner,
             IWhatsAppSocket socket,
+            ConnectionSlot<IWhatsAppSocket> socketSlot,
             ConnectionSessionFlags flags,
             IncomingMessagePump incomingPump,
             IRuntimeDiagnostics diagnostics,
@@ -35,6 +37,7 @@ namespace Unison.Uwp.Services.WhatsApp
         {
             _owner = owner ?? throw new ArgumentNullException(nameof(owner));
             _socket = socket ?? throw new ArgumentNullException(nameof(socket));
+            _socketSlot = socketSlot ?? throw new ArgumentNullException(nameof(socketSlot));
             _flags = flags ?? throw new ArgumentNullException(nameof(flags));
             _incomingPump = incomingPump ?? throw new ArgumentNullException(nameof(incomingPump));
             _diagnostics = diagnostics ?? throw new ArgumentNullException(nameof(diagnostics));
@@ -45,7 +48,7 @@ namespace Unison.Uwp.Services.WhatsApp
             _flags.SuppressReconnect || _flags.FatalSessionEnded;
 
         public bool IsMonitoredSocketCurrent =>
-            ReferenceEquals(_owner.CurrentSocket, _socket);
+            _socketSlot.Holds(_socket);
 
         public bool IsMonitoredSocketConnected =>
             _socket.IsConnected && _socket.IsHandshakeComplete;
@@ -90,7 +93,7 @@ namespace Unison.Uwp.Services.WhatsApp
             ForceDisconnectMonitoredSocketDispatch.Run(this);
 
         bool IForceDisconnectMonitoredSocketHost.IsMonitoredSocketCurrent =>
-            ReferenceEquals(_owner.CurrentSocket, _socket);
+            _socketSlot.Holds(_socket);
 
         void IForceDisconnectMonitoredSocketHost.DisconnectMonitoredSocketBestEffort()
         {
@@ -104,7 +107,7 @@ namespace Unison.Uwp.Services.WhatsApp
         }
 
         void IForceDisconnectMonitoredSocketHost.ClearCurrentSocketReferenceIfStillMonitored() =>
-            _owner.ClearCurrentSocketIf(_socket);
+            _socketSlot.ClearIf(_socket);
 
         public void RequestSoftReconnect(string reason) =>
             _owner.RequestSoftReconnect(reason);

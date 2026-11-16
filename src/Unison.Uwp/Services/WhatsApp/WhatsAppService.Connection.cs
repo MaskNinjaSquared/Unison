@@ -218,6 +218,7 @@ namespace Unison.Uwp.Services.WhatsApp
             var host = new ConnectionHealthSocketHost(
                 this,
                 socket,
+                _socketSlot,
                 _sessionFlags,
                 _incomingPump,
                 _diagnostics,
@@ -231,16 +232,6 @@ namespace Unison.Uwp.Services.WhatsApp
         }
 
         // --- IConnectionHealthOwnerPort --------------------------------------
-
-        IWhatsAppSocket IConnectionHealthOwnerPort.CurrentSocket => _socketSlot.Current;
-
-        void IConnectionHealthOwnerPort.ClearCurrentSocketIf(IWhatsAppSocket socket)
-        {
-            if (ReferenceEquals(_socketSlot.Current, socket))
-            {
-                _socketSlot.Current = null;
-            }
-        }
 
         bool IConnectionHealthOwnerPort.IsHistoryCatchUpActive => IsHistoryCatchUpActive();
 
@@ -831,73 +822,6 @@ namespace Unison.Uwp.Services.WhatsApp
         void IConnectionBrokerTransferHost.RecordBrokerException(string eventName, Exception error) =>
             _diagnostics.RecordException("socket-broker", eventName, error);
 
-        // --- IIsCurrentSocketHealthyHost -------------------------------------
-
-        object IIsCurrentSocketHealthyHost.CurrentSocket => _socketSlot.Current;
-
-        bool IIsCurrentSocketHealthyHost.SocketHasStalledNodeProcessing(object socket)
-        {
-            var typed = socket as IWhatsAppSocket;
-            return typed != null &&
-                typed.HasStalledNodeProcessing(ConnectionHealthPolicy.NodeProcessingStallLimit);
-        }
-
-        bool IIsCurrentSocketHealthyHost.SocketHasFreshConnection(object socket)
-        {
-            var typed = socket as IWhatsAppSocket;
-            return typed != null &&
-                typed.HasFreshConnection(ConnectionHealthProfile.OnDemand.FreshnessLimit);
-        }
-
-        bool IIsCurrentSocketHealthyHost.SocketIsConnected(object socket) =>
-            socket is IWhatsAppSocket typed && typed.IsConnected;
-
-        bool IIsCurrentSocketHealthyHost.SocketIsHandshakeComplete(object socket) =>
-            socket is IWhatsAppSocket typed && typed.IsHandshakeComplete;
-
-        int IIsCurrentSocketHealthyHost.SocketQueuedNodeProcessingCount(object socket) =>
-            socket is IWhatsAppSocket typed ? typed.QueuedNodeProcessingCount : 0;
-
-        void IIsCurrentSocketHealthyHost.LogNodeQueueStalled(int depth) =>
-            Debug.WriteLine(
-                "[WhatsAppService] Socket node queue is stalled (depth=" + depth + ")");
-
-        Task<bool> IIsCurrentSocketHealthyHost.ProbeSocketConnectionAsync(object socket)
-        {
-            var typed = socket as IWhatsAppSocket;
-            if (typed == null)
-            {
-                return Task.FromResult(false);
-            }
-
-            return typed.ProbeConnectionAsync(ConnectionHealthProfile.OnDemand.ProbeTimeoutMs);
-        }
-
-        void IIsCurrentSocketHealthyHost.DisconnectSocket(object socket)
-        {
-            var typed = socket as IWhatsAppSocket;
-            if (typed == null)
-            {
-                return;
-            }
-
-            try
-            {
-                typed.Disconnect();
-            }
-            catch
-            {
-            }
-            }
-
-        void IIsCurrentSocketHealthyHost.ClearCurrentSocketIfSame(object socket)
-        {
-            if (ReferenceEquals(_socketSlot.Current, socket))
-            {
-                _socketSlot.Current = null;
-            }
-        }
-
         /// <summary>
         /// Ensures that the socket is usable before an operation that requires the
         /// network. This is needed after Windows resumes a suspended UWP process:
@@ -927,7 +851,7 @@ namespace Unison.Uwp.Services.WhatsApp
         /// answer pings while user messages never reach the application.
         /// </summary>
         Task<bool> IConnectionEnsureHost.IsCurrentSocketHealthyAsync() =>
-            IsCurrentSocketHealthyDispatch.RunAsync(this);
+            IsCurrentSocketHealthyDispatch.RunAsync(_currentSocketHealth);
 
         void IConnectionEnsureHost.DropCurrentSocketForFastResume() =>
                     DropCurrentSocketForFastResumeDispatch.Run(this);
@@ -1076,7 +1000,7 @@ namespace Unison.Uwp.Services.WhatsApp
             _authSlot.Current != null && _authSlot.Current.Registered;
 
         Task<bool> IAutoReconnectLoopHost.IsCurrentSocketHealthyAsync() =>
-            IsCurrentSocketHealthyDispatch.RunAsync(this);
+            IsCurrentSocketHealthyDispatch.RunAsync(_currentSocketHealth);
 
         Task IAutoReconnectLoopHost.InitializeAsync() => InitializeAsync();
 
