@@ -77,6 +77,36 @@ Replay: `WaTransportAdapter` unpacks UBD3 batches into `DecodedFrames` + `PostNo
 
 **Not wired: cold restore.** If the process was terminated while the broker held the socket, the next `StreamSocketWebSocketTransport.ConnectAsync` disposes that socket and clears the journal and checkpoints. The broker never acknowledges what it reads, so the server redelivers those messages to the new connection. Adopting the socket instead needs `ConnectionHandler` to resume from a saved Noise state without a handshake; `TryRestoreBrokerSessionAsync` exists only on the uncompiled legacy `SocketClient.cs`.
 
+## Cold restore — design (not scheduled)
+
+Status: written design only. No code until the measurement below says it is worth it.
+
+### What it would buy
+
+Nothing is lost today: the broker never acks, so a fresh connection gets every message again. Cold restore only saves the Noise handshake and the login round-trips (a few seconds on Mobile) when the app is relaunched after Windows killed it with the socket in the broker. It is a latency feature, not a reliability one.
+
+### Why the legacy restore cannot be copied
+
+`SocketClient.TryRestoreBrokerSessionAsync` imported the Noise state, re-attached the socket, set handshake-complete, started the keep-alive and raised `connected` + `OnSessionInitialized` with **no proof the server still had the session**. The broker sends no `w:p` keep-alive, so after a few minutes the server has usually dropped it; the legacy path then reported a live session over a dead socket until the health monitor noticed. That is the "fake handoff" the project rules forbid. It also skipped everything that normally follows `<success>` (passive IQ, presence, pre-key count check, app-state resync, offline-replay release), so even a live socket came back half-initialised.
+
+### Shape if it is ever built
+
+1. **Gate (UWP, before any connect):** ownership store says `broker`, the socket id is still in `SocketActivityInformation.AllSockets`, the Noise snapshot matches that id (`NoiseSessionStore.LoadSnapshotAsync` already picks the newest of checkpoint vs. UBD3 post-state), auth is registered, and the snapshot is younger than a short bound. Anything else: today's fresh connect, unchanged.
+2. **Attach without claiming:** `StreamSocketWebSocketTransport.AttachExistingBrokerSocketAsync` takes the socket back; journal replay runs through the normal receive path. The connection status stays `connecting`.
+3. **Prove liveness:** a new `ConnectionHandler.ResumeFromBrokerAsync(NoiseSessionState)` imports the state (the import itself already exists for broker batches) and sends one `w:p` ping IQ with a short timeout. Only a matching response counts. Timeout, close or decrypt failure: dispose the socket, clear the artifacts, fresh connect. No `connected` / `SessionInitialized` before the pong.
+4. **Finish login on the resumed socket:** run the post-`<success>` sequence the handshake path runs (passive IQ, presence, pre-key check, app-state resync) through the same use cases, and arm the offline-replay watchdog as for a normal open (the server will not send a new `ib offline` for an already-open session).
+5. **Ownership:** `SocketBridge` reports the restore only through `ConnectionHandler`; `IsSocketOwnedByBroker` flips to foreground only after step 3 succeeds.
+
+### Before writing any of it
+
+Measure how often it would fire. Add a journal line on cold launch with `ownerIsBroker`, `socketStillRegistered`, snapshot age and whether a later ping would have been possible. If most cold launches find the broker socket gone or stale, cold restore never pays back its risk and stays a non-goal.
+
+### Risks
+
+- Pong after a server-side drop is impossible, but a half-open TCP socket can swallow the ping until the timeout; the timeout is the cost on every failed attempt.
+- Noise read counter drift if the journal and checkpoint disagree: decrypt fails on the first frame; must fall back, never retry with a guessed counter.
+- Signal state is safe: the broker only decrypts on a cloned snapshot, and the foreground key store stays authoritative.
+
 ## Auth the task can see
 
 The reconnect toast reads the same `LocalSettings` container as `AuthStore` (`WhatsAppAuth` / `auth_state`) to know whether a registered session exists. Signal preview uses `socket-broker-signal-preview-v673b.json`, which is **not** authoritative.
