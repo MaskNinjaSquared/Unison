@@ -635,6 +635,14 @@ The soft/auto-reconnect **bodies** already lived outside the host (`SoftReconnec
 
 Tier-dependent pacing (silent FULL lot gap, catch-up idle abort, stagnant cycles, finalize quiet) was already on `SyncProductPolicy`. The fixed timings the host still held as private constants (ON_DEMAND 20 s, FULL 15 min, catch-up progress poll 8 s, freshness 30 min, backfill 8 h / 40 chats, hydration settle 25 s / batch 10 / page 50 / 5 pages) moved to `HistoryOnDemandPacing` (`WhatsAppClient.Helpers`). `HistoryOnDemandPacingTests` pins every value, so a retune shows up as a test edit. No number changed. The FULL / silent-chain **owners** are still built in the host ctor: their ports close over the catch-up banner, finish owner and freshness checks.
 
+### Phase D stage 4 — history catch-up cluster leaves the host
+
+The host now shrinks by **cohesive clusters**, not owner by owner: moving a single owner into `App.ConfigureServices` while its ports still call back into the host does not shrink anything.
+
+`HistoryCatchUpHost` (UWP, `Services/WhatsApp/History`, DI singleton) owns the FULL / catch-up / silent chain / ON_DEMAND hydration / first-sync release owners (about 30) and their per-session state (last sync type and time, identity-refresh latch, hydration fallback stamp, on-demand dispatch). It implements `IHistorySyncHost`, `IHistoryCatchUpHost`, `ISqliteHistoryQuietFinalizeHost`, `IHistoryHydrationBackfillHost` and `IHydrationDayRetryIoHost`; DI resolves `IHistorySyncHost` / `IHistoryCatchUpHost` to it instead of `WhatsAppService`. What it still needs from the connection owner goes through `IHistoryCatchUpHostPort` (resolved lazily, same pattern as `ReconnectHostAdapter`): stop health monitor, publish connection status, schedule post-message enrichment, startup quiet wait, enable scheduled persist. `EnsureConnectedAsync` comes from `IConnectionEnsureHost`.
+
+Move-only: owner bodies, construction order and every threshold are unchanged; Debug output prefix is `[HistoryCatchUpHost]`. Needs on-device check (first sync after pairing, FULL catch-up after a long offline gap, resync conversations from settings). Next clusters: connection (pairing / auth / socket error / logout / clear session), then persistence and startup.
+
 ### Phase E (future) — client-owned public I/O
 
 **Not** Phase C/D work. Long-term goal: `Unison.WhatsAppClient` publishable / reusable without dragging Unison UI models — a portable WhatsApp **policy** library whose **entry and exit** types live on the client (or a thin contracts package next to it), not on Unison.Core ViewModel-shaped models.

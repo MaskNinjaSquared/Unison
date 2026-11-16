@@ -169,7 +169,7 @@ namespace Unison.Uwp.Services.WhatsApp
         {
             // Always disarm — Arm is Low/Mobile-only, but Stop is cheap and keeps
             // a leftover schedule from firing after socket teardown.
-            _silentChain.Stop(reason ?? string.Empty);
+            _historyCatchUp.StopSilentChain(reason ?? string.Empty);
             _healthMonitors.Stop(reason);
         }
 
@@ -182,7 +182,7 @@ namespace Unison.Uwp.Services.WhatsApp
                     HistoryTuning.AllowStagnantRepairCascade))
             {
                 // Arm only — first fire waits for loud catch-up finish + tip stale.
-                _silentChain.Arm("post-init", fireSoon: false);
+                _historyCatchUp.ArmSilentChain("post-init", fireSoon: false);
             }
         }
 
@@ -203,7 +203,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
         Task IConnectionHealthMonitorIoHost.RunPeriodicFullHistorySafetyLoopAsync(
             CancellationToken token) =>
-            _periodicFullSafety.RunLoopAsync(token);
+            _historyCatchUp.RunPeriodicFullHistorySafetyLoopAsync(token);
 
         private Task ConnectionHealthLoopAsync(IWhatsAppSocket socket, CancellationToken token)
         {
@@ -317,7 +317,7 @@ namespace Unison.Uwp.Services.WhatsApp
             _messageStore.InitializeAsync();
 
         void IInitializeConnectionStateHost.LoadHistoryFreshnessRepairState() =>
-                _freshnessRepair.Load();
+                _historyCatchUp.LoadFreshnessRepairState();
 
         async Task IInitializeConnectionStateHost.RecoverPendingIncomingJournalAsync()
         {
@@ -1060,10 +1060,9 @@ namespace Unison.Uwp.Services.WhatsApp
 
             _sessionFlags.SessionEstablishedThisConnection = false;
             _sessionEstablished.Renew();
-            _historyIdentityRefreshTriggeredThisSession = false;
             _sessionFlags.QrDeliveredThisConnection = false;
             _postSyncMaintenance.ResetEnrichmentStarted();
-            _heavyHistoryEnrichment.SetAwaitingHeavyHistory(false);
+            _historyCatchUp.ResetPerConnection();
         }
 
         void IConnectionConnectPrepareHost.MarkConnecting() => _isConnecting = true;
@@ -1122,8 +1121,7 @@ namespace Unison.Uwp.Services.WhatsApp
             }
 
             _historyRequests.ReleaseFull();
-            _lastHistorySyncReceivedUtc = DateTime.MinValue;
-            _lastHistorySyncTypeReceived = null;
+            _historyCatchUp.ResetLastHistorySync();
             _historyRequests.ClearRequests();
             _historyRequests.ClearBackoff();
         }
@@ -1233,7 +1231,7 @@ namespace Unison.Uwp.Services.WhatsApp
         {
             Contacts?.CancelBackgroundResolution();
             _postSyncMaintenance.CancelAll();
-            _hydrationDayRetry.Cancel();
+            _historyCatchUp.CancelHydrationDayRetry();
             DeferredAvatars?.Cancel();
             Contacts?.CancelAliasFollowUp();
             _offlineReplayFlush?.ClearTimer();

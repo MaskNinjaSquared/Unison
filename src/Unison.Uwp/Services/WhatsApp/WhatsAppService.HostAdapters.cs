@@ -48,7 +48,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 "reason=memory; level=" + _appMemory.UsageLevel);
 
         void IPostReplayMaintenanceHost.MarkEnrichmentAwaitingHeavyHistory() =>
-            _heavyHistoryEnrichment.SetAwaitingHeavyHistory(true);
+            _historyCatchUp.HeavyHistoryEnrichment.SetAwaitingHeavyHistory(true);
 
         void IPostReplayMaintenanceHost.WriteDeferred(
             string catchUpDeferReason,
@@ -121,7 +121,7 @@ namespace Unison.Uwp.Services.WhatsApp
             _syncWork.ShouldDeferAvatarFetch(out reason);
 
         void IBackgroundResolutionGate.MarkEnrichmentAwaitingHeavyHistory() =>
-            _heavyHistoryEnrichment.SetAwaitingHeavyHistory(true);
+            _historyCatchUp.HeavyHistoryEnrichment.SetAwaitingHeavyHistory(true);
 
         void IBackgroundResolutionGate.ClearSyncStatus() => _syncStatus.Raise(null);
 
@@ -150,7 +150,7 @@ namespace Unison.Uwp.Services.WhatsApp
             PostMessageEnrichmentDispatch.RunAsync(this, reason, token);
 
         void IPostSyncMaintenanceIoHost.ClearEnrichmentAwaitingHeavyHistory() =>
-            _heavyHistoryEnrichment.SetAwaitingHeavyHistory(false);
+            _historyCatchUp.HeavyHistoryEnrichment.SetAwaitingHeavyHistory(false);
 
         void IPostSyncMaintenanceIoHost.LogPostMessageEnrichment(string message) =>
             Debug.WriteLine("[WhatsAppService] " + message);
@@ -176,7 +176,7 @@ namespace Unison.Uwp.Services.WhatsApp
         }
 
         bool IPostMessageEnrichmentHost.EnrichmentAwaitingHeavyHistory =>
-            _heavyHistoryEnrichment.IsAwaitingHeavyHistory;
+            _historyCatchUp.HeavyHistoryEnrichment.IsAwaitingHeavyHistory;
 
         bool IPostMessageEnrichmentHost.IsHistoryCatchUpActive => IsHistoryCatchUpActive();
 
@@ -202,7 +202,7 @@ namespace Unison.Uwp.Services.WhatsApp
                     reason + ")");
 
         void IPostMessageEnrichmentHost.MarkAwaitingHeavyHistory() =>
-            _heavyHistoryEnrichment.SetAwaitingHeavyHistory(true);
+            _historyCatchUp.HeavyHistoryEnrichment.SetAwaitingHeavyHistory(true);
 
         void IPostMessageEnrichmentHost.WriteCatchUpDeferred(
             string reason,

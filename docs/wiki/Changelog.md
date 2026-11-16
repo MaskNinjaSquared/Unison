@@ -2,6 +2,14 @@
 
 Newest first.
 
+## Phase D stage 4 — history catch-up cluster leaves the host
+
+`HistoryCatchUpHost` (UWP, DI) owns the FULL / catch-up / silent chain / hydration / first-sync release owners and implements the history host ports; `WhatsAppService` loses about 900 lines and five interfaces. Move-only: no threshold or order change.
+
+## Chat list — visible reconcile converges in one pass
+
+`ChatListVisibleReconcile` drops stale rows first and moves only rows off the longest already-ordered run. A dozen stale rows near the top no longer turn into one Move per row below them (dozens of budgeted passes, each a visible flicker).
+
 ## Phase D stage 3 — fixed history pacing leaves the host
 
 FULL / ON_DEMAND / hydration timing constants moved from `WhatsAppService` to `HistoryOnDemandPacing`, pinned by tests. Move-only: no value changed.

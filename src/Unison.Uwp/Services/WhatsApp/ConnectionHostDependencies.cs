@@ -6,6 +6,7 @@
 // and goes away with the host.
 // =============================================================================
 using System;
+using Unison.Uwp.Services.WhatsApp.History;
 using Unison.WhatsAppClient.Helpers;
 
 namespace Unison.Uwp.Services.WhatsApp
@@ -22,9 +23,11 @@ namespace Unison.Uwp.Services.WhatsApp
             InboundWireNodeOwner inboundWireNode,
             DecryptedMessageWireOwner decryptedMessage,
             ReconnectHostAdapter reconnect,
-            CurrentSocketHealthHost currentSocketHealth)
+            CurrentSocketHealthHost currentSocketHealth,
+            HistoryCatchUpHost historyCatchUp)
         {
             Reconnect = reconnect ?? throw new ArgumentNullException(nameof(reconnect));
+            HistoryCatchUp = historyCatchUp ?? throw new ArgumentNullException(nameof(historyCatchUp));
             CurrentSocketHealth = currentSocketHealth
                 ?? throw new ArgumentNullException(nameof(currentSocketHealth));
             Events = events ?? throw new ArgumentNullException(nameof(events));
@@ -42,6 +45,8 @@ namespace Unison.Uwp.Services.WhatsApp
         }
 
         public ReconnectHostAdapter Reconnect { get; }
+
+        public HistoryCatchUpHost HistoryCatchUp { get; }
 
         public CurrentSocketHealthHost CurrentSocketHealth { get; }
 

@@ -50,7 +50,7 @@ using Unison.WhatsAppClient.Helpers;
 
 namespace Unison.Uwp.Services.WhatsApp
 {
-    public partial class WhatsAppService : INotifyPropertyChanged, IConnectionSessionHost, IOfflineReplayHost, IOfflineReplayFlushIoHost, IChatCatalogPersistHost, IPostReplayMaintenanceHost, IPostMessageEnrichmentHost, IPlaceholderResendSocket, IRuntimeSnapshotSource, IBackgroundResolutionGate, IConversationResyncHost, IHistorySyncHost, IHistoryCatchUpHost, IConnectionEnsureHost, IConnectionResumeHost, IConnectionPairingStage2Host, IConnectionBrokerTransferHost, IConnectionSoftReconnectHost, IConnectionLifecycleHost, IConnectionConnectGateSource, IConnectionConnectPrepareHost, IConnectionSocketAssignment, IConnectionAssignedSocketClearHost, ISelfIdentityHealHost, IStartupUiHost, IResolvedNameApplyHost, IHistoryHydrationBackfillHost, ISqliteHistoryQuietFinalizeHost, IInitializeConnectionStateHost, IHydrationDayRetryIoHost, IBrokerReconnectConsumeHost, IPublishConnectionUpdateHost, IDropCurrentSocketForFastResumeHost, IConnectionHealthMonitorIoHost, IConnectAsyncHost, IPostSyncMaintenanceIoHost
+    public partial class WhatsAppService : INotifyPropertyChanged, IConnectionSessionHost, IOfflineReplayHost, IOfflineReplayFlushIoHost, IChatCatalogPersistHost, IPostReplayMaintenanceHost, IPostMessageEnrichmentHost, IPlaceholderResendSocket, IRuntimeSnapshotSource, IBackgroundResolutionGate, IConversationResyncHost, IConnectionEnsureHost, IConnectionResumeHost, IConnectionPairingStage2Host, IConnectionBrokerTransferHost, IConnectionSoftReconnectHost, IConnectionLifecycleHost, IConnectionConnectGateSource, IConnectionConnectPrepareHost, IConnectionSocketAssignment, IConnectionAssignedSocketClearHost, ISelfIdentityHealHost, IStartupUiHost, IResolvedNameApplyHost, IInitializeConnectionStateHost, IBrokerReconnectConsumeHost, IPublishConnectionUpdateHost, IDropCurrentSocketForFastResumeHost, IConnectionHealthMonitorIoHost, IConnectAsyncHost, IPostSyncMaintenanceIoHost
     {
         public event PropertyChangedEventHandler PropertyChanged;
         protected void OnPropertyChanged([CallerMemberName] string propertyName = null)
@@ -129,7 +129,6 @@ namespace Unison.Uwp.Services.WhatsApp
         private readonly Func<IGroupService> _resolveGroups;
         private readonly Func<IHistoryWireIngress> _resolveHistory;
         private readonly Func<IDeferredAvatarResolution> _resolveDeferredAvatars;
-        private readonly IHistoryOnDemandSocket _historyOnDemandSocket;
         private readonly ChatCatalogDebounceTimer _catalogDebounce = new ChatCatalogDebounceTimer();
         private readonly ChatCatalogDebounceTimer _rowPersistDebounce = new ChatCatalogDebounceTimer();
         private readonly ChatCatalogRowPersistBuffer _rowPersistBuffer = new ChatCatalogRowPersistBuffer();
@@ -280,41 +279,16 @@ namespace Unison.Uwp.Services.WhatsApp
 
         private readonly SessionEstablishedGate _sessionEstablished;
         private readonly ConnectionEventHub _events;
-        private volatile bool _historyIdentityRefreshTriggeredThisSession = false;
+        private readonly HistoryCatchUpHost _historyCatchUp;
 
         private readonly SyncWorkGate _syncWork;
         private readonly OfflineReplayFirstReleaseLatch _offlineReplayLatch =
             new OfflineReplayFirstReleaseLatch();
         private OfflineSyncedWatchdog _offlineSyncedWatchdog;
-        private readonly HistoryFreshnessRepairPersistence _freshnessRepair;
         private readonly LiveMessagePersist _liveMessages;
         private PersistedMessageLookup _persistedLookup;
         private ActiveChatCacheSideEffects _activeChatSideEffects;
         private readonly HistoryCatchUpContinuation _catchUp;
-        private readonly HistoryCatchUpFinishOwner _catchUpFinish;
-        private readonly HistoryReconnectFallbackOwner _historyReconnectFallback;
-        private readonly TearDownSocketForSoftReconnectOwner _socketTearDown;
-        private readonly FirstSyncListReleaseOwner _firstSyncListRelease;
-        /// <summary>
-        /// Background ON_DEMAND hydration lock / active ? owned by
-        /// <see cref="HistoryHydrationBackfill"/>. Client only implements
-        /// <see cref="IHistoryHydrationBackfillHost"/> I/O.
-        /// </summary>
-        private readonly HistoryHydrationBackfill _historyHydrationBackfill;
-
-        /// <summary>
-        /// SQLite history quiet-finalize generation + delayed entry ? owned by
-        /// <see cref="SqliteHistoryQuietFinalize"/>. Client only implements
-        /// <see cref="ISqliteHistoryQuietFinalizeHost"/> I/O.
-        /// </summary>
-        private readonly SqliteHistoryQuietFinalize _sqliteHistoryQuietFinalize;
-        private DateTime _lastHydrationFallbackUtc = DateTime.MinValue;
-        /// <summary>
-        /// Hydration day-retry CTS + day attempts/anchor ? owned by
-        /// <see cref="HydrationDayRetryOwner"/>. Client only implements
-        /// <see cref="IHydrationDayRetryIoHost"/>.
-        /// </summary>
-        private readonly HydrationDayRetryOwner _hydrationDayRetry;
         // Default retry delay for the deferred background-resolution pass (names+avatars+groups).
         
         // Debounce timer for persisting data (5 seconds)
@@ -338,16 +312,12 @@ namespace Unison.Uwp.Services.WhatsApp
         /// <see cref="IPostSyncMaintenanceIoHost"/> work.
         /// </summary>
         private readonly PostSyncMaintenanceOwner _postSyncMaintenance;
-        private readonly ReleaseEnrichmentAfterHeavyHistoryCoordinator _heavyHistoryEnrichment;
         private readonly SelfProfileAuthSync _selfProfileAuth;
         private readonly ChatCatalogDiskPersistence _catalogDisk;
         private readonly BackgroundDisplayNamesPersistence _backgroundDisplayNames;
         private readonly LoadPersistedUiStateOwner _persistedUiState;
         private readonly ReleaseMemoryOwner _releaseMemory;
         private readonly DeferredStartupMaintenanceOwner _deferredStartup;
-        private readonly PublishInitialSyncProgressOwner _initialSyncProgress;
-        private readonly HistoryCatchUpBannerOwner _catchUpBanner;
-        private readonly ResetFirstSyncListHoldFlagsOwner _resetFirstSyncHold;
         private readonly InvalidateCurrentSocketOwner _invalidateSocket;
         private readonly NotifyServerLogoutOwner _serverLogout;
         private readonly RaiseSessionClearedOwner _sessionCleared;
@@ -378,21 +348,7 @@ namespace Unison.Uwp.Services.WhatsApp
         private readonly PostReplayMaintenanceCoordinator _postReplayMaintenance;
         private readonly SelfProfileState _selfProfile;
 
-        /// <summary>
-        /// SQLite history arrives in several chunks. We accumulate conversation counts and only
-        /// leave safe-mode after a quiet period (or a Full chunk), so the list banner can show
-        /// progress instead of flashing complete on every write.
-        /// </summary>
-        private int SqliteHistoryConversationsAccumulated
-        {
-            get => _historyChunks.ConversationsAccumulated;
-            set => _historyChunks.ConversationsAccumulated = value;
-        }
-
         private readonly FirstSyncListHoldState _firstSyncHold;
-        private int SqliteHistoryFinalizeQuietMs => HistoryTuning.HistoryFinalizeQuietMs;
-
-        private int SqliteHistoryFullFinalizeDelayMs => HistoryTuning.HistoryFullFinalizeDelayMs;
 
         /// <summary>UWP transport only; outside this assembly use <see cref="IConnectionService"/> / fa?ades.</summary>
         internal IWhatsAppSocket Socket => _socketSlot.Current;
@@ -407,12 +363,6 @@ namespace Unison.Uwp.Services.WhatsApp
         public bool IsTransportReady =>
             _socketSlot.Current != null &&
             _socketSlot.Current.IsHandshakeComplete;
-
-        /// <summary>
-        /// True while FULL_HISTORY catch-up is owed or its banner is up. Used by
-        /// <see cref="SyncWorkGate"/> so post-reconnect enrichment can step aside.
-        /// </summary>
-        public bool IsHistoryCatchUpInProgress => IsHistoryCatchUpActive();
 
         private bool IsHistoryCatchUpBannerActive => _syncStatus.IsHistoryCatchUpShown;
 
@@ -432,75 +382,15 @@ namespace Unison.Uwp.Services.WhatsApp
 
         /// <summary>Per-chat and full-history requests sent and still owed. Shared with <c>HistoryFacade</c>.</summary>
         private readonly HistoryOnDemandRegistry _historyRequests;
-        private HistoryOnDemandDispatch _historyDispatch;
-        private readonly FullHistoryCatchUpWatchdogOwner _catchUpWatchdogOwner;
-        private readonly AcceptedHistoryRequestTimeoutOwner _acceptedHistoryTimeout;
-        private readonly FullHistoryOnDemandClearOwner _fullHistoryClear;
-        private readonly HistorySqliteChunkOwner _historyChunks;
-        private readonly FullHistoryCatchUpProgressOwner _catchUpProgress;
-        private readonly SilentFullHistoryChainOwner _silentChain;
-        private readonly PeriodicFullHistorySafetyOwner _periodicFullSafety;
-        private readonly RequestFullHistoryTrackedOwner _requestFullTracked;
-        private readonly FullHistoryAckDeadlineOwner _fullHistoryAckDeadline;
-        private readonly ForceHistoryRepairOwner _forceHistoryRepair;
-        private readonly SessionOpenOnDemandPendingConsumeOwner _sessionOpenPendingConsume;
-        private readonly HistoryPostOfflineFreshnessOwner _postOfflineFreshness;
-        private readonly ReconnectHistoryCatchUpOwner _reconnectCatchUp;
-        private readonly HydrationFallbackPipelineOwner _hydrationFallback;
-        private readonly HistoryHydrationCandidatesOwner _hydrationCandidates;
-        private readonly HistoryHydrationSettleOwner _hydrationSettle;
         private readonly PersistAuthStateOwner _persistAuthState;
         private readonly WaitForSessionEstablishedOwner _waitForSessionEstablished;
         private readonly MarkPairingRestartPendingOwner _markPairingRestartPending;
-        private DateTime _lastHistorySyncReceivedUtc = DateTime.MinValue;
-        private Proto.HistorySync.Types.HistorySyncType? _lastHistorySyncTypeReceived = null;
         private readonly ResyncConversationsOwner _resyncConversations;
-        private readonly UserResyncHistoryWaitOwner _userResyncWait;
-        private readonly UserResyncFullHistoryOwner _userResyncFullHistory;
         private readonly GroupRecipientCountCache _groupRecipientCounts = new GroupRecipientCountCache();
         // Field initializers run in declaration order, so _selfMarkers is set before it is read below.
         private readonly ISelfMarkerNaming _selfMarkers = new SelfMarkerNaming();
         private readonly ContactLabelSanitizer _contactLabels = new ContactLabelSanitizer(new SelfMarkerNaming());
         private readonly ContactDisplayNames _displayNames;
-
-        private DateTime GetNewestStoredMessageUtc()
-        {
-            return GetNewestStoredMessageUtc(null);
-        }
-
-        private DateTime GetNewestStoredMessageUtc(Func<string, bool> includeChat) =>
-            NewestStoredMessage.FindUtc(_chatState.MessagesByChat.Snapshot(), Chats, includeChat);
-
-
-        private bool TryGetHistoryFreshnessStaleReason(DateTime nowUtc, out string reason)
-        {
-            DateTime newestAnyUtc = GetNewestStoredMessageUtc();
-            DateTime newestNonSelfUtc = newestAnyUtc == DateTime.MinValue
-                ? DateTime.MinValue
-                : GetNewestStoredMessageUtc(jid => !IsSelfLinkedJid(jid));
-            bool hasGroups = Chats.Any(c => c != null && (c.IsGroup || JidHelper.IsGroupJid(c.JID)));
-            DateTime newestGroupUtc = hasGroups
-                ? GetNewestStoredMessageUtc(JidHelper.IsGroupJid)
-                : DateTime.MinValue;
-
-            return HistoryFreshnessStaleDecision.IsStale(
-                nowUtc,
-                newestAnyUtc,
-                newestNonSelfUtc,
-                hasGroups,
-                newestGroupUtc,
-                HistoryOnDemandPacing.FreshnessStaleThreshold,
-                out reason);
-        }
-
-
-        // --- FULL_HISTORY catch-up continue (next offline lot via soft-reconnect) ---
-        // Idle must outlast slow Mobile SQLite/UI between chunks (15s was aborting too early).
-        // Fixed on-demand / hydration timings: HistoryOnDemandPacing.
-        private TimeSpan FullHistoryCatchUpIdleAbort => PhaseTuning.CatchUpIdleAbort;
-
-        /// <summary>Tip watermark must stall this many idle cycles before catch-up stops.</summary>
-        private int CatchUpStagnantCyclesBeforeStop => HistoryTuning.CatchUpStagnantCyclesBeforeStop;
 
         private string CurrentUserAvatar => _selfProfile.AvatarUrl;
 
@@ -667,17 +557,6 @@ namespace Unison.Uwp.Services.WhatsApp
         }
 
 
-        /// <inheritdoc />
-        public void NotifyHistorySqliteChunkApplied(string syncType, int conversationCount) =>
-            _historyChunks.OnChunkApplied(syncType, conversationCount);
-
-        /// <summary>
-        /// Called when a non-on-demand history chunk starts persisting so the chat list can show
-        /// a banner before SQLite returns (previews/messages can take a while on Mobile).
-        /// </summary>
-        public void NotifyHistorySqliteChunkStarted(string syncType, int conversationCount) =>
-            _historyChunks.OnChunkStarted(syncType, conversationCount);
-
         /// <summary>
         /// PN + LID (+ canonical) keys for SQLite history reads and avatar lookups.
         /// </summary>
@@ -729,36 +608,6 @@ namespace Unison.Uwp.Services.WhatsApp
             deferred.Schedule(reason);
         }
 
-
-        /// <inheritdoc />
-        public Task<bool> RequestFullHistoryOnDemandAsync(string reason = null, bool force = false)
-        {
-            if (force)
-            {
-                _historyRequests.ForceReleaseFull();
-            }
-
-            return _requestFullTracked.RunAsync(
-                string.IsNullOrWhiteSpace(reason) ? "manual-full-history" : reason,
-                isFreshnessRepair: true);
-        }
-
-        /// <summary>
-        /// After MessageStore epoch upgrade (legacy JSON abandoned), request a one-shot
-        /// full history sync instead of migrating old LocalFolder files.
-        /// </summary>
-        private async Task TryConsumeMessageStoreForceHistoryRepairAsync(string reason)
-        {
-            await _forceHistoryRepair.ConsumeAsync(reason).ConfigureAwait(false);
-            await _sessionOpenPendingConsume.ConsumeAsync(reason).ConfigureAwait(false);
-        }
-
-
-        /// <summary>
-        /// Per-JID HISTORY_SYNC_ON_DEMAND pass: ledger Pending/InFlight/HasMore/Synced until
-        /// pages stop growing or a silent batch aborts. Returns how many requests went out.
-        /// Ownership (lock / active) is <see cref="HistoryHydrationBackfill"/>.
-        /// </summary>
         /// <summary>
         /// Stops the reconnect loop before the close handler or a ping waiter can schedule
         /// another attempt. 401 arrives as a &lt;failure&gt; after Noise, FailPendingWaiters

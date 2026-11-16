@@ -368,7 +368,7 @@ namespace Unison.Uwp
             services.AddSingleton(sp => new SyncWorkGate(
                 sp.GetRequiredService<HistoryOnDemandRegistry>(),
                 () => (sp.GetRequiredService<WhatsAppService>()).Socket?.IsAwaitingInitialSync ?? false,
-                () => (sp.GetRequiredService<WhatsAppService>()).IsHistoryCatchUpInProgress,
+                () => sp.GetRequiredService<HistoryCatchUpHost>().IsHistoryCatchUpActive,
                 () =>
                 {
                     IHistoryService history = sp.GetService<IHistoryService>();
@@ -496,7 +496,34 @@ namespace Unison.Uwp
                 sp.GetRequiredService<InboundWireNodeOwner>(),
                 sp.GetRequiredService<DecryptedMessageWireOwner>(),
                 sp.GetRequiredService<ReconnectHostAdapter>(),
-                sp.GetRequiredService<CurrentSocketHealthHost>()));
+                sp.GetRequiredService<CurrentSocketHealthHost>(),
+                sp.GetRequiredService<HistoryCatchUpHost>()));
+            services.AddSingleton(sp => new HistoryCatchUpHost(
+                () => sp.GetRequiredService<WhatsAppService>(),
+                () => sp.GetRequiredService<IConnectionEnsureHost>(),
+                () => sp.GetRequiredService<IHistoryWireIngress>(),
+                () => sp.GetRequiredService<IContactService>(),
+                () => sp.GetRequiredService<IMessageWireIngress>(),
+                () => sp.GetRequiredService<IChatService>(),
+                () => sp.GetRequiredService<IDeferredAvatarResolution>(),
+                sp.GetRequiredService<ChatStateStore>(),
+                sp.GetRequiredService<JidAliasTable>(),
+                sp.GetRequiredService<SyncStatusChannel>(),
+                sp.GetRequiredService<SyncWorkGate>(),
+                sp.GetRequiredService<HistoryOnDemandRegistry>(),
+                sp.GetRequiredService<HistoryCatchUpContinuation>(),
+                sp.GetRequiredService<InitialSyncProgressState>(),
+                sp.GetRequiredService<SyncProductPolicy>(),
+                sp.GetRequiredService<FirstSyncListHoldState>(),
+                sp.GetRequiredService<ChatListInitialPaintGate>(),
+                sp.GetRequiredService<ConnectionSessionFlags>(),
+                sp.GetRequiredService<ConnectionSlot<IWhatsAppSocket>>(),
+                sp.GetRequiredService<ConnectionSlot<AuthState>>(),
+                sp.GetRequiredService<ReconnectHostAdapter>(),
+                sp.GetRequiredService<ConnectionEventHub>(),
+                sp.GetRequiredService<IAppVisibility>(),
+                sp.GetRequiredService<ILocalSettings>(),
+                sp.GetRequiredService<IRuntimeDiagnostics>()));
             services.AddSingleton(sp => new ChatPreviewReconciler(
                 sp.GetRequiredService<IHistoryMessageStore>(),
                 sp.GetRequiredService<JidAliasTable>(),
@@ -669,9 +696,9 @@ namespace Unison.Uwp
             services.AddSingleton<IConversationResyncHost>(
                 sp => sp.GetRequiredService<WhatsAppService>());
             services.AddSingleton<IHistorySyncHost>(
-                sp => sp.GetRequiredService<WhatsAppService>());
+                sp => sp.GetRequiredService<HistoryCatchUpHost>());
             services.AddSingleton<IHistoryCatchUpHost>(
-                sp => sp.GetRequiredService<WhatsAppService>());
+                sp => sp.GetRequiredService<HistoryCatchUpHost>());
             services.AddSingleton<IStatusThumbnailMaterializer, WinRtStatusThumbnailMaterializer>();
             services.AddSingleton<IHistoryMessageThumbnailMaterializer, WinRtHistoryMessageThumbnailMaterializer>();
             services.AddSingleton(sp => new HistoryFacade(

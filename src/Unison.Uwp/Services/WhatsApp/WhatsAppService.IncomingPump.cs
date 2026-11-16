@@ -55,7 +55,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
         bool IOfflineReplayHost.IsWindowVisible => IsAppWindowVisible;
 
-        void IOfflineReplayHost.NoteCatchUpProgress(string reason) => NoteFullHistoryCatchUpProgress(reason);
+        void IOfflineReplayHost.NoteCatchUpProgress(string reason) => _historyCatchUp.NoteFullHistoryCatchUpProgress(reason);
 
         void IOfflineReplayHost.SchedulePersist() => SchedulePersist();
 
@@ -72,7 +72,7 @@ namespace Unison.Uwp.Services.WhatsApp
         {
             PublishConnectionUpdateDispatch.Run(this, "synced");
             EnableScheduledPersist("offline completion (" + reason + ")");
-            _ = TryConsumeMessageStoreForceHistoryRepairAsync(reason);
+            _ = _historyCatchUp.TryConsumeMessageStoreForceHistoryRepairAsync(reason);
         }
     }
 }
