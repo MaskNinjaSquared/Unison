@@ -40,6 +40,7 @@ namespace Unison.Core.Tests.Helpers
             Assert.True(host.BannerBegun);
             Assert.True(host.Bounced);
             Assert.True(host.Logged);
+            Assert.Equal("r1", host.AckDeadlineArmedFor);
         }
 
         [Fact]
@@ -57,6 +58,7 @@ namespace Unison.Core.Tests.Helpers
             Assert.True(await RequestFullHistoryOnDemandTrackedDispatch.RunAsync(host, "boot", false));
             Assert.False(host.BannerBegun);
             Assert.True(host.Bounced);
+            Assert.Null(host.AckDeadlineArmedFor);
         }
 
         private sealed class FakeHost : IRequestFullHistoryOnDemandTrackedHost
@@ -91,6 +93,10 @@ namespace Unison.Core.Tests.Helpers
             }
 
             public void BeginHistoryCatchUpBanner(string reason) => BannerBegun = true;
+
+            public string AckDeadlineArmedFor;
+
+            public void ArmFullHistoryAckDeadline(string requestId) => AckDeadlineArmedFor = requestId;
 
             public void NotifyBackgroundHistorySyncBounced() => Bounced = true;
         }

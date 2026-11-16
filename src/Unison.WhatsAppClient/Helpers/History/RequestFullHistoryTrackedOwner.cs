@@ -18,6 +18,7 @@ namespace Unison.WhatsAppClient.Helpers
         private readonly TimeSpan _responseTimeout;
         private readonly Func<string, bool, DateTime, Task<HistoryFullRequestResult>> _requestFullAsync;
         private readonly Action<string> _beginCatchUpBanner;
+        private readonly Action<string> _armAckDeadline;
         private readonly Action _notifyBackgroundSyncBounced;
         private readonly IRuntimeDiagnostics _diagnostics;
         private readonly Action<string> _log;
@@ -27,6 +28,7 @@ namespace Unison.WhatsAppClient.Helpers
             TimeSpan responseTimeout,
             Func<string, bool, DateTime, Task<HistoryFullRequestResult>> requestFullAsync,
             Action<string> beginCatchUpBanner,
+            Action<string> armAckDeadline,
             Action notifyBackgroundSyncBounced,
             IRuntimeDiagnostics diagnostics,
             Action<string> log)
@@ -36,6 +38,7 @@ namespace Unison.WhatsAppClient.Helpers
             _requestFullAsync = requestFullAsync ?? throw new ArgumentNullException(nameof(requestFullAsync));
             _beginCatchUpBanner = beginCatchUpBanner
                 ?? throw new ArgumentNullException(nameof(beginCatchUpBanner));
+            _armAckDeadline = armAckDeadline ?? throw new ArgumentNullException(nameof(armAckDeadline));
             _notifyBackgroundSyncBounced = notifyBackgroundSyncBounced
                 ?? throw new ArgumentNullException(nameof(notifyBackgroundSyncBounced));
             _diagnostics = diagnostics ?? throw new ArgumentNullException(nameof(diagnostics));
@@ -85,6 +88,9 @@ namespace Unison.WhatsAppClient.Helpers
 
         void IRequestFullHistoryOnDemandTrackedHost.BeginHistoryCatchUpBanner(string reason) =>
             _beginCatchUpBanner(reason);
+
+        void IRequestFullHistoryOnDemandTrackedHost.ArmFullHistoryAckDeadline(string requestId) =>
+            _armAckDeadline(requestId);
 
         void IRequestFullHistoryOnDemandTrackedHost.NotifyBackgroundHistorySyncBounced() =>
             _notifyBackgroundSyncBounced();

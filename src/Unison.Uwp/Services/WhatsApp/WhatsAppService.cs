@@ -599,6 +599,7 @@ namespace Unison.Uwp.Services.WhatsApp
         private readonly SilentFullHistoryChainOwner _silentChain;
         private readonly PeriodicFullHistorySafetyOwner _periodicFullSafety;
         private readonly RequestFullHistoryTrackedOwner _requestFullTracked;
+        private readonly FullHistoryAckDeadlineOwner _fullHistoryAckDeadline;
         private readonly ForceHistoryRepairOwner _forceHistoryRepair;
         private readonly SessionOpenOnDemandPendingConsumeOwner _sessionOpenPendingConsume;
         private readonly HistoryPostOfflineFreshnessOwner _postOfflineFreshness;
@@ -1009,6 +1010,13 @@ namespace Unison.Uwp.Services.WhatsApp
                 _historyRequests,
                 _syncStatus,
                 _diagnostics);
+            _fullHistoryAckDeadline = new FullHistoryAckDeadlineOwner(
+                _historyRequests,
+                () => FullHistoryCatchUpIdleAbort,
+                () => IsHistoryCatchUpBannerActive,
+                (reason, releaseEnrichment) => _catchUpFinish.Run(reason, releaseEnrichment),
+                _diagnostics,
+                message => Debug.WriteLine("[WhatsAppService] " + message));
             _requestFullTracked = new RequestFullHistoryTrackedOwner(
                 idleAbort: () => FullHistoryCatchUpIdleAbort,
                 responseTimeout: FullHistoryOnDemandResponseTimeout,
@@ -1018,6 +1026,7 @@ namespace Unison.Uwp.Services.WhatsApp
                     GetStoredMessageCount,
                     nowUtc),
                 beginCatchUpBanner: BeginHistoryCatchUpBanner,
+                armAckDeadline: requestId => _fullHistoryAckDeadline.Arm(requestId),
                 notifyBackgroundSyncBounced: () => RaiseReport(
                     () => History?.NotifyBackgroundHistorySyncBounced(),
                     nameof(IHistoryService.NotifyBackgroundHistorySyncBounced)),

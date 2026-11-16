@@ -44,6 +44,7 @@ namespace Unison.WhatsAppClient.Helpers
             if (isFreshnessRepair)
             {
                 host.BeginHistoryCatchUpBanner(reason);
+                host.ArmFullHistoryAckDeadline(stanzaId);
             }
 
             host.NotifyBackgroundHistorySyncBounced();

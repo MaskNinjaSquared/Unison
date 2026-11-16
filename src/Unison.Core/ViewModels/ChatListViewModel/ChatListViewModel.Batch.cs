@@ -14,7 +14,6 @@ using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Factories;
 using Unison.Core.Helpers;
 using Unison.Core.Helpers.Chats;
-using Unison.Core.Helpers.Chats;
 using Unison.Core.Models;
 using Unison.Core.State;
 

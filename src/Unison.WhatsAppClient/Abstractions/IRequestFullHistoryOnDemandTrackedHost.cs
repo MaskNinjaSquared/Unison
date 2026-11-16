@@ -5,7 +5,7 @@
 // =============================================================================
 using System;
 using System.Threading.Tasks;
-using Unison.Core.State;
+using Unison.Core.State;
 using Unison.WhatsAppClient.Helpers;
 
 namespace Unison.WhatsAppClient.Abstractions
@@ -34,6 +34,8 @@ namespace Unison.WhatsAppClient.Abstractions
             bool isFreshnessRepair);
 
         void BeginHistoryCatchUpBanner(string reason);
+
+        void ArmFullHistoryAckDeadline(string requestId);
 
         void NotifyBackgroundHistorySyncBounced();
     }
