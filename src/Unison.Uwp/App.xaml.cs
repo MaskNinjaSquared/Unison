@@ -409,6 +409,7 @@ namespace Unison.Uwp
             services.AddSingleton<ISyncLoadMode>(sp => sp.GetRequiredService<SyncProductPolicy>());
             services.AddSingleton<IHistorySyncTuning>(sp => sp.GetRequiredService<SyncProductPolicy>());
             services.AddSingleton<IEnrichmentTuning>(sp => sp.GetRequiredService<SyncProductPolicy>());
+            services.AddSingleton<IStartupMaintenanceTuning>(sp => sp.GetRequiredService<SyncProductPolicy>());
             services.AddSingleton(sp => new ChatPreviewReconciler(
                 sp.GetRequiredService<IHistoryMessageStore>(),
                 sp.GetRequiredService<JidAliasTable>(),

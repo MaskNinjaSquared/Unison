@@ -14,7 +14,11 @@ namespace Unison.WhatsAppClient.Abstractions
     {
         TimeSpan DeferredStartupQuietWait { get; }
 
-        bool UseFrugalSyncBudget { get; }
+        bool RequireVisibleWindow { get; }
+
+        bool RequireMemoryHeadroom { get; }
+
+        bool ResolveMissingNamesAllowed { get; }
 
         bool IsWindowVisible { get; }
 

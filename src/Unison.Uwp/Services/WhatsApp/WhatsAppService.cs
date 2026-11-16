@@ -454,7 +454,7 @@ namespace Unison.Uwp.Services.WhatsApp
         private readonly InitialSyncProgressState _initialSync;
         private readonly SyncBudget _syncBudget;
         private readonly SyncWorkloadStrategy _workload;
-        private readonly IHistorySyncTuning _historySyncTuning;
+        private readonly SyncProductPolicy _productPolicy;
         private readonly SelfProfileState _selfProfile;
 
         /// <summary>
@@ -993,7 +993,7 @@ namespace Unison.Uwp.Services.WhatsApp
             _initialSync = initialSync ?? throw new ArgumentNullException(nameof(initialSync));
             _syncBudget = syncBudget ?? throw new ArgumentNullException(nameof(syncBudget));
             _workload = workload ?? throw new ArgumentNullException(nameof(workload));
-            _historySyncTuning = new SyncProductPolicy(_workload, () => _syncBudget.IsFrugal);
+            _productPolicy = new SyncProductPolicy(_workload, () => _syncBudget.IsFrugal);
             _selfProfile = selfProfile ?? throw new ArgumentNullException(nameof(selfProfile));
             _selfProfileAuth = new SelfProfileAuthSync(
                 _selfProfile,
@@ -1108,7 +1108,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 log: message => Debug.WriteLine("[WhatsAppService] " + message));
             _silentChain = new SilentFullHistoryChainOwner(
                 historyRequests: _historyRequests,
-                silentLotDelay: _historySyncTuning.SilentFullHistoryDelay,
+                silentLotDelay: ((IHistorySyncTuning)_productPolicy).SilentFullHistoryDelay,
                 isSocketReady: () =>
                 {
                     var socket = _socket;
@@ -1127,7 +1127,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 log: message => Debug.WriteLine("[WhatsAppService] " + message));
             _periodicFullSafety = new PeriodicFullHistorySafetyOwner(
                 historyRequests: _historyRequests,
-                allowStagnantRepairCascade: _historySyncTuning.AllowStagnantRepairCascade,
+                allowStagnantRepairCascade: ((IHistorySyncTuning)_productPolicy).AllowStagnantRepairCascade,
                 settings: _localSettings,
                 isSocketReady: () =>
                 {
@@ -1436,7 +1436,7 @@ namespace Unison.Uwp.Services.WhatsApp
                     "reason=" + reason));
             _deferredStartup = new DeferredStartupMaintenanceOwner(
                 () => TimeSpan.FromMilliseconds(CurrentSyncPacing.DeferredStartupQuietMs),
-                () => UseFrugalSyncBudget,
+                _productPolicy,
                 () => IsAppWindowVisible,
                 () => Chats.Count,
                 () => _authState != null && _authState.Registered,
@@ -2057,7 +2057,11 @@ namespace Unison.Uwp.Services.WhatsApp
                 "post-message-enrichment-scheduled",
                 "reason=" + reason);
 
-        bool IPostReplayMaintenanceHost.UseFrugalSyncBudget => UseFrugalSyncBudget;
+        TimeSpan IPostReplayMaintenanceHost.PostReplayQuietWait =>
+            ((IStartupMaintenanceTuning)_productPolicy).PostReplayQuietWait;
+
+        bool IPostReplayMaintenanceHost.RunDelayedBulkAfterReplay(int offlineCount) =>
+            ((IStartupMaintenanceTuning)_productPolicy).RunDelayedBulkAfterReplay(offlineCount);
 
         bool IPostReplayMaintenanceHost.IsConnected => IsConnected;
 

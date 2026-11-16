@@ -187,12 +187,20 @@ receiving it; the product layer maps it to client options.
 | P2 | Swap `SyncWorkloadStrategy` injection in WhatsAppClient for those options, one façade at a time (History chain first: it was just extracted) | `rg SyncWorkloadStrategy src/Unison.WhatsAppClient` shrinks per step |
 | P3 | Core product services (e.g. `ISyncProductPolicy` / `StartupProductPolicy`) own the decisions: frugal gate, startup quiet, post-replay maintenance, avatar/roster policy by tier. They read tier / frugal / memory and call façade contracts | Gates gone from `Helpers/Connection`; decisions unit-tested in `Unison.Core.Tests` without a client |
 | P4 | Core contracts stop exposing Baileys types (own DTOs at the contract edge) | `Unison.Core.csproj` drops the Baileys reference |
-| Exit | `rg "SyncWorkloadStrategy\|DeviceCategory\|Frugal\|IAppMemoryInfo\|IsMobile" src/Unison.WhatsAppClient src/Unison.Socket src/Unison.Baileys` returns 0 | — |
+| Exit | `rg "SyncWorkloadStrategy\|DeviceCategory\|SyncBudget\|UseFrugalSyncBudget\|IsMobile" src/Unison.WhatsAppClient src/Unison.Socket src/Unison.Baileys` returns 0. Neutral `Func<bool> preferFrugal` / `ISyncLoadMode` knobs (slice, pause) and `IAppMemoryInfo` read only for diagnostics are allowed | — |
 
-**Open decision:** the dependency direction. Today WhatsAppClient → Core (contracts in Core).
-Recommended: keep contracts in Core through P, but make them tier-free; flip in Phase E
-(client owns its I/O, Core → WhatsAppClient, product services consult the client directly).
-Flipping earlier would mean moving every `Contracts/WhatsApp` interface in one pass.
+**Progress (Nov 2026).** P1–P3 done for the client:
+
+- Tuning contracts in `Core/Contracts/Tuning` (tier-free, primitives / `TimeSpan`): `ISyncLoadMode`, `IHistorySyncTuning`, `IEnrichmentTuning`, `IStartupMaintenanceTuning`.
+- One product implementation: `Core/Product/SyncProductPolicy` (`SyncWorkloadStrategy` + live `SyncBudget.IsFrugal`), registered once in `App.ConfigureServices` behind the four contracts. Unit tests: `SyncProductPolicyTests`.
+- Façades, owners and policies in WhatsAppClient take those contracts or plain values (`silentLotDelay`, `allowStagnantRepairCascade`, `rosterBuildChunkSize`, `flushDebounce`). `DeferredStartupFrugalGate` became the neutral `DeferredStartupGate` (`requireVisibleWindow` / `requireMemoryHeadroom`); post-replay quiet window and delayed bulk come from the host.
+- `IHistoryService.PreferFrugalSyncBudget` removed; ViewModels read `ISyncLoadMode`.
+
+Still open: `WhatsAppService` (UWP host) reads `_workload` / `CurrentSyncPacing` / `UseFrugalSyncBudget` directly — host debt that leaves with it (Phase D). P4 untouched.
+
+**Dependency direction (decided):** contracts stay in Core through P (WhatsAppClient → Core),
+tier-free; the flip happens in Phase E (client owns its I/O, Core → WhatsAppClient, product
+services consult the client directly).
 
 **Risk:** the History FULL chain and deferred startup are the paths Mobile is most sensitive
 to. P2/P3 there need on-device runs (first sync, reconnect with stale tips, frugal on/off),

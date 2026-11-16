@@ -8,6 +8,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using Unison.Core.Contracts.Tuning;
 using Unison.WhatsAppClient.Abstractions;
 
 namespace Unison.WhatsAppClient.Helpers
@@ -15,7 +16,7 @@ namespace Unison.WhatsAppClient.Helpers
     public sealed class DeferredStartupMaintenanceOwner : IDeferredStartupMaintenanceHost
     {
         private readonly Func<TimeSpan> _quietWait;
-        private readonly Func<bool> _useFrugal;
+        private readonly IStartupMaintenanceTuning _tuning;
         private readonly Func<bool> _isWindowVisible;
         private readonly Func<int> _chatCount;
         private readonly Func<bool> _isAuthRegistered;
@@ -40,7 +41,7 @@ namespace Unison.WhatsAppClient.Helpers
 
         public DeferredStartupMaintenanceOwner(
             Func<TimeSpan> quietWait,
-            Func<bool> useFrugal,
+            IStartupMaintenanceTuning tuning,
             Func<bool> isWindowVisible,
             Func<int> chatCount,
             Func<bool> isAuthRegistered,
@@ -64,7 +65,7 @@ namespace Unison.WhatsAppClient.Helpers
             Action<Exception> logDeferredMaintenanceFailed)
         {
             _quietWait = quietWait ?? throw new ArgumentNullException(nameof(quietWait));
-            _useFrugal = useFrugal ?? throw new ArgumentNullException(nameof(useFrugal));
+            _tuning = tuning ?? throw new ArgumentNullException(nameof(tuning));
             _isWindowVisible = isWindowVisible
                 ?? throw new ArgumentNullException(nameof(isWindowVisible));
             _chatCount = chatCount ?? throw new ArgumentNullException(nameof(chatCount));
@@ -112,7 +113,11 @@ namespace Unison.WhatsAppClient.Helpers
 
         TimeSpan IDeferredStartupMaintenanceHost.DeferredStartupQuietWait => _quietWait();
 
-        bool IDeferredStartupMaintenanceHost.UseFrugalSyncBudget => _useFrugal();
+        bool IDeferredStartupMaintenanceHost.RequireVisibleWindow => _tuning.DeferredStartupRequiresVisibleWindow;
+
+        bool IDeferredStartupMaintenanceHost.RequireMemoryHeadroom => _tuning.DeferredStartupRequiresMemoryHeadroom;
+
+        bool IDeferredStartupMaintenanceHost.ResolveMissingNamesAllowed => _tuning.ResolveMissingNamesAtStartup;
 
         bool IDeferredStartupMaintenanceHost.IsWindowVisible => _isWindowVisible();
 

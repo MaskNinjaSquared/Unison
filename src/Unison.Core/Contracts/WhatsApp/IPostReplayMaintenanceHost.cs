@@ -12,7 +12,9 @@ namespace Unison.Core.Contracts.WhatsApp
 {
     public interface IPostReplayMaintenanceHost
     {
-        bool UseFrugalSyncBudget { get; }
+        TimeSpan PostReplayQuietWait { get; }
+
+        bool RunDelayedBulkAfterReplay(int offlineCount);
 
         bool IsConnected { get; }
 

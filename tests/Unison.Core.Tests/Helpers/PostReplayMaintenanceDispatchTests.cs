@@ -11,14 +11,6 @@ namespace Unison.Core.Tests.Helpers
     public sealed class PostReplayMaintenanceDispatchTests
     {
         [Fact]
-        public void Delayed_bulk_only_above_threshold_without_frugal()
-        {
-            Assert.True(PostReplayMaintenanceGates.ShouldRunDelayedBulk(50, false));
-            Assert.False(PostReplayMaintenanceGates.ShouldRunDelayedBulk(49, false));
-            Assert.False(PostReplayMaintenanceGates.ShouldRunDelayedBulk(50, true));
-        }
-
-        [Fact]
         public void Abort_when_quiet_or_connection_or_window_fails()
         {
             Assert.True(PostReplayMaintenanceGates.ShouldAbortBeforeWork(false, true, true));
@@ -93,7 +85,7 @@ namespace Unison.Core.Tests.Helpers
         [Fact]
         public async Task Happy_path_notifies_with_delayed_bulk()
         {
-            var host = new FakeHost { UseFrugal = false };
+            var host = new FakeHost { AllowDelayedBulk = true };
 
             await PostReplayMaintenanceDispatch.RunAsync(
                 host,
@@ -118,13 +110,15 @@ namespace Unison.Core.Tests.Helpers
 
             public bool MemoryOk { get; set; } = true;
 
-            public bool UseFrugal { get; set; }
+            public bool AllowDelayedBulk { get; set; } = true;
 
             public bool CatchUpActive { get; set; }
 
             public bool ListPaintPending { get; set; }
 
-            public bool UseFrugalSyncBudget => UseFrugal;
+            public TimeSpan PostReplayQuietWait => TimeSpan.FromSeconds(12);
+
+            public bool RunDelayedBulkAfterReplay(int offlineCount) => AllowDelayedBulk && offlineCount >= 50;
 
             public bool IsConnected => true;
 

@@ -13,8 +13,16 @@ using Unison.Core.State;
 
 namespace Unison.Core.Product
 {
-    public sealed class SyncProductPolicy : ISyncLoadMode, IHistorySyncTuning, IEnrichmentTuning
+    public sealed class SyncProductPolicy :
+        ISyncLoadMode,
+        IHistorySyncTuning,
+        IEnrichmentTuning,
+        IStartupMaintenanceTuning
     {
+        private const int DelayedBulkMinOfflineCount = 50;
+        private static readonly TimeSpan FrugalPostReplayQuietWait = TimeSpan.FromSeconds(8);
+        private static readonly TimeSpan PostReplayQuietWaitDefault = TimeSpan.FromSeconds(12);
+
         private readonly SyncWorkloadStrategy _workload;
         private readonly Func<bool> _isFrugal;
 
@@ -77,6 +85,21 @@ namespace Unison.Core.Product
             TimeSpan.FromSeconds(_workload.DeferredAvatarRetryDelaySeconds);
 
         int IEnrichmentTuning.DeferredAvatarMaxRetries => _workload.DeferredAvatarMaxRetries;
+
+        // --- IStartupMaintenanceTuning --------------------------------------
+
+        bool IStartupMaintenanceTuning.DeferredStartupRequiresVisibleWindow => _isFrugal();
+
+        bool IStartupMaintenanceTuning.DeferredStartupRequiresMemoryHeadroom => _isFrugal();
+
+        bool IStartupMaintenanceTuning.ResolveMissingNamesAtStartup => !_isFrugal();
+
+        TimeSpan IStartupMaintenanceTuning.PostReplayQuietWait =>
+            _isFrugal() ? FrugalPostReplayQuietWait : PostReplayQuietWaitDefault;
+
+        // Large offline drains get a delayed bulk tip scan unless already frugal.
+        bool IStartupMaintenanceTuning.RunDelayedBulkAfterReplay(int offlineCount) =>
+            offlineCount >= DelayedBulkMinOfflineCount && !_isFrugal();
 
         private bool IsLowTier =>
             _workload.Category == DeviceCategory.Low || _workload.Category == DeviceCategory.Unsupported;

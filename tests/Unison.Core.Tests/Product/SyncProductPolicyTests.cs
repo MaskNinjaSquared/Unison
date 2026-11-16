@@ -58,6 +58,51 @@ namespace Unison.Core.Tests.Product
             Assert.Equal(Math.Max(1, workload.GroupRosterBatchSize) * 8, tuning.GroupRosterBuildChunkSize);
         }
 
+        [Fact]
+        public void Frugal_startup_requires_visibility_and_headroom_and_skips_missing_names()
+        {
+            bool frugal = true;
+            IStartupMaintenanceTuning tuning = new SyncProductPolicy(
+                SyncWorkloadStrategy.For(DeviceCategory.Low),
+                () => frugal);
+
+            Assert.True(tuning.DeferredStartupRequiresVisibleWindow);
+            Assert.True(tuning.DeferredStartupRequiresMemoryHeadroom);
+            Assert.False(tuning.ResolveMissingNamesAtStartup);
+
+            frugal = false;
+            Assert.False(tuning.DeferredStartupRequiresVisibleWindow);
+            Assert.False(tuning.DeferredStartupRequiresMemoryHeadroom);
+            Assert.True(tuning.ResolveMissingNamesAtStartup);
+        }
+
+        [Fact]
+        public void Post_replay_quiet_is_shorter_when_frugal()
+        {
+            bool frugal = true;
+            IStartupMaintenanceTuning tuning = new SyncProductPolicy(
+                SyncWorkloadStrategy.For(DeviceCategory.High),
+                () => frugal);
+
+            Assert.Equal(TimeSpan.FromSeconds(8), tuning.PostReplayQuietWait);
+            frugal = false;
+            Assert.Equal(TimeSpan.FromSeconds(12), tuning.PostReplayQuietWait);
+        }
+
+        [Fact]
+        public void Delayed_bulk_only_above_threshold_without_frugal()
+        {
+            bool frugal = false;
+            IStartupMaintenanceTuning tuning = new SyncProductPolicy(
+                SyncWorkloadStrategy.For(DeviceCategory.High),
+                () => frugal);
+
+            Assert.True(tuning.RunDelayedBulkAfterReplay(50));
+            Assert.False(tuning.RunDelayedBulkAfterReplay(49));
+            frugal = true;
+            Assert.False(tuning.RunDelayedBulkAfterReplay(50));
+        }
+
         [Theory]
         [InlineData(DeviceCategory.High, false)]
         [InlineData(DeviceCategory.Low, true)]

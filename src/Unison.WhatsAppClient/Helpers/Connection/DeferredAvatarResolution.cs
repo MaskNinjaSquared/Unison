@@ -3,7 +3,7 @@
 //
 // Retries the background enrichment pass after a delay when sync traffic made
 // the first attempt step aside. Owns the timer; the contact façade owns the pass.
-// Delay and consecutive cap come from SyncWorkloadStrategy (High defaults when
+// Delay and consecutive cap come from IEnrichmentTuning (High defaults when
 // the host does not inject them).
 // =============================================================================
 using System;

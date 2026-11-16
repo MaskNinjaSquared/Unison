@@ -28,7 +28,7 @@ namespace Unison.WhatsAppClient.Helpers
             try
             {
                 bool quiet = await host.WaitForStartupQuietAsync(
-                        PostReplayMaintenanceGates.QuietWait(host.UseFrugalSyncBudget),
+                        host.PostReplayQuietWait,
                         token)
                     .ConfigureAwait(false);
 
@@ -66,9 +66,7 @@ namespace Unison.WhatsAppClient.Helpers
                     try
                     {
                         token.ThrowIfCancellationRequested();
-                        bool runDelayedBulk = PostReplayMaintenanceGates.ShouldRunDelayedBulk(
-                            offlineCount,
-                            host.UseFrugalSyncBudget);
+                        bool runDelayedBulk = host.RunDelayedBulkAfterReplay(offlineCount);
                         await host.NotifyPostReplayMaintenanceAsync(
                                 offlineCount,
                                 runDelayedBulk,

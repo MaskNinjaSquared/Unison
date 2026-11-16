@@ -38,16 +38,17 @@ namespace Unison.WhatsAppClient.Helpers
                         CancellationToken.None)
                     .ConfigureAwait(false);
 
-                DeferredStartupFrugalAction frugal = DeferredStartupFrugalGate.Decide(
-                    host.UseFrugalSyncBudget,
+                DeferredStartupGateAction gate = DeferredStartupGate.Decide(
+                    host.RequireVisibleWindow,
+                    host.RequireMemoryHeadroom,
                     host.IsWindowVisible);
-                if (frugal == DeferredStartupFrugalAction.SkipVisibility)
+                if (gate == DeferredStartupGateAction.SkipVisibility)
                 {
                     host.WriteDeferredSkipped("reason=visibility");
                     return;
                 }
 
-                if (frugal == DeferredStartupFrugalAction.CheckMemory)
+                if (gate == DeferredStartupGateAction.CheckMemory)
                 {
                     if (!await host.WaitForMemoryHeadroomAsync(CancellationToken.None)
                             .ConfigureAwait(false))
@@ -94,9 +95,9 @@ namespace Unison.WhatsAppClient.Helpers
                 await host.NotifyDeferredStartupListRepairAsync().ConfigureAwait(false);
                 await host.NormalizePersistedChatNamesAsync().ConfigureAwait(false);
 
-                bool resolveMissing = DeferredStartupFrugalGate.ShouldResolveMissingNames(
+                bool resolveMissing = DeferredStartupGate.ShouldResolveMissingNames(
                     host.ChatCount,
-                    host.UseFrugalSyncBudget,
+                    host.ResolveMissingNamesAllowed,
                     HistoryCatchUpLocalWorkPolicy.ShouldDeferHeavyLocalWork(
                         host.IsHistoryCatchUpActive));
                 await host.RunDeferredStartupContactPassAsync(resolveMissing)

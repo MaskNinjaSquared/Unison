@@ -49,7 +49,7 @@ namespace Unison.WhatsAppClient.Abstractions
         void RequestFirstSyncListReleaseAfterNames(string reason, int processed, int total);
 
         /// <summary>
-        /// Explicit delay (not the tier default from <c>SyncWorkloadStrategy</c>).
+        /// Explicit delay (not the product default from <c>IHistorySyncTuning</c>).
         /// Catch-up finish uses a fixed quiet gap before deferred-avatar wake.
         /// </summary>
         void ScheduleDeferredAvatars(string reason, TimeSpan delay);

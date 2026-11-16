@@ -2,6 +2,16 @@
 
 Newest first.
 
+## Product policy out of the WhatsApp client (Phase P)
+
+Device tier and frugal mode no longer reach `Unison.WhatsAppClient` as
+`SyncWorkloadStrategy` / `SyncBudget` / `DeviceCategory`. Core owns the decisions in
+`SyncProductPolicy`, exposed through tier-free tuning contracts (`ISyncLoadMode`,
+`IHistorySyncTuning`, `IEnrichmentTuning`, `IStartupMaintenanceTuning`); façades and
+owners take those or plain values. Deferred startup and post-replay maintenance gates
+are neutral (`DeferredStartupGate`). Same values as before per tier / frugal.
+See [Netstandard WhatsApp client](Netstandard-WhatsApp-Client).
+
 ## WhatsAppService extraction — 30 history/connection host interfaces to owners
 
 Manual resync, SQLite lot progress, FULL watchdogs, catch-up finish and reconnect
