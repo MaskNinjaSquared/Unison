@@ -2878,17 +2878,6 @@ namespace Unison.Uwp.Services.WhatsApp
                 _authState == null,
                 _authState != null && _authState.Registered);
 
-        /// <summary>
-        /// Phone revoked this companion (401 / 403 / the live <c>device_removed</c> stanza).
-        /// </summary>
-        private static bool IsExplicitLogoutStreamCode(string code) =>
-            ExplicitLogoutStreamCode.Matches(code);
-
-        /// <summary>
-        /// Recovers the stream code behind a socket error (typed reason, else message text).
-        /// </summary>
-        private static string TryExtractFatalStreamCodeFromException(Exception ex) =>
-            FatalStreamCodeFromException.TryRead(ex);
 
 
         private void InvalidateCurrentSocket(IWhatsAppSocket socket, string reason) =>

@@ -186,6 +186,8 @@
     <Compile Include="Services\Socket\UwpWhatsAppTransportFactory.cs" />
     <Compile Include="Services\Socket\IWhatsAppSessionProvider.cs" />
     <Compile Include="Services\WhatsApp\SocketBridgeRemoteHooks.cs" />
+    <Compile Include="Services\WhatsApp\ConnectionHealthSocketHost.cs" />
+    <Compile Include="Services\WhatsApp\IConnectionHealthOwnerPort.cs" />
     <Compile Include="Services\WhatsApp\SocketEventHandlerWiring.cs" />
     <Compile Include="Services\WhatsApp\UwpConnectionSocketSessionFactory.cs" />
     <Compile Include="Services\WhatsApp\JidResolver.cs" />

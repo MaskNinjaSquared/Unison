@@ -40,7 +40,7 @@ using Windows.Networking.Sockets;
 
 namespace Unison.Uwp.Services.WhatsApp
 {
-    public partial class WhatsAppService
+    public partial class WhatsAppService : IConnectionHealthOwnerPort
     {
 
         private static TaskCompletionSource<bool> CreateSessionEstablishedTcs()
@@ -224,7 +224,13 @@ namespace Unison.Uwp.Services.WhatsApp
         {
             // ConnectionStabilityExperiment: defer-aware (usync / FULL_HISTORY) by default.
             // Flip Enabled off to restore the pure 1.8.3 force-reconnect loop for A/B.
-            var host = new ConnectionHealthMonitorHost(this, socket);
+            var host = new ConnectionHealthSocketHost(
+                this,
+                socket,
+                _sessionFlags,
+                _incomingPump,
+                _diagnostics,
+                _usyncGate);
             if (ConnectionStabilityExperiment.UseDeferAwareHealthMonitor)
             {
                 return ConnectionHealthMonitor.RunDeferAwareAsync(host, token);
@@ -233,119 +239,27 @@ namespace Unison.Uwp.Services.WhatsApp
             return ConnectionHealthMonitor.RunLegacy183Async(host, token);
         }
 
-        /// <summary>
-        /// Binds one monitored socket into <see cref="IConnectionHealthMonitorHost"/> for
-        /// <see cref="ConnectionHealthMonitor"/>.
-        /// </summary>
-        private sealed class ConnectionHealthMonitorHost :
-            IConnectionHealthMonitorHost,
-            IForceDisconnectMonitoredSocketHost
+        // --- IConnectionHealthOwnerPort --------------------------------------
+
+        IWhatsAppSocket IConnectionHealthOwnerPort.CurrentSocket => _socket;
+
+        void IConnectionHealthOwnerPort.ClearCurrentSocketIf(IWhatsAppSocket socket)
         {
-            private readonly WhatsAppService _owner;
-            private readonly IWhatsAppSocket _socket;
-
-            public ConnectionHealthMonitorHost(WhatsAppService owner, IWhatsAppSocket socket)
+            if (ReferenceEquals(_socket, socket))
             {
-                _owner = owner;
-                _socket = socket;
+                _socket = null;
             }
+        }
 
-            public bool ShouldAbortLoop =>
-                _owner._sessionFlags.SuppressReconnect || _owner._sessionFlags.FatalSessionEnded;
+        bool IConnectionHealthOwnerPort.IsHistoryCatchUpActive => IsHistoryCatchUpActive();
 
-            public bool IsMonitoredSocketCurrent =>
-                ReferenceEquals(_owner._socket, _socket);
+        void IConnectionHealthOwnerPort.RequestSoftReconnect(string reason) =>
+            ScheduleAutoReconnect(reason);
 
-            public bool IsMonitoredSocketConnected =>
-                _socket.IsConnected && _socket.IsHandshakeComplete;
-
-            public Task DelayCheckIntervalAsync(CancellationToken token) =>
-                Task.Delay(ConnectionHealthPolicy.CheckInterval, token);
-
-            public void RestartIncomingPumpIfStalled()
-            {
-                if (!_owner._incomingPump.IsStalled(ConnectionHealthPolicy.IncomingPumpStallLimit))
-                {
-                        return;
-                    }
-
-                        _owner._diagnostics.Write(
-                            "messages",
-                            "incoming-pump-health-restart",
-                    "stage=" + _owner._incomingPump.Stage);
-                _owner._incomingPump.Reset("health-stall", requeueCurrent: true);
-                _owner._incomingPump.RestartIfNeeded();
-            }
-
-            public bool IsNodeProcessingStalled =>
-                _socket.HasStalledNodeProcessing(ConnectionHealthPolicy.NodeProcessingStallLimit);
-
-            public bool HasFreshBackgroundConnection =>
-                _socket.HasFreshConnection(ConnectionHealthProfile.Background.FreshnessLimit);
-
-            public bool IsUsyncGateHeld =>
-                _owner._usyncGate != null && _owner._usyncGate.IsHeld;
-
-            public bool IsHistoryCatchUpActive => _owner.IsHistoryCatchUpActive();
-
-            public Task<bool> ProbeBackgroundAsync() =>
-                _socket.ProbeConnectionAsync(ConnectionHealthProfile.Background.ProbeTimeoutMs);
-
-            public int QueuedNodeProcessingCount => _socket.QueuedNodeProcessingCount;
-
-            public int PendingQueryCount => _socket.PendingQueryCount;
-
-            public void ForceDisconnectMonitoredSocket() =>
-                ForceDisconnectMonitoredSocketDispatch.Run(this);
-
-            bool IForceDisconnectMonitoredSocketHost.IsMonitoredSocketCurrent =>
-                ReferenceEquals(_owner._socket, _socket);
-
-            void IForceDisconnectMonitoredSocketHost.DisconnectMonitoredSocketBestEffort()
+        void IConnectionHealthOwnerPort.LatchFatalAndReportStream(string code)
         {
-            try
-            {
-                    _socket.Disconnect();
-                }
-                catch
-                {
-                }
-            }
-
-            void IForceDisconnectMonitoredSocketHost.ClearCurrentSocketReferenceIfStillMonitored()
-            {
-                if (ReferenceEquals(_owner._socket, _socket))
-                {
-                    _owner._socket = null;
-                }
-            }
-
-            public void RequestSoftReconnect(string reason) =>
-                _owner.ScheduleAutoReconnect(reason);
-
-            public void WriteHealthJournal(string eventName, string detail) =>
-                _owner._diagnostics.Write("connection", eventName, detail);
-
-            public void LogHealth(string message) =>
-                Debug.WriteLine("[WhatsAppService] " + message);
-
-            public void RecordHealthException(Exception error) =>
-                _owner._diagnostics.RecordException(
-                            "connection",
-                    "health-monitor-failed",
-                    error);
-
-            public string TryGetExplicitLogoutStreamCode(Exception error)
-            {
-                string fatalCode = WhatsAppService.TryExtractFatalStreamCodeFromException(error);
-                return IsExplicitLogoutStreamCode(fatalCode) ? fatalCode : null;
-            }
-
-            public void LatchFatalAndReportStream(string code)
-            {
-                _owner.LatchFatalSession("health-" + code);
-                _owner.ReportStreamError(code);
-            }
+            LatchFatalSession("health-" + code);
+            ReportStreamError(code);
         }
 
         internal void PairingTrace(string message)
