@@ -259,7 +259,7 @@ History catch-up host interfaces (30) left the client as owners in
 | FULL request chain | `FullHistoryCatchUpProgressOwner`, `SilentFullHistoryChainOwner` (owns armed / quiet / empty-streak / schedule CTS), `PeriodicFullHistorySafetyOwner`, `RequestFullHistoryTrackedOwner` |
 | Latches | `ForceHistoryRepairOwner` (pending + consume over `ILocalSettings`), `SessionOpenOnDemandPendingConsumeOwner` |
 | Freshness / hydration | `HistoryPostOfflineFreshnessOwner`, `ReconnectHistoryCatchUpOwner`, `HydrationFallbackPipelineOwner`, `HistoryHydrationCandidatesOwner`, `HistoryHydrationSettleOwner` |
-| Connection | `PersistAuthStateOwner`, `WaitForSessionEstablishedOwner`, `MarkPairingRestartPendingOwner` |
+| Connection | `PersistAuthStateOwner`, `MarkPairingRestartPendingOwner` (both in `ConnectionSessionHost` now) |
 
 Stale probes share `TryGetHistoryStaleReason`. The connection three are ports only:
 auth state, the session-established TCS and the pairing flags stay on the host with

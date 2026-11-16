@@ -643,6 +643,8 @@ The host now shrinks by **cohesive clusters**, not owner by owner: moving a sing
 
 Move-only: owner bodies, construction order and every threshold are unchanged; Debug output prefix is `[HistoryCatchUpHost]`. Needs on-device check (first sync after pairing, FULL catch-up after a long offline gap, resync conversations from settings). Next clusters: connection (pairing / auth / socket error / logout / clear session), then persistence and startup.
 
+`ConnectionSessionHost` (`Unison.WhatsAppClient/Helpers/Connection`, DI singleton) is the connection cluster: `PersistAuthStateOwner`, `MarkPairingRestartPendingOwner`, `InvalidateCurrentSocketOwner`, `NotifyServerLogoutOwner`, `RaiseSessionClearedOwner`, `AuthStateWireOwner`, `SessionInitializedOwner`, `SocketErrorOwner`, `ConnectionUpdateOwner`, and the fatal latch / stream-error report. Socket access is `IConnectionSocketControl`; what it needs from the host is `IConnectionSessionHostPort` (lazy). `SocketEventHandlerWiring` still reaches the wire owners through the host's forwarding properties. `ClearSessionOwner` stays wired in the host until there is a storage wipe port worth having: every step it runs is AuthStore / key store / Noise store / toast / tile / UI-collection I/O.
+
 ### Phase E (future) — client-owned public I/O
 
 **Not** Phase C/D work. Long-term goal: `Unison.WhatsAppClient` publishable / reusable without dragging Unison UI models — a portable WhatsApp **policy** library whose **entry and exit** types live on the client (or a thin contracts package next to it), not on Unison.Core ViewModel-shaped models.

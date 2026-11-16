@@ -329,13 +329,13 @@ namespace Unison.Uwp.Services.WhatsApp
 
         internal QrCodeWireOwner QrCodeWire => _qrCodeWire;
 
-        internal AuthStateWireOwner AuthStateWire => _authStateWire;
+        internal AuthStateWireOwner AuthStateWire => _connectionSession.AuthStateWire;
 
-        internal SessionInitializedOwner SessionInitializedWire => _sessionInitializedWire;
+        internal SessionInitializedOwner SessionInitializedWire => _connectionSession.SessionInitializedWire;
 
-        internal SocketErrorOwner SocketErrorWire => _socketErrorWire;
+        internal SocketErrorOwner SocketErrorWire => _connectionSession.SocketErrorWire;
 
-        internal ConnectionUpdateOwner ConnectionUpdateWire => _connectionUpdateWire;
+        internal ConnectionUpdateOwner ConnectionUpdateWire => _connectionSession.ConnectionUpdateWire;
 
         internal SocketFacadeWireOwner SocketFacadeWire => _socketFacadeWire;
 

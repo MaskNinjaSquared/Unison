@@ -497,7 +497,8 @@ namespace Unison.Uwp
                 sp.GetRequiredService<DecryptedMessageWireOwner>(),
                 sp.GetRequiredService<ReconnectHostAdapter>(),
                 sp.GetRequiredService<CurrentSocketHealthHost>(),
-                sp.GetRequiredService<HistoryCatchUpHost>()));
+                sp.GetRequiredService<HistoryCatchUpHost>(),
+                sp.GetRequiredService<ConnectionSessionHost>()));
             services.AddSingleton(sp => new HistoryCatchUpHost(
                 () => sp.GetRequiredService<WhatsAppService>(),
                 () => sp.GetRequiredService<IConnectionEnsureHost>(),
@@ -527,6 +528,20 @@ namespace Unison.Uwp
                 sp.GetRequiredService<IRuntimeDiagnostics>()));
             services.AddSingleton<IConnectionSocketControl>(sp => new SlotConnectionSocketControl(
                 sp.GetRequiredService<ConnectionSlot<IWhatsAppSocket>>()));
+            services.AddSingleton(sp => new ConnectionSessionHost(
+                () => sp.GetRequiredService<WhatsAppService>(),
+                () => sp.GetRequiredService<IHistoryWireIngress>(),
+                sp.GetRequiredService<IConnectionSocketControl>(),
+                sp.GetRequiredService<ConnectionSlot<AuthState>>(),
+                sp.GetRequiredService<ConnectionSessionFlags>(),
+                sp.GetRequiredService<SessionEstablishedGate>(),
+                sp.GetRequiredService<SyncWorkGate>(),
+                sp.GetRequiredService<HistoryCatchUpHost>(),
+                sp.GetRequiredService<ReconnectHostAdapter>(),
+                sp.GetRequiredService<ReconnectHostAdapter>().Coordinator,
+                sp.GetRequiredService<ConnectionEventHub>(),
+                sp.GetRequiredService<AttachedUiDispatcher>(),
+                sp.GetRequiredService<IRuntimeDiagnostics>()));
             services.AddSingleton(sp => new ChatPreviewReconciler(
                 sp.GetRequiredService<IHistoryMessageStore>(),
                 sp.GetRequiredService<JidAliasTable>(),

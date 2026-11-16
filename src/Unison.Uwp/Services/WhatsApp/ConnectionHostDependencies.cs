@@ -23,10 +23,13 @@ namespace Unison.Uwp.Services.WhatsApp
             DecryptedMessageWireOwner decryptedMessage,
             ReconnectHostAdapter reconnect,
             CurrentSocketHealthHost currentSocketHealth,
-            HistoryCatchUpHost historyCatchUp)
+            HistoryCatchUpHost historyCatchUp,
+            ConnectionSessionHost connectionSession)
         {
             Reconnect = reconnect ?? throw new ArgumentNullException(nameof(reconnect));
             HistoryCatchUp = historyCatchUp ?? throw new ArgumentNullException(nameof(historyCatchUp));
+            ConnectionSession = connectionSession
+                ?? throw new ArgumentNullException(nameof(connectionSession));
             CurrentSocketHealth = currentSocketHealth
                 ?? throw new ArgumentNullException(nameof(currentSocketHealth));
             Events = events ?? throw new ArgumentNullException(nameof(events));
@@ -46,6 +49,8 @@ namespace Unison.Uwp.Services.WhatsApp
         public ReconnectHostAdapter Reconnect { get; }
 
         public HistoryCatchUpHost HistoryCatchUp { get; }
+
+        public ConnectionSessionHost ConnectionSession { get; }
 
         public CurrentSocketHealthHost CurrentSocketHealth { get; }
 

@@ -40,25 +40,31 @@ using Windows.Networking.Sockets;
 
 namespace Unison.Uwp.Services.WhatsApp
 {
-    public partial class WhatsAppService : IConnectionHealthOwnerPort, IReconnectLifecyclePort
+    public partial class WhatsAppService :
+        IConnectionHealthOwnerPort,
+        IReconnectLifecyclePort,
+        IConnectionSessionHostPort
     {
-        private object ResolveAuthToSave(object sourceSocket)
-        {
-            var typed = sourceSocket as IWhatsAppSocket;
-            return typed?.Auth ?? _socketSlot.Current?.Auth ?? _authSlot.Current;
-        }
+        // --- IConnectionSessionHostPort --------------------------------------
 
-        private async Task AssignAndSaveAuthAsync(object auth)
-        {
-            var authToSave = auth as AuthState;
-            if (authToSave == null)
-            {
-                return;
-            }
+        void IConnectionSessionHostPort.StopConnectionHealthMonitor(string reason) =>
+            StopConnectionHealthMonitor(reason);
 
-            _authSlot.Current = authToSave;
-            await _authStore.SaveAsync(authToSave);
-        }
+        void IConnectionSessionHostPort.PublishConnectionStatus(string status) =>
+            PublishConnectionUpdateDispatch.Run(this, status);
+
+        void IConnectionSessionHostPort.PairingTrace(string message) => PairingTrace(message);
+
+        void IConnectionSessionHostPort.FileSelfIdentityAliases(string source) =>
+            FileSelfIdentityAliases(source);
+
+        void IConnectionSessionHostPort.EnsureSelfPhonePersisted() =>
+            _selfProfileAuth.EnsureSelfPhonePersisted();
+
+        void IConnectionSessionHostPort.SchedulePostReplay(int offlineCount) =>
+            _postSyncMaintenance.SchedulePostReplay(offlineCount);
+
+        Task IConnectionSessionHostPort.SaveAuthAsync(AuthState auth) => _authStore.SaveAsync(auth);
 
         // --- IPublishConnectionUpdateHost ------------------------------------
 
@@ -234,8 +240,8 @@ namespace Unison.Uwp.Services.WhatsApp
 
         void IConnectionHealthOwnerPort.LatchFatalAndReportStream(string code)
         {
-            LatchFatalSession("health-" + code);
-            ReportStreamError(code);
+            _connectionSession.LatchFatalSession("health-" + code);
+            _connectionSession.ReportStreamError(code);
         }
 
         internal void PairingTrace(string message)
@@ -266,7 +272,7 @@ namespace Unison.Uwp.Services.WhatsApp
         void IReconnectLifecyclePort.PairingTrace(string message) => PairingTrace(message);
 
         void IReconnectLifecyclePort.MarkPairingRestartPending(string reason) =>
-            _markPairingRestartPending.Run(reason);
+            _connectionSession.MarkPairingRestartPending.Run(reason);
 
         void IReconnectLifecyclePort.StopConnectionHealthMonitor(string reason) =>
             StopConnectionHealthMonitor(reason);
@@ -523,7 +529,7 @@ namespace Unison.Uwp.Services.WhatsApp
         /// unlink from: an unregistered or already-closed session has nobody to tell.
         /// </summary>
         public Task NotifyServerLogoutAsync(string reason = null) =>
-            _serverLogout.RunAsync(reason);
+            _connectionSession.ServerLogout.RunAsync(reason);
 
         public Task ClearSessionAsync() => _clearSession.RunAsync();
 
@@ -993,7 +999,7 @@ namespace Unison.Uwp.Services.WhatsApp
         /// </summary>
         public void SuppressReconnectFromPolicy(string reason)
         {
-            LatchFatalSession("policy-" + (reason ?? "fatal"));
+            _connectionSession.LatchFatalSession("policy-" + (reason ?? "fatal"));
             _diagnostics.Write(
                     "connection",
                 "reconnect-suppressed-by-policy",

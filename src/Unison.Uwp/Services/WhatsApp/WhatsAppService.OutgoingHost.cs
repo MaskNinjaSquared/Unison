@@ -126,7 +126,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
         void IOutgoingMessageHost.InvalidateTransport(OutgoingSendAttempt attempt, string reason)
         {
-            _invalidateSocket.Run(attempt?.TransportToken as IWhatsAppSocket, reason);
+            _connectionSession.InvalidateSocket.Run(attempt?.TransportToken as IWhatsAppSocket, reason);
         }
 
         void IOutgoingMessageHost.RecordSendAttempt(string messageId)

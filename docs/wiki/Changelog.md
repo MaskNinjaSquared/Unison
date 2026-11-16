@@ -2,6 +2,10 @@
 
 Newest first.
 
+## Phase D stage 4 — `ConnectionSessionHost` (netstandard)
+
+`ConnectionSessionHost` (`Unison.WhatsAppClient/Helpers/Connection`) owns auth persistence, pairing restart, socket invalidate, logout notice, session-cleared event and the auth / session-initialized / socket-error / connection-update wire owners, plus `LatchFatalSession`, `ReportStreamError` and the pre-session close threshold. `WhatsAppService` answers `IConnectionSessionHostPort` (health stop, status publish, pairing trace, self alias filing, self phone persist, post-replay, `AuthStore` save). `ClearSessionOwner` stays wired in the host: its steps are UWP storage and UI wipes. The unused `WaitForSessionEstablishedOwner` is deleted. Debug prefix for these lines is now `[ConnectionSessionHost]`. Event order (QR, 515, fatal, logout) unchanged.
+
 ## Phase D stage 4 — `HistoryCatchUpHost` moves to netstandard
 
 `HistoryCatchUpHost` now lives in `Unison.WhatsAppClient` (`Helpers/History`). The live socket reaches it through `IConnectionSocketControl` (UWP: `SlotConnectionSocketControl` over the socket slot), on-demand stanzas through the DI `IHistoryOnDemandSocket` (the bridge, same socket), and soft reconnect through `SoftReconnectCoordinator`. `SocketOwnedHistoryOnDemand` is gone. Verbose log goes through `ProtocolRuntimeLog`, which the host already routes to `WhatsAppService.Log`.

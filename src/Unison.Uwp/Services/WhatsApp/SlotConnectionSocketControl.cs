@@ -1,4 +1,5 @@
 using System;
+using System.Threading.Tasks;
 using Unison.Uwp.Client;
 using Unison.WhatsAppClient.Abstractions;
 using Unison.WhatsAppClient.Helpers;
@@ -17,6 +18,8 @@ namespace Unison.Uwp.Services.WhatsApp
             _socketSlot = socketSlot ?? throw new ArgumentNullException(nameof(socketSlot));
         }
 
+        public object Current => _socketSlot.Current;
+
         public bool IsConnected
         {
             get
@@ -25,6 +28,12 @@ namespace Unison.Uwp.Services.WhatsApp
                 return socket != null && socket.IsConnected && socket.IsHandshakeComplete;
             }
         }
+
+        public bool Holds(object socket) => _socketSlot.Holds(socket as IWhatsAppSocket);
+
+        public object AuthOf(object socket) => (socket as IWhatsAppSocket)?.Auth;
+
+        public Task LogoutAsync(string reason) => _socketSlot.Current.LogoutAsync(reason);
 
         public object DetachCurrent()
         {

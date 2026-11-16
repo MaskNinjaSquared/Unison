@@ -217,12 +217,6 @@ namespace Unison.Uwp.Services.WhatsApp
         private readonly ConnectionSessionFlags _sessionFlags;
 
         /// <summary>
-        /// Two was too eager: a pair of transport blips during login - a phone changing networks,
-        /// a server that hangs up mid-handshake - looks identical to a revoked session from here,
-        /// and the old threshold let that pair speak for the account.
-        /// </summary>
-        private const int PreSessionCloseFatalThreshold = 5;
-        /// <summary>
         /// Soft auto-reconnect slot (lock + isReconnecting) lives on
         /// <see cref="SoftReconnectCoordinator"/>, owned by <see cref="ReconnectHostAdapter"/>.
         /// </summary>
@@ -279,6 +273,7 @@ namespace Unison.Uwp.Services.WhatsApp
         private readonly SessionEstablishedGate _sessionEstablished;
         private readonly ConnectionEventHub _events;
         private readonly HistoryCatchUpHost _historyCatchUp;
+        private readonly ConnectionSessionHost _connectionSession;
 
         private readonly SyncWorkGate _syncWork;
         private readonly OfflineReplayFirstReleaseLatch _offlineReplayLatch =
@@ -317,15 +312,8 @@ namespace Unison.Uwp.Services.WhatsApp
         private readonly LoadPersistedUiStateOwner _persistedUiState;
         private readonly ReleaseMemoryOwner _releaseMemory;
         private readonly DeferredStartupMaintenanceOwner _deferredStartup;
-        private readonly InvalidateCurrentSocketOwner _invalidateSocket;
-        private readonly NotifyServerLogoutOwner _serverLogout;
-        private readonly RaiseSessionClearedOwner _sessionCleared;
         private readonly ClearSessionOwner _clearSession;
         private readonly QrCodeWireOwner _qrCodeWire;
-        private readonly AuthStateWireOwner _authStateWire;
-        private readonly SessionInitializedOwner _sessionInitializedWire;
-        private readonly SocketErrorOwner _socketErrorWire;
-        private readonly ConnectionUpdateOwner _connectionUpdateWire;
         private readonly SocketFacadeWireOwner _socketFacadeWire;
         private readonly InboundWireNodeOwner _inboundWireNode;
         private readonly DecryptedMessageWireOwner _decryptedMessageWire;
@@ -381,9 +369,6 @@ namespace Unison.Uwp.Services.WhatsApp
 
         /// <summary>Per-chat and full-history requests sent and still owed. Shared with <c>HistoryFacade</c>.</summary>
         private readonly HistoryOnDemandRegistry _historyRequests;
-        private readonly PersistAuthStateOwner _persistAuthState;
-        private readonly WaitForSessionEstablishedOwner _waitForSessionEstablished;
-        private readonly MarkPairingRestartPendingOwner _markPairingRestartPending;
         private readonly ResyncConversationsOwner _resyncConversations;
         private readonly GroupRecipientCountCache _groupRecipientCounts = new GroupRecipientCountCache();
         // Field initializers run in declaration order, so _selfMarkers is set before it is read below.
@@ -445,11 +430,6 @@ namespace Unison.Uwp.Services.WhatsApp
             {
                 Debug.WriteLine("[WhatsAppService] " + name + " subscriber failed: " + ex.Message);
             }
-        }
-
-        private void ReportStreamError(string code)
-        {
-            RaiseReport(() => _events.RaiseStreamError(code), nameof(ConnectionEventHub.OnStreamError));
         }
 
         public string CurrentConnectionStatus
@@ -605,20 +585,6 @@ namespace Unison.Uwp.Services.WhatsApp
             }
 
             deferred.Schedule(reason);
-        }
-
-        /// <summary>
-        /// Stops the reconnect loop before the close handler or a ping waiter can schedule
-        /// another attempt. 401 arrives as a &lt;failure&gt; after Noise, FailPendingWaiters
-        /// unblocks the health probe, and the loop would otherwise already be in its backoff
-        /// before the facade runs.
-        /// </summary>
-        private void LatchFatalSession(string reason)
-        {
-            _sessionFlags.FatalSessionEnded = true;
-            _sessionFlags.SuppressReconnect = true;
-            _sessionFlags.ResetPreSessionCloseStreak();
-            StopConnectionHealthMonitor(reason ?? "fatal");
         }
 
         /// <summary>

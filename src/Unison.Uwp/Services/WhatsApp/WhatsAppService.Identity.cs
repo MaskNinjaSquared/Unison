@@ -88,7 +88,7 @@ namespace Unison.Uwp.Services.WhatsApp
             CurrentUserName = sanitized;
             if (persistAuth)
             {
-                _ = _persistAuthState.RunAsync(null, "self-push-name");
+                _ = _connectionSession.PersistAuthState.RunAsync(null, "self-push-name");
             }
         }
 
@@ -191,7 +191,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 Log("[WhatsAppService] IDENTITY HEALING (USync): Me.Lid (" + meLid + ") belongs to PN " +
                     normalizedLid + ", but current Me.Id is " + _authSlot.Current.Me.Id + ". Fixing...");
                 _authSlot.Current.Me.Id = normalizedLid;
-                _ = _persistAuthState.RunAsync(null, "usync-identity-heal");
+                _ = _connectionSession.PersistAuthState.RunAsync(null, "usync-identity-heal");
             }
             else if (action == SelfIdentityHealingAction.PurgeForeignMapping)
             {
@@ -199,7 +199,7 @@ namespace Unison.Uwp.Services.WhatsApp
                     ") is mapped to foreign LID " + normalizedLid + ". PURGING...");
                 _authSlot.Current.Me.Id = meLid;
                 JidAlias.Remove(normalizedUser);
-                _ = _persistAuthState.RunAsync(null, "usync-identity-purge");
+                _ = _connectionSession.PersistAuthState.RunAsync(null, "usync-identity-purge");
             }
         }
 

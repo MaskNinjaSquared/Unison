@@ -123,6 +123,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 ?? throw new ArgumentNullException(nameof(pendingMessages));
             _offlineReplayFlush = new OfflineReplayFlush(_pendingMessages, this);
             _historyCatchUp = wire.HistoryCatchUp;
+            _connectionSession = wire.ConnectionSession;
             _reconnectHost = wire.Reconnect;
             _softReconnect = _reconnectHost.Coordinator;
             _healthMonitors = new ConnectionHealthMonitorOwner(this);
@@ -181,7 +182,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 () => _authSlot.Current?.Me?.Name,
                 IsOwnPhoneEchoLabel,
                 () => { _authSlot.Current.Me.Name = null; },
-                () => { _ = _persistAuthState.RunAsync(null, "clear-phone-echo-name"); },
+                () => { _ = _connectionSession.PersistAuthState.RunAsync(null, "clear-phone-echo-name"); },
                 () => CurrentUserAvatar,
                 () => _authSlot.Current?.Me?.AvatarUrl,
                 avatarUrl => _selfProfile.RestoreAvatar(avatarUrl),
@@ -190,7 +191,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 phone => { _authSlot.Current.Me.Phone = phone; },
                 () => OnPropertyChanged(nameof(CurrentUserPhone)),
                 () => _selfProfile.NotifyChanged(),
-                () => { _ = _persistAuthState.RunAsync(null, "self-phone"); },
+                () => { _ = _connectionSession.PersistAuthState.RunAsync(null, "self-phone"); },
                 avatarUrl => { _authSlot.Current.Me.AvatarUrl = avatarUrl; },
                 () => _authStore != null && _authSlot.Current != null,
                 () => _authStore.SaveAsync(_authSlot.Current));
@@ -222,19 +223,6 @@ namespace Unison.Uwp.Services.WhatsApp
             _jids = jidResolver;
             _receipts = new ReceiptReader(jidResolver);
             _persistedLookup = new PersistedMessageLookup(_historyMessages, jidResolver);
-            _persistAuthState = new PersistAuthStateOwner(
-                resolveAuthToSave: ResolveAuthToSave,
-                assignAndSaveAuthAsync: AssignAndSaveAuthAsync,
-                log: message => Debug.WriteLine("[WhatsAppService] " + message));
-            _waitForSessionEstablished = new WaitForSessionEstablishedOwner(
-                sessionEstablishedGate: () => _sessionEstablished.Task,
-                log: message => Log("[WhatsAppService] " + message));
-            _markPairingRestartPending = new MarkPairingRestartPendingOwner(
-                getPairingRestartPending: () => _sessionFlags.PairingRestartPending,
-                setPairingRestartPending: value => _sessionFlags.PairingRestartPending = value,
-                clearPreSessionCloseAsFatal: () => _sessionFlags.CountPreSessionCloseAsFatal = false,
-                resetPreSessionCloseStreak: () => _sessionFlags.ResetPreSessionCloseStreak(),
-                trace: PairingTrace);
             _catalogDisk = new ChatCatalogDiskPersistence(
                 _chatState,
                 JidAlias,
@@ -315,25 +303,6 @@ namespace Unison.Uwp.Services.WhatsApp
                 error => Debug.WriteLine(
                     "[Memoria] Falha ao liberar caches: " +
                     (error != null ? error.Message : string.Empty)));
-            _invalidateSocket = new InvalidateCurrentSocketOwner(
-                socket => socket != null && ReferenceEquals(_socketSlot.Current, socket),
-                StopConnectionHealthMonitor,
-                () => _socketSlot.Current = null,
-                socket =>
-                {
-                    var typed = socket as IWhatsAppSocket;
-                    if (typed == null)
-                    {
-                        return;
-                    }
-
-                    try { typed.Disconnect(); } catch { }
-                    try { typed.Dispose(); } catch { }
-                },
-                reason => _diagnostics.Write(
-                    "connection",
-                    "socket-invalidated",
-                    "reason=" + reason));
             _deferredStartup = new DeferredStartupMaintenanceOwner(
                 () => PhaseTuning.DeferredStartupQuietWait(IsFirstSyncListHoldInProgress),
                 _startupMaintenance,
@@ -406,39 +375,6 @@ namespace Unison.Uwp.Services.WhatsApp
                 ex => Debug.WriteLine(
                     "[WhatsAppService] Deferred startup maintenance failed: " +
                     (ex != null ? ex.Message : string.Empty)));
-            _serverLogout = new NotifyServerLogoutOwner(
-                () => _socketSlot.Current != null,
-                () =>
-                {
-                    _sessionFlags.SuppressReconnect = true;
-                    _sessionFlags.FatalSessionEnded = true;
-                },
-                StopConnectionHealthMonitor,
-                reason => _socketSlot.Current.LogoutAsync(reason),
-                error => _diagnostics.RecordException(
-                    "connection",
-                    "logout-notice-failed",
-                    error));
-            _sessionCleared = new RaiseSessionClearedOwner(
-                reason => _historyCatchUp.ResetFirstSyncHold.Run(reason),
-                () => History?.NotifySessionCleared(),
-                message => Log("[WhatsAppService] " + message),
-                startPairing =>
-                {
-                    var args = new SessionClearedEventArgs(startPairing);
-                    return _ui.RunAsync(() =>
-                    {
-                        try
-                        {
-                            _events.RaiseSessionCleared(args);
-                        }
-                        catch (Exception ex)
-                        {
-                            Log("[WhatsAppService] OnSessionCleared handler failed: " +
-                                ex.Message);
-                        }
-                    });
-                });
             _clearSession = new ClearSessionOwner(
                 message => Log("[WhatsAppService] " + message),
                 () => _pendingClearSessionKeyStore = _socketSlot.Current?.KeyStore,
@@ -482,7 +418,7 @@ namespace Unison.Uwp.Services.WhatsApp
                     }
                 },
                 _sessionEstablished.CancelAndRenew,
-                startPairing => _sessionCleared.RunAsync(startPairing),
+                startPairing => _connectionSession.SessionCleared.RunAsync(startPairing),
                 async () => await Task.Yield(),
                 async () =>
                 {
@@ -572,95 +508,6 @@ namespace Unison.Uwp.Services.WhatsApp
                             ex.Message);
                     }
                 });
-            _authStateWire = new AuthStateWireOwner(
-                () => Debug.WriteLine("[WhatsAppService] Auth state updated, saving..."),
-                FileSelfIdentityAliases,
-                () => _persistAuthState.RunAsync(_socketSlot.Current, "socket-auth-update"));
-            _sessionInitializedWire = new SessionInitializedOwner(
-                () => _sessionFlags.FatalSessionEnded,
-                () => _sessionFlags.SessionEstablishedThisConnection = true,
-                () => _sessionFlags.PairingRestartPending = false,
-                () => _sessionFlags.CountPreSessionCloseAsFatal = true,
-                () => _sessionFlags.ResetPreSessionCloseStreak(),
-                _sessionEstablished.Signal,
-                () => _selfProfileAuth.EnsureSelfPhonePersisted(),
-                () => _persistAuthState.RunAsync(_socketSlot.Current, "session-initialized"),
-                () => _syncWork.IsReplayDrainActive,
-                () => Debug.WriteLine(
-                    "[WhatsAppService] Deferring reconnect name/group work until replay drain completes."),
-                () => _postSyncMaintenance.SchedulePostReplay(0),
-                reason => _ = _historyCatchUp.TryConsumeMessageStoreForceHistoryRepairAsync(reason),
-                _events.RaiseSessionInitialized,
-                PairingTrace,
-                () => Debug.WriteLine(
-                    "[WhatsAppService] Session initialized - triggering missing name resolution"));
-            _socketErrorWire = new SocketErrorOwner(
-                () => _sessionFlags.SuppressReconnect,
-                () => _sessionFlags.FatalSessionEnded,
-                () => _sessionFlags.PairingRestartPending,
-                _markPairingRestartPending.Run,
-                reason => TryStartPairingStage2ReconnectDispatch.Run(_reconnectHost, reason),
-                LatchFatalSession,
-                ReportStreamError,
-                (ex, socketConnected, handshakeComplete) =>
-                {
-                    Debug.WriteLine("[WhatsAppService] Socket error: " + ex.Message);
-                    _diagnostics.RecordException(
-                        "connection",
-                        "socket-error",
-                        ex,
-                        "socketConnected=" + socketConnected +
-                        "; handshake=" + handshakeComplete);
-                },
-                PairingTrace,
-                () => Debug.WriteLine(
-                    "[WhatsAppService] Transport failure detected; persistent reconnect scheduled"),
-                milliseconds => Task.Delay(milliseconds),
-                _softReconnect.Schedule,
-                _events.RaiseError);
-            _connectionUpdateWire = new ConnectionUpdateOwner(
-                () => _sessionFlags.SuppressReconnect,
-                () => _sessionFlags.FatalSessionEnded,
-                () => _authSlot.Current != null && _authSlot.Current.Registered,
-                () => _sessionFlags.PairingRestartPending,
-                () => _sessionFlags.SessionEstablishedThisConnection,
-                () => _sessionFlags.CountPreSessionCloseAsFatal,
-                () => _sessionFlags.QrDeliveredThisConnection,
-                () => PreSessionCloseFatalThreshold,
-                status => Debug.WriteLine(
-                    "[WhatsAppService] Connection update '" + status +
-                    "' ignored during intentional shutdown"),
-                status => PublishConnectionUpdateDispatch.Run(this, status),
-                () => _diagnostics.Write(
-                    "connection",
-                    "pairing-restart",
-                    "code=515"),
-                PairingTrace,
-                StopConnectionHealthMonitor,
-                () => _diagnostics.Write(
-                    "connection",
-                    "pairing-restart-close",
-                    "ignored-pre-session-streak=true"),
-                () => _diagnostics.Write(
-                    "connection",
-                    "pairing-close-before-restart",
-                    "claiming-stage2=true"),
-                reason => TryStartPairingStage2ReconnectDispatch.Run(_reconnectHost, reason),
-                () => _sessionFlags.IncrementPreSessionCloseStreak(),
-                streak => _diagnostics.Write(
-                    "connection",
-                    "pre-session-close",
-                    "streak=" + streak + "; threshold=" + PreSessionCloseFatalThreshold),
-                reason => RaiseReport(
-                    () => _events.RaiseInvalidSessionSuspected(reason),
-                    nameof(ConnectionEventHub.OnInvalidSessionSuspected)),
-                () => _sessionFlags.ResetPreSessionCloseStreak(),
-                _softReconnect.Schedule,
-                trigger => _diagnostics.Write(
-                    "connection",
-                    "qr-expired",
-                    "trigger=" + trigger),
-                _events.RaiseQrExpired);
             _historySyncWire = new HistorySyncWireOwner(
                 () => _sessionFlags.FatalSessionEnded,
                 () => _authSlot.Current != null,
