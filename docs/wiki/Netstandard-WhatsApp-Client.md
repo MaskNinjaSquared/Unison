@@ -307,6 +307,71 @@ Single composition root (today: `App.ConfigureServices`, optionally a named `Uwp
 - Register Application façades against Core contracts.
 - No new domain policy in the handler.
 
+### Portable persistence (SQLite / file store — plan only)
+
+**Verdict:** yes, with the current model — same idea as TDLib (client owns the DB; host only
+supplies a root path and native init). Do **not** start this until Phase D has
+`WhatsAppService` connection-only and product knobs/coordinators are stable. Plan only below.
+
+**Today**
+
+| Piece | Where | Notes |
+|---|---|---|
+| Contracts `IMessageStore`, `IChatStore`, `IHistoryMessageStore`, `IPersonStore`, … | Core | Façades / client already depend on these |
+| `ChatStore`, `History*Store`, `PersonStore`, `GroupRosterStore`, `CallLogStore`, … | UWP `Data/` | `sqlite-net-pcl` + `unison.db` under `ApplicationData.Current.LocalFolder` |
+| `MessageStore` | UWP `Data/` | **JSON** under LocalFolder (WinRT `StorageFolder`), not SQLite |
+| `SQLitePCL.Batteries.Init()` | UWP `App` | Must stay at process start (and any second process that opens the DB) |
+| Background preview/broker files | `Unison.Background` | Own small stores; **must not** reference Core or WhatsAppClient |
+
+**Target (TDLib-shaped)**
+
+```
+UWP / Background host
+  → supplies dbRootPath (string) + Batteries.Init()
+Unison.WhatsAppClient (or sibling Unison.Persistence netstandard2.0)
+  → implements I*Store with sqlite-net-pcl / System.IO over that path
+Façades
+  → keep talking to I*Store only (already true)
+```
+
+Host keeps: path from `ApplicationData` (or broker local folder), PCL init, optional
+file-picker / backup UI. Everything that speaks SQL or JSON schema moves behind netstandard.
+
+**Recommended package split**
+
+- Prefer a small **`Unison.Persistence`** (`netstandard2.0`) referenced by WhatsAppClient
+  (and later by tests), **not** dumping SQL into Core. Core stays contracts + models.
+- If Background ever needs the same `unison.db` schema, it may reference **only**
+  Persistence (or a thinner `Unison.Persistence.Broker` slice) — never Core ViewModels /
+  WhatsAppClient. Default for now: Background keeps its isolated preview stores; sharing
+  the live DB from the out-of-process task is a **separate** decision (locking, schema,
+  toast-only reads).
+
+**Migration steps (when opened)**
+
+| Step | Work | Done check |
+|---|---|---|
+| S0 | Inventory: every `src/Unison.Uwp/Data/*Store.cs` + Entities; classify SQLite vs JSON vs WinRT-only | Table in this page |
+| S1 | Introduce `IAppDataPaths` (or ctor `string dbDirectory`) in Core contracts; UWP adapter returns `LocalFolder.Path` | Stores compile against path string, not `ApplicationData` in signatures |
+| S2 | Move SQLite entities + one store (`ChatStore` or `PersonStore` — smallest) into Persistence; register from UWP | App runs; same `unison.db` |
+| S3 | Move remaining SQLite history/chat/roster/call stores; keep schema versions identical | ARM device open-chat + history catch-up smoke |
+| S4 | Port `MessageStore` JSON I/O from `Windows.Storage` to `System.IO` over the same root (or fold into SQLite in a later pass — do not mix goals) | Wipe / syncId rotation still works |
+| S5 | Tests: Persistence project tests with temp directory (no UWP) for schema migrate + one read/write path | CI without WinRT |
+
+**Do not**
+
+- Put WinRT `StorageFile` / `ApplicationData` inside Persistence or WhatsAppClient.
+- Open the same `unison.db` from Background without an explicit locking/WAL plan.
+- Change schema “while moving” — move first, migrate schema in a dedicated change.
+- Block Phase D / coordinators on this; persistence is parallel **after** connection-only host.
+
+**Risk:** Mobile Lumia I/O + large history tables; any path or connection-string mistake
+corrupts the only copy of chat history. Require on-device open-chat + first sync after S3.
+
+**Agent boundary:** S1–S2 OK on a cheaper model (mechanical + temp-dir tests). S3–S4 need
+careful review / Opus if schema or wipe/syncId behaviour is touched. Sharing DB with
+Background = Opus + explicit ask.
+
 ---
 
 ## Migration phases
