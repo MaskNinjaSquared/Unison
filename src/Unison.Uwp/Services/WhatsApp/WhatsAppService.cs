@@ -455,6 +455,8 @@ namespace Unison.Uwp.Services.WhatsApp
         private readonly SyncBudget _syncBudget;
         private readonly SyncWorkloadStrategy _workload;
         private readonly SyncProductPolicy _productPolicy;
+        private readonly StartupMaintenanceCoordinator _startupMaintenance;
+        private readonly PostReplayMaintenanceCoordinator _postReplayMaintenance;
         private readonly SelfProfileState _selfProfile;
 
         /// <summary>
@@ -994,6 +996,8 @@ namespace Unison.Uwp.Services.WhatsApp
             _syncBudget = syncBudget ?? throw new ArgumentNullException(nameof(syncBudget));
             _workload = workload ?? throw new ArgumentNullException(nameof(workload));
             _productPolicy = new SyncProductPolicy(_workload, () => _syncBudget.IsFrugal);
+            _startupMaintenance = new StartupMaintenanceCoordinator(_productPolicy);
+            _postReplayMaintenance = new PostReplayMaintenanceCoordinator(_productPolicy);
             _selfProfile = selfProfile ?? throw new ArgumentNullException(nameof(selfProfile));
             _selfProfileAuth = new SelfProfileAuthSync(
                 _selfProfile,
@@ -1436,7 +1440,7 @@ namespace Unison.Uwp.Services.WhatsApp
                     "reason=" + reason));
             _deferredStartup = new DeferredStartupMaintenanceOwner(
                 () => TimeSpan.FromMilliseconds(CurrentSyncPacing.DeferredStartupQuietMs),
-                _productPolicy,
+                _startupMaintenance,
                 () => IsAppWindowVisible,
                 () => Chats.Count,
                 () => _authState != null && _authState.Registered,
@@ -2058,10 +2062,10 @@ namespace Unison.Uwp.Services.WhatsApp
                 "reason=" + reason);
 
         TimeSpan IPostReplayMaintenanceHost.PostReplayQuietWait =>
-            ((IStartupMaintenanceTuning)_productPolicy).PostReplayQuietWait;
+            _postReplayMaintenance.QuietWait;
 
         bool IPostReplayMaintenanceHost.RunDelayedBulkAfterReplay(int offlineCount) =>
-            ((IStartupMaintenanceTuning)_productPolicy).RunDelayedBulkAfterReplay(offlineCount);
+            _postReplayMaintenance.RunDelayedBulkAfterReplay(offlineCount);
 
         bool IPostReplayMaintenanceHost.IsConnected => IsConnected;
 

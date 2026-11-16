@@ -196,7 +196,18 @@ receiving it; the product layer maps it to client options.
 - Façades, owners and policies in WhatsAppClient take those contracts or plain values (`silentLotDelay`, `allowStagnantRepairCascade`, `rosterBuildChunkSize`, `flushDebounce`). `DeferredStartupFrugalGate` became the neutral `DeferredStartupGate` (`requireVisibleWindow` / `requireMemoryHeadroom`); post-replay quiet window and delayed bulk come from the host.
 - `IHistoryService.PreferFrugalSyncBudget` removed; ViewModels read `ISyncLoadMode`.
 
-Still open: `WhatsAppService` (UWP host) reads `_workload` / `CurrentSyncPacing` / `UseFrugalSyncBudget` directly — host debt that leaves with it (Phase D). P4 untouched.
+**Coordinators (started):** `StartupMaintenanceCoordinator` and `PostReplayMaintenanceCoordinator`
+in `Core/Product` own the deferred-startup gate / resolve-missing decision and the post-replay
+abort + quiet/delayed-bulk knobs. Client dispatch asks the host (`DecideGate` /
+`ShouldResolveMissingNames`) or calls `PostReplayMaintenanceCoordinator.ShouldAbortBeforeWork`;
+`DeferredStartupGate` / `PostReplayMaintenanceGates` were removed from WhatsAppClient. Registered
+in `App.ConfigureServices`. They do **not** yet drive façades end-to-end (host still owns
+quiet/memory waits and notify ports) — that orchestration moves when `WhatsAppService` shrinks
+(Phase D). Tests: `StartupMaintenanceCoordinatorTests`, `PostReplayMaintenanceCoordinatorTests`.
+
+Still open: `WhatsAppService` (UWP host) reads `_workload` / `CurrentSyncPacing` / `UseFrugalSyncBudget`
+directly — host debt that leaves with it (Phase D). P4 untouched. Coordinators do not yet
+subscribe to façade facts or notify UI (next cheap slice when a VM still duplicates a gate).
 
 **Dependency direction (decided):** contracts stay in Core through P (WhatsAppClient → Core),
 tier-free; the flip happens in Phase E (client owns its I/O, Core → WhatsAppClient, product

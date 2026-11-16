@@ -2,13 +2,14 @@
 // DeferredStartupMaintenanceOwner
 //
 // Owns IDeferredStartupMaintenanceHost. Quiet/memory waits, name tables, and
-// façade contact passes stay as ctor ports.
+// façade contact passes stay as ctor ports. Product gates come from
+// StartupMaintenanceCoordinator.
 // =============================================================================
 using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
-using Unison.Core.Contracts.Tuning;
+using Unison.Core.Product;
 using Unison.WhatsAppClient.Abstractions;
 
 namespace Unison.WhatsAppClient.Helpers
@@ -16,7 +17,7 @@ namespace Unison.WhatsAppClient.Helpers
     public sealed class DeferredStartupMaintenanceOwner : IDeferredStartupMaintenanceHost
     {
         private readonly Func<TimeSpan> _quietWait;
-        private readonly IStartupMaintenanceTuning _tuning;
+        private readonly StartupMaintenanceCoordinator _coordinator;
         private readonly Func<bool> _isWindowVisible;
         private readonly Func<int> _chatCount;
         private readonly Func<bool> _isAuthRegistered;
@@ -41,7 +42,7 @@ namespace Unison.WhatsAppClient.Helpers
 
         public DeferredStartupMaintenanceOwner(
             Func<TimeSpan> quietWait,
-            IStartupMaintenanceTuning tuning,
+            StartupMaintenanceCoordinator coordinator,
             Func<bool> isWindowVisible,
             Func<int> chatCount,
             Func<bool> isAuthRegistered,
@@ -65,7 +66,7 @@ namespace Unison.WhatsAppClient.Helpers
             Action<Exception> logDeferredMaintenanceFailed)
         {
             _quietWait = quietWait ?? throw new ArgumentNullException(nameof(quietWait));
-            _tuning = tuning ?? throw new ArgumentNullException(nameof(tuning));
+            _coordinator = coordinator ?? throw new ArgumentNullException(nameof(coordinator));
             _isWindowVisible = isWindowVisible
                 ?? throw new ArgumentNullException(nameof(isWindowVisible));
             _chatCount = chatCount ?? throw new ArgumentNullException(nameof(chatCount));
@@ -113,20 +114,15 @@ namespace Unison.WhatsAppClient.Helpers
 
         TimeSpan IDeferredStartupMaintenanceHost.DeferredStartupQuietWait => _quietWait();
 
-        bool IDeferredStartupMaintenanceHost.RequireVisibleWindow => _tuning.DeferredStartupRequiresVisibleWindow;
+        DeferredStartupGateAction IDeferredStartupMaintenanceHost.DecideGate() =>
+            _coordinator.DecideGate(_isWindowVisible());
 
-        bool IDeferredStartupMaintenanceHost.RequireMemoryHeadroom => _tuning.DeferredStartupRequiresMemoryHeadroom;
-
-        bool IDeferredStartupMaintenanceHost.ResolveMissingNamesAllowed => _tuning.ResolveMissingNamesAtStartup;
-
-        bool IDeferredStartupMaintenanceHost.IsWindowVisible => _isWindowVisible();
+        bool IDeferredStartupMaintenanceHost.ShouldResolveMissingNames() =>
+            _coordinator.ShouldResolveMissingNames(_chatCount(), _isHistoryCatchUpActive());
 
         int IDeferredStartupMaintenanceHost.ChatCount => _chatCount();
 
         bool IDeferredStartupMaintenanceHost.IsAuthRegistered => _isAuthRegistered();
-
-        bool IDeferredStartupMaintenanceHost.IsHistoryCatchUpActive =>
-            _isHistoryCatchUpActive();
 
         string IDeferredStartupMaintenanceHost.MemoryUsageLevelText =>
             _memoryUsageLevelText();

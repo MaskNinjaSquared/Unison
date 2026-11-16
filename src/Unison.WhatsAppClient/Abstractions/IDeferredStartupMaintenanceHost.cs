@@ -1,12 +1,15 @@
 // =============================================================================
 // IDeferredStartupMaintenanceHost
 //
-// Side effects for DeferredStartupMaintenanceDispatch.
+// Side effects for DeferredStartupMaintenanceDispatch. Product gate decisions
+// come from StartupMaintenanceCoordinator (Core) via DecideGate /
+// ShouldResolveMissingNames.
 // =============================================================================
 using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using Unison.Core.Product;
 
 namespace Unison.WhatsAppClient.Abstractions
 {
@@ -14,19 +17,13 @@ namespace Unison.WhatsAppClient.Abstractions
     {
         TimeSpan DeferredStartupQuietWait { get; }
 
-        bool RequireVisibleWindow { get; }
+        DeferredStartupGateAction DecideGate();
 
-        bool RequireMemoryHeadroom { get; }
-
-        bool ResolveMissingNamesAllowed { get; }
-
-        bool IsWindowVisible { get; }
+        bool ShouldResolveMissingNames();
 
         int ChatCount { get; }
 
         bool IsAuthRegistered { get; }
-
-        bool IsHistoryCatchUpActive { get; }
 
         string MemoryUsageLevelText { get; }
 

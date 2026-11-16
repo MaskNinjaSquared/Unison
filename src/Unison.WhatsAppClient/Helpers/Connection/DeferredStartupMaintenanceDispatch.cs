@@ -2,13 +2,14 @@
 // DeferredStartupMaintenanceDispatch
 //
 // Body of RunDeferredStartupMaintenanceAsync after CAS start. Quiet/memory
-// waits and store I/O stay on the host.
+// waits and store I/O stay on the host. Gate decisions come from
+// StartupMaintenanceCoordinator via the host.
 // =============================================================================
 using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
-using Unison.Core.Helpers;
+using Unison.Core.Product;
 using Unison.WhatsAppClient.Abstractions;
 
 namespace Unison.WhatsAppClient.Helpers
@@ -38,10 +39,7 @@ namespace Unison.WhatsAppClient.Helpers
                         CancellationToken.None)
                     .ConfigureAwait(false);
 
-                DeferredStartupGateAction gate = DeferredStartupGate.Decide(
-                    host.RequireVisibleWindow,
-                    host.RequireMemoryHeadroom,
-                    host.IsWindowVisible);
+                DeferredStartupGateAction gate = host.DecideGate();
                 if (gate == DeferredStartupGateAction.SkipVisibility)
                 {
                     host.WriteDeferredSkipped("reason=visibility");
@@ -95,12 +93,7 @@ namespace Unison.WhatsAppClient.Helpers
                 await host.NotifyDeferredStartupListRepairAsync().ConfigureAwait(false);
                 await host.NormalizePersistedChatNamesAsync().ConfigureAwait(false);
 
-                bool resolveMissing = DeferredStartupGate.ShouldResolveMissingNames(
-                    host.ChatCount,
-                    host.ResolveMissingNamesAllowed,
-                    HistoryCatchUpLocalWorkPolicy.ShouldDeferHeavyLocalWork(
-                        host.IsHistoryCatchUpActive));
-                await host.RunDeferredStartupContactPassAsync(resolveMissing)
+                await host.RunDeferredStartupContactPassAsync(host.ShouldResolveMissingNames())
                     .ConfigureAwait(false);
             }
             catch (Exception ex)

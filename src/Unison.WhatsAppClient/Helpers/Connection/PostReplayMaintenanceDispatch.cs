@@ -10,6 +10,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Helpers;
+using Unison.Core.Product;
 
 namespace Unison.WhatsAppClient.Helpers
 {
@@ -32,7 +33,7 @@ namespace Unison.WhatsAppClient.Helpers
                         token)
                     .ConfigureAwait(false);
 
-                if (PostReplayMaintenanceGates.ShouldAbortBeforeWork(
+                if (PostReplayMaintenanceCoordinator.ShouldAbortBeforeWork(
                         quiet,
                         host.IsConnected,
                         host.IsWindowVisible))

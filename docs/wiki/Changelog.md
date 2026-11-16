@@ -2,6 +2,14 @@
 
 Newest first.
 
+## Startup / post-replay product coordinators
+
+`StartupMaintenanceCoordinator` and `PostReplayMaintenanceCoordinator` in Core own the
+deferred-startup gate and post-replay abort/quiet/delayed-bulk decisions. WhatsAppClient
+dispatch no longer has `DeferredStartupGate` / `PostReplayMaintenanceGates`. Same behaviour;
+façade-driving orchestration still on the host until Phase D.
+See [Netstandard WhatsApp client](Netstandard-WhatsApp-Client).
+
 ## Product coordinators + agent boundaries (docs)
 
 Wiki now describes Core **coordinators** (not `UseCase`) over façade contracts for

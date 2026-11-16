@@ -8,6 +8,7 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using Unison.Core.Contracts.WhatsApp;
+using Unison.Core.Product;
 
 namespace Unison.WhatsAppClient.Helpers
 {
@@ -181,7 +182,7 @@ namespace Unison.WhatsAppClient.Helpers
             bool quietReached = await host.WaitForStartupQuietAsync(quiet, phase, token)
                 .ConfigureAwait(false);
 
-            if (PostReplayMaintenanceGates.ShouldAbortBeforeWork(
+            if (PostReplayMaintenanceCoordinator.ShouldAbortBeforeWork(
                     quietReached,
                     host.IsConnected,
                     host.IsWindowVisible))

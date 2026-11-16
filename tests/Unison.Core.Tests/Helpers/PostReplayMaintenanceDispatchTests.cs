@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Unison.Core.Contracts.WhatsApp;
+using Unison.Core.Product;
 using Unison.WhatsAppClient.Helpers;
 using Xunit;
 
@@ -13,10 +14,10 @@ namespace Unison.Core.Tests.Helpers
         [Fact]
         public void Abort_when_quiet_or_connection_or_window_fails()
         {
-            Assert.True(PostReplayMaintenanceGates.ShouldAbortBeforeWork(false, true, true));
-            Assert.True(PostReplayMaintenanceGates.ShouldAbortBeforeWork(true, false, true));
-            Assert.True(PostReplayMaintenanceGates.ShouldAbortBeforeWork(true, true, false));
-            Assert.False(PostReplayMaintenanceGates.ShouldAbortBeforeWork(true, true, true));
+            Assert.True(PostReplayMaintenanceCoordinator.ShouldAbortBeforeWork(false, true, true));
+            Assert.True(PostReplayMaintenanceCoordinator.ShouldAbortBeforeWork(true, false, true));
+            Assert.True(PostReplayMaintenanceCoordinator.ShouldAbortBeforeWork(true, true, false));
+            Assert.False(PostReplayMaintenanceCoordinator.ShouldAbortBeforeWork(true, true, true));
         }
 
         [Fact]
