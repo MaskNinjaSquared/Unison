@@ -288,6 +288,7 @@ namespace Unison.Uwp
                 sp.GetRequiredService<LidMappingPersistHost>());
             // Host owns WinRT transport construction; SocketBridge only asks the factory.
             services.AddSingleton<IWhatsAppTransportFactory, UwpWhatsAppTransportFactory>();
+            services.AddSingleton<Unison.Voip.Abstractions.ICallIoFactory, Unison.Uwp.Services.Calls.UwpCallIoFactory>();
             // Host owns SocketBridge build + wire + transport open; portable connect-open only calls this.
             services.AddSingleton(sp =>
                 new ProfilePictureQueryCache(sp.GetRequiredService<IProfilePictureCacheTuning>()));
@@ -571,6 +572,12 @@ namespace Unison.Uwp
             services.AddSingleton<UwpSessionProvider>(sp => sp.GetRequiredService<BridgeSessionProvider>());
             services.AddSingleton<AppSessionProvider>(
                 sp => sp.GetRequiredService<BridgeSessionProvider>());
+            services.AddSingleton<Unison.Voip.Abstractions.ICallSignalingChannel>(sp =>
+                new Unison.Uwp.Services.Calls.SocketCallSignalingChannel(
+                    sp.GetRequiredService<AppSessionProvider>()));
+            services.AddSingleton<Unison.Core.Contracts.WhatsApp.ICallService>(sp =>
+                new Unison.WhatsAppClient.Calls.CallFacade(
+                    sp.GetRequiredService<Unison.Voip.Abstractions.ICallSignalingChannel>()));
             services.AddSingleton<IHistoryOnDemandSocket>(sp => new BridgeHistoryOnDemandSocket(
                 sp.GetRequiredService<UwpSessionProvider>()));
             services.AddSingleton<ISelfIdentityHealHost>(
