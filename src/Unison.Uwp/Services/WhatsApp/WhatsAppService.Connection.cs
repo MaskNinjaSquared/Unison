@@ -40,7 +40,7 @@ using Windows.Networking.Sockets;
 
 namespace Unison.Uwp.Services.WhatsApp
 {
-    public partial class WhatsAppService : IConnectionHealthOwnerPort
+    public partial class WhatsAppService : IConnectionHealthOwnerPort, IReconnectLifecyclePort
     {
 
         private static TaskCompletionSource<bool> CreateSessionEstablishedTcs()
@@ -258,78 +258,34 @@ namespace Unison.Uwp.Services.WhatsApp
             Debug.WriteLine(line);
         }
 
-        // --- ITryStartPairingStage2ReconnectHost -----------------------------
+        // --- IReconnectLifecyclePort -----------------------------------------
 
-        void ITryStartPairingStage2ReconnectHost.TracePairingStage2(string message) =>
-            PairingTrace(message);
+        bool IReconnectLifecyclePort.IsConnected => IsConnected;
 
-        /// <summary>
-        /// Marks the 515 pairing-restart window. Must run as early as possible — on Mobile the
-        /// transport often closes with 1006 BEFORE the "restart" status is published, and that
-        /// premature close must not schedule the generic AutoReconnect loop.
-        /// </summary>
-        void ITryStartPairingStage2ReconnectHost.MarkPairingRestartPending(string reason) =>
+        Task IReconnectLifecyclePort.InitializeAsync() => InitializeAsync();
+
+        Task IReconnectLifecyclePort.ConnectAsync() => ConnectAsync();
+
+        void IReconnectLifecyclePort.PublishReconnectingStatus() =>
+            PublishConnectionUpdateDispatch.Run(this, "reconnecting");
+
+        void IReconnectLifecyclePort.RaiseReconnectLoopError(Exception error) =>
+            OnError?.Invoke(this, error);
+
+        void IReconnectLifecyclePort.PairingTrace(string message) => PairingTrace(message);
+
+        void IReconnectLifecyclePort.MarkPairingRestartPending(string reason) =>
             _markPairingRestartPending.Run(reason);
 
-        bool ITryStartPairingStage2ReconnectHost.TryClaimReconnectSlot() =>
-            _softReconnect.TryClaimReconnectSlot();
-
-        void ITryStartPairingStage2ReconnectHost.StopConnectionHealthMonitor(string reason) =>
+        void IReconnectLifecyclePort.StopConnectionHealthMonitor(string reason) =>
             StopConnectionHealthMonitor(reason);
 
         /// <summary>
         /// Reconnects after close code 515 to complete pairing stage 2.
         /// Orchestration lives in <see cref="ConnectionPairingStage2"/>.
         /// </summary>
-        void ITryStartPairingStage2ReconnectHost.FireAndForgetPairingStage2Reconnect() =>
+        void IReconnectLifecyclePort.FireAndForgetPairingStage2Reconnect() =>
             _ = ConnectionPairingStage2.RunAsync(this);
-
-        // --- ISoftReconnectIoHost --------------------------------------------
-
-        bool ISoftReconnectIoHost.IsAuthPresent => _authSlot.Current != null;
-
-        bool ISoftReconnectIoHost.IsAuthRegistered =>
-            _authSlot.Current != null && _authSlot.Current.Registered;
-
-        bool ISoftReconnectIoHost.IsConnected => IsConnected;
-
-        void ISoftReconnectIoHost.LogAutoReconnectScheduled(string reason) =>
-            Debug.WriteLine("[WhatsAppService] Scheduling persistent reconnect: " + reason);
-
-        void ISoftReconnectIoHost.WriteAutoReconnectScheduled(string reason) =>
-            _diagnostics.Write("connection", "reconnect-scheduled", reason);
-
-        void ISoftReconnectIoHost.TracePairingSkippedForPending(string reason) =>
-                        PairingTrace(
-                            "ScheduleAutoReconnect SKIPPED (pairingRestartPending) reason=" +
-                            (reason ?? string.Empty));
-
-        void ISoftReconnectIoHost.TraceScheduleAutoReconnectReason(string reason)
-        {
-            try
-            {
-                if (SessionLogger.Instance.PairingTraceActive)
-                {
-                    SessionLogger.Instance.WriteAlways(
-                        "[Pairing/WA] ScheduleAutoReconnect reason=" + (reason ?? string.Empty));
-                }
-            }
-            catch
-            {
-            }
-        }
-
-        void ISoftReconnectIoHost.FireAndForgetAutoReconnect(Func<Task> work) =>
-            _ = Task.Run(work);
-
-        Task ISoftReconnectIoHost.RunAutoReconnectLoopAsync(string reason) =>
-            AutoReconnectLoopDispatch.RunAsync(this, reason);
-
-        void ISoftReconnectIoHost.TryStartPairingStage2Reconnect(string reason) =>
-            TryStartPairingStage2ReconnectDispatch.Run(this, reason);
-
-
-
         /// <summary>
         /// Loads only the durable session and the storage roots required to connect.
         /// Chat rows are deliberately excluded so a cold launch can start Noise/Signal
@@ -991,34 +947,6 @@ namespace Unison.Uwp.Services.WhatsApp
 
         Task IConnectAsyncHost.OpenConnectAsync(bool reuseLoadedKeyState) =>
             ConnectionConnectOpen.RunAsync(_connectionOpen, _socketSessions, reuseLoadedKeyState);
-
-        // --- IAutoReconnectLoopHost ------------------------------------------
-
-        bool IAutoReconnectLoopHost.IsAuthStatePresent => _authSlot.Current != null;
-
-        bool IAutoReconnectLoopHost.IsAuthRegistered =>
-            _authSlot.Current != null && _authSlot.Current.Registered;
-
-        Task<bool> IAutoReconnectLoopHost.IsCurrentSocketHealthyAsync() =>
-            IsCurrentSocketHealthyDispatch.RunAsync(_currentSocketHealth);
-
-        Task IAutoReconnectLoopHost.InitializeAsync() => InitializeAsync();
-
-        Task IAutoReconnectLoopHost.ConnectAsync() => ConnectAsync();
-
-        TimeSpan IAutoReconnectLoopHost.ReconnectDelayForAttempt(int attempt) =>
-            ConnectionHealthPolicy.ReconnectDelay(attempt);
-
-        void IAutoReconnectLoopHost.PublishReconnectingStatus() =>
-            PublishConnectionUpdateDispatch.Run(this, "reconnecting");
-
-        void IAutoReconnectLoopHost.LogAutoReconnect(string message) =>
-            Debug.WriteLine("[WhatsAppService] " + message);
-
-        void IAutoReconnectLoopHost.TracePairing(string detail) => PairingTrace(detail);
-
-        void IAutoReconnectLoopHost.RaiseReconnectLoopError(Exception error) =>
-            OnError?.Invoke(this, error);
 
         bool IConnectionPairingStage2Host.ShouldAbortPairingRestart =>
             ConnectionSoftReconnectGates.ShouldAbortPairingRestart(

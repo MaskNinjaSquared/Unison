@@ -50,7 +50,7 @@ using Unison.WhatsAppClient.Helpers;
 
 namespace Unison.Uwp.Services.WhatsApp
 {
-    public partial class WhatsAppService : INotifyPropertyChanged, IConnectionEventSource, IConnectionSessionHost, IOfflineReplayHost, IOfflineReplayFlushIoHost, IChatCatalogPersistHost, IPostReplayMaintenanceHost, IPostMessageEnrichmentHost, IPlaceholderResendSocket, IRuntimeSnapshotSource, IBackgroundResolutionGate, IConversationResyncHost, IHistorySyncHost, IHistoryCatchUpHost, IConnectionEnsureHost, IConnectionResumeHost, IConnectionPairingStage2Host, IConnectionBrokerTransferHost, IConnectionSoftReconnectHost, IConnectionLifecycleHost, IConnectionConnectGateSource, IConnectionConnectPrepareHost, IConnectionSocketAssignment, IConnectionAssignedSocketClearHost, ISelfIdentityHealHost, IStartupUiHost, IResolvedNameApplyHost, IHistoryHydrationBackfillHost, ISqliteHistoryQuietFinalizeHost, IAutoReconnectLoopHost, IInitializeConnectionStateHost, IHydrationDayRetryIoHost, ISoftReconnectIoHost, IBrokerReconnectConsumeHost, IPublishConnectionUpdateHost, IDropCurrentSocketForFastResumeHost, IConnectionHealthMonitorIoHost, ITryStartPairingStage2ReconnectHost, IConnectAsyncHost, IPostSyncMaintenanceIoHost
+    public partial class WhatsAppService : INotifyPropertyChanged, IConnectionEventSource, IConnectionSessionHost, IOfflineReplayHost, IOfflineReplayFlushIoHost, IChatCatalogPersistHost, IPostReplayMaintenanceHost, IPostMessageEnrichmentHost, IPlaceholderResendSocket, IRuntimeSnapshotSource, IBackgroundResolutionGate, IConversationResyncHost, IHistorySyncHost, IHistoryCatchUpHost, IConnectionEnsureHost, IConnectionResumeHost, IConnectionPairingStage2Host, IConnectionBrokerTransferHost, IConnectionSoftReconnectHost, IConnectionLifecycleHost, IConnectionConnectGateSource, IConnectionConnectPrepareHost, IConnectionSocketAssignment, IConnectionAssignedSocketClearHost, ISelfIdentityHealHost, IStartupUiHost, IResolvedNameApplyHost, IHistoryHydrationBackfillHost, ISqliteHistoryQuietFinalizeHost, IInitializeConnectionStateHost, IHydrationDayRetryIoHost, IBrokerReconnectConsumeHost, IPublishConnectionUpdateHost, IDropCurrentSocketForFastResumeHost, IConnectionHealthMonitorIoHost, IConnectAsyncHost, IPostSyncMaintenanceIoHost
     {
         public event PropertyChangedEventHandler PropertyChanged;
         protected void OnPropertyChanged([CallerMemberName] string propertyName = null)
@@ -226,10 +226,10 @@ namespace Unison.Uwp.Services.WhatsApp
         private const int PreSessionCloseFatalThreshold = 5;
         /// <summary>
         /// Soft auto-reconnect slot (lock + isReconnecting) lives on
-        /// <see cref="SoftReconnectCoordinator"/>. Client only implements
-        /// <see cref="ISoftReconnectIoHost"/> I/O.
+        /// <see cref="SoftReconnectCoordinator"/>, owned by <see cref="ReconnectHostAdapter"/>.
         /// </summary>
         private readonly SoftReconnectCoordinator _softReconnect;
+        private readonly ReconnectHostAdapter _reconnectHost;
         /// <summary>
         /// Health-monitor + periodic FULL_HISTORY safety CTS / Task.Run live on
         /// <see cref="ConnectionHealthMonitorOwner"/>. Client only implements
@@ -843,7 +843,13 @@ namespace Unison.Uwp.Services.WhatsApp
             _offlineReplayFlush = new OfflineReplayFlush(_pendingMessages, this);
             _historyHydrationBackfill = new HistoryHydrationBackfill(this);
             _sqliteHistoryQuietFinalize = new SqliteHistoryQuietFinalize(this);
-            _softReconnect = new SoftReconnectCoordinator(this);
+            _reconnectHost = new ReconnectHostAdapter(
+                this,
+                _sessionFlags,
+                _authSlot,
+                _currentSocketHealth,
+                _diagnostics);
+            _softReconnect = _reconnectHost.Coordinator;
             _healthMonitors = new ConnectionHealthMonitorOwner(this);
             _postSyncMaintenance = new PostSyncMaintenanceOwner(this);
             _hydrationDayRetry = new HydrationDayRetryOwner(this);
@@ -1640,7 +1646,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 () => _sessionFlags.FatalSessionEnded,
                 () => _sessionFlags.PairingRestartPending,
                 _markPairingRestartPending.Run,
-                reason => TryStartPairingStage2ReconnectDispatch.Run(this, reason),
+                reason => TryStartPairingStage2ReconnectDispatch.Run(_reconnectHost, reason),
                 LatchFatalSession,
                 ReportStreamError,
                 (ex, socketConnected, handshakeComplete) =>
@@ -1686,7 +1692,7 @@ namespace Unison.Uwp.Services.WhatsApp
                     "connection",
                     "pairing-close-before-restart",
                     "claiming-stage2=true"),
-                reason => TryStartPairingStage2ReconnectDispatch.Run(this, reason),
+                reason => TryStartPairingStage2ReconnectDispatch.Run(_reconnectHost, reason),
                 () => _sessionFlags.IncrementPreSessionCloseStreak(),
                 streak => _diagnostics.Write(
                     "connection",
