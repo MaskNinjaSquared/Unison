@@ -49,10 +49,12 @@ Analogous to `IWaTransport`: behaviour ports, no WinRT in Voip.
 | Package + ports + Null/UWP stub factory | Done (skeleton) |
 | `RejectCall` / `TerminateCall` UseCases | Done (signaling MVP) |
 | `CallSession` + `CallFacade` / `ICallService` | Done (no media yet) |
+| Active call (ring / end from live statuses) | Done — `ActiveCallEventPolicy`, `CallFacade.ActiveCall` |
+| Call screen | Done — `CallScreenViewModel` (Core), `LegacyCallView` in a full-window popup (`ICallScreenPresenter`); every theme uses it for now |
 | Engine modules (stun/relay/srtp/mlow) | Scaffold only — Opus review before port |
 | Real audio 1:1 | Not started |
 
-Inbound offer toast/log (pre-existing) is unchanged. Outbound offer/accept wait on engine payloads — UI “calling unavailable” stays until media lands.
+Inbound offer toast/log (pre-existing) is unchanged. `SocketBridgeRemoteHooks` also hands the live call statuses to `ICallService`: a fresh offer from someone else (younger than `ActiveCallEventPolicy.RingFreshWindow`, 60 s) opens the screen as ringing; Missed / Completed / AnsweredElsewhere for the same call id closes it, and an unanswered ring drops itself after the same window. End call rejects a ringing offer or terminates anything else. Answer and outbound offer wait on engine payloads, so speaker / mute / bluetooth stay disabled until a call is connected — which cannot happen before media lands.
 
 ## Opus review checklist
 

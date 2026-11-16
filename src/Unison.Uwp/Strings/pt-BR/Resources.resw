@@ -2278,4 +2278,31 @@ Desative depois de diagnosticar: manter ligado deixa o app lento.</value>
   <data name="StatusList_NewStatusDockTitle.Text" xml:space="preserve">
     <value>NOVO STATUS</value>
   </data>
+  <data name="CallScreen_Brand.Text" xml:space="preserve">
+    <value>WHATSAPP CALL</value>
+  </data>
+  <data name="CallScreen_Dialing" xml:space="preserve">
+    <value>CHAMANDO...</value>
+  </data>
+  <data name="CallScreen_Receiving" xml:space="preserve">
+    <value>RECEBENDO CHAMADA...</value>
+  </data>
+  <data name="CallScreen_Ended" xml:space="preserve">
+    <value>CHAMADA ENCERRADA</value>
+  </data>
+  <data name="CallScreen_Speaker.Text" xml:space="preserve">
+    <value>viva-voz</value>
+  </data>
+  <data name="CallScreen_Mute.Text" xml:space="preserve">
+    <value>mudo</value>
+  </data>
+  <data name="CallScreen_Bluetooth.Text" xml:space="preserve">
+    <value>bluetooth</value>
+  </data>
+  <data name="CallScreen_EndCall.Text" xml:space="preserve">
+    <value>encerrar</value>
+  </data>
+  <data name="CallScreen_Message.Text" xml:space="preserve">
+    <value>mensagem</value>
+  </data>
 </root>

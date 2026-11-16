@@ -2278,4 +2278,31 @@ Disable after diagnosing: keeping it on slows the app.</value>
   <data name="StatusList_NewStatusDockTitle.Text" xml:space="preserve">
     <value>NEW STATUS</value>
   </data>
+  <data name="CallScreen_Brand.Text" xml:space="preserve">
+    <value>WHATSAPP CALL</value>
+  </data>
+  <data name="CallScreen_Dialing" xml:space="preserve">
+    <value>DIALING...</value>
+  </data>
+  <data name="CallScreen_Receiving" xml:space="preserve">
+    <value>RECEIVING CALL...</value>
+  </data>
+  <data name="CallScreen_Ended" xml:space="preserve">
+    <value>CALL ENDED</value>
+  </data>
+  <data name="CallScreen_Speaker.Text" xml:space="preserve">
+    <value>speaker</value>
+  </data>
+  <data name="CallScreen_Mute.Text" xml:space="preserve">
+    <value>mute</value>
+  </data>
+  <data name="CallScreen_Bluetooth.Text" xml:space="preserve">
+    <value>bluetooth</value>
+  </data>
+  <data name="CallScreen_EndCall.Text" xml:space="preserve">
+    <value>end call</value>
+  </data>
+  <data name="CallScreen_Message.Text" xml:space="preserve">
+    <value>message</value>
+  </data>
 </root>

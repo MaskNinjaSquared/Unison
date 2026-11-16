@@ -10,6 +10,7 @@ using System.Threading.Tasks;
 using Unison.Baileys.Client;
 using Unison.Core.Contracts;
 using Unison.Core.Contracts.Tuning;
+using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Helpers;
 using Unison.Socket.Signal;
 using Unison.Uwp.Client;
@@ -24,14 +25,17 @@ namespace Unison.Uwp.Services.WhatsApp
         private readonly ProfilePictureQueryCache _pictureCache;
         private readonly ISocketBootstrapTuning _bootstrap;
         private readonly IRuntimeDiagnostics _diagnostics;
+        private readonly ICallService _calls;
 
         public UwpConnectionSocketSessionFactory(
             IWhatsAppTransportFactory transports,
             ISystemInfoProvider systemInfo,
             ProfilePictureQueryCache pictureCache,
             ISocketBootstrapTuning bootstrap,
-            IRuntimeDiagnostics diagnostics)
+            IRuntimeDiagnostics diagnostics,
+            ICallService calls)
         {
+            _calls = calls ?? throw new ArgumentNullException(nameof(calls));
             _transports = transports ?? throw new ArgumentNullException(nameof(transports));
             _systemInfo = systemInfo ?? throw new ArgumentNullException(nameof(systemInfo));
             _pictureCache = pictureCache ?? throw new ArgumentNullException(nameof(pictureCache));
@@ -74,6 +78,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 owner.Contacts,
                 owner.Messages,
                 owner.GroupFacade,
+                _calls,
                 owner.ResolveSentMessageForRetryAsync);
 
             SocketEventHandlerWiring.Attach(bridge, owner);

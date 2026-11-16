@@ -22,6 +22,7 @@ namespace Unison.Uwp.Services.WhatsApp
             IContactService contacts,
             IMessageService messages,
             IGroupService groups,
+            ICallService calls,
             Func<string, string, Task<global::Proto.Message>> resolveSentMessage)
         {
             if (bridge == null)
@@ -64,9 +65,12 @@ namespace Unison.Uwp.Services.WhatsApp
                     ? messages.NotifyGroupJoinsAsync(joins)
                     : Task.CompletedTask;
             bridge.CallEvents = events =>
-                messages != null
+            {
+                calls?.NotifyCallEvents(events);
+                return messages != null
                     ? messages.NotifyCallEventsAsync(events)
                     : Task.CompletedTask;
+            };
             bridge.GroupParticipantsLeft = leaves =>
                 messages != null
                     ? messages.NotifyGroupLeavesAsync(leaves)

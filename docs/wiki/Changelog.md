@@ -2,6 +2,14 @@
 
 Newest first.
 
+## Call screen (Legacy) — ringing from live offers
+
+`CallFacade` now tracks the one active call from the socket's live call statuses (`ActiveCallEventPolicy`: fresh offer from someone else rings, terminal status for the same id ends it, stale replays never ring). `CallScreenViewModel` + `LegacyCallView` show it in a full-window popup over any theme: square photo/placeholder with WHATSAPP CALL brand, status (dialing / receiving / running time), name, number, and a square-key dock (speaker, mute, bluetooth, end call ×2, message). Media is still not ported: the screen can reject or hang up, not answer. See [VoIP](Voip).
+
+## Build 32 — catch-up FULL request gets an ack deadline
+
+b31/b32 after pairing: `full-history-requested` + banner, then no ack journal of either kind and the snapshot showed no FULL pending while the banner and the enrichment hold stayed up. The watchdog only arms on an accepted ack, so an unanswered or silently dropped request left nothing to finish the catch-up. `FullHistoryAckDeadlineDispatch` is armed at send for catch-up requests (deadline = catch-up idle abort): an unacked request is cleared and the catch-up finished (`full-history-ack-missing`); a banner with no FULL request behind it is finished (`full-history-catch-up-orphaned`). Accepted requests are left to the watchdog. No FULL / catch-up / silent-chain number changed.
+
 ## Build 31 fixes — rejected FULL ack ends catch-up; chat-list release budget
 
 A rejected FULL_HISTORY ack clears the registry, so no watchdog or quiet lot could ever finish the catch-up it opened: banner, deferred enrichment (avatars) and toast suppression stayed up for the session (b31 fb8e90ad, after pairing). `FullHistoryAckRejectedDispatch` now finishes the catch-up (`full-history-ack-rejected`, releases enrichment) when it is active; both ack outcomes are journaled (`full-history-ack-accepted` / `-rejected`). Chat-list release ticks timed the per-turn budget from before skipping rows already on screen, so every tick released only the first batch (437 rows in 51 ticks on Low); `ChatListReleaseBudgetPolicy` starts the clock at the first add. No FULL / catch-up / silent-chain number changed.

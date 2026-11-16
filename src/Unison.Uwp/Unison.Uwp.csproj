@@ -347,6 +347,7 @@
     <Compile Include="Services\NotificationService.cs" />
     <Compile Include="Services\Calls\UwpCallIoFactory.cs" />
     <Compile Include="Services\Calls\SocketCallSignalingChannel.cs" />
+    <Compile Include="Services\Calls\CallScreenPresenter.cs" />
     <Compile Include="Services\LiveTilesService.cs" />
     <Compile Include="Services\ShortcutService.cs" />
     <Compile Include="Services\RuntimeDiagnosticsService.cs" />
@@ -570,6 +571,9 @@
     </Compile>
     <Compile Include="Shell\WhatsAppLegacy\Controls\NewConversationView.xaml.cs">
       <DependentUpon>NewConversationView.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Shell\WhatsAppLegacy\Controls\LegacyCallView.xaml.cs">
+      <DependentUpon>LegacyCallView.xaml</DependentUpon>
     </Compile>
     <Compile Include="Shell\WhatsAppLegacy\Controls\NewStatusPickerOverlay.xaml.cs">
       <DependentUpon>NewStatusPickerOverlay.xaml</DependentUpon>
@@ -1390,6 +1394,10 @@
       <SubType>Designer</SubType>
     </Page>
     <Page Include="Shell\WhatsAppLegacy\Controls\NewConversationView.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Include="Shell\WhatsAppLegacy\Controls\LegacyCallView.xaml">
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </Page>
