@@ -48,9 +48,6 @@ namespace Unison.Uwp.Services.WhatsApp
             return new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         }
 
-        private Task PersistAuthStateAsync(IWhatsAppSocket sourceSocket, string reason) =>
-            _persistAuthState.RunAsync(sourceSocket, reason);
-
         private object ResolveAuthToSave(object sourceSocket)
         {
             var typed = sourceSocket as IWhatsAppSocket;
@@ -68,12 +65,6 @@ namespace Unison.Uwp.Services.WhatsApp
             _authState = authToSave;
             await _authStore.SaveAsync(authToSave);
         }
-
-        private Task WaitForSessionEstablishedAsync(string reason) =>
-            _waitForSessionEstablished.WaitAsync(reason);
-
-        private void PublishConnectionUpdate(string status) =>
-            PublishConnectionUpdateDispatch.Run(this, status);
 
         // --- IPublishConnectionUpdateHost ------------------------------------
 
@@ -254,7 +245,7 @@ namespace Unison.Uwp.Services.WhatsApp
         bool IConnectionHealthOwnerPort.IsHistoryCatchUpActive => IsHistoryCatchUpActive();
 
         void IConnectionHealthOwnerPort.RequestSoftReconnect(string reason) =>
-            ScheduleAutoReconnect(reason);
+            _softReconnect.Schedule(reason);
 
         void IConnectionHealthOwnerPort.LatchFatalAndReportStream(string code)
         {
@@ -281,15 +272,6 @@ namespace Unison.Uwp.Services.WhatsApp
         /// transport often closes with 1006 BEFORE the "restart" status is published, and that
         /// premature close must not schedule the generic AutoReconnect loop.
         /// </summary>
-        private void MarkPairingRestartPending(string reason) =>
-            _markPairingRestartPending.Run(reason);
-
-        /// <summary>
-        /// Owns stage-2 reconnect after pair-success / 515. Idempotent under
-        /// <see cref="SoftReconnectCoordinator"/>.
-        /// </summary>
-        private void TryStartPairingStage2Reconnect(string reason) =>
-            TryStartPairingStage2ReconnectDispatch.Run(this, reason);
 
         // --- ITryStartPairingStage2ReconnectHost -----------------------------
 
@@ -301,7 +283,7 @@ namespace Unison.Uwp.Services.WhatsApp
             PairingTrace(message);
 
         void ITryStartPairingStage2ReconnectHost.MarkPairingRestartPending(string reason) =>
-            MarkPairingRestartPending(reason);
+            _markPairingRestartPending.Run(reason);
 
         bool ITryStartPairingStage2ReconnectHost.TryClaimReconnectSlot() =>
             _softReconnect.TryClaimReconnectSlot();
@@ -310,10 +292,7 @@ namespace Unison.Uwp.Services.WhatsApp
             StopConnectionHealthMonitor(reason);
 
         void ITryStartPairingStage2ReconnectHost.FireAndForgetPairingStage2Reconnect() =>
-            _ = ReconnectForPairingAsync();
-
-        private void ScheduleAutoReconnect(string reason) =>
-            _softReconnect.Schedule(reason);
+            _ = ConnectionPairingStage2.RunAsync(this);
 
         // --- ISoftReconnectIoHost --------------------------------------------
 
@@ -360,10 +339,10 @@ namespace Unison.Uwp.Services.WhatsApp
             _ = Task.Run(work);
 
         Task ISoftReconnectIoHost.RunAutoReconnectLoopAsync(string reason) =>
-            AutoReconnectLoopAsync(reason);
+            AutoReconnectLoopDispatch.RunAsync(this, reason);
 
         void ISoftReconnectIoHost.TryStartPairingStage2Reconnect(string reason) =>
-            TryStartPairingStage2Reconnect(reason);
+            TryStartPairingStage2ReconnectDispatch.Run(this, reason);
 
 
 
@@ -583,7 +562,7 @@ namespace Unison.Uwp.Services.WhatsApp
         }
 
         void IInitializeConnectionStateHost.SyncSelfProfileFromAuth() =>
-            SyncSelfProfileFromAuth();
+            _selfProfileAuth.SyncFromAuth();
 
         /// <summary>
         /// Compatibility path for callers that genuinely need both connection state and
@@ -630,7 +609,7 @@ namespace Unison.Uwp.Services.WhatsApp
         void IConnectionResumeHost.ClearSuppressReconnect() => _sessionFlags.SuppressReconnect = false;
 
         Task<bool> IConnectionResumeHost.ConsumeBrokerReconnectRequestAsync() =>
-            ConsumeBrokerReconnectRequestAsync();
+            BrokerReconnectConsumeDispatch.RunAsync(this);
 
         void IConnectionResumeHost.MarkForceFreshConnectOnResume() =>
                 Interlocked.Exchange(ref _forceFreshConnectOnResume, 1);
@@ -654,7 +633,7 @@ namespace Unison.Uwp.Services.WhatsApp
                         Interlocked.Exchange(ref _forceFreshConnectOnResume, 0);
                         StartConnectionHealthMonitor(brokerSocket);
                         _incomingPump.RestartIfNeeded();
-                        PublishConnectionUpdate("connected");
+                        PublishConnectionUpdateDispatch.Run(this, "connected");
                         _diagnostics.Write(
                             "socket-broker",
                             "resume-reclaim-complete",
@@ -684,7 +663,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 _incomingPump.RestartIfNeeded();
 
         void IConnectionResumeHost.RequestSoftReconnect(string reason) =>
-            ScheduleAutoReconnect(reason);
+            _softReconnect.Schedule(reason);
 
         void IConnectionResumeHost.WriteResumeJournal(string eventName, string detail)
         {
@@ -700,9 +679,6 @@ namespace Unison.Uwp.Services.WhatsApp
                 "[WhatsAppService] Immediate resume reconnect failed: " +
                 (error != null ? error.Message : string.Empty));
         }
-
-        private Task<bool> ConsumeBrokerReconnectRequestAsync() =>
-            BrokerReconnectConsumeDispatch.RunAsync(this);
 
         // --- IBrokerReconnectConsumeHost -------------------------------------
 
@@ -846,7 +822,7 @@ namespace Unison.Uwp.Services.WhatsApp
         }
 
         void IConnectionBrokerTransferHost.PublishBackgroundConnection() =>
-            PublishConnectionUpdate("background");
+            PublishConnectionUpdateDispatch.Run(this, "background");
 
         void IConnectionBrokerTransferHost.WriteBrokerJournal(string eventName, string detail)
         {
@@ -872,8 +848,6 @@ namespace Unison.Uwp.Services.WhatsApp
         /// protocol queue stopped making progress: in that state the socket can
         /// answer pings while user messages never reach the application.
         /// </summary>
-        private Task<bool> IsCurrentSocketHealthyAsync() =>
-            IsCurrentSocketHealthyDispatch.RunAsync(this);
 
         // --- IIsCurrentSocketHealthyHost -------------------------------------
 
@@ -971,10 +945,10 @@ namespace Unison.Uwp.Services.WhatsApp
             EnsureConnectedAsync(timeoutMs, forceFreshTransport);
 
         Task<bool> IConnectionEnsureHost.IsCurrentSocketHealthyAsync() =>
-            IsCurrentSocketHealthyAsync();
+            IsCurrentSocketHealthyDispatch.RunAsync(this);
 
         void IConnectionEnsureHost.DropCurrentSocketForFastResume() =>
-                    DropCurrentSocketForFastResume();
+                    DropCurrentSocketForFastResumeDispatch.Run(this);
 
         Task<bool> IConnectionEnsureHost.IsRegisteredAsync() => IsRegisteredAsync();
 
@@ -1000,9 +974,6 @@ namespace Unison.Uwp.Services.WhatsApp
                 // The connection check in ConnectionEnsure provides the user-facing error.
             }
         }
-
-        private void DropCurrentSocketForFastResume() =>
-            DropCurrentSocketForFastResumeDispatch.Run(this);
 
         // --- IDropCurrentSocketForFastResumeHost -----------------------------
 
@@ -1115,9 +1086,6 @@ namespace Unison.Uwp.Services.WhatsApp
         Task IConnectAsyncHost.OpenConnectAsync(bool reuseLoadedKeyState) =>
             ConnectionConnectOpen.RunAsync(_connectionOpen, _socketSessions, reuseLoadedKeyState);
 
-        private Task AutoReconnectLoopAsync(string trigger) =>
-            AutoReconnectLoopDispatch.RunAsync(this, trigger);
-
         // --- IAutoReconnectLoopHost ------------------------------------------
 
         bool IAutoReconnectLoopHost.SuppressReconnect => _sessionFlags.SuppressReconnect;
@@ -1132,7 +1100,7 @@ namespace Unison.Uwp.Services.WhatsApp
             _authState != null && _authState.Registered;
 
         Task<bool> IAutoReconnectLoopHost.IsCurrentSocketHealthyAsync() =>
-            IsCurrentSocketHealthyAsync();
+            IsCurrentSocketHealthyDispatch.RunAsync(this);
 
         Task IAutoReconnectLoopHost.InitializeAsync() => InitializeAsync();
 
@@ -1142,7 +1110,7 @@ namespace Unison.Uwp.Services.WhatsApp
             ConnectionHealthPolicy.ReconnectDelay(attempt);
 
         void IAutoReconnectLoopHost.PublishReconnectingStatus() =>
-            PublishConnectionUpdate("reconnecting");
+            PublishConnectionUpdateDispatch.Run(this, "reconnecting");
 
         void IAutoReconnectLoopHost.LogAutoReconnect(string message) =>
             Debug.WriteLine("[WhatsAppService] " + message);
@@ -1156,7 +1124,6 @@ namespace Unison.Uwp.Services.WhatsApp
         /// Reconnects after close code 515 to complete pairing stage 2.
         /// Orchestration lives in <see cref="ConnectionPairingStage2"/>.
         /// </summary>
-        private Task ReconnectForPairingAsync() => ConnectionPairingStage2.RunAsync(this);
 
         bool IConnectionPairingStage2Host.ShouldAbortPairingRestart =>
             ConnectionSoftReconnectGates.ShouldAbortPairingRestart(
@@ -1180,7 +1147,7 @@ namespace Unison.Uwp.Services.WhatsApp
         Task IConnectionPairingStage2Host.ConnectAsync() => ConnectAsync();
 
         void IConnectionPairingStage2Host.RequestSoftReconnect(string reason) =>
-            ScheduleAutoReconnect(reason);
+            _softReconnect.Schedule(reason);
 
         void IConnectionPairingStage2Host.RaisePairingError(Exception error)
         {
@@ -1481,7 +1448,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 }
 
         void IConnectionLifecycleHost.PublishSuspended() =>
-                PublishConnectionUpdate("suspended");
+                PublishConnectionUpdateDispatch.Run(this, "suspended");
 
         void IConnectionLifecycleHost.ResetIncomingPumpForSuspend() =>
                 _incomingPump.Reset("suspend", requeueCurrent: true);

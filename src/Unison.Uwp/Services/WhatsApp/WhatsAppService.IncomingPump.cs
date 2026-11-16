@@ -72,7 +72,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
         void IOfflineReplayHost.CompleteFirstOfflineRelease(string reason)
         {
-            PublishConnectionUpdate("synced");
+            PublishConnectionUpdateDispatch.Run(this, "synced");
             EnableScheduledPersist("offline completion (" + reason + ")");
             _ = TryConsumeMessageStoreForceHistoryRepairAsync(reason);
         }

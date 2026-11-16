@@ -911,7 +911,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 () => _authState?.Me?.Name,
                 IsOwnPhoneEchoLabel,
                 () => { _authState.Me.Name = null; },
-                () => { _ = PersistAuthStateAsync(null, "clear-phone-echo-name"); },
+                () => { _ = _persistAuthState.RunAsync(null, "clear-phone-echo-name"); },
                 () => CurrentUserAvatar,
                 () => _authState?.Me?.AvatarUrl,
                 avatarUrl => _selfProfile.RestoreAvatar(avatarUrl),
@@ -920,7 +920,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 phone => { _authState.Me.Phone = phone; },
                 () => OnPropertyChanged(nameof(CurrentUserPhone)),
                 () => _selfProfile.NotifyChanged(),
-                () => { _ = PersistAuthStateAsync(null, "self-phone"); },
+                () => { _ = _persistAuthState.RunAsync(null, "self-phone"); },
                 avatarUrl => { _authState.Me.AvatarUrl = avatarUrl; },
                 () => _authStore != null && _authState != null,
                 () => _authStore.SaveAsync(_authState));
@@ -1074,8 +1074,8 @@ namespace Unison.Uwp.Services.WhatsApp
                     Chats.Any(c => c != null && (c.IsGroup || JidHelper.IsGroupJid(c.JID)))
                         ? GetNewestStoredMessageUtc(JidHelper.IsGroupJid)
                         : DateTime.MinValue,
-                requestReconnectHistoryCatchUpAsync: RequestReconnectHistoryCatchUpAsync,
-                finishHistoryCatchUpContinue: FinishHistoryCatchUpContinue,
+                requestReconnectHistoryCatchUpAsync: _reconnectCatchUp.RunAsync,
+                finishHistoryCatchUpContinue: _catchUpFinish.Run,
                 log: message => Debug.WriteLine("[WhatsAppService] " + message));
             _reconnectCatchUp = new ReconnectHistoryCatchUpOwner(
                 historyRequests: _historyRequests,
@@ -1093,7 +1093,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 tryGetStaleReason: TryGetHistoryFreshnessStaleReason,
                 noteHydrationDayAttempt: NoteHydrationDayAttempt,
                 startBackgroundHistoryBackfillAsync: StartBackgroundHistoryBackfillAsync,
-                requestReconnectHistoryCatchUpAsync: RequestReconnectHistoryCatchUpAsync,
+                requestReconnectHistoryCatchUpAsync: _reconnectCatchUp.RunAsync,
                 scheduleHydrationDayRetryIfNeeded: ScheduleHydrationDayRetryIfNeeded,
                 diagnostics: _diagnostics,
                 log: message => Debug.WriteLine("[WhatsAppService] " + message));
@@ -1172,13 +1172,13 @@ namespace Unison.Uwp.Services.WhatsApp
                 suppressReconnect: () => _sessionFlags.SuppressReconnect,
                 isAuthRegistered: () => _authState != null && _authState.Registered,
                 tryGetStaleReason: TryGetHistoryFreshnessStaleReason,
-                finishCatchUpContinue: FinishHistoryCatchUpContinue,
+                finishCatchUpContinue: _catchUpFinish.Run,
                 beginCatchUpBanner: BeginHistoryCatchUpBanner,
-                startHydrationFallback: reason => _ = RunHydrationFallbackPipelineAsync(reason),
-                publishConnectionStatus: PublishConnectionUpdate,
+                startHydrationFallback: reason => _ = _hydrationFallback.RunAsync(reason),
+                publishConnectionStatus: status => PublishConnectionUpdateDispatch.Run(this, status),
                 stopHealthMonitor: StopConnectionHealthMonitor,
-                tearDownSocket: TearDownSocketForSoftReconnect,
-                scheduleAutoReconnect: ScheduleAutoReconnect,
+                tearDownSocket: () => _socketTearDown.Run(),
+                scheduleAutoReconnect: _softReconnect.Schedule,
                 raiseError: error => OnError?.Invoke(this, error),
                 diagnostics: _diagnostics,
                 log: message => Debug.WriteLine("[WhatsAppService] " + message));
@@ -1609,7 +1609,7 @@ namespace Unison.Uwp.Services.WhatsApp
             _authStateWire = new AuthStateWireOwner(
                 () => Debug.WriteLine("[WhatsAppService] Auth state updated, saving..."),
                 FileSelfIdentityAliases,
-                () => PersistAuthStateAsync(_socket, "socket-auth-update"));
+                () => _persistAuthState.RunAsync(_socket, "socket-auth-update"));
             _sessionInitializedWire = new SessionInitializedOwner(
                 () => _sessionFlags.FatalSessionEnded,
                 () => _sessionFlags.SessionEstablishedThisConnection = true,
@@ -1617,12 +1617,12 @@ namespace Unison.Uwp.Services.WhatsApp
                 () => _sessionFlags.CountPreSessionCloseAsFatal = true,
                 () => _sessionFlags.ResetPreSessionCloseStreak(),
                 () => _sessionEstablishedTcs.TrySetResult(true),
-                EnsureSelfPhonePersisted,
-                () => PersistAuthStateAsync(_socket, "session-initialized"),
+                () => _selfProfileAuth.EnsureSelfPhonePersisted(),
+                () => _persistAuthState.RunAsync(_socket, "session-initialized"),
                 ShouldDeferReconnectReplayWork,
                 () => Debug.WriteLine(
                     "[WhatsAppService] Deferring reconnect name/group work until replay drain completes."),
-                () => SchedulePostReplayMaintenance(0),
+                () => _postSyncMaintenance.SchedulePostReplay(0),
                 reason => _ = TryConsumeMessageStoreForceHistoryRepairAsync(reason),
                 () => OnSessionInitialized?.Invoke(this, EventArgs.Empty),
                 PairingTrace,
@@ -1632,8 +1632,8 @@ namespace Unison.Uwp.Services.WhatsApp
                 () => _sessionFlags.SuppressReconnect,
                 () => _sessionFlags.FatalSessionEnded,
                 () => _sessionFlags.PairingRestartPending,
-                MarkPairingRestartPending,
-                TryStartPairingStage2Reconnect,
+                _markPairingRestartPending.Run,
+                reason => TryStartPairingStage2ReconnectDispatch.Run(this, reason),
                 LatchFatalSession,
                 ReportStreamError,
                 (ex, socketConnected, handshakeComplete) =>
@@ -1650,7 +1650,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 () => Debug.WriteLine(
                     "[WhatsAppService] Transport failure detected; persistent reconnect scheduled"),
                 milliseconds => Task.Delay(milliseconds),
-                ScheduleAutoReconnect,
+                _softReconnect.Schedule,
                 ex => OnError?.Invoke(this, ex));
             _connectionUpdateWire = new ConnectionUpdateOwner(
                 () => _sessionFlags.SuppressReconnect,
@@ -1664,7 +1664,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 status => Debug.WriteLine(
                     "[WhatsAppService] Connection update '" + status +
                     "' ignored during intentional shutdown"),
-                PublishConnectionUpdate,
+                status => PublishConnectionUpdateDispatch.Run(this, status),
                 () => _diagnostics.Write(
                     "connection",
                     "pairing-restart",
@@ -1679,7 +1679,7 @@ namespace Unison.Uwp.Services.WhatsApp
                     "connection",
                     "pairing-close-before-restart",
                     "claiming-stage2=true"),
-                TryStartPairingStage2Reconnect,
+                reason => TryStartPairingStage2ReconnectDispatch.Run(this, reason),
                 () => _sessionFlags.IncrementPreSessionCloseStreak(),
                 streak => _diagnostics.Write(
                     "connection",
@@ -1689,7 +1689,7 @@ namespace Unison.Uwp.Services.WhatsApp
                     () => OnInvalidSessionSuspected?.Invoke(this, reason),
                     nameof(OnInvalidSessionSuspected)),
                 () => _sessionFlags.ResetPreSessionCloseStreak(),
-                ScheduleAutoReconnect,
+                _softReconnect.Schedule,
                 trigger => _diagnostics.Write(
                     "connection",
                     "qr-expired",
@@ -1796,7 +1796,7 @@ namespace Unison.Uwp.Services.WhatsApp
                         "; socketConnected=" + (_socket != null && _socket.IsConnected) +
                         "; handshake=" + (_socket != null && _socket.IsHandshakeComplete)),
                 NotifyOfflineReplayMessagesReleasedAsync,
-                SchedulePostReplayMaintenance,
+                _postSyncMaintenance.SchedulePostReplay,
                 IsHistoryCatchUpActive,
                 LogHistoryFreshnessAfterOfflineDrain);
             _chatState.Chats.CollectionChanged += (s, e) => InvalidateChatRowIndex();
@@ -1863,16 +1863,6 @@ namespace Unison.Uwp.Services.WhatsApp
         }
 
         /// <summary>
-        /// Copies persisted Me (name + avatar URI) into shell fields before sync.
-        /// Null/empty AvatarUrl leaves the UI without a photo.
-        /// </summary>
-        private void SyncSelfProfileFromAuth() =>
-            _selfProfileAuth.SyncFromAuth();
-
-        private void EnsureSelfPhonePersisted() =>
-            _selfProfileAuth.EnsureSelfPhonePersisted();
-
-        /// <summary>
         /// Clears local chats/messages and asks WhatsApp for a fresh history sync.
         /// Auth / Noise session stay intact (unlike <see cref="ClearSessionAsync"/>).
         /// Unlike pairing, an already-linked companion will not receive INITIAL_BOOTSTRAP
@@ -1933,8 +1923,6 @@ namespace Unison.Uwp.Services.WhatsApp
         /// forced fresh transport ? a live socket that already completed pull will not
         /// spontaneously re-bootstrap like pairing.
         /// </summary>
-        private void SchedulePostReplayMaintenance(int offlineCount) =>
-            _postSyncMaintenance.SchedulePostReplay(offlineCount);
 
         // --- IPostSyncMaintenanceIoHost --------------------------------------
 
@@ -2128,9 +2116,6 @@ namespace Unison.Uwp.Services.WhatsApp
                         ex,
                         "reason=" + reason);
 
-        private void ReleaseEnrichmentAfterHeavyHistory(string reason) =>
-            _heavyHistoryEnrichment.Run(reason);
-
         /// <summary>
         /// Flush lock / idle timer / claim-drain owner (DI exposes
         /// <see cref="IPendingMessageFlushHost"/> from this instance).
@@ -2268,11 +2253,8 @@ namespace Unison.Uwp.Services.WhatsApp
                 return;
             }
 
-            _ = RunDeferredStartupMaintenanceAsync();
+            _ = _deferredStartup.RunAsync();
         }
-
-        private Task RunDeferredStartupMaintenanceAsync() =>
-            _deferredStartup.RunAsync();
 
         /// <summary>
         /// Saves a single message to disk (call after the timeline store accepted it).
@@ -2288,12 +2270,6 @@ namespace Unison.Uwp.Services.WhatsApp
                 Debug.WriteLine($"[WhatsAppService] Failed to save message: {ex.Message}");
             }
         }
-
-        private void ScheduleAcceptedHistoryRequestTimeout(HistoryOnDemandRequest state) =>
-            _acceptedHistoryTimeout.Schedule(state);
-
-        private void ClearFullHistoryOnDemandRequestState(string reason) =>
-            _fullHistoryClear.Run(reason);
 
         /// <summary>
         /// After a FULL_HISTORY request goes quiet: soft-reconnect for the next offline lot while
@@ -2315,19 +2291,19 @@ namespace Unison.Uwp.Services.WhatsApp
             _heavyHistoryEnrichment.SetAwaitingHeavyHistory(true);
 
         void IHistoryCatchUpHost.FinishContinue(string reason, bool releaseEnrichment) =>
-            FinishHistoryCatchUpContinue(reason, releaseEnrichment);
+            _catchUpFinish.Run(reason, releaseEnrichment);
 
         void IHistoryCatchUpHost.ClearFullHistoryOnDemandRequest(string reason) =>
-            ClearFullHistoryOnDemandRequestState(reason);
+            _fullHistoryClear.Run(reason);
 
         void IHistoryCatchUpHost.NotifySilentFullLotQuiet(string triggerReason, int appliedCount) =>
-            NotifySilentFullLotQuiet(triggerReason, appliedCount);
+            _silentChain.OnLotQuiet(triggerReason, appliedCount);
 
         void IHistoryCatchUpHost.MarkForceHistoryRepairPending(string reason) =>
-            TryMarkForceHistoryRepairPending(reason);
+            _forceHistoryRepair.MarkPending(reason);
 
         void IHistoryCatchUpHost.StartHydrationFallback(string reason) =>
-            _ = RunHydrationFallbackPipelineAsync(reason);
+            _ = _hydrationFallback.RunAsync(reason);
 
         async Task<bool> IHistoryCatchUpHost.TryRequestAdjacentLiveFullHistoryAsync(string reason)
         {
@@ -2360,23 +2336,16 @@ namespace Unison.Uwp.Services.WhatsApp
             return _catchUp.IsActive(IsHistoryCatchUpBannerActive);
         }
 
-        private void FinishHistoryCatchUpContinue(string reason, bool releaseEnrichment) =>
-            _catchUpFinish.Run(reason, releaseEnrichment);
-
         void IConnectionSoftReconnectHost.ScheduleSoftReconnect(string reason) =>
-            ScheduleAutoReconnect(reason);
+            _softReconnect.Schedule(reason);
 
         void IConnectionSoftReconnectHost.ScheduleCatchUpContinueReconnect(string reason) =>
-            ScheduleCatchUpContinueReconnect(reason);
+            _historyReconnectFallback.ScheduleCatchUpContinue(reason);
 
         /// <summary>
         /// Soft-reconnect to pull another offline catch-up lot while the history banner stays up.
         /// Distinct from the long-cooldown freshness failure fallback.
         /// </summary>
-        private void ScheduleCatchUpContinueReconnect(string triggerReason) =>
-            _historyReconnectFallback.ScheduleCatchUpContinue(triggerReason);
-
-        private void TearDownSocketForSoftReconnect() => _socketTearDown.Run();
 
         /// <summary>
         /// Single forward to <see cref="IDeferredAvatarResolution"/> for enrichment / catch-up /
@@ -2414,7 +2383,7 @@ namespace Unison.Uwp.Services.WhatsApp
         }
 
         void IHistorySyncHost.ScheduleAcceptedHistoryOnDemandTimeout(HistoryOnDemandRequest state) =>
-            ScheduleAcceptedHistoryRequestTimeout(state);
+            _acceptedHistoryTimeout.Schedule(state);
 
         void IHistorySyncHost.NoteHistorySyncLanded(string syncType, bool hasContent)
         {
@@ -2434,7 +2403,7 @@ namespace Unison.Uwp.Services.WhatsApp
             _historyIdentityRefreshTriggeredThisSession = true;
             Debug.WriteLine(
                 "[WhatsAppService] Scheduling post-message enrichment after first non-empty history sync.");
-            ReleaseEnrichmentAfterHeavyHistory(syncType ?? "history-sync");
+            _heavyHistoryEnrichment.Run(syncType ?? "history-sync");
         }
 
         private HistoryOnDemandDispatch HistoryDispatch =>
@@ -2505,11 +2474,6 @@ namespace Unison.Uwp.Services.WhatsApp
             BeginHistoryCatchUpBanner(tracked.TriggerReason);
         }
 
-        private void NotifySilentFullLotQuiet(string triggerReason, int appliedCount)
-        {
-            _silentChain.OnLotQuiet(triggerReason, appliedCount);
-        }
-
         private Task PeriodicFullHistorySafetyLoopAsync(CancellationToken token) =>
             _periodicFullSafety.RunLoopAsync(token);
 
@@ -2535,8 +2499,6 @@ namespace Unison.Uwp.Services.WhatsApp
         /// Leaves a latch so the next session / offline-complete path can resume FULL_HISTORY
         /// after Mobile hits its adjacent-page cap while tips are still owed.
         /// </summary>
-        private void TryMarkForceHistoryRepairPending(string reason) =>
-            _forceHistoryRepair.MarkPending(reason);
 
         /// <summary>
         /// After MessageStore epoch upgrade (legacy JSON abandoned), request a one-shot
@@ -2551,16 +2513,11 @@ namespace Unison.Uwp.Services.WhatsApp
         private void LogHistoryFreshnessAfterOfflineDrain(int offlineCount) =>
             _ = _postOfflineFreshness.RunAsync(offlineCount);
 
-        private Task RequestReconnectHistoryCatchUpAsync(string reason) =>
-            _reconnectCatchUp.RunAsync(reason);
-
         /// <summary>
         /// After FULL_HISTORY quiet fails while tips stay stale: per-JID ON_DEMAND hydration
         /// (Pending ? syncing ? HasMore/Synced), then natural FULL_HISTORY again. Day retries
         /// keep going until tips look fresh (max 5 / day, every 3h).
         /// </summary>
-        private Task RunHydrationFallbackPipelineAsync(string reason) =>
-            _hydrationFallback.RunAsync(reason);
 
         private void NoteHydrationDayAttempt(DateTime nowUtc) =>
             _hydrationDayRetry.NoteAttempt(nowUtc);
@@ -2576,7 +2533,7 @@ namespace Unison.Uwp.Services.WhatsApp
             TryGetHistoryFreshnessStaleReason(nowUtc, out staleReason);
 
         Task IHydrationDayRetryIoHost.RunHydrationFallbackPipelineAsync(string reason) =>
-            RunHydrationFallbackPipelineAsync(reason);
+            _hydrationFallback.RunAsync(reason);
 
         void IHydrationDayRetryIoHost.StampLastHydrationFallbackUtc(DateTime nowUtc) =>
             _lastHydrationFallbackUtc = nowUtc;
@@ -2620,7 +2577,7 @@ namespace Unison.Uwp.Services.WhatsApp
             RequestHistoryOnDemandIfNeededAsync(normJid, pageSize, triggerReason);
 
         Task IHistoryHydrationBackfillHost.WaitForHydrationSettleAsync() =>
-            WaitForHistoryHydrationSettleAsync();
+            _hydrationSettle.WaitAsync();
 
         void IHistoryHydrationBackfillHost.LogHydrationSkippedNotConnected(string reason) =>
             Debug.WriteLine(
@@ -2728,7 +2685,7 @@ namespace Unison.Uwp.Services.WhatsApp
         void ISqliteHistoryQuietFinalizeHost.NotifySilentFullLotQuiet(
             string triggerReason,
             int appliedCount) =>
-            NotifySilentFullLotQuiet(triggerReason, appliedCount);
+            _silentChain.OnLotQuiet(triggerReason, appliedCount);
 
         void ISqliteHistoryQuietFinalizeHost.NotifyCatchUpIdleBatch(
             string lotRequestId,
@@ -2746,10 +2703,10 @@ namespace Unison.Uwp.Services.WhatsApp
         void ISqliteHistoryQuietFinalizeHost.FinishHistoryCatchUpContinue(
             string reason,
             bool releaseEnrichment) =>
-            FinishHistoryCatchUpContinue(reason, releaseEnrichment);
+            _catchUpFinish.Run(reason, releaseEnrichment);
 
         void ISqliteHistoryQuietFinalizeHost.ClearFullHistoryOnDemandRequestState(string reason) =>
-            ClearFullHistoryOnDemandRequestState(reason);
+            _fullHistoryClear.Run(reason);
 
         void ISqliteHistoryQuietFinalizeHost.EndHistoryCatchUpBanner(string reason) =>
             EndHistoryCatchUpBanner(reason);
@@ -2838,8 +2795,6 @@ namespace Unison.Uwp.Services.WhatsApp
         private int GetHistoryHydrationMessageCount(string jid) =>
             string.IsNullOrWhiteSpace(jid) ? 0 : _chatState.GetMessageCount(jid);
 
-        private Task WaitForHistoryHydrationSettleAsync() => _hydrationSettle.WaitAsync();
-
         /// <summary>
         /// Rebuilds a message we sent, so a retry receipt that arrives after the socket's cache
         /// has expired can still be answered.
@@ -2877,11 +2832,6 @@ namespace Unison.Uwp.Services.WhatsApp
                 _sessionFlags.FatalSessionEnded,
                 _authState == null,
                 _authState != null && _authState.Registered);
-
-
-
-        private void InvalidateCurrentSocket(IWhatsAppSocket socket, string reason) =>
-            _invalidateSocket.Run(socket, reason);
 
         private string NormalizeSelfNameCandidate(string candidate, string canonical, string normalized) =>
             SelfNameCandidate.Normalize(candidate, canonical, normalized, _selfMarkers);
@@ -2923,7 +2873,7 @@ namespace Unison.Uwp.Services.WhatsApp
             CurrentUserName = sanitized;
             if (persistAuth)
             {
-                _ = PersistAuthStateAsync(null, "self-push-name");
+                _ = _persistAuthState.RunAsync(null, "self-push-name");
             }
         }
 
@@ -3026,7 +2976,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 Log("[WhatsAppService] IDENTITY HEALING (USync): Me.Lid (" + meLid + ") belongs to PN " +
                     normalizedLid + ", but current Me.Id is " + _authState.Me.Id + ". Fixing...");
                 _authState.Me.Id = normalizedLid;
-                _ = PersistAuthStateAsync(null, "usync-identity-heal");
+                _ = _persistAuthState.RunAsync(null, "usync-identity-heal");
             }
             else if (action == SelfIdentityHealingAction.PurgeForeignMapping)
             {
@@ -3034,7 +2984,7 @@ namespace Unison.Uwp.Services.WhatsApp
                     ") is mapped to foreign LID " + normalizedLid + ". PURGING...");
                 _authState.Me.Id = meLid;
                 JidAlias.Remove(normalizedUser);
-                _ = PersistAuthStateAsync(null, "usync-identity-purge");
+                _ = _persistAuthState.RunAsync(null, "usync-identity-purge");
             }
         }
     }
