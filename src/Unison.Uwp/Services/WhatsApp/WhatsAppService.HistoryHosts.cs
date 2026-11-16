@@ -18,12 +18,12 @@ namespace Unison.Uwp.Services.WhatsApp
 
         bool IHistoryHydrationBackfillHost.IsConnected => IsConnected;
 
-        int IHistoryHydrationBackfillHost.HydrationBatchSize => HistoryHydrationBatchSize;
+        int IHistoryHydrationBackfillHost.HydrationBatchSize => HistoryOnDemandPacing.HydrationBatchSize;
 
-        int IHistoryHydrationBackfillHost.HydrationPageSize => HistoryHydrationPageSize;
+        int IHistoryHydrationBackfillHost.HydrationPageSize => HistoryOnDemandPacing.HydrationPageSize;
 
         int IHistoryHydrationBackfillHost.HydrationMaxPagesPerChat =>
-            HistoryHydrationMaxPagesPerChat;
+            HistoryOnDemandPacing.HydrationMaxPagesPerChat;
 
         IReadOnlyList<HistoryBackfillCandidate> IHistoryHydrationBackfillHost.BuildHydrationCandidates(
             DateTime nowUtc) =>

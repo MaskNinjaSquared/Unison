@@ -2,6 +2,10 @@
 
 Newest first.
 
+## Phase D stage 3 — fixed history pacing leaves the host
+
+FULL / ON_DEMAND / hydration timing constants moved from `WhatsAppService` to `HistoryOnDemandPacing`, pinned by tests. Move-only: no value changed.
+
 ## Phase D stage 2 — reconnect adapter from DI
 
 `ReconnectHostAdapter` (soft reconnect + auto-reconnect loop I/O) and `CurrentSocketHealthHost` are built in `App.ConfigureServices`; the connect lifecycle port is resolved lazily. Reconnect loop errors raise on `ConnectionEventHub`. No delay or threshold change.

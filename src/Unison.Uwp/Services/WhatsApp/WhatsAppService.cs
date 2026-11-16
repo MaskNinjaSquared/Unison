@@ -489,25 +489,15 @@ namespace Unison.Uwp.Services.WhatsApp
                 newestNonSelfUtc,
                 hasGroups,
                 newestGroupUtc,
-                HistoryFreshnessStaleThreshold,
+                HistoryOnDemandPacing.FreshnessStaleThreshold,
                 out reason);
         }
 
 
-        private static readonly TimeSpan HistoryBackfillStaleThreshold = TimeSpan.FromHours(8);
-        private static readonly TimeSpan HistoryFreshnessStaleThreshold = TimeSpan.FromMinutes(30);
-        private static readonly TimeSpan HistoryHydrationSettleBudget = TimeSpan.FromSeconds(25);
-        private const int HistoryBackfillMaxStaleTopChats = 40;
-        private const int HistoryHydrationBatchSize = 10;
-        private const int HistoryHydrationPageSize = 50;
-        private const int HistoryHydrationMaxPagesPerChat = 5;
-        private static readonly TimeSpan HistoryOnDemandResponseTimeout = TimeSpan.FromSeconds(20);
-        private static readonly TimeSpan FullHistoryOnDemandResponseTimeout = TimeSpan.FromMinutes(15);
         // --- FULL_HISTORY catch-up continue (next offline lot via soft-reconnect) ---
         // Idle must outlast slow Mobile SQLite/UI between chunks (15s was aborting too early).
+        // Fixed on-demand / hydration timings: HistoryOnDemandPacing.
         private TimeSpan FullHistoryCatchUpIdleAbort => PhaseTuning.CatchUpIdleAbort;
-
-        private static readonly TimeSpan FullHistoryCatchUpProgressPoll = TimeSpan.FromSeconds(8);
 
         /// <summary>Tip watermark must stall this many idle cycles before catch-up stops.</summary>
         private int CatchUpStagnantCyclesBeforeStop => HistoryTuning.CatchUpStagnantCyclesBeforeStop;

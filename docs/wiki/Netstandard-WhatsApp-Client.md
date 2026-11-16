@@ -631,6 +631,10 @@ Further shrinking those rows is **State/contract seams** (or Phase E), not anoth
 
 The soft/auto-reconnect **bodies** already lived outside the host (`SoftReconnectCoordinator` + `AutoReconnectLoopDispatch` policy, `ReconnectHostAdapter` I/O). What was left: the host built the adapter with `this`. Now `ReconnectHostAdapter` and `CurrentSocketHealthHost` are DI singletons; the adapter resolves `IReconnectLifecyclePort` lazily (the host takes the adapter's coordinator in its ctor, so an eager port would be a cycle). The loop error goes straight to `ConnectionEventHub`; `RaiseReconnectLoopError` left the port. No delay / attempt / threshold change. Health monitor timers stay on the host (not asked).
 
+### Phase D stage 3 — FULL / on-demand pacing out of the host (move-only)
+
+Tier-dependent pacing (silent FULL lot gap, catch-up idle abort, stagnant cycles, finalize quiet) was already on `SyncProductPolicy`. The fixed timings the host still held as private constants (ON_DEMAND 20 s, FULL 15 min, catch-up progress poll 8 s, freshness 30 min, backfill 8 h / 40 chats, hydration settle 25 s / batch 10 / page 50 / 5 pages) moved to `HistoryOnDemandPacing` (`WhatsAppClient.Helpers`). `HistoryOnDemandPacingTests` pins every value, so a retune shows up as a test edit. No number changed. The FULL / silent-chain **owners** are still built in the host ctor: their ports close over the catch-up banner, finish owner and freshness checks.
+
 ### Phase E (future) — client-owned public I/O
 
 **Not** Phase C/D work. Long-term goal: `Unison.WhatsAppClient` publishable / reusable without dragging Unison UI models — a portable WhatsApp **policy** library whose **entry and exit** types live on the client (or a thin contracts package next to it), not on Unison.Core ViewModel-shaped models.

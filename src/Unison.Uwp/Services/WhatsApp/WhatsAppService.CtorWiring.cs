@@ -264,15 +264,15 @@ namespace Unison.Uwp.Services.WhatsApp
                 _syncStatus,
                 () => History,
                 () => FullHistoryCatchUpIdleAbort,
-                FullHistoryCatchUpProgressPoll,
-                FullHistoryOnDemandResponseTimeout,
+                HistoryOnDemandPacing.FullHistoryCatchUpProgressPoll,
+                HistoryOnDemandPacing.FullHistoryResponseTimeout,
                 () => _chatState.MessagesByChat.TotalMessageCount(),
                 _diagnostics,
                 message => Debug.WriteLine("[WhatsAppService] " + message));
             _acceptedHistoryTimeout = new AcceptedHistoryRequestTimeoutOwner(
                 _historyRequests,
-                HistoryOnDemandResponseTimeout,
-                FullHistoryOnDemandResponseTimeout,
+                HistoryOnDemandPacing.OnDemandResponseTimeout,
+                HistoryOnDemandPacing.FullHistoryResponseTimeout,
                 _catchUpWatchdogOwner,
                 () => History,
                 () => _chatState.MessagesByChat.TotalMessageCount(),
@@ -296,7 +296,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 message => Debug.WriteLine("[WhatsAppService] " + message));
             _requestFullTracked = new RequestFullHistoryTrackedOwner(
                 idleAbort: () => FullHistoryCatchUpIdleAbort,
-                responseTimeout: FullHistoryOnDemandResponseTimeout,
+                responseTimeout: HistoryOnDemandPacing.FullHistoryResponseTimeout,
                 requestFullAsync: (reason, isFreshnessRepair, nowUtc) => HistoryDispatch.RequestFullAsync(
                     reason,
                     isFreshnessRepair,
@@ -407,12 +407,12 @@ namespace Unison.Uwp.Services.WhatsApp
                 chats: () => Chats,
                 normalizeJid: NormalizeJid,
                 getMessageCount: GetHistoryHydrationMessageCount,
-                staleThreshold: HistoryBackfillStaleThreshold,
-                maxStaleTopChats: HistoryBackfillMaxStaleTopChats);
+                staleThreshold: HistoryOnDemandPacing.BackfillStaleThreshold,
+                maxStaleTopChats: HistoryOnDemandPacing.BackfillMaxStaleTopChats);
             _hydrationSettle = new HistoryHydrationSettleOwner(
                 _historyRequests,
                 isConnected: () => IsConnected,
-                settleBudget: HistoryHydrationSettleBudget);
+                settleBudget: HistoryOnDemandPacing.HydrationSettleBudget);
             _persistAuthState = new PersistAuthStateOwner(
                 resolveAuthToSave: ResolveAuthToSave,
                 assignAndSaveAuthAsync: AssignAndSaveAuthAsync,
