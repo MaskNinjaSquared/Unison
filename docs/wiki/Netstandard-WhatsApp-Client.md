@@ -566,12 +566,15 @@ Further shrinking those rows is **State/contract seams** (or Phase E), not anoth
 | `SocketBridgeRemoteHooks` | Done — façade app-state callbacks out of `BuildSocketBridge` |
 | `IAppMemoryInfo.LimitBytes` | Done — client diagnostics no longer call `MemoryManager` |
 | `IWhatsAppSessionProvider` | Unchanged — live lookup via `BridgeSessionProvider` |
-| `WireSocketEventHandlers` / incoming pump | Wire attach moved into `UwpConnectionSocketSessionFactory`; pump still on the client; offline-replay release body is `OfflineReplayRelease` |
+| `WireSocketEventHandlers` / incoming pump | Wire attach moved into `UwpConnectionSocketSessionFactory`; offline-replay release body is `OfflineReplayRelease`. Pump: **Done** — DI singleton `IncomingMessagePump` required by the host; `DecryptedMessageWireOwner` maps the wire envelope and enqueues straight into the pump; health / resume / suspend call the pump directly (no host forwards) |
 | `IConnectionSocketSessionFactory` / `UwpConnectionSocketSessionFactory` | Done — build + wire + transport open leave `WhatsAppService`; portable `ConnectionConnectOpen` owns the sequence |
 | DI registers concrete `WhatsAppService` | Done — host ports resolve without casting `IWhatsAppService` |
 | `ConnectionOpenHost` / `IConnectionSocketAssignment` | Done — portable open host; assignment port in Core; abort/clear + key-store journal helpers in WhatsAppClient |
 | Portable connection **open** end-to-end | **Done** — `ConnectionConnectOpen` + `ConnectionOpenHost`; UWP only owns `_socket` field, dispose, and health-monitor start. **Not** moved (ask before Mobile risk): incoming pump, auto-reconnect / health-monitor timers |
 | `ConnectionConnectAbortedJournal` | Done — prepare-abort reason strings portable (journal only; no pump/reconnect) |
+| Reconnect / pairing / logout latches | **Done** — `ConnectionSessionFlags` (WhatsAppClient, DI singleton): suppress, fatal, session-established, 515 pending, count-pre-session-as-fatal, QR delivered, pre-session close streak. Host reads/writes the shared instance |
+| Health-monitor socket adapter | **Done** — `ConnectionHealthSocketHost` (UWP, own file) over `IConnectionHealthOwnerPort` (current socket slot, catch-up, soft reconnect, latch fatal + report). Loop policy unchanged in `ConnectionHealthMonitor` |
+| Health / reconnect timers | Policy already in WhatsAppClient (`ConnectionHealthMonitorOwner`, `SoftReconnectCoordinator`, `AutoReconnectLoopDispatch`). Still on the host: `ISoftReconnectIoHost` / `IAutoReconnectLoopHost` adapters (they call `InitializeAsync` / `ConnectAsync` on the client) and the `_socket` field. Next: move those once the connect path leaves `WhatsAppService` |
 
 ### Phase E (future) — client-owned public I/O
 

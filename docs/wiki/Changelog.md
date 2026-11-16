@@ -2,6 +2,10 @@
 
 Newest first.
 
+## Phase D — pump, connection latches and health adapter leave WhatsAppService
+
+The host now drains through the injected `IncomingMessagePump` (no private forwards, no fallback pump); `DecryptedMessageWireOwner` maps the wire envelope onto the pump request. Reconnect / pairing / logout latches moved to `ConnectionSessionFlags` (WhatsAppClient, DI singleton). The nested health-monitor adapter is now `ConnectionHealthSocketHost` behind `IConnectionHealthOwnerPort`. No policy, threshold or ordering change; needs an on-device pass (pairing, reconnect, offline replay, suspend/resume, pump stall).
+See [Netstandard WhatsApp client](Netstandard-WhatsApp-Client).
 ## Core keeps only façade contracts; WhatsAppService dead code out
 
 `PlaceholderResendDispatch`, `HistoryOnDemandDispatch` (+ `HistoryFullRequestResult`) and `OfflineReplayTips` moved from Core State to WhatsAppClient with their host ports. Another 29 connection / persistence / alias / thumbnail ports left `Core/Contracts/WhatsApp` for `WhatsAppClient.Abstractions`; Core now holds only the façades ViewModels consume plus `IConnectionEventSource`, `IConnectionSoftReconnect`, `ILidMappingMemory`, `IGroupNaming`, `IGroupParticipantLookup`, `IDebugSendService`. `WhatsAppService`: always-null owner parameters gone, `IRuntimeDiagnostics` / `InitGateOwner` required, the snapshot's UI-hold count is filled by `RuntimeDiagnosticsService`; dead code removed (static `Instance`, replay-diagnostics suppression + `ReplayDiagnosticNoise`, `AutoReconnectAsync`, 16 unused private members). No behaviour change; pump / reconnect untouched.
