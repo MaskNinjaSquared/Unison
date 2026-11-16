@@ -168,26 +168,4 @@ namespace Unison.Core.Tests.Helpers
             Assert.Null(DuplicateChatRowPick.FirstNonBlankName(null));
         }
     }
-
-    public class ReplayDiagnosticNoiseTests
-    {
-        [Theory]
-        [InlineData("[Noise] Decrypted frame body")]
-        [InlineData("[Signal] SenderKey cache miss for the group")]
-        [InlineData("[Socket] Unpadded payload: abc")]
-        public void Protocol_chatter_is_noise_during_replay(string message)
-        {
-            Assert.True(ReplayDiagnosticNoise.Matches(message));
-        }
-
-        [Theory]
-        [InlineData(null)]
-        [InlineData("")]
-        [InlineData("[WhatsAppService] SendTextMessageAsync to 1@s.whatsapp.net")]
-        [InlineData("noise decrypted")]
-        public void Ordinary_lines_are_kept(string message)
-        {
-            Assert.False(ReplayDiagnosticNoise.Matches(message));
-        }
-    }
 }

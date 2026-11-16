@@ -74,10 +74,6 @@ namespace Unison.Uwp.Services.WhatsApp
             }
         }
 
-        private static volatile bool _suppressReplayDiagnostics;
-
-        public static bool SuppressReplayDiagnostics => _suppressReplayDiagnostics;
-
         /// <summary>
         /// Host-visible window flag via <see cref="IAppVisibility"/> (Phase A); falls back to App.
         /// </summary>
@@ -117,26 +113,10 @@ namespace Unison.Uwp.Services.WhatsApp
         [Conditional("DEBUG")]
         public static void Log(string message)
         {
-            if (VerboseLog.IsEnabled && !ShouldSuppressReplayDiagnostic(message))
+            if (VerboseLog.IsEnabled)
             {
                 Debug.WriteLine(message);
             }
-        }
-
-        public static void SetReplayDiagnosticsSuppressed(bool suppressed, string source)
-        {
-            bool previous = _suppressReplayDiagnostics;
-            _suppressReplayDiagnostics = suppressed;
-
-            if (previous != suppressed)
-            {
-                Debug.WriteLine($"[Logging] Replay diagnostics suppression {(suppressed ? "ON" : "OFF")} (source={source})");
-            }
-        }
-
-        private static bool ShouldSuppressReplayDiagnostic(string message)
-        {
-            return _suppressReplayDiagnostics && ReplayDiagnosticNoise.Matches(message);
         }
 
         /// <summary>

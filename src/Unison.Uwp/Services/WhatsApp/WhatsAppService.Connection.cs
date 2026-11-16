@@ -1201,12 +1201,6 @@ namespace Unison.Uwp.Services.WhatsApp
         Task IConnectAsyncHost.OpenConnectAsync(bool reuseLoadedKeyState) =>
             ConnectionConnectOpen.RunAsync(_connectionOpen, _socketSessions, reuseLoadedKeyState);
 
-        public Task AutoReconnectAsync()
-        {
-            ScheduleAutoReconnect("explicit-auto-reconnect");
-            return Task.CompletedTask;
-        }
-
         private Task AutoReconnectLoopAsync(string trigger) =>
             AutoReconnectLoopDispatch.RunAsync(this, trigger);
 
