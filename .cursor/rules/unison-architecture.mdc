@@ -13,6 +13,7 @@ Read `docs/wiki/Home.md` + `docs/wiki/Architecture.md` before editing. Coding sp
 - `Unison.Core`: no XAML/WinRT. `Unison.Background`: no Core/Socket.
 - `ConnectionHandler` never calls use cases and never holds chats. Reconnect stays in the host.
 - Broker transfer on `SocketBridge` goes through `ConnectionHandler` and answers true only when ownership moved. No cold restore. Never fake a handoff.
+- Product (tier / frugal / memory): WhatsAppClient takes **neutral knobs** only (`ISyncLoadMode`, `IHistorySyncTuning`, …). Decisions live in `Unison.Core.Product` (`SyncProductPolicy`, coordinators). Do not add new `SyncWorkloadStrategy` / `DeviceCategory` / `SyncBudget` reads under WhatsAppClient. Do not name product coordinators `UseCase` (Socket owns that word). Incoming pump and reconnect/health timers stay on the host until explicitly asked.
 
 UI waits: `IUiWorkHolds.BeginRun(...).WaitAsync(kind)`, never a new `while (gate) Task.Delay` loop; storms via `KeyedLatestCoalescer` (`docs/wiki/Ui-Work-Scheduling.md`).
 

@@ -167,7 +167,7 @@ to a Core product service) or **fact** (stays, exposed upward):
 
 | Area | Files | Likely class |
 |---|---|---|
-| Deferred startup / frugal | `DeferredStartupFrugalGate`, `DeferredStartupMaintenanceOwner` / `Dispatch`, `IDeferredStartupMaintenanceHost`, `StartupQuietGate`, `StartupPhaseTrace` | decision (frugal gate, quiet window) + fact (phase trace) |
+| Deferred startup / frugal | ~~`DeferredStartupFrugalGate`~~ → `DeferredStartupGate`, `DeferredStartupMaintenanceOwner` / `Dispatch`, `IDeferredStartupMaintenanceHost`, `StartupQuietGate`, `StartupPhaseTrace` | decision moved to `IStartupMaintenanceTuning`; gate is neutral + fact (phase trace) |
 | Post-replay maintenance | `PostReplayMaintenanceGates`, `PostReplayMaintenanceDispatch` | decision |
 | History FULL chain | `SilentFullHistoryChainOwner` / `Dispatch`, `ISilentFullHistoryChainHost`, `PeriodicFullHistorySafetyOwner`, `IHistoryCatchUpFinishHost`, `HistoryFacade` | knob (`MaxFullHistoryCatchUpRounds`, `AllowStagnantHistoryRepairCascade`, pacing) |
 | Chats / previews | `ChatFacade` (16 refs), `ChatPreviewReconciler`, `ChatPreviewMemoryTip`, `ChatCatalogDiskPersistence`, `ChatNameRefresh` (14) | knob (batch sizes) + decision (memory-tip trim) |
@@ -205,6 +205,88 @@ services consult the client directly).
 **Risk:** the History FULL chain and deferred startup are the paths Mobile is most sensitive
 to. P2/P3 there need on-device runs (first sync, reconnect with stale tips, frugal on/off),
 not only unit tests.
+
+### Product coordinators (Core — next)
+
+Do **not** name these `UseCase`. That word already means one Socket protocol operation
+(`Unison.Socket/UseCases/…`). Product orchestration lives in **`Unison.Core/Product/`** as
+**coordinators** (or keep `*Policy` when the type only maps knobs and never calls a façade).
+
+```
+ViewModel
+  ├─ façade contract directly     when there is no Unison product decision
+  └─ Product coordinator (Core)   when tier / frugal / memory / window / notify matter
+        ├─ injects façade contracts (IHistoryService, IContactService, …) — never concrete façades
+        ├─ injects SyncProductPolicy / tuning contracts for knobs
+        ├─ may subscribe once to façade facts (singleton) and emit decided UI intents
+        └─ platform work only via Core interfaces implemented in UWP
+           (IUiWorkHolds, IAppMemoryInfo, toast/notify ports — Core decides, UWP executes)
+```
+
+**When a coordinator exists**
+
+- There is a Unison-only rule: device tier, frugal mode, memory headroom, window visibility,
+  when/how to notify the UI, defer/coalesce work.
+- Or several ViewModels would otherwise subscribe to the same façade facts and duplicate gates.
+
+**When it must not exist**
+
+- Pure pass-through (VM → coordinator → façade with no decision). Call the façade contract.
+- WhatsApp domain rules (dedup, JID merge, message order) stay on the façade / client.
+- WinRT types never enter Core. Coordinators call Core ports; UWP adapters do toast /
+  dispatcher / broker.
+
+**Naming / DI**
+
+- `SomethingCoordinator` in `Unison.Core.Product` (or keep `SyncProductPolicy` for pure mapping).
+- Constructor DI only; register in `App.ConfigureServices`. No `Foo.Instance`.
+- Unit-test against façade fakes in `Unison.Core.Tests` (no WhatsAppClient required for the
+  decision).
+
+**Suggested first coordinators (cheap-model safe order)**
+
+| Coordinator | Owns | Leaves alone |
+|---|---|---|
+| `StartupMaintenanceCoordinator` | When to start deferred name/list repair; visibility + memory gates already on `IStartupMaintenanceTuning` | Incoming pump, reconnect timers |
+| `PostReplayMaintenanceCoordinator` | Quiet wait + delayed bulk after offline replay (host still runs the owner until Phase D) | Pump ordering |
+| (later) `HistorySyncCoordinator` | Banner / UI intents from history facts; optional when VMs stop reading raw progress | Silent FULL chain pacing already knobs — do not re-gate inside the client |
+| (later) enrichment notify coordinators | Toast / list refresh after avatar/roster passes | `Func<bool> preferFrugal` UI slice knobs on client (allowed) |
+
+Do not invent a coordinator per façade. Grow only where a product decision or a shared
+subscription is real.
+
+### Agent execution boundaries (Opus vs cheaper models)
+
+Use this when continuing Phase P / coordinators / extraction on a **cheaper** model. The
+architecture is fixed above; cheaper models implement only the rows marked **OK**. Anything
+marked **Opus / human** stays out of that session unless the developer explicitly overrides.
+
+| Work | Cheaper model | Why |
+|---|---|---|
+| New `*Coordinator` / extend `SyncProductPolicy` / new tuning contract members with TDD | **OK** | Pure Core; tests in `Unison.Core.Tests`; no protocol |
+| Wire DI in `App.ConfigureServices`; pass tuning into façades already on knobs | **OK** | Mechanical if constructors already take the contracts |
+| Move a remaining **decision** out of WhatsAppClient into tuning + host members (same pattern as deferred startup / post-replay) | **OK** with exit grep | Mirror `DeferredStartupGate` / `IStartupMaintenanceTuning`; keep values identical |
+| Leave `Func<bool> preferFrugal` / `ISyncLoadMode` slice-and-pause knobs on client | **OK leave** | Accepted Exit rule; do not "fix" by inventing coordinators that only forward the bool |
+| Shrink `WhatsAppService` connection-only by extracting another **Owner** that already has a host interface and no Mobile hot-path | **OK** if listed in [WhatsAppService extraction](WhatsAppService-Extraction) as next safe step | Follow owner pattern + `XDispatch`; do not invent new reconnect policy |
+| P4 — drop Baileys types from Core contracts | **Opus / planned pass** | Touches contract edges (`IMessageService`, …); easy to break hosts |
+| Move **incoming pump** or **auto-reconnect / health timers** off `WhatsAppService` | **Opus + on-device + explicit ask** | Mobile hot path; wiki already forbids without confirmation |
+| Broker transfer / `SocketBridge` ownership / fake handoff | **Never invent** | True only when ownership moved; cold restore not wired |
+| Change silent FULL / periodic FULL / catch-up finish behaviour (not just knob injection) | **Opus + on-device** | Highest Mobile risk; knobs already extracted — do not retune numbers without a device run |
+| Phase E dependency flip (Core → WhatsAppClient) | **Opus / dedicated pass** | Moves every `Contracts/WhatsApp` consumer |
+| Revive `SocketClient.cs` or put WinRT in Core / WhatsAppClient | **Forbidden** | Architecture hard rule |
+| `ConnectionHandler` calling use cases or holding chats | **Forbidden** | Architecture hard rule |
+
+**Cheaper-model definition of done for a coordinator PR**
+
+1. Red-green tests for the decision in `Unison.Core.Tests` (no client).
+2. `dotnet build` / `dotnet test` on `tests/Unison.Core.Tests` (ignore the three known
+   pre-existing failures: `GroupAvatarFallbackJidsTests`, `HistorySyncWireOwnerTests`,
+   `MessageRevocationContentTests` unless the change touches them).
+3. UWP ARM Debug build when UWP files changed.
+4. No new `SyncWorkloadStrategy` / `DeviceCategory` / `SyncBudget` / `UseFrugalSyncBudget`
+   reads under `src/Unison.WhatsAppClient`.
+5. Wiki progress line updated; Changelog only if behaviour or public seam changed.
+6. After **two** failed fix attempts on the same error → stop and ask (project rule).
 
 ### UWP handler
 

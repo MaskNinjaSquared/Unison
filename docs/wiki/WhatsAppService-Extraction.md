@@ -164,6 +164,16 @@ What is left on `_contactService` is awaited and ordered by the client, so it is
 
 ## Current coupling (start here next session)
 
+**Product decisions (tier / frugal) and Core coordinators** are not this page's scope —
+see [Netstandard WhatsApp client — Product policy / coordinators](Netstandard-WhatsApp-Client#product-policy-layer-unison-vs-the-whatsapp-client).
+`WhatsAppService` host debt (`_workload` / `CurrentSyncPacing` / `UseFrugalSyncBudget`) leaves
+when the host shrinks to connection-only (Phase D).
+
+**Cheaper-model safe on this page:** extract another **Owner** only when a host interface
+already exists, the wiki lists it as a next step, and the path is **not** the incoming pump
+or auto-reconnect / health timers. Those two stay until Opus + on-device + explicit ask.
+Full agent boundary table: [Netstandard WhatsApp client — Agent execution boundaries](Netstandard-WhatsApp-Client#agent-execution-boundaries-opus-vs-cheaper-models).
+
 ### Recent slice (reactions plan +10)
 
 - `IncomingMessagePump` is a DI singleton (`IIncomingMessageEnqueueHost` + `IIncomingPumpControl`); the client no longer implements enqueue.
@@ -1704,4 +1714,5 @@ Build `Unison.Uwp` (not only Core). Update this page (tick the phase), [Changelo
 - [Architecture](Architecture) — client vs policy; `WhatsAppService` today
 - [Application layer](Application-Layer) — which VM talks to which façade
 - [Coding standards](Coding-Standards) — do not grow `IWhatsAppService` for UI
+- [Netstandard WhatsApp client](Netstandard-WhatsApp-Client) — product policy, coordinators, Opus vs cheaper-model boundaries
 - [Migration](Migration) — SQLite history, broker, `ChatsModule`, `SocketClient` on disk

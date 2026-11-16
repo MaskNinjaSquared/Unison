@@ -2,6 +2,14 @@
 
 Newest first.
 
+## Product coordinators + agent boundaries (docs)
+
+Wiki now describes Core **coordinators** (not `UseCase`) over façade contracts for
+Unison-only rules, and an Opus vs cheaper-model execution table: what is safe to
+implement without Opus (tuning/coordinators/TDD) vs what stays Opus / on-device /
+explicit ask (incoming pump, reconnect timers, silent FULL behaviour change, Phase E,
+P4). See [Netstandard WhatsApp client](Netstandard-WhatsApp-Client).
+
 ## Product policy out of the WhatsApp client (Phase P)
 
 Device tier and frugal mode no longer reach `Unison.WhatsAppClient` as

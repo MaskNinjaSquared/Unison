@@ -10,6 +10,7 @@ UWP WhatsApp Multi-Device client (Windows 10 Mobile first). Baileys-style compan
 4. If the work is background/toasts/broker, read `docs/wiki/Background-Broker.md` — transfer is **not** wired on `SocketBridge`.
 5. New UI locale: `docs/wiki/Adding-Languages.md` (copy `en-US` `.resw`, register csproj + manifest + `AppLanguage`).
 6. Shrinking `WhatsAppService` / moving work to façades: `docs/wiki/WhatsAppService-Extraction.md` (phase 0 done; do not treat partials as façades).
+7. Product policy (tier / frugal out of the WhatsApp client) and Core **coordinators**: `docs/wiki/Netstandard-WhatsApp-Client.md` § Product policy / Product coordinators. Do **not** name product types `UseCase` (that word is Socket protocol only). Agent what-is-safe-on-a-cheaper-model table is in the same page.
 
 Cursor project rules in `.cursor/rules/` repeat the must-not-break bits. The wiki is the full spec.
 
