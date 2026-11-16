@@ -38,7 +38,7 @@ using Unison.WhatsAppClient.Helpers;
 
 namespace Unison.WhatsAppClient.History
 {
-    public sealed class HistoryFacade : IHistoryWireIngress
+    public sealed class HistoryFacade : IHistoryWireIngress, IFullHistoryAckRejectedHost
     {
         /// <summary>How long the phone gets to send anything at all before we call it a failure.</summary>
         private static readonly TimeSpan FirstChunkTimeout = TimeSpan.FromSeconds(75);
@@ -1265,8 +1265,7 @@ namespace Unison.WhatsAppClient.History
 
                 if (state.Kind == HistoryOnDemandKind.FullHistory)
                 {
-                    _syncStatus.Raise("History download rejected. Try again or re-link.");
-                    _historySync.CompleteUserResyncOnFullHistoryAckRejected();
+                    FullHistoryAckRejectedDispatch.Run(this, ackId, ackError, state.TriggerReason);
                 }
 
                 return;
@@ -1280,11 +1279,28 @@ namespace Unison.WhatsAppClient.History
                 ". Waiting for follow-up payload.");
             if (state.Kind == HistoryOnDemandKind.FullHistory)
             {
+                _catchUpHost.WriteHistoryJournal(
+                    "full-history-ack-accepted",
+                    "requestId=" + ackId + "; trigger=" + (state.TriggerReason ?? string.Empty));
                 _historySync.NoteFullHistoryCatchUpProgress("ack-accepted");
             }
 
             _historySync.ScheduleAcceptedHistoryOnDemandTimeout(state);
         }
+
+        bool IFullHistoryAckRejectedHost.IsHistoryCatchUpActive => IsHistoryCatchUpQuiet;
+
+        void IFullHistoryAckRejectedHost.RaiseFullHistoryRejectedStatus() =>
+            _syncStatus.Raise("History download rejected. Try again or re-link.");
+
+        void IFullHistoryAckRejectedHost.CompleteUserResyncOnFullHistoryAckRejected() =>
+            _historySync.CompleteUserResyncOnFullHistoryAckRejected();
+
+        void IFullHistoryAckRejectedHost.FinishHistoryCatchUp(string reason, bool releaseEnrichment) =>
+            _catchUpHost.FinishContinue(reason, releaseEnrichment);
+
+        void IFullHistoryAckRejectedHost.WriteFullHistoryAckRejected(string detail) =>
+            _catchUpHost.WriteHistoryJournal("full-history-ack-rejected", detail);
 
         /// <inheritdoc />
         public async Task ApplyHistorySyncAsync(HistorySync sync)
