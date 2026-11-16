@@ -6,7 +6,6 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
-using Unison.Core.Models;
 
 namespace Unison.WhatsAppClient.Abstractions
 {
@@ -28,7 +27,8 @@ namespace Unison.WhatsAppClient.Abstractions
         /// <summary>True when tip freshness still looks behind the watermark.</summary>
         bool IsHistoryTipStale { get; }
 
-        DeviceCategory DeviceCategory { get; }
+        /// <summary>Gap before the next silent lot (product knob).</summary>
+        TimeSpan SilentLotDelay { get; }
 
         void MarkSilentChainArmed(bool armed);
 

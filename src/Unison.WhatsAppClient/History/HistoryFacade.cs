@@ -24,6 +24,7 @@ using System.Threading.Tasks;
 using Proto;
 using Unison.Core.Constants;
 using Unison.Core.Contracts;
+using Unison.Core.Contracts.Tuning;
 using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Helpers;
 using Unison.Core.Helpers.Chats;
@@ -80,8 +81,8 @@ namespace Unison.WhatsAppClient.History
         private readonly IChatStateStore _chatState;
         private readonly SyncStatusChannel _syncStatus;
         private readonly InitialSyncProgressState _initialSync;
-        private readonly SyncBudget _syncBudget;
-        private readonly SyncWorkloadStrategy _workload;
+        private readonly ISyncLoadMode _loadMode;
+        private readonly IHistorySyncTuning _tuning;
         private readonly IDisplayKeepAwakeService _displayKeepAwake;
         private readonly ChatListInitialPaintGate _listPaintGate;
         private readonly IAppVisibility _visibility;
@@ -126,8 +127,8 @@ namespace Unison.WhatsAppClient.History
             IChatStateStore chatState,
             SyncStatusChannel syncStatus,
             InitialSyncProgressState initialSync,
-            SyncBudget syncBudget,
-            SyncWorkloadStrategy workload,
+            ISyncLoadMode loadMode,
+            IHistorySyncTuning tuning,
             IHistoryChatPreviewStore chatPreviewStore = null,
             IHistoryMigrationStore migrationStore = null,
             IHistoryMessageStore messageHistoryStore = null,
@@ -190,8 +191,8 @@ namespace Unison.WhatsAppClient.History
             _chatState = chatState ?? throw new ArgumentNullException(nameof(chatState));
             _syncStatus = syncStatus ?? throw new ArgumentNullException(nameof(syncStatus));
             _initialSync = initialSync ?? throw new ArgumentNullException(nameof(initialSync));
-            _syncBudget = syncBudget ?? throw new ArgumentNullException(nameof(syncBudget));
-            _workload = workload ?? throw new ArgumentNullException(nameof(workload));
+            _loadMode = loadMode ?? throw new ArgumentNullException(nameof(loadMode));
+            _tuning = tuning ?? throw new ArgumentNullException(nameof(tuning));
             _chatPreviewStore = chatPreviewStore;
             _migrationStore = migrationStore;
             _messageHistoryStore = messageHistoryStore;
@@ -276,8 +277,6 @@ namespace Unison.WhatsAppClient.History
         public bool IsPairingBootstrapChunkSeenOrApplying =>
             _pairingBootstrapChunkSeenPendingFinalize ||
             Volatile.Read(ref _pairingBootstrapApplyInFlight) > 0;
-
-        public bool PreferFrugalSyncBudget => _syncBudget.IsFrugal;
 
         public int InitialSyncProcessedConversations => _initialSync.ProcessedConversations;
 
@@ -769,7 +768,7 @@ namespace Unison.WhatsAppClient.History
             }
 
             string syncId = CurrentSyncId();
-            int messageCap = _workload.MaxMessagesPerConversation;
+            int messageCap = _tuning.MaxMessagesPerConversation;
             HistoryMessageWriteBatch batch = await Task.Run(
                     () => HistoryMessageBuilder.Build(sync, syncId ?? string.Empty, messageCap))
                 .ConfigureAwait(false);
@@ -783,7 +782,7 @@ namespace Unison.WhatsAppClient.History
             // reactions/pins share the same key as bodies across PN/LID twins.
             HistoryWriteBatchJidCanonicalizer.Apply(batch, _jids.GetCanonicalJid);
 
-            if (_workload.MaterializeHistoryThumbsDuringSync)
+            if (_tuning.MaterializeThumbsDuringSync)
             {
                 try
                 {
@@ -806,7 +805,7 @@ namespace Unison.WhatsAppClient.History
             var chatJids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (HistoryMessageWriteBatch slice in HistoryPersistBatching.Split(
                 batch,
-                _workload.HistoryPersistSubBatchSize))
+                _tuning.PersistSubBatchSize))
             {
                 HistoryWriteBatchResult written = await _messageHistoryStore.PersistWriteBatchAsync(slice)
                     .ConfigureAwait(false);
@@ -1385,10 +1384,8 @@ namespace Unison.WhatsAppClient.History
             bool stillStale = _catchUpHost.TryGetHistoryFreshnessStaleReason(
                 DateTime.UtcNow,
                 out staleReason);
-            bool frugal = _syncBudget.IsFrugal;
-            int stagnantStop = _workload.PacingFor(frugal)
-                .CatchUpStagnantCyclesBeforeStop;
-            int maxRounds = Math.Max(0, _workload.MaxFullHistoryCatchUpRounds);
+            int stagnantStop = _tuning.CatchUpStagnantCyclesBeforeStop;
+            int maxRounds = Math.Max(0, _tuning.MaxFullHistoryCatchUpRounds);
             // Empty-ack finish on every tier: WA often acks FULL_HISTORY then sends
             // nothing; Desktop High used to burn idle-continue while live tips moved.
             const bool emptyAckFinish = true;
@@ -1417,7 +1414,7 @@ namespace Unison.WhatsAppClient.History
                 "; round=" + before.Round +
                 "; stagnant=" + before.StagnantCycles +
                 "; stagnantStop=" + stagnantStop +
-                "; frugal=" + frugal +
+                "; frugal=" + _loadMode.PreferFrugal +
                 "; emptyAckFinish=" + emptyAckFinish +
                 "; action=" + decision.Action +
                 "; trigger=" + (triggerReason ?? string.Empty));
@@ -1499,7 +1496,7 @@ namespace Unison.WhatsAppClient.History
         {
             bool cascade = HistoryCatchUpRepairCascade.ShouldStartAfterFinish(
                 stillStale,
-                _workload.AllowStagnantHistoryRepairCascade,
+                _tuning.AllowStagnantRepairCascade,
                 ackAccepted,
                 progressSignals);
 

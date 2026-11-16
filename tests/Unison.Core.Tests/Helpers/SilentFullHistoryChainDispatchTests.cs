@@ -182,7 +182,7 @@ namespace Unison.Core.Tests.Helpers
 
             public bool IsHistoryTipStale => TipStale;
 
-            public DeviceCategory DeviceCategory => DeviceCategory.High;
+            public TimeSpan SilentLotDelay => TimeSpan.FromMinutes(2);
 
             public void MarkSilentChainArmed(bool armed) => Armed = armed;
 

@@ -1,4 +1,4 @@
-// =============================================================================
+﻿// =============================================================================
 // ChatFacade
 //
 // The conversation itself as a subject: pinned or not, read or not, there or
@@ -26,6 +26,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Unison.Core.Constants;
 using Unison.Core.Contracts;
+using Unison.Core.Contracts.Tuning;
 using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Helpers;
 using Unison.Core.Helpers.Chats;
@@ -90,6 +91,7 @@ namespace Unison.WhatsAppClient.Chats
         private readonly HistoryOnDemandRegistry _historyRequests;
         private readonly PendingMessageQueue _pendingMessages;
         private readonly Func<IHistoryService> _resolveHistory;
+        private readonly ISyncLoadMode _loadMode;
         private readonly OfflineReplayTips _offlineReplayTips;
         private readonly SessionTipAuthorCache _tipAuthorCache;
         private readonly IPersonStore _people;
@@ -190,8 +192,10 @@ namespace Unison.WhatsAppClient.Chats
             IPersonStore people = null,
             IUiWorkHolds uiHolds = null,
             Func<bool> isReplayDrainActive = null,
-            ILocalSettings localSettings = null)
+            ILocalSettings localSettings = null,
+            ISyncLoadMode loadMode = null)
         {
+            _loadMode = loadMode;
             // Null → assume drain active so PreferFrugal still defers when tests omit the gate.
             _isReplayDrainActive = isReplayDrainActive ?? (() => true);
             _uiHolds = uiHolds ?? new UiWorkHolds(
@@ -242,21 +246,21 @@ namespace Unison.WhatsAppClient.Chats
                 OfflineReplayTipThrottle,
                 OfflineReplayTipSteadyThrottle,
                 () => OfflineReplayUiPolicy.TipBusyQuietAfterFlush(
-                    PreferFrugalSyncBudget,
+                    PreferFrugal,
                     IsReplayDrainActive),
                 () => OfflineReplayUiPolicy.DeferTipPaintUntilSettle(
-                    PreferFrugalSyncBudget,
+                    PreferFrugal,
                     IsReplayDrainActive),
                 OfflineReplayTipDeferredBackstop);
             _remoteChatSettings = new KeyedLatestCoalescer<string, RemoteChatSettings>(
                 ApplyRemoteChatSettingsBatchAsync,
-                () => StormWindowPolicy.For(PreferFrugalSyncBudget),
+                () => StormWindowPolicy.For(PreferFrugal),
                 RemoteChatSettings.Merge,
                 StringComparer.OrdinalIgnoreCase);
         }
 
-        private bool PreferFrugalSyncBudget =>
-            _resolveHistory != null && _resolveHistory().PreferFrugalSyncBudget;
+        private bool PreferFrugal =>
+            _loadMode != null && _loadMode.PreferFrugal;
 
         private bool IsReplayDrainActive
         {
@@ -953,7 +957,7 @@ namespace Unison.WhatsAppClient.Chats
                 return;
             }
 
-            ILowPriorityDispatcher lowUi = PreferFrugalSyncBudget ? _ui as ILowPriorityDispatcher : null;
+            ILowPriorityDispatcher lowUi = PreferFrugal ? _ui as ILowPriorityDispatcher : null;
             for (int start = 0; start < work.Count; start += ChatFlagUiSliceSize)
             {
                 int from = start;
@@ -2389,8 +2393,7 @@ namespace Unison.WhatsAppClient.Chats
             if (chatForReorder != null)
             {
                 bool preferFrugal =
-                    _resolveHistory != null &&
-                    _resolveHistory().PreferFrugalSyncBudget;
+                    PreferFrugal;
                 if (LiveIncomingStripUiPolicy.SkipCatalogueReposition(preferFrugal))
                 {
                     // Soft-invalidate Visible order — same as offline softOrder. Avoids
@@ -2459,8 +2462,7 @@ namespace Unison.WhatsAppClient.Chats
             var reorderRows = new List<ChatItem>();
             var touchedJids = new List<string>(summaries.Count);
             bool preferFrugal =
-                _resolveHistory != null &&
-                _resolveHistory().PreferFrugalSyncBudget;
+                PreferFrugal;
 
             for (int start = 0; start < summaries.Count; start += OfflineReplayUiSliceSize)
             {

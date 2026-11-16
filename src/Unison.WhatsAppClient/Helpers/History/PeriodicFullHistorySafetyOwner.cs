@@ -20,7 +20,7 @@ namespace Unison.WhatsAppClient.Helpers
         IPeriodicFullHistorySafetyHost
     {
         private readonly HistoryOnDemandRegistry _historyRequests;
-        private readonly SyncWorkloadStrategy _workload;
+        private readonly bool _allowStagnantRepairCascade;
         private readonly ILocalSettings _settings;
         private readonly Func<bool> _isSocketReady;
         private readonly Func<bool> _isHistoryCatchUpActive;
@@ -31,7 +31,7 @@ namespace Unison.WhatsAppClient.Helpers
 
         public PeriodicFullHistorySafetyOwner(
             HistoryOnDemandRegistry historyRequests,
-            SyncWorkloadStrategy workload,
+            bool allowStagnantRepairCascade,
             ILocalSettings settings,
             Func<bool> isSocketReady,
             Func<bool> isHistoryCatchUpActive,
@@ -42,7 +42,7 @@ namespace Unison.WhatsAppClient.Helpers
         {
             _historyRequests = historyRequests
                 ?? throw new ArgumentNullException(nameof(historyRequests));
-            _workload = workload ?? throw new ArgumentNullException(nameof(workload));
+            _allowStagnantRepairCascade = allowStagnantRepairCascade;
             _settings = settings ?? throw new ArgumentNullException(nameof(settings));
             _isSocketReady = isSocketReady ?? throw new ArgumentNullException(nameof(isSocketReady));
             _isHistoryCatchUpActive = isHistoryCatchUpActive
@@ -79,7 +79,7 @@ namespace Unison.WhatsAppClient.Helpers
         bool IPeriodicFullHistorySafetyHost.IsFullHistoryClaimed => _historyRequests.IsFullClaimed;
 
         bool IPeriodicFullHistorySafetyHost.AllowStagnantHistoryRepairCascade =>
-            _workload.AllowStagnantHistoryRepairCascade;
+            _allowStagnantRepairCascade;
 
         bool IPeriodicFullHistorySafetyHost.TryReadForceHistoryRepairPending()
         {

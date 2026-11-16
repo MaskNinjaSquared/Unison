@@ -10,7 +10,6 @@ using System.Threading;
 using System.Threading.Tasks;
 using Unison.Core.Contracts;
 using Unison.Core.Helpers;
-using Unison.Core.Models;
 using Unison.Core.State;
 using Unison.WhatsAppClient.Abstractions;
 
@@ -19,7 +18,7 @@ namespace Unison.WhatsAppClient.Helpers
     public sealed class SilentFullHistoryChainOwner : ISilentFullHistoryChainHost
     {
         private readonly HistoryOnDemandRegistry _historyRequests;
-        private readonly SyncWorkloadStrategy _workload;
+        private readonly TimeSpan _silentLotDelay;
         private readonly Func<bool> _isSocketReady;
         private readonly Func<bool> _isHistoryCatchUpActive;
         private readonly TryGetHistoryStaleReason _tryGetStaleReason;
@@ -35,7 +34,7 @@ namespace Unison.WhatsAppClient.Helpers
 
         public SilentFullHistoryChainOwner(
             HistoryOnDemandRegistry historyRequests,
-            SyncWorkloadStrategy workload,
+            TimeSpan silentLotDelay,
             Func<bool> isSocketReady,
             Func<bool> isHistoryCatchUpActive,
             TryGetHistoryStaleReason tryGetStaleReason,
@@ -47,7 +46,7 @@ namespace Unison.WhatsAppClient.Helpers
         {
             _historyRequests = historyRequests
                 ?? throw new ArgumentNullException(nameof(historyRequests));
-            _workload = workload ?? throw new ArgumentNullException(nameof(workload));
+            _silentLotDelay = silentLotDelay;
             _isSocketReady = isSocketReady ?? throw new ArgumentNullException(nameof(isSocketReady));
             _isHistoryCatchUpActive = isHistoryCatchUpActive
                 ?? throw new ArgumentNullException(nameof(isHistoryCatchUpActive));
@@ -87,7 +86,7 @@ namespace Unison.WhatsAppClient.Helpers
 
         bool ISilentFullHistoryChainHost.IsHistoryTipStale => _tryGetStaleReason(DateTime.UtcNow, out _);
 
-        DeviceCategory ISilentFullHistoryChainHost.DeviceCategory => _workload.Category;
+        TimeSpan ISilentFullHistoryChainHost.SilentLotDelay => _silentLotDelay;
 
         void ISilentFullHistoryChainHost.MarkSilentChainArmed(bool armed) => _armed = armed;
 

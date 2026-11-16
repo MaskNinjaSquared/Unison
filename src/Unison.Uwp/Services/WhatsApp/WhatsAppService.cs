@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
@@ -30,6 +30,8 @@ using Unison.Core.Constants;
 using Unison.Core.Contracts;
 using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.State;
+using Unison.Core.Contracts.Tuning;
+using Unison.Core.Product;
 using Unison.Uwp.Services;
 using Unison.Uwp.Services.WhatsApp.Chats;
 using Unison.Uwp.Services.WhatsApp.History;
@@ -452,6 +454,7 @@ namespace Unison.Uwp.Services.WhatsApp
         private readonly InitialSyncProgressState _initialSync;
         private readonly SyncBudget _syncBudget;
         private readonly SyncWorkloadStrategy _workload;
+        private readonly IHistorySyncTuning _historySyncTuning;
         private readonly SelfProfileState _selfProfile;
 
         /// <summary>
@@ -990,6 +993,7 @@ namespace Unison.Uwp.Services.WhatsApp
             _initialSync = initialSync ?? throw new ArgumentNullException(nameof(initialSync));
             _syncBudget = syncBudget ?? throw new ArgumentNullException(nameof(syncBudget));
             _workload = workload ?? throw new ArgumentNullException(nameof(workload));
+            _historySyncTuning = new SyncProductPolicy(_workload, () => _syncBudget.IsFrugal);
             _selfProfile = selfProfile ?? throw new ArgumentNullException(nameof(selfProfile));
             _selfProfileAuth = new SelfProfileAuthSync(
                 _selfProfile,
@@ -1104,7 +1108,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 log: message => Debug.WriteLine("[WhatsAppService] " + message));
             _silentChain = new SilentFullHistoryChainOwner(
                 historyRequests: _historyRequests,
-                workload: _workload,
+                silentLotDelay: _historySyncTuning.SilentFullHistoryDelay,
                 isSocketReady: () =>
                 {
                     var socket = _socket;
@@ -1123,7 +1127,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 log: message => Debug.WriteLine("[WhatsAppService] " + message));
             _periodicFullSafety = new PeriodicFullHistorySafetyOwner(
                 historyRequests: _historyRequests,
-                workload: _workload,
+                allowStagnantRepairCascade: _historySyncTuning.AllowStagnantRepairCascade,
                 settings: _localSettings,
                 isSocketReady: () =>
                 {

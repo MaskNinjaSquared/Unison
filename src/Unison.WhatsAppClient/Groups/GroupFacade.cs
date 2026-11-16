@@ -19,6 +19,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Unison.Baileys.Protocol;
 using Unison.Core.Contracts;
+using Unison.Core.Contracts.Tuning;
 using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Helpers;
 using Unison.Core.Helpers.Chats;
@@ -52,7 +53,7 @@ namespace Unison.WhatsAppClient.Groups
         private readonly IUsyncGate _usyncGate;
         private readonly SyncStatusChannel _syncStatus;
         private readonly SyncWorkGate _syncWork;
-        private readonly SyncWorkloadStrategy _workload;
+        private readonly IEnrichmentTuning _tuning;
         private readonly IRuntimeDiagnostics _diagnostics;
         private readonly IAppVisibility _visibility;
         private readonly GroupCreation _creation;
@@ -108,7 +109,7 @@ namespace Unison.WhatsAppClient.Groups
             IUsyncGate usyncGate,
             SyncStatusChannel syncStatus,
             SyncWorkGate syncWork,
-            SyncWorkloadStrategy workload,
+            IEnrichmentTuning tuning,
             IDispatcher ui,
             IChatCatalogPersistence catalog,
             ChatNameRefresh nameRefresh,
@@ -124,7 +125,7 @@ namespace Unison.WhatsAppClient.Groups
             _uiHolds = uiHolds ?? new UiWorkHolds(
                 () => new UiHoldSnapshot { WindowVisible = true, OfflineTipBusy = tipBusy() },
                 diagnostics);
-            _workload = workload ?? throw new ArgumentNullException(nameof(workload));
+            _tuning = tuning ?? throw new ArgumentNullException(nameof(tuning));
             _syncStatus = syncStatus ?? throw new ArgumentNullException(nameof(syncStatus));
             _syncWork = syncWork ?? throw new ArgumentNullException(nameof(syncWork));
             _wire = wire ?? throw new ArgumentNullException(nameof(wire));
@@ -227,7 +228,7 @@ namespace Unison.WhatsAppClient.Groups
         private async Task RunResumeListingAfterSettleAsync()
         {
             int armed = Interlocked.Increment(ref _resumeSettleGeneration);
-            int delayMs = Math.Max(0, _workload.GroupListingResumeSettleMs);
+            int delayMs = Math.Max(0, _tuning.GroupListingResumeSettleMs);
             _diagnostics?.Write(
                 "startup-phase",
                 "background-groups:deferred",
@@ -845,7 +846,7 @@ namespace Unison.WhatsAppClient.Groups
                     try
                     {
                         abortedForVisibility = await QueryUnresolvedGroupMetadataAsync(
-                            _workload.GroupMetadataBatchSize,
+                            _tuning.GroupMetadataBatchSize,
                             listingToken);
                         if (abortedForVisibility)
                         {
@@ -1001,11 +1002,11 @@ namespace Unison.WhatsAppClient.Groups
                 !cancellationToken.IsCancellationRequested)
             {
                 bool aborted = await QueryUnresolvedGroupMetadataAsync(
-                    _workload.GroupMetadataBatchSize,
+                    _tuning.GroupMetadataBatchSize,
                     cancellationToken).ConfigureAwait(false);
                 if (!aborted)
                 {
-                    metadataQueued = _workload.GroupMetadataBatchSize;
+                    metadataQueued = _tuning.GroupMetadataBatchSize;
                 }
             }
 
@@ -1141,7 +1142,7 @@ namespace Unison.WhatsAppClient.Groups
                     Debug.WriteLine("[GroupFacade] QueryGroupMetadataAsync failed for " + chat.JID + ": " + ex.Message);
                 }
 
-                await Task.Delay(Math.Max(0, _workload.GroupMetadataPauseMs));
+                await Task.Delay(Math.Max(0, _tuning.GroupMetadataPauseMs));
             }
 
             _syncStatus.Raise(null);

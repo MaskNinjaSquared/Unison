@@ -10,6 +10,7 @@ using System.Threading.Tasks;
 using System.Windows.Input;
 using Unison.Core.Constants;
 using Unison.Core.Contracts;
+using Unison.Core.Contracts.Tuning;
 using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Factories;
 using Unison.Core.Helpers;
@@ -84,6 +85,7 @@ namespace Unison.Core.ViewModels
         private readonly IRuntimeDiagnostics _diagnostics;
         private readonly ILocalSettings _localSettings;
         private readonly SyncWorkloadStrategy _workload;
+        private readonly ISyncLoadMode _loadMode;
         private readonly ChatListInitialPaintGate _listPaintGate;
         private readonly ChatListDeepLinkHoldGate _deepLinkHold;
         private readonly ChatListColdPopulateGate _coldPopulateGate;
@@ -276,8 +278,10 @@ namespace Unison.Core.ViewModels
             NewConversationViewModel newConversation = null,
             ILocalContactsService localContacts = null,
             IChatListCatalogContext catalog = null,
-            SyncStatusChannel syncStatus = null)
+            SyncStatusChannel syncStatus = null,
+            ISyncLoadMode loadMode = null)
         {
+            _loadMode = loadMode;
             _jids = jids ?? throw new ArgumentNullException(nameof(jids));
             _catalog = catalog;
             _syncStatus = syncStatus;

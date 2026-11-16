@@ -3,6 +3,7 @@ using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Input;
 using Unison.Core.Contracts;
+using Unison.Core.Contracts.Tuning;
 using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Helpers;
 using Unison.Core.Models;
@@ -38,6 +39,7 @@ namespace Unison.Core.ViewModels
         private readonly IDialogService _dialogService;
         private readonly IStringResources _strings;
         private readonly IHistoryService _history;
+        private readonly ISyncLoadMode _loadMode;
 
         private bool _isSessionLoggingEnabled;
         private bool _isVerboseLoggingEnabled;
@@ -57,13 +59,15 @@ namespace Unison.Core.ViewModels
             IConnectionService connectionService,
             IDialogService dialogService,
             IStringResources strings,
-            IHistoryService history)
+            IHistoryService history,
+            ISyncLoadMode loadMode)
         {
             _console = console;
             _connectionService = connectionService;
             _dialogService = dialogService;
             _strings = strings;
             _history = history;
+            _loadMode = loadMode;
 
             _isSessionLoggingEnabled = console.IsCaptureEnabled;
             _isVerboseLoggingEnabled = console.IsVerboseLoggingEnabled;
@@ -101,7 +105,7 @@ namespace Unison.Core.ViewModels
         /// responsive while catch-up and name refresh keep writing the journal.
         /// </summary>
         public bool PreferFrugalLivePaint =>
-            _history != null && _history.PreferFrugalSyncBudget;
+            _loadMode != null && _loadMode.PreferFrugal;
 
         /// <summary>Interval the view should use for <see cref="FlushPendingLogLines"/>.</summary>
         public TimeSpan LogFlushInterval =>

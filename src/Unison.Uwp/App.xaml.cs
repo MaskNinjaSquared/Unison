@@ -64,6 +64,8 @@ using AppProfileFacade = Unison.WhatsAppClient.Profiles.ProfileFacade;
 using UwpSessionProvider = Unison.Uwp.Services.Socket.IWhatsAppSessionProvider;
 using Unison.WhatsAppClient.Abstractions;
 using Unison.WhatsAppClient.Helpers;
+using Unison.Core.Contracts.Tuning;
+using Unison.Core.Product;
 
 namespace Unison.Uwp
 {
@@ -400,6 +402,13 @@ namespace Unison.Uwp
                 () => sp.GetRequiredService<IAppMemoryInfo>().IsLow,
                 sp.GetRequiredService<ISystemInfoProvider>().IsMobile(),
                 sp.GetRequiredService<SyncWorkloadStrategy>()));
+            // Product layer: tier + frugal become neutral knobs for the WhatsApp client.
+            services.AddSingleton(sp => new SyncProductPolicy(
+                sp.GetRequiredService<SyncWorkloadStrategy>(),
+                () => sp.GetRequiredService<SyncBudget>().IsFrugal));
+            services.AddSingleton<ISyncLoadMode>(sp => sp.GetRequiredService<SyncProductPolicy>());
+            services.AddSingleton<IHistorySyncTuning>(sp => sp.GetRequiredService<SyncProductPolicy>());
+            services.AddSingleton<IEnrichmentTuning>(sp => sp.GetRequiredService<SyncProductPolicy>());
             services.AddSingleton(sp => new ChatPreviewReconciler(
                 sp.GetRequiredService<IHistoryMessageStore>(),
                 sp.GetRequiredService<JidAliasTable>(),
@@ -408,7 +417,7 @@ namespace Unison.Uwp
                 sp.GetRequiredService<AttachedUiDispatcher>(),
                 sp.GetRequiredService<IStringResources>(),
                 sp.GetRequiredService<IRuntimeDiagnostics>(),
-                () => sp.GetRequiredService<SyncBudget>().IsFrugal,
+                () => sp.GetRequiredService<ISyncLoadMode>().PreferFrugal,
                 sp.GetRequiredService<IUiWorkHolds>(),
                 sp.GetRequiredService<AttachedUiDispatcher>(),
                 sp.GetRequiredService<IUiWorkStage>()));
@@ -432,7 +441,7 @@ namespace Unison.Uwp
                 sp.GetRequiredService<ContactDisplayNames>(),
                 sp.GetRequiredService<ISelfMarkerNaming>(),
                 sp.GetRequiredService<IGroupNaming>(),
-                () => sp.GetRequiredService<SyncBudget>().IsFrugal,
+                () => sp.GetRequiredService<ISyncLoadMode>().PreferFrugal,
                 uiHolds: sp.GetRequiredService<IUiWorkHolds>()));
             services.AddSingleton(sp => new StoredChatPreviewRefresh(
                 sp.GetRequiredService<AttachedUiDispatcher>(),
@@ -581,8 +590,8 @@ namespace Unison.Uwp
                 sp.GetRequiredService<IChatStateStore>(),
                 sp.GetRequiredService<SyncStatusChannel>(),
                 sp.GetRequiredService<InitialSyncProgressState>(),
-                sp.GetRequiredService<SyncBudget>(),
-                sp.GetRequiredService<SyncWorkloadStrategy>(),
+                sp.GetRequiredService<ISyncLoadMode>(),
+                sp.GetRequiredService<IHistorySyncTuning>(),
                 sp.GetRequiredService<IHistoryChatPreviewStore>(),
                 sp.GetRequiredService<IHistoryMigrationStore>(),
                 sp.GetRequiredService<IHistoryMessageStore>(),
@@ -624,11 +633,11 @@ namespace Unison.Uwp
                 sp.GetRequiredService<AttachedUiDispatcher>()));
             services.AddSingleton<IDeferredAvatarResolution>(sp =>
             {
-                SyncWorkloadStrategy workload = sp.GetRequiredService<SyncWorkloadStrategy>();
+                IEnrichmentTuning tuning = sp.GetRequiredService<IEnrichmentTuning>();
                 return new DeferredAvatarResolution(
                     () => sp.GetRequiredService<IContactService>(),
-                    () => TimeSpan.FromSeconds(workload.DeferredAvatarRetryDelaySeconds),
-                    () => workload.DeferredAvatarMaxRetries);
+                    () => tuning.DeferredAvatarRetryDelay,
+                    () => tuning.DeferredAvatarMaxRetries);
             });
             services.AddSingleton<IBackgroundResolutionGate>(
                 sp => sp.GetRequiredService<WhatsAppService>());
@@ -735,7 +744,8 @@ namespace Unison.Uwp
                 sp.GetRequiredService<IRuntimeDiagnostics>(),
                 sp.GetRequiredService<IGroupNaming>(),
                 sp.GetRequiredService<ICallLogService>(),
-                sp.GetRequiredService<HeldStatusPersist>()));
+                sp.GetRequiredService<HeldStatusPersist>(),
+                sp.GetRequiredService<ISyncLoadMode>()));
             // AttachedUiDispatcher (not IDispatcher/DispatcherService): PropertyChanged from the
             // incoming pump must marshal onto the live frame dispatcher, or IsRevoked/HasReactions
             // bindings throw RPC_E_WRONG_THREAD on Mobile.
@@ -803,8 +813,8 @@ namespace Unison.Uwp
                 sp.GetRequiredService<SyncStatusChannel>(),
                 sp.GetRequiredService<SyncWorkGate>(),
                 sp.GetRequiredService<ContactDisplayNames>(),
-                sp.GetRequiredService<SyncBudget>(),
-                sp.GetRequiredService<SyncWorkloadStrategy>(),
+                sp.GetRequiredService<ISyncLoadMode>(),
+                sp.GetRequiredService<IEnrichmentTuning>(),
                 sp.GetRequiredService<InitialSyncProgressState>(),
                 sp.GetRequiredService<ChatNameRefresh>(),
                 sp.GetRequiredService<ChatListAliasMerge>(),
@@ -875,7 +885,8 @@ namespace Unison.Uwp
                 sp.GetRequiredService<IPersonStore>(),
                 sp.GetRequiredService<IUiWorkHolds>(),
                 () => sp.GetRequiredService<SyncWorkGate>().IsReplayDrainActive,
-                sp.GetRequiredService<ILocalSettings>()));
+                sp.GetRequiredService<ILocalSettings>(),
+                sp.GetRequiredService<ISyncLoadMode>()));
             // After IChatService: the projection persists resolved strip rows so cold start keeps names.
             // AttachedUiDispatcher (not IDispatcher/DispatcherService): same live frame as
             // GroupMetadataApply / ChatFacade so strip passes share the pump; DispatcherService
@@ -889,11 +900,7 @@ namespace Unison.Uwp
                 sp.GetRequiredService<IContactService>(),
                 sp.GetRequiredService<IChatService>(),
                 timelinePriority: sp.GetRequiredService<ChatTimelineLoadPriorityGate>(),
-                preferFrugalUi: () =>
-                {
-                    IHistoryService history = sp.GetService<IHistoryService>();
-                    return history != null && history.PreferFrugalSyncBudget;
-                },
+                preferFrugalUi: () => sp.GetRequiredService<ISyncLoadMode>().PreferFrugal,
                 sessionLog: sp.GetService<ISessionLogger>(),
                 diagnostics: sp.GetService<IRuntimeDiagnostics>()));
             // The group apply and the roster restore live in Core and run from GroupFacade; they
@@ -911,9 +918,7 @@ namespace Unison.Uwp
             // One applier for GroupFacade and the receipt path (lazy Func on WhatsAppService).
             services.AddSingleton(sp =>
             {
-                SyncWorkloadStrategy workload = sp.GetRequiredService<SyncWorkloadStrategy>();
-                // Build chunks = roster batch × 8 so Mobile yields often without tiny commits.
-                int rosterChunk = Math.Max(1, workload.GroupRosterBatchSize) * 8;
+                ISyncLoadMode loadMode = sp.GetRequiredService<ISyncLoadMode>();
                 return new GroupMetadataApply(
                     sp.GetRequiredService<IGroupNaming>(),
                     sp.GetRequiredService<AttachedUiDispatcher>(),
@@ -925,13 +930,9 @@ namespace Unison.Uwp
                     sp.GetRequiredService<ChatStateStore>().GroupSubjects,
                     utcNow: null,
                     timelinePriority: sp.GetRequiredService<ChatTimelineLoadPriorityGate>(),
-                    rosterBuildChunkSize: rosterChunk,
+                    rosterBuildChunkSize: sp.GetRequiredService<IEnrichmentTuning>().GroupRosterBuildChunkSize,
                     rosterIndex: sp.GetRequiredService<GroupRosterIndex>(),
-                    preferFrugalUi: () =>
-                    {
-                        IHistoryService history = sp.GetService<IHistoryService>();
-                        return history != null && history.PreferFrugalSyncBudget;
-                    },
+                    preferFrugalUi: () => loadMode.PreferFrugal,
                     chatStore: sp.GetRequiredService<IChatStore>());
             });
             services.AddSingleton(sp => new GroupRosterWriter(
@@ -942,12 +943,7 @@ namespace Unison.Uwp
             // coalesce into fewer low-priority UI flushes instead of hopping every 250ms.
             services.AddSingleton(sp =>
             {
-                SyncWorkloadStrategy workload = sp.GetRequiredService<SyncWorkloadStrategy>();
-                bool lowTier = workload.Category == DeviceCategory.Low ||
-                    workload.Category == DeviceCategory.Unsupported;
-                TimeSpan? flushDebounce = lowTier
-                    ? TimeSpan.FromMilliseconds(750)
-                    : (TimeSpan?)null;
+                TimeSpan? flushDebounce = sp.GetRequiredService<IEnrichmentTuning>().GroupRosterFlushDebounce;
                 return new GroupRosterDemand(
                     sp.GetRequiredService<GroupRosterIndex>(),
                     sp.GetRequiredService<AttachedUiDispatcher>(),
@@ -974,7 +970,7 @@ namespace Unison.Uwp
                 sp.GetRequiredService<IUsyncGate>(),
                 sp.GetRequiredService<SyncStatusChannel>(),
                 sp.GetRequiredService<SyncWorkGate>(),
-                sp.GetRequiredService<SyncWorkloadStrategy>(),
+                sp.GetRequiredService<IEnrichmentTuning>(),
                 sp.GetRequiredService<AttachedUiDispatcher>(),
                 sp.GetRequiredService<IChatCatalogPersistence>(),
                 sp.GetRequiredService<ChatNameRefresh>(),

@@ -17,6 +17,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Unison.Core.Contracts;
+using Unison.Core.Contracts.Tuning;
 using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Helpers;
 using Unison.Core.Models;
@@ -49,7 +50,7 @@ namespace Unison.WhatsAppClient.Contacts
         private readonly IChatStateStore _chatState;
         private readonly SyncStatusChannel _syncStatus;
         private readonly SyncWorkGate _syncWork;
-        private readonly SyncWorkloadStrategy _workload;
+        private readonly IEnrichmentTuning _tuning;
         private readonly UsyncFailureCooldownBook _usyncFailures;
         private readonly IAppMemoryInfo _memory;
         private readonly IRuntimeDiagnostics _diagnostics;
@@ -75,7 +76,7 @@ namespace Unison.WhatsAppClient.Contacts
             SyncWorkGate syncWork,
             IWhatsAppSessionProvider sessions,
             ChatNameRefresh nameRefresh,
-            SyncWorkloadStrategy workload,
+            IEnrichmentTuning tuning,
             UsyncFailureCooldownBook usyncFailures = null,
             IAppMemoryInfo memory = null,
             IRuntimeDiagnostics diagnostics = null)
@@ -95,7 +96,7 @@ namespace Unison.WhatsAppClient.Contacts
             _directory = directory ?? throw new ArgumentNullException(nameof(directory));
             _usync = usync ?? throw new ArgumentNullException(nameof(usync));
             _jids = jids ?? throw new ArgumentNullException(nameof(jids));
-            _workload = workload ?? throw new ArgumentNullException(nameof(workload));
+            _tuning = tuning ?? throw new ArgumentNullException(nameof(tuning));
             _usyncFailures = usyncFailures ?? UsyncFailureCooldownBook.Default;
         }
 
@@ -320,8 +321,8 @@ namespace Unison.WhatsAppClient.Contacts
                 $"({ready.Count} after failure cooldown).");
 
             // Keep this small and opportunistic so it does not monopolize the socket during
-            // reconnect or live sync. Tier caps come from SyncWorkloadStrategy (Mobile/Low frugal).
-            int maxPerPass = Math.Max(1, _workload.NameResolveMaxPerPass);
+            // reconnect or live sync. Caps come from IEnrichmentTuning (product layer).
+            int maxPerPass = Math.Max(1, _tuning.NameResolveMaxPerPass);
             var missingList = ready
                 .Where(j => !string.IsNullOrWhiteSpace(j))
                 .OrderBy(j => j, StringComparer.OrdinalIgnoreCase)
@@ -433,8 +434,8 @@ namespace Unison.WhatsAppClient.Contacts
 
         private async Task ResolveInChunksAsync(IList<string> jids)
         {
-            int chunkSize = Math.Max(1, _workload.NameResolveChunkSize);
-            int delayMs = Math.Max(0, _workload.NameResolveInterChunkDelayMs);
+            int chunkSize = Math.Max(1, _tuning.NameResolveChunkSize);
+            int delayMs = Math.Max(0, _tuning.NameResolveInterChunkDelayMs);
 
             for (int i = 0; i < jids.Count; i += chunkSize)
             {
@@ -524,7 +525,7 @@ namespace Unison.WhatsAppClient.Contacts
                     Debug.WriteLine($"[ContactNameResolver] Individual contact resolve failed for {jid}: {ex.Message}");
                 }
 
-                await Task.Delay(Math.Max(120, _workload.NameResolveInterChunkDelayMs));
+                await Task.Delay(Math.Max(120, _tuning.NameResolveInterChunkDelayMs));
             }
         }
 

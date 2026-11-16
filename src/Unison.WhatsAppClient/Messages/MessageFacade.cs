@@ -6,6 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Proto;
 using Unison.Core.Contracts;
+using Unison.Core.Contracts.Tuning;
 using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Helpers;
 using Unison.Core.Helpers.Chats;
@@ -32,6 +33,7 @@ namespace Unison.WhatsAppClient.Messages
         private readonly IChatMessageMapper _chatMessageMapper;
         private readonly IReactionMapper _reactionMapper;
         private readonly IHistoryService _history;
+        private readonly ISyncLoadMode _loadMode;
         private readonly IHistoryMessageStore _historyMessageStore;
         private readonly HeldStatusPersist _heldStatusPersist;
         private readonly IJidResolver _jids;
@@ -135,8 +137,10 @@ namespace Unison.WhatsAppClient.Messages
             IRuntimeDiagnostics diagnostics = null,
             IGroupNaming groupNaming = null,
             ICallLogService callLog = null,
-            HeldStatusPersist heldStatusPersist = null)
+            HeldStatusPersist heldStatusPersist = null,
+            ISyncLoadMode loadMode = null)
         {
+            _loadMode = loadMode;
             _diagnostics = diagnostics;
             _heldStatusPersist = heldStatusPersist;
             _callLog = callLog;
@@ -196,7 +200,7 @@ namespace Unison.WhatsAppClient.Messages
             _receipts = new ReceiptReader(jids);
             _receiptStatuses = new KeyedLatestCoalescer<string, string>(
                 ApplyOutgoingStatusBatchAsync,
-                () => StormWindowPolicy.For(_history.PreferFrugalSyncBudget),
+                () => StormWindowPolicy.For(_loadMode != null && _loadMode.PreferFrugal),
                 StrongerStatus,
                 StringComparer.Ordinal);
 

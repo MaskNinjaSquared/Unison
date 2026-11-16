@@ -57,13 +57,6 @@ namespace Unison.Core.Contracts.WhatsApp
         /// </summary>
         bool IsPairingBootstrapChunkSeenOrApplying { get; }
 
-        /// <summary>
-        /// True when startup and sync work should use smaller batches, longer quiet floors and
-        /// gentler list updates. Driven by memory pressure and how hot the sync is, not by
-        /// form factor alone.
-        /// </summary>
-        bool PreferFrugalSyncBudget { get; }
-
         /// <summary>How many conversations of the first sync are in, for the progress line.</summary>
         int InitialSyncProcessedConversations { get; }
 

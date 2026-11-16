@@ -104,7 +104,6 @@ namespace Unison.Core.Tests.Helpers
             public bool IsAwaitingFirstHistorySync => false;
             public bool IsPairingBootstrapActive => false;
             public bool IsPairingBootstrapChunkSeenOrApplying => false;
-            public bool PreferFrugalSyncBudget => false;
             public int InitialSyncProcessedConversations => 0;
             public int InitialSyncTotalConversations => 0;
 

@@ -21,6 +21,7 @@ using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
 using Unison.Core.Contracts;
+using Unison.Core.Contracts.Tuning;
 using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Helpers;
 using Unison.Core.Helpers.Chats;
@@ -65,7 +66,7 @@ namespace Unison.WhatsAppClient.Contacts
         private readonly PushNameUiCoalesce _pushNameUiPending = new PushNameUiCoalesce();
         private readonly CoalescedDebounceScheduler _pushNameUiDebounce =
             new CoalescedDebounceScheduler(TimeSpan.FromMilliseconds(180));
-        private readonly SyncBudget _syncBudget;
+        private readonly ISyncLoadMode _loadMode;
         private readonly ChatTimelineLoadPriorityGate _timelinePriority;
         private int _aliasFollowUpDeferredDuringBulk;
 
@@ -111,8 +112,8 @@ namespace Unison.WhatsAppClient.Contacts
             SyncStatusChannel syncStatus,
             SyncWorkGate syncWork,
             ContactDisplayNames displayNames,
-            SyncBudget syncBudget,
-            SyncWorkloadStrategy workload,
+            ISyncLoadMode loadMode,
+            IEnrichmentTuning tuning,
             InitialSyncProgressState initialSync,
             ChatNameRefresh nameRefresh,
             ChatListAliasMerge aliasMerge,
@@ -149,7 +150,7 @@ namespace Unison.WhatsAppClient.Contacts
             _deferredAvatars = deferredAvatars ?? throw new ArgumentNullException(nameof(deferredAvatars));
             _timelinePriority = timelinePriority;
             _diagnostics = diagnostics;
-            _syncBudget = syncBudget ?? throw new ArgumentNullException(nameof(syncBudget));
+            _loadMode = loadMode ?? throw new ArgumentNullException(nameof(loadMode));
             _ui = ui ?? throw new ArgumentNullException(nameof(ui));
             _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
             if (sessions == null) throw new ArgumentNullException(nameof(sessions));
@@ -204,7 +205,7 @@ namespace Unison.WhatsAppClient.Contacts
                 _syncWork,
                 sessions,
                 nameRefresh,
-                workload ?? throw new ArgumentNullException(nameof(workload)),
+                tuning ?? throw new ArgumentNullException(nameof(tuning)),
                 memory: memory,
                 diagnostics: diagnostics);
             _avatars = new ChatAvatarPolicy(
@@ -217,12 +218,12 @@ namespace Unison.WhatsAppClient.Contacts
                 _syncStatus,
                 _syncWork,
                 sessions,
-                syncBudget,
-                workload ?? throw new ArgumentNullException(nameof(workload)),
+                loadMode,
+                tuning ?? throw new ArgumentNullException(nameof(tuning)),
                 initialSync,
                 diagnostics);
             _groups = groups;
-            _roster = new GroupRosterPolicy(groups, this, jids, ui, catalog, chats, syncWork, sessions, workload);
+            _roster = new GroupRosterPolicy(groups, this, jids, ui, catalog, chats, syncWork, sessions, tuning);
             _backgroundResolution = new BackgroundResolutionPass(
                 backgroundResolutionGate ?? throw new ArgumentNullException(nameof(backgroundResolutionGate)),
                 _deferredAvatars,
@@ -675,7 +676,7 @@ namespace Unison.WhatsAppClient.Contacts
             }
 
             ILowPriorityDispatcher lowUi = _ui as ILowPriorityDispatcher;
-            bool useLow = lowUi != null && _syncBudget.IsFrugal;
+            bool useLow = lowUi != null && _loadMode.PreferFrugal;
             int sliceSize = useLow ? ResolvedNameUiSliceSize : batch.Count;
 
             for (int offset = 0; offset < batch.Count; offset += sliceSize)
@@ -861,7 +862,7 @@ namespace Unison.WhatsAppClient.Contacts
 
             ILowPriorityDispatcher lowUi = _ui as ILowPriorityDispatcher;
             bool useLow = lowUi != null &&
-                (TipUiPipelineGate.PreferLowSilentUi(_syncBudget.IsFrugal) ||
+                (TipUiPipelineGate.PreferLowSilentUi(_loadMode.PreferFrugal) ||
                  unique.Count > ResolvedNameTinyBatchMax);
             int namesUpdated = 0;
 
@@ -1038,7 +1039,7 @@ namespace Unison.WhatsAppClient.Contacts
                 if (AliasFollowUpPassPolicy.ShouldRearmAfterPass(_aliasFollowUps.HasPendingTargets))
                 {
                     TimeSpan gap = AliasFollowUpPassPolicy.RearmGapBeforeSchedule(
-                        _syncBudget.IsFrugal,
+                        _loadMode.PreferFrugal,
                         hasMoreAvatarTargets: true,
                         bulkCatalogueMutating: true);
                     if (gap > TimeSpan.Zero)
@@ -1053,7 +1054,7 @@ namespace Unison.WhatsAppClient.Contacts
             }
 
             if (!_aliasFollowUps.TryBegin(
-                    AliasFollowUpAvatarCap.MaxTargets(_syncBudget.IsFrugal),
+                    AliasFollowUpAvatarCap.MaxTargets(_loadMode.PreferFrugal),
                     out AliasFollowUpBatch batch,
                     out bool hasMoreAvatarTargets))
             {
@@ -1123,7 +1124,7 @@ namespace Unison.WhatsAppClient.Contacts
                                 jid => _chatRows.FindConversation(jid));
                         };
                         ILowPriorityDispatcher lowUi = _ui as ILowPriorityDispatcher;
-                        if (lowUi != null && _syncBudget.IsFrugal)
+                        if (lowUi != null && _loadMode.PreferFrugal)
                         {
                             await lowUi.RunLowAsync(collect).ConfigureAwait(false);
                         }
@@ -1158,7 +1159,7 @@ namespace Unison.WhatsAppClient.Contacts
                                         RequestAvatarRefresh(rows[i], force: true);
                                     }
                                 };
-                                if (lowUi != null && _syncBudget.IsFrugal)
+                                if (lowUi != null && _loadMode.PreferFrugal)
                                 {
                                     await lowUi.RunLowAsync(paint).ConfigureAwait(false);
                                 }
@@ -1207,7 +1208,7 @@ namespace Unison.WhatsAppClient.Contacts
                 if (AliasFollowUpPassPolicy.ShouldRearmAfterPass(_aliasFollowUps.HasPendingTargets))
                 {
                     TimeSpan gap = AliasFollowUpPassPolicy.RearmGapBeforeSchedule(
-                        _syncBudget.IsFrugal,
+                        _loadMode.PreferFrugal,
                         hasMoreAvatarTargets || yieldedToTip);
                     if (gap > TimeSpan.Zero)
                     {

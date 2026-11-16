@@ -411,7 +411,7 @@ namespace Unison.Core.ViewModels
             });
         }
 
-        private bool PreferFrugalUi => _history.PreferFrugalSyncBudget;
+        private bool PreferFrugalUi => _loadMode != null && _loadMode.PreferFrugal;
 
         /// <summary>
         /// Accepts the flyout's integer id, maps it onto <see cref="ChatListFilter"/>, and

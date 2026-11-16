@@ -2,7 +2,7 @@
 // GroupRosterPolicy
 //
 // Idle member-picture work: one batch of GETs, then the next (batch size and
-// pauses come from SyncWorkloadStrategy; 16 on High). Not a migration.
+// pauses come from IEnrichmentTuning; 16 on High). Not a migration.
 //
 // ChatAvatarPolicy already does this for chat-list rows. Group members were a
 // one-shot of 16 on open that never continued and never remembered a miss, so
@@ -17,6 +17,7 @@ using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
 using Unison.Core.Contracts;
+using Unison.Core.Contracts.Tuning;
 using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Helpers;
 using Unison.Core.Models;
@@ -31,13 +32,13 @@ namespace Unison.WhatsAppClient.Contacts
         private static readonly TimeSpan NoPictureRetry = TimeSpan.FromDays(7);
         private static readonly TimeSpan FailureBackoff = TimeSpan.FromMinutes(30);
 
-        private readonly SyncWorkloadStrategy _workload;
+        private readonly IEnrichmentTuning _tuning;
 
-        private TimeSpan NextBatchDelay => TimeSpan.FromSeconds(_workload.GroupRosterNextBatchDelaySeconds);
+        private TimeSpan NextBatchDelay => TimeSpan.FromSeconds(_tuning.GroupRosterNextBatchDelaySeconds);
 
-        private TimeSpan InterRequestDelay => TimeSpan.FromMilliseconds(_workload.GroupRosterInterRequestDelayMs);
+        private TimeSpan InterRequestDelay => TimeSpan.FromMilliseconds(_tuning.GroupRosterInterRequestDelayMs);
 
-        private int BatchSize => Math.Max(1, _workload.GroupRosterBatchSize);
+        private int BatchSize => Math.Max(1, _tuning.GroupRosterBatchSize);
 
         private readonly IWhatsAppSessionProvider _sessions;
         private readonly IChatStateStore _chatState;
@@ -66,9 +67,9 @@ namespace Unison.WhatsAppClient.Contacts
             IChatStateStore chatState,
             SyncWorkGate syncWork,
             IWhatsAppSessionProvider sessions,
-            SyncWorkloadStrategy workload)
+            IEnrichmentTuning tuning)
         {
-            _workload = workload ?? throw new ArgumentNullException(nameof(workload));
+            _tuning = tuning ?? throw new ArgumentNullException(nameof(tuning));
             _sessions = sessions ?? throw new ArgumentNullException(nameof(sessions));
             _syncWork = syncWork ?? throw new ArgumentNullException(nameof(syncWork));
             _ui = ui ?? throw new ArgumentNullException(nameof(ui));

@@ -188,7 +188,7 @@ namespace Unison.WhatsAppClient.Helpers
             CancellationToken token = cts.Token;
             TimeSpan delay = immediate
                 ? TimeSpan.FromSeconds(2)
-                : SilentFullHistoryPolicy.DelayFor(host.DeviceCategory);
+                : host.SilentLotDelay;
 
             host.StartSilentScheduleTask(async () =>
             {

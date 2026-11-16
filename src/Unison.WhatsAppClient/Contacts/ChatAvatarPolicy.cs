@@ -21,6 +21,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Unison.Core.Contracts;
+using Unison.Core.Contracts.Tuning;
 using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Helpers;
 using Unison.Core.Models;
@@ -42,8 +43,8 @@ namespace Unison.WhatsAppClient.Contacts
         private readonly IChatStateStore _chatState;
         private readonly SyncStatusChannel _syncStatus;
         private readonly SyncWorkGate _syncWork;
-        private readonly SyncBudget _syncBudget;
-        private readonly SyncWorkloadStrategy _workload;
+        private readonly ISyncLoadMode _loadMode;
+        private readonly IEnrichmentTuning _tuning;
         private readonly InitialSyncProgressState _initialSync;
         private readonly IDispatcher _ui;
         private readonly IChatCatalogPersistence _catalog;
@@ -70,14 +71,14 @@ namespace Unison.WhatsAppClient.Contacts
             SyncStatusChannel syncStatus,
             SyncWorkGate syncWork,
             IWhatsAppSessionProvider sessions,
-            SyncBudget syncBudget,
-            SyncWorkloadStrategy workload,
+            ISyncLoadMode loadMode,
+            IEnrichmentTuning tuning,
             InitialSyncProgressState initialSync,
             IRuntimeDiagnostics diagnostics = null)
         {
             _sessions = sessions ?? throw new ArgumentNullException(nameof(sessions));
-            _syncBudget = syncBudget ?? throw new ArgumentNullException(nameof(syncBudget));
-            _workload = workload ?? throw new ArgumentNullException(nameof(workload));
+            _loadMode = loadMode ?? throw new ArgumentNullException(nameof(loadMode));
+            _tuning = tuning ?? throw new ArgumentNullException(nameof(tuning));
             _initialSync = initialSync ?? throw new ArgumentNullException(nameof(initialSync));
             _chatState = chatState ?? throw new ArgumentNullException(nameof(chatState));
             _syncWork = syncWork ?? throw new ArgumentNullException(nameof(syncWork));
@@ -101,9 +102,9 @@ namespace Unison.WhatsAppClient.Contacts
         /// </summary>
         public async Task RetrieveBatchAsync(CancellationToken token = default(CancellationToken))
         {
-            int batchSize = _workload.AvatarFetchBatchSize;
-            TimeSpan interRequestDelay = TimeSpan.FromMilliseconds(_workload.AvatarFetchInterRequestDelayMs);
-            bool frugal = _syncBudget.IsFrugal;
+            int batchSize = _tuning.AvatarFetchBatchSize;
+            TimeSpan interRequestDelay = TimeSpan.FromMilliseconds(_tuning.AvatarFetchInterRequestDelayMs);
+            bool frugal = _loadMode.PreferFrugal;
 
             // Progress only after the first completed fetch — "0 of N" is noise on Mobile StatusBar.
             // Bare phase:avatars is also skipped; hydrate/disk work stays silent.
