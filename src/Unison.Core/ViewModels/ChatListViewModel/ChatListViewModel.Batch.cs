@@ -14,6 +14,7 @@ using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Factories;
 using Unison.Core.Helpers;
 using Unison.Core.Helpers.Chats;
+using Unison.Core.Helpers.Chats;
 using Unison.Core.Models;
 using Unison.Core.State;
 
@@ -217,6 +218,7 @@ namespace Unison.Core.ViewModels
             }
 
             var budget = Stopwatch.StartNew();
+            long addStartedTicks = 0;
             int added = 0;
             foreach (var chat in source)
             {
@@ -228,7 +230,11 @@ namespace Unison.Core.ViewModels
                 // A fixed count either starves a fast machine or stalls a slow one. Release one
                 // batch unconditionally, then keep going while this turn still has time, so the
                 // list fills as fast as the device allows without eating an input frame.
-                if (added >= BatchSize && budget.ElapsedMilliseconds >= BatchBudgetMs)
+                long addElapsedMs = ChatListReleaseBudgetPolicy.AddElapsedMs(
+                    addStartedTicks,
+                    budget.ElapsedTicks,
+                    Stopwatch.Frequency / 1000);
+                if (!ChatListReleaseBudgetPolicy.CanAddMore(added, BatchSize, addElapsedMs, BatchBudgetMs))
                 {
                     break;
                 }
@@ -236,6 +242,11 @@ namespace Unison.Core.ViewModels
                 if (!visibleCanonical.Add(GetCanonical(chat.JID)))
                 {
                     continue;
+                }
+
+                if (addStartedTicks == 0)
+                {
+                    addStartedTicks = Math.Max(1, budget.ElapsedTicks);
                 }
 
                 VisibleChats.Add(chat);

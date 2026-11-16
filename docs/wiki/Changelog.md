@@ -2,6 +2,10 @@
 
 Newest first.
 
+## Build 31 fixes — rejected FULL ack ends catch-up; chat-list release budget
+
+A rejected FULL_HISTORY ack clears the registry, so no watchdog or quiet lot could ever finish the catch-up it opened: banner, deferred enrichment (avatars) and toast suppression stayed up for the session (b31 fb8e90ad, after pairing). `FullHistoryAckRejectedDispatch` now finishes the catch-up (`full-history-ack-rejected`, releases enrichment) when it is active; both ack outcomes are journaled (`full-history-ack-accepted` / `-rejected`). Chat-list release ticks timed the per-turn budget from before skipping rows already on screen, so every tick released only the first batch (437 rows in 51 ticks on Low); `ChatListReleaseBudgetPolicy` starts the clock at the first add. No FULL / catch-up / silent-chain number changed.
+
 ## VoIP skeleton — Unison.Voip + reject/terminate (Opus review next)
 
 New Unison.Voip package (ports ICallAudioSource/Sink, ICallUdpTransport, ICallSignalingChannel, CallSession). Socket UseCases RejectCall / TerminateCall match meowcaller stanza shape. CallFacade / ICallService + UWP stub IO factory and SocketCallSignalingChannel in DI. Engine modules (stun/relay/srtp/mlow) are scaffolds only — no audio yet. Primary SOT: [purpshell/meowcaller](https://github.com/purpshell/meowcaller); Baileys.cpp discarded. See [VoIP](Voip).
