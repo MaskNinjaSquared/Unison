@@ -95,6 +95,82 @@ namespace Unison.Core.Tests.Helpers
             Assert.Equal(new[] { a, b }, visible);
         }
 
+        [Fact]
+        public void Stale_rows_at_the_top_are_removed_without_walking_the_list()
+        {
+            var desired = new List<ChatItem>();
+            for (int i = 0; i < 424; i++)
+            {
+                desired.Add(Row("c" + i));
+            }
+
+            var visible = new ObservableCollection<ChatItem>();
+            for (int i = 0; i < 12; i++)
+            {
+                visible.Add(Row("stale" + i));
+            }
+
+            foreach (ChatItem row in desired)
+            {
+                visible.Add(row);
+            }
+
+            ChatListVisibleReconcileResult result = ChatListVisibleReconcile.Apply(visible, desired, 12);
+
+            Assert.False(result.Incomplete);
+            Assert.Equal(12, result.Mutations);
+            Assert.Equal(desired, visible);
+        }
+
+        [Fact]
+        public void Single_row_jumping_to_the_bottom_costs_one_move()
+        {
+            var desired = new List<ChatItem>();
+            for (int i = 0; i < 100; i++)
+            {
+                desired.Add(Row("c" + i));
+            }
+
+            var visible = new ObservableCollection<ChatItem>();
+            visible.Add(desired[99]);
+            for (int i = 0; i < 99; i++)
+            {
+                visible.Add(desired[i]);
+            }
+
+            ChatListVisibleReconcileResult result = ChatListVisibleReconcile.Apply(visible, desired, 10);
+
+            Assert.False(result.Incomplete);
+            Assert.Equal(1, result.Mutations);
+            Assert.Equal(desired, visible);
+        }
+
+        [Fact]
+        public void Mixed_stale_new_and_moved_rows_converge_to_desired_order()
+        {
+            ChatItem a = Row("a");
+            ChatItem b = Row("b");
+            ChatItem c = Row("c");
+            ChatItem d = Row("d");
+            ChatItem e = Row("e");
+            ChatItem stale = Row("stale");
+            ChatItem fresh = Row("fresh");
+            var visible = new ObservableCollection<ChatItem> { stale, c, a, e, b, d };
+            var desired = new List<ChatItem> { fresh, a, b, c, d, e };
+
+            int passes = 0;
+            ChatListVisibleReconcileResult result;
+            do
+            {
+                result = ChatListVisibleReconcile.Apply(visible, desired, 2);
+                passes++;
+            }
+            while (result.Incomplete && passes < 10);
+
+            Assert.False(result.Incomplete);
+            Assert.Equal(desired, visible);
+        }
+
         private static ChatItem Row(string jid) => new ChatItem { JID = jid + "@s.whatsapp.net" };
     }
 }
