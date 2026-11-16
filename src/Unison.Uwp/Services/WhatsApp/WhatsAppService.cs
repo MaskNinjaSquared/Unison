@@ -1087,8 +1087,9 @@ namespace Unison.Uwp.Services.WhatsApp
                     Chats.Any(c => c != null && (c.IsGroup || JidHelper.IsGroupJid(c.JID)))
                         ? GetNewestStoredMessageUtc(JidHelper.IsGroupJid)
                         : DateTime.MinValue,
-                requestReconnectHistoryCatchUpAsync: _reconnectCatchUp.RunAsync,
-                finishHistoryCatchUpContinue: _catchUpFinish.Run,
+                requestReconnectHistoryCatchUpAsync: reason => _reconnectCatchUp.RunAsync(reason),
+                finishHistoryCatchUpContinue: (reason, releaseEnrichment) =>
+                    _catchUpFinish.Run(reason, releaseEnrichment),
                 log: message => Debug.WriteLine("[WhatsAppService] " + message));
             _reconnectCatchUp = new ReconnectHistoryCatchUpOwner(
                 historyRequests: _historyRequests,
