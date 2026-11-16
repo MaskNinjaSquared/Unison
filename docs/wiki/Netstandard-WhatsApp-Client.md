@@ -205,9 +205,25 @@ in `App.ConfigureServices`. They do **not** yet drive façades end-to-end (host 
 quiet/memory waits and notify ports) — that orchestration moves when `WhatsAppService` shrinks
 (Phase D). Tests: `StartupMaintenanceCoordinatorTests`, `PostReplayMaintenanceCoordinatorTests`.
 
-Still open: `WhatsAppService` (UWP host) reads `_workload` / `CurrentSyncPacing` / `UseFrugalSyncBudget`
-directly — host debt that leaves with it (Phase D). P4 untouched. Coordinators do not yet
-subscribe to façade facts or notify UI (next cheap slice when a VM still duplicates a gate).
+**Host off the tier (done):** `WhatsAppService` no longer reads `SyncWorkloadStrategy`,
+`SyncBudget`, `CurrentSyncPacing` or `UseFrugalSyncBudget`. It receives the DI
+`SyncProductPolicy` plus both coordinators and reads `IHistorySyncTuning`
+(+ `HistoryFinalizeQuietMs` / `HistoryFullFinalizeDelayMs`), `IEnrichmentTuning`
+(+ `SerializePostSyncEnrichment` / `PostSyncEnrichmentQuietWait`) and the new
+`ISyncPhaseTuning` (startup quiet floor / deferred quiet with the first-sync list-hold fact,
+catch-up idle abort). One policy instance for the whole app.
+
+Left on purpose (composition-root adapters, not product leaks): `UwpConnectionSocketSessionFactory`
+(`InitialPreKeyUploadCount`), `SyncWorkloadLidMappingPersistPolicy`, `ProfilePictureQueryCache`,
+`SyncBudget` / `SyncWorkloadStrategy` construction in `App.ConfigureServices`. Core ViewModels
+reading `ISyncLoadMode` (`ChatListViewModel`, `DebugViewModel`) and `GifPlaybackCoordinator`
+reading the tier are already in the product layer. `PostMessageEnrichmentGates` /
+`HistoryCatchUpLocalWorkPolicy` are WhatsApp-flow rules (catch-up / FULL / list paint), not tier.
+
+Still open: coordinators **decide** but do not yet **drive** façades end-to-end (deferred
+startup and post-replay orchestration, quiet/memory waits, contact name tables stay on the
+host/dispatch). That move is Phase D and touches Mobile-sensitive deferred startup — Opus +
+on-device. P4 untouched.
 
 **Dependency direction (decided):** contracts stay in Core through P (WhatsAppClient → Core),
 tier-free; the flip happens in Phase E (client owns its I/O, Core → WhatsAppClient, product

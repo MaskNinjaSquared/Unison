@@ -31,5 +31,11 @@ namespace Unison.Core.Contracts.Tuning
 
         /// <summary>Gap between silent FULL_HISTORY lots.</summary>
         TimeSpan SilentFullHistoryDelay { get; }
+
+        /// <summary>SQLite quiet before a history lot is finalized (at least 200 ms).</summary>
+        int HistoryFinalizeQuietMs { get; }
+
+        /// <summary>Delay before a FULL history lot is finalized (at least 200 ms).</summary>
+        int HistoryFullFinalizeDelayMs { get; }
     }
 }

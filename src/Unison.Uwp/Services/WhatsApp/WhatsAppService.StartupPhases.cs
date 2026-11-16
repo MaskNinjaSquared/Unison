@@ -25,7 +25,7 @@ namespace Unison.Uwp.Services.WhatsApp
     {
         /// <summary>Breathing room the UI gets before enrichment starts, even on a fast device.</summary>
         private TimeSpan StartupQuietFloor =>
-            TimeSpan.FromMilliseconds(CurrentSyncPacing.StartupQuietFloorMs);
+            PhaseTuning.StartupQuietFloor(IsFirstSyncListHoldInProgress);
 
         /// <summary>
         /// Holds off enrichment until the list stops moving, up to <paramref name="budget"/>.
@@ -56,7 +56,7 @@ namespace Unison.Uwp.Services.WhatsApp
                     "reason=" + (reason ?? string.Empty) +
                     "; waitedMs=" + waitedMs +
                     "; budgetMs=" + budgetMs +
-                    "; frugal=" + UseFrugalSyncBudget +
+                    "; frugal=" + _productPolicy.PreferFrugal +
                     "; memory=" + _appMemory.UsageLevel));
         }
 

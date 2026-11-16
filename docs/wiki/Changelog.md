@@ -2,6 +2,15 @@
 
 Newest first.
 
+## WhatsAppService reads product tuning, not the device tier
+
+The host no longer computes pacing from `SyncWorkloadStrategy` / `SyncBudget`. It receives
+the single DI `SyncProductPolicy` and both maintenance coordinators. New `ISyncPhaseTuning`
+(startup quiet floor and deferred quiet, shortened while the first-sync list is held;
+catch-up idle abort); `IHistorySyncTuning` gains finalize quiet / FULL finalize delay;
+`IEnrichmentTuning` gains post-sync serialize + quiet wait. Same values per tier / frugal.
+See [Netstandard WhatsApp client](Netstandard-WhatsApp-Client).
+
 ## Startup / post-replay product coordinators
 
 `StartupMaintenanceCoordinator` and `PostReplayMaintenanceCoordinator` in Core own the

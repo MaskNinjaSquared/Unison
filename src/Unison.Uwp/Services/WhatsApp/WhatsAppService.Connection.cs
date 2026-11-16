@@ -194,7 +194,7 @@ namespace Unison.Uwp.Services.WhatsApp
             // Mobile (cascade off): silent probes are the progressive path after
             // empty-ack ghost. High keeps cascade + periodic safety instead.
             if (SilentFullHistoryPolicy.ShouldArmOnHealthStart(
-                    _workload.AllowStagnantHistoryRepairCascade))
+                    HistoryTuning.AllowStagnantRepairCascade))
             {
                 // Arm only — first fire waits for loud catch-up finish + tip stale.
                 _silentChain.Arm("post-init", fireSoon: false);

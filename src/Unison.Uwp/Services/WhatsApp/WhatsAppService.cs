@@ -210,14 +210,11 @@ namespace Unison.Uwp.Services.WhatsApp
 
         internal bool UsesSingleMediaDownloadSlot => IsWindowsMobile;
 
-        /// <summary>Startup and enrichment timings; the rule is <see cref="SyncBudget"/>.</summary>
-        private bool UseFrugalSyncBudget => _syncBudget.IsFrugal;
+        private IHistorySyncTuning HistoryTuning => _productPolicy;
 
-        private SyncPacing CurrentSyncPacing =>
-            SyncPhasePacing.For(
-                _workload,
-                UseFrugalSyncBudget,
-                IsFirstSyncListHoldInProgress);
+        private IEnrichmentTuning EnrichmentTuning => _productPolicy;
+
+        private ISyncPhaseTuning PhaseTuning => _productPolicy;
 
         private async Task WarmPersonStoreAsync()
         {
@@ -452,8 +449,6 @@ namespace Unison.Uwp.Services.WhatsApp
         // Active-chat window size / trim lives on MessageFacade (store cache), not here.
         private readonly ActiveChat _activeChat;
         private readonly InitialSyncProgressState _initialSync;
-        private readonly SyncBudget _syncBudget;
-        private readonly SyncWorkloadStrategy _workload;
         private readonly SyncProductPolicy _productPolicy;
         private readonly StartupMaintenanceCoordinator _startupMaintenance;
         private readonly PostReplayMaintenanceCoordinator _postReplayMaintenance;
@@ -479,11 +474,9 @@ namespace Unison.Uwp.Services.WhatsApp
         private bool _firstSyncListHoldOwned;
         /// <summary>After the first-sync list unlock this session ? reconnect chunks must not re-arm it.</summary>
         private bool _firstSyncListAlreadyReleased;
-        private int SqliteHistoryFinalizeQuietMs =>
-            Math.Max(200, _workload.HistoryFinalizeQuietMs);
+        private int SqliteHistoryFinalizeQuietMs => HistoryTuning.HistoryFinalizeQuietMs;
 
-        private int SqliteHistoryFullFinalizeDelayMs =>
-            Math.Max(200, _workload.HistoryFullFinalizeDelayMs);
+        private int SqliteHistoryFullFinalizeDelayMs => HistoryTuning.HistoryFullFinalizeDelayMs;
 
         /// <summary>UWP transport only; outside this assembly use <see cref="IConnectionService"/> / fa?ades.</summary>
         internal IWhatsAppSocket Socket => _socket;
@@ -767,16 +760,13 @@ namespace Unison.Uwp.Services.WhatsApp
         private static readonly TimeSpan FullHistoryOnDemandResponseTimeout = TimeSpan.FromMinutes(15);
         // --- FULL_HISTORY catch-up continue (next offline lot via soft-reconnect) ---
         // Idle must outlast slow Mobile SQLite/UI between chunks (15s was aborting too early).
-        private TimeSpan FullHistoryCatchUpIdleAbort =>
-            TimeSpan.FromSeconds(CurrentSyncPacing.CatchUpIdleAbortSeconds);
+        private TimeSpan FullHistoryCatchUpIdleAbort => PhaseTuning.CatchUpIdleAbort;
 
         private static readonly TimeSpan FullHistoryCatchUpProgressPoll = TimeSpan.FromSeconds(8);
 
-        private int CatchUpContinueMaxRounds =>
-            Math.Max(0, _workload.MaxFullHistoryCatchUpRounds);
+        private int CatchUpContinueMaxRounds => HistoryTuning.MaxFullHistoryCatchUpRounds;
         /// <summary>Tip watermark must stall this many idle cycles before catch-up stops.</summary>
-        private int CatchUpStagnantCyclesBeforeStop =>
-            CurrentSyncPacing.CatchUpStagnantCyclesBeforeStop;
+        private int CatchUpStagnantCyclesBeforeStop => HistoryTuning.CatchUpStagnantCyclesBeforeStop;
 
         private string CurrentUserAvatar => _selfProfile.AvatarUrl;
 
@@ -890,8 +880,9 @@ namespace Unison.Uwp.Services.WhatsApp
             HistoryOnDemandRegistry historyRequests,
             HistoryCatchUpContinuation catchUp,
             InitialSyncProgressState initialSync,
-            SyncBudget syncBudget,
-            SyncWorkloadStrategy workload,
+            SyncProductPolicy productPolicy,
+            StartupMaintenanceCoordinator startupMaintenance,
+            PostReplayMaintenanceCoordinator postReplayMaintenance,
             SelfProfileState selfProfile,
             IPersonStore personStore,
             IGroupRosterStore groupRosterStore,
@@ -993,11 +984,11 @@ namespace Unison.Uwp.Services.WhatsApp
                 _userResyncWait.WaitAsync);
             _catchUp = catchUp ?? throw new ArgumentNullException(nameof(catchUp));
             _initialSync = initialSync ?? throw new ArgumentNullException(nameof(initialSync));
-            _syncBudget = syncBudget ?? throw new ArgumentNullException(nameof(syncBudget));
-            _workload = workload ?? throw new ArgumentNullException(nameof(workload));
-            _productPolicy = new SyncProductPolicy(_workload, () => _syncBudget.IsFrugal);
-            _startupMaintenance = new StartupMaintenanceCoordinator(_productPolicy);
-            _postReplayMaintenance = new PostReplayMaintenanceCoordinator(_productPolicy);
+            _productPolicy = productPolicy ?? throw new ArgumentNullException(nameof(productPolicy));
+            _startupMaintenance = startupMaintenance
+                ?? throw new ArgumentNullException(nameof(startupMaintenance));
+            _postReplayMaintenance = postReplayMaintenance
+                ?? throw new ArgumentNullException(nameof(postReplayMaintenance));
             _selfProfile = selfProfile ?? throw new ArgumentNullException(nameof(selfProfile));
             _selfProfileAuth = new SelfProfileAuthSync(
                 _selfProfile,
@@ -1112,7 +1103,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 log: message => Debug.WriteLine("[WhatsAppService] " + message));
             _silentChain = new SilentFullHistoryChainOwner(
                 historyRequests: _historyRequests,
-                silentLotDelay: ((IHistorySyncTuning)_productPolicy).SilentFullHistoryDelay,
+                silentLotDelay: HistoryTuning.SilentFullHistoryDelay,
                 isSocketReady: () =>
                 {
                     var socket = _socket;
@@ -1131,7 +1122,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 log: message => Debug.WriteLine("[WhatsAppService] " + message));
             _periodicFullSafety = new PeriodicFullHistorySafetyOwner(
                 historyRequests: _historyRequests,
-                allowStagnantRepairCascade: ((IHistorySyncTuning)_productPolicy).AllowStagnantRepairCascade,
+                allowStagnantRepairCascade: HistoryTuning.AllowStagnantRepairCascade,
                 settings: _localSettings,
                 isSocketReady: () =>
                 {
@@ -1439,7 +1430,7 @@ namespace Unison.Uwp.Services.WhatsApp
                     "socket-invalidated",
                     "reason=" + reason));
             _deferredStartup = new DeferredStartupMaintenanceOwner(
-                () => TimeSpan.FromMilliseconds(CurrentSyncPacing.DeferredStartupQuietMs),
+                () => PhaseTuning.DeferredStartupQuietWait(IsFirstSyncListHoldInProgress),
                 _startupMaintenance,
                 () => IsAppWindowVisible,
                 () => Chats.Count,
@@ -1930,8 +1921,9 @@ namespace Unison.Uwp.Services.WhatsApp
             HistoryOnDemandRegistry historyRequests,
             HistoryCatchUpContinuation catchUp,
             InitialSyncProgressState initialSync,
-            SyncBudget syncBudget,
-            SyncWorkloadStrategy workload,
+            SyncProductPolicy productPolicy,
+            StartupMaintenanceCoordinator startupMaintenance,
+            PostReplayMaintenanceCoordinator postReplayMaintenance,
             SelfProfileState selfProfile,
             IPersonStore personStore,
             IGroupRosterStore groupRosterStore,
@@ -1955,7 +1947,7 @@ namespace Unison.Uwp.Services.WhatsApp
         {
             return _instance ?? (_instance = new WhatsAppService(
                 chatState, chatRows, activeChat, syncStatus, syncWork, historyMessages, chatPreviews, usyncGate, avatarFetcher, mediaCache, jidAlias, displayNames, historyRequests,
-                catchUp, initialSync, syncBudget, workload, selfProfile, personStore, groupRosterStore, chatStore, systemInfo, ui, pendingMessages, lidMappings, socketSessions, listPaintGate, appMemory, localSettings, resolveContacts, resolveMessages, resolveChats, resolveGroups, resolveHistory, resolveDeferredAvatars, incomingPump, liveMessages));
+                catchUp, initialSync, productPolicy, startupMaintenance, postReplayMaintenance, selfProfile, personStore, groupRosterStore, chatStore, systemInfo, ui, pendingMessages, lidMappings, socketSessions, listPaintGate, appMemory, localSettings, resolveContacts, resolveMessages, resolveChats, resolveGroups, resolveHistory, resolveDeferredAvatars, incomingPump, liveMessages));
         }
 
         /// <summary>
@@ -2184,10 +2176,10 @@ namespace Unison.Uwp.Services.WhatsApp
         bool IPostMessageEnrichmentHost.IsWindowVisible => IsAppWindowVisible;
 
         bool IPostMessageEnrichmentHost.SerializePostSyncEnrichment =>
-            _workload.SerializePostSyncEnrichment;
+            EnrichmentTuning.SerializePostSyncEnrichment;
 
         TimeSpan IPostMessageEnrichmentHost.EnrichmentQuietWait =>
-            TimeSpan.FromSeconds(_workload.PostSyncEnrichmentQuietSeconds);
+            EnrichmentTuning.PostSyncEnrichmentQuietWait;
 
         void IPostMessageEnrichmentHost.LogDeferUntilHeavyFinishes(string reason) =>
                 Debug.WriteLine(

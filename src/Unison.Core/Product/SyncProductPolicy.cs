@@ -17,8 +17,11 @@ namespace Unison.Core.Product
         ISyncLoadMode,
         IHistorySyncTuning,
         IEnrichmentTuning,
-        IStartupMaintenanceTuning
+        IStartupMaintenanceTuning,
+        ISyncPhaseTuning
     {
+        private const int MinHistoryFinalizeMs = 200;
+
         private const int DelayedBulkMinOfflineCount = 50;
         private static readonly TimeSpan FrugalPostReplayQuietWait = TimeSpan.FromSeconds(8);
         private static readonly TimeSpan PostReplayQuietWaitDefault = TimeSpan.FromSeconds(12);
@@ -50,6 +53,12 @@ namespace Unison.Core.Product
         bool IHistorySyncTuning.AllowStagnantRepairCascade => _workload.AllowStagnantHistoryRepairCascade;
 
         TimeSpan IHistorySyncTuning.SilentFullHistoryDelay => SilentFullHistoryPolicy.DelayFor(_workload.Category);
+
+        int IHistorySyncTuning.HistoryFinalizeQuietMs =>
+            Math.Max(MinHistoryFinalizeMs, _workload.HistoryFinalizeQuietMs);
+
+        int IHistorySyncTuning.HistoryFullFinalizeDelayMs =>
+            Math.Max(MinHistoryFinalizeMs, _workload.HistoryFullFinalizeDelayMs);
 
         // --- IEnrichmentTuning -----------------------------------------------
 
@@ -85,6 +94,25 @@ namespace Unison.Core.Product
             TimeSpan.FromSeconds(_workload.DeferredAvatarRetryDelaySeconds);
 
         int IEnrichmentTuning.DeferredAvatarMaxRetries => _workload.DeferredAvatarMaxRetries;
+
+        bool IEnrichmentTuning.SerializePostSyncEnrichment => _workload.SerializePostSyncEnrichment;
+
+        TimeSpan IEnrichmentTuning.PostSyncEnrichmentQuietWait =>
+            TimeSpan.FromSeconds(_workload.PostSyncEnrichmentQuietSeconds);
+
+        // --- ISyncPhaseTuning ------------------------------------------------
+
+        TimeSpan ISyncPhaseTuning.StartupQuietFloor(bool firstSyncListHold) =>
+            TimeSpan.FromMilliseconds(PacingFor(firstSyncListHold).StartupQuietFloorMs);
+
+        TimeSpan ISyncPhaseTuning.DeferredStartupQuietWait(bool firstSyncListHold) =>
+            TimeSpan.FromMilliseconds(PacingFor(firstSyncListHold).DeferredStartupQuietMs);
+
+        TimeSpan ISyncPhaseTuning.CatchUpIdleAbort =>
+            TimeSpan.FromSeconds(PacingFor(firstSyncListHold: false).CatchUpIdleAbortSeconds);
+
+        private SyncPacing PacingFor(bool firstSyncListHold) =>
+            SyncPhasePacing.For(_workload, _isFrugal(), firstSyncListHold);
 
         // --- IStartupMaintenanceTuning --------------------------------------
 

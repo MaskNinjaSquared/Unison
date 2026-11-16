@@ -41,5 +41,11 @@ namespace Unison.Core.Contracts.Tuning
         TimeSpan DeferredAvatarRetryDelay { get; }
 
         int DeferredAvatarMaxRetries { get; }
+
+        /// <summary>Run post-sync enrichment passes one after another instead of together.</summary>
+        bool SerializePostSyncEnrichment { get; }
+
+        /// <summary>Quiet wait before post-sync enrichment starts.</summary>
+        TimeSpan PostSyncEnrichmentQuietWait { get; }
     }
 }

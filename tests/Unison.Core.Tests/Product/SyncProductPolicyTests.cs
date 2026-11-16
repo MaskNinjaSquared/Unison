@@ -113,5 +113,59 @@ namespace Unison.Core.Tests.Product
 
             Assert.Equal(debounced ? TimeSpan.FromMilliseconds(750) : (TimeSpan?)null, tuning.GroupRosterFlushDebounce);
         }
+
+        [Theory]
+        [InlineData(DeviceCategory.High, false)]
+        [InlineData(DeviceCategory.Low, true)]
+        [InlineData(DeviceCategory.Unsupported, false)]
+        public void Phase_quiet_follows_tier_pacing_and_list_hold(DeviceCategory category, bool frugal)
+        {
+            SyncWorkloadStrategy workload = SyncWorkloadStrategy.For(category);
+            ISyncPhaseTuning tuning = new SyncProductPolicy(workload, () => frugal);
+
+            SyncPacing open = SyncPhasePacing.For(workload, frugal, firstSyncListHold: false);
+            SyncPacing held = SyncPhasePacing.For(workload, frugal, firstSyncListHold: true);
+
+            Assert.Equal(TimeSpan.FromMilliseconds(open.StartupQuietFloorMs), tuning.StartupQuietFloor(false));
+            Assert.Equal(TimeSpan.FromMilliseconds(held.StartupQuietFloorMs), tuning.StartupQuietFloor(true));
+            Assert.Equal(TimeSpan.FromMilliseconds(open.DeferredStartupQuietMs), tuning.DeferredStartupQuietWait(false));
+            Assert.Equal(TimeSpan.FromMilliseconds(held.DeferredStartupQuietMs), tuning.DeferredStartupQuietWait(true));
+            Assert.Equal(TimeSpan.FromSeconds(open.CatchUpIdleAbortSeconds), tuning.CatchUpIdleAbort);
+        }
+
+        [Fact]
+        public void List_hold_shortens_startup_quiet_floor()
+        {
+            ISyncPhaseTuning tuning = new SyncProductPolicy(SyncWorkloadStrategy.For(DeviceCategory.Low), () => true);
+
+            Assert.True(tuning.StartupQuietFloor(true) <= TimeSpan.FromMilliseconds(SyncPhasePacing.HoldStartupQuietFloorMs));
+            Assert.True(tuning.DeferredStartupQuietWait(true) <= TimeSpan.FromMilliseconds(SyncPhasePacing.HoldDeferredStartupQuietMs));
+        }
+
+        [Theory]
+        [InlineData(DeviceCategory.High)]
+        [InlineData(DeviceCategory.Low)]
+        [InlineData(DeviceCategory.Unsupported)]
+        public void History_finalize_waits_never_drop_below_200ms(DeviceCategory category)
+        {
+            SyncWorkloadStrategy workload = SyncWorkloadStrategy.For(category);
+            IHistorySyncTuning tuning = new SyncProductPolicy(workload, () => false);
+
+            Assert.Equal(Math.Max(200, workload.HistoryFinalizeQuietMs), tuning.HistoryFinalizeQuietMs);
+            Assert.Equal(Math.Max(200, workload.HistoryFullFinalizeDelayMs), tuning.HistoryFullFinalizeDelayMs);
+        }
+
+        [Theory]
+        [InlineData(DeviceCategory.High)]
+        [InlineData(DeviceCategory.Low)]
+        [InlineData(DeviceCategory.Unsupported)]
+        public void Post_sync_enrichment_knobs_come_from_the_tier(DeviceCategory category)
+        {
+            SyncWorkloadStrategy workload = SyncWorkloadStrategy.For(category);
+            IEnrichmentTuning tuning = new SyncProductPolicy(workload, () => false);
+
+            Assert.Equal(workload.SerializePostSyncEnrichment, tuning.SerializePostSyncEnrichment);
+            Assert.Equal(TimeSpan.FromSeconds(workload.PostSyncEnrichmentQuietSeconds), tuning.PostSyncEnrichmentQuietWait);
+        }
     }
 }
