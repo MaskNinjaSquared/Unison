@@ -71,7 +71,7 @@ namespace Unison.Uwp.Services.WhatsApp
             snapshot.IncomingPumpMessageId = incoming.CurrentMessageId;
             snapshot.IncomingPumpStageUtc = DiagnosticUtcTicks.ToDateTime(incoming.StageUtcTicks);
 
-            snapshot.PersistPending = _persistScheduler.IsPending;
+            snapshot.PersistPending = _catalogPersistence.IsPersistPending;
 
             snapshot.OfflinePersistPendingMessageCount = _offlineReplayFlush.PendingCount;
             snapshot.OfflineReplayFlushRequested = _offlineReplayFlush.IsFlushClaimed;

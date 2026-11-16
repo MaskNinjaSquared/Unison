@@ -49,7 +49,7 @@ using Unison.WhatsAppClient.Helpers;
 
 namespace Unison.Uwp.Services.WhatsApp
 {
-    public partial class WhatsAppService : INotifyPropertyChanged, IConnectionSessionHost, IOfflineReplayHost, IOfflineReplayFlushIoHost, IChatCatalogPersistHost, IPostReplayMaintenanceHost, IPostMessageEnrichmentHost, IPlaceholderResendSocket, IRuntimeSnapshotSource, IBackgroundResolutionGate, IConversationResyncHost, IConnectionEnsureHost, IConnectionResumeHost, IConnectionPairingStage2Host, IConnectionBrokerTransferHost, IConnectionSoftReconnectHost, IConnectionLifecycleHost, IConnectionConnectGateSource, IConnectionConnectPrepareHost, IConnectionSocketAssignment, IConnectionAssignedSocketClearHost, ISelfIdentityHealHost, IStartupUiHost, IResolvedNameApplyHost, IInitializeConnectionStateHost, IBrokerReconnectConsumeHost, IPublishConnectionUpdateHost, IDropCurrentSocketForFastResumeHost, IConnectionHealthMonitorIoHost, IConnectAsyncHost, IPostSyncMaintenanceIoHost
+    public partial class WhatsAppService : INotifyPropertyChanged, IConnectionSessionHost, IOfflineReplayHost, IPostReplayMaintenanceHost, IPostMessageEnrichmentHost, IPlaceholderResendSocket, IRuntimeSnapshotSource, IBackgroundResolutionGate, IConversationResyncHost, IConnectionEnsureHost, IConnectionResumeHost, IConnectionPairingStage2Host, IConnectionBrokerTransferHost, IConnectionSoftReconnectHost, IConnectionLifecycleHost, IConnectionConnectGateSource, IConnectionConnectPrepareHost, IConnectionSocketAssignment, IConnectionAssignedSocketClearHost, ISelfIdentityHealHost, IStartupUiHost, IResolvedNameApplyHost, IInitializeConnectionStateHost, IBrokerReconnectConsumeHost, IPublishConnectionUpdateHost, IDropCurrentSocketForFastResumeHost, IConnectionHealthMonitorIoHost, IConnectAsyncHost, IPostSyncMaintenanceIoHost
     {
         public event PropertyChangedEventHandler PropertyChanged;
         protected void OnPropertyChanged([CallerMemberName] string propertyName = null)
@@ -128,9 +128,6 @@ namespace Unison.Uwp.Services.WhatsApp
         private readonly Func<IGroupService> _resolveGroups;
         private readonly Func<IHistoryWireIngress> _resolveHistory;
         private readonly Func<IDeferredAvatarResolution> _resolveDeferredAvatars;
-        private readonly ChatCatalogDebounceTimer _catalogDebounce = new ChatCatalogDebounceTimer();
-        private readonly ChatCatalogDebounceTimer _rowPersistDebounce = new ChatCatalogDebounceTimer();
-        private readonly ChatCatalogRowPersistBuffer _rowPersistBuffer = new ChatCatalogRowPersistBuffer();
 
         internal IMessageWireIngress Messages => _resolveMessages != null ? _resolveMessages() : null;
 
@@ -283,22 +280,15 @@ namespace Unison.Uwp.Services.WhatsApp
         private PersistedMessageLookup _persistedLookup;
         private ActiveChatCacheSideEffects _activeChatSideEffects;
         private readonly HistoryCatchUpContinuation _catchUp;
-        // Default retry delay for the deferred background-resolution pass (names+avatars+groups).
-        
-        // Debounce timer for persisting data (5 seconds)
-
-        /// <summary>Whether the catalogue owes a save, and whether startup is still warming up.</summary>
-        private readonly PersistScheduler _persistScheduler = new PersistScheduler();
+        /// <summary>Catalogue save scheduling, row buffer and the queued-message flush.</summary>
+        private readonly ChatCatalogPersistenceHost _catalogPersistence;
         /// <summary>
         /// Messages accepted but not yet written. Shared DI singleton with
         /// <c>MessageFacade.QueueIncomingPersist</c> so enqueue and flush see one queue.
         /// </summary>
         private readonly PendingMessageQueue _pendingMessages;
 
-        /// <summary>
-        /// Owns flush lock / idle timer / claim-drain. SQLite I/O stays on this client
-        /// via <see cref="IOfflineReplayFlushIoHost"/>.
-        /// </summary>
+        /// <summary>Owned by <see cref="ChatCatalogPersistenceHost"/>.</summary>
         private readonly OfflineReplayFlush _offlineReplayFlush;
         /// <summary>
         /// Post-replay + post-message enrichment CTS / once-per-session CAS live on
@@ -307,7 +297,6 @@ namespace Unison.Uwp.Services.WhatsApp
         /// </summary>
         private readonly PostSyncMaintenanceOwner _postSyncMaintenance;
         private readonly SelfProfileAuthSync _selfProfileAuth;
-        private readonly ChatCatalogDiskPersistence _catalogDisk;
         private readonly BackgroundDisplayNamesPersistence _backgroundDisplayNames;
         private readonly LoadPersistedUiStateOwner _persistedUiState;
         private readonly ReleaseMemoryOwner _releaseMemory;

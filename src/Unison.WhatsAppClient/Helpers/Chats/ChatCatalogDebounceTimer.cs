@@ -1,16 +1,15 @@
 // =============================================================================
 // ChatCatalogDebounceTimer
 //
-// Owns the debounce Timer field for catalogue persist. WhatsAppService only
-// arms / disposes through this helper — Persistence.cs no longer holds the
-// Timer itself.
+// Owns the debounce Timer field for catalogue persist. ChatCatalogPersistenceHost
+// only arms / disposes through this helper.
 // =============================================================================
 using System;
 using System.Threading;
 
-namespace Unison.Uwp.Services.WhatsApp.Chats
+namespace Unison.WhatsAppClient.Helpers
 {
-    internal sealed class ChatCatalogDebounceTimer : IDisposable
+    public sealed class ChatCatalogDebounceTimer : IDisposable
     {
         private readonly object _gate = new object();
         private Timer _timer;

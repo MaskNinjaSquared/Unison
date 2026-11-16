@@ -122,7 +122,8 @@ namespace Unison.Uwp.Services.WhatsApp
 
             _pendingMessages = pendingMessages
                 ?? throw new ArgumentNullException(nameof(pendingMessages));
-            _offlineReplayFlush = new OfflineReplayFlush(_pendingMessages, this);
+            _catalogPersistence = wire.CatalogPersistence;
+            _offlineReplayFlush = _catalogPersistence.OfflineReplayFlush;
             _historyCatchUp = wire.HistoryCatchUp;
             _connectionSession = wire.ConnectionSession;
             _reconnectHost = wire.Reconnect;
@@ -225,15 +226,6 @@ namespace Unison.Uwp.Services.WhatsApp
             _jids = jidResolver;
             _receipts = new ReceiptReader(jidResolver);
             _persistedLookup = new PersistedMessageLookup(_historyMessages, jidResolver);
-            _catalogDisk = new ChatCatalogDiskPersistence(
-                _chatState,
-                JidAlias,
-                _messageStore,
-                _chatPreviews,
-                _ui,
-                () => History,
-                _diagnostics,
-                _appMemory);
             _backgroundDisplayNames = new BackgroundDisplayNamesPersistence(
                 _chatState,
                 JidAlias,
@@ -247,7 +239,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 () => _authSlot.Current?.Registered == true,
                 () => _persistedUiLoadGate.EnterAsync(),
                 () => _persistedUiLoadGate.Exit(),
-                () => _catalogDisk.LoadPersistedChatsAsync(),
+                () => _catalogPersistence.LoadPersistedChatsAsync(),
                 () => _persistedUiStateLoaded = true,
                 chatRowCount => _diagnostics.Write(
                     "startup",

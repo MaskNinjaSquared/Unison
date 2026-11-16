@@ -2,6 +2,10 @@
 
 Newest first.
 
+## Phase D stage 4 — `ChatCatalogPersistenceHost` (netstandard)
+
+`ChatCatalogPersistenceHost` (`Unison.WhatsAppClient/Helpers/Chats`) owns the persist scheduler, both debounce timers (`ChatCatalogDebounceTimer` moved with it), the row buffer, `ChatCatalogDiskPersistence` and `OfflineReplayFlush`, and implements `IChatCatalogPersistence`, `IChatCatalogPersistHost` and `IOfflineReplayFlushIoHost`. DI resolves `IChatCatalogPersistence` and `OfflineReplayFlush` from it, so neither builds `WhatsAppService` any more. Debug prefix is `[ChatCatalogPersistenceHost]`. Move-only.
+
 ## Message store — one instance
 
 `WhatsAppService` used to build its own `MessageStore` beside the DI singleton the facades use. Epoch rotation (logout wipe, conversation resync) ran only on the host's copy, so the singleton kept its own write lock, cache and the previous epoch folder until restart. The host now takes `IMessageStore` from DI.

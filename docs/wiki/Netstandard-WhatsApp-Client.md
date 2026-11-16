@@ -645,6 +645,18 @@ Move-only: owner bodies, construction order and every threshold are unchanged; D
 
 `ConnectionSessionHost` (`Unison.WhatsAppClient/Helpers/Connection`, DI singleton) is the connection cluster: `PersistAuthStateOwner`, `MarkPairingRestartPendingOwner`, `InvalidateCurrentSocketOwner`, `NotifyServerLogoutOwner`, `RaiseSessionClearedOwner`, `AuthStateWireOwner`, `SessionInitializedOwner`, `SocketErrorOwner`, `ConnectionUpdateOwner`, and the fatal latch / stream-error report. Socket access is `IConnectionSocketControl`; what it needs from the host is `IConnectionSessionHostPort` (lazy). `SocketEventHandlerWiring` still reaches the wire owners through the host's forwarding properties. `ClearSessionOwner` stays wired in the host until there is a storage wipe port worth having: every step it runs is AuthStore / key store / Noise store / toast / tile / UI-collection I/O.
 
+`ChatCatalogPersistenceHost` (`Unison.WhatsAppClient/Helpers/Chats`, DI singleton) is the persistence cluster: persist scheduler, debounce timers, row buffer, `ChatCatalogDiskPersistence`, `OfflineReplayFlush`. It needs nothing from the host. The host and the facades share one `IMessageStore` (DI); before this stage the host built a second `MessageStore`, and epoch rotation on wipe/resync only reached the host's copy.
+
+#### Where stage 4 stops
+
+`WhatsAppService` went from about 5,000 lines (before stage 4) to about 3,760. It is **not** deleted in this round, and it is not yet only the transport shell. What remains, and why:
+
+- **Transport shell (stays in UWP by design):** connect / open through `UwpWhatsAppTransportFactory` + `SocketBridge`, socket assign / dispose, health-monitor IO, broker transfer / reclaim and reconnect consume (`SocketActivityInformation`), reconnect-required toasts, `AuthStore` / `FileKeyStore` / `NoiseSessionStore`.
+- **Startup and maintenance owners still wired in the host:** `LoadPersistedUiStateOwner` (calls `InitializeConnectionStateAsync`), `DeferredStartupMaintenanceOwner`, `ReleaseMemoryOwner`, `PostSyncMaintenanceOwner` (the host implements `IPostSyncMaintenanceIoHost`), `ResyncConversationsOwner`, `HistorySyncWireOwner`, `OfflineReplayReleaseOwner`, `OfflineSyncedWatchdog`, `ClearSessionOwner`, `SelfProfileAuthSync`. Their lambdas reach facades through the host's lazy resolvers, the connection init path, or UWP stores (`BackgroundDisplayNameStore`, `NotificationService`). Moving the owners alone would not shrink anything; the next cut has to take the IO host bodies with them (as the three clusters above did).
+- **Compatibility surface:** the members App, `AppStateSyncService` and the UI still call on the client.
+
+Next step, when scheduled: a startup cluster that owns `InitializeConnectionStateAsync` + persisted UI load + deferred maintenance, with the connection init behind a port.
+
 ### Phase E (future) — client-owned public I/O
 
 **Not** Phase C/D work. Long-term goal: `Unison.WhatsAppClient` publishable / reusable without dragging Unison UI models — a portable WhatsApp **policy** library whose **entry and exit** types live on the client (or a thin contracts package next to it), not on Unison.Core ViewModel-shaped models.

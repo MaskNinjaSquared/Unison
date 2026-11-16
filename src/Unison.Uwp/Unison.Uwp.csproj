@@ -209,7 +209,6 @@
     <Compile Include="Services\WhatsApp\History\WinRtHistoryMessageThumbnailMaterializer.cs" />
     <Compile Include="Services\WhatsApp\History\BridgeHistoryOnDemandSocket.cs" />
     <Compile Include="Services\WhatsApp\Identity\BridgeSocketAliasRegistrar.cs" />
-    <Compile Include="Services\WhatsApp\Chats\ChatCatalogDebounceTimer.cs" />
     <Compile Include="Services\WhatsApp\Status\WinRtStatusThumbnailMaterializer.cs" />
     <Compile Include="Services\Network\WinRtNetworkAccess.cs" />
     <Compile Include="Services\WinRtAppMemoryInfo.cs" />

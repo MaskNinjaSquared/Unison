@@ -1243,13 +1243,8 @@ namespace Unison.Uwp.Services.WhatsApp
             _offlineReplayFlush?.ClearTimer();
         }
 
-        void IConnectionLifecycleHost.ResetPersistScheduler()
-        {
-            FlushPendingCatalogRows();
-            _catalogDebounce.Dispose();
-            _rowPersistDebounce.Dispose();
-            _persistScheduler.Reset();
-        }
+        void IConnectionLifecycleHost.ResetPersistScheduler() =>
+            _catalogPersistence.ResetPersistScheduler();
 
         Task IConnectionLifecycleHost.WaitForIncomingQueueDrainAsync(int timeoutMs) =>
             _incomingPump.WaitForDrainAsync(timeoutMs);
@@ -1273,7 +1268,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
         async Task IConnectionLifecycleHost.PersistSuspendTailWithBudgetAsync(int budgetMs)
         {
-            var persistTail = _catalogDisk.PersistSuspendTailAsync();
+            var persistTail = _catalogPersistence.PersistSuspendTailAsync();
             var completed = await Task.WhenAny(persistTail, Task.Delay(budgetMs)).ConfigureAwait(false);
             if (completed == persistTail)
             {

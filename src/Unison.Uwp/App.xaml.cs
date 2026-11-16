@@ -498,7 +498,19 @@ namespace Unison.Uwp
                 sp.GetRequiredService<ReconnectHostAdapter>(),
                 sp.GetRequiredService<CurrentSocketHealthHost>(),
                 sp.GetRequiredService<HistoryCatchUpHost>(),
-                sp.GetRequiredService<ConnectionSessionHost>()));
+                sp.GetRequiredService<ConnectionSessionHost>(),
+                sp.GetRequiredService<ChatCatalogPersistenceHost>()));
+            services.AddSingleton(sp => new ChatCatalogPersistenceHost(
+                sp.GetRequiredService<ChatStateStore>(),
+                sp.GetRequiredService<JidAliasTable>(),
+                sp.GetRequiredService<IMessageStore>(),
+                sp.GetRequiredService<IHistoryChatPreviewStore>(),
+                sp.GetRequiredService<AttachedUiDispatcher>(),
+                () => sp.GetRequiredService<IHistoryWireIngress>(),
+                sp.GetRequiredService<PendingMessageQueue>(),
+                sp.GetRequiredService<LiveMessagePersist>(),
+                sp.GetRequiredService<IAppMemoryInfo>(),
+                sp.GetRequiredService<IRuntimeDiagnostics>()));
             services.AddSingleton(sp => new HistoryCatchUpHost(
                 () => sp.GetRequiredService<WhatsAppService>(),
                 () => sp.GetRequiredService<IConnectionEnsureHost>(),
@@ -774,7 +786,7 @@ namespace Unison.Uwp
             // The save debounce stays on the client until its shutdown path moves (phase 4);
             // façades reach it only through this port.
             services.AddSingleton<IChatCatalogPersistence>(
-                sp => sp.GetRequiredService<WhatsAppService>());
+                sp => sp.GetRequiredService<ChatCatalogPersistenceHost>());
             services.AddSingleton<IChatIdentityPersistence>(sp => new ChatIdentityPersistence(
                 sp.GetRequiredService<ChatStateStore>(),
                 sp.GetRequiredService<JidAliasTable>(),
@@ -847,7 +859,7 @@ namespace Unison.Uwp
                 sp => sp.GetRequiredService<WhatsAppService>());
             services.AddSingleton<IBoundMutationGate>(
                 sp => sp.GetRequiredService<WhatsAppService>());
-            services.AddSingleton(sp => sp.GetRequiredService<WhatsAppService>().OfflineReplayFlush);
+            services.AddSingleton(sp => sp.GetRequiredService<ChatCatalogPersistenceHost>().OfflineReplayFlush);
             services.AddSingleton<IPendingMessageFlushHost>(
                 sp => sp.GetRequiredService<OfflineReplayFlush>());
             services.AddSingleton<IMessageService>(sp => sp.GetRequiredService<MessageFacade>());

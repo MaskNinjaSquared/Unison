@@ -24,8 +24,11 @@ namespace Unison.Uwp.Services.WhatsApp
             ReconnectHostAdapter reconnect,
             CurrentSocketHealthHost currentSocketHealth,
             HistoryCatchUpHost historyCatchUp,
-            ConnectionSessionHost connectionSession)
+            ConnectionSessionHost connectionSession,
+            ChatCatalogPersistenceHost catalogPersistence)
         {
+            CatalogPersistence = catalogPersistence
+                ?? throw new ArgumentNullException(nameof(catalogPersistence));
             Reconnect = reconnect ?? throw new ArgumentNullException(nameof(reconnect));
             HistoryCatchUp = historyCatchUp ?? throw new ArgumentNullException(nameof(historyCatchUp));
             ConnectionSession = connectionSession
@@ -51,6 +54,8 @@ namespace Unison.Uwp.Services.WhatsApp
         public HistoryCatchUpHost HistoryCatchUp { get; }
 
         public ConnectionSessionHost ConnectionSession { get; }
+
+        public ChatCatalogPersistenceHost CatalogPersistence { get; }
 
         public CurrentSocketHealthHost CurrentSocketHealth { get; }
 
