@@ -106,7 +106,8 @@ namespace Unison.Uwp.Services.WhatsApp
             VerboseLog.Initialize();
         }
 
-        private IWhatsAppSocket _socket;
+        /// <summary>Live socket; shared DI slot so connection adapters outside the client see it.</summary>
+        private readonly ConnectionSlot<IWhatsAppSocket> _socketSlot;
         private readonly LidMappingStore _lidMappings;
         private readonly IConnectionSocketSessionFactory _socketSessions;
         private readonly ConnectionOpenHost _connectionOpen;
@@ -210,7 +211,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
         private bool IsActiveChatJid(string jid) => _activeChat.IsOpen(jid);
 
-        private AuthState _authState;
+        private readonly ConnectionSlot<AuthState> _authSlot;
 
         private bool _isConnecting = false;
         /// <summary>Reconnect / pairing / logout latches; shared DI singleton.</summary>
@@ -401,18 +402,18 @@ namespace Unison.Uwp.Services.WhatsApp
         private int SqliteHistoryFullFinalizeDelayMs => HistoryTuning.HistoryFullFinalizeDelayMs;
 
         /// <summary>UWP transport only; outside this assembly use <see cref="IConnectionService"/> / fa?ades.</summary>
-        internal IWhatsAppSocket Socket => _socket;
+        internal IWhatsAppSocket Socket => _socketSlot.Current;
         /// <summary>Session keys; the profile the app shows is <see cref="SelfProfileState"/>.</summary>
-        internal AuthState AuthState => _authState;
+        internal AuthState AuthState => _authSlot.Current;
 
         public bool IsConnected =>
-            _socket != null &&
-            _socket.IsConnected &&
-            _socket.IsHandshakeComplete;
+            _socketSlot.Current != null &&
+            _socketSlot.Current.IsConnected &&
+            _socketSlot.Current.IsHandshakeComplete;
 
         public bool IsTransportReady =>
-            _socket != null &&
-            _socket.IsHandshakeComplete;
+            _socketSlot.Current != null &&
+            _socketSlot.Current.IsHandshakeComplete;
 
         /// <summary>
         /// True while FULL_HISTORY catch-up is owed or its banner is up. Used by
@@ -515,7 +516,7 @@ namespace Unison.Uwp.Services.WhatsApp
             snapshot.OfflinePersistPendingMessageCount = _offlineReplayFlush.PendingCount;
             snapshot.OfflineReplayFlushRequested = _offlineReplayFlush.IsFlushClaimed;
 
-            var socket = _socket;
+            var socket = _socketSlot.Current;
             if (socket != null)
             {
                 snapshot.IsSocketConnected = socket.IsConnected;
@@ -686,7 +687,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
         private SelfProfileAccount ReadSelfProfileAccount()
         {
-            var me = _authState?.Me;
+            var me = _authSlot.Current?.Me;
             if (me == null)
             {
                 return null;
@@ -707,12 +708,12 @@ namespace Unison.Uwp.Services.WhatsApp
         {
             get
             {
-                if (!string.IsNullOrWhiteSpace(_authState?.Me?.Phone))
+                if (!string.IsNullOrWhiteSpace(_authSlot.Current?.Me?.Phone))
                 {
-                    return _authState.Me.Phone;
+                    return _authSlot.Current.Me.Phone;
                 }
 
-                return JidHelper.TryPhoneFromJid(_authState?.Me?.Id);
+                return JidHelper.TryPhoneFromJid(_authSlot.Current?.Me?.Id);
             }
         }
 
@@ -811,7 +812,9 @@ namespace Unison.Uwp.Services.WhatsApp
             LiveMessagePersist liveMessages = null,
             IRuntimeDiagnostics diagnostics = null,
             InitGateOwner initGate = null,
-            ConnectionSessionFlags sessionFlags = null)
+            ConnectionSessionFlags sessionFlags = null,
+            ConnectionSlot<IWhatsAppSocket> socketSlot = null,
+            ConnectionSlot<AuthState> authSlot = null)
         {
             if (chatState == null)
             {
@@ -821,6 +824,8 @@ namespace Unison.Uwp.Services.WhatsApp
             _diagnostics = diagnostics ?? throw new ArgumentNullException(nameof(diagnostics));
             _initGate = initGate ?? throw new ArgumentNullException(nameof(initGate));
             _sessionFlags = sessionFlags ?? throw new ArgumentNullException(nameof(sessionFlags));
+            _socketSlot = socketSlot ?? throw new ArgumentNullException(nameof(socketSlot));
+            _authSlot = authSlot ?? throw new ArgumentNullException(nameof(authSlot));
             _lidMappings = lidMappings;
             _socketSessions = socketSessions
                 ?? throw new ArgumentNullException(nameof(socketSessions));
@@ -855,7 +860,7 @@ namespace Unison.Uwp.Services.WhatsApp
             _resolveGroups = resolveGroups;
             _resolveHistory = resolveHistory;
             _resolveDeferredAvatars = resolveDeferredAvatars;
-            _historyOnDemandSocket = new SocketOwnedHistoryOnDemand(() => _socket);
+            _historyOnDemandSocket = new SocketOwnedHistoryOnDemand(() => _socketSlot.Current);
             _incomingPump = incomingPump ?? throw new ArgumentNullException(nameof(incomingPump));
             _ui = ui ?? throw new ArgumentNullException(nameof(ui));
             _listPaintGate = listPaintGate ?? new ChatListInitialPaintGate();
@@ -901,29 +906,29 @@ namespace Unison.Uwp.Services.WhatsApp
             _selfProfile = selfProfile ?? throw new ArgumentNullException(nameof(selfProfile));
             _selfProfileAuth = new SelfProfileAuthSync(
                 _selfProfile,
-                () => _authState?.Me != null,
+                () => _authSlot.Current?.Me != null,
                 () => NormalizeSelfNameCandidate(
-                    _authState.Me.Name,
-                    NormalizeJid(_authState.Me.Id),
-                    NormalizeJid(_authState.Me.Lid)),
+                    _authSlot.Current.Me.Name,
+                    NormalizeJid(_authSlot.Current.Me.Id),
+                    NormalizeJid(_authSlot.Current.Me.Lid)),
                 () => CurrentUserName,
                 value => CurrentUserName = value,
-                () => _authState?.Me?.Name,
+                () => _authSlot.Current?.Me?.Name,
                 IsOwnPhoneEchoLabel,
-                () => { _authState.Me.Name = null; },
+                () => { _authSlot.Current.Me.Name = null; },
                 () => { _ = _persistAuthState.RunAsync(null, "clear-phone-echo-name"); },
                 () => CurrentUserAvatar,
-                () => _authState?.Me?.AvatarUrl,
+                () => _authSlot.Current?.Me?.AvatarUrl,
                 avatarUrl => _selfProfile.RestoreAvatar(avatarUrl),
-                () => _authState?.Me?.Id,
-                () => _authState?.Me?.Phone,
-                phone => { _authState.Me.Phone = phone; },
+                () => _authSlot.Current?.Me?.Id,
+                () => _authSlot.Current?.Me?.Phone,
+                phone => { _authSlot.Current.Me.Phone = phone; },
                 () => OnPropertyChanged(nameof(CurrentUserPhone)),
                 () => _selfProfile.NotifyChanged(),
                 () => { _ = _persistAuthState.RunAsync(null, "self-phone"); },
-                avatarUrl => { _authState.Me.AvatarUrl = avatarUrl; },
-                () => _authStore != null && _authState != null,
-                () => _authStore.SaveAsync(_authState));
+                avatarUrl => { _authSlot.Current.Me.AvatarUrl = avatarUrl; },
+                () => _authStore != null && _authSlot.Current != null,
+                () => _authStore.SaveAsync(_authSlot.Current));
             _selfProfile.Bind(ReadSelfProfileAccount, IsOwnPhoneEchoLabel, url => _selfProfileAuth.PersistAvatarUrl(url));
             _historyMessages = historyMessages ?? throw new ArgumentNullException(nameof(historyMessages));
             _liveMessages = liveMessages ?? new LiveMessagePersist(_historyMessages);
@@ -932,15 +937,15 @@ namespace Unison.Uwp.Services.WhatsApp
             _avatarFetcher = avatarFetcher ?? throw new ArgumentNullException(nameof(avatarFetcher));
             _mediaCache = mediaCache ?? throw new ArgumentNullException(nameof(mediaCache));
             JidAlias = jidAlias ?? throw new ArgumentNullException(nameof(jidAlias));
-            JidAlias.BindSelf(() => _authState?.Me?.Id, () => _authState?.Me?.Lid, () => CurrentUserPhone);
+            JidAlias.BindSelf(() => _authSlot.Current?.Me?.Id, () => _authSlot.Current?.Me?.Lid, () => CurrentUserPhone);
             JidAlias.Changed += (s, e) => InvalidateChatRowIndex();
             _displayNames = displayNames ?? throw new ArgumentNullException(nameof(displayNames));
             _displayNames.Bind(
                 () => new SelfNameInputs
                 {
-                    Id = _authState?.Me?.Id,
-                    Lid = _authState?.Me?.Lid,
-                    CredentialsName = _authState?.Me?.Name,
+                    Id = _authSlot.Current?.Me?.Id,
+                    Lid = _authSlot.Current?.Me?.Lid,
+                    CredentialsName = _authSlot.Current?.Me?.Name,
                     CurrentUserName = CurrentUserName,
                     Phone = CurrentUserPhone
                 },
@@ -1015,7 +1020,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 silentLotDelay: HistoryTuning.SilentFullHistoryDelay,
                 isSocketReady: () =>
                 {
-                    var socket = _socket;
+                    var socket = _socketSlot.Current;
                     return IsConnected &&
                            socket != null &&
                            socket.IsHandshakeComplete;
@@ -1035,7 +1040,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 settings: _localSettings,
                 isSocketReady: () =>
                 {
-                    var socket = _socket;
+                    var socket = _socketSlot.Current;
                     return IsConnected &&
                            socket != null &&
                            socket.IsConnected &&
@@ -1123,8 +1128,8 @@ namespace Unison.Uwp.Services.WhatsApp
             _socketTearDown = new TearDownSocketForSoftReconnectOwner(
                 () =>
                 {
-                    var staleSocket = _socket;
-                    _socket = null;
+                    var staleSocket = _socketSlot.Current;
+                    _socketSlot.Current = null;
                     return staleSocket;
                 },
                 socket =>
@@ -1170,7 +1175,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 freshnessRepair: _freshnessRepair,
                 heavyHistoryEnrichment: _heavyHistoryEnrichment,
                 suppressReconnect: () => _sessionFlags.SuppressReconnect,
-                isAuthRegistered: () => _authState != null && _authState.Registered,
+                isAuthRegistered: () => _authSlot.Current != null && _authSlot.Current.Registered,
                 tryGetStaleReason: TryGetHistoryFreshnessStaleReason,
                 finishCatchUpContinue: _catchUpFinish.Run,
                 beginCatchUpBanner: BeginHistoryCatchUpBanner,
@@ -1194,14 +1199,14 @@ namespace Unison.Uwp.Services.WhatsApp
             _backgroundDisplayNames = new BackgroundDisplayNamesPersistence(
                 _chatState,
                 JidAlias,
-                () => _authState?.Me?.Id,
-                () => _authState?.Me?.Lid,
+                () => _authSlot.Current?.Me?.Id,
+                () => _authSlot.Current?.Me?.Lid,
                 (names, meId, meLid) => BackgroundDisplayNameStore.SaveAsync(names, meId, meLid),
                 _diagnostics);
             _persistedUiState = new LoadPersistedUiStateOwner(
                 InitializeConnectionStateAsync,
                 () => _persistedUiStateLoaded,
-                () => _authState?.Registered == true,
+                () => _authSlot.Current?.Registered == true,
                 () => _persistedUiLoadGate.EnterAsync(),
                 () => _persistedUiLoadGate.Exit(),
                 LoadPersistedChatsAsync,
@@ -1320,9 +1325,9 @@ namespace Unison.Uwp.Services.WhatsApp
                     }
                 });
             _invalidateSocket = new InvalidateCurrentSocketOwner(
-                socket => socket != null && ReferenceEquals(_socket, socket),
+                socket => socket != null && ReferenceEquals(_socketSlot.Current, socket),
                 StopConnectionHealthMonitor,
-                () => _socket = null,
+                () => _socketSlot.Current = null,
                 socket =>
                 {
                     var typed = socket as IWhatsAppSocket;
@@ -1343,7 +1348,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 _startupMaintenance,
                 () => IsAppWindowVisible,
                 () => Chats.Count,
-                () => _authState != null && _authState.Registered,
+                () => _authSlot.Current != null && _authSlot.Current.Registered,
                 () => IsHistoryCatchUpActive(),
                 () => _appMemory.UsageLevel.ToString(),
                 async () =>
@@ -1411,14 +1416,14 @@ namespace Unison.Uwp.Services.WhatsApp
                     "[WhatsAppService] Deferred startup maintenance failed: " +
                     (ex != null ? ex.Message : string.Empty)));
             _serverLogout = new NotifyServerLogoutOwner(
-                () => _socket != null,
+                () => _socketSlot.Current != null,
                 () =>
                 {
                     _sessionFlags.SuppressReconnect = true;
                     _sessionFlags.FatalSessionEnded = true;
                 },
                 StopConnectionHealthMonitor,
-                reason => _socket.LogoutAsync(reason),
+                reason => _socketSlot.Current.LogoutAsync(reason),
                 error => _diagnostics.RecordException(
                     "connection",
                     "logout-notice-failed",
@@ -1445,7 +1450,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 });
             _clearSession = new ClearSessionOwner(
                 message => Log("[WhatsAppService] " + message),
-                () => _pendingClearSessionKeyStore = _socket?.KeyStore,
+                () => _pendingClearSessionKeyStore = _socketSlot.Current?.KeyStore,
                 () => SetSuppressReconnectToast(true),
                 () =>
                 {
@@ -1464,7 +1469,7 @@ namespace Unison.Uwp.Services.WhatsApp
                             ex.Message);
                     }
                 },
-                () => _authState = null,
+                () => _authSlot.Current = null,
                 () =>
                 {
                     _sessionFlags.SuppressReconnect = true;
@@ -1477,10 +1482,10 @@ namespace Unison.Uwp.Services.WhatsApp
                 StopConnectionHealthMonitor,
                 () =>
                 {
-                    if (_socket != null)
+                    if (_socketSlot.Current != null)
                     {
-                        var socket = _socket;
-                        _socket = null;
+                        var socket = _socketSlot.Current;
+                        _socketSlot.Current = null;
                         try { socket.Disconnect(); } catch { /* ignore */ }
                         try { socket.Dispose(); } catch { /* ignore */ }
                     }
@@ -1609,7 +1614,7 @@ namespace Unison.Uwp.Services.WhatsApp
             _authStateWire = new AuthStateWireOwner(
                 () => Debug.WriteLine("[WhatsAppService] Auth state updated, saving..."),
                 FileSelfIdentityAliases,
-                () => _persistAuthState.RunAsync(_socket, "socket-auth-update"));
+                () => _persistAuthState.RunAsync(_socketSlot.Current, "socket-auth-update"));
             _sessionInitializedWire = new SessionInitializedOwner(
                 () => _sessionFlags.FatalSessionEnded,
                 () => _sessionFlags.SessionEstablishedThisConnection = true,
@@ -1618,7 +1623,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 () => _sessionFlags.ResetPreSessionCloseStreak(),
                 () => _sessionEstablishedTcs.TrySetResult(true),
                 () => _selfProfileAuth.EnsureSelfPhonePersisted(),
-                () => _persistAuthState.RunAsync(_socket, "session-initialized"),
+                () => _persistAuthState.RunAsync(_socketSlot.Current, "session-initialized"),
                 ShouldDeferReconnectReplayWork,
                 () => Debug.WriteLine(
                     "[WhatsAppService] Deferring reconnect name/group work until replay drain completes."),
@@ -1655,7 +1660,7 @@ namespace Unison.Uwp.Services.WhatsApp
             _connectionUpdateWire = new ConnectionUpdateOwner(
                 () => _sessionFlags.SuppressReconnect,
                 () => _sessionFlags.FatalSessionEnded,
-                () => _authState != null && _authState.Registered,
+                () => _authSlot.Current != null && _authSlot.Current.Registered,
                 () => _sessionFlags.PairingRestartPending,
                 () => _sessionFlags.SessionEstablishedThisConnection,
                 () => _sessionFlags.CountPreSessionCloseAsFatal,
@@ -1738,7 +1743,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 _incomingPump.Enqueue);
             _historySyncWire = new HistorySyncWireOwner(
                 () => _sessionFlags.FatalSessionEnded,
-                () => _authState != null,
+                () => _authSlot.Current != null,
                 (conversations, syncType) =>
                     _diagnostics.Write(
                         "history",
@@ -1782,7 +1787,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 FlushOfflineReplayFromWireAsync,
                 () =>
                 {
-                    var socket = _socket;
+                    var socket = _socketSlot.Current;
                     return ConnectionTransportReady.IsReady(
                         socket != null,
                         socket != null && socket.IsConnected,
@@ -1793,8 +1798,8 @@ namespace Unison.Uwp.Services.WhatsApp
                         "connection",
                         "offline-replay-synced-skipped",
                         "reason=not-connected; count=" + offlineCount +
-                        "; socketConnected=" + (_socket != null && _socket.IsConnected) +
-                        "; handshake=" + (_socket != null && _socket.IsHandshakeComplete)),
+                        "; socketConnected=" + (_socketSlot.Current != null && _socketSlot.Current.IsConnected) +
+                        "; handshake=" + (_socketSlot.Current != null && _socketSlot.Current.IsHandshakeComplete)),
                 NotifyOfflineReplayMessagesReleasedAsync,
                 _postSyncMaintenance.SchedulePostReplay,
                 IsHistoryCatchUpActive,
@@ -1855,11 +1860,13 @@ namespace Unison.Uwp.Services.WhatsApp
             LiveMessagePersist liveMessages = null,
             IRuntimeDiagnostics diagnostics = null,
             InitGateOwner initGate = null,
-            ConnectionSessionFlags sessionFlags = null)
+            ConnectionSessionFlags sessionFlags = null,
+            ConnectionSlot<IWhatsAppSocket> socketSlot = null,
+            ConnectionSlot<AuthState> authSlot = null)
         {
             return new WhatsAppService(
                 chatState, chatRows, activeChat, syncStatus, syncWork, historyMessages, chatPreviews, usyncGate, avatarFetcher, mediaCache, jidAlias, displayNames, historyRequests,
-                catchUp, initialSync, productPolicy, startupMaintenance, postReplayMaintenance, selfProfile, personStore, groupRosterStore, chatStore, systemInfo, ui, pendingMessages, lidMappings, socketSessions, listPaintGate, appMemory, localSettings, resolveContacts, resolveMessages, resolveChats, resolveGroups, resolveHistory, resolveDeferredAvatars, incomingPump, liveMessages, diagnostics, initGate, sessionFlags);
+                catchUp, initialSync, productPolicy, startupMaintenance, postReplayMaintenance, selfProfile, personStore, groupRosterStore, chatStore, systemInfo, ui, pendingMessages, lidMappings, socketSessions, listPaintGate, appMemory, localSettings, resolveContacts, resolveMessages, resolveChats, resolveGroups, resolveHistory, resolveDeferredAvatars, incomingPump, liveMessages, diagnostics, initGate, sessionFlags, socketSlot, authSlot);
         }
 
         /// <summary>
@@ -1904,7 +1911,7 @@ namespace Unison.Uwp.Services.WhatsApp
         {
             try
             {
-                var bridge = _socket as SocketBridge;
+                var bridge = _socketSlot.Current as SocketBridge;
                 if (bridge == null)
                 {
                     return;
@@ -2009,7 +2016,7 @@ namespace Unison.Uwp.Services.WhatsApp
         bool IHistoryCatchUpHost.IsCatchUpBannerActive => IsHistoryCatchUpBannerActive;
 
         bool IHistoryCatchUpHost.CanSolicitAdjacent =>
-            !_sessionFlags.SuppressReconnect && _authState != null && _authState.Registered;
+            !_sessionFlags.SuppressReconnect && _authSlot.Current != null && _authSlot.Current.Registered;
 
         void IHistoryCatchUpHost.MarkEnrichmentAwaitingHeavyHistory() =>
             _heavyHistoryEnrichment.SetAwaitingHeavyHistory(true);
@@ -2035,7 +2042,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
         async Task<bool> IHistoryCatchUpHost.TryRequestAdjacentLiveFullHistoryAsync(string reason)
         {
-            if (_socket == null || !_socket.IsHandshakeComplete || !IsConnected)
+            if (_socketSlot.Current == null || !_socketSlot.Current.IsHandshakeComplete || !IsConnected)
             {
                 return false;
             }
@@ -2291,15 +2298,15 @@ namespace Unison.Uwp.Services.WhatsApp
         private bool ShouldRefuseConnectBecauseSessionDied() =>
             SessionDiedConnectRefusal.ShouldRefuse(
                 _sessionFlags.FatalSessionEnded,
-                _authState == null,
-                _authState != null && _authState.Registered);
+                _authSlot.Current == null,
+                _authSlot.Current != null && _authSlot.Current.Registered);
 
         private string NormalizeSelfNameCandidate(string candidate, string canonical, string normalized) =>
             SelfNameCandidate.Normalize(candidate, canonical, normalized, _selfMarkers);
 
         private bool IsOwnPhoneEchoLabel(string label)
         {
-            var me = _authState?.Me;
+            var me = _authSlot.Current?.Me;
             return me != null && SelfNameCandidate.IsOwnPhoneEcho(label, me.Id, me.Lid, _selfMarkers);
         }
 

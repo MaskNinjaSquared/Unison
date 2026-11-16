@@ -51,7 +51,7 @@ namespace Unison.Uwp.Services.WhatsApp
         private object ResolveAuthToSave(object sourceSocket)
         {
             var typed = sourceSocket as IWhatsAppSocket;
-            return typed?.Auth ?? _socket?.Auth ?? _authState;
+            return typed?.Auth ?? _socketSlot.Current?.Auth ?? _authSlot.Current;
         }
 
         private async Task AssignAndSaveAuthAsync(object auth)
@@ -62,7 +62,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 return;
             }
 
-            _authState = authToSave;
+            _authSlot.Current = authToSave;
             await _authStore.SaveAsync(authToSave);
         }
 
@@ -138,7 +138,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
         private bool IsOfflineSyncedWatchdogTransportReady()
         {
-            var socket = _socket;
+            var socket = _socketSlot.Current;
             return ConnectionTransportReady.IsReady(
                 socket != null,
                 socket != null && socket.IsConnected,
@@ -168,7 +168,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
         internal bool IsCurrentSocket(object sender)
         {
-            return sender != null && ReferenceEquals(_socket, sender);
+            return sender != null && ReferenceEquals(_socketSlot.Current, sender);
         }
 
         private void StopConnectionHealthMonitor(string reason)
@@ -232,13 +232,13 @@ namespace Unison.Uwp.Services.WhatsApp
 
         // --- IConnectionHealthOwnerPort --------------------------------------
 
-        IWhatsAppSocket IConnectionHealthOwnerPort.CurrentSocket => _socket;
+        IWhatsAppSocket IConnectionHealthOwnerPort.CurrentSocket => _socketSlot.Current;
 
         void IConnectionHealthOwnerPort.ClearCurrentSocketIf(IWhatsAppSocket socket)
         {
-            if (ReferenceEquals(_socket, socket))
+            if (ReferenceEquals(_socketSlot.Current, socket))
             {
-                _socket = null;
+                _socketSlot.Current = null;
             }
         }
 
@@ -295,10 +295,10 @@ namespace Unison.Uwp.Services.WhatsApp
 
         // --- ISoftReconnectIoHost --------------------------------------------
 
-        bool ISoftReconnectIoHost.IsAuthPresent => _authState != null;
+        bool ISoftReconnectIoHost.IsAuthPresent => _authSlot.Current != null;
 
         bool ISoftReconnectIoHost.IsAuthRegistered =>
-            _authState != null && _authState.Registered;
+            _authSlot.Current != null && _authSlot.Current.Registered;
 
         bool ISoftReconnectIoHost.IsConnected => IsConnected;
 
@@ -352,12 +352,12 @@ namespace Unison.Uwp.Services.WhatsApp
                 _diagnostics.Write(
                     "startup",
                     "connection-state-init-begin",
-                    "hasAuth=" + (_authState != null));
+                    "hasAuth=" + (_authSlot.Current != null));
                 await InitializeConnectionStateDispatch.RunAsync(this).ConfigureAwait(false);
                 _diagnostics.Write(
                     "startup",
                     "connection-state-init-end",
-                    "registered=" + (_authState != null && _authState.Registered));
+                    "registered=" + (_authSlot.Current != null && _authSlot.Current.Registered));
             }
             finally
             {
@@ -367,7 +367,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
         // --- IInitializeConnectionStateHost ----------------------------------
 
-        bool IInitializeConnectionStateHost.HasAuthState => _authState != null;
+        bool IInitializeConnectionStateHost.HasAuthState => _authSlot.Current != null;
 
         void IInitializeConnectionStateHost.NoteConnectionStateInitStep(string step) =>
             _diagnostics.Write(
@@ -391,28 +391,28 @@ namespace Unison.Uwp.Services.WhatsApp
 
         async Task IInitializeConnectionStateHost.LoadOrCreateAuthStateAsync()
         {
-                _authState = await _authStore.LoadAsync();
-                if (_authState == null)
+                _authSlot.Current = await _authStore.LoadAsync();
+                if (_authSlot.Current == null)
                 {
-                    _authState = AuthState.Create();
+                    _authSlot.Current = AuthState.Create();
                 Debug.WriteLine(
                     "[WhatsAppService] Created NEW AuthState (ObjID: " +
-                    _authState.GetHashCode() + ")");
+                    _authSlot.Current.GetHashCode() + ")");
                 }
                 else
                 {
                 Debug.WriteLine(
                     "[WhatsAppService] Loaded EXISTING AuthState (ObjID: " +
-                    _authState.GetHashCode() + "), registered: " + _authState.Registered);
+                    _authSlot.Current.GetHashCode() + "), registered: " + _authSlot.Current.Registered);
             }
         }
 
         void IInitializeConnectionStateHost.ApplyLinkedAccountReconnectToastGate()
         {
             bool hasActiveAccount = LinkedAccountGate.HasLinkedAccount(
-                _authState.Registered,
-                _authState.Me != null,
-                _authState.Me != null ? _authState.Me.Id : null);
+                _authSlot.Current.Registered,
+                _authSlot.Current.Me != null,
+                _authSlot.Current.Me != null ? _authSlot.Current.Me.Id : null);
             SetSuppressReconnectToast(!hasActiveAccount);
         }
 
@@ -565,7 +565,7 @@ namespace Unison.Uwp.Services.WhatsApp
         public async Task InitializeAsync()
         {
             await InitializeConnectionStateAsync();
-            if (_authState?.Registered == true)
+            if (_authSlot.Current?.Registered == true)
             {
                 await LoadPersistedUiStateAsync();
             }
@@ -573,11 +573,11 @@ namespace Unison.Uwp.Services.WhatsApp
 
         public async Task<bool> IsRegisteredAsync()
         {
-            if (_authState == null) await InitializeConnectionStateAsync();
+            if (_authSlot.Current == null) await InitializeConnectionStateAsync();
             return LinkedAccountGate.IsRegisteredWithIdentity(
-                _authState != null,
-                _authState != null && _authState.Registered,
-                _authState != null && _authState.Me != null);
+                _authSlot.Current != null,
+                _authSlot.Current != null && _authSlot.Current.Registered,
+                _authSlot.Current != null && _authSlot.Current.Me != null);
         }
 
         /// <summary>
@@ -605,7 +605,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
         async Task<bool> IConnectionResumeHost.TryReclaimBrokerOwnedSocketAsync()
         {
-            var brokerSocket = _socket;
+            var brokerSocket = _socketSlot.Current;
             if (brokerSocket == null || !brokerSocket.IsSocketOwnedByBroker)
             {
                 return false;
@@ -736,8 +736,8 @@ namespace Unison.Uwp.Services.WhatsApp
             await SocketBrokerCoordinator.DisposeBrokerSocketAsync(snapshot.SocketId)
                 .ConfigureAwait(false);
 
-                IWhatsAppSocket staleSocket = _socket;
-                _socket = null;
+                IWhatsAppSocket staleSocket = _socketSlot.Current;
+                _socketSlot.Current = null;
                 if (staleSocket != null)
                 {
                     try { staleSocket.Disconnect(); } catch { }
@@ -764,7 +764,7 @@ namespace Unison.Uwp.Services.WhatsApp
         {
             get
             {
-                var socket = _socket;
+                var socket = _socketSlot.Current;
                 return ConnectionTransportReady.IsReady(
                     socket != null,
                     socket != null && socket.IsConnected,
@@ -776,7 +776,7 @@ namespace Unison.Uwp.Services.WhatsApp
         {
             get
             {
-                var socket = _socket;
+                var socket = _socketSlot.Current;
                 return socket != null && socket.IsSocketOwnedByBroker;
             }
         }
@@ -786,7 +786,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
         void IConnectionBrokerTransferHost.RestartHealthMonitor()
         {
-            var socket = _socket;
+            var socket = _socketSlot.Current;
             if (socket != null)
             {
                 StartConnectionHealthMonitor(socket);
@@ -801,7 +801,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
         Task<bool> IConnectionBrokerTransferHost.TransferSocketToBrokerAsync(string reason)
         {
-            var socket = _socket;
+            var socket = _socketSlot.Current;
             if (socket == null)
             {
                 return Task.FromResult(false);
@@ -818,7 +818,7 @@ namespace Unison.Uwp.Services.WhatsApp
             string enriched = detail;
             if (string.Equals(eventName, "service-transfer-complete", StringComparison.Ordinal))
             {
-                var socket = _socket;
+                var socket = _socketSlot.Current;
                 enriched = "transport=" +
                     (socket != null ? socket.TransportName : string.Empty) +
                     "; " +
@@ -833,7 +833,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
         // --- IIsCurrentSocketHealthyHost -------------------------------------
 
-        object IIsCurrentSocketHealthyHost.CurrentSocket => _socket;
+        object IIsCurrentSocketHealthyHost.CurrentSocket => _socketSlot.Current;
 
         bool IIsCurrentSocketHealthyHost.SocketHasStalledNodeProcessing(object socket)
         {
@@ -892,9 +892,9 @@ namespace Unison.Uwp.Services.WhatsApp
 
         void IIsCurrentSocketHealthyHost.ClearCurrentSocketIfSame(object socket)
         {
-            if (ReferenceEquals(_socket, socket))
+            if (ReferenceEquals(_socketSlot.Current, socket))
             {
-                _socket = null;
+                _socketSlot.Current = null;
             }
         }
 
@@ -961,8 +961,8 @@ namespace Unison.Uwp.Services.WhatsApp
 
         object IDropCurrentSocketForFastResumeHost.TakeCurrentSocketOrNull()
         {
-            var socket = _socket;
-            _socket = null;
+            var socket = _socketSlot.Current;
+            _socketSlot.Current = null;
             return socket;
         }
 
@@ -1046,7 +1046,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
         void IConnectAsyncHost.LogConnectAuthState()
         {
-            var auth = _authState;
+            var auth = _authSlot.Current;
             Debug.WriteLine(
                 "[WhatsAppService] ConnectAsync using AuthState (ObjID: " +
                 auth.GetHashCode() +
@@ -1058,7 +1058,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
         bool IConnectAsyncHost.ComputeReuseLoadedKeyStore()
         {
-            var auth = _authState;
+            var auth = _authSlot.Current;
             return ConnectionConnectPrepare.ShouldReuseLoadedKeyStore(
                 _sharedKeyStore != null,
                 auth.Sessions.Count,
@@ -1070,10 +1070,10 @@ namespace Unison.Uwp.Services.WhatsApp
 
         // --- IAutoReconnectLoopHost ------------------------------------------
 
-        bool IAutoReconnectLoopHost.IsAuthStatePresent => _authState != null;
+        bool IAutoReconnectLoopHost.IsAuthStatePresent => _authSlot.Current != null;
 
         bool IAutoReconnectLoopHost.IsAuthRegistered =>
-            _authState != null && _authState.Registered;
+            _authSlot.Current != null && _authSlot.Current.Registered;
 
         Task<bool> IAutoReconnectLoopHost.IsCurrentSocketHealthyAsync() =>
             IsCurrentSocketHealthyDispatch.RunAsync(this);
@@ -1102,7 +1102,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 _sessionFlags.FatalSessionEnded);
 
         bool IConnectionPairingStage2Host.IsRegistered =>
-            _authState != null && _authState.Registered;
+            _authSlot.Current != null && _authSlot.Current.Registered;
 
         bool IConnectionPairingStage2Host.CanScheduleSoftReconnect =>
             ConnectionSoftReconnectGates.CanScheduleSoftReconnect(
@@ -1162,8 +1162,8 @@ namespace Unison.Uwp.Services.WhatsApp
         {
             _sessionFlags.SuppressReconnect = true;
             StopConnectionHealthMonitor("disconnect");
-            var socket = _socket;
-            _socket = null;
+            var socket = _socketSlot.Current;
+            _socketSlot.Current = null;
             if (socket != null)
             {
                 socket.Disconnect();
@@ -1175,15 +1175,15 @@ namespace Unison.Uwp.Services.WhatsApp
         {
             get
             {
-                var current = _socket;
+                var current = _socketSlot.Current;
                 bool ready = ConnectionTransportReady.IsReady(
                     current != null,
                     current != null && current.IsConnected,
                     current != null && current.IsHandshakeComplete);
                 return ConnectionTransportReady.HasHealthyRegistered(
                     ready,
-                    _authState != null,
-                    _authState != null && _authState.Registered);
+                    _authSlot.Current != null,
+                    _authSlot.Current != null && _authSlot.Current.Registered);
             }
         }
 
@@ -1191,14 +1191,14 @@ namespace Unison.Uwp.Services.WhatsApp
         {
             get
             {
-                var current = _socket;
+                var current = _socketSlot.Current;
                 bool ready = ConnectionTransportReady.IsReady(
                     current != null,
                     current != null && current.IsConnected,
                     current != null && current.IsHandshakeComplete);
                 return ConnectionTransportReady.HasHealthyUnregistered(
                     ready,
-                    _authState == null || !_authState.Registered);
+                    _authSlot.Current == null || !_authSlot.Current.Registered);
             }
         }
 
@@ -1228,13 +1228,13 @@ namespace Unison.Uwp.Services.WhatsApp
         void IConnectionConnectPrepareHost.StopHealthAndDropCurrentSocket()
         {
             StopConnectionHealthMonitor("connect-replace-socket");
-            if (_socket == null)
+            if (_socketSlot.Current == null)
                 {
                     return;
                 }
 
-            var previousSocket = _socket;
-            _socket = null;
+            var previousSocket = _socketSlot.Current;
+            _socketSlot.Current = null;
             previousSocket.Disconnect();
             previousSocket.Dispose();
         }
@@ -1244,20 +1244,20 @@ namespace Unison.Uwp.Services.WhatsApp
 
         async Task IConnectionConnectPrepareHost.EnsureAuthLoadedAsync()
         {
-            if (_authState == null)
+            if (_authSlot.Current == null)
             {
                 await InitializeConnectionStateAsync().ConfigureAwait(false);
             }
         }
 
-        bool IConnectionConnectPrepareHost.HasAuthState => _authState != null;
+        bool IConnectionConnectPrepareHost.HasAuthState => _authSlot.Current != null;
 
         bool IConnectionConnectPrepareHost.ShouldRefuseConnectBecauseSessionDied =>
             ShouldRefuseConnectBecauseSessionDied();
 
         void IConnectionConnectPrepareHost.ApplyRegisteredSessionConnectState()
         {
-            var auth = _authState;
+            var auth = _authSlot.Current;
             if (auth == null)
             {
                     return;
@@ -1289,7 +1289,7 @@ namespace Unison.Uwp.Services.WhatsApp
             bool reuseLoadedKeyState) =>
             new ConnectionSocketSessionRequest
             {
-                AuthState = _authState,
+                AuthState = _authSlot.Current,
                 SharedKeyStore = _sharedKeyStore,
                 ReuseLoadedKeyState = reuseLoadedKeyState,
                 LidMappings = _lidMappings,
@@ -1297,12 +1297,12 @@ namespace Unison.Uwp.Services.WhatsApp
             };
 
         void IConnectionSocketAssignment.AssignSocketSession(object session) =>
-            _socket = session as IWhatsAppSocket;
+            _socketSlot.Current = session as IWhatsAppSocket;
 
         void IConnectionSocketAssignment.ApplyPersistentKeyStore(object keyStore, bool reuseLoadedKeyState)
         {
             _sharedKeyStore = keyStore as FileKeyStore;
-            var auth = _authState;
+            var auth = _authSlot.Current;
             if (auth == null)
             {
                         return;
@@ -1322,7 +1322,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
         void IConnectionSocketAssignment.StartHealthMonitorIfAssignedCurrent()
         {
-            var socket = _socket;
+            var socket = _socketSlot.Current;
             if (socket != null)
             {
                 StartConnectionHealthMonitor(socket);
@@ -1340,8 +1340,8 @@ namespace Unison.Uwp.Services.WhatsApp
 
         void IConnectionAssignedSocketClearHost.DisposeAndClearAssignedSocket()
         {
-            var socket = _socket;
-            _socket = null;
+            var socket = _socketSlot.Current;
+            _socketSlot.Current = null;
             _socketSessions.DisposeSession(socket);
         }
 
@@ -1409,8 +1409,8 @@ namespace Unison.Uwp.Services.WhatsApp
 
         void IConnectionLifecycleHost.DisconnectAndDisposeSocket()
             {
-                var socket = _socket;
-                _socket = null;
+                var socket = _socketSlot.Current;
+                _socketSlot.Current = null;
                 if (socket != null)
                 {
                     socket.Disconnect();

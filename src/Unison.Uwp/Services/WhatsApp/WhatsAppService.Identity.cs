@@ -13,14 +13,14 @@ namespace Unison.Uwp.Services.WhatsApp
         {
             id = null;
             lid = null;
-            if (_authState?.Me == null)
+            if (_authSlot.Current?.Me == null)
             {
                 return false;
             }
 
             return SelfIdentityAliasPair.TryCreate(
-                _authState.Me.Id,
-                _authState.Me.Lid,
+                _authSlot.Current.Me.Id,
+                _authSlot.Current.Me.Lid,
                 NormalizeJid,
                 out id,
                 out lid);
@@ -43,13 +43,13 @@ namespace Unison.Uwp.Services.WhatsApp
 
         private void RegisterSocketAlias(string jidA, string jidB, string source)
         {
-            _socket?.RegisterJidAlias(jidA, jidB, source);
+            _socketSlot.Current?.RegisterJidAlias(jidA, jidB, source);
         }
 
         internal void RegisterSocketAliases(string source)
         {
             var aliases = JidAlias.Snapshot();
-            _socket?.RegisterJidAliases(aliases, source);
+            _socketSlot.Current?.RegisterJidAliases(aliases, source);
         }
 
         public string ResolveDisplayName(string jid, string context = null) =>
@@ -58,16 +58,16 @@ namespace Unison.Uwp.Services.WhatsApp
         public string GetCanonicalJid(string jid) => JidAlias.GetCanonicalJid(jid);
 
         bool Unison.WhatsAppClient.Abstractions.IResolvedNameApplyHost.HasSelfCredentials =>
-            _authState?.Me != null && !string.IsNullOrWhiteSpace(_authState.Me.Id);
+            _authSlot.Current?.Me != null && !string.IsNullOrWhiteSpace(_authSlot.Current.Me.Id);
 
         string Unison.WhatsAppClient.Abstractions.IResolvedNameApplyHost.SelfId =>
-            NormalizeJid(_authState?.Me?.Id);
+            NormalizeJid(_authSlot.Current?.Me?.Id);
 
         string Unison.WhatsAppClient.Abstractions.IResolvedNameApplyHost.SelfLid =>
-            NormalizeJid(_authState?.Me?.Lid);
+            NormalizeJid(_authSlot.Current?.Me?.Lid);
 
         string Unison.WhatsAppClient.Abstractions.IResolvedNameApplyHost.AuthSelfName =>
-            _authState?.Me?.Name;
+            _authSlot.Current?.Me?.Name;
 
         string Unison.WhatsAppClient.Abstractions.IResolvedNameApplyHost.SidebarSelfName =>
             CurrentUserName;
@@ -79,12 +79,12 @@ namespace Unison.Uwp.Services.WhatsApp
             string sanitized,
             bool persistAuth)
         {
-            if (_authState?.Me == null || string.IsNullOrWhiteSpace(sanitized))
+            if (_authSlot.Current?.Me == null || string.IsNullOrWhiteSpace(sanitized))
             {
                 return;
             }
 
-            _authState.Me.Name = sanitized;
+            _authSlot.Current.Me.Name = sanitized;
             CurrentUserName = sanitized;
             if (persistAuth)
             {
@@ -173,8 +173,8 @@ namespace Unison.Uwp.Services.WhatsApp
         /// </summary>
         void ISelfIdentityHealHost.HealOwnIdentityAfterUsync(string normalizedUser, string normalizedLid)
         {
-            string meLid = _authState?.Me?.Lid;
-            if (string.IsNullOrEmpty(meLid) || _authState?.Me == null)
+            string meLid = _authSlot.Current?.Me?.Lid;
+            if (string.IsNullOrEmpty(meLid) || _authSlot.Current?.Me == null)
             {
                 return;
             }
@@ -183,21 +183,21 @@ namespace Unison.Uwp.Services.WhatsApp
             SelfIdentityHealingAction action = SelfIdentityHealingDecision.Decide(
                 normalizedUser,
                 normalizedLid,
-                _authState.Me.Id,
+                _authSlot.Current.Me.Id,
                 normalizedMeLid);
 
             if (action == SelfIdentityHealingAction.HealMeId)
             {
                 Log("[WhatsAppService] IDENTITY HEALING (USync): Me.Lid (" + meLid + ") belongs to PN " +
-                    normalizedLid + ", but current Me.Id is " + _authState.Me.Id + ". Fixing...");
-                _authState.Me.Id = normalizedLid;
+                    normalizedLid + ", but current Me.Id is " + _authSlot.Current.Me.Id + ". Fixing...");
+                _authSlot.Current.Me.Id = normalizedLid;
                 _ = _persistAuthState.RunAsync(null, "usync-identity-heal");
             }
             else if (action == SelfIdentityHealingAction.PurgeForeignMapping)
             {
                 Log("[WhatsAppService] IDENTITY CORRUPTION DETECTED (USync): Me.Id (" + normalizedUser +
                     ") is mapped to foreign LID " + normalizedLid + ". PURGING...");
-                _authState.Me.Id = meLid;
+                _authSlot.Current.Me.Id = meLid;
                 JidAlias.Remove(normalizedUser);
                 _ = _persistAuthState.RunAsync(null, "usync-identity-purge");
             }

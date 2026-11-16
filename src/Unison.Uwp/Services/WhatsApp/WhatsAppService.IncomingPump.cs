@@ -17,14 +17,14 @@ namespace Unison.Uwp.Services.WhatsApp
     public partial class WhatsAppService : IBoundMutationGate
     {
         bool IPlaceholderResendSocket.IsHandshakeComplete =>
-            _socket != null && _socket.IsHandshakeComplete;
+            _socketSlot.Current != null && _socketSlot.Current.IsHandshakeComplete;
 
-        string IPlaceholderResendSocket.GenerateMessageId() => _socket.GenerateMessageId();
+        string IPlaceholderResendSocket.GenerateMessageId() => _socketSlot.Current.GenerateMessageId();
 
         Task<string> IPlaceholderResendSocket.RequestPlaceholderResendAsync(
             MissingMessageCandidate target,
             string stanzaId) =>
-            _socket.RequestPlaceholderResendAsync(
+            _socketSlot.Current.RequestPlaceholderResendAsync(
                 new Proto.MessageKey
                 {
                     RemoteJid = target.ChatJid,

@@ -37,14 +37,14 @@ namespace Unison.Uwp.Services.WhatsApp
         async Task<BinaryNode> IOutgoingReceiptHost.QueryGroupMetadataAsync(string groupJid)
         {
             string canonical = GetCanonicalJid(groupJid);
-            if (string.IsNullOrWhiteSpace(canonical) || _socket == null)
+            if (string.IsNullOrWhiteSpace(canonical) || _socketSlot.Current == null)
             {
                 return null;
             }
 
             try
             {
-                return await _socket.QueryGroupMetadataAsync(canonical).ConfigureAwait(false);
+                return await _socketSlot.Current.QueryGroupMetadataAsync(canonical).ConfigureAwait(false);
             }
             catch (Exception ex)
             {

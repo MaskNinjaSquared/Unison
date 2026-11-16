@@ -111,7 +111,7 @@ namespace Unison.Uwp.Services.WhatsApp
             WaitForStartupQuietAsync(budget, reason, token);
 
         bool IBackgroundResolutionGate.IsHandshakeReady =>
-            _socket != null && _socket.IsHandshakeComplete;
+            _socketSlot.Current != null && _socketSlot.Current.IsHandshakeComplete;
 
         bool IBackgroundResolutionGate.ShouldDeferReplay => ShouldDeferReconnectReplayWork();
 

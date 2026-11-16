@@ -27,12 +27,12 @@ namespace Unison.Uwp.Services.WhatsApp
 
         Task IOutgoingMessageHost.SendImageAsync(string jid, byte[] imageBytes, string caption, string messageId)
         {
-            return Task.Run(async () => await _socket.SendImageMessageAsync(jid, imageBytes, caption, messageId));
+            return Task.Run(async () => await _socketSlot.Current.SendImageMessageAsync(jid, imageBytes, caption, messageId));
         }
 
         Task IOutgoingMessageHost.SendAudioAsync(string jid, OutgoingAudio audio, string messageId)
         {
-            return _socket.SendAudioMessageAsync(
+            return _socketSlot.Current.SendAudioMessageAsync(
                 jid,
                 audio.Bytes,
                 audio.MimeType,
@@ -44,7 +44,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
         Task IOutgoingMessageHost.SendDocumentAsync(string jid, OutgoingDocument document, string messageId)
         {
-            return _socket.SendDocumentMessageAsync(
+            return _socketSlot.Current.SendDocumentMessageAsync(
                 jid,
                 document.Bytes,
                 document.MimeType,
@@ -71,7 +71,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 // is a transport failure (StatusFailed), not an uncaught throw that leaves
                 // the bubble pending (1.8.3 SendTextMessageAsync catch behaviour).
                 await EnsureConnectedAsync((int)request.ConnectTimeout.TotalMilliseconds);
-                socket = _socket;
+                socket = _socketSlot.Current;
                 if (socket == null || !socket.IsConnected || !socket.IsHandshakeComplete)
                 {
                     return new OutgoingSendAttempt
