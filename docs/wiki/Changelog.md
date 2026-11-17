@@ -2,6 +2,10 @@
 
 Newest first.
 
+## Phase D stage 4 — `OfflineReplayWireHost` and `ReconnectHost` (netstandard)
+
+`OfflineReplayWireHost` (`Unison.WhatsAppClient/Helpers/Connection`) owns the history-sync wire owner, offline-replay release, its first-release latch and the offline-synced watchdog. `ReconnectHostAdapter` moved to WhatsAppClient as `ReconnectHost`, with `IReconnectLifecyclePort`. `IConnectionSocketControl` gained `IsTransportOpen` / `IsHandshakeComplete`. Move-only; the move-only path for the host ends here (health socket hosts are typed on the UWP socket, `ClearSessionOwner` is UWP wipe I/O). Needs an on-device pass: offline replay / FULL after offline, "Updating…" banner clear, network-drop reconnect, QR / 515.
+
 ## Phase D stage 4 — `StartupMaintenanceHost` (netstandard)
 
 `StartupMaintenanceHost` (`Unison.WhatsAppClient/Helpers/Connection`) owns persisted UI load, deferred startup maintenance, post-sync enrichment, conversation resync, inactive-cache release and self-profile auth sync (owners already in WhatsAppClient; construction left the host). `IStartupMaintenanceHostPort` keeps connection-state init, window visibility, quiet/memory waits and the phone INPC on `WhatsAppService`. Move-only; cold-start / deferred / resync behaviour unchanged.

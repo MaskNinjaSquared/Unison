@@ -51,7 +51,7 @@ No behaviour change for users. Prep so later diffs are one cluster, not a 16k-li
 | `WhatsAppService.OutgoingHost.cs` | Explicit `IOutgoingMessageHost`: the caches and socket the send flows on `MessageFacade` reach (3.4) |
 | `ConnectionHealthSocketHost.cs` | Health-monitor socket adapter (Phase D) on the socket slot + `IConnectionHealthOwnerPort` |
 | `CurrentSocketHealthHost.cs` | On-demand socket health probe host over socket slot + flags |
-| `ReconnectHostAdapter.cs` + `IReconnectLifecyclePort.cs` | Soft / auto reconnect + pairing stage-2 host I/O; owns `SoftReconnectCoordinator` |
+| ~~`ReconnectHostAdapter.cs` + `IReconnectLifecyclePort.cs`~~ | Moved to WhatsAppClient as `ReconnectHost` (`Helpers/Connection`) + `Abstractions/IReconnectLifecyclePort.cs` |
 
 `WhatsAppService.Groups.cs` and `WhatsAppService.Avatars.cs` are gone: group apply lives on `GroupFacade` / `GroupMetadataApply`; avatar fetch/apply moved earlier in phase 3.
 

@@ -574,7 +574,7 @@ Further shrinking those rows is **State/contract seams** (or Phase E), not anoth
 | Reconnect / pairing / logout latches | **Done** — `ConnectionSessionFlags` (WhatsAppClient, DI singleton): suppress, fatal, session-established, 515 pending, count-pre-session-as-fatal, QR delivered, pre-session close streak. Host reads/writes the shared instance |
 | Socket / auth slots | **Done** — `ConnectionSlot<T>` (WhatsAppClient, DI singleton per T: `IWhatsAppSocket`, `AuthState`). The host has no `_socket` / `_authState` fields; adapters share the slot. `ClearIf` = reference-equality clear |
 | Health-monitor socket adapter | **Done** — `ConnectionHealthSocketHost` (UWP, own file) reads the socket slot; `IConnectionHealthOwnerPort` is only catch-up, soft reconnect, latch fatal + report. `CurrentSocketHealthHost` (UWP) is `IIsCurrentSocketHealthyHost` over slot + flags. Loop policy unchanged in `ConnectionHealthMonitor` |
-| Health / reconnect timers | **Done** — policy in WhatsAppClient (`ConnectionHealthMonitorOwner`, `SoftReconnectCoordinator`, `AutoReconnectLoopDispatch`, `TryStartPairingStage2ReconnectDispatch`). Host I/O is `ReconnectHostAdapter` (UWP; owns the coordinator) over `IReconnectLifecyclePort` (`InitializeAsync` / `ConnectAsync` / `IsConnected`, reconnecting status, error, pairing trace, 515 pending, stop health, stage-2 fire). Timers and loop stay host-run as before |
+| Health / reconnect timers | **Done** — policy in WhatsAppClient (`ConnectionHealthMonitorOwner`, `SoftReconnectCoordinator`, `AutoReconnectLoopDispatch`, `TryStartPairingStage2ReconnectDispatch`). Host I/O is `ReconnectHost` (WhatsAppClient; owns the coordinator) over `IReconnectLifecyclePort` (`InitializeAsync` / `ConnectAsync` / `IsConnected`, reconnecting status, error, pairing trace, 515 pending, stop health, stage-2 fire). Timers and loop stay host-run as before |
 | Wire-owner assembly | **Not moved** — ~48 owners are built in the `WhatsAppService` constructor from lambdas over events, `Messages` / `Contacts` and persistence. A factory needs a wide port with no behaviour gain; revisit after on-device validation. Deleting `WhatsAppService` is not on this phase |
 
 ### Auto batch after Phase D — Opus quick review
@@ -648,14 +648,16 @@ Move-only: owner bodies, construction order and every threshold are unchanged; D
 
 #### Where stage 4 stops
 
-`WhatsAppService` went from about 5,000 lines (before stage 4) to about 3,100 after the startup cluster. It is **not** deleted in this round, and it is not yet only the transport shell. What remains, and why:
+`WhatsAppService` went from about 5,000 lines (before stage 4) to about 2,950 after the startup, offline-replay and reconnect cuts. It is **not** deleted in this round, and it is not yet only the transport shell. What remains, and why:
 
 - **Transport shell (stays in UWP by design):** connect / open through `UwpWhatsAppTransportFactory` + `SocketBridge`, socket assign / dispose, health-monitor IO, broker transfer / reclaim and reconnect consume (`SocketActivityInformation`), reconnect-required toasts, `AuthStore` / `FileKeyStore` / `NoiseSessionStore`.
 - **Startup / maintenance cluster (done):** `StartupMaintenanceHost` (`Unison.WhatsAppClient/Helpers/Connection`) owns `LoadPersistedUiStateOwner`, `DeferredStartupMaintenanceOwner`, `ReleaseMemoryOwner`, `PostSyncMaintenanceOwner`, `ResyncConversationsOwner` and `SelfProfileAuthSync`, plus the persisted-UI load gate and deferred-startup once latch. Connection init, quiet/memory waits and the phone INPC stay on `IStartupMaintenanceHostPort` (`WhatsAppService`). DI resolves the host; `ConnectionHostDependencies` forwards it.
-- **Still wired in the host (Opus + on-device):** `HistorySyncWireOwner`, `OfflineReplayReleaseOwner`, `OfflineSyncedWatchdog`, `ClearSessionOwner` (UWP wipe I/O), health-monitor / soft-reconnect bodies, remaining wire owners → DI, broker transfer.
+- **Offline replay wire (done):** `OfflineReplayWireHost` (`Unison.WhatsAppClient/Helpers/Connection`) owns `HistorySyncWireOwner`, `OfflineReplayReleaseOwner`, the first-release latch and `OfflineSyncedWatchdog` (open / synced / close sync moved verbatim). Readiness reads `IConnectionSocketControl.IsTransportOpen` / `IsHandshakeComplete`.
+- **Reconnect I/O (done):** `ReconnectHost` (was the UWP `ReconnectHostAdapter`) and `IReconnectLifecyclePort` live in WhatsAppClient. The pairing-trace `SessionLogger` line stays on the host behind `IReconnectLifecyclePort.TraceScheduleAutoReconnectReason`.
+- **Still in the host, on purpose:** `ClearSessionOwner` wiring (every step is UWP wipe I/O); `ConnectionHealthSocketHost` / `CurrentSocketHealthHost` (typed on the UWP `IWhatsAppSocket`, so moving them needs a socket abstraction, not a move); the health loop and timers (host-run until asked); broker transfer (a feature; never fake a handoff); FULL / silent pacing (behaviour change, not refactor).
 - **Compatibility surface:** the members App, `AppStateSyncService` and the UI still call on the client.
 
-Next Auto-safe mechanical cut on this path is exhausted; remaining host shrink is Opus + on-device.
+The move-only path ends here. Further shrink needs a new port (socket abstraction or storage wipe port) or a feature decision.
 
 ### Phase E — client-owned public I/O
 
