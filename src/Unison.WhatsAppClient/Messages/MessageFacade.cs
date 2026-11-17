@@ -35,7 +35,8 @@ namespace Unison.WhatsAppClient.Messages
         IMessageWireIngress,
         IMissingMessageChatHost,
         IMessageTextIo,
-        IMessageMediaIo
+        IMessageMediaIo,
+        IMessageReactIo
     {
         private readonly IPersonStore _personStore;
         private readonly IChatMessagePayloadMapper _chatMessageMapper;
@@ -4307,10 +4308,20 @@ namespace Unison.WhatsAppClient.Messages
         }
 
         /// <inheritdoc />
-        /// <inheritdoc />
-        public async Task<bool> TryReactAsync(string chatJid, ChatMessage message, string emoji)
+        public Task<bool> TryReactAsync(string chatJid, ChatMessage message, string emoji)
         {
             if (message == null || string.IsNullOrWhiteSpace(message.Id))
+            {
+                return Task.FromResult(false);
+            }
+
+            return TryReactAsync(MessageTargetRequestMapper.ToReact(chatJid, message, emoji));
+        }
+
+        /// <inheritdoc />
+        public async Task<bool> TryReactAsync(ReactToMessageRequest request)
+        {
+            if (request == null || string.IsNullOrWhiteSpace(request.MessageId))
             {
                 return false;
             }
@@ -4331,7 +4342,7 @@ namespace Unison.WhatsAppClient.Messages
             }
 
             string canonical = _jids.GetCanonicalJid(
-                string.IsNullOrWhiteSpace(chatJid) ? message.RemoteJid : chatJid);
+                string.IsNullOrWhiteSpace(request.ChatJid) ? request.RemoteJid : request.ChatJid);
             if (string.IsNullOrWhiteSpace(canonical))
             {
                 return false;
@@ -4339,32 +4350,32 @@ namespace Unison.WhatsAppClient.Messages
 
             var key = new MessageKey
             {
-                RemoteJid = string.IsNullOrWhiteSpace(message.RemoteJid)
+                RemoteJid = string.IsNullOrWhiteSpace(request.RemoteJid)
                     ? canonical
-                    : JidHelper.Normalize(message.RemoteJid),
-                FromMe = message.IsFromMe,
-                Id = message.Id
+                    : JidHelper.Normalize(request.RemoteJid),
+                FromMe = request.IsFromMe,
+                Id = request.MessageId
             };
-            if (!string.IsNullOrWhiteSpace(message.ParticipantJid))
+            if (!string.IsNullOrWhiteSpace(request.ParticipantJid))
             {
-                key.Participant = message.ParticipantJid;
+                key.Participant = request.ParticipantJid;
             }
 
             try
             {
-                await _wire.SendReactionMessageAsync(canonical, key, emoji ?? string.Empty)
+                await _wire.SendReactionMessageAsync(canonical, key, request.Emoji ?? string.Empty)
                     .ConfigureAwait(false);
                 return true;
             }
             catch (Exception ex)
             {
                 Debug.WriteLine(
-                    "[MessageFacade] TryReactAsync failed for " + message.Id + ": " + ex.Message);
+                    "[MessageFacade] TryReactAsync failed for " + request.MessageId + ": " + ex.Message);
                 _diagnostics?.RecordException(
                     "messages",
                     "react-send-failed",
                     ex,
-                    "messageId=" + message.Id + "; chatJid=" + canonical);
+                    "messageId=" + request.MessageId + "; chatJid=" + canonical);
                 return false;
             }
         }
