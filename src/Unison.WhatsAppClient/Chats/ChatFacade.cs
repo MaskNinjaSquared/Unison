@@ -38,11 +38,12 @@ using Unison.Socket.AppState;
 using Unison.Socket.Models;
 using Unison.Socket.UseCases.Messages;
 using Unison.WhatsAppClient.Abstractions;
+using Unison.WhatsAppClient.Io.Chats;
 using Unison.WhatsAppClient.Helpers;
 
 namespace Unison.WhatsAppClient.Chats
 {
-    public sealed class ChatFacade : IChatService
+    public sealed class ChatFacade : IChatService, IChatFlagsIo
     {
         public event EventHandler FavoritesMembershipChanged;
 
@@ -576,9 +577,25 @@ namespace Unison.WhatsAppClient.Chats
             }
         }
 
-        public async Task SetPinnedAsync(ChatItem chat, bool pinned)
+        public Task SetPinnedAsync(ChatItem chat, bool pinned)
         {
             if (chat == null || string.IsNullOrWhiteSpace(chat.JID))
+            {
+                return Task.CompletedTask;
+            }
+
+            return SetPinnedAsync(new SetChatPinnedRequest
+            {
+                ChatJid = chat.JID,
+                Pinned = pinned,
+                PreviousPinned = chat.IsChatPinned
+            });
+        }
+
+        /// <inheritdoc />
+        public async Task SetPinnedAsync(SetChatPinnedRequest request)
+        {
+            if (request == null || string.IsNullOrWhiteSpace(request.ChatJid))
             {
                 return;
             }
@@ -586,13 +603,13 @@ namespace Unison.WhatsAppClient.Chats
             // RC14's chatModify writes the patch under the chat id exactly as the caller holds
             // it - it never rewrites PN to LID. The canonical JID is the same id the local row
             // and the mark-read path use, so the pin lands in the collection the phone reads.
-            var canonicalJid = _jids.GetCanonicalJid(chat.JID);
-            var wasPinned = chat.IsChatPinned;
+            var canonicalJid = _jids.GetCanonicalJid(request.ChatJid);
+            var wasPinned = request.PreviousPinned;
 
             await ApplyLocalChatFlagsAsync(
                 canonicalJid,
-                pinned: pinned,
-                pinnedTimestamp: pinned
+                pinned: request.Pinned,
+                pinnedTimestamp: request.Pinned
                     ? (long?)DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
                     : null).ConfigureAwait(false);
 
@@ -604,7 +621,7 @@ namespace Unison.WhatsAppClient.Chats
 
             try
             {
-                await _account.SetPinnedAsync(canonicalJid, pinned).ConfigureAwait(false);
+                await _account.SetPinnedAsync(canonicalJid, request.Pinned).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
@@ -612,9 +629,9 @@ namespace Unison.WhatsAppClient.Chats
                 // reinstall in name only, and would sort the list against what every other
                 // device shows.
                 var details =
-                    "chatJid=" + chat.JID +
+                    "chatJid=" + request.ChatJid +
                     "; canonicalJid=" + canonicalJid +
-                    "; requestedPinned=" + pinned +
+                    "; requestedPinned=" + request.Pinned +
                     "; previousPinned=" + wasPinned;
 
                 Debug.WriteLine(
@@ -651,21 +668,37 @@ namespace Unison.WhatsAppClient.Chats
             }
         }
 
-        public async Task SetFavoriteAsync(ChatItem chat, bool favorite)
+        public Task SetFavoriteAsync(ChatItem chat, bool favorite)
         {
             if (chat == null || string.IsNullOrWhiteSpace(chat.JID))
             {
-                return;
+                return Task.CompletedTask;
             }
 
-            string canonicalJid = _jids.GetCanonicalJid(chat.JID);
-            bool wasFavorite = chat.IsFavorite;
-            if (wasFavorite == favorite)
+            return SetFavoriteAsync(new SetChatFavoriteRequest
+            {
+                ChatJid = chat.JID,
+                Favorite = favorite,
+                PreviousFavorite = chat.IsFavorite
+            });
+        }
+
+        /// <inheritdoc />
+        public async Task SetFavoriteAsync(SetChatFavoriteRequest request)
+        {
+            if (request == null || string.IsNullOrWhiteSpace(request.ChatJid))
             {
                 return;
             }
 
-            await ApplyLocalFavoriteAsync(canonicalJid, favorite).ConfigureAwait(false);
+            string canonicalJid = _jids.GetCanonicalJid(request.ChatJid);
+            bool wasFavorite = request.PreviousFavorite;
+            if (wasFavorite == request.Favorite)
+            {
+                return;
+            }
+
+            await ApplyLocalFavoriteAsync(canonicalJid, request.Favorite).ConfigureAwait(false);
             RaiseFavoritesMembershipChanged();
 
             if (!_account.IsAvailable)
@@ -681,8 +714,8 @@ namespace Unison.WhatsAppClient.Chats
                 // already wrote RememberFavorite + SQLite, so the cache is the wire source of truth.
                 IList<string> fullList = CollectFavoriteJids();
                 Debug.WriteLine(
-                    "[ChatFacade] Favorite patch sending favorite=" + favorite +
-                    "; chatJid=" + chat.JID +
+                    "[ChatFacade] Favorite patch sending favorite=" + request.Favorite +
+                    "; chatJid=" + request.ChatJid +
                     "; canonicalJid=" + canonicalJid +
                     "; listCount=" + fullList.Count);
                 await _account.SetFavoritesListAsync(fullList, add: true).ConfigureAwait(false);
@@ -694,9 +727,9 @@ namespace Unison.WhatsAppClient.Chats
                 // picker look dead: overlay closed, then the star vanished after a failed
                 // regular_low patch (MAC / LT-hash). Wire catches up on the next good sync.
                 string details =
-                    "chatJid=" + chat.JID +
+                    "chatJid=" + request.ChatJid +
                     "; canonicalJid=" + canonicalJid +
-                    "; requestedFavorite=" + favorite +
+                    "; requestedFavorite=" + request.Favorite +
                     "; previousFavorite=" + wasFavorite;
                 Debug.WriteLine(
                     "[ChatFacade] Favorite patch failed; keeping local membership: " +

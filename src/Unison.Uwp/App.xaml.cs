@@ -59,6 +59,7 @@ using Unison.Uwp.Services.WhatsApp.Status;
 using Unison.WhatsAppClient.Contacts;
 using Unison.WhatsAppClient.Groups;
 using Unison.WhatsAppClient.History;
+using Unison.WhatsAppClient.Io.Chats;
 using Unison.WhatsAppClient.Io.Messages;
 using Unison.WhatsAppClient.Messages;
 using Unison.WhatsAppClient.Status;
@@ -1021,7 +1022,7 @@ namespace Unison.Uwp
             services.AddSingleton<IChatAccountActions>(sp => new BridgeChatAccountActions(
                 sp.GetRequiredService<UwpSessionProvider>()));
             services.AddSingleton<SessionTipAuthorCache>();
-            services.AddSingleton<IChatService>(sp => new ChatFacade(
+            services.AddSingleton(sp => new ChatFacade(
                 sp.GetRequiredService<IChatAccountActions>(),
                 sp.GetRequiredService<IAppStateLocalHost>(),
                 sp.GetRequiredService<IJidResolver>(),
@@ -1057,6 +1058,8 @@ namespace Unison.Uwp
                 () => sp.GetRequiredService<SyncWorkGate>().IsReplayDrainActive,
                 sp.GetRequiredService<ILocalSettings>(),
                 sp.GetRequiredService<ISyncLoadMode>()));
+            services.AddSingleton<IChatService>(sp => sp.GetRequiredService<ChatFacade>());
+            services.AddSingleton<IChatFlagsIo>(sp => sp.GetRequiredService<ChatFacade>());
             // After IChatService: the projection persists resolved strip rows so cold start keeps names.
             // AttachedUiDispatcher (not IDispatcher/DispatcherService): same live frame as
             // GroupMetadataApply / ChatFacade so strip passes share the pump; DispatcherService

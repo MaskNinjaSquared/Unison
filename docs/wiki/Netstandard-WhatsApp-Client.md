@@ -663,15 +663,21 @@ Long-term goal: `Unison.WhatsAppClient` publishable / reusable without dragging 
 
 Until the csproj flip, façades **keep** exposing Core `I*` contracts to ViewModels (dependency arrow `WhatsAppClient` → `Core` stays). That is portable vs WinRT; it is **not** yet portable vs Unison’s app domain.
 
-#### Phase E stage 1 — send I/O (text + media)
+#### Phase E — Auto batch (envelopes, no csproj flip)
 
-Done. Client owns under `WhatsAppClient/Io/Messages`:
+Done under `WhatsAppClient/Io/`:
 
-- Text: `IMessageTextIo` / `SendTextRequest` / `OutgoingQuoteRequest`
-- Media: `IMessageMediaIo` / `SendImageRequest` / `SendImagesRequest` / `SendAudioRequest` / `SendDocumentRequest`
-- Shared: `ChatMessageDto` (+ media URI / batch fields)
+| Surface | Ports / requests |
+|---|---|
+| Send text | `IMessageTextIo`, `SendTextRequest`, `OutgoingQuoteRequest` |
+| Send media | `IMessageMediaIo`, image/audio/document requests |
+| React / pin / delete | `IMessageReactIo`, `IMessagePinIo`, `IMessageDeleteIo`, `MessageTargetRequest` |
+| Chat flags | `IChatFlagsIo`, `SetChatPinnedRequest`, `SetChatFavoriteRequest` |
+| Shared | `ChatMessageDto` (+ media URI / batch fields) |
 
-`OutgoingTextSend` and `OutgoingMediaSend` take requests and return DTOs; timeline/persist still use Core `ChatMessage`. `MessageFacade` adapts Core `IMessageService` send methods ↔ these I/O ports (both registered in DI). Kind fields on the envelope are **strings**, not mirrored enums. Still Core-shaped (not Auto): load/timeline APIs, Ensure*Available, react, and the csproj dependency flip.
+Owners and façades speak requests/DTOs on the client side; Core `IMessageService` / `IChatService` stay as adapters for ViewModels. Kind fields are **strings**, not mirrored enums. Timeline/persist still hold Core `ChatMessage` / `ChatItem` internally.
+
+**Still Opus / not Auto:** load/timeline APIs, `Ensure*Available` (live bubble mutation), inbound wire appliers (`AcceptIncoming*`, `ApplyIncoming*`), receipt/status apply, other façades’ list/projection helpers, dropping Core models from the client, and the Core→WhatsAppClient csproj flip.
 
 | Now (C/D) | Later (E) |
 |---|---|

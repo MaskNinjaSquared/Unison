@@ -2,9 +2,9 @@
 
 Newest first.
 
-## Phase E stage 1 — send I/O envelopes (text + media)
+## Phase E — Auto I/O envelopes (send, react, pin, delete, chat flags)
 
-`IMessageTextIo` / `IMessageMediaIo` + request DTOs / `ChatMessageDto` live in `Unison.WhatsAppClient/Io/Messages`. `OutgoingTextSend` and `OutgoingMediaSend` speak only that surface; `MessageFacade` adapts Core `IMessageService` send methods ↔ client I/O. ViewModels unchanged; no Core→WhatsAppClient csproj flip. Timeline/persist still hold Core `ChatMessage` internally.
+Client-owned ports under `Unison.WhatsAppClient/Io`: text/media send, react, message pin, delete-for-me/everyone, chat pin/favourite. Core façades adapt for ViewModels. No csproj flip; timeline still Core-shaped.
 
 ## Phase D stage 4 — `ChatCatalogPersistenceHost` (netstandard)
 
