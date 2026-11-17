@@ -41,5 +41,38 @@ namespace Unison.WhatsAppClient.Io.Messages
             CopyTarget(request, chatJid, message);
             return request;
         }
+
+        public static DeleteMessageForMeRequest ToDeleteForMe(string chatJid, ChatMessage message)
+        {
+            var request = new DeleteMessageForMeRequest
+            {
+                IsRevoked = message != null && message.IsRevoked,
+                DeleteMedia = message != null &&
+                              (message.IsImage ||
+                               message.IsVideo ||
+                               message.IsGif ||
+                               message.IsAudio ||
+                               message.IsDocument ||
+                               message.IsSticker)
+            };
+            CopyTarget(request, chatJid, message);
+            return request;
+        }
+
+        public static DeleteMessageForEveryoneRequest ToDeleteForEveryone(
+            string chatJid,
+            ChatMessage message,
+            bool isGroupChat,
+            bool viewerIsGroupAdmin)
+        {
+            var request = new DeleteMessageForEveryoneRequest
+            {
+                IsRevoked = message != null && message.IsRevoked,
+                IsGroupChat = isGroupChat,
+                ViewerIsGroupAdmin = viewerIsGroupAdmin
+            };
+            CopyTarget(request, chatJid, message);
+            return request;
+        }
     }
 }

@@ -37,7 +37,8 @@ namespace Unison.WhatsAppClient.Messages
         IMessageTextIo,
         IMessageMediaIo,
         IMessageReactIo,
-        IMessagePinIo
+        IMessagePinIo,
+        IMessageDeleteIo
     {
         private readonly IPersonStore _personStore;
         private readonly IChatMessagePayloadMapper _chatMessageMapper;
@@ -2427,27 +2428,34 @@ namespace Unison.WhatsAppClient.Messages
         }
 
         /// <inheritdoc />
-        public async Task DeleteMessageForMeAsync(string chatJid, ChatMessage message)
+        public Task DeleteMessageForMeAsync(string chatJid, ChatMessage message)
         {
             if (!MessageDeleteEligibility.CanDeleteForMe(message))
+            {
+                return Task.CompletedTask;
+            }
+
+            return DeleteMessageForMeAsync(MessageTargetRequestMapper.ToDeleteForMe(chatJid, message));
+        }
+
+        /// <inheritdoc />
+        public async Task DeleteMessageForMeAsync(DeleteMessageForMeRequest request)
+        {
+            if (request == null ||
+                string.IsNullOrWhiteSpace(request.MessageId) ||
+                request.IsRevoked)
             {
                 return;
             }
 
             string canonical = _jids.GetCanonicalJid(
-                string.IsNullOrWhiteSpace(chatJid) ? message.RemoteJid : chatJid);
+                string.IsNullOrWhiteSpace(request.ChatJid) ? request.RemoteJid : request.ChatJid);
             if (string.IsNullOrWhiteSpace(canonical))
             {
                 return;
             }
 
-            long timestampSeconds = ToUnixSeconds(message.Timestamp);
-            bool deleteMedia = message.IsImage ||
-                               message.IsVideo ||
-                               message.IsGif ||
-                               message.IsAudio ||
-                               message.IsDocument ||
-                               message.IsSticker;
+            long timestampSeconds = ToUnixSeconds(request.TimestampUtc);
 
             if (_wire != null && _wire.CanSendDeleteForMe)
             {
@@ -2455,29 +2463,29 @@ namespace Unison.WhatsAppClient.Messages
                 {
                     await _wire.DeleteMessageForMeAsync(
                             canonical,
-                            message.Id,
-                            fromMe: message.IsFromMe,
+                            request.MessageId,
+                            fromMe: request.IsFromMe,
                             timestampSeconds,
-                            deleteMedia)
+                            request.DeleteMedia)
                         .ConfigureAwait(false);
                 }
                 catch (Exception ex)
                 {
                     Debug.WriteLine(
-                        "[MessageFacade] deleteForMe patch failed for " + message.Id + ": " + ex.Message);
+                        "[MessageFacade] deleteForMe patch failed for " + request.MessageId + ": " + ex.Message);
                     _diagnostics?.RecordException(
                         "messages",
                         "delete-for-me-patch-failed",
                         ex,
-                        "messageId=" + message.Id + "; chatJid=" + canonical);
+                        "messageId=" + request.MessageId + "; chatJid=" + canonical);
                 }
             }
 
-            await ApplyAppStateDeleteMessageAsync(canonical, message.Id).ConfigureAwait(false);
+            await ApplyAppStateDeleteMessageAsync(canonical, request.MessageId).ConfigureAwait(false);
         }
 
         /// <inheritdoc />
-        public async Task DeleteMessageForEveryoneAsync(
+        public Task DeleteMessageForEveryoneAsync(
             string chatJid,
             ChatMessage message,
             bool isGroupChat,
@@ -2488,6 +2496,36 @@ namespace Unison.WhatsAppClient.Messages
                     isGroupChat,
                     viewerIsGroupAdmin,
                     DateTime.UtcNow))
+            {
+                return Task.CompletedTask;
+            }
+
+            return DeleteMessageForEveryoneAsync(
+                MessageTargetRequestMapper.ToDeleteForEveryone(
+                    chatJid,
+                    message,
+                    isGroupChat,
+                    viewerIsGroupAdmin));
+        }
+
+        /// <inheritdoc />
+        public async Task DeleteMessageForEveryoneAsync(DeleteMessageForEveryoneRequest request)
+        {
+            if (request == null ||
+                string.IsNullOrWhiteSpace(request.MessageId) ||
+                request.IsRevoked)
+            {
+                return;
+            }
+
+            if (!MessageDeleteEligibility.IsWithinDeleteForEveryoneWindow(
+                    request.TimestampUtc,
+                    DateTime.UtcNow))
+            {
+                return;
+            }
+
+            if (!request.IsFromMe && !(request.IsGroupChat && request.ViewerIsGroupAdmin))
             {
                 return;
             }
@@ -2500,7 +2538,7 @@ namespace Unison.WhatsAppClient.Messages
             }
 
             string canonical = _jids.GetCanonicalJid(
-                string.IsNullOrWhiteSpace(chatJid) ? message.RemoteJid : chatJid);
+                string.IsNullOrWhiteSpace(request.ChatJid) ? request.RemoteJid : request.ChatJid);
             if (string.IsNullOrWhiteSpace(canonical))
             {
                 return;
@@ -2508,15 +2546,15 @@ namespace Unison.WhatsAppClient.Messages
 
             var key = new MessageKey
             {
-                RemoteJid = string.IsNullOrWhiteSpace(message.RemoteJid)
+                RemoteJid = string.IsNullOrWhiteSpace(request.RemoteJid)
                     ? canonical
-                    : JidHelper.Normalize(message.RemoteJid),
-                FromMe = message.IsFromMe,
-                Id = message.Id
+                    : JidHelper.Normalize(request.RemoteJid),
+                FromMe = request.IsFromMe,
+                Id = request.MessageId
             };
-            if (!string.IsNullOrWhiteSpace(message.ParticipantJid))
+            if (!string.IsNullOrWhiteSpace(request.ParticipantJid))
             {
-                key.Participant = message.ParticipantJid;
+                key.Participant = request.ParticipantJid;
             }
 
             try
@@ -2526,16 +2564,16 @@ namespace Unison.WhatsAppClient.Messages
             catch (Exception ex)
             {
                 Debug.WriteLine(
-                    "[MessageFacade] deleteForEveryone failed for " + message.Id + ": " + ex.Message);
+                    "[MessageFacade] deleteForEveryone failed for " + request.MessageId + ": " + ex.Message);
                 _diagnostics?.RecordException(
                     "messages",
                     "delete-for-everyone-failed",
                     ex,
-                    "messageId=" + message.Id + "; chatJid=" + canonical);
+                    "messageId=" + request.MessageId + "; chatJid=" + canonical);
                 throw;
             }
 
-            await ApplyIncomingRevocationAsync(canonical, message.Id).ConfigureAwait(false);
+            await ApplyIncomingRevocationAsync(canonical, request.MessageId).ConfigureAwait(false);
         }
 
         private static long ToUnixSeconds(DateTime timestamp)

@@ -40,5 +40,36 @@ namespace Unison.Core.Tests.Io
             Assert.True(request.Pin);
             Assert.Equal(86400u, request.DurationSeconds);
         }
+
+        [Fact]
+        public void ToDeleteForMe_flags_media_and_revoked()
+        {
+            var bubble = new ChatMessage
+            {
+                Id = "D1",
+                IsImage = true,
+                IsRevoked = false
+            };
+
+            DeleteMessageForMeRequest request = MessageTargetRequestMapper.ToDeleteForMe("c", bubble);
+
+            Assert.True(request.DeleteMedia);
+            Assert.False(request.IsRevoked);
+        }
+
+        [Fact]
+        public void ToDeleteForEveryone_copies_group_admin_flags()
+        {
+            var bubble = new ChatMessage { Id = "D2", IsFromMe = false };
+            DeleteMessageForEveryoneRequest request = MessageTargetRequestMapper.ToDeleteForEveryone(
+                "g@g.us",
+                bubble,
+                isGroupChat: true,
+                viewerIsGroupAdmin: true);
+
+            Assert.True(request.IsGroupChat);
+            Assert.True(request.ViewerIsGroupAdmin);
+            Assert.False(request.IsFromMe);
+        }
     }
 }
