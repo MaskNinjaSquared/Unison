@@ -43,8 +43,33 @@ namespace Unison.Uwp.Services.WhatsApp
     public partial class WhatsAppService :
         IConnectionHealthOwnerPort,
         IReconnectLifecyclePort,
-        IConnectionSessionHostPort
+        IConnectionSessionHostPort,
+        IStartupMaintenanceHostPort
     {
+        // --- IStartupMaintenanceHostPort -------------------------------------
+
+        Task IStartupMaintenanceHostPort.InitializeConnectionStateAsync() =>
+            InitializeConnectionStateAsync();
+
+        bool IStartupMaintenanceHostPort.IsAuthRegistered =>
+            _authSlot.Current != null && _authSlot.Current.Registered;
+
+        bool IStartupMaintenanceHostPort.IsAppWindowVisible => IsAppWindowVisible;
+
+        Task IStartupMaintenanceHostPort.WaitForStartupQuietAsync(
+            TimeSpan budget,
+            string reason,
+            CancellationToken token) =>
+            WaitForStartupQuietAsync(budget, reason, token);
+
+        Task<bool> IStartupMaintenanceHostPort.WaitForMemoryHeadroomAsync(
+            string reason,
+            CancellationToken token) =>
+            WaitForMemoryHeadroomAsync(reason, token);
+
+        void IStartupMaintenanceHostPort.NotifyCurrentUserPhoneChanged() =>
+            OnPropertyChanged(nameof(CurrentUserPhone));
+
         // --- IConnectionSessionHostPort --------------------------------------
 
         void IConnectionSessionHostPort.StopConnectionHealthMonitor(string reason) =>
@@ -59,10 +84,10 @@ namespace Unison.Uwp.Services.WhatsApp
             FileSelfIdentityAliases(source);
 
         void IConnectionSessionHostPort.EnsureSelfPhonePersisted() =>
-            _selfProfileAuth.EnsureSelfPhonePersisted();
+            _startupHost.EnsureSelfPhonePersisted();
 
         void IConnectionSessionHostPort.SchedulePostReplay(int offlineCount) =>
-            _postSyncMaintenance.SchedulePostReplay(offlineCount);
+            _startupHost.SchedulePostReplay(offlineCount);
 
         Task IConnectionSessionHostPort.SaveAuthAsync(AuthState auth) => _authStore.SaveAsync(auth);
 
@@ -499,7 +524,7 @@ namespace Unison.Uwp.Services.WhatsApp
         }
 
         void IInitializeConnectionStateHost.SyncSelfProfileFromAuth() =>
-            _selfProfileAuth.SyncFromAuth();
+            _startupHost.SyncSelfProfileFromAuth();
 
         /// <summary>
         /// Compatibility path for callers that genuinely need both connection state and
@@ -1067,7 +1092,7 @@ namespace Unison.Uwp.Services.WhatsApp
             _sessionFlags.SessionEstablishedThisConnection = false;
             _sessionEstablished.Renew();
             _sessionFlags.QrDeliveredThisConnection = false;
-            _postSyncMaintenance.ResetEnrichmentStarted();
+            _startupHost.ResetEnrichmentStarted();
             _historyCatchUp.ResetPerConnection();
         }
 
@@ -1236,7 +1261,7 @@ namespace Unison.Uwp.Services.WhatsApp
         void IConnectionLifecycleHost.CancelBackgroundWorkForShutdown()
         {
             Contacts?.CancelBackgroundResolution();
-            _postSyncMaintenance.CancelAll();
+            _startupHost.CancelPostSync();
             _historyCatchUp.CancelHydrationDayRetry();
             DeferredAvatars?.Cancel();
             Contacts?.CancelAliasFollowUp();

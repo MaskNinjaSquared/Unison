@@ -49,7 +49,7 @@ using Unison.WhatsAppClient.Helpers;
 
 namespace Unison.Uwp.Services.WhatsApp
 {
-    public partial class WhatsAppService : INotifyPropertyChanged, IConnectionSessionHost, IOfflineReplayHost, IPostReplayMaintenanceHost, IPostMessageEnrichmentHost, IPlaceholderResendSocket, IRuntimeSnapshotSource, IBackgroundResolutionGate, IConversationResyncHost, IConnectionEnsureHost, IConnectionResumeHost, IConnectionPairingStage2Host, IConnectionBrokerTransferHost, IConnectionSoftReconnectHost, IConnectionLifecycleHost, IConnectionConnectGateSource, IConnectionConnectPrepareHost, IConnectionSocketAssignment, IConnectionAssignedSocketClearHost, ISelfIdentityHealHost, IStartupUiHost, IResolvedNameApplyHost, IInitializeConnectionStateHost, IBrokerReconnectConsumeHost, IPublishConnectionUpdateHost, IDropCurrentSocketForFastResumeHost, IConnectionHealthMonitorIoHost, IConnectAsyncHost, IPostSyncMaintenanceIoHost
+    public partial class WhatsAppService : INotifyPropertyChanged, IConnectionSessionHost, IOfflineReplayHost, IPostReplayMaintenanceHost, IPostMessageEnrichmentHost, IPlaceholderResendSocket, IRuntimeSnapshotSource, IBackgroundResolutionGate, IConversationResyncHost, IConnectionEnsureHost, IConnectionResumeHost, IConnectionPairingStage2Host, IConnectionBrokerTransferHost, IConnectionSoftReconnectHost, IConnectionLifecycleHost, IConnectionConnectGateSource, IConnectionConnectPrepareHost, IConnectionSocketAssignment, IConnectionAssignedSocketClearHost, ISelfIdentityHealHost, IStartupUiHost, IResolvedNameApplyHost, IInitializeConnectionStateHost, IBrokerReconnectConsumeHost, IPublishConnectionUpdateHost, IDropCurrentSocketForFastResumeHost, IConnectionHealthMonitorIoHost, IConnectAsyncHost, IPostSyncMaintenanceIoHost, IStartupMaintenanceHostPort
     {
         public event PropertyChangedEventHandler PropertyChanged;
         protected void OnPropertyChanged([CallerMemberName] string propertyName = null)
@@ -202,7 +202,7 @@ namespace Unison.Uwp.Services.WhatsApp
         /// Libera estruturas que podem ser reconstruidas do disco. A conversa aberta e
         /// preservada; caches de conversas inativas sao descartados.
         /// </summary>
-        public Task ReleaseMemoryAsync() => _releaseMemory.RunAsync();
+        public Task ReleaseMemoryAsync() => _startupHost.ReleaseMemoryAsync();
 
         private bool IsActiveChatJid(string jid) => _activeChat.IsOpen(jid);
 
@@ -230,19 +230,8 @@ namespace Unison.Uwp.Services.WhatsApp
         /// <see cref="InitGateOwner"/>.
         /// </summary>
         private readonly InitGateOwner _initGate;
-        /// <summary>
-        /// LoadPersistedUiState SemaphoreSlim ? owned by
-        /// <see cref="PersistedUiLoadGate"/>.
-        /// </summary>
-        private readonly PersistedUiLoadGate _persistedUiLoadGate = new PersistedUiLoadGate();
-        private volatile bool _persistedUiStateLoaded;
         private FileKeyStore _sharedKeyStore;
         private int _forceFreshConnectOnResume;
-        /// <summary>
-        /// Once-per-session deferred-startup CAS ? owned by
-        /// <see cref="DeferredStartupOnce"/>.
-        /// </summary>
-        private readonly DeferredStartupOnce _deferredStartupOnce = new DeferredStartupOnce();
         /// <summary>
         /// Connect + resume/ensure SemaphoreSlim gates ? owned by
         /// <see cref="ConnectionGateLocks"/>.
@@ -271,6 +260,7 @@ namespace Unison.Uwp.Services.WhatsApp
         private readonly ConnectionEventHub _events;
         private readonly HistoryCatchUpHost _historyCatchUp;
         private readonly ConnectionSessionHost _connectionSession;
+        private readonly StartupMaintenanceHost _startupHost;
 
         private readonly SyncWorkGate _syncWork;
         private readonly OfflineReplayFirstReleaseLatch _offlineReplayLatch =
@@ -290,17 +280,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
         /// <summary>Owned by <see cref="ChatCatalogPersistenceHost"/>.</summary>
         private readonly OfflineReplayFlush _offlineReplayFlush;
-        /// <summary>
-        /// Post-replay + post-message enrichment CTS / once-per-session CAS live on
-        /// <see cref="PostSyncMaintenanceOwner"/>. Client only implements
-        /// <see cref="IPostSyncMaintenanceIoHost"/> work.
-        /// </summary>
-        private readonly PostSyncMaintenanceOwner _postSyncMaintenance;
-        private readonly SelfProfileAuthSync _selfProfileAuth;
         private readonly BackgroundDisplayNamesPersistence _backgroundDisplayNames;
-        private readonly LoadPersistedUiStateOwner _persistedUiState;
-        private readonly ReleaseMemoryOwner _releaseMemory;
-        private readonly DeferredStartupMaintenanceOwner _deferredStartup;
         private readonly ClearSessionOwner _clearSession;
         private readonly QrCodeWireOwner _qrCodeWire;
         private readonly SocketFacadeWireOwner _socketFacadeWire;
@@ -320,7 +300,6 @@ namespace Unison.Uwp.Services.WhatsApp
         private readonly ActiveChat _activeChat;
         private readonly InitialSyncProgressState _initialSync;
         private readonly SyncProductPolicy _productPolicy;
-        private readonly StartupMaintenanceCoordinator _startupMaintenance;
         private readonly PostReplayMaintenanceCoordinator _postReplayMaintenance;
         private readonly SelfProfileState _selfProfile;
 
@@ -358,7 +337,6 @@ namespace Unison.Uwp.Services.WhatsApp
 
         /// <summary>Per-chat and full-history requests sent and still owed. Shared with <c>HistoryFacade</c>.</summary>
         private readonly HistoryOnDemandRegistry _historyRequests;
-        private readonly ResyncConversationsOwner _resyncConversations;
         private readonly GroupRecipientCountCache _groupRecipientCounts = new GroupRecipientCountCache();
         // Field initializers run in declaration order, so _selfMarkers is set before it is read below.
         private readonly ISelfMarkerNaming _selfMarkers = new SelfMarkerNaming();
@@ -495,49 +473,17 @@ namespace Unison.Uwp.Services.WhatsApp
         /// pull connection). Reports wipe then prepare phases; awaits history (or timeout).
         /// </summary>
         public Task ResyncConversationsAsync(IProgress<ConversationResyncPhase> progress = null) =>
-            _resyncConversations.RunAsync(progress);
+            _startupHost.ResyncConversationsAsync(progress);
 
-        /// <summary>
-        /// Drops the in-memory conversation state after the on-disk copy has been wiped.
-        /// </summary>
-        /// <remarks>
-        /// Clearing the lists is the obvious half. The one that matters is the message id index:
-        /// it remembers every id already applied, so history arriving after a wipe would be
-        /// discarded as a duplicate of something that no longer exists, and the resync would end
-        /// with an empty app and no explanation. The on-demand bookkeeping goes with it because
-        /// its per-chat markers point at messages that are gone.
-        /// </remarks>
-        public Task ClearConversationCachesAsync()
-        {
-            return _ui.RunAsync(() =>
-            {
-                Chats.Clear();
-                if (ChatFacade != null)
-                {
-                    ChatFacade.ClearInMemoryTimelines();
-                }
-                else
-                {
-                    _chatState.MessagesByChat.Clear();
-                }
-                _historyRequests.ClearRequests();
-                _historyRequests.ReleaseFull();
-            });
-        }
-
+        /// <inheritdoc cref="IConversationResyncHost.ClearConversationCachesAsync"/>
+        public Task ClearConversationCachesAsync() =>
+            _startupHost.ClearConversationCachesAsync();
 
         /// <summary>
         /// PN + LID (+ canonical) keys for SQLite history reads and avatar lookups.
         /// </summary>
-        public void StartDeferredStartupMaintenance()
-        {
-            if (!_deferredStartupOnce.TryStart())
-            {
-                return;
-            }
-
-            _ = _deferredStartup.RunAsync();
-        }
+        public void StartDeferredStartupMaintenance() =>
+            _startupHost.StartDeferredStartupMaintenance();
 
         /// <summary>
         /// Saves a single message to disk (call after the timeline store accepted it).

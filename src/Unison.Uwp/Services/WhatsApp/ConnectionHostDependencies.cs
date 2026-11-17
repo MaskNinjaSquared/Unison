@@ -25,7 +25,8 @@ namespace Unison.Uwp.Services.WhatsApp
             CurrentSocketHealthHost currentSocketHealth,
             HistoryCatchUpHost historyCatchUp,
             ConnectionSessionHost connectionSession,
-            ChatCatalogPersistenceHost catalogPersistence)
+            ChatCatalogPersistenceHost catalogPersistence,
+            StartupMaintenanceHost startupMaintenance)
         {
             CatalogPersistence = catalogPersistence
                 ?? throw new ArgumentNullException(nameof(catalogPersistence));
@@ -33,6 +34,8 @@ namespace Unison.Uwp.Services.WhatsApp
             HistoryCatchUp = historyCatchUp ?? throw new ArgumentNullException(nameof(historyCatchUp));
             ConnectionSession = connectionSession
                 ?? throw new ArgumentNullException(nameof(connectionSession));
+            StartupMaintenance = startupMaintenance
+                ?? throw new ArgumentNullException(nameof(startupMaintenance));
             CurrentSocketHealth = currentSocketHealth
                 ?? throw new ArgumentNullException(nameof(currentSocketHealth));
             Events = events ?? throw new ArgumentNullException(nameof(events));
@@ -54,6 +57,8 @@ namespace Unison.Uwp.Services.WhatsApp
         public HistoryCatchUpHost HistoryCatchUp { get; }
 
         public ConnectionSessionHost ConnectionSession { get; }
+
+        public StartupMaintenanceHost StartupMaintenance { get; }
 
         public ChatCatalogPersistenceHost CatalogPersistence { get; }
 

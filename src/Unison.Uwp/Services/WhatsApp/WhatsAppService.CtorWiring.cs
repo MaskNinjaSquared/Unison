@@ -126,10 +126,10 @@ namespace Unison.Uwp.Services.WhatsApp
             _offlineReplayFlush = _catalogPersistence.OfflineReplayFlush;
             _historyCatchUp = wire.HistoryCatchUp;
             _connectionSession = wire.ConnectionSession;
+            _startupHost = wire.StartupMaintenance;
             _reconnectHost = wire.Reconnect;
             _softReconnect = _reconnectHost.Coordinator;
             _healthMonitors = new ConnectionHealthMonitorOwner(this);
-            _postSyncMaintenance = new PostSyncMaintenanceOwner(this);
             _chatState = chatState;
             _personStore = personStore ?? throw new ArgumentNullException(nameof(personStore));
             _groupRosterStore = groupRosterStore ?? throw new ArgumentNullException(nameof(groupRosterStore));
@@ -157,48 +157,14 @@ namespace Unison.Uwp.Services.WhatsApp
                 _syncStatus);
             _syncWork = syncWork ?? throw new ArgumentNullException(nameof(syncWork));
             _historyRequests = historyRequests ?? throw new ArgumentNullException(nameof(historyRequests));
-            _resyncConversations = new ResyncConversationsOwner(
-                message => Log("[WhatsAppService] " + message),
-                () => _messageStore.WipeChatsAndMessagesAsync(),
-                ClearConversationCachesAsync,
-                () => PersistChatCatalogAsync(Array.Empty<ChatItem>()),
-                () => NotificationService.Instance.ClearAll(),
-                _localSettings,
-                _historyCatchUp.UserResyncWait.WaitAsync);
             _catchUp = catchUp ?? throw new ArgumentNullException(nameof(catchUp));
             _initialSync = initialSync ?? throw new ArgumentNullException(nameof(initialSync));
             _productPolicy = productPolicy ?? throw new ArgumentNullException(nameof(productPolicy));
-            _startupMaintenance = startupMaintenance
-                ?? throw new ArgumentNullException(nameof(startupMaintenance));
+            _ = startupMaintenance;
             _postReplayMaintenance = postReplayMaintenance
                 ?? throw new ArgumentNullException(nameof(postReplayMaintenance));
             _selfProfile = selfProfile ?? throw new ArgumentNullException(nameof(selfProfile));
-            _selfProfileAuth = new SelfProfileAuthSync(
-                _selfProfile,
-                () => _authSlot.Current?.Me != null,
-                () => NormalizeSelfNameCandidate(
-                    _authSlot.Current.Me.Name,
-                    NormalizeJid(_authSlot.Current.Me.Id),
-                    NormalizeJid(_authSlot.Current.Me.Lid)),
-                () => CurrentUserName,
-                value => CurrentUserName = value,
-                () => _authSlot.Current?.Me?.Name,
-                IsOwnPhoneEchoLabel,
-                () => { _authSlot.Current.Me.Name = null; },
-                () => { _ = _connectionSession.PersistAuthState.RunAsync(null, "clear-phone-echo-name"); },
-                () => CurrentUserAvatar,
-                () => _authSlot.Current?.Me?.AvatarUrl,
-                avatarUrl => _selfProfile.RestoreAvatar(avatarUrl),
-                () => _authSlot.Current?.Me?.Id,
-                () => _authSlot.Current?.Me?.Phone,
-                phone => { _authSlot.Current.Me.Phone = phone; },
-                () => OnPropertyChanged(nameof(CurrentUserPhone)),
-                () => _selfProfile.NotifyChanged(),
-                () => { _ = _connectionSession.PersistAuthState.RunAsync(null, "self-phone"); },
-                avatarUrl => { _authSlot.Current.Me.AvatarUrl = avatarUrl; },
-                () => _authStore != null && _authSlot.Current != null,
-                () => _authStore.SaveAsync(_authSlot.Current));
-            _selfProfile.Bind(ReadSelfProfileAccount, IsOwnPhoneEchoLabel, url => _selfProfileAuth.PersistAvatarUrl(url));
+            _startupHost.BindSelfProfile(ReadSelfProfileAccount, IsOwnPhoneEchoLabel);
             _historyMessages = historyMessages ?? throw new ArgumentNullException(nameof(historyMessages));
             _liveMessages = liveMessages ?? new LiveMessagePersist(_historyMessages);
             _chatPreviews = chatPreviews ?? throw new ArgumentNullException(nameof(chatPreviews));
@@ -233,142 +199,6 @@ namespace Unison.Uwp.Services.WhatsApp
                 () => _authSlot.Current?.Me?.Lid,
                 (names, meId, meLid) => BackgroundDisplayNameStore.SaveAsync(names, meId, meLid),
                 _diagnostics);
-            _persistedUiState = new LoadPersistedUiStateOwner(
-                InitializeConnectionStateAsync,
-                () => _persistedUiStateLoaded,
-                () => _authSlot.Current?.Registered == true,
-                () => _persistedUiLoadGate.EnterAsync(),
-                () => _persistedUiLoadGate.Exit(),
-                () => _catalogPersistence.LoadPersistedChatsAsync(),
-                () => _persistedUiStateLoaded = true,
-                chatRowCount => _diagnostics.Write(
-                    "startup",
-                    "persisted-ui-loaded",
-                    "chatRows=" + chatRowCount),
-                () => Chats.Count,
-                async () =>
-                {
-                    try
-                    {
-                        if (Contacts == null)
-                        {
-                            Debug.WriteLine(
-                                "[WhatsAppService] Avatar hydrate skipped (persisted-ui-loaded): contact facade missing");
-                        }
-                        else
-                        {
-                            await Contacts.HydrateCachedAvatarUrisAsync("persisted-ui-loaded")
-                                .ConfigureAwait(false);
-                        }
-                    }
-                    catch (Exception exHydrate)
-                    {
-                        Debug.WriteLine(
-                            "[WhatsAppService] Startup avatar hydrate failed: " + exHydrate.Message);
-                    }
-                },
-                async () =>
-                {
-                    try
-                    {
-                        if (ChatFacade != null)
-                        {
-                            await ChatFacade.ReconcileChatPreviewsFromSqliteAsync(
-                                    null,
-                                    "persisted-ui-loaded")
-                                .ConfigureAwait(false);
-                        }
-                    }
-                    catch (Exception exReconcile)
-                    {
-                        Debug.WriteLine(
-                            "[WhatsAppService] Startup preview reconcile failed: " +
-                            exReconcile.Message);
-                    }
-                });
-            _releaseMemory = new ReleaseMemoryOwner(
-                () => _messageStore?.ClearMemoryCache(),
-                action => _ui.RunAsync(action),
-                () => _activeChat.Jid,
-                () => _chatState.MessagesByChat.ChatJids(),
-                GetCanonicalJid,
-                key => _chatState.MessagesByChat.Remove(key),
-                () => Debug.WriteLine("[Memoria] Caches inativos de mensagens liberados"),
-                error => Debug.WriteLine(
-                    "[Memoria] Falha ao liberar caches: " +
-                    (error != null ? error.Message : string.Empty)));
-            _deferredStartup = new DeferredStartupMaintenanceOwner(
-                () => PhaseTuning.DeferredStartupQuietWait(IsFirstSyncListHoldInProgress),
-                _startupMaintenance,
-                () => IsAppWindowVisible,
-                () => Chats.Count,
-                () => _authSlot.Current != null && _authSlot.Current.Registered,
-                () => IsHistoryCatchUpActive(),
-                () => _appMemory.UsageLevel.ToString(),
-                async () =>
-                {
-                    if (Contacts == null)
-                    {
-                        Debug.WriteLine(
-                            "[WhatsAppService] Avatar hydrate skipped (deferred-startup-early): contact facade missing");
-                        return;
-                    }
-
-                    await Contacts.HydrateCachedAvatarUrisAsync("deferred-startup-early")
-                        .ConfigureAwait(false);
-                },
-                ex => Debug.WriteLine(
-                    "[WhatsAppService] Early avatar hydrate failed: " +
-                    (ex != null ? ex.Message : string.Empty)),
-                (timeout, token) => WaitForStartupQuietAsync(timeout, "deferred-startup", token),
-                token => WaitForMemoryHeadroomAsync("deferred-startup", token),
-                reasonDetail => _diagnostics.Write(
-                    "startup",
-                    "deferred-maintenance-skipped",
-                    reasonDetail),
-                () => _syncStatus.Raise(null),
-                async () => (IReadOnlyDictionary<string, string>)await _messageStore
-                    .LoadContactNamesAsync()
-                    .ConfigureAwait(false),
-                async () => (IReadOnlyDictionary<string, string>)await _messageStore
-                    .LoadPhoneContactNamesAsync()
-                    .ConfigureAwait(false),
-                SanitizeContactLabel,
-                (jid, sanitized) => ContactNames.TryAdd(jid, sanitized),
-                (jid, trimmed) => PhoneContactNamesByJid.TryAdd(jid, trimmed),
-                () => Debug.WriteLine(
-                    "[WhatsAppService] Startup catalog empty; waiting for history_chat_preview / sync"),
-                async () =>
-                {
-                    IChatService chats = ChatFacade;
-                    if (chats == null)
-                    {
-                        Debug.WriteLine(
-                            "[WhatsAppService] Deferred list repair skipped: chat facade missing");
-                        return;
-                    }
-
-                    await chats.NotifyDeferredStartupListRepairAsync().ConfigureAwait(false);
-                },
-                async () =>
-                {
-                    if (Contacts != null)
-                    {
-                        await Contacts.NormalizePersistedChatNamesAsync().ConfigureAwait(false);
-                    }
-                },
-                async resolveMissingNames =>
-                {
-                    IContactService contacts = Contacts;
-                    if (contacts != null)
-                    {
-                        await contacts.RunDeferredStartupContactPassAsync(resolveMissingNames)
-                            .ConfigureAwait(false);
-                    }
-                },
-                ex => Debug.WriteLine(
-                    "[WhatsAppService] Deferred startup maintenance failed: " +
-                    (ex != null ? ex.Message : string.Empty)));
             _clearSession = new ClearSessionOwner(
                 message => Log("[WhatsAppService] " + message),
                 () => _pendingClearSessionKeyStore = _socketSlot.Current?.KeyStore,
@@ -436,7 +266,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 () =>
                 {
                     _sharedKeyStore = null;
-                    _persistedUiStateLoaded = false;
+                    _startupHost.ResetPersistedUiLoaded();
                     Interlocked.Exchange(ref _forceFreshConnectOnResume, 0);
                 },
                 async () =>
@@ -562,7 +392,7 @@ namespace Unison.Uwp.Services.WhatsApp
                         "; socketConnected=" + (_socketSlot.Current != null && _socketSlot.Current.IsConnected) +
                         "; handshake=" + (_socketSlot.Current != null && _socketSlot.Current.IsHandshakeComplete)),
                 NotifyOfflineReplayMessagesReleasedAsync,
-                _postSyncMaintenance.SchedulePostReplay,
+                _startupHost.SchedulePostReplay,
                 IsHistoryCatchUpActive,
                 offlineCount => _ = _historyCatchUp.PostOfflineFreshness.RunAsync(offlineCount));
             _chatState.Chats.CollectionChanged += (s, e) => _chatRows.Invalidate();

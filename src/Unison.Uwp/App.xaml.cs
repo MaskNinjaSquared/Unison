@@ -501,7 +501,8 @@ namespace Unison.Uwp
                 sp.GetRequiredService<CurrentSocketHealthHost>(),
                 sp.GetRequiredService<HistoryCatchUpHost>(),
                 sp.GetRequiredService<ConnectionSessionHost>(),
-                sp.GetRequiredService<ChatCatalogPersistenceHost>()));
+                sp.GetRequiredService<ChatCatalogPersistenceHost>(),
+                sp.GetRequiredService<StartupMaintenanceHost>()));
             services.AddSingleton(sp => new ChatCatalogPersistenceHost(
                 sp.GetRequiredService<ChatStateStore>(),
                 sp.GetRequiredService<JidAliasTable>(),
@@ -556,6 +557,33 @@ namespace Unison.Uwp
                 sp.GetRequiredService<ConnectionEventHub>(),
                 sp.GetRequiredService<AttachedUiDispatcher>(),
                 sp.GetRequiredService<IRuntimeDiagnostics>()));
+            services.AddSingleton(sp => new StartupMaintenanceHost(
+                () => sp.GetRequiredService<WhatsAppService>(),
+                () => sp.GetRequiredService<WhatsAppService>(),
+                () => sp.GetRequiredService<IContactService>(),
+                () => sp.GetRequiredService<IChatService>(),
+                sp.GetRequiredService<ChatCatalogPersistenceHost>(),
+                sp.GetRequiredService<HistoryCatchUpHost>(),
+                sp.GetRequiredService<ConnectionSessionHost>(),
+                sp.GetRequiredService<ConnectionSlot<AuthState>>(),
+                sp.GetRequiredService<SelfProfileState>(),
+                sp.GetRequiredService<ChatStateStore>(),
+                sp.GetRequiredService<ActiveChat>(),
+                sp.GetRequiredService<JidAliasTable>(),
+                sp.GetRequiredService<HistoryOnDemandRegistry>(),
+                sp.GetRequiredService<IHistoryChatPreviewStore>(),
+                sp.GetRequiredService<IMessageStore>(),
+                sp.GetRequiredService<AttachedUiDispatcher>(),
+                sp.GetRequiredService<ILocalSettings>(),
+                sp.GetRequiredService<IAppMemoryInfo>(),
+                sp.GetRequiredService<INotificationService>(),
+                sp.GetRequiredService<IRuntimeDiagnostics>(),
+                sp.GetRequiredService<StartupMaintenanceCoordinator>(),
+                sp.GetRequiredService<SyncProductPolicy>(),
+                sp.GetRequiredService<FirstSyncListHoldState>(),
+                sp.GetRequiredService<InitialSyncProgressState>(),
+                sp.GetRequiredService<SyncStatusChannel>(),
+                sp.GetRequiredService<ISelfMarkerNaming>()));
             services.AddSingleton(sp => new ChatPreviewReconciler(
                 sp.GetRequiredService<IHistoryMessageStore>(),
                 sp.GetRequiredService<JidAliasTable>(),

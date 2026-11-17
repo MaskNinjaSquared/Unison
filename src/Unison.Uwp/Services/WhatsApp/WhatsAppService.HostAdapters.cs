@@ -237,7 +237,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 }
 
         void IPostMessageEnrichmentHost.BeginEnrichmentSchedule(string reason) =>
-            _postSyncMaintenance.ScheduleEnrichment(reason);
+            _startupHost.ScheduleEnrichment(reason);
 
         Task<bool> IPostMessageEnrichmentHost.WaitForStartupQuietAsync(
             TimeSpan timeout,

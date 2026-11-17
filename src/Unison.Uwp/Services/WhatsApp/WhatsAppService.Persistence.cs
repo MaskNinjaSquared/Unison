@@ -19,7 +19,7 @@ namespace Unison.Uwp.Services.WhatsApp
         /// already started; only one caller performs the disk read.
         /// </summary>
         public Task LoadPersistedUiStateAsync() =>
-            _persistedUiState.RunAsync();
+            _startupHost.LoadPersistedUiStateAsync();
 
         private void QueueOfflineReplayMessageForPersist(string jid, ChatMessage message)
         {
