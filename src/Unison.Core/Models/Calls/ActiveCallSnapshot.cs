@@ -12,6 +12,7 @@ namespace Unison.Core.Models
     {
         Dialing,
         Ringing,
+        Connecting,
         Active,
         Ended
     }
@@ -28,7 +29,8 @@ namespace Unison.Core.Models
             DateTime? connectedAtUtc = null,
             bool isMuted = false,
             bool isSpeakerOn = false,
-            bool isBluetoothOn = false)
+            bool isBluetoothOn = false,
+            string signalingToJid = null)
         {
             CallId = callId;
             PeerJid = peerJid;
@@ -40,13 +42,18 @@ namespace Unison.Core.Models
             IsMuted = isMuted;
             IsSpeakerOn = isSpeakerOn;
             IsBluetoothOn = isBluetoothOn;
+            SignalingToJid = string.IsNullOrWhiteSpace(signalingToJid) ? peerJid : signalingToJid;
         }
 
         public string CallId { get; }
 
+        /// <summary>UI / chat identity (PN or resolved peer).</summary>
         public string PeerJid { get; }
 
         public string CallCreatorJid { get; }
+
+        /// <summary>meowcaller <c>m.from</c> — wire <c>to=</c> for call stanzas.</summary>
+        public string SignalingToJid { get; }
 
         public bool IsInbound { get; }
 
@@ -78,6 +85,7 @@ namespace Unison.Core.Models
                 connectedAtUtc ?? ConnectedAtUtc,
                 isMuted ?? IsMuted,
                 isSpeakerOn ?? IsSpeakerOn,
-                isBluetoothOn ?? IsBluetoothOn);
+                isBluetoothOn ?? IsBluetoothOn,
+                SignalingToJid);
     }
 }

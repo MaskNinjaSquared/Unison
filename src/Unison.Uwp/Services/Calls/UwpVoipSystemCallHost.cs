@@ -7,8 +7,13 @@
 using System;
 using System.Threading.Tasks;
 using Unison.Core.Contracts;
+using Unison.Core.Helpers.Calls;
+using Unison.Uwp.Services;
+using Windows.ApplicationModel;
 using Windows.ApplicationModel.Calls;
 using Windows.Foundation.Metadata;
+using Windows.System;
+using Windows.UI.Xaml;
 
 namespace Unison.Uwp.Services.Calls
 {
@@ -20,7 +25,7 @@ namespace Unison.Uwp.Services.Calls
         public const string SystemProtocolScheme = "ms-voip-call";
 
         /// <summary>App-owned deep link; also accepted in OnActivated.</summary>
-        public const string ProtocolScheme = "unison-call";
+        public const string ProtocolScheme = VoipCallActivationUri.AppScheme;
 
         private readonly object _gate = new object();
         private VoipPhoneCall _current;
@@ -142,6 +147,44 @@ namespace Unison.Uwp.Services.Calls
             try
             {
                 ending.NotifyCallEnded();
+            }
+            catch
+            {
+            }
+        }
+
+        /// <summary>
+        /// Foregrounds Unison after a system Answer via own-protocol activation (Mobile-safe).
+        /// </summary>
+        public static async Task ActivateAppForAnswerAsync(string callId)
+        {
+            string uri = VoipCallActivationUri.ForAnswer(callId);
+            RuntimeDiagnosticsService.Instance.Write("call", "activate-launch", "uri=" + uri);
+
+            try
+            {
+                var options = new LauncherOptions();
+                try
+                {
+                    options.TargetApplicationPackageFamilyName = Package.Current.Id.FamilyName;
+                }
+                catch
+                {
+                }
+
+                await Launcher.LaunchUriAsync(new Uri(uri), options);
+            }
+            catch (Exception ex)
+            {
+                RuntimeDiagnosticsService.Instance.Write(
+                    "call",
+                    "activate-launch-failed",
+                    ex.Message);
+            }
+
+            try
+            {
+                Window.Current?.Activate();
             }
             catch
             {

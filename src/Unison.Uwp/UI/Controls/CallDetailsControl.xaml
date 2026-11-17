@@ -12,9 +12,9 @@
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
 
+                <!-- DirectionGlyph is Video (E714) when IsVideo — see CallDirectionGlyphs.For. -->
                 <FontIcon Glyph="{x:Bind DirectionGlyph}"
                           FontFamily="{StaticResource IconFont}"
                           FontSize="16"
@@ -37,13 +37,6 @@
                                TextWrapping="NoWrap"
                                TextTrimming="CharacterEllipsis"/>
                 </StackPanel>
-
-                <TextBlock Grid.Column="2"
-                           VerticalAlignment="Center"
-                           FontSize="12"
-                           Foreground="{ThemeResource WhatsAppTextMediumBrush}"
-                           Text="Video"
-                           Visibility="{x:Bind IsVideo, Converter={StaticResource BooleanToVisibilityConverter}}"/>
             </Grid>
         </DataTemplate>
     </UserControl.Resources>

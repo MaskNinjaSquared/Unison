@@ -340,6 +340,7 @@ namespace Unison.Core.ViewModels
             if (IsCallEventProperty(name))
             {
                 Raise(nameof(IsCallEvent));
+                Raise(nameof(IsCallVideo));
                 Raise(nameof(IsMissedCall));
                 Raise(nameof(CallTitle));
                 Raise(nameof(CallSubtitle));
@@ -457,6 +458,7 @@ namespace Unison.Core.ViewModels
 
         private static bool IsCallEventProperty(string name) =>
             name == nameof(ChatMessage.IsCallEvent) ||
+            name == nameof(ChatMessage.IsCallVideo) ||
             name == nameof(ChatMessage.IsMissedCall) ||
             name == nameof(ChatMessage.CallChromeKind) ||
             name == nameof(ChatMessage.CallDurationSeconds) ||
@@ -1494,6 +1496,8 @@ namespace Unison.Core.ViewModels
 
         public bool IsCallEvent => Model.IsCallEvent;
 
+        public bool IsCallVideo => Model.IsCallVideo;
+
         public bool IsMissedCall => Model.IsMissedCall;
 
         public string CallTitle =>
@@ -1508,9 +1512,9 @@ namespace Unison.Core.ViewModels
         public string CallGlyph =>
             !string.IsNullOrEmpty(Model.CallGlyph)
                 ? Model.CallGlyph
-                : (Model.IsFromMe
-                    ? Unison.Core.Helpers.Calls.CallDirectionGlyphs.Outgoing
-                    : Unison.Core.Helpers.Calls.CallDirectionGlyphs.Incoming);
+                : Unison.Core.Helpers.Calls.CallDirectionGlyphs.For(
+                    Model.IsFromMe ? CallDirection.Outgoing : CallDirection.Incoming,
+                    Model.IsCallVideo);
 
         public string ContactCardDisplayName
         {

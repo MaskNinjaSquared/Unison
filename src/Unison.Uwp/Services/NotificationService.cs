@@ -214,7 +214,8 @@ namespace Unison.Uwp.Services
             string body,
             string chatJid = null,
             bool updateLiveTile = false,
-            bool isFavorite = false)
+            bool isFavorite = false,
+            bool isVideo = false)
         {
             Initialize();
 
@@ -243,6 +244,7 @@ namespace Unison.Uwp.Services
                 "master=" + master +
                 "; calls=" + calls +
                 "; tile=" + updateLiveTile +
+                "; video=" + isVideo +
                 "; jid=" + (chatJid ?? string.Empty));
         }
 

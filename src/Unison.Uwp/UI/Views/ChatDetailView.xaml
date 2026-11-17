@@ -114,8 +114,7 @@
                         <AdaptiveTrigger MinWindowWidth="0"/>
                     </VisualState.StateTriggers>
                     <VisualState.Setters>
-                        <Setter Target="ContactVideoCallButton.Visibility" Value="Collapsed"/>
-                        <Setter Target="ContactAudioCallButton.Visibility" Value="Collapsed"/>
+                        <!-- Contact voice/video: code-behind (hides on Notes to Self). -->
                         <Setter Target="GroupVideoCallButton.Visibility" Value="Collapsed"/>
                     </VisualState.Setters>
                 </VisualState>
@@ -124,8 +123,6 @@
                         <AdaptiveTrigger MinWindowWidth="400"/>
                     </VisualState.StateTriggers>
                     <VisualState.Setters>
-                        <Setter Target="ContactVideoCallButton.Visibility" Value="Visible"/>
-                        <Setter Target="ContactAudioCallButton.Visibility" Value="Visible"/>
                         <Setter Target="GroupVideoCallButton.Visibility" Value="Visible"/>
                     </VisualState.Setters>
                 </VisualState>
@@ -216,7 +213,10 @@
             </Grid.RowDefinitions>
             
             <!-- Tiled Background Layer -->
-            <controls:TiledBackground Grid.RowSpan="4"/>
+            <controls:ChatBackgroundSurface Grid.RowSpan="4"
+                                            BackgroundKind="{Binding ActiveChat.BackgroundKind, FallbackValue=0}"
+                                            CustomPath="{Binding ActiveChat.BackgroundPath}"
+                                            SolidColorHex="{Binding ActiveChat.BackgroundSolidColorHex}"/>
 
             <!-- Chat Header with DropShadowPanel (Imgur-style; black cast below) -->
             <toolkit:DropShadowPanel Grid.Row="0"

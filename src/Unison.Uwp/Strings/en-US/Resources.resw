@@ -1340,7 +1340,13 @@ Disable after diagnosing: keeping it on slows the app.</value>
     <value>Toasts for incoming calls and missed-call Live Tile updates.</value>
   </data>
   <data name="Notification_IncomingCallBody" xml:space="preserve">
-    <value>Incoming Call (Answer on Primary Phone)</value>
+    <value>Voice call</value>
+  </data>
+  <data name="Notification_IncomingVoiceCallBody" xml:space="preserve">
+    <value>Voice call</value>
+  </data>
+  <data name="Notification_IncomingVideoCallBody" xml:space="preserve">
+    <value>Video call — answer on your phone</value>
   </data>
   <data name="Notification_MissedCall" xml:space="preserve">
     <value>Missed call</value>
@@ -1665,6 +1671,45 @@ Disable after diagnosing: keeping it on slows the app.</value>
   </data>
   <data name="ChatDetail_ShowContact.Text" xml:space="preserve">
     <value>View contact</value>
+  </data>
+  <data name="ChatDetail_Background.Text" xml:space="preserve">
+    <value>Conversation theme</value>
+  </data>
+  <data name="ChatBackground_ConversationThemeTitle.Text" xml:space="preserve">
+    <value>Conversation Theme</value>
+  </data>
+  <data name="ChatBackground_Back.Text" xml:space="preserve">
+    <value>Back</value>
+  </data>
+  <data name="ChatBackground_Wallpaper.Text" xml:space="preserve">
+    <value>Wallpaper</value>
+  </data>
+  <data name="ChatBackground_BackgroundAppBarLabel.Text" xml:space="preserve">
+    <value>Background</value>
+  </data>
+  <data name="ChatBackground_SectionPreview.Text" xml:space="preserve">
+    <value>PREVIEW</value>
+  </data>
+  <data name="ChatBackground_SectionBackground.Text" xml:space="preserve">
+    <value>BACKGROUND</value>
+  </data>
+  <data name="ChatBackground_SectionCustomize.Text" xml:space="preserve">
+    <value>CUSTOMIZE</value>
+  </data>
+  <data name="ChatBackground_WhatsAppDoodles.Text" xml:space="preserve">
+    <value>WhatsApp Doodles</value>
+  </data>
+  <data name="ChatBackground_SolidColor.Text" xml:space="preserve">
+    <value>Solid color</value>
+  </data>
+  <data name="ChatBackground_SolidColorTitle.Text" xml:space="preserve">
+    <value>Solid color</value>
+  </data>
+  <data name="ChatBackground_SectionSolidColors.Text" xml:space="preserve">
+    <value>COLORS</value>
+  </data>
+  <data name="ChatBackground_SolidColorTransparent" xml:space="preserve">
+    <value>Transparent</value>
   </data>
   <data name="ChatDetail_VoiceCall.Text" xml:space="preserve">
     <value>Voice call</value>
@@ -2301,6 +2346,18 @@ Disable after diagnosing: keeping it on slows the app.</value>
   </data>
   <data name="CallScreen_EndCall.Text" xml:space="preserve">
     <value>end call</value>
+  </data>
+  <data name="CallScreen_Answer.Text" xml:space="preserve">
+    <value>answer</value>
+  </data>
+  <data name="CallScreen_Decline.Text" xml:space="preserve">
+    <value>decline</value>
+  </data>
+  <data name="CallScreen_ReplyWithMessage.Text" xml:space="preserve">
+    <value>reply with message</value>
+  </data>
+  <data name="CallScreen_Connecting" xml:space="preserve">
+    <value>CONNECTING...</value>
   </data>
   <data name="CallScreen_Message.Text" xml:space="preserve">
     <value>message</value>

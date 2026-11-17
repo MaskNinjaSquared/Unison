@@ -1304,7 +1304,13 @@ Desative depois de diagnosticar: manter ligado deixa o app lento.</value>
     <value>Toasts de chamadas recebidas e Live Tile de chamadas perdidas.</value>
   </data>
   <data name="Notification_IncomingCallBody" xml:space="preserve">
-    <value>Chamada recebida (Atenda no telefone principal)</value>
+    <value>Chamada de voz</value>
+  </data>
+  <data name="Notification_IncomingVoiceCallBody" xml:space="preserve">
+    <value>Chamada de voz</value>
+  </data>
+  <data name="Notification_IncomingVideoCallBody" xml:space="preserve">
+    <value>Chamada de vídeo — atenda no telefone</value>
   </data>
   <data name="Notification_MissedCall" xml:space="preserve">
     <value>Chamada perdida</value>
@@ -1626,6 +1632,45 @@ Desative depois de diagnosticar: manter ligado deixa o app lento.</value>
   </data>
   <data name="ChatDetail_ShowContact.Text" xml:space="preserve">
     <value>Ver contato</value>
+  </data>
+  <data name="ChatDetail_Background.Text" xml:space="preserve">
+    <value>Tema da conversa</value>
+  </data>
+  <data name="ChatBackground_ConversationThemeTitle.Text" xml:space="preserve">
+    <value>Tema da Conversa</value>
+  </data>
+  <data name="ChatBackground_Back.Text" xml:space="preserve">
+    <value>Voltar</value>
+  </data>
+  <data name="ChatBackground_Wallpaper.Text" xml:space="preserve">
+    <value>Papel de parede</value>
+  </data>
+  <data name="ChatBackground_BackgroundAppBarLabel.Text" xml:space="preserve">
+    <value>Background</value>
+  </data>
+  <data name="ChatBackground_SectionPreview.Text" xml:space="preserve">
+    <value>PRÉVIA</value>
+  </data>
+  <data name="ChatBackground_SectionBackground.Text" xml:space="preserve">
+    <value>BACKGROUND</value>
+  </data>
+  <data name="ChatBackground_SectionCustomize.Text" xml:space="preserve">
+    <value>PERSONALIZAR</value>
+  </data>
+  <data name="ChatBackground_WhatsAppDoodles.Text" xml:space="preserve">
+    <value>Doodles de WhatsApp</value>
+  </data>
+  <data name="ChatBackground_SolidColor.Text" xml:space="preserve">
+    <value>Cor sólida</value>
+  </data>
+  <data name="ChatBackground_SolidColorTitle.Text" xml:space="preserve">
+    <value>Cor sólida</value>
+  </data>
+  <data name="ChatBackground_SectionSolidColors.Text" xml:space="preserve">
+    <value>CORES</value>
+  </data>
+  <data name="ChatBackground_SolidColorTransparent" xml:space="preserve">
+    <value>Transparente</value>
   </data>
   <data name="ChatDetail_VoiceCall.Text" xml:space="preserve">
     <value>Ligação de voz</value>
@@ -2301,6 +2346,18 @@ Desative depois de diagnosticar: manter ligado deixa o app lento.</value>
   </data>
   <data name="CallScreen_EndCall.Text" xml:space="preserve">
     <value>encerrar</value>
+  </data>
+  <data name="CallScreen_Answer.Text" xml:space="preserve">
+    <value>atender</value>
+  </data>
+  <data name="CallScreen_Decline.Text" xml:space="preserve">
+    <value>recusar</value>
+  </data>
+  <data name="CallScreen_ReplyWithMessage.Text" xml:space="preserve">
+    <value>responder com mensagem</value>
+  </data>
+  <data name="CallScreen_Connecting" xml:space="preserve">
+    <value>CONECTANDO...</value>
   </data>
   <data name="CallScreen_Message.Text" xml:space="preserve">
     <value>mensagem</value>

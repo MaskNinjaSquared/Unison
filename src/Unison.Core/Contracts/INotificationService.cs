@@ -38,7 +38,8 @@ namespace Unison.Core.Contracts
             string body,
             string chatJid = null,
             bool updateLiveTile = false,
-            bool isFavorite = false);
+            bool isFavorite = false,
+            bool isVideo = false);
 
         void RefreshUnreadState(IEnumerable<ChatItem> chats);
         void UpdateBadge(int totalUnread);

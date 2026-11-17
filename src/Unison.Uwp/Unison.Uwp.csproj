@@ -42,6 +42,8 @@
     <AppxOSMinVersionReplaceManifestVersion>false</AppxOSMinVersionReplaceManifestVersion>
     <AppxOSMaxVersionTestedReplaceManifestVersion>false</AppxOSMaxVersionTestedReplaceManifestVersion>
     <LangVersion>preview</LangVersion>
+    <!-- AudioGraph float PCM copies use IMemoryBufferByteAccess (byte*). -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <!-- Debug turns on reflection XamlTypeInfo, which registers System.Windows.Input.ICommand
          again even though the Windows SDK already includes it. -->
     <EnableTypeInfoReflection>false</EnableTypeInfoReflection>
@@ -346,6 +348,10 @@
     <Compile Include="Services\WindowsContactListPublisher.cs" />
     <Compile Include="Services\NotificationService.cs" />
     <Compile Include="Services\Calls\UwpCallIoFactory.cs" />
+    <Compile Include="Services\Calls\AudioFrameBufferAccess.cs" />
+    <Compile Include="Services\Calls\UwpCallAudioSource.cs" />
+    <Compile Include="Services\Calls\UwpCallAudioSink.cs" />
+    <Compile Include="Services\Calls\UwpDatagramCallUdpTransport.cs" />
     <Compile Include="Services\Calls\SocketCallSignalingChannel.cs" />
     <Compile Include="Services\Calls\CallScreenPresenter.cs" />
     <Compile Include="Services\Calls\UwpVoipSystemCallHost.cs" />
@@ -397,6 +403,16 @@
     </Compile>
     <Compile Include="UI\Controls\TiledBackground.xaml.cs">
       <DependentUpon>TiledBackground.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="UI\Controls\ChatBackgroundSurface.xaml.cs">
+      <DependentUpon>ChatBackgroundSurface.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="UI\Controls\ChatThemePreviewState.cs" />
+    <Compile Include="UI\Controls\ChatThemePreview.xaml.cs">
+      <DependentUpon>ChatThemePreview.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="UI\Controls\ChatBackgroundPickerControl.xaml.cs">
+      <DependentUpon>ChatBackgroundPickerControl.xaml</DependentUpon>
     </Compile>
     <Compile Include="UI\Controls\MessageBubbleChrome.xaml.cs">
       <DependentUpon>MessageBubbleChrome.xaml</DependentUpon>
@@ -597,6 +613,7 @@
     <Compile Include="UI\TemplateSelectors\StatusListAvatarKindTemplateSelector.cs" />
     <Compile Include="UI\Controls\SettingBoxFace.cs" />
     <Compile Include="UI\TemplateSelectors\SettingBoxLayoutTemplateSelector.cs" />
+    <Compile Include="UI\TemplateSelectors\ChatThemePreviewFormFactorTemplateSelector.cs" />
     <Compile Include="UI\Templates\ChatItemTemplates.xaml.cs">
       <DependentUpon>ChatItemTemplates.xaml</DependentUpon>
     </Compile>
@@ -635,6 +652,9 @@
     <Compile Include="UI\Converters\BooleanToVisibilityConverter.cs" />
     <Compile Include="UI\Converters\InvertedBooleanToVisibilityConverter.cs" />
     <Compile Include="UI\Converters\HexColorToBrushConverter.cs" />
+    <Compile Include="UI\Converters\HexOrThemeWallpaperBrushConverter.cs" />
+    <Compile Include="UI\Converters\BoolToThicknessConverter.cs" />
+    <Compile Include="UI\Converters\BoolClearsCornerRadiusConverter.cs" />
     <Compile Include="UI\Converters\FontFamilyNameConverter.cs" />
     <Compile Include="UI\Converters\EmojiJumpFontConverter.cs" />
     <Compile Include="UI\Converters\InvertedStringToVisibilityConverter.cs" />
@@ -922,6 +942,10 @@
     <Content Include="Assets\StoreLogo.scale-400.png" />
     <Content Include="Assets\Backgrounds\WhatsAppBackground.png" />
     <Content Include="Assets\Backgrounds\WhatsAppBackground_Colored.png" />
+    <Content Include="Assets\Backgrounds\ChatBg_Cubes.jpg" />
+    <Content Include="Assets\Backgrounds\ChatBg_Owls.png" />
+    <Content Include="Assets\Backgrounds\ChatBg_Damask.jpg" />
+    <Content Include="Assets\ChatTheme\OutgoingBubble.png" />
     <Content Include="Assets\Bubbles\**\*.png" />
     <Content Include="Assets\Wide310x150Logo.scale-100.png" />
     <Content Include="Assets\Wide310x150Logo.scale-125.png" />
@@ -975,6 +999,18 @@
       <SubType>Designer</SubType>
     </Page>
     <Page Include="UI\Controls\TiledBackground.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Include="UI\Controls\ChatBackgroundSurface.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Include="UI\Controls\ChatThemePreview.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Include="UI\Controls\ChatBackgroundPickerControl.xaml">
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </Page>

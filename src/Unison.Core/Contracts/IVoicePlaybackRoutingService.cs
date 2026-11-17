@@ -43,6 +43,12 @@ namespace Unison.Core.Contracts
         /// End the session: detach proximity, release screen controller, restore speaker.
         /// </summary>
         void EndSession();
+
+        /// <summary>
+        /// Prefer speaker or earpiece for the current device (call screen viva-voz).
+        /// No-op when routing is unsupported; does not require a voice-note session.
+        /// </summary>
+        void SetPreferredRoute(VoicePlaybackRoute route);
     }
 
     public enum VoicePlaybackRoute

@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <root>
   <!-- 
     Microsoft ResX Schema 
@@ -860,7 +860,13 @@ Schakel uit na diagnostiseren: het ingeschakeld laten vertraagd de app.</value>
     <value>Toasts for incoming calls and missed-call Live Tile updates.</value>
   </data>
   <data name="Notification_IncomingCallBody" xml:space="preserve">
-    <value>Incoming Call (Answer on Primary Phone)</value>
+    <value>Voice call</value>
+  </data>
+  <data name="Notification_IncomingVoiceCallBody" xml:space="preserve">
+    <value>Voice call</value>
+  </data>
+  <data name="Notification_IncomingVideoCallBody" xml:space="preserve">
+    <value>Video call — answer on your phone</value>
   </data>
   <data name="Notification_MissedCall" xml:space="preserve">
     <value>Missed call</value>
@@ -1164,6 +1170,45 @@ Schakel uit na diagnostiseren: het ingeschakeld laten vertraagd de app.</value>
   </data>
   <data name="ChatDetail_ShowContact.Text" xml:space="preserve">
     <value>Contact bekijken</value>
+  </data>
+  <data name="ChatDetail_Background.Text" xml:space="preserve">
+    <value>Gespreksthema</value>
+  </data>
+  <data name="ChatBackground_ConversationThemeTitle.Text" xml:space="preserve">
+    <value>Gespreksthema</value>
+  </data>
+  <data name="ChatBackground_Back.Text" xml:space="preserve">
+    <value>Terug</value>
+  </data>
+  <data name="ChatBackground_Wallpaper.Text" xml:space="preserve">
+    <value>Achtergrond</value>
+  </data>
+  <data name="ChatBackground_BackgroundAppBarLabel.Text" xml:space="preserve">
+    <value>Achtergrond</value>
+  </data>
+  <data name="ChatBackground_SectionPreview.Text" xml:space="preserve">
+    <value>VOORBEELD</value>
+  </data>
+  <data name="ChatBackground_SectionBackground.Text" xml:space="preserve">
+    <value>ACHTERGROND</value>
+  </data>
+  <data name="ChatBackground_SectionCustomize.Text" xml:space="preserve">
+    <value>AANPASSEN</value>
+  </data>
+  <data name="ChatBackground_WhatsAppDoodles.Text" xml:space="preserve">
+    <value>WhatsApp-doodles</value>
+  </data>
+  <data name="ChatBackground_SolidColor.Text" xml:space="preserve">
+    <value>Effen kleur</value>
+  </data>
+  <data name="ChatBackground_SolidColorTitle.Text" xml:space="preserve">
+    <value>Effen kleur</value>
+  </data>
+  <data name="ChatBackground_SectionSolidColors.Text" xml:space="preserve">
+    <value>KLEUREN</value>
+  </data>
+  <data name="ChatBackground_SolidColorTransparent" xml:space="preserve">
+    <value>Transparant</value>
   </data>
   <data name="ChatDetail_VoiceCall.Text" xml:space="preserve">
     <value>Spraakoproep</value>

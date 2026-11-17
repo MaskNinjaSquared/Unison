@@ -8,6 +8,7 @@
 using System;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
+using System.Threading.Tasks;
 using System.Windows.Input;
 using Unison.Core.Contracts;
 using Unison.Core.Contracts.WhatsApp;
@@ -27,6 +28,8 @@ namespace Unison.Core.ViewModels
         private readonly IDispatcher _ui;
         private readonly IStringResources _strings;
         private readonly IContactService _contacts;
+        private readonly IJidResolver _jids;
+        private readonly IVoicePlaybackRoutingService _routing;
         private readonly Func<DateTime> _utcNow;
 
         private ActiveCallSnapshot _call;
@@ -34,6 +37,7 @@ namespace Unison.Core.ViewModels
         private string _displayName = string.Empty;
         private string _phoneNumber = string.Empty;
         private string _avatarUrl;
+        private bool _ending;
 
         public CallScreenViewModel(
             ICallService calls,
@@ -41,20 +45,28 @@ namespace Unison.Core.ViewModels
             IDispatcher ui,
             IStringResources strings = null,
             IContactService contacts = null,
-            Func<DateTime> utcNow = null)
+            IVoicePlaybackRoutingService routing = null,
+            Func<DateTime> utcNow = null,
+            IJidResolver jids = null)
         {
             _calls = calls ?? throw new ArgumentNullException(nameof(calls));
             _chatState = chatState ?? throw new ArgumentNullException(nameof(chatState));
             _ui = ui ?? throw new ArgumentNullException(nameof(ui));
             _strings = strings;
             _contacts = contacts;
+            _routing = routing;
+            _jids = jids;
             _utcNow = utcNow ?? (() => DateTime.UtcNow);
 
-            EndCallCommand = new RelayCommand(() => _ = _calls.EndActiveCallAsync());
+            AnswerCommand = new RelayCommand(() => _ = _calls.AnswerActiveCallAsync());
+            // Ringing → reject; Connecting/Active → terminate (meowcaller hangup).
+            DeclineCommand = new RelayCommand(() => _ = EndCallAsync());
+            EndCallCommand = new RelayCommand(() => _ = EndCallAsync());
             MuteCommand = new RelayCommand(() => _calls.SetMuted(!IsMuted));
-            SpeakerCommand = new RelayCommand(() => _calls.SetSpeakerOn(!IsSpeakerOn));
+            SpeakerCommand = new RelayCommand(ToggleSpeaker);
             BluetoothCommand = new RelayCommand(() => _calls.SetBluetoothOn(!IsBluetoothOn));
             MessageCommand = new RelayCommand(RequestOpenChat);
+            ReplyWithMessageCommand = new RelayCommand(() => _ = DeclineAndOpenChatAsync());
 
             _calls.ActiveCallChanged += OnActiveCallChanged;
             Apply(_calls.ActiveCall);
@@ -64,6 +76,11 @@ namespace Unison.Core.ViewModels
 
         /// <summary>Payload is the peer JID to open in Chats.</summary>
         public event EventHandler<string> OpenChatRequested;
+
+        public ICommand AnswerCommand { get; }
+
+        /// <summary>Rejects a ringing offer (or hangs up). Same path as <see cref="EndCallCommand"/>.</summary>
+        public ICommand DeclineCommand { get; }
 
         public ICommand EndCallCommand { get; }
 
@@ -75,13 +92,31 @@ namespace Unison.Core.ViewModels
 
         public ICommand MessageCommand { get; }
 
+        /// <summary>Rejects the ring, then asks the shell to open the peer chat.</summary>
+        public ICommand ReplyWithMessageCommand { get; }
+
         public bool IsOpen => _call != null;
+
+        public bool IsRinging =>
+            _call != null && _call.Phase == ActiveCallPhase.Ringing;
 
         public bool IsConnected => _call != null && _call.Phase == ActiveCallPhase.Active;
 
+        public bool CanToggleSpeaker =>
+            _call != null &&
+            (_call.Phase == ActiveCallPhase.Ringing ||
+             _call.Phase == ActiveCallPhase.Connecting ||
+             _call.Phase == ActiveCallPhase.Dialing ||
+             _call.Phase == ActiveCallPhase.Active);
+
         public bool IsMuted => _call != null && _call.IsMuted;
 
-        public bool IsSpeakerOn => _call != null && _call.IsSpeakerOn;
+        /// <summary>Two-way for the call-dock <c>ToggleButton</c>; also flipped by <see cref="SpeakerCommand"/>.</summary>
+        public bool IsSpeakerOn
+        {
+            get => _call != null && _call.IsSpeakerOn;
+            set => ApplySpeaker(value);
+        }
 
         public bool IsBluetoothOn => _call != null && _call.IsBluetoothOn;
 
@@ -132,7 +167,25 @@ namespace Unison.Core.ViewModels
                 _utcNow(),
                 Label("CallScreen_Dialing", "DIALING..."),
                 Label("CallScreen_Receiving", "RECEIVING CALL..."),
-                Label("CallScreen_Ended", "CALL ENDED"));
+                Label("CallScreen_Ended", "CALL ENDED"),
+                Label("CallScreen_Connecting", "CONNECTING..."));
+        }
+
+        private void ToggleSpeaker() => ApplySpeaker(!IsSpeakerOn);
+
+        private void ApplySpeaker(bool on)
+        {
+            bool current = _call != null && _call.IsSpeakerOn;
+            if (!CanToggleSpeaker || on == current)
+            {
+                // Snap ToggleButton IsChecked back when the change was rejected.
+                OnPropertyChanged(nameof(IsSpeakerOn));
+                return;
+            }
+
+            _calls.SetSpeakerOn(on);
+            _routing?.SetPreferredRoute(
+                on ? VoicePlaybackRoute.Speaker : VoicePlaybackRoute.Earpiece);
         }
 
         private void OnActiveCallChanged(object sender, EventArgs e)
@@ -153,7 +206,9 @@ namespace Unison.Core.ViewModels
 
             RefreshClock();
             OnPropertyChanged(nameof(IsOpen));
+            OnPropertyChanged(nameof(IsRinging));
             OnPropertyChanged(nameof(IsConnected));
+            OnPropertyChanged(nameof(CanToggleSpeaker));
             OnPropertyChanged(nameof(IsMuted));
             OnPropertyChanged(nameof(IsSpeakerOn));
             OnPropertyChanged(nameof(IsBluetoothOn));
@@ -176,7 +231,7 @@ namespace Unison.Core.ViewModels
             }
 
             string phone = string.IsNullOrWhiteSpace(digits) ? string.Empty : "+" + digits;
-            ChatItem chat = _chatState.FindChat(peerJid);
+            ChatItem chat = FindChatFlexible(peerJid);
             string name = chat?.Name;
             if (string.IsNullOrWhiteSpace(name) && _contacts != null)
             {
@@ -185,7 +240,41 @@ namespace Unison.Core.ViewModels
 
             DisplayName = !string.IsNullOrWhiteSpace(name) ? name : (phone.Length > 0 ? phone : peerJid);
             PhoneNumber = phone;
-            AvatarUrl = chat != null ? (chat.AvatarHighUrl ?? chat.AvatarUrl) : null;
+            // Prefer high for the full-bleed call photo; GetAvatarUrl falls back either way.
+            AvatarUrl = chat != null ? chat.GetAvatarUrl(preferHigh: true) : null;
+        }
+
+        private ChatItem FindChatFlexible(string jid)
+        {
+            ChatItem chat = _chatState.FindChat(jid);
+            if (chat != null)
+            {
+                return chat;
+            }
+
+            if (_jids == null)
+            {
+                return null;
+            }
+
+            string canonical = _jids.GetCanonicalJid(jid);
+            if (!string.IsNullOrWhiteSpace(canonical) &&
+                !string.Equals(canonical, jid, StringComparison.OrdinalIgnoreCase))
+            {
+                chat = _chatState.FindChat(canonical);
+                if (chat != null)
+                {
+                    return chat;
+                }
+            }
+
+            string alias;
+            if (_jids.TryGetAlias(jid, out alias) && !string.IsNullOrWhiteSpace(alias))
+            {
+                return _chatState.FindChat(alias);
+            }
+
+            return null;
         }
 
         private void RequestOpenChat()
@@ -194,6 +283,39 @@ namespace Unison.Core.ViewModels
             if (call != null && !string.IsNullOrWhiteSpace(call.PeerJid))
             {
                 OpenChatRequested?.Invoke(this, call.PeerJid);
+            }
+        }
+
+        private async Task EndCallAsync()
+        {
+            if (_ending)
+            {
+                return;
+            }
+
+            _ending = true;
+            try
+            {
+                await _calls.EndActiveCallAsync().ConfigureAwait(true);
+            }
+            catch
+            {
+                // Signaling can fail (no session / reject stanza); façade already cleared ActiveCall.
+            }
+            finally
+            {
+                _ending = false;
+            }
+        }
+
+        private async Task DeclineAndOpenChatAsync()
+        {
+            ActiveCallSnapshot call = _call;
+            string peerJid = call?.PeerJid;
+            await EndCallAsync().ConfigureAwait(true);
+            if (!string.IsNullOrWhiteSpace(peerJid))
+            {
+                OpenChatRequested?.Invoke(this, peerJid);
             }
         }
 

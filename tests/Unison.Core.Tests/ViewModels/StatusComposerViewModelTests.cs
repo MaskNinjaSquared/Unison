@@ -7,7 +7,7 @@ using Unison.Core.Models;
 using Unison.Core.State;
 using Unison.Core.Tests.Helpers;
 using Unison.Core.ViewModels;
-using Xunit;
+using Xunit;
 using Unison.WhatsAppClient.Messages;
 
 namespace Unison.Core.Tests.ViewModels
@@ -557,7 +557,7 @@ namespace Unison.Core.Tests.ViewModels
                 bool isCommunityAnnounce = false, bool isFavorite = false, bool isChannel = false) { }
 
             public void NotifyCallAlert(
-                string title, string body, string chatJid = null, bool updateLiveTile = false, bool isFavorite = false) { }
+                string title, string body, string chatJid = null, bool updateLiveTile = false, bool isFavorite = false, bool isVideo = false) { }
 
             public void RefreshUnreadState(IEnumerable<ChatItem> chats) { }
 

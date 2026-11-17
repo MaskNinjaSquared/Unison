@@ -19,6 +19,10 @@ namespace Unison.Voip.Null
 
         private sealed class NullAudioSource : ICallAudioSource
         {
+            public Task StartAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+
+            public float[] TryReadFrame() => null;
+
             public Task<float[]> ReadAsync(CancellationToken cancellationToken) =>
                 Task.FromResult<float[]>(null);
 
@@ -29,6 +33,8 @@ namespace Unison.Voip.Null
 
         private sealed class NullAudioSink : ICallAudioSink
         {
+            public Task StartAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+
             public Task WriteAsync(float[] pcm, CancellationToken cancellationToken) =>
                 Task.CompletedTask;
 

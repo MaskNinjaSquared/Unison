@@ -227,6 +227,7 @@ namespace Unison.Core.ViewModels
                 {
                     CloseMentionMenu();
                     CloseStickerBox();
+                    DismissReply();
                 }
             }
 

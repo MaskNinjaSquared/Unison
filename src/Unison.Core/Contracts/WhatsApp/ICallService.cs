@@ -12,6 +12,13 @@ namespace Unison.Core.Contracts.WhatsApp
     /// </summary>
     public interface ICallService
     {
+        /// <summary>
+        /// Places a 1:1 audio call (meowcaller placeCall). Opens the call screen in Dialing.
+        /// </summary>
+        Task StartOutgoingAudioCallAsync(
+            string peerJid,
+            CancellationToken cancellationToken = default(CancellationToken));
+
         /// <summary>Reject an inbound ringing offer.</summary>
         Task RejectAsync(
             string callId,
@@ -42,11 +49,20 @@ namespace Unison.Core.Contracts.WhatsApp
         /// <summary>Rejects a ringing offer, hangs up anything else. No-op when nothing is up.</summary>
         Task EndActiveCallAsync(CancellationToken cancellationToken = default(CancellationToken));
 
-        /// <summary>Audio toggles apply only once a call is dialing or connected.</summary>
+        /// <summary>
+        /// Accepts an inbound ring (meowcaller): phase → Connecting and arms deferred accept;
+        /// the accept stanza goes out on the caller's first <c>mute_v2</c>.
+        /// Media/engine still gated by <see cref="IsMediaAvailable"/>. No-op when nothing is ringing.
+        /// </summary>
+        Task AnswerActiveCallAsync(CancellationToken cancellationToken = default(CancellationToken));
+
+        /// <summary>Mute applies once dialing or connected.</summary>
         void SetMuted(bool muted);
 
+        /// <summary>Speaker flag applies while ringing, connecting, dialing or active.</summary>
         void SetSpeakerOn(bool on);
 
+        /// <summary>Bluetooth applies once dialing or connected.</summary>
         void SetBluetoothOn(bool on);
     }
 }

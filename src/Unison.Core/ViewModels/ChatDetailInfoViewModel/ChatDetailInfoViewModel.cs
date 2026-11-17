@@ -42,6 +42,7 @@ namespace Unison.Core.ViewModels
         private readonly IStringResources _strings;
         private readonly IDialogService _dialogs;
         private readonly IUriLauncher _uriLauncher;
+        private readonly ICallService _calls;
         private readonly ISystemInfoProvider _systemInfo;
         private readonly ChatItem _source;
         private readonly GroupMember _member;
@@ -98,7 +99,8 @@ namespace Unison.Core.ViewModels
             IUriLauncher uriLauncher = null,
             IChatStateStore chatState = null,
             ISystemInfoProvider systemInfo = null,
-            bool isChannel = false)
+            bool isChannel = false,
+            ICallService calls = null)
         {
             _source = source ?? throw new ArgumentNullException(nameof(source));
             _participants = participants;
@@ -122,6 +124,7 @@ namespace Unison.Core.ViewModels
             _dialogs = dialogs;
             _uriLauncher = uriLauncher;
             _systemInfo = systemInfo;
+            _calls = calls;
 
             _source.PropertyChanged += Source_PropertyChanged;
             if (_member != null)
@@ -391,12 +394,13 @@ namespace Unison.Core.ViewModels
 
         public bool HasPhone => !string.IsNullOrWhiteSpace(PhoneValue);
 
-        /// <summary>Non-group profiles with a phone — drives the dialer hyperlink.</summary>
+        /// <summary>Non-group, non-self profiles — VoIP when wired, else GSM tel:.</summary>
         public bool CanCallPhone =>
             !_isGroup &&
             !_isChannel &&
-            _uriLauncher != null &&
-            HasPhone;
+            _source != null &&
+            !_source.IsPersonal &&
+            (_calls != null || (_uriLauncher != null && HasPhone));
 
         public bool CanAddToAddressBook =>
             !_isGroup &&

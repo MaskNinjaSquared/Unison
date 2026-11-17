@@ -40,6 +40,18 @@ namespace Unison.Uwp.Data.Entities
         /// <summary>Wire id of <see cref="GroupDescription"/>; NULL when none was carried.</summary>
         public string GroupDescriptionId { get; set; }
 
+        /// <summary>
+        /// <see cref="Unison.Core.Models.ChatBackgroundKind"/> as int; null = Default (with doodles).
+        /// Includes <c>DefaultNoDoodles</c> when the WhatsApp doodles toggle is off.
+        /// </summary>
+        public int? BackgroundKind { get; set; }
+
+        /// <summary>Relative LocalFolder path when kind is Custom; otherwise null.</summary>
+        public string BackgroundPath { get; set; }
+
+        /// <summary>Optional #AARRGGBB underfill for Default-family wallpapers; null = theme.</summary>
+        public string BackgroundSolidColorHex { get; set; }
+
         public DateTime UpdatedAtUtc { get; set; }
     }
 }

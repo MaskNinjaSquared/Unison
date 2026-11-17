@@ -766,7 +766,8 @@ namespace Unison.Core.Tests.ViewModels
                 string body,
                 string chatJid = null,
                 bool updateLiveTile = false,
-                bool isFavorite = false)
+                bool isFavorite = false,
+                bool isVideo = false)
             {
             }
 

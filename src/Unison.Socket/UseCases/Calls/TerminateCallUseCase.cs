@@ -5,7 +5,9 @@
 // =============================================================================
 using System;
 using System.Threading.Tasks;
+using Unison.Baileys.Protocol;
 using Unison.Socket.Abstractions;
+using Unison.Socket.Messages;
 using Unison.Socket.Session;
 
 namespace Unison.Socket.UseCases.Calls
@@ -27,10 +29,31 @@ namespace Unison.Socket.UseCases.Calls
             string callCreatorJid,
             string reason = null)
         {
-            var node = CallStanzaBuilders.BuildTerminate(callId, toJid, callCreatorJid, reason);
+            // meowcaller hangup: wrapper has to + id only (no from=me — that is reject/Baileys).
+            string meJid = _connection.MeId;
+            string stanzaId = !string.IsNullOrEmpty(meJid)
+                ? MessageContent.GenerateMessageId(meJid)
+                : _connection.GenerateMessageTag();
+
+            BinaryNode node = CallStanzaBuilders.BuildTerminate(
+                callId,
+                toJid,
+                callCreatorJid,
+                reason,
+                meJid: null,
+                stanzaId: stanzaId);
+
+            _log.Info(
+                "[Call] terminate send callId=" + callId +
+                " to=" + toJid +
+                " creator=" + callCreatorJid +
+                " reason=" + (reason ?? string.Empty) +
+                " id=" + stanzaId);
+
             try
             {
                 await _connection.SendNodeAsync(node).ConfigureAwait(false);
+                _log.Info("[Call] terminate sent callId=" + callId);
             }
             catch (Exception ex)
             {

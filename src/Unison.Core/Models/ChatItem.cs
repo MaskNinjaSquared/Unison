@@ -361,6 +361,72 @@ namespace Unison.Core.Models
             }
         }
 
+        private ChatBackgroundKind _backgroundKind = ChatBackgroundKind.Default;
+        /// <summary>Per-chat wallpaper kind; Default follows theme underfill + stock image.</summary>
+        public ChatBackgroundKind BackgroundKind
+        {
+            get => _backgroundKind;
+            set
+            {
+                if (_backgroundKind == value) return;
+                _backgroundKind = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(BackgroundImageUri));
+            }
+        }
+
+        private string _backgroundPath;
+        /// <summary>Relative LocalFolder path when <see cref="BackgroundKind"/> is Custom.</summary>
+        public string BackgroundPath
+        {
+            get => _backgroundPath;
+            set
+            {
+                if (string.Equals(_backgroundPath, value, StringComparison.Ordinal)) return;
+                _backgroundPath = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(BackgroundImageUri));
+            }
+        }
+
+        private string _backgroundSolidColorHex;
+        /// <summary>
+        /// Optional #AARRGGBB underfill for the Default family (doodles). Null = theme brush.
+        /// </summary>
+        public string BackgroundSolidColorHex
+        {
+            get => _backgroundSolidColorHex;
+            set
+            {
+                if (string.Equals(_backgroundSolidColorHex, value, StringComparison.OrdinalIgnoreCase))
+                {
+                    return;
+                }
+
+                _backgroundSolidColorHex = value;
+                OnPropertyChanged();
+            }
+        }
+
+        /// <summary>
+        /// Appx or ms-appdata URI for the stretch image. Custom relative paths are prefixed
+        /// as <c>ms-appdata:///local/</c>; Default uses the stock colored wallpaper.
+        /// </summary>
+        public string BackgroundImageUri
+        {
+            get
+            {
+                if (BackgroundKind == ChatBackgroundKind.Custom &&
+                    !string.IsNullOrWhiteSpace(BackgroundPath))
+                {
+                    string path = BackgroundPath.Replace('\\', '/').TrimStart('/');
+                    return "ms-appdata:///local/" + path;
+                }
+
+                return ChatBackgroundCatalog.ResolveImageUri(BackgroundKind, null);
+            }
+        }
+
         private int _channelFollowerCount;
         /// <summary>
         /// Channel <c>subscribers_count</c> from newsletter metadata. 0 = not yet known.

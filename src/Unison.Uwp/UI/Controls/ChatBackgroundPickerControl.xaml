@@ -1,0 +1,631 @@
+<UserControl
+    x:Class="Unison.Uwp.UI.Controls.ChatBackgroundPickerControl"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:Unison.Uwp.UI.Controls"
+    HorizontalAlignment="Stretch"
+    VerticalAlignment="Stretch">
+
+    <UserControl.Resources>
+        <SolidColorBrush x:Key="ChatBackgroundPickerBarBrush" Color="#019944"/>
+        <SolidColorBrush x:Key="ChatBackgroundPickerHoverBrush" Color="#33FFFFFF"/>
+        <SolidColorBrush x:Key="ChatBackgroundPickerPressedBrush" Color="#55FFFFFF"/>
+
+        <!-- Flat GridView tiles: no system chrome (avoids shrink/border on narrow panes). -->
+        <Style x:Key="ChatBackgroundPickerTileItemStyle" TargetType="GridViewItem">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="Margin" Value="0"/>
+            <Setter Property="MinWidth" Value="0"/>
+            <Setter Property="MinHeight" Value="0"/>
+            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+            <Setter Property="VerticalContentAlignment" Value="Stretch"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="GridViewItem">
+                        <ContentPresenter Content="{TemplateBinding Content}"
+                                          ContentTemplate="{TemplateBinding ContentTemplate}"
+                                          HorizontalAlignment="Stretch"
+                                          VerticalAlignment="Stretch"/>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="ChatBackgroundPickerCloseButtonStyle" TargetType="Button">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="{ThemeResource ChatDetailHeaderTitleBrush}"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="4"/>
+            <Setter Property="Width" Value="40"/>
+            <Setter Property="Height" Value="40"/>
+            <Setter Property="MinWidth" Value="0"/>
+            <Setter Property="MinHeight" Value="0"/>
+            <Setter Property="HorizontalContentAlignment" Value="Center"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="UseSystemFocusVisuals" Value="False"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Root"
+                                Background="{TemplateBinding Background}"
+                                CornerRadius="20"
+                                Padding="{TemplateBinding Padding}">
+                            <VisualStateManager.VisualStateGroups>
+                                <VisualStateGroup x:Name="CommonStates">
+                                    <VisualState x:Name="Normal"/>
+                                    <VisualState x:Name="PointerOver">
+                                        <Storyboard>
+                                            <ObjectAnimationUsingKeyFrames Storyboard.TargetName="Root"
+                                                                           Storyboard.TargetProperty="Background">
+                                                <DiscreteObjectKeyFrame KeyTime="0"
+                                                                        Value="{StaticResource ChatBackgroundPickerHoverBrush}"/>
+                                            </ObjectAnimationUsingKeyFrames>
+                                        </Storyboard>
+                                    </VisualState>
+                                    <VisualState x:Name="Pressed">
+                                        <Storyboard>
+                                            <ObjectAnimationUsingKeyFrames Storyboard.TargetName="Root"
+                                                                           Storyboard.TargetProperty="Background">
+                                                <DiscreteObjectKeyFrame KeyTime="0"
+                                                                        Value="{StaticResource ChatBackgroundPickerPressedBrush}"/>
+                                            </ObjectAnimationUsingKeyFrames>
+                                        </Storyboard>
+                                    </VisualState>
+                                </VisualStateGroup>
+                            </VisualStateManager.VisualStateGroups>
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"
+                                              Content="{TemplateBinding Content}"
+                                              Foreground="{TemplateBinding Foreground}"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Same silhouette as ChatDetailInfoAppBarButtonStyle: glyph + caption under. -->
+        <Style x:Key="ChatBackgroundPickerAppBarButtonStyle" TargetType="Button">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="16,4"/>
+            <Setter Property="MinWidth" Value="0"/>
+            <Setter Property="MinHeight" Value="0"/>
+            <Setter Property="Height" Value="64"/>
+            <Setter Property="HorizontalAlignment" Value="Right"/>
+            <Setter Property="HorizontalContentAlignment" Value="Center"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="UseSystemFocusVisuals" Value="False"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Root"
+                                Background="{TemplateBinding Background}"
+                                Padding="{TemplateBinding Padding}"
+                                HorizontalAlignment="Stretch">
+                            <VisualStateManager.VisualStateGroups>
+                                <VisualStateGroup x:Name="CommonStates">
+                                    <VisualState x:Name="Normal"/>
+                                    <VisualState x:Name="PointerOver">
+                                        <Storyboard>
+                                            <ObjectAnimationUsingKeyFrames Storyboard.TargetName="Root"
+                                                                           Storyboard.TargetProperty="Background">
+                                                <DiscreteObjectKeyFrame KeyTime="0"
+                                                                        Value="{StaticResource ChatBackgroundPickerHoverBrush}"/>
+                                            </ObjectAnimationUsingKeyFrames>
+                                        </Storyboard>
+                                    </VisualState>
+                                    <VisualState x:Name="Pressed">
+                                        <Storyboard>
+                                            <ObjectAnimationUsingKeyFrames Storyboard.TargetName="Root"
+                                                                           Storyboard.TargetProperty="Background">
+                                                <DiscreteObjectKeyFrame KeyTime="0"
+                                                                        Value="{StaticResource ChatBackgroundPickerPressedBrush}"/>
+                                            </ObjectAnimationUsingKeyFrames>
+                                        </Storyboard>
+                                    </VisualState>
+                                    <VisualState x:Name="Disabled">
+                                        <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetName="Root"
+                                                             Storyboard.TargetProperty="Opacity"
+                                                             To="0.45"
+                                                             Duration="0"/>
+                                        </Storyboard>
+                                    </VisualState>
+                                </VisualStateGroup>
+                            </VisualStateManager.VisualStateGroups>
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"
+                                              Content="{TemplateBinding Content}"
+                                              Foreground="{TemplateBinding Foreground}"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- WP8-style Legacy strip: circled glyph + caption (shared control; no Legacy-only ThemeResource). -->
+        <Style x:Key="ChatBackgroundPickerLegacyBarButtonStyle" TargetType="Button">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="Width" Value="72"/>
+            <Setter Property="Height" Value="54"/>
+            <Setter Property="Margin" Value="9,0"/>
+            <Setter Property="MinWidth" Value="0"/>
+            <Setter Property="MinHeight" Value="0"/>
+            <Setter Property="HorizontalAlignment" Value="Center"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="HorizontalContentAlignment" Value="Center"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="UseSystemFocusVisuals" Value="False"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Root" Background="Transparent">
+                            <VisualStateManager.VisualStateGroups>
+                                <VisualStateGroup x:Name="CommonStates">
+                                    <VisualState x:Name="Normal"/>
+                                    <VisualState x:Name="PointerOver">
+                                        <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetName="Root"
+                                                             Storyboard.TargetProperty="Opacity"
+                                                             To="0.85"
+                                                             Duration="0"/>
+                                        </Storyboard>
+                                    </VisualState>
+                                    <VisualState x:Name="Pressed">
+                                        <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetName="Root"
+                                                             Storyboard.TargetProperty="Opacity"
+                                                             To="0.55"
+                                                             Duration="0"/>
+                                        </Storyboard>
+                                    </VisualState>
+                                </VisualStateGroup>
+                            </VisualStateManager.VisualStateGroups>
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"
+                                              Content="{TemplateBinding Content}"
+                                              Foreground="{TemplateBinding Foreground}"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </UserControl.Resources>
+
+    <!-- Opaque pane fill (InputBar brush is translucent in dark themes). -->
+    <Grid Background="{ThemeResource ChatListBackgroundBrush}">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Unison / WhatsApp: same height as ChatSurface header -->
+        <Grid x:Name="ModernHeader"
+              Grid.Row="0"
+              Height="64"
+              Background="{ThemeResource ChatDetailHeaderBrush}"
+              Padding="12,0,8,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <StackPanel Grid.Column="0"
+                        Margin="5,0,0,0"
+                        Orientation="Horizontal"
+                        VerticalAlignment="Center"
+                        HorizontalAlignment="Left">
+                <FontIcon Glyph="&#xE790;"
+                          FontFamily="{StaticResource IconFont}"
+                          FontSize="20"
+                          
+                          VerticalAlignment="Center"
+                          Foreground="{ThemeResource ChatDetailHeaderTitleBrush}"/>
+                <TextBlock x:Uid="ChatBackground_ConversationThemeTitle"
+                           Text="Tema da Conversa"
+                           Margin="10,0,0,0"
+                           VerticalAlignment="Center"
+                           FontSize="16"
+                           FontFamily="{StaticResource MainFont}"
+                           Foreground="{ThemeResource ChatDetailHeaderTitleBrush}"
+                           TextTrimming="CharacterEllipsis"/>
+            </StackPanel>
+            <Button x:Name="HeaderBackButton"
+                    Grid.Column="1"
+                    HorizontalAlignment="Right"
+                    VerticalAlignment="Center"
+                    Style="{StaticResource ChatBackgroundPickerCloseButtonStyle}"
+                    Click="BackButton_Click"
+                    ToolTipService.ToolTip="Back">
+                <FontIcon Glyph="&#xE711;"
+                          FontFamily="{StaticResource IconFont}"
+                          FontSize="16"
+                          Foreground="{ThemeResource ChatDetailHeaderTitleBrush}"/>
+            </Button>
+        </Grid>
+
+        <ScrollViewer Grid.Row="1"
+                      VerticalScrollBarVisibility="Auto"
+                      HorizontalScrollBarVisibility="Disabled"
+                      ZoomMode="Disabled">
+            <StackPanel Padding="0,0,0,12">
+                <!-- PREVIEW -->
+                <TextBlock x:Uid="ChatBackground_SectionPreview"
+                           Text="PREVIEW"
+                           Margin="16,16,16,8"
+                           FontSize="12"
+                           FontFamily="{StaticResource MainFont}"
+                           Foreground="{ThemeResource ChatDetailMutedTextBrush}"
+                           CharacterSpacing="40"/>
+                <controls:ChatThemePreview
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Top"
+                    Margin="16,0,16,8"
+                    BackgroundKind="{Binding PickerSelectedKind, Mode=OneWay}"
+                    CustomPath="{Binding PickerCustomPath, Mode=OneWay}"
+                    SolidColorHex="{Binding PickerSolidColorHex, Mode=OneWay}"/>
+
+                <!-- BACKGROUND -->
+                <TextBlock x:Uid="ChatBackground_SectionBackground"
+                           Text="BACKGROUND"
+                           Margin="16,16,16,8"
+                           FontSize="12"
+                           FontFamily="{StaticResource MainFont}"
+                           Foreground="{ThemeResource ChatDetailMutedTextBrush}"
+                           CharacterSpacing="40"/>
+                <!-- Fixed tiles; no AdaptiveGridView chrome (shrinks on narrow panes). -->
+                <GridView ItemsSource="{Binding BackgroundOptions}"
+                          SelectionMode="None"
+                          IsItemClickEnabled="True"
+                          ItemClick="PresetGrid_ItemClick"
+                          ItemContainerStyle="{StaticResource ChatBackgroundPickerTileItemStyle}"
+                          Padding="12,0"
+                          Background="Transparent"
+                          BorderThickness="0">
+                    <GridView.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <ItemsWrapGrid Orientation="Horizontal"
+                                           ItemWidth="128"
+                                           ItemHeight="128"/>
+                        </ItemsPanelTemplate>
+                    </GridView.ItemsPanel>
+                    <GridView.ItemTemplate>
+                        <DataTemplate>
+                            <!-- Outer Margin=4 = gap between tiles only. Selection frame is flush. -->
+                            <Grid Width="120"
+                                  Height="120"
+                                  Margin="4">
+                                <Border Margin="{Binding IsSelected, Converter={StaticResource BoolToThicknessConverter}, ConverterParameter=8}"
+                                        CornerRadius="{Binding IsSelected, Converter={StaticResource BoolClearsCornerRadiusConverter}, ConverterParameter=2}"
+                                        Background="{ThemeResource ChatDetailWallpaperBackgroundBrush}">
+                                    <Grid>
+                                        <Border CornerRadius="{Binding IsSelected, Converter={StaticResource BoolClearsCornerRadiusConverter}, ConverterParameter=2}">
+                                            <Border.Background>
+                                                <ImageBrush Stretch="UniformToFill"
+                                                            ImageSource="{Binding ThumbUri, Converter={StaticResource StringToImageSourceConverter}, ConverterParameter=128}"/>
+                                            </Border.Background>
+                                        </Border>
+                                        <!-- WP8 live-tile caption: bottom-left, no bar; hidden while selected. -->
+                                        <TextBlock Text="{Binding Title}"
+                                                   Margin="8,0,8,6"
+                                                   HorizontalAlignment="Left"
+                                                   VerticalAlignment="Bottom"
+                                                   FontSize="12"
+                                                   FontFamily="{StaticResource MainFont}"
+                                                   Foreground="White"
+                                                   TextTrimming="CharacterEllipsis"
+                                                   IsHitTestVisible="False"
+                                                   Visibility="{Binding IsSelected, Converter={StaticResource InvertedBooleanToVisibilityConverter}}"/>
+                                    </Grid>
+                                </Border>
+                                <!-- Selected: contrast frame (white dark / black light) + corner check. -->
+                                <Border BorderBrush="{ThemeResource ChatDetailHeaderTitleBrush}"
+                                        BorderThickness="3"
+                                        CornerRadius="2"
+                                        IsHitTestVisible="False"
+                                        Visibility="{Binding IsSelected, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                                <Grid IsHitTestVisible="False"
+                                      Visibility="{Binding IsSelected, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                    <Path Data="M0,0 L22,0 L0,22 Z"
+                                          Fill="{ThemeResource ChatDetailHeaderTitleBrush}"
+                                          HorizontalAlignment="Left"
+                                          VerticalAlignment="Top"/>
+                                    <FontIcon Glyph="&#xE8FB;"
+                                              FontFamily="{StaticResource IconFont}"
+                                              FontSize="10"
+                                              Foreground="{ThemeResource ChatListBackgroundBrush}"
+                                              Margin="2,1,0,0"
+                                              HorizontalAlignment="Left"
+                                              VerticalAlignment="Top"/>
+                                </Grid>
+                            </Grid>
+                        </DataTemplate>
+                    </GridView.ItemTemplate>
+                </GridView>
+
+                <!-- PERSONALIZAR -->
+                <TextBlock x:Uid="ChatBackground_SectionCustomize"
+                           Text="PERSONALIZAR"
+                           Margin="16,16,16,8"
+                           FontSize="12"
+                           FontFamily="{StaticResource MainFont}"
+                           Foreground="{ThemeResource ChatDetailMutedTextBrush}"
+                           CharacterSpacing="40"/>
+                <Grid Margin="16,0,16,8"
+                      MinHeight="48">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock x:Uid="ChatBackground_WhatsAppDoodles"
+                               Text="Doodles de WhatsApp"
+                               VerticalAlignment="Center"
+                               FontSize="15"
+                               FontFamily="{StaticResource MainFont}"
+                               TextWrapping="WrapWholeWords"
+                               IsHitTestVisible="False"/>
+                    <ToggleSwitch x:Name="DoodlesToggle"
+                                  Grid.Column="1"
+                                  VerticalAlignment="Center"
+                                  OnContent=""
+                                  OffContent=""
+                                  MinWidth="0"
+                                  IsEnabled="{Binding IsPickerDoodlesEnabled, Mode=OneWay}"
+                                  Toggled="DoodlesToggle_Toggled"/>
+                </Grid>
+                <Button Margin="16,4,16,8"
+                        HorizontalAlignment="Stretch"
+                        HorizontalContentAlignment="Stretch"
+                        Background="Transparent"
+                        BorderThickness="0"
+                        Padding="0,10"
+                        IsEnabled="{Binding IsPickerSolidColorEnabled, Mode=OneWay}"
+                        Click="SolidColorRow_Click">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <Border Width="18"
+                                Height="18"
+                                Margin="0,0,12,0"
+                                VerticalAlignment="Center"
+                                BorderBrush="{ThemeResource ChatDetailMutedTextBrush}"
+                                BorderThickness="1"
+                                Background="{Binding PickerSolidColorHex, Mode=OneWay, Converter={StaticResource HexOrThemeWallpaperBrushConverter}}"/>
+                        <TextBlock x:Uid="ChatBackground_SolidColor"
+                                   Grid.Column="1"
+                                   Text="Solid color"
+                                   VerticalAlignment="Center"
+                                   FontSize="15"
+                                   FontFamily="{StaticResource MainFont}"
+                                   TextWrapping="WrapWholeWords"/>
+                        <FontIcon Grid.Column="2"
+                                  Glyph="&#xE76C;"
+                                  FontFamily="{StaticResource IconFont}"
+                                  FontSize="14"
+                                  VerticalAlignment="Center"
+                                  Foreground="{ThemeResource ChatDetailMutedTextBrush}"/>
+                    </Grid>
+                </Button>
+            </StackPanel>
+        </ScrollViewer>
+
+        <!-- Unison / WhatsApp: ChatDetailInfo-style footer -->
+        <Grid x:Name="ModernFooter"
+              Grid.Row="2"
+              Height="64"
+              Background="{StaticResource ChatBackgroundPickerBarBrush}">
+            <StackPanel Orientation="Horizontal"
+                        HorizontalAlignment="Right"
+                        VerticalAlignment="Stretch">
+                <Button x:Name="ModernWallpaperButton"
+                        Style="{StaticResource ChatBackgroundPickerAppBarButtonStyle}"
+                        Click="WallpaperButton_Click"
+                        ToolTipService.ToolTip="Background">
+                    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <Grid Height="28" Width="40" HorizontalAlignment="Center">
+                            <FontIcon Glyph="&#xE91B;"
+                                      FontFamily="{StaticResource IconFont}"
+                                      FontSize="18"
+                                      Foreground="White"
+                                      HorizontalAlignment="Center"
+                                      VerticalAlignment="Center"/>
+                        </Grid>
+                        <TextBlock x:Uid="ChatBackground_BackgroundAppBarLabel"
+                                   Text="Background"
+                                   FontSize="10"
+                                   FontFamily="{StaticResource MainFont}"
+                                   Foreground="White"
+                                   Margin="0,2,0,0"
+                                   TextAlignment="Center"/>
+                    </StackPanel>
+                </Button>
+            </StackPanel>
+        </Grid>
+
+        <!-- Legacy WP8: voltar + wallpaper -->
+        <Grid x:Name="LegacyFooter"
+              Grid.Row="2"
+              Height="54"
+              Visibility="Collapsed"
+              Background="{ThemeResource ChatDetailHeaderBrush}">
+            <StackPanel Orientation="Horizontal"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Stretch">
+                <Button x:Name="LegacyBackButton"
+                        Style="{StaticResource ChatBackgroundPickerLegacyBarButtonStyle}"
+                        Click="BackButton_Click"
+                        ToolTipService.ToolTip="Back">
+                    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <Grid Height="40" Width="40" HorizontalAlignment="Center">
+                            <Ellipse Width="40" Height="40"
+                                     Stroke="White"
+                                     StrokeThickness="2"
+                                     HorizontalAlignment="Center"
+                                     VerticalAlignment="Center"/>
+                            <FontIcon FontFamily="{StaticResource IconFont}"
+                                      Glyph="&#xE72B;"
+                                      FontSize="16"
+                                      HorizontalAlignment="Center"
+                                      VerticalAlignment="Center"
+                                      Foreground="White"/>
+                        </Grid>
+                        <TextBlock x:Uid="ChatBackground_Back"
+                                   Text="Back"
+                                   FontSize="10"
+                                   Margin="0,2,0,0"
+                                   HorizontalAlignment="Center"
+                                   Foreground="White"/>
+                    </StackPanel>
+                </Button>
+                <Button x:Name="LegacyWallpaperButton"
+                        Style="{StaticResource ChatBackgroundPickerLegacyBarButtonStyle}"
+                        Click="WallpaperButton_Click"
+                        ToolTipService.ToolTip="Wallpaper">
+                    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <Grid Height="40" Width="40" HorizontalAlignment="Center">
+                            <Ellipse Width="40" Height="40"
+                                     Stroke="White"
+                                     StrokeThickness="2"
+                                     HorizontalAlignment="Center"
+                                     VerticalAlignment="Center"/>
+                            <FontIcon FontFamily="{StaticResource IconFont}"
+                                      Glyph="&#xE91B;"
+                                      FontSize="16"
+                                      HorizontalAlignment="Center"
+                                      VerticalAlignment="Center"
+                                      Foreground="White"/>
+                        </Grid>
+                        <TextBlock x:Uid="ChatBackground_Wallpaper"
+                                   Text="Wallpaper"
+                                   FontSize="10"
+                                   Margin="0,2,0,0"
+                                   HorizontalAlignment="Center"
+                                   Foreground="White"/>
+                    </StackPanel>
+                </Button>
+            </StackPanel>
+        </Grid>
+
+        <!-- Solid-color overlay (Default family only): back on top of current picker + preview + WP8 swatches -->
+        <Grid x:Name="SolidColorOverlay"
+              Grid.RowSpan="3"
+              Canvas.ZIndex="50"
+              Background="{ThemeResource ChatListBackgroundBrush}"
+              Visibility="{Binding IsSolidColorPickerOpen, Converter={StaticResource BooleanToVisibilityConverter}}">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+
+            <Grid Height="64"
+                  Background="{ThemeResource ChatDetailHeaderBrush}"
+                  Padding="12,0,8,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <Button Style="{StaticResource ChatBackgroundPickerCloseButtonStyle}"
+                        Click="SolidColorBack_Click"
+                        ToolTipService.ToolTip="Back">
+                    <FontIcon Glyph="&#xE72B;"
+                              FontFamily="{StaticResource IconFont}"
+                              FontSize="16"
+                              Foreground="{ThemeResource ChatDetailHeaderTitleBrush}"/>
+                </Button>
+                <TextBlock x:Uid="ChatBackground_SolidColorTitle"
+                           Grid.Column="1"
+                           Text="Solid color"
+                           VerticalAlignment="Center"
+                           Margin="8,0,0,0"
+                           FontSize="16"
+                           FontFamily="{StaticResource MainFont}"
+                           Foreground="{ThemeResource ChatDetailHeaderTitleBrush}"
+                           TextTrimming="CharacterEllipsis"/>
+            </Grid>
+
+            <ScrollViewer Grid.Row="1"
+                          VerticalScrollBarVisibility="Auto"
+                          HorizontalScrollBarVisibility="Disabled"
+                          ZoomMode="Disabled">
+                <StackPanel Padding="0,0,0,16">
+                    <TextBlock x:Uid="ChatBackground_SectionPreview"
+                               Text="PREVIEW"
+                               Margin="16,16,16,8"
+                               FontSize="12"
+                               FontFamily="{StaticResource MainFont}"
+                               Foreground="{ThemeResource ChatDetailMutedTextBrush}"
+                               CharacterSpacing="40"/>
+                    <controls:ChatThemePreview
+                        HorizontalAlignment="Center"
+                        Margin="16,0,16,8"
+                        BackgroundKind="{Binding PickerSelectedKind, Mode=OneWay}"
+                        CustomPath="{Binding PickerCustomPath, Mode=OneWay}"
+                        SolidColorHex="{Binding PickerSolidColorHex, Mode=OneWay}"/>
+
+                    <TextBlock x:Uid="ChatBackground_SectionSolidColors"
+                               Text="COLORS"
+                               Margin="16,16,16,8"
+                               FontSize="12"
+                               FontFamily="{StaticResource MainFont}"
+                               Foreground="{ThemeResource ChatDetailMutedTextBrush}"
+                               CharacterSpacing="40"/>
+                    <!-- WP8 accent strip: 48×48 color-only tiles; selection = white inset frame. -->
+                    <GridView ItemsSource="{Binding SolidColorOptions}"
+                              SelectionMode="None"
+                              IsItemClickEnabled="True"
+                              ItemClick="SolidColorGrid_ItemClick"
+                              ItemContainerStyle="{StaticResource ChatBackgroundPickerTileItemStyle}"
+                              Padding="12,0"
+                              Background="Transparent"
+                              BorderThickness="0">
+                        <GridView.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <ItemsWrapGrid Orientation="Horizontal"
+                                               ItemWidth="56"
+                                               ItemHeight="56"/>
+                            </ItemsPanelTemplate>
+                        </GridView.ItemsPanel>
+                        <GridView.ItemTemplate>
+                            <DataTemplate>
+                                <!-- Outer Margin=4 = gap between tiles only. Selection frame is flush. -->
+                                <Grid Width="48"
+                                      Height="48"
+                                      Margin="4">
+                                    <Border Background="{Binding Hex, Converter={StaticResource HexOrThemeWallpaperBrushConverter}}"
+                                            Margin="{Binding IsSelected, Converter={StaticResource BoolToThicknessConverter}, ConverterParameter=8}"/>
+                                    <Border BorderBrush="{ThemeResource ChatDetailHeaderTitleBrush}"
+                                            BorderThickness="3"
+                                            IsHitTestVisible="False"
+                                            Visibility="{Binding IsSelected, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                                    <Grid IsHitTestVisible="False"
+                                          Visibility="{Binding IsSelected, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                        <Path Data="M0,0 L16,0 L0,16 Z"
+                                              Fill="{ThemeResource ChatDetailHeaderTitleBrush}"
+                                              HorizontalAlignment="Left"
+                                              VerticalAlignment="Top"/>
+                                        <FontIcon Glyph="&#xE8FB;"
+                                                  FontFamily="{StaticResource IconFont}"
+                                                  FontSize="8"
+                                                  Foreground="{ThemeResource ChatListBackgroundBrush}"
+                                                  Margin="1,0,0,0"
+                                                  HorizontalAlignment="Left"
+                                                  VerticalAlignment="Top"/>
+                                    </Grid>
+                                </Grid>
+                            </DataTemplate>
+                        </GridView.ItemTemplate>
+                    </GridView>
+                </StackPanel>
+            </ScrollViewer>
+        </Grid>
+    </Grid>
+</UserControl>

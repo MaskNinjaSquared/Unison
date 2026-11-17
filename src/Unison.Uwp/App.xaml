@@ -36,6 +36,9 @@
             <converters:BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
             <converters:InvertedBooleanToVisibilityConverter x:Key="InvertedBooleanToVisibilityConverter"/>
             <converters:HexColorToBrushConverter x:Key="HexColorToBrushConverter"/>
+            <converters:HexOrThemeWallpaperBrushConverter x:Key="HexOrThemeWallpaperBrushConverter"/>
+            <converters:BoolToThicknessConverter x:Key="BoolToThicknessConverter"/>
+            <converters:BoolClearsCornerRadiusConverter x:Key="BoolClearsCornerRadiusConverter"/>
             <converters:FontFamilyNameConverter x:Key="FontFamilyNameConverter"/>
             <converters:EmojiJumpFontConverter x:Key="EmojiJumpFontConverter"/>
             <converters:ChatPreviewKindToLabelConverter x:Key="ChatPreviewKindToLabelConverter"/>

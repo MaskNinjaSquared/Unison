@@ -15,6 +15,8 @@ namespace Unison.Core.Helpers.Calls
     {
         Ignore,
         Ring,
+        /// <summary>Outbound dialing: peer accepted — move to Connected/media.</summary>
+        Connect,
         End
     }
 
@@ -38,9 +40,34 @@ namespace Unison.Core.Helpers.Calls
                             current.Phase != ActiveCallPhase.Ended &&
                             string.Equals(current.CallId, callEvent.CallId.Trim(), StringComparison.Ordinal);
 
+            // Outbound: peer accept → Connect; reject/terminate/timeout → End.
+            if (sameCall &&
+                current.Phase == ActiveCallPhase.Dialing &&
+                !current.IsInbound)
+            {
+                if (callEvent.Kind == CallEventChromeKind.Completed &&
+                    string.Equals(callEvent.ActionTag, "accept", StringComparison.OrdinalIgnoreCase))
+                {
+                    return ActiveCallEventAction.Connect;
+                }
+
+                if (callEvent.Kind == CallEventChromeKind.Missed ||
+                    callEvent.Kind == CallEventChromeKind.Completed ||
+                    callEvent.Kind == CallEventChromeKind.AnsweredElsewhere)
+                {
+                    return ActiveCallEventAction.End;
+                }
+            }
+
             if (callEvent.Kind != CallEventChromeKind.Incoming)
             {
                 return sameCall ? ActiveCallEventAction.End : ActiveCallEventAction.Ignore;
+            }
+
+            // Video: toast-only on the companion — answer on the primary phone.
+            if (callEvent.IsVideo)
+            {
+                return ActiveCallEventAction.Ignore;
             }
 
             if (callerIsSelf || (current != null && current.Phase != ActiveCallPhase.Ended))

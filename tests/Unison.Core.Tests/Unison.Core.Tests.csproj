@@ -19,6 +19,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <None Include="Voip\TestData\**\*" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\..\src\Unison.Core\Unison.Core.csproj" />
     <ProjectReference Include="..\..\src\Unison.Socket\Unison.Socket.csproj" />
     <ProjectReference Include="..\..\src\Unison.WhatsAppClient\Unison.WhatsAppClient.csproj" />

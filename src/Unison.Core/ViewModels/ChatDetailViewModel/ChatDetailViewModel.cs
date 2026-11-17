@@ -69,6 +69,9 @@ namespace Unison.Core.ViewModels
         /// <summary>Opens system URIs (tel:, http, …).</summary>
         private readonly IUriLauncher _uriLauncher;
 
+        /// <summary>WhatsApp VoIP (1:1 audio). Prefer over GSM when present.</summary>
+        private readonly ICallService _calls;
+
         /// <summary>UI-thread marshaling for live updates / elapsed ticks.</summary>
         private readonly IDispatcher _dispatcher;
 
@@ -204,8 +207,10 @@ namespace Unison.Core.ViewModels
             IShareService share = null,
             IChannelService channels = null,
             ICameraPickService cameraPick = null,
-            IChatWindowTuning chatWindow = null)
+            IChatWindowTuning chatWindow = null,
+            ICallService calls = null)
         {
+            _calls = calls;
             _cameraPick = cameraPick;
             _channels = channels;
             _chatService = chatService;
@@ -342,7 +347,7 @@ namespace Unison.Core.ViewModels
                 () => _messageActions.CanCopy);
             ReplySelectedMessageCommand = new RelayCommand(
                 () => BeginReply(SelectedMessage),
-                () => _messageActions.CanReply);
+                () => CanCompose && _messageActions.CanReply);
             ForwardSelectedMessageCommand = new RelayCommand(
                 () =>
                 {
@@ -389,6 +394,7 @@ namespace Unison.Core.ViewModels
                 OpenActiveChatDetailInfo,
                 () => ActiveChat != null);
             CloseChatDetailInfoCommand = new RelayCommand(CloseChatDetailInfo);
+            InitBackgroundPickerCommands();
             AddContactCommand = new RelayCommand(
                 () => _ = AddContactAsync(),
                 () => CanAddToAddressBook);
@@ -1185,12 +1191,15 @@ namespace Unison.Core.ViewModels
             !ActiveChat.IsPersonal &&
             _contactService.CanAddToAddressBook(ActiveChat.JID);
 
-        /// <summary>1:1 chats with a resolvable phone number.</summary>
+        /// <summary>
+        /// 1:1 chats except Notes to Self — VoIP when <see cref="ICallService"/> is wired, else GSM tel:.
+        /// </summary>
         public bool CanCallPhone =>
             ActiveChat != null &&
             !ActiveChat.IsGroup &&
-            _uriLauncher != null &&
-            !string.IsNullOrEmpty(ResolveActiveChatPhone());
+            !ActiveChat.IsPersonal &&
+            (_calls != null ||
+             (_uriLauncher != null && !string.IsNullOrEmpty(ResolveActiveChatPhone())));
 
         private string ResolveActiveChatPhone()
         {
@@ -1220,6 +1229,30 @@ namespace Unison.Core.ViewModels
             }
 
             ChatItem chat = ActiveChat;
+            if (_calls != null && chat != null && !string.IsNullOrWhiteSpace(chat.JID))
+            {
+                try
+                {
+                    await _calls.StartOutgoingAudioCallAsync(chat.JID).ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    _diagnostics?.Write(
+                        "call",
+                        "outgoing-failed",
+                        "peer=" + chat.JID + "; " + ex.Message);
+                    if (_dialogs != null)
+                    {
+                        await _dialogs.ShowMessageAsync(
+                            _strings?.Get("ChatDetail_CallFailedTitle", "Call failed") ?? "Call failed",
+                            ex.Message,
+                            _strings?.Get("Common_Ok", "OK") ?? "OK").ConfigureAwait(false);
+                    }
+                }
+
+                return;
+            }
+
             string phone = ResolveActiveChatPhone();
             string label = chat.GetNameResolved(_strings);
             if (string.IsNullOrWhiteSpace(label))

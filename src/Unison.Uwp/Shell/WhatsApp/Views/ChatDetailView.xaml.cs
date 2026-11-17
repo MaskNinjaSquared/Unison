@@ -54,8 +54,46 @@ namespace Unison.Uwp.Shell.WhatsApp.Views
         public event EventHandler BackRequested;
         private Storyboard _chatDetailInfoSlideStoryboard;
         private bool _chatDetailInfoPaneShown;
+
+        /// <summary>
+        /// x:Load gate for the info host. Stays true after <see cref="ChatDetailViewModel.IsChatDetailInfoOpen"/>
+        /// flips false so the close slide can finish and the docked column can collapse.
+        /// </summary>
+        public static readonly DependencyProperty IsChatDetailInfoHostLoadedProperty =
+            DependencyProperty.Register(
+                nameof(IsChatDetailInfoHostLoaded),
+                typeof(bool),
+                typeof(ChatDetailView),
+                new PropertyMetadata(false));
+
+        public bool IsChatDetailInfoHostLoaded
+        {
+            get { return (bool)GetValue(IsChatDetailInfoHostLoadedProperty); }
+            private set { SetValue(IsChatDetailInfoHostLoadedProperty, value); }
+        }
+
+        private bool _chatBackgroundPickerPaneShown;
+
+        /// <summary>
+        /// x:Load gate for the conversation-theme pane. Same docked/fullscreen column rules
+        /// as ChatDetailInfo; unload waits until close finishes.
+        /// </summary>
+        public static readonly DependencyProperty IsChatBackgroundPickerHostLoadedProperty =
+            DependencyProperty.Register(
+                nameof(IsChatBackgroundPickerHostLoaded),
+                typeof(bool),
+                typeof(ChatDetailView),
+                new PropertyMetadata(false));
+
+        public bool IsChatBackgroundPickerHostLoaded
+        {
+            get { return (bool)GetValue(IsChatBackgroundPickerHostLoadedProperty); }
+            private set { SetValue(IsChatBackgroundPickerHostLoadedProperty, value); }
+        }
+
         private Point? _pendingMicFlyOrigin;
         private bool _micFlyRunning;
+        private IDisposable _backgroundPickerBack;
 
         /// <summary>
         /// DI ViewModel owns composer, pin, audio prepare, presence watch, and timeline VMs.
@@ -413,7 +451,13 @@ private readonly IStringResources _strings;
                 ApplyChatDetailInfoPane();
             }
 
+            if (ViewModel?.IsChatBackgroundPickerOpen == true)
+            {
+                ApplyChatBackgroundPickerPane();
+            }
+
             UpdateScrollToBottomButton();
+            SyncContactCallButtonsVisibility();
         }
 
         private void ViewModel_PropertyChanged(object sender, PropertyChangedEventArgs e)
@@ -422,6 +466,12 @@ private readonly IStringResources _strings;
                 e.PropertyName == nameof(ChatDetailViewModel.ChatDetailInfo))
             {
                 ApplyChatDetailInfoPane();
+            }
+
+            if (e.PropertyName == nameof(ChatDetailViewModel.IsChatBackgroundPickerOpen))
+            {
+                ApplyChatBackgroundPickerPane();
+                SyncBackgroundPickerBackRegistration();
             }
 
             if (e.PropertyName == nameof(ChatDetailViewModel.IsRecording) ||
@@ -491,15 +541,33 @@ private readonly IStringResources _strings;
         /// <summary>
         /// Minimal: info covers the chat, which stays laid out underneath. Extended+: fixed 400px column.
         /// Opening slides the pane in from the right; SizeChanged only reflows columns.
+        /// Do not bind x:Load to <see cref="ChatDetailViewModel.IsChatDetailInfoOpen"/> — that
+        /// unloads the host before the docked column can collapse (empty 400px gap).
         /// </summary>
         private void ApplyChatDetailInfoPane()
         {
-            if (ChatDetailInfoPaneHost == null || ChatColumn == null || InfoColumn == null)
+            if (ChatColumn == null || InfoColumn == null)
             {
                 return;
             }
 
             bool open = ViewModel?.IsChatDetailInfoOpen == true;
+            if (open)
+            {
+                EnsureChatDetailInfoHostLoaded();
+            }
+
+            if (ChatDetailInfoPaneHost == null)
+            {
+                if (!open)
+                {
+                    _chatDetailInfoPaneShown = false;
+                    ApplyChatDetailInfoColumns(IsAnySidePaneOpen());
+                }
+
+                return;
+            }
+
             var info = ViewModel?.ChatDetailInfo;
             bool member = info != null && info.IsGroupMember;
 
@@ -533,6 +601,7 @@ private readonly IStringResources _strings;
             if (_chatDetailInfoPaneShown)
             {
                 _chatDetailInfoPaneShown = false;
+                ApplyChatDetailInfoColumns(IsAnySidePaneOpen());
                 if (ShouldUseFullScreenChatInfo())
                 {
                     StopChatDetailInfoSlide();
@@ -544,8 +613,19 @@ private readonly IStringResources _strings;
                 return;
             }
 
-            ChatDetailInfoPaneHost.Visibility = Visibility.Collapsed;
-            ApplyChatDetailInfoColumns(open: false);
+            CompleteChatDetailInfoClose();
+        }
+
+        private void EnsureChatDetailInfoHostLoaded()
+        {
+            if (!IsChatDetailInfoHostLoaded)
+            {
+                IsChatDetailInfoHostLoaded = true;
+                Bindings.Update();
+            }
+
+            _infoPaneCache = ChatDetailInfoPaneHost
+                ?? FindName("ChatDetailInfoPaneHost") as FrameworkElement;
         }
 
         private void CompleteChatDetailInfoClose()
@@ -555,7 +635,14 @@ private readonly IStringResources _strings;
                 return;
             }
 
-            ChatDetailInfoPaneHost.Visibility = Visibility.Collapsed;
+            _chatDetailInfoPaneShown = false;
+            ApplyChatDetailInfoColumns(IsAnySidePaneOpen());
+
+            if (ChatDetailInfoPaneHost != null)
+            {
+                ChatDetailInfoPaneHost.Visibility = Visibility.Collapsed;
+            }
+
             if (ChatDetailInfoPanel != null)
             {
                 ChatDetailInfoPanel.Visibility = Visibility.Collapsed;
@@ -566,11 +653,23 @@ private readonly IStringResources _strings;
                 ChatDetailMemberInfoPanel.Visibility = Visibility.Collapsed;
             }
 
-            ApplyChatDetailInfoColumns(open: false);
             if (ChatDetailInfoSlideTransform != null)
             {
                 ChatDetailInfoSlideTransform.X = 0;
             }
+
+            if (IsChatDetailInfoHostLoaded)
+            {
+                IsChatDetailInfoHostLoaded = false;
+                _infoPaneCache = null;
+                Bindings.Update();
+            }
+        }
+
+        private bool IsAnySidePaneOpen()
+        {
+            return ViewModel?.IsChatDetailInfoOpen == true ||
+                   ViewModel?.IsChatBackgroundPickerOpen == true;
         }
 
         private void ApplyChatDetailInfoColumns(bool open)
@@ -581,6 +680,7 @@ private readonly IStringResources _strings;
                 : (cover ? "InfoFullScreen" : "InfoDocked");
             VisualStateManager.GoToState(this, state, false);
             PlaceChatDetailInfoHost(cover);
+            PlaceChatBackgroundPickerHost(cover);
 
             if (!open || cover)
             {
@@ -606,6 +706,108 @@ private readonly IStringResources _strings;
 
             Grid.SetColumn(ChatDetailInfoPaneHost, coverChat ? 0 : 1);
             Grid.SetColumnSpan(ChatDetailInfoPaneHost, coverChat ? 2 : 1);
+        }
+
+        private void PlaceChatBackgroundPickerHost(bool coverChat)
+        {
+            if (ChatBackgroundPickerPaneHost == null)
+            {
+                return;
+            }
+
+            Grid.SetColumn(ChatBackgroundPickerPaneHost, coverChat ? 0 : 1);
+            Grid.SetColumnSpan(ChatBackgroundPickerPaneHost, coverChat ? 2 : 1);
+            // Lateral divider only when docked beside the chat (not Minimal fullscreen cover).
+            bool dockedDivider = !coverChat && ViewModel?.IsChatBackgroundPickerOpen == true;
+            ChatBackgroundPickerPaneHost.BorderThickness = dockedDivider
+                ? new Thickness(1, 0, 0, 0)
+                : new Thickness(0);
+        }
+
+        private void ApplyChatBackgroundPickerPane()
+        {
+            if (ChatColumn == null || InfoColumn == null)
+            {
+                return;
+            }
+
+            bool open = ViewModel?.IsChatBackgroundPickerOpen == true;
+            if (open)
+            {
+                EnsureChatBackgroundPickerHostLoaded();
+            }
+
+            if (ChatBackgroundPickerPaneHost == null)
+            {
+                if (!open)
+                {
+                    _chatBackgroundPickerPaneShown = false;
+                    ApplyChatDetailInfoColumns(IsAnySidePaneOpen());
+                }
+
+                return;
+            }
+
+            if (open)
+            {
+                ApplyChatDetailInfoColumns(open: true);
+                if (!_chatBackgroundPickerPaneShown)
+                {
+                    _chatBackgroundPickerPaneShown = true;
+                    ChatBackgroundPickerPaneHost.Visibility = Visibility.Visible;
+                }
+
+                return;
+            }
+
+            if (_chatBackgroundPickerPaneShown)
+            {
+                _chatBackgroundPickerPaneShown = false;
+                ApplyChatDetailInfoColumns(IsAnySidePaneOpen());
+                CompleteChatBackgroundPickerClose();
+                return;
+            }
+
+            CompleteChatBackgroundPickerClose();
+        }
+
+        private void EnsureChatBackgroundPickerHostLoaded()
+        {
+            if (!IsChatBackgroundPickerHostLoaded)
+            {
+                IsChatBackgroundPickerHostLoaded = true;
+                Bindings.Update();
+            }
+
+            _ = ChatBackgroundPickerPaneHost
+                ?? FindName("ChatBackgroundPickerPaneHost") as FrameworkElement;
+        }
+
+        private void CompleteChatBackgroundPickerClose()
+        {
+            if (ViewModel?.IsChatBackgroundPickerOpen == true)
+            {
+                return;
+            }
+
+            _chatBackgroundPickerPaneShown = false;
+            ApplyChatDetailInfoColumns(IsAnySidePaneOpen());
+
+            if (ChatBackgroundPickerPaneHost != null)
+            {
+                ChatBackgroundPickerPaneHost.Visibility = Visibility.Collapsed;
+            }
+
+            if (ChatBackgroundPickerSlideTransform != null)
+            {
+                ChatBackgroundPickerSlideTransform.X = 0;
+            }
+
+            if (IsChatBackgroundPickerHostLoaded)
+            {
+                IsChatBackgroundPickerHostLoaded = false;
+                Bindings.Update();
+            }
         }
 
         private void StopChatDetailInfoSlide()
@@ -756,6 +958,18 @@ private readonly IStringResources _strings;
                 return true;
             }
 
+            if (ViewModel?.IsSolidColorPickerOpen == true)
+            {
+                ViewModel.CloseSolidColorPicker();
+                return true;
+            }
+
+            if (ViewModel?.IsChatBackgroundPickerOpen == true)
+            {
+                ViewModel.CloseChatBackgroundPicker();
+                return true;
+            }
+
             if (ViewModel?.IsChatDetailInfoOpen == true)
             {
                 ViewModel.CloseChatDetailInfo();
@@ -763,6 +977,45 @@ private readonly IStringResources _strings;
             }
 
             return false;
+        }
+
+        private void SyncBackgroundPickerBackRegistration()
+        {
+            if (ViewModel?.IsChatBackgroundPickerOpen == true)
+            {
+                if (_backgroundPickerBack != null)
+                {
+                    return;
+                }
+
+                INavigator navigator = App.Services?.GetService<INavigator>();
+                if (navigator == null)
+                {
+                    return;
+                }
+
+                _backgroundPickerBack = navigator.PushLocalBack(() =>
+                {
+                    if (ViewModel?.IsSolidColorPickerOpen == true)
+                    {
+                        ViewModel.CloseSolidColorPicker();
+                        return true;
+                    }
+
+                    if (ViewModel?.IsChatBackgroundPickerOpen == true)
+                    {
+                        ViewModel.CloseChatBackgroundPicker();
+                        return true;
+                    }
+
+                    return false;
+                });
+            }
+            else
+            {
+                _backgroundPickerBack?.Dispose();
+                _backgroundPickerBack = null;
+            }
         }
 
         private void MessageListView_Loaded(object sender, RoutedEventArgs e)
@@ -1132,8 +1385,10 @@ private readonly IStringResources _strings;
                 }
                 else if (string.Equals(tag, "headerVideoCall", StringComparison.Ordinal) && menuItem != null)
                 {
-                    // Same compact rule as the header button (still disabled until VoIP exists).
-                    menuItem.Visibility = compactHeader ? Visibility.Visible : Visibility.Collapsed;
+                    // Same gate as voice — no call chrome on Notes to Self.
+                    menuItem.Visibility = compactHeader && canVoiceCall
+                        ? Visibility.Visible
+                        : Visibility.Collapsed;
                 }
                 else if (string.Equals(tag, "archiveChat", StringComparison.Ordinal) && menuItem != null)
                 {
@@ -1624,7 +1879,8 @@ private readonly IStringResources _strings;
                             ApplyHeaderAvatar(chat);
                             ApplyHeaderActions(
                                 isGroup: chat.IsGroup || (chat.JID ?? string.Empty).EndsWith("@g.us", StringComparison.OrdinalIgnoreCase),
-                                visible: true);
+                                visible: true,
+                                showContactCalls: !chat.IsPersonal);
                         }
                     }
 
@@ -2178,11 +2434,14 @@ private readonly IStringResources _strings;
                 HeaderAnnouncementsAvatar.Visibility = announce ? Visibility.Visible : Visibility.Collapsed;
             }
 
-            ApplyHeaderActions(isGroup, visible: true);
+            ApplyHeaderActions(isGroup, visible: true, showContactCalls: !chat.IsPersonal);
         }
 
-        private void ApplyHeaderActions(bool isGroup, bool visible)
+        private bool _showContactCallButtons = true;
+
+        private void ApplyHeaderActions(bool isGroup, bool visible, bool showContactCalls = true)
         {
+            _showContactCallButtons = showContactCalls;
             if (ContactHeaderActions != null)
             {
                 ContactHeaderActions.Visibility = visible && !isGroup
@@ -2195,6 +2454,27 @@ private readonly IStringResources _strings;
                 GroupHeaderActions.Visibility = visible && isGroup
                     ? Visibility.Visible
                     : Visibility.Collapsed;
+            }
+
+            SyncContactCallButtonsVisibility();
+        }
+
+        /// <summary>
+        /// Notes-to-self never shows voice/video. Re-applied after AdaptiveTrigger width flips.
+        /// </summary>
+        private void SyncContactCallButtonsVisibility()
+        {
+            Visibility callVisibility = _showContactCallButtons && !IsCompactHeaderCallLayout()
+                ? Visibility.Visible
+                : Visibility.Collapsed;
+            if (ContactVideoCallButton != null)
+            {
+                ContactVideoCallButton.Visibility = callVisibility;
+            }
+
+            if (ContactAudioCallButton != null)
+            {
+                ContactAudioCallButton.Visibility = callVisibility;
             }
         }
 

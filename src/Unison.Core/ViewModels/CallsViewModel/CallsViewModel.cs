@@ -32,6 +32,7 @@ namespace Unison.Core.ViewModels
         private readonly IDispatcher _ui;
         private readonly IDialogService _dialogs;
         private readonly IContactService _contacts;
+        private readonly ICallService _calls;
         private readonly DebouncedUiRebuild _favoritesRebuildDebounce;
 
         private ObservableCollection<CallFavoriteItem> _favoritePreview =
@@ -59,7 +60,8 @@ namespace Unison.Core.ViewModels
             IPersonStore people = null,
             IJidResolver jids = null,
             IDialogService dialogs = null,
-            IContactService contacts = null)
+            IContactService contacts = null,
+            ICallService calls = null)
         {
             _chatState = chatState ?? throw new ArgumentNullException(nameof(chatState));
             _chats = chats ?? throw new ArgumentNullException(nameof(chats));
@@ -70,6 +72,7 @@ namespace Unison.Core.ViewModels
             _jids = jids;
             _dialogs = dialogs;
             _contacts = contacts;
+            _calls = calls;
             _favoritesRebuildDebounce = new DebouncedUiRebuild(
                 () => true,
                 RebuildFavorites,
@@ -368,12 +371,37 @@ namespace Unison.Core.ViewModels
 
         private async System.Threading.Tasks.Task CallFavoriteVoiceAsync(CallFavoriteItem item)
         {
-            if (item == null || _dialogs == null)
+            if (item == null)
             {
                 return;
             }
 
             if (item.Chat != null && item.Chat.IsGroup)
+            {
+                return;
+            }
+
+            if (_calls != null && !string.IsNullOrWhiteSpace(item.Jid))
+            {
+                try
+                {
+                    await _calls.StartOutgoingAudioCallAsync(item.Jid).ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    if (_dialogs != null)
+                    {
+                        await _dialogs.ShowMessageAsync(
+                            _strings?.Get("ChatDetail_CallFailedTitle", "Call failed") ?? "Call failed",
+                            ex.Message,
+                            _strings?.Get("Common_Ok", "OK") ?? "OK").ConfigureAwait(false);
+                    }
+                }
+
+                return;
+            }
+
+            if (_dialogs == null)
             {
                 return;
             }
@@ -476,7 +504,7 @@ namespace Unison.Core.ViewModels
 
                 if (string.IsNullOrEmpty(row.DirectionGlyph))
                 {
-                    row.DirectionGlyph = CallDirectionGlyphs.For(row.Direction);
+                    row.DirectionGlyph = CallDirectionGlyphs.For(row.Direction, row.IsVideo);
                 }
 
                 enriched.Add(row);
@@ -585,7 +613,7 @@ namespace Unison.Core.ViewModels
 
                 if (string.IsNullOrEmpty(entry.DirectionGlyph))
                 {
-                    entry.DirectionGlyph = CallDirectionGlyphs.For(entry.Direction);
+                    entry.DirectionGlyph = CallDirectionGlyphs.For(entry.Direction, entry.IsVideo);
                 }
             }
 

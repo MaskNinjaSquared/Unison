@@ -14,6 +14,7 @@ namespace Unison.Core.Tests.Helpers
         {
             Assert.Equal("DIALING...", CallScreenStatusText.For(ActiveCallPhase.Dialing, null, Now, "DIALING...", "RECEIVING CALL...", "CALL ENDED"));
             Assert.Equal("RECEIVING CALL...", CallScreenStatusText.For(ActiveCallPhase.Ringing, null, Now, "DIALING...", "RECEIVING CALL...", "CALL ENDED"));
+            Assert.Equal("CONNECTING...", CallScreenStatusText.For(ActiveCallPhase.Connecting, null, Now, "DIALING...", "RECEIVING CALL...", "CALL ENDED", "CONNECTING..."));
             Assert.Equal("CALL ENDED", CallScreenStatusText.For(ActiveCallPhase.Ended, null, Now, "DIALING...", "RECEIVING CALL...", "CALL ENDED"));
         }
 

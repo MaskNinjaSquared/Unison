@@ -33,6 +33,12 @@ namespace Unison.Core.Models
         /// </summary>
         GroupDescription = 64,
 
+        /// <summary>
+        /// Outside <see cref="All"/>: NULL kind means "never chosen" → Default fallback,
+        /// not "wipe a wallpaper applied this session".
+        /// </summary>
+        Background = 128,
+
         All = Pin | Mute | WidgetPin | Status | Favorite
     }
 }

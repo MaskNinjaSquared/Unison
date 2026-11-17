@@ -817,6 +817,27 @@ namespace Unison.Core.ViewModels
                 return;
             }
 
+            string peerJid = LookupJid;
+            if (_calls != null && !string.IsNullOrWhiteSpace(peerJid))
+            {
+                try
+                {
+                    await _calls.StartOutgoingAudioCallAsync(peerJid).ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    if (_dialogs != null)
+                    {
+                        await _dialogs.ShowMessageAsync(
+                            _strings?.Get("ChatDetail_CallFailedTitle", "Call failed") ?? "Call failed",
+                            ex.Message,
+                            _strings?.Get("Common_Ok", "OK") ?? "OK").ConfigureAwait(false);
+                    }
+                }
+
+                return;
+            }
+
             string phone = PhoneValue;
             string label = DisplayName;
             if (string.IsNullOrWhiteSpace(label))

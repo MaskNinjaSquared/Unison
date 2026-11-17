@@ -708,6 +708,9 @@ namespace Unison.Core.Tests.Helpers
                 return Task.CompletedTask;
             }
 
+            public Task SetBackgroundAsync(string jid, ChatBackgroundKind kind, string backgroundPath, string solidColorHex = null) =>
+                Task.CompletedTask;
+
             public Task InitializeAsync() => Task.CompletedTask;
             public Task WarmAsync() => Task.CompletedTask;
             public ChatLocalState TryGetCached(string jid) => null;

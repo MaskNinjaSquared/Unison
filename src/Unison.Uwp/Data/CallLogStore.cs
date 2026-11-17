@@ -153,7 +153,7 @@ namespace Unison.Uwp.Data
                 CategoryLabel = entry.CategoryLabel,
                 TimestampLabel = entry.TimestampLabel,
                 DirectionGlyph = string.IsNullOrEmpty(entry.DirectionGlyph)
-                    ? CallDirectionGlyphs.For(entry.Direction)
+                    ? CallDirectionGlyphs.For(entry.Direction, entry.IsVideo)
                     : entry.DirectionGlyph
             };
         }
@@ -172,7 +172,7 @@ namespace Unison.Uwp.Data
                 CanonicalJid = row.CanonicalJid,
                 Direction = direction,
                 DirectionGlyph = string.IsNullOrEmpty(row.DirectionGlyph)
-                    ? CallDirectionGlyphs.For(direction)
+                    ? CallDirectionGlyphs.For(direction, row.IsVideo)
                     : row.DirectionGlyph,
                 ChromeKind = (CallEventChromeKind)row.ChromeKind,
                 IsVideo = row.IsVideo,

@@ -31,6 +31,16 @@ namespace Unison.Core.Tests.Helpers
         }
 
         [Fact]
+        public void Fresh_video_offer_does_not_ring_on_companion()
+        {
+            var video = Offer();
+            video.IsVideo = true;
+            Assert.Equal(
+                ActiveCallEventAction.Ignore,
+                ActiveCallEventPolicy.Decide(video, callerIsSelf: false, current: null, nowUtc: Now));
+        }
+
+        [Fact]
         public void Offer_from_self_never_rings()
         {
             Assert.Equal(
@@ -86,6 +96,49 @@ namespace Unison.Core.Tests.Helpers
             Assert.Equal(
                 ActiveCallEventAction.Ignore,
                 ActiveCallEventPolicy.Decide(evt, callerIsSelf: false, current: null, nowUtc: Now));
+        }
+
+        private static ActiveCallSnapshot Dialing(string callId = "c1") =>
+            new ActiveCallSnapshot(
+                callId,
+                "peer@s.whatsapp.net",
+                "self@lid",
+                isInbound: false,
+                isVideo: false,
+                ActiveCallPhase.Dialing);
+
+        [Fact]
+        public void Outbound_accept_while_dialing_connects()
+        {
+            var evt = Offer();
+            evt.Kind = CallEventChromeKind.Completed;
+            evt.ActionTag = "accept";
+            Assert.Equal(
+                ActiveCallEventAction.Connect,
+                ActiveCallEventPolicy.Decide(evt, callerIsSelf: false, current: Dialing(), nowUtc: Now));
+        }
+
+        [Theory]
+        [InlineData(CallEventChromeKind.Missed)]
+        [InlineData(CallEventChromeKind.AnsweredElsewhere)]
+        public void Outbound_terminal_while_dialing_ends(CallEventChromeKind kind)
+        {
+            var evt = Offer();
+            evt.Kind = kind;
+            Assert.Equal(
+                ActiveCallEventAction.End,
+                ActiveCallEventPolicy.Decide(evt, callerIsSelf: false, current: Dialing(), nowUtc: Now));
+        }
+
+        [Fact]
+        public void Outbound_terminate_while_dialing_ends()
+        {
+            var evt = Offer();
+            evt.Kind = CallEventChromeKind.Completed;
+            evt.ActionTag = "terminate";
+            Assert.Equal(
+                ActiveCallEventAction.End,
+                ActiveCallEventPolicy.Decide(evt, callerIsSelf: false, current: Dialing(), nowUtc: Now));
         }
     }
 }

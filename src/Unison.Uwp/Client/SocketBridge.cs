@@ -233,6 +233,12 @@ namespace Unison.Uwp.Client
                 {
                     RuntimeDiagnosticsService.Instance.Write("protocol", "query", line);
                 }
+                else if (!string.IsNullOrEmpty(line) &&
+                         line.IndexOf("[Call]", StringComparison.Ordinal) >= 0)
+                {
+                    // preaccept / accept / reject / terminate — health send=* only counts chat.
+                    RuntimeDiagnosticsService.Instance.Write("call", "signaling", line);
+                }
             });
             _downloader = new HttpEncryptedMediaDownloader(_log);
             _events = new WaEventBuffer(_log);
@@ -2973,9 +2979,11 @@ namespace Unison.Uwp.Client
                     continue;
                 }
 
-                CallEventChromeKind? chrome =
-                    Unison.Core.Helpers.Calls.CallEventChromeMap.FromStatusName(call.Status.ToString());
-                if (chrome == null)
+                bool control = Unison.Core.Helpers.Calls.CallSignalingControl.IsControlTag(call.ActionTag);
+                CallEventChromeKind? chrome = control
+                    ? null
+                    : Unison.Core.Helpers.Calls.CallEventChromeMap.FromStatusName(call.Status.ToString());
+                if (chrome == null && !control)
                 {
                     continue;
                 }
@@ -2986,24 +2994,45 @@ namespace Unison.Uwp.Client
                     call.From,
                     call.GroupJid,
                     call.IsGroup);
-                if (string.IsNullOrWhiteSpace(chatJid))
+                // meowcaller m.from = offer outer from (ChatId before sanitize).
+                string signalingTo = !string.IsNullOrWhiteSpace(call.ChatId)
+                    ? call.ChatId
+                    : call.From;
+                if (string.IsNullOrWhiteSpace(chatJid) && !control)
                 {
                     continue;
+                }
+
+                if (string.IsNullOrWhiteSpace(chatJid))
+                {
+                    chatJid = signalingTo;
                 }
 
                 DateTime stamp = call.Date > 0
                     ? DateTimeOffset.FromUnixTimeSeconds(call.Date).UtcDateTime
                     : DateTime.UtcNow;
 
+                string callerJid = call.From;
+                if (string.IsNullOrWhiteSpace(callerJid) ||
+                    Unison.Core.Helpers.JidHelper.IsCallRelayJid(callerJid))
+                {
+                    callerJid = chatJid;
+                }
+
                 requests.Add(new CallEventNotifyRequest
                 {
                     ChatJid = chatJid,
                     CallId = call.Id,
-                    Kind = chrome.Value,
+                    Kind = chrome ?? CallEventChromeKind.Incoming,
                     IsVideo = call.IsVideo,
                     TimestampUtc = stamp,
-                    CallerJid = call.From,
-                    DurationSeconds = call.DurationSeconds
+                    CallerJid = callerJid,
+                    SignalingToJid = signalingTo,
+                    ActionTag = call.ActionTag,
+                    DurationSeconds = call.DurationSeconds,
+                    IsSignalingControl = control,
+                    CallCreatorJid = call.CallCreator,
+                    MediaHints = Unison.WhatsAppClient.Calls.CallMediaHintsMapper.From(call)
                 });
             }
 
@@ -3183,6 +3212,15 @@ namespace Unison.Uwp.Client
             }
 
             return module;
+        }
+
+        /// <summary>Live message module (call offer / send path), or null when disconnected.</summary>
+        internal MessageModule TryGetMessages()
+        {
+            lock (_gate)
+            {
+                return _messages;
+            }
         }
 
         private MessageModule RequireMessages()

@@ -121,6 +121,10 @@ namespace Unison.Socket.Session
         /// <summary>Registration point for inbound feature modules.</summary>
         public NodeDispatcher Dispatcher { get; }
 
+        /// <summary>Logged-in account JID (<c>auth.Me.Id</c>), or null before pairing.</summary>
+        public string MeId =>
+            _auth != null && _auth.Me != null ? _auth.Me.Id : null;
+
         /// <summary>
         /// Every decoded node, before it is routed. This is an observation point and nothing more:
         /// a host that needs to see the raw traffic - to bridge it to another stack, or to log it -

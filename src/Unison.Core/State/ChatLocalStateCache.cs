@@ -269,6 +269,13 @@ namespace Unison.Core.State
                 copy.GroupDescriptionId = source.GroupDescriptionId;
             }
 
+            if (source.Knows(ChatLocalStateFields.Background))
+            {
+                copy.BackgroundKind = source.BackgroundKind;
+                copy.BackgroundPath = source.BackgroundPath;
+                copy.BackgroundSolidColorHex = source.BackgroundSolidColorHex;
+            }
+
             return copy;
         }
     }

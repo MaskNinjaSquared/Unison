@@ -563,6 +563,7 @@ namespace Unison.Uwp.UI.Views
             ApplyAttachTileSize(e.NewSize.Width);
             ApplyAttachMenuHeightCap(e.NewSize.Height);
             UpdateScrollToBottomButton();
+            SyncContactCallButtonsVisibility();
         }
 
         /// <summary>Largest a tile gets: the size Whatsapp drew them at on Windows Phone 8.</summary>
@@ -1351,8 +1352,9 @@ namespace Unison.Uwp.UI.Views
                 }
                 else if (string.Equals(tag, "headerVideoCall", StringComparison.Ordinal) && menuItem != null)
                 {
-                    // Same compact rule as the header button (still disabled until VoIP exists).
-                    menuItem.Visibility = compactHeader ? Visibility.Visible : Visibility.Collapsed;
+                    menuItem.Visibility = compactHeader && canVoiceCall
+                        ? Visibility.Visible
+                        : Visibility.Collapsed;
                 }
                 else if (string.Equals(tag, "archiveChat", StringComparison.Ordinal) && menuItem != null)
                 {
@@ -1843,7 +1845,8 @@ namespace Unison.Uwp.UI.Views
                             ApplyHeaderAvatar(chat);
                             ApplyHeaderActions(
                                 isGroup: chat.IsGroup || (chat.JID ?? string.Empty).EndsWith("@g.us", StringComparison.OrdinalIgnoreCase),
-                                visible: true);
+                                visible: true,
+                                showContactCalls: !chat.IsPersonal);
                         }
                     }
 
@@ -2435,11 +2438,14 @@ namespace Unison.Uwp.UI.Views
                 HeaderAnnouncementsAvatar.Visibility = announce ? Visibility.Visible : Visibility.Collapsed;
             }
 
-            ApplyHeaderActions(isGroup, visible: true);
+            ApplyHeaderActions(isGroup, visible: true, showContactCalls: !chat.IsPersonal);
         }
 
-        private void ApplyHeaderActions(bool isGroup, bool visible)
+        private bool _showContactCallButtons = true;
+
+        private void ApplyHeaderActions(bool isGroup, bool visible, bool showContactCalls = true)
         {
+            _showContactCallButtons = showContactCalls;
             if (ContactHeaderActions != null)
             {
                 ContactHeaderActions.Visibility = visible && !isGroup
@@ -2452,6 +2458,27 @@ namespace Unison.Uwp.UI.Views
                 GroupHeaderActions.Visibility = visible && isGroup
                     ? Visibility.Visible
                     : Visibility.Collapsed;
+            }
+
+            SyncContactCallButtonsVisibility();
+        }
+
+        /// <summary>
+        /// Notes-to-self never shows voice/video. Re-applied after AdaptiveTrigger width flips.
+        /// </summary>
+        private void SyncContactCallButtonsVisibility()
+        {
+            Visibility callVisibility = _showContactCallButtons && !IsCompactHeaderCallLayout()
+                ? Visibility.Visible
+                : Visibility.Collapsed;
+            if (ContactVideoCallButton != null)
+            {
+                ContactVideoCallButton.Visibility = callVisibility;
+            }
+
+            if (ContactAudioCallButton != null)
+            {
+                ContactAudioCallButton.Visibility = callVisibility;
             }
         }
 

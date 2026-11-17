@@ -7,4 +7,19 @@
     <ProjectGuid>{C8A1F2E3-4B5D-6E7F-8091-A2B3C4D5E6F7}</ProjectGuid>
   </PropertyGroup>
 
+  <ItemGroup>
+    <!-- Same version as Unison.Baileys: AES-GCM (SFrame) + DTLS client for the relay DataChannel. -->
+    <PackageReference Include="Portable.BouncyCastle" Version="1.9.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Unison.Core.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Engine\Mlow\Seeds\lsf_seed.bin" LogicalName="Unison.Voip.Engine.Mlow.Seeds.lsf_seed.bin" />
+    <EmbeddedResource Include="Engine\Mlow\Seeds\pitch_seed.bin" LogicalName="Unison.Voip.Engine.Mlow.Seeds.pitch_seed.bin" />
+    <EmbeddedResource Include="Engine\Mlow\Seeds\cc_seed.bin" LogicalName="Unison.Voip.Engine.Mlow.Seeds.cc_seed.bin" />
+  </ItemGroup>
+
 </Project>

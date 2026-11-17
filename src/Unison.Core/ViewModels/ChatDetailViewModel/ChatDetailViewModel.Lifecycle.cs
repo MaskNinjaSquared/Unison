@@ -300,7 +300,10 @@ namespace Unison.Core.ViewModels
         /// <summary>Opens the reply bar on this bubble and closes the Legacy action bar.</summary>
         public void BeginReply(ChatMessageViewModel message)
         {
-            if (message == null || message.Model == null || string.IsNullOrWhiteSpace(message.Model.Id))
+            if (!CanCompose ||
+                message == null ||
+                message.Model == null ||
+                string.IsNullOrWhiteSpace(message.Model.Id))
             {
                 return;
             }

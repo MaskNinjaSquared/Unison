@@ -88,7 +88,7 @@ namespace Unison.Core.Services
             entry.CanonicalJid = canonical;
             if (string.IsNullOrEmpty(entry.DirectionGlyph))
             {
-                entry.DirectionGlyph = CallDirectionGlyphs.For(entry.Direction);
+                entry.DirectionGlyph = CallDirectionGlyphs.For(entry.Direction, entry.IsVideo);
             }
 
             if (entry.TimestampUtc.Kind != DateTimeKind.Utc)
@@ -251,7 +251,7 @@ namespace Unison.Core.Services
                 Jid = entry.CanonicalJid,
                 Direction = entry.Direction,
                 DirectionGlyph = string.IsNullOrEmpty(entry.DirectionGlyph)
-                    ? CallDirectionGlyphs.For(entry.Direction)
+                    ? CallDirectionGlyphs.For(entry.Direction, entry.IsVideo)
                     : entry.DirectionGlyph,
                 LastAt = new DateTimeOffset(entry.TimestampUtc, TimeSpan.Zero),
                 IsVideo = entry.IsVideo,

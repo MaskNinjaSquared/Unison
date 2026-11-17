@@ -21,6 +21,9 @@ namespace Unison.Core.Models
         private ChannelViewerRole _channelRole;
         private string _groupDescription;
         private string _groupDescriptionId;
+        private ChatBackgroundKind _backgroundKind = ChatBackgroundKind.Default;
+        private string _backgroundPath;
+        private string _backgroundSolidColorHex;
         private ChatLocalStateFields _known;
 
         public string Jid
@@ -123,6 +126,37 @@ namespace Unison.Core.Models
         {
             get { return _groupDescriptionId; }
             set { _groupDescriptionId = value; }
+        }
+
+        /// <summary>
+        /// Wallpaper kind. Set with <see cref="BackgroundPath"/> when kind is Custom.
+        /// </summary>
+        public ChatBackgroundKind BackgroundKind
+        {
+            get { return _backgroundKind; }
+            set
+            {
+                _backgroundKind = value;
+                _known |= ChatLocalStateFields.Background;
+            }
+        }
+
+        /// <summary>
+        /// Relative path under LocalFolder for <see cref="ChatBackgroundKind.Custom"/>; otherwise null.
+        /// </summary>
+        public string BackgroundPath
+        {
+            get { return _backgroundPath; }
+            set { _backgroundPath = value; }
+        }
+
+        /// <summary>
+        /// Optional #AARRGGBB underfill for the Default family. Null = theme wallpaper brush.
+        /// </summary>
+        public string BackgroundSolidColorHex
+        {
+            get { return _backgroundSolidColorHex; }
+            set { _backgroundSolidColorHex = value; }
         }
 
         public bool IsMutedLocally => ChatMuteHelper.IsMuted(MutedUntil);

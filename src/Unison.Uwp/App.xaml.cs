@@ -746,11 +746,19 @@ namespace Unison.Uwp
                 sp => sp.GetRequiredService<BridgeSessionProvider>());
             services.AddSingleton<Unison.Voip.Abstractions.ICallSignalingChannel>(sp =>
                 new Unison.Uwp.Services.Calls.SocketCallSignalingChannel(
-                    sp.GetRequiredService<AppSessionProvider>()));
+                    sp.GetRequiredService<AppSessionProvider>(),
+                    () =>
+                    {
+                        var bridge = sp.GetRequiredService<WhatsAppService>().Socket as SocketBridge;
+                        return bridge != null ? bridge.TryGetMessages() : null;
+                    }));
             services.AddSingleton<Unison.Core.Contracts.WhatsApp.ICallService>(sp =>
                 new Unison.WhatsAppClient.Calls.CallFacade(
                     sp.GetRequiredService<Unison.Voip.Abstractions.ICallSignalingChannel>(),
-                    jid => sp.GetRequiredService<JidAliasTable>().IsSelfJid(jid)));
+                    jid => sp.GetRequiredService<JidAliasTable>().IsSelfJid(jid),
+                    log: line => RuntimeDiagnosticsService.Instance.Write("call", "facade", line),
+                    ioFactory: sp.GetRequiredService<Unison.Voip.Abstractions.ICallIoFactory>(),
+                    selfLid: () => sp.GetRequiredService<IResolvedNameApplyHost>().SelfLid));
             services.AddSingleton<IHistoryOnDemandSocket>(sp => new BridgeHistoryOnDemandSocket(
                 sp.GetRequiredService<UwpSessionProvider>()));
             services.AddSingleton<ISelfIdentityHealHost>(
@@ -1304,7 +1312,10 @@ namespace Unison.Uwp
                 sp.GetRequiredService<ChatStateStore>(),
                 sp.GetRequiredService<IDispatcher>(),
                 sp.GetRequiredService<IStringResources>(),
-                sp.GetService<IContactService>()));
+                sp.GetService<IContactService>(),
+                sp.GetService<IVoicePlaybackRoutingService>(),
+                utcNow: null,
+                jids: sp.GetService<IJidResolver>()));
             services.AddSingleton<ICallScreenPresenter>(sp => new CallScreenPresenter(
                 sp.GetRequiredService<CallScreenViewModel>(),
                 jid => sp.GetRequiredService<ShellViewModel>().QueueOpenChatFromActivation(
@@ -1315,7 +1326,6 @@ namespace Unison.Uwp
                 sp.GetRequiredService<ICallService>(),
                 sp.GetRequiredService<IVoipSystemCallHost>(),
                 sp.GetRequiredService<IAppVisibility>(),
-                sp.GetRequiredService<IDispatcher>(),
                 call =>
                 {
                     if (call == null)
@@ -1333,16 +1343,7 @@ namespace Unison.Uwp
                     string resolved = contacts?.ResolveDisplayName(call.PeerJid, "voip-wake");
                     return string.IsNullOrWhiteSpace(resolved) ? call.PeerJid : resolved;
                 },
-                () =>
-                {
-                    try
-                    {
-                        Window.Current?.Activate();
-                    }
-                    catch
-                    {
-                    }
-                },
+                callId => UwpVoipSystemCallHost.ActivateAppForAnswerAsync(callId),
                 ensureProcessKeepAlive: () =>
                     sp.GetRequiredService<ILocationKeepAliveService>().ApplyConfigAsync()));
             services.AddSingleton<IAppActivationRouter>(sp => new AppActivationRouter(
@@ -1463,7 +1464,11 @@ namespace Unison.Uwp
                 if (string.Equals(scheme, UwpVoipSystemCallHost.SystemProtocolScheme, StringComparison.OrdinalIgnoreCase) ||
                     string.Equals(scheme, UwpVoipSystemCallHost.ProtocolScheme, StringComparison.OrdinalIgnoreCase))
                 {
-                    // ms-voip-call (system / Unigram) or unison-call: bring the call screen forward.
+                    // ms-voip-call (system / Unigram) or unison-call:answer — foreground call UI.
+                    RuntimeDiagnosticsService.Instance.Write(
+                        "call",
+                        "protocol-activated",
+                        "scheme=" + scheme + "; uri=" + (protocolArgs.Uri?.OriginalString ?? string.Empty));
                     NotificationService.Instance.Initialize();
                     LiveTilesService.Instance.Initialize();
                     EnsureWindowVisibilityTracking();

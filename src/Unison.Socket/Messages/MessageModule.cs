@@ -195,9 +195,17 @@ namespace Unison.Socket.Messages
                 GroupSettingsChanged = groupJid => GroupMetadata.Invalidate(groupJid),
                 GroupParticipantsChanged = update => GroupMetadata.Invalidate(update.Id)
             };
-            Calls = new CallHandler(session.Events, Ack, log);
+            Calls = new CallHandler(session.Events, Ack, log, new CallKeyDecryptor(signal, log));
             RejectCall = new RejectCallUseCase(session.Connection, log);
             TerminateCall = new TerminateCallUseCase(session.Connection, log);
+            OfferCall = new OfferCallUseCase(
+                session.Connection,
+                signal,
+                devices,
+                auth,
+                meId,
+                meLid,
+                log);
             SentAcks = new MessageAckHandler(session.Events, log);
             Presence = new PresenceHandler(session.Events, log);
 
@@ -280,6 +288,9 @@ namespace Unison.Socket.Messages
         public RejectCallUseCase RejectCall { get; }
 
         public TerminateCallUseCase TerminateCall { get; }
+
+        /// <summary>Places an outbound 1:1 audio offer (meowcaller placeCall).</summary>
+        public OfferCallUseCase OfferCall { get; }
 
         /// <summary>The server's answer to what we sent; the only place a refused send shows up.</summary>
         public MessageAckHandler SentAcks { get; }

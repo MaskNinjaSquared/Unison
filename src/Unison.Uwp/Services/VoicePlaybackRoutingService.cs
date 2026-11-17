@@ -132,6 +132,16 @@ namespace Unison.Uwp.Services
             ApplyRoute(VoicePlaybackRoute.Speaker, "session-end");
         }
 
+        public void SetPreferredRoute(VoicePlaybackRoute route)
+        {
+            if (!IsSupported)
+            {
+                return;
+            }
+
+            ApplyRoute(route, "preferred");
+        }
+
         private async Task ReassertSpeakerAfterStreamStartsAsync()
         {
             try

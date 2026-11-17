@@ -231,6 +231,9 @@ namespace Unison.Core.Tests.Helpers
                 return Task.CompletedTask;
             }
 
+            public Task SetBackgroundAsync(string jid, ChatBackgroundKind kind, string backgroundPath, string solidColorHex = null) =>
+                Task.CompletedTask;
+
             public void RememberChatPinned(string jid, bool pinned, long? pinnedTimestamp = null)
             {
             }

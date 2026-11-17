@@ -57,5 +57,17 @@ namespace Unison.Socket.Models
 
         /// <summary>Count of action children (opaque payload presence without copying bytes yet).</summary>
         public int OpaqueChildCount { get; set; }
+
+        /// <summary>The action's call-creator attribute (stanza call-creator for replies).</summary>
+        public string CallCreator { get; set; }
+
+        /// <summary>Decrypted media root key from a live 1:1 offer; null otherwise. Never log it.</summary>
+        public byte[] CallKey { get; set; }
+
+        /// <summary>&lt;relay&gt; under the action (offer / relaylatency / transport), when present.</summary>
+        public CallRelayInfo Relay { get; set; }
+
+        /// <summary>Caller relaylatency candidates the callee must echo back.</summary>
+        public System.Collections.Generic.List<CallRelayLatencyProbe> RelayLatencyProbes { get; set; }
     }
 }

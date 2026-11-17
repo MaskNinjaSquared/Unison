@@ -54,6 +54,9 @@ namespace Unison.Uwp.Data
                 await EnsureColumnAsync(nameof(ChatRow.ChannelRole)).ConfigureAwait(false);
                 await EnsureTextColumnAsync(nameof(ChatRow.GroupDescription)).ConfigureAwait(false);
                 await EnsureTextColumnAsync(nameof(ChatRow.GroupDescriptionId)).ConfigureAwait(false);
+                await EnsureColumnAsync(nameof(ChatRow.BackgroundKind)).ConfigureAwait(false);
+                await EnsureTextColumnAsync(nameof(ChatRow.BackgroundPath)).ConfigureAwait(false);
+                await EnsureTextColumnAsync(nameof(ChatRow.BackgroundSolidColorHex)).ConfigureAwait(false);
                 _initialized = true;
                 Debug.WriteLine("[ChatStore] Initialized at " + dbPath);
             }
@@ -161,6 +164,69 @@ namespace Unison.Uwp.Data
                 existing.GroupDescription = description ?? string.Empty;
                 existing.GroupDescriptionId = descriptionId;
             });
+        }
+
+        public Task SetBackgroundAsync(
+            string jid,
+            ChatBackgroundKind kind,
+            string backgroundPath,
+            string solidColorHex = null)
+        {
+            RememberBackground(jid, kind, backgroundPath, solidColorHex);
+            return WriteAsync(
+                jid,
+                existing => ApplyBackground(existing, kind, backgroundPath, solidColorHex));
+        }
+
+        public void RememberBackground(
+            string jid,
+            ChatBackgroundKind kind,
+            string backgroundPath,
+            string solidColorHex = null)
+        {
+            _cache.Mutate(jid, state => ApplyBackground(state, kind, backgroundPath, solidColorHex));
+        }
+
+        private static void ApplyBackground(
+            ChatLocalState state,
+            ChatBackgroundKind kind,
+            string backgroundPath,
+            string solidColorHex)
+        {
+            if (state == null)
+            {
+                return;
+            }
+
+            if (kind == ChatBackgroundKind.Custom)
+            {
+                if (string.IsNullOrWhiteSpace(backgroundPath))
+                {
+                    kind = ChatBackgroundKind.Default;
+                    backgroundPath = null;
+                }
+            }
+            else
+            {
+                backgroundPath = null;
+            }
+
+            if (!ChatBackgroundCatalog.IsDefaultFamily(kind))
+            {
+                solidColorHex = null;
+            }
+            else if (!string.IsNullOrWhiteSpace(solidColorHex))
+            {
+                solidColorHex = solidColorHex.Trim();
+            }
+            else
+            {
+                solidColorHex = null;
+            }
+
+            state.BackgroundKind = kind;
+            state.BackgroundPath = backgroundPath;
+            state.BackgroundSolidColorHex = solidColorHex;
         }
 
         public void RememberChatPinned(string jid, bool pinned, long? pinnedTimestamp = null)
@@ -362,6 +428,23 @@ namespace Unison.Uwp.Data
                 state.GroupDescriptionId = row.GroupDescriptionId;
             }
 
+            if (row.BackgroundKind.HasValue &&
+                Enum.IsDefined(typeof(ChatBackgroundKind), row.BackgroundKind.Value))
+            {
+                state.BackgroundKind = (ChatBackgroundKind)row.BackgroundKind.Value;
+                state.BackgroundPath = row.BackgroundPath;
+                state.BackgroundSolidColorHex = row.BackgroundSolidColorHex;
+            }
+            else if (row.BackgroundPath != null)
+            {
+                // Legacy path-only row: treat as Custom when path present.
+                state.BackgroundKind = string.IsNullOrWhiteSpace(row.BackgroundPath)
+                    ? ChatBackgroundKind.Default
+                    : ChatBackgroundKind.Custom;
+                state.BackgroundPath = row.BackgroundPath;
+                state.BackgroundSolidColorHex = row.BackgroundSolidColorHex;
+            }
+
             return state;
         }
 
@@ -384,6 +467,15 @@ namespace Unison.Uwp.Data
                     : null,
                 GroupDescriptionId = state.Knows(ChatLocalStateFields.GroupDescription)
                     ? state.GroupDescriptionId
+                    : null,
+                BackgroundKind = state.Knows(ChatLocalStateFields.Background)
+                    ? (int?)state.BackgroundKind
+                    : null,
+                BackgroundPath = state.Knows(ChatLocalStateFields.Background)
+                    ? state.BackgroundPath
+                    : null,
+                BackgroundSolidColorHex = state.Knows(ChatLocalStateFields.Background)
+                    ? state.BackgroundSolidColorHex
                     : null,
                 UpdatedAtUtc = DateTime.UtcNow
             };

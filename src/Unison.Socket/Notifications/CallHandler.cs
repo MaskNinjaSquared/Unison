@@ -30,8 +30,14 @@ namespace Unison.Socket.Notifications
         private readonly SendMessageAckUseCase _ack;
         private readonly TtlCache<CallOffer> _offers = new TtlCache<CallOffer>(TimeSpan.FromMinutes(5));
         private readonly ISocketLog _log;
+        private readonly CallKeyDecryptor _callKeys;
 
-        public CallHandler(IWaEventBus events, SendMessageAckUseCase ack, ISocketLog log = null)
+        /// <param name="callKeys">Null leaves CallOffer.CallKey empty (no media possible).</param>
+        public CallHandler(
+            IWaEventBus events,
+            SendMessageAckUseCase ack,
+            ISocketLog log = null,
+            CallKeyDecryptor callKeys = null)
         {
             if (events == null)
             {
@@ -46,6 +52,7 @@ namespace Unison.Socket.Notifications
             _events = events;
             _ack = ack;
             _log = log ?? NullSocketLog.Instance;
+            _callKeys = callKeys;
         }
 
         public async Task HandleAsync(BinaryNode node)
@@ -60,6 +67,7 @@ namespace Unison.Socket.Notifications
                 var call = Read(node);
                 if (call != null)
                 {
+                    await AttachCallKeyAsync(node, call).ConfigureAwait(false);
                     await _events.EmitAsync(
                         WaEventKind.Call,
                         new List<CallOffer> { call }).ConfigureAwait(false);
@@ -84,7 +92,7 @@ namespace Unison.Socket.Notifications
             }
 
             var info = children[0];
-            var status = ReadStatus(info);
+            var status = CallStatusReader.Read(info);
 
             var from = info.GetAttribute("from");
             if (string.IsNullOrEmpty(from))
@@ -103,7 +111,10 @@ namespace Unison.Socket.Notifications
                 DurationSeconds = ReadDurationSeconds(info),
                 ActionTag = info.Tag,
                 HasEncryptedPayload = info.GetChild("enc") != null,
-                OpaqueChildCount = CountChildren(info)
+                OpaqueChildCount = CountChildren(info),
+                CallCreator = info.GetAttribute("call-creator"),
+                Relay = CallRelayParser.FindRelay(info),
+                RelayLatencyProbes = CallRelayParser.ReadLatencyProbes(info)
             };
 
             if (status == CallStatus.Offer)
@@ -128,6 +139,11 @@ namespace Unison.Socket.Notifications
                 call.IsGroup = offer.IsGroup;
                 call.GroupJid = offer.GroupJid;
             }
+            else if (info.Tag == "offer" || info.Tag == "offer_notice")
+            {
+                // Ended-offer notice with no live offer cached still states its own media type.
+                call.IsVideo = info.GetChild("video") != null;
+            }
 
             if (!string.IsNullOrEmpty(call.Id) && status != CallStatus.Ringing)
             {
@@ -135,6 +151,20 @@ namespace Unison.Socket.Notifications
             }
 
             return call;
+        }
+
+        /// <summary>1:1 offers only: group calls key from the group epoch, not an offer enc.</summary>
+        private async Task AttachCallKeyAsync(BinaryNode node, CallOffer call)
+        {
+            if (_callKeys == null || call.Status != CallStatus.Offer || call.IsGroup || !call.HasEncryptedPayload)
+            {
+                return;
+            }
+
+            BinaryNode info = node.GetAllChildren()[0];
+            call.CallKey = await _callKeys
+                .TryDecryptAsync(info, node.GetAttribute("from"), call.CallCreator)
+                .ConfigureAwait(false);
         }
 
         private static int CountChildren(BinaryNode info)
@@ -146,42 +176,6 @@ namespace Unison.Socket.Notifications
 
             var children = info.GetAllChildren();
             return children == null ? 0 : children.Count;
-        }
-
-        /// <summary>
-        /// A terminate says why in an attribute, and the reason is what separates a call the user
-        /// rejected from one they never heard ring.
-        /// </summary>
-        private static CallStatus ReadStatus(BinaryNode info)
-        {
-            switch (info.Tag)
-            {
-                case "offer":
-                case "offer_notice":
-                    return CallStatus.Offer;
-
-                case "reject":
-                    return CallStatus.Reject;
-
-                case "accept":
-                    return CallStatus.Accept;
-
-                case "terminate":
-                    switch (info.GetAttribute("reason"))
-                    {
-                        case "timeout":
-                            return CallStatus.Timeout;
-                        case "rejected":
-                            return CallStatus.Reject;
-                        case "accept":
-                            return CallStatus.Accept;
-                        default:
-                            return CallStatus.Terminate;
-                    }
-
-                default:
-                    return CallStatus.Ringing;
-            }
         }
 
         private static long ParseLong(string value)

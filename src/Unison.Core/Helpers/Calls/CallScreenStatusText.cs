@@ -18,7 +18,8 @@ namespace Unison.Core.Helpers.Calls
             DateTime nowUtc,
             string dialingLabel,
             string ringingLabel,
-            string endedLabel)
+            string endedLabel,
+            string connectingLabel = null)
         {
             switch (phase)
             {
@@ -26,6 +27,8 @@ namespace Unison.Core.Helpers.Calls
                     return dialingLabel;
                 case ActiveCallPhase.Ringing:
                     return ringingLabel;
+                case ActiveCallPhase.Connecting:
+                    return string.IsNullOrEmpty(connectingLabel) ? dialingLabel : connectingLabel;
                 case ActiveCallPhase.Ended:
                     return endedLabel;
             }

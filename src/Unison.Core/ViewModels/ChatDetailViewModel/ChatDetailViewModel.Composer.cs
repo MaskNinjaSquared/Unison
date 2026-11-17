@@ -35,6 +35,8 @@ namespace Unison.Core.ViewModels
             (ToggleViewOnceVoiceCommand as RelayCommand)?.RaiseCanExecuteChanged();
             (ToggleStickerBoxCommand as RelayCommand)?.RaiseCanExecuteChanged();
             (InsertEmojiCommand as RelayCommand<string>)?.RaiseCanExecuteChanged();
+            (OpenChatBackgroundPickerCommand as RelayCommand)?.RaiseCanExecuteChanged();
+            (ReplySelectedMessageCommand as RelayCommand)?.RaiseCanExecuteChanged();
         }
 
         private void RaiseSendMessageCanExecuteChanged() =>

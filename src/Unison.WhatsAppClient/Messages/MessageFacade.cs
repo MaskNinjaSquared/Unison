@@ -4454,7 +4454,8 @@ namespace Unison.WhatsAppClient.Messages
 
             foreach (CallEventNotifyRequest callEvent in events)
             {
-                if (callEvent == null || string.IsNullOrWhiteSpace(callEvent.ChatJid))
+                if (callEvent == null || callEvent.IsSignalingControl ||
+                    string.IsNullOrWhiteSpace(callEvent.ChatJid))
                 {
                     continue;
                 }
@@ -4502,7 +4503,9 @@ namespace Unison.WhatsAppClient.Messages
                         CallId = callEvent.CallId,
                         CanonicalJid = chatJid,
                         Direction = direction,
-                        DirectionGlyph = Unison.Core.Helpers.Calls.CallDirectionGlyphs.For(direction),
+                        DirectionGlyph = Unison.Core.Helpers.Calls.CallDirectionGlyphs.For(
+                            direction,
+                            callEvent.IsVideo),
                         ChromeKind = kind,
                         IsVideo = callEvent.IsVideo,
                         DurationSeconds = callEvent.DurationSeconds,
@@ -4548,11 +4551,14 @@ namespace Unison.WhatsAppClient.Messages
                     Content = content,
                     Timestamp = stamp,
                     IsFromMe = callerIsSelf,
+                    IsCallVideo = callEvent.IsVideo,
                     CallChromeKind = kind,
                     CallDurationSeconds = callEvent.DurationSeconds,
                     CallTitle = title,
                     CallSubtitle = subtitle,
-                    CallGlyph = Unison.Core.Helpers.Calls.CallDirectionGlyphs.For(direction)
+                    CallGlyph = Unison.Core.Helpers.Calls.CallDirectionGlyphs.For(
+                        direction,
+                        callEvent.IsVideo)
                 };
 
                 IncomingTimelineAcceptResult timeline =
@@ -4625,7 +4631,8 @@ namespace Unison.WhatsAppClient.Messages
                 body,
                 chatJid,
                 updateLiveTile: tile,
-                isFavorite: isFavorite);
+                isFavorite: isFavorite,
+                isVideo: callEvent.IsVideo);
         }
 
         private string ResolveCallAlertTitle(string chatJid, ChatItem existingChat)
@@ -4670,10 +4677,18 @@ namespace Unison.WhatsAppClient.Messages
         {
             if (kind == CallEventChromeKind.Incoming)
             {
+                if (isVideo)
+                {
+                    return _strings?.Get(
+                               "Notification_IncomingVideoCallBody",
+                               "Video call — answer on your phone")
+                           ?? "Video call — answer on your phone";
+                }
+
                 return _strings?.Get(
-                           "Notification_IncomingCallBody",
-                           "Incoming Call (Answer on Primary Phone)")
-                       ?? "Incoming Call (Answer on Primary Phone)";
+                           "Notification_IncomingVoiceCallBody",
+                           "Voice call")
+                       ?? "Voice call";
             }
 
             if (kind == CallEventChromeKind.Missed)

@@ -52,6 +52,40 @@ namespace Unison.Core.Tests.ViewModels
         }
 
         [Fact]
+        public void Ringing_resolves_avatar_via_jid_alias()
+        {
+            const string lid = "123456789012345@lid";
+            var chats = new ChatStateStore(new InlineDispatcher());
+            chats.Chats.Add(new ChatItem
+            {
+                JID = Peer,
+                Name = "Maria",
+                AvatarUrl = "ms-appdata:///local/a.jpg"
+            });
+            var calls = new FakeCalls();
+            var jids = new FakeJids(lid, Peer);
+            var vm = new CallScreenViewModel(
+                calls,
+                chats,
+                new InlineDispatcher(),
+                strings: null,
+                utcNow: () => Now,
+                jids: jids);
+
+            calls.Publish(new ActiveCallSnapshot(
+                "c1",
+                lid,
+                lid,
+                isInbound: true,
+                isVideo: false,
+                ActiveCallPhase.Ringing));
+
+            Assert.Equal("Maria", vm.DisplayName);
+            Assert.Equal("ms-appdata:///local/a.jpg", vm.AvatarUrl);
+            Assert.True(vm.HasAvatar);
+        }
+
+        [Fact]
         public void Unknown_peer_falls_back_to_the_number_and_placeholder()
         {
             var (vm, calls, _) = Create();
@@ -96,6 +130,53 @@ namespace Unison.Core.Tests.ViewModels
         }
 
         [Fact]
+        public void Decline_rejects_through_the_same_end_path()
+        {
+            var (vm, calls, _) = Create();
+            calls.Publish(Call(ActiveCallPhase.Ringing));
+
+            vm.DeclineCommand.Execute(null);
+
+            Assert.Equal(1, calls.EndCount);
+        }
+
+        [Fact]
+        public void Answer_call_goes_through_the_facade()
+        {
+            var (vm, calls, _) = Create();
+            calls.Publish(Call(ActiveCallPhase.Ringing));
+
+            vm.AnswerCommand.Execute(null);
+
+            Assert.Equal(1, calls.AnswerCount);
+        }
+
+        [Fact]
+        public void Reply_with_message_declines_then_opens_the_peer_chat()
+        {
+            var (vm, calls, _) = Create();
+            calls.Publish(Call(ActiveCallPhase.Ringing));
+            string opened = null;
+            vm.OpenChatRequested += (_, jid) => opened = jid;
+
+            vm.ReplyWithMessageCommand.Execute(null);
+
+            Assert.Equal(1, calls.EndCount);
+            Assert.Equal(Peer, opened);
+        }
+
+        [Fact]
+        public void Ringing_exposes_answer_ui_flags()
+        {
+            var (vm, calls, _) = Create();
+            calls.Publish(Call(ActiveCallPhase.Ringing));
+
+            Assert.True(vm.IsRinging);
+            Assert.True(vm.CanToggleSpeaker);
+            Assert.False(vm.IsConnected);
+        }
+
+        [Fact]
         public void Mute_toggles_from_the_current_state()
         {
             var (vm, calls, _) = Create();
@@ -104,6 +185,18 @@ namespace Unison.Core.Tests.ViewModels
             vm.MuteCommand.Execute(null);
 
             Assert.False(calls.LastMuted);
+        }
+
+        [Fact]
+        public void Speaker_two_way_property_routes_to_speaker()
+        {
+            var (vm, calls, _) = Create();
+            calls.Publish(Call(ActiveCallPhase.Connecting));
+
+            vm.IsSpeakerOn = true;
+
+            Assert.True(calls.LastSpeakerOn);
+            Assert.True(vm.IsSpeakerOn);
         }
 
         [Fact]
@@ -123,7 +216,9 @@ namespace Unison.Core.Tests.ViewModels
         {
             public ActiveCallSnapshot ActiveCall { get; private set; }
             public int EndCount;
+            public int AnswerCount;
             public bool? LastMuted;
+            public bool? LastSpeakerOn;
 
             public event EventHandler ActiveCallChanged;
 
@@ -135,9 +230,20 @@ namespace Unison.Core.Tests.ViewModels
                 ActiveCallChanged?.Invoke(this, EventArgs.Empty);
             }
 
+            public Task StartOutgoingAudioCallAsync(
+                string peerJid,
+                CancellationToken cancellationToken = default(CancellationToken)) =>
+                Task.CompletedTask;
+
             public Task EndActiveCallAsync(CancellationToken cancellationToken = default(CancellationToken))
             {
                 EndCount++;
+                return Task.CompletedTask;
+            }
+
+            public Task AnswerActiveCallAsync(CancellationToken cancellationToken = default(CancellationToken))
+            {
+                AnswerCount++;
                 return Task.CompletedTask;
             }
 
@@ -145,6 +251,14 @@ namespace Unison.Core.Tests.ViewModels
 
             public void SetSpeakerOn(bool on)
             {
+                LastSpeakerOn = on;
+                if (ActiveCall == null)
+                {
+                    return;
+                }
+
+                ActiveCall = ActiveCall.With(isSpeakerOn: on);
+                ActiveCallChanged?.Invoke(this, EventArgs.Empty);
             }
 
             public void SetBluetoothOn(bool on)
@@ -169,6 +283,45 @@ namespace Unison.Core.Tests.ViewModels
                 action();
                 return Task.CompletedTask;
             }
+        }
+
+        private sealed class FakeJids : IJidResolver
+        {
+            private readonly string _a;
+            private readonly string _b;
+
+            public FakeJids(string a, string b)
+            {
+                _a = a;
+                _b = b;
+            }
+
+            public Profile Self => null;
+
+            public string GetCanonicalJid(string jid) =>
+                string.Equals(jid, _a, StringComparison.OrdinalIgnoreCase) ? _b : jid;
+
+            public string PeekCanonicalJid(string jid) => GetCanonicalJid(jid);
+
+            public bool TryGetAlias(string jid, out string alias)
+            {
+                if (string.Equals(jid, _a, StringComparison.OrdinalIgnoreCase))
+                {
+                    alias = _b;
+                    return true;
+                }
+
+                if (string.Equals(jid, _b, StringComparison.OrdinalIgnoreCase))
+                {
+                    alias = _a;
+                    return true;
+                }
+
+                alias = null;
+                return false;
+            }
+
+            public bool IsSelfLinked(string jid) => false;
         }
     }
 }

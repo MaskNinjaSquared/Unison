@@ -77,6 +77,13 @@ namespace Unison.WhatsAppClient.Helpers
                 chat.GroupDescriptionId = state.GroupDescriptionId;
             }
 
+            if (state.Knows(ChatLocalStateFields.Background))
+            {
+                chat.BackgroundKind = state.BackgroundKind;
+                chat.BackgroundPath = state.BackgroundPath;
+                chat.BackgroundSolidColorHex = state.BackgroundSolidColorHex;
+            }
+
             if (!state.Knows(ChatLocalStateFields.Pin))
             {
                 return;

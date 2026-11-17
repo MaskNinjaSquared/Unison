@@ -518,6 +518,13 @@ namespace Unison.Uwp.UI.Templates
                 return;
             }
 
+            // Announce-only / left / channel read-only: no reply sling.
+            if (FindChatDetail(sender)?.ViewModel?.CanCompose != true)
+            {
+                ResetReplySwipeVisuals(root);
+                return;
+            }
+
             double dx = e.Cumulative.Translation.X;
             // Bubble sling: follow the finger horizontally (leftward reply gesture).
             EnsureTranslate(root).X = dx < 0 ? dx : 0;
@@ -531,6 +538,12 @@ namespace Unison.Uwp.UI.Templates
         private void MessageBubble_ManipulationCompleted(object sender, ManipulationCompletedRoutedEventArgs e)
         {
             ResetReplySwipeVisuals(sender as UIElement);
+
+            var detail = FindChatDetail(sender)?.ViewModel;
+            if (detail == null || !detail.CanCompose)
+            {
+                return;
+            }
 
             if (!MessageBubbleReplySwipe.ShouldReply(
                     e.Cumulative.Translation.X,
@@ -546,7 +559,7 @@ namespace Unison.Uwp.UI.Templates
                 return;
             }
 
-            FindChatDetail(sender)?.ViewModel?.BeginReply(message);
+            detail.BeginReply(message);
             e.Handled = true;
         }
 

@@ -5,9 +5,9 @@
     SizeChanged="Root_SizeChanged">
 
     <!--
-      Call screen (Legacy; other themes reuse it for now). Square photo the width of the
-      screen with brand top-left and status / name / number bottom-left, then a dock of
-      square calculator-style keys: speaker, mute, bluetooth / end call (2 cols), message.
+      Call screen (Legacy; other themes reuse it for now). Square-ish photo the width of
+      the screen with brand top-left and status / name / number bottom-left, then a dock
+      of shorter calculator-style keys. Ringing: Answer | Decline, then reply span 2.
     -->
     <UserControl.Resources>
         <Style x:Key="CallKeyStyle" TargetType="Button">
@@ -46,6 +46,69 @@
                 </Setter.Value>
             </Setter>
         </Style>
+        <!-- Speaker: Checked = legacy green + white content. -->
+        <Style x:Key="CallSpeakerToggleStyle" TargetType="ToggleButton">
+            <Setter Property="Background" Value="#FF1F1F1F"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="HorizontalAlignment" Value="Stretch"/>
+            <Setter Property="VerticalAlignment" Value="Stretch"/>
+            <Setter Property="Margin" Value="1"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ToggleButton">
+                        <Grid x:Name="KeyRoot" Background="{TemplateBinding Background}">
+                            <VisualStateManager.VisualStateGroups>
+                                <VisualStateGroup x:Name="CommonStates">
+                                    <VisualState x:Name="Normal"/>
+                                    <VisualState x:Name="PointerOver"/>
+                                    <VisualState x:Name="Pressed">
+                                        <VisualState.Setters>
+                                            <Setter Target="PressedOverlay.Opacity" Value="0.25"/>
+                                        </VisualState.Setters>
+                                    </VisualState>
+                                    <VisualState x:Name="Disabled">
+                                        <VisualState.Setters>
+                                            <Setter Target="KeyContent.Opacity" Value="0.4"/>
+                                        </VisualState.Setters>
+                                    </VisualState>
+                                    <VisualState x:Name="Checked">
+                                        <VisualState.Setters>
+                                            <Setter Target="KeyRoot.Background" Value="#FF075E54"/>
+                                        </VisualState.Setters>
+                                    </VisualState>
+                                    <VisualState x:Name="CheckedPointerOver">
+                                        <VisualState.Setters>
+                                            <Setter Target="KeyRoot.Background" Value="#FF075E54"/>
+                                        </VisualState.Setters>
+                                    </VisualState>
+                                    <VisualState x:Name="CheckedPressed">
+                                        <VisualState.Setters>
+                                            <Setter Target="KeyRoot.Background" Value="#FF075E54"/>
+                                            <Setter Target="PressedOverlay.Opacity" Value="0.25"/>
+                                        </VisualState.Setters>
+                                    </VisualState>
+                                    <VisualState x:Name="CheckedDisabled">
+                                        <VisualState.Setters>
+                                            <Setter Target="KeyRoot.Background" Value="#FF075E54"/>
+                                            <Setter Target="KeyContent.Opacity" Value="0.4"/>
+                                        </VisualState.Setters>
+                                    </VisualState>
+                                    <VisualState x:Name="Indeterminate"/>
+                                    <VisualState x:Name="IndeterminatePointerOver"/>
+                                    <VisualState x:Name="IndeterminatePressed"/>
+                                    <VisualState x:Name="IndeterminateDisabled"/>
+                                </VisualStateGroup>
+                            </VisualStateManager.VisualStateGroups>
+                            <Border x:Name="PressedOverlay" Background="White" Opacity="0"/>
+                            <ContentPresenter x:Name="KeyContent"
+                                              HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"
+                                              Foreground="{TemplateBinding Foreground}"/>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
         <Style x:Key="CallKeyGlyphStyle" TargetType="FontIcon">
             <Setter Property="FontFamily" Value="{StaticResource IconFont}"/>
             <Setter Property="FontSize" Value="26"/>
@@ -56,6 +119,13 @@
             <Setter Property="FontSize" Value="13"/>
             <Setter Property="Margin" Value="0,8,0,0"/>
             <Setter Property="HorizontalAlignment" Value="Center"/>
+        </Style>
+        <Style x:Key="CallKeyTextOnlyStyle" TargetType="TextBlock">
+            <Setter Property="FontFamily" Value="{StaticResource MainFont}"/>
+            <Setter Property="FontSize" Value="16"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="HorizontalAlignment" Value="Center"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
         </Style>
     </UserControl.Resources>
 
@@ -72,7 +142,7 @@
                       FontSize="120"
                       Foreground="#66FFFFFF"
                       Visibility="{Binding HasAvatar, Converter={StaticResource InvertedBooleanToVisibilityConverter}}"/>
-            <Image Source="{Binding AvatarUrl}"
+            <Image Source="{Binding AvatarUrl, Converter={StaticResource StringToImageSourceConverter}, ConverterParameter=480}"
                    Stretch="UniformToFill"
                    Visibility="{Binding HasAvatar, Converter={StaticResource BooleanToVisibilityConverter}}"/>
             <Border>
@@ -126,60 +196,105 @@
         </Grid>
 
         <Grid x:Name="KeyDock" Grid.Row="1" Margin="1">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="*"/>
-            </Grid.ColumnDefinitions>
-            <Grid.RowDefinitions>
-                <RowDefinition x:Name="KeyRowTop" Height="100"/>
-                <RowDefinition x:Name="KeyRowBottom" Height="100"/>
-            </Grid.RowDefinitions>
+            <!-- Ringing: Answer | Decline, then reply with message -->
+            <Grid Visibility="{Binding IsRinging, Converter={StaticResource BooleanToVisibilityConverter}}">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition x:Name="RingKeyRowTop" Height="72"/>
+                    <RowDefinition x:Name="RingKeyRowBottom" Height="72"/>
+                </Grid.RowDefinitions>
 
-            <Button Grid.Row="0" Grid.Column="0"
-                    Style="{StaticResource CallKeyStyle}"
-                    Command="{Binding SpeakerCommand}"
-                    IsEnabled="{Binding IsConnected}">
-                <StackPanel>
-                    <FontIcon Glyph="&#xE767;" Style="{StaticResource CallKeyGlyphStyle}"/>
-                    <TextBlock x:Uid="CallScreen_Speaker" Text="speaker" Style="{StaticResource CallKeyLabelStyle}"/>
-                </StackPanel>
-            </Button>
-            <Button Grid.Row="0" Grid.Column="1"
-                    Style="{StaticResource CallKeyStyle}"
-                    Command="{Binding MuteCommand}"
-                    IsEnabled="{Binding IsConnected}">
-                <StackPanel>
-                    <FontIcon Glyph="&#xE720;" Style="{StaticResource CallKeyGlyphStyle}"/>
-                    <TextBlock x:Uid="CallScreen_Mute" Text="mute" Style="{StaticResource CallKeyLabelStyle}"/>
-                </StackPanel>
-            </Button>
-            <Button Grid.Row="0" Grid.Column="2"
-                    Style="{StaticResource CallKeyStyle}"
-                    Command="{Binding BluetoothCommand}"
-                    IsEnabled="{Binding IsConnected}">
-                <StackPanel>
-                    <FontIcon Glyph="&#xE702;" Style="{StaticResource CallKeyGlyphStyle}"/>
-                    <TextBlock x:Uid="CallScreen_Bluetooth" Text="bluetooth" Style="{StaticResource CallKeyLabelStyle}"/>
-                </StackPanel>
-            </Button>
-            <Button Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2"
-                    Style="{StaticResource CallKeyStyle}"
-                    Background="#FFE51400"
-                    Command="{Binding EndCallCommand}">
-                <StackPanel>
-                    <FontIcon Glyph="&#xE778;" Style="{StaticResource CallKeyGlyphStyle}"/>
-                    <TextBlock x:Uid="CallScreen_EndCall" Text="end call" Style="{StaticResource CallKeyLabelStyle}"/>
-                </StackPanel>
-            </Button>
-            <Button Grid.Row="1" Grid.Column="2"
-                    Style="{StaticResource CallKeyStyle}"
-                    Command="{Binding MessageCommand}">
-                <StackPanel>
-                    <FontIcon Glyph="&#xE8BD;" Style="{StaticResource CallKeyGlyphStyle}"/>
-                    <TextBlock x:Uid="CallScreen_Message" Text="message" Style="{StaticResource CallKeyLabelStyle}"/>
-                </StackPanel>
-            </Button>
+                <Button Grid.Row="0" Grid.Column="0"
+                        Style="{StaticResource CallKeyStyle}"
+                        Background="#FF075E54"
+                        Command="{Binding AnswerCommand}">
+                    <TextBlock x:Uid="CallScreen_Answer"
+                               Text="answer"
+                               Style="{StaticResource CallKeyTextOnlyStyle}"/>
+                </Button>
+                <Button Grid.Row="0" Grid.Column="1"
+                        Style="{StaticResource CallKeyStyle}"
+                        Background="#FF3C3C3C"
+                        Command="{Binding DeclineCommand}">
+                    <TextBlock x:Uid="CallScreen_Decline"
+                               Text="decline"
+                               Style="{StaticResource CallKeyTextOnlyStyle}"/>
+                </Button>
+                <Button Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2"
+                        Style="{StaticResource CallKeyStyle}"
+                        Command="{Binding ReplyWithMessageCommand}">
+                    <TextBlock x:Uid="CallScreen_ReplyWithMessage"
+                               Text="reply with message"
+                               Style="{StaticResource CallKeyTextOnlyStyle}"
+                               FontWeight="Normal"/>
+                </Button>
+            </Grid>
+
+            <!-- Connected / dialing / connecting pad -->
+            <Grid Visibility="{Binding IsRinging, Converter={StaticResource InvertedBooleanToVisibilityConverter}}">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition x:Name="KeyRowTop" Height="72"/>
+                    <RowDefinition x:Name="KeyRowBottom" Height="72"/>
+                </Grid.RowDefinitions>
+
+                <ToggleButton Grid.Row="0" Grid.Column="0"
+                              Style="{StaticResource CallSpeakerToggleStyle}"
+                              IsChecked="{Binding IsSpeakerOn, Mode=TwoWay}"
+                              IsEnabled="{Binding CanToggleSpeaker}">
+                    <StackPanel>
+                        <FontIcon Glyph="&#xE767;"
+                                  Style="{StaticResource CallKeyGlyphStyle}"
+                                  Foreground="White"/>
+                        <TextBlock x:Uid="CallScreen_Speaker"
+                                   Text="speaker"
+                                   Style="{StaticResource CallKeyLabelStyle}"
+                                   Foreground="White"/>
+                    </StackPanel>
+                </ToggleButton>
+                <Button Grid.Row="0" Grid.Column="1"
+                        Style="{StaticResource CallKeyStyle}"
+                        Command="{Binding MuteCommand}"
+                        IsEnabled="{Binding IsConnected}">
+                    <StackPanel>
+                        <FontIcon Glyph="&#xE720;" Style="{StaticResource CallKeyGlyphStyle}"/>
+                        <TextBlock x:Uid="CallScreen_Mute" Text="mute" Style="{StaticResource CallKeyLabelStyle}"/>
+                    </StackPanel>
+                </Button>
+                <Button Grid.Row="0" Grid.Column="2"
+                        Style="{StaticResource CallKeyStyle}"
+                        Command="{Binding BluetoothCommand}"
+                        IsEnabled="{Binding IsConnected}">
+                    <StackPanel>
+                        <FontIcon Glyph="&#xE702;" Style="{StaticResource CallKeyGlyphStyle}"/>
+                        <TextBlock x:Uid="CallScreen_Bluetooth" Text="bluetooth" Style="{StaticResource CallKeyLabelStyle}"/>
+                    </StackPanel>
+                </Button>
+                <Button Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2"
+                        Style="{StaticResource CallKeyStyle}"
+                        Background="#FFE51400"
+                        Command="{Binding EndCallCommand}">
+                    <StackPanel>
+                        <FontIcon Glyph="&#xE778;" Style="{StaticResource CallKeyGlyphStyle}"/>
+                        <TextBlock x:Uid="CallScreen_EndCall" Text="end call" Style="{StaticResource CallKeyLabelStyle}"/>
+                    </StackPanel>
+                </Button>
+                <Button Grid.Row="1" Grid.Column="2"
+                        Style="{StaticResource CallKeyStyle}"
+                        Command="{Binding MessageCommand}">
+                    <StackPanel>
+                        <FontIcon Glyph="&#xE8BD;" Style="{StaticResource CallKeyGlyphStyle}"/>
+                        <TextBlock x:Uid="CallScreen_Message" Text="message" Style="{StaticResource CallKeyLabelStyle}"/>
+                    </StackPanel>
+                </Button>
+            </Grid>
         </Grid>
     </Grid>
 </UserControl>

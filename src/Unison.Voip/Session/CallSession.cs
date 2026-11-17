@@ -2,12 +2,13 @@
 // CallSession
 //
 // Lifecycle for one WhatsApp call (meowcaller Call). Signaling goes through
-// ICallSignalingChannel; media I/O is reserved for the engine port (Phase 4).
+// ICallSignalingChannel; CallEngine owns media phase hooks until MLow lands.
 // =============================================================================
 using System;
 using System.Threading;
 using System.Threading.Tasks;
 using Unison.Voip.Abstractions;
+using Unison.Voip.Engine;
 
 namespace Unison.Voip.Session
 {
@@ -40,6 +41,7 @@ namespace Unison.Voip.Session
             IsVideo = isVideo;
             IsInbound = inbound;
             _signaling = signaling;
+            Engine = new CallEngine(callId, inbound);
             State = inbound ? CallSessionState.Ringing : CallSessionState.Connecting;
         }
 
@@ -53,13 +55,16 @@ namespace Unison.Voip.Session
 
         public bool IsInbound { get; }
 
+        /// <summary>Portable media coordinator (STUN/relay/MLow hooks). Not media-ready yet.</summary>
+        public CallEngine Engine { get; }
+
         public CallSessionState State { get; private set; }
 
         /// <summary>
-        /// Accepts an inbound ring. Media/engine attach is not wired yet — state moves to
-        /// Connecting so the façade can gate UI until Phase 4.
+        /// Accepts an inbound ring on the wire (accept stanza). Media attach is still
+        /// Phase 4 — state moves to Connecting after the stanza is sent.
         /// </summary>
-        public void Answer()
+        public async Task AnswerAsync(CancellationToken cancellationToken = default(CancellationToken))
         {
             lock (_gate)
             {
@@ -69,8 +74,19 @@ namespace Unison.Voip.Session
                     throw new InvalidOperationException(
                         "Answer is only valid for an inbound call in Ringing.");
                 }
+            }
 
+            await _signaling.AcceptAsync(
+                CallId,
+                PeerJid,
+                CallCreatorJid,
+                IsVideo,
+                cancellationToken).ConfigureAwait(false);
+
+            lock (_gate)
+            {
                 State = CallSessionState.Connecting;
+                Engine.MarkConnecting();
             }
         }
 
@@ -95,6 +111,7 @@ namespace Unison.Voip.Session
             lock (_gate)
             {
                 State = CallSessionState.Ended;
+                Engine.Hangup();
             }
         }
 
@@ -117,6 +134,7 @@ namespace Unison.Voip.Session
             lock (_gate)
             {
                 State = CallSessionState.Ended;
+                Engine.Hangup();
             }
         }
 
@@ -126,6 +144,7 @@ namespace Unison.Voip.Session
             {
                 EnsureNotEnded();
                 State = CallSessionState.Active;
+                Engine.MarkActive();
             }
         }
 
@@ -134,6 +153,7 @@ namespace Unison.Voip.Session
             lock (_gate)
             {
                 State = CallSessionState.Ended;
+                Engine.Hangup();
             }
         }
 

@@ -49,19 +49,24 @@ namespace Unison.Core.Tests.Voip
         }
 
         [Fact]
-        public void Answer_moves_inbound_ring_to_connecting()
+        public async Task Answer_sends_accept_and_moves_inbound_ring_to_connecting()
         {
+            var channel = new NullCallSignalingChannel();
             var session = new CallSession(
                 "call-3",
                 "1@s.whatsapp.net",
                 "1@s.whatsapp.net",
                 isVideo: true,
                 inbound: true,
-                NullCallSignalingChannel.Instance);
+                channel);
 
-            session.Answer();
+            await session.AnswerAsync();
 
+            Assert.Equal(1, channel.AcceptCount);
+            Assert.True(channel.LastAcceptWasVideo);
             Assert.Equal(CallSessionState.Connecting, session.State);
+            Assert.Equal(Unison.Voip.Engine.CallEnginePhase.Connecting, session.Engine.Phase);
+            Assert.False(session.Engine.IsMediaReady);
         }
 
         [Fact]

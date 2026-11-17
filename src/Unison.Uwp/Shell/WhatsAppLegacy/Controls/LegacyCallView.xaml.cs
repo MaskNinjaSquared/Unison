@@ -6,12 +6,14 @@ using Windows.UI.Xaml.Controls;
 namespace Unison.Uwp.Shell.WhatsAppLegacy.Controls
 {
     /// <summary>
-    /// Call screen body. Keeps the photo and the dock keys square to the screen width and
-    /// drives the call clock once a second while shown.
+    /// Call screen body. Keeps the photo roughly square to the screen width, shortens
+    /// the dock keys, and drives the call clock once a second while shown.
     /// </summary>
     public sealed partial class LegacyCallView : UserControl
     {
         private const int KeyColumns = 3;
+        /// <summary>Shorter than a full square key — Answer / Decline / Reply stay compact.</summary>
+        private const double KeyHeightRatio = 0.48;
 
         private readonly DispatcherTimer _clock = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
 
@@ -31,12 +33,15 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Controls
                 return;
             }
 
-            double key = Math.Floor((width - KeyDock.Margin.Left - KeyDock.Margin.Right) / KeyColumns);
-            KeyRowTop.Height = new GridLength(key);
-            KeyRowBottom.Height = new GridLength(key);
+            double keyWidth = Math.Floor((width - KeyDock.Margin.Left - KeyDock.Margin.Right) / KeyColumns);
+            double keyHeight = Math.Floor(keyWidth * KeyHeightRatio);
+            KeyRowTop.Height = new GridLength(keyHeight);
+            KeyRowBottom.Height = new GridLength(keyHeight);
+            RingKeyRowTop.Height = new GridLength(keyHeight);
+            RingKeyRowBottom.Height = new GridLength(keyHeight);
 
             // Landscape / desktop: the photo gives way so the dock stays on screen.
-            double dock = (2 * key) + KeyDock.Margin.Top + KeyDock.Margin.Bottom;
+            double dock = (2 * keyHeight) + KeyDock.Margin.Top + KeyDock.Margin.Bottom;
             PhotoArea.Height = Math.Max(0, Math.Min(width, e.NewSize.Height - dock));
         }
     }

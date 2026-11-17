@@ -88,6 +88,7 @@ namespace Unison.Core.ViewModels
             if (next != null)
             {
                 next.ChatDeleted += ChatDetailInfo_ChatDeleted;
+                CloseChatBackgroundPicker();
             }
 
             ChatDetailInfo = next;

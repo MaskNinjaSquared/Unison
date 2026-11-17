@@ -507,6 +507,27 @@ namespace Unison.Core.Models
         /// <summary>Call chrome bubble (missed / completed / answered elsewhere).</summary>
         public bool IsCallEvent => _kind == ChatMessageKind.CallEvent;
 
+        private bool _isCallVideo;
+
+        /// <summary>
+        /// True when the call event was a video offer (Baileys <c>video</c> child).
+        /// Same <see cref="ChatMessageKind.CallEvent"/>; titles/glyph branch on this flag.
+        /// </summary>
+        public bool IsCallVideo
+        {
+            get => _isCallVideo;
+            set
+            {
+                if (_isCallVideo == value)
+                {
+                    return;
+                }
+
+                _isCallVideo = value;
+                OnPropertyChanged();
+            }
+        }
+
         private CallEventChromeKind _callChromeKind;
 
         /// <summary>Host chrome kind for call event bubbles and list preview coloring.</summary>

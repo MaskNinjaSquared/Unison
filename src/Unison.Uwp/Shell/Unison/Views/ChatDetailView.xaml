@@ -113,8 +113,7 @@
                         <AdaptiveTrigger MinWindowWidth="0"/>
                     </VisualState.StateTriggers>
                     <VisualState.Setters>
-                        <Setter Target="ContactVideoCallButton.Visibility" Value="Collapsed"/>
-                        <Setter Target="ContactAudioCallButton.Visibility" Value="Collapsed"/>
+                        <!-- Contact voice/video: code-behind (hides on Notes to Self). -->
                         <Setter Target="GroupVideoCallButton.Visibility" Value="Collapsed"/>
                     </VisualState.Setters>
                 </VisualState>
@@ -123,8 +122,6 @@
                         <AdaptiveTrigger MinWindowWidth="400"/>
                     </VisualState.StateTriggers>
                     <VisualState.Setters>
-                        <Setter Target="ContactVideoCallButton.Visibility" Value="Visible"/>
-                        <Setter Target="ContactAudioCallButton.Visibility" Value="Visible"/>
                         <Setter Target="GroupVideoCallButton.Visibility" Value="Visible"/>
                     </VisualState.Setters>
                 </VisualState>
@@ -234,8 +231,11 @@
                 <RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
             
-            <!-- Tiled Background Layer -->
-            <controls:TiledBackground Grid.RowSpan="4"/>
+            <!-- Stretch wallpaper (Default / preset / custom) -->
+            <controls:ChatBackgroundSurface Grid.RowSpan="4"
+                                            BackgroundKind="{Binding ActiveChat.BackgroundKind, FallbackValue=0}"
+                                            CustomPath="{Binding ActiveChat.BackgroundPath}"
+                                            SolidColorHex="{Binding ActiveChat.BackgroundSolidColorHex}"/>
 
             <!-- Header: shadow opacity 0 on Unison (cast moves to LeftEdgeShadow). -->
             <toolkit:DropShadowPanel Grid.Row="0"
@@ -359,6 +359,13 @@
                                     <MenuFlyoutItem x:Uid="ChatDetail_ShowContact" Text="View contact"
                                                     Command="{Binding OpenChatDetailInfoCommand}"
                                                     Style="{StaticResource ModernMenuFlyoutItemStyle}"/>
+                                    <MenuFlyoutItem x:Uid="ChatDetail_Background" Text="Conversation theme"
+                                                    Command="{Binding OpenChatBackgroundPickerCommand}"
+                                                    Style="{StaticResource ModernMenuFlyoutItemStyle}">
+                                        <MenuFlyoutItem.Icon>
+                                            <FontIcon FontFamily="{StaticResource IconFont}" Glyph="&#xE790;"/>
+                                        </MenuFlyoutItem.Icon>
+                                    </MenuFlyoutItem>
                                     <MenuFlyoutItem Tag="headerVoiceCall"
                                                     x:Uid="ChatDetail_VoiceCall"
                                                     Text="Voice call"
@@ -488,6 +495,13 @@
                                     <MenuFlyoutItem x:Uid="ChatDetail_GroupInfo" Text="Group info"
                                                     Command="{Binding OpenChatDetailInfoCommand}"
                                                     Style="{StaticResource ModernMenuFlyoutItemStyle}"/>
+                                    <MenuFlyoutItem x:Uid="ChatDetail_Background" Text="Conversation theme"
+                                                    Command="{Binding OpenChatBackgroundPickerCommand}"
+                                                    Style="{StaticResource ModernMenuFlyoutItemStyle}">
+                                        <MenuFlyoutItem.Icon>
+                                            <FontIcon FontFamily="{StaticResource IconFont}" Glyph="&#xE790;"/>
+                                        </MenuFlyoutItem.Icon>
+                                    </MenuFlyoutItem>
                                     <MenuFlyoutItem Tag="headerVideoCall"
                                                     x:Uid="ChatDetail_VideoCall"
                                                     Text="Video call"
@@ -1236,9 +1250,10 @@
             </Grid>
             </Grid><!-- ChatSurface -->
 
+            <!-- x:Load stays true until close slide finishes (same rule as AttachMenuBar). -->
             <Grid x:Name="ChatDetailInfoPaneHost"
                   Grid.Column="1"
-                  x:Load="{x:Bind ViewModel.IsChatDetailInfoOpen, Mode=OneWay}">
+                  x:Load="{x:Bind IsChatDetailInfoHostLoaded, Mode=OneWay}">
                 <Grid.RenderTransform>
                     <TranslateTransform x:Name="ChatDetailInfoSlideTransform" X="0"/>
                 </Grid.RenderTransform>
@@ -1248,6 +1263,22 @@
                 <controls:ChatDetailGroupMemberInfoPane x:Name="ChatDetailMemberInfoPanel"
                                                         Visibility="Collapsed"
                                                         CloseCommand="{Binding CloseChatDetailInfoCommand}"/>
+            </Grid>
+
+            <!-- Same docked / fullscreen column rules as ChatDetailInfo; left divider when docked. -->
+            <Grid x:Name="ChatBackgroundPickerPaneHost"
+                  Grid.Column="1"
+                  Canvas.ZIndex="30"
+                  Background="{ThemeResource ChatListBackgroundBrush}"
+                  BorderBrush="{ThemeResource ChatDetailPaneSeparatorBrush}"
+                  BorderThickness="0"
+                  x:Load="{x:Bind IsChatBackgroundPickerHostLoaded, Mode=OneWay}">
+                <Grid.RenderTransform>
+                    <TranslateTransform x:Name="ChatBackgroundPickerSlideTransform" X="0"/>
+                </Grid.RenderTransform>
+                <controls:ChatBackgroundPickerControl
+                    x:Name="ChatBackgroundPickerOverlay"
+                    DataContext="{Binding}"/>
             </Grid>
         </Grid>
 

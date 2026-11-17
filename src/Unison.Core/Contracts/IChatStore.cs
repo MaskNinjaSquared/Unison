@@ -51,6 +51,17 @@ namespace Unison.Core.Contracts
         Task SetGroupDescriptionAsync(string jid, string description, string descriptionId);
 
         /// <summary>
+        /// Per-chat wallpaper. Pass <see cref="ChatBackgroundKind.Default"/> to clear a custom/preset;
+        /// <see cref="ChatBackgroundKind.Custom"/> requires a non-empty relative <paramref name="backgroundPath"/>.
+        /// <paramref name="solidColorHex"/> (#AARRGGBB) only applies to the Default family; otherwise cleared.
+        /// </summary>
+        Task SetBackgroundAsync(
+            string jid,
+            ChatBackgroundKind kind,
+            string backgroundPath,
+            string solidColorHex = null);
+
+        /// <summary>
         /// Writes the pin into the in-memory cache immediately. History sync applies flags onto
         /// the row and then persists asynchronously — without this, the next
         /// <see cref="ApplyTo"/> (batch release / tip refresh) reads a stale cache and clears the pin.

@@ -17,9 +17,8 @@ namespace Unison.Core.Helpers.Calls
         private readonly ICallService _calls;
         private readonly IVoipSystemCallHost _systemCalls;
         private readonly IAppVisibility _visibility;
-        private readonly IDispatcher _ui;
         private readonly Func<ActiveCallSnapshot, string> _resolveContactName;
-        private readonly Action _bringToForeground;
+        private readonly Func<string, Task> _bringToForeground;
         private readonly Func<Task> _ensureProcessKeepAlive;
         private bool _started;
 
@@ -27,15 +26,13 @@ namespace Unison.Core.Helpers.Calls
             ICallService calls,
             IVoipSystemCallHost systemCalls,
             IAppVisibility visibility,
-            IDispatcher ui,
             Func<ActiveCallSnapshot, string> resolveContactName,
-            Action bringToForeground,
+            Func<string, Task> bringToForeground,
             Func<Task> ensureProcessKeepAlive = null)
         {
             _calls = calls ?? throw new ArgumentNullException(nameof(calls));
             _systemCalls = systemCalls ?? throw new ArgumentNullException(nameof(systemCalls));
             _visibility = visibility ?? throw new ArgumentNullException(nameof(visibility));
-            _ui = ui ?? throw new ArgumentNullException(nameof(ui));
             _resolveContactName = resolveContactName ?? throw new ArgumentNullException(nameof(resolveContactName));
             _bringToForeground = bringToForeground ?? throw new ArgumentNullException(nameof(bringToForeground));
             _ensureProcessKeepAlive = ensureProcessKeepAlive;
@@ -77,7 +74,7 @@ namespace Unison.Core.Helpers.Calls
                 return;
             }
 
-            if (action != VoipSystemCallSyncAction.Ring || call == null)
+            if (action != VoipSystemCallSyncAction.Ring || call == null || call.IsVideo)
             {
                 return;
             }
@@ -117,10 +114,32 @@ namespace Unison.Core.Helpers.Calls
 
         private void OnAnswerRequested(object sender, VoipSystemCallIdEventArgs e)
         {
-            _ = _ui.RunAsync(() =>
+            _ = AnswerFromSystemAsync(e?.CallId);
+        }
+
+        private async Task AnswerFromSystemAsync(string callId)
+        {
+            ActiveCallSnapshot active = _calls.ActiveCall;
+            string resolvedId = !string.IsNullOrWhiteSpace(callId)
+                ? callId
+                : active?.CallId;
+
+            if (active != null &&
+                active.Phase == ActiveCallPhase.Ringing &&
+                (string.IsNullOrWhiteSpace(callId) ||
+                 string.Equals(active.CallId, callId, StringComparison.Ordinal)))
             {
-                _bringToForeground();
-            });
+                await _calls.AnswerActiveCallAsync().ConfigureAwait(false);
+            }
+
+            // Mobile: protocol LaunchUri foregrounds the app; Window.Activate alone does not.
+            try
+            {
+                await _bringToForeground(resolvedId ?? string.Empty).ConfigureAwait(false);
+            }
+            catch
+            {
+            }
         }
 
         private void OnRejectRequested(object sender, VoipSystemCallIdEventArgs e)
