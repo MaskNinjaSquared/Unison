@@ -2,6 +2,10 @@
 
 Newest first.
 
+## Phase D stage 4 — `StartupMaintenanceHost` (netstandard)
+
+`StartupMaintenanceHost` (`Unison.WhatsAppClient/Helpers/Connection`) owns persisted UI load, deferred startup maintenance, post-sync enrichment, conversation resync, inactive-cache release and self-profile auth sync (owners already in WhatsAppClient; construction left the host). `IStartupMaintenanceHostPort` keeps connection-state init, window visibility, quiet/memory waits and the phone INPC on `WhatsAppService`. Move-only; cold-start / deferred / resync behaviour unchanged.
+
 ## Phase E closed at mutations; audio playback prep fix
 
 Outgoing audio playback prep ran on a DTO copy since the send envelopes, so the timeline bubble never got its playable URI. It now runs inside `OutgoingMediaSend` on the accepted bubble. Phase E stops at the mutation envelopes: timeline, `Ensure*Available`, inbound and receipts keep the live Core `ChatMessage`, and the Core → WhatsAppClient flip is not scheduled. Details in [Netstandard WhatsApp client](Netstandard-WhatsApp-Client) § Phase E — closed at mutations.

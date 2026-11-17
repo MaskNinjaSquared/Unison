@@ -648,13 +648,14 @@ Move-only: owner bodies, construction order and every threshold are unchanged; D
 
 #### Where stage 4 stops
 
-`WhatsAppService` went from about 5,000 lines (before stage 4) to about 3,760. It is **not** deleted in this round, and it is not yet only the transport shell. What remains, and why:
+`WhatsAppService` went from about 5,000 lines (before stage 4) to about 3,100 after the startup cluster. It is **not** deleted in this round, and it is not yet only the transport shell. What remains, and why:
 
 - **Transport shell (stays in UWP by design):** connect / open through `UwpWhatsAppTransportFactory` + `SocketBridge`, socket assign / dispose, health-monitor IO, broker transfer / reclaim and reconnect consume (`SocketActivityInformation`), reconnect-required toasts, `AuthStore` / `FileKeyStore` / `NoiseSessionStore`.
-- **Startup and maintenance owners still wired in the host:** `LoadPersistedUiStateOwner` (calls `InitializeConnectionStateAsync`), `DeferredStartupMaintenanceOwner`, `ReleaseMemoryOwner`, `PostSyncMaintenanceOwner` (the host implements `IPostSyncMaintenanceIoHost`), `ResyncConversationsOwner`, `HistorySyncWireOwner`, `OfflineReplayReleaseOwner`, `OfflineSyncedWatchdog`, `ClearSessionOwner`, `SelfProfileAuthSync`. Their lambdas reach facades through the host's lazy resolvers, the connection init path, or UWP stores (`BackgroundDisplayNameStore`, `NotificationService`). Moving the owners alone would not shrink anything; the next cut has to take the IO host bodies with them (as the three clusters above did).
+- **Startup / maintenance cluster (done):** `StartupMaintenanceHost` (`Unison.WhatsAppClient/Helpers/Connection`) owns `LoadPersistedUiStateOwner`, `DeferredStartupMaintenanceOwner`, `ReleaseMemoryOwner`, `PostSyncMaintenanceOwner`, `ResyncConversationsOwner` and `SelfProfileAuthSync`, plus the persisted-UI load gate and deferred-startup once latch. Connection init, quiet/memory waits and the phone INPC stay on `IStartupMaintenanceHostPort` (`WhatsAppService`). DI resolves the host; `ConnectionHostDependencies` forwards it.
+- **Still wired in the host (Opus + on-device):** `HistorySyncWireOwner`, `OfflineReplayReleaseOwner`, `OfflineSyncedWatchdog`, `ClearSessionOwner` (UWP wipe I/O), health-monitor / soft-reconnect bodies, remaining wire owners → DI, broker transfer.
 - **Compatibility surface:** the members App, `AppStateSyncService` and the UI still call on the client.
 
-Next step, when scheduled: a startup cluster that owns `InitializeConnectionStateAsync` + persisted UI load + deferred maintenance, with the connection init behind a port.
+Next Auto-safe mechanical cut on this path is exhausted; remaining host shrink is Opus + on-device.
 
 ### Phase E — client-owned public I/O
 
