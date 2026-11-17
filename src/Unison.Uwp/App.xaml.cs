@@ -868,6 +868,7 @@ namespace Unison.Uwp
             services.AddSingleton<IMessageTextIo>(sp => sp.GetRequiredService<MessageFacade>());
             services.AddSingleton<IMessageMediaIo>(sp => sp.GetRequiredService<MessageFacade>());
             services.AddSingleton<IMessageReactIo>(sp => sp.GetRequiredService<MessageFacade>());
+            services.AddSingleton<IMessagePinIo>(sp => sp.GetRequiredService<MessageFacade>());
             services.AddSingleton(sp => new MessageFacade(
                 sp.GetRequiredService<IPersonStore>(),
                 sp.GetRequiredService<IChatMessagePayloadMapper>(),

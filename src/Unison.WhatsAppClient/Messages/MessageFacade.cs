@@ -36,7 +36,8 @@ namespace Unison.WhatsAppClient.Messages
         IMissingMessageChatHost,
         IMessageTextIo,
         IMessageMediaIo,
-        IMessageReactIo
+        IMessageReactIo,
+        IMessagePinIo
     {
         private readonly IPersonStore _personStore;
         private readonly IChatMessagePayloadMapper _chatMessageMapper;
@@ -1781,38 +1782,65 @@ namespace Unison.WhatsAppClient.Messages
             }
         }
 
-        public async Task SetMessagePinnedAsync(string chatJid, ChatMessage message, bool pin, uint durationSeconds = 604800)
+        public Task SetMessagePinnedAsync(
+            string chatJid,
+            ChatMessage message,
+            bool pin,
+            uint durationSeconds = 604800)
         {
-            await _resolveConnection().EnsureConnectedAsync().ConfigureAwait(false);
-
             if (message == null || string.IsNullOrWhiteSpace(message.Id))
             {
                 throw new ArgumentException("A valid message is required", nameof(message));
             }
+
+            return SetMessagePinnedAsync(
+                MessageTargetRequestMapper.ToPin(chatJid, message, pin, durationSeconds));
+        }
+
+        /// <inheritdoc />
+        public async Task SetMessagePinnedAsync(PinMessageRequest request)
+        {
+            if (request == null || string.IsNullOrWhiteSpace(request.MessageId))
+            {
+                throw new ArgumentException("A valid message is required", nameof(request));
+            }
+
+            await _resolveConnection().EnsureConnectedAsync().ConfigureAwait(false);
 
             if (!_wire.CanSendPin)
             {
                 throw new InvalidOperationException("Not connected: the message pin was not sent.");
             }
 
-            string canonical = _jids.GetCanonicalJid(chatJid);
+            string canonical = _jids.GetCanonicalJid(request.ChatJid);
             var key = new MessageKey
             {
-                RemoteJid = string.IsNullOrWhiteSpace(message.RemoteJid)
+                RemoteJid = string.IsNullOrWhiteSpace(request.RemoteJid)
                     ? canonical
-                    : JidHelper.Normalize(message.RemoteJid),
-                FromMe = message.IsFromMe,
-                Id = message.Id
+                    : JidHelper.Normalize(request.RemoteJid),
+                FromMe = request.IsFromMe,
+                Id = request.MessageId
             };
-            if (!string.IsNullOrWhiteSpace(message.ParticipantJid))
+            if (!string.IsNullOrWhiteSpace(request.ParticipantJid))
             {
-                key.Participant = message.ParticipantJid;
+                key.Participant = request.ParticipantJid;
             }
 
-            await _wire.SendPinInChatMessageAsync(canonical, key, pin, durationSeconds);
-            MessagePinWindow window = MessagePinWindow.FromLocal(pin, durationSeconds, DateTime.UtcNow);
+            await _wire.SendPinInChatMessageAsync(
+                canonical,
+                key,
+                request.Pin,
+                request.DurationSeconds);
+            MessagePinWindow window = MessagePinWindow.FromLocal(
+                request.Pin,
+                request.DurationSeconds,
+                DateTime.UtcNow);
             await ApplyPinnedMessageStateAsync(
-                canonical, message.Id, pin, window.PinnedAtUtc, window.ExpiresAtUtc);
+                canonical,
+                request.MessageId,
+                request.Pin,
+                window.PinnedAtUtc,
+                window.ExpiresAtUtc);
         }
 
         public bool TryHandleReaction(

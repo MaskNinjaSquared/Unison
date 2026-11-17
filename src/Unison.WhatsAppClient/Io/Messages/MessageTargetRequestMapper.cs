@@ -26,5 +26,20 @@ namespace Unison.WhatsAppClient.Io.Messages
             CopyTarget(request, chatJid, message);
             return request;
         }
+
+        public static PinMessageRequest ToPin(
+            string chatJid,
+            ChatMessage message,
+            bool pin,
+            uint durationSeconds)
+        {
+            var request = new PinMessageRequest
+            {
+                Pin = pin,
+                DurationSeconds = durationSeconds
+            };
+            CopyTarget(request, chatJid, message);
+            return request;
+        }
     }
 }

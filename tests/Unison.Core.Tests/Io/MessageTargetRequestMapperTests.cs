@@ -29,5 +29,16 @@ namespace Unison.Core.Tests.Io
             Assert.Equal(bubble.Timestamp, request.TimestampUtc);
             Assert.Equal("👍", request.Emoji);
         }
+
+        [Fact]
+        public void ToPin_copies_target_and_duration()
+        {
+            var bubble = new ChatMessage { Id = "P1", IsFromMe = false };
+            PinMessageRequest request = MessageTargetRequestMapper.ToPin("c@g.us", bubble, true, 86400);
+
+            Assert.Equal("P1", request.MessageId);
+            Assert.True(request.Pin);
+            Assert.Equal(86400u, request.DurationSeconds);
+        }
     }
 }
