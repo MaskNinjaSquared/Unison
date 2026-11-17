@@ -8,5 +8,7 @@ namespace Unison.WhatsAppClient.Io.Chats
         Task SetPinnedAsync(SetChatPinnedRequest request);
 
         Task SetFavoriteAsync(SetChatFavoriteRequest request);
+
+        Task MarkReadAsync(MarkChatReadRequest request);
     }
 }

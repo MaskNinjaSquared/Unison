@@ -1127,15 +1127,30 @@ namespace Unison.WhatsAppClient.Chats
             public List<ChatItem> Touched { get; } = new List<ChatItem>();
         }
 
-        public async Task MarkReadAsync(ChatItem chat)
+        public Task MarkReadAsync(ChatItem chat)
         {
             if (chat == null || string.IsNullOrWhiteSpace(chat.JID))
+            {
+                return Task.CompletedTask;
+            }
+
+            return MarkReadAsync(new MarkChatReadRequest
+            {
+                ChatJid = chat.JID,
+                UnreadCount = chat.UnreadCount
+            });
+        }
+
+        /// <inheritdoc />
+        public async Task MarkReadAsync(MarkChatReadRequest request)
+        {
+            if (request == null || string.IsNullOrWhiteSpace(request.ChatJid))
             {
                 return;
             }
 
-            var unread = chat.UnreadCount;
-            var jid = _jids.GetCanonicalJid(chat.JID);
+            var unread = request.UnreadCount;
+            var jid = _jids.GetCanonicalJid(request.ChatJid);
             var openSw = Stopwatch.StartNew();
 
             // Cleared first, and unconditionally: the badge is the part the user is looking at, it

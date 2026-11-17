@@ -672,7 +672,7 @@ Done under `WhatsAppClient/Io/`:
 | Send text | `IMessageTextIo`, `SendTextRequest`, `OutgoingQuoteRequest` |
 | Send media | `IMessageMediaIo`, image/audio/document requests |
 | React / pin / delete | `IMessageReactIo`, `IMessagePinIo`, `IMessageDeleteIo`, `MessageTargetRequest` |
-| Chat flags | `IChatFlagsIo`, `SetChatPinnedRequest`, `SetChatFavoriteRequest` |
+| Chat flags / read | `IChatFlagsIo`, `SetChatPinnedRequest`, `SetChatFavoriteRequest`, `MarkChatReadRequest` |
 | Shared | `ChatMessageDto` (+ media URI / batch fields) |
 
 Owners and façades speak requests/DTOs on the client side; Core `IMessageService` / `IChatService` stay as adapters for ViewModels. Kind fields are **strings**, not mirrored enums. Timeline/persist still hold Core `ChatMessage` / `ChatItem` internally.

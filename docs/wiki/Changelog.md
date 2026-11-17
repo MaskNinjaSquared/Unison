@@ -2,9 +2,9 @@
 
 Newest first.
 
-## Phase E — Auto I/O envelopes (send, react, pin, delete, chat flags)
+## Phase E — Auto I/O envelopes (send, react, pin, delete, chat flags, mark-read)
 
-Client-owned ports under `Unison.WhatsAppClient/Io`: text/media send, react, message pin, delete-for-me/everyone, chat pin/favourite. Core façades adapt for ViewModels. No csproj flip; timeline still Core-shaped.
+Client-owned ports under `Unison.WhatsAppClient/Io`: text/media send, react, message pin, delete-for-me/everyone, chat pin/favourite/mark-read. Core façades adapt for ViewModels. No csproj flip; timeline still Core-shaped.
 
 ## Phase D stage 4 — `ChatCatalogPersistenceHost` (netstandard)
 
