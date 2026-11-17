@@ -255,6 +255,28 @@ namespace Unison.Core.Tests.Helpers
         }
 
         [Fact]
+        public async Task Playback_is_prepared_on_the_bubble_the_timeline_holds_not_on_a_copy()
+        {
+            ChatMessage accepted = null;
+            ChatMessage prepared = null;
+            var sender = new OutgoingMediaSend(
+                _host,
+                _jids,
+                _cache,
+                _ => { },
+                (chatJid, message) => accepted = message,
+                (chatJid, message, kind) => Task.CompletedTask,
+                () => At,
+                () => "AUD1",
+                message => prepared = message);
+
+            await sender.SendAudioAsync(AudioReq("555@s.whatsapp.net", Bytes, true));
+
+            Assert.NotNull(accepted);
+            Assert.Same(accepted, prepared);
+        }
+
+        [Fact]
         public async Task Plain_audio_still_previews_as_voice()
         {
             ChatMessageDto m = await Create("AUD1").SendAudioAsync(AudioReq("555@s.whatsapp.net", Bytes, false));

@@ -33,6 +33,7 @@ namespace Unison.WhatsAppClient.Helpers
         private readonly Func<string, ChatMessage, ChatPreviewKind, Task> _showLocalPreview;
         private readonly Func<DateTime> _utcNow;
         private readonly Func<string> _newMessageId;
+        private readonly Action<ChatMessage> _prepareAudioPlayback;
 
         public OutgoingMediaSend(
             IOutgoingMessageHost host,
@@ -42,7 +43,8 @@ namespace Unison.WhatsAppClient.Helpers
             Action<string, ChatMessage> acceptOutgoing,
             Func<string, ChatMessage, ChatPreviewKind, Task> showLocalPreview,
             Func<DateTime> utcNow = null,
-            Func<string> newMessageId = null)
+            Func<string> newMessageId = null,
+            Action<ChatMessage> prepareAudioPlayback = null)
         {
             _host = host ?? throw new ArgumentNullException(nameof(host));
             _jids = jids ?? throw new ArgumentNullException(nameof(jids));
@@ -55,6 +57,7 @@ namespace Unison.WhatsAppClient.Helpers
                 ?? throw new ArgumentNullException(nameof(showLocalPreview));
             _utcNow = utcNow ?? (() => DateTime.UtcNow);
             _newMessageId = newMessageId ?? NewRandomMessageId;
+            _prepareAudioPlayback = prepareAudioPlayback ?? (_ => { });
         }
 
         // No ConfigureAwait(false) anywhere below: the host mutates the in-memory timeline,
@@ -191,6 +194,8 @@ namespace Unison.WhatsAppClient.Helpers
                 message,
                 ChatPreviewKind.Voice,
                 () => _host.SendAudioAsync(request.ChatJid, audio, messageId));
+            // The live bubble, not the returned DTO: playback prep writes the playable URI onto it.
+            _prepareAudioPlayback(message);
             return ChatMessageDtoMapper.FromBubble(message);
         }
 

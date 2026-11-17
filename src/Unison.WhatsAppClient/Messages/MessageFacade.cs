@@ -229,7 +229,8 @@ namespace Unison.WhatsAppClient.Messages
                 mediaCache ?? throw new ArgumentNullException(nameof(mediaCache)),
                 NotifyChatMessagesChanged,
                 AcceptOutgoingTimeline,
-                ShowOutgoingLocalPreviewAsync);
+                ShowOutgoingLocalPreviewAsync,
+                prepareAudioPlayback: message => _availability.PrepareLocalPlaybackInBackground(message));
             // systemInfo kept in the ctor for DI compatibility; page sizes match desktop on all devices.
             _ = systemInfo;
 
@@ -1653,9 +1654,7 @@ namespace Unison.WhatsAppClient.Messages
                 IsVoiceMessage = isVoiceMessage,
                 ViewOnce = viewOnce
             });
-            ChatMessage message = ChatMessageDtoMapper.ToBubble(dto);
-            _availability.PrepareLocalPlaybackInBackground(message);
-            return message;
+            return ChatMessageDtoMapper.ToBubble(dto);
         }
 
         public async Task<ChatMessage> SendDocumentAsync(
