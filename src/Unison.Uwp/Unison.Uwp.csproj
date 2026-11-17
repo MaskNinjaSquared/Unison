@@ -189,8 +189,6 @@
     <Compile Include="Services\WhatsApp\ConnectionHealthSocketHost.cs" />
     <Compile Include="Services\WhatsApp\CurrentSocketHealthHost.cs" />
     <Compile Include="Services\WhatsApp\SlotConnectionSocketControl.cs" />
-    <Compile Include="Services\WhatsApp\IReconnectLifecyclePort.cs" />
-    <Compile Include="Services\WhatsApp\ReconnectHostAdapter.cs" />
     <Compile Include="Services\WhatsApp\IConnectionHealthOwnerPort.cs" />
     <Compile Include="Services\WhatsApp\SocketEventHandlerWiring.cs" />
     <Compile Include="Services\WhatsApp\ConnectionHostDependencies.cs" />

@@ -21,7 +21,7 @@ namespace Unison.Uwp.Services.WhatsApp
             SocketFacadeWireOwner socketFacade,
             InboundWireNodeOwner inboundWireNode,
             DecryptedMessageWireOwner decryptedMessage,
-            ReconnectHostAdapter reconnect,
+            ReconnectHost reconnect,
             CurrentSocketHealthHost currentSocketHealth,
             HistoryCatchUpHost historyCatchUp,
             ConnectionSessionHost connectionSession,
@@ -55,7 +55,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 ?? throw new ArgumentNullException(nameof(decryptedMessage));
         }
 
-        public ReconnectHostAdapter Reconnect { get; }
+        public ReconnectHost Reconnect { get; }
 
         public HistoryCatchUpHost HistoryCatchUp { get; }
 

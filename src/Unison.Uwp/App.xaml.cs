@@ -481,7 +481,7 @@ namespace Unison.Uwp
             services.AddSingleton(sp => new CurrentSocketHealthHost(
                 sp.GetRequiredService<ConnectionSlot<IWhatsAppSocket>>(),
                 sp.GetRequiredService<ConnectionSessionFlags>()));
-            services.AddSingleton(sp => new ReconnectHostAdapter(
+            services.AddSingleton(sp => new ReconnectHost(
                 () => sp.GetRequiredService<WhatsAppService>(),
                 sp.GetRequiredService<ConnectionSessionFlags>(),
                 sp.GetRequiredService<ConnectionSlot<AuthState>>(),
@@ -497,7 +497,7 @@ namespace Unison.Uwp
                 sp.GetRequiredService<SocketFacadeWireOwner>(),
                 sp.GetRequiredService<InboundWireNodeOwner>(),
                 sp.GetRequiredService<DecryptedMessageWireOwner>(),
-                sp.GetRequiredService<ReconnectHostAdapter>(),
+                sp.GetRequiredService<ReconnectHost>(),
                 sp.GetRequiredService<CurrentSocketHealthHost>(),
                 sp.GetRequiredService<HistoryCatchUpHost>(),
                 sp.GetRequiredService<ConnectionSessionHost>(),
@@ -548,7 +548,7 @@ namespace Unison.Uwp
                 sp.GetRequiredService<IConnectionSocketControl>(),
                 sp.GetRequiredService<IHistoryOnDemandSocket>(),
                 sp.GetRequiredService<ConnectionSlot<AuthState>>(),
-                sp.GetRequiredService<ReconnectHostAdapter>().Coordinator,
+                sp.GetRequiredService<ReconnectHost>().Coordinator,
                 sp.GetRequiredService<ConnectionEventHub>(),
                 sp.GetRequiredService<IAppVisibility>(),
                 sp.GetRequiredService<ILocalSettings>(),
@@ -564,8 +564,8 @@ namespace Unison.Uwp
                 sp.GetRequiredService<SessionEstablishedGate>(),
                 sp.GetRequiredService<SyncWorkGate>(),
                 sp.GetRequiredService<HistoryCatchUpHost>(),
-                sp.GetRequiredService<ReconnectHostAdapter>(),
-                sp.GetRequiredService<ReconnectHostAdapter>().Coordinator,
+                sp.GetRequiredService<ReconnectHost>(),
+                sp.GetRequiredService<ReconnectHost>().Coordinator,
                 sp.GetRequiredService<ConnectionEventHub>(),
                 sp.GetRequiredService<AttachedUiDispatcher>(),
                 sp.GetRequiredService<IRuntimeDiagnostics>()));

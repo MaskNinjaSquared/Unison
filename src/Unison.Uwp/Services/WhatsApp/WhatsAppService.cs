@@ -215,10 +215,10 @@ namespace Unison.Uwp.Services.WhatsApp
 
         /// <summary>
         /// Soft auto-reconnect slot (lock + isReconnecting) lives on
-        /// <see cref="SoftReconnectCoordinator"/>, owned by <see cref="ReconnectHostAdapter"/>.
+        /// <see cref="SoftReconnectCoordinator"/>, owned by <see cref="ReconnectHost"/>.
         /// </summary>
         private readonly SoftReconnectCoordinator _softReconnect;
-        private readonly ReconnectHostAdapter _reconnectHost;
+        private readonly ReconnectHost _reconnectHost;
         /// <summary>
         /// Health-monitor + periodic FULL_HISTORY safety CTS / Task.Run live on
         /// <see cref="ConnectionHealthMonitorOwner"/>. Client only implements

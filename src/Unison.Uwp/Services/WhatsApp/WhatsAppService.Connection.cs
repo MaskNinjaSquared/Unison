@@ -261,6 +261,21 @@ namespace Unison.Uwp.Services.WhatsApp
 
         void IReconnectLifecyclePort.PairingTrace(string message) => PairingTrace(message);
 
+        void IReconnectLifecyclePort.TraceScheduleAutoReconnectReason(string reason)
+        {
+            try
+            {
+                if (SessionLogger.Instance.PairingTraceActive)
+                {
+                    SessionLogger.Instance.WriteAlways(
+                        "[Pairing/WA] ScheduleAutoReconnect reason=" + (reason ?? string.Empty));
+                }
+            }
+            catch
+            {
+            }
+        }
+
         void IReconnectLifecyclePort.MarkPairingRestartPending(string reason) =>
             _connectionSession.MarkPairingRestartPending.Run(reason);
 
