@@ -2,6 +2,10 @@
 
 Newest first.
 
+## Phase E closed at mutations; audio playback prep fix
+
+Outgoing audio playback prep ran on a DTO copy since the send envelopes, so the timeline bubble never got its playable URI. It now runs inside `OutgoingMediaSend` on the accepted bubble. Phase E stops at the mutation envelopes: timeline, `Ensure*Available`, inbound and receipts keep the live Core `ChatMessage`, and the Core → WhatsAppClient flip is not scheduled. Details in [Netstandard WhatsApp client](Netstandard-WhatsApp-Client) § Phase E — closed at mutations.
+
 ## Phase E — Auto I/O envelopes (send, react, pin, delete, chat flags, mark-read)
 
 Client-owned ports under `Unison.WhatsAppClient/Io`: text/media send, react, message pin, delete-for-me/everyone, chat pin/favourite/mark-read. Core façades adapt for ViewModels. No csproj flip; timeline still Core-shaped.

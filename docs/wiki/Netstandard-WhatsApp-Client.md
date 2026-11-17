@@ -302,8 +302,7 @@ Step 5 (drop the csproj reference) is the done check — Opus or a reviewed pass
 missed `using` only shows up when the reference is gone.
 
 **Dependency direction (decided):** contracts stay in Core through P (WhatsAppClient → Core),
-tier-free; the flip happens in Phase E (client owns its I/O, Core → WhatsAppClient, product
-services consult the client directly).
+tier-free. Phase E was closed at the mutation envelopes without the flip; see § Phase E — closed at mutations.
 
 **Risk:** the History FULL chain and deferred startup are the paths Mobile is most sensitive
 to. P2/P3 there need on-device runs (first sync, reconnect with stale tips, frugal on/off),
@@ -375,7 +374,7 @@ marked **Opus / human** stays out of that session unless the developer explicitl
 | Move **incoming pump** or **auto-reconnect / health timers** off `WhatsAppService` | **Opus + on-device + explicit ask** | Mobile hot path; wiki already forbids without confirmation |
 | Broker transfer / `SocketBridge` ownership / fake handoff | **Never invent** | True only when ownership moved; cold restore not wired |
 | Change silent FULL / periodic FULL / catch-up finish behaviour (not just knob injection) | **Opus + on-device** | Highest Mobile risk; knobs already extracted — do not retune numbers without a device run |
-| Phase E dependency flip (Core → WhatsAppClient) | **Opus / dedicated pass** | Moves every `Contracts/WhatsApp` consumer |
+| Phase E dependency flip (Core → WhatsAppClient) | **Not scheduled** (Phase E closed at mutations) | Needs a UI-owned bubble model first; DTO copies break live timeline updates |
 | Revive `SocketClient.cs` or put WinRT in Core / WhatsAppClient | **Forbidden** | Architecture hard rule |
 | `ConnectionHandler` calling use cases or holding chats | **Forbidden** | Architecture hard rule |
 
@@ -677,7 +676,17 @@ Done under `WhatsAppClient/Io/`:
 
 Owners and façades speak requests/DTOs on the client side; Core `IMessageService` / `IChatService` stay as adapters for ViewModels. Kind fields are **strings**, not mirrored enums. Timeline/persist still hold Core `ChatMessage` / `ChatItem` internally.
 
-**Still Opus / not Auto:** load/timeline APIs, `Ensure*Available` (live bubble mutation), inbound wire appliers (`AcceptIncoming*`, `ApplyIncoming*`), receipt/status apply, other façades’ list/projection helpers, dropping Core models from the client, and the Core→WhatsAppClient csproj flip.
+#### Phase E — closed at mutations (decided)
+
+Phase E stops at the envelopes above. The rest stays on Core `ChatMessage` / `ChatItem` on purpose, and the csproj flip is **not** scheduled.
+
+**Why:** the timeline cache and the UI share the same `ChatMessage` instances. Receipts, status, media hydration (`Ensure*Available`, `PrepareLocalPlaybackInBackground`) and inbound appliers mutate those instances, and XAML updates through property change. A request → DTO → `ToBubble` round trip hands out a **copy**, so anything written afterwards never reaches the screen. The first send batch hit exactly that: audio playback prep ran on a copy until it moved inside `OutgoingMediaSend`, onto the bubble the timeline accepted.
+
+**Rule for envelope adapters:** a DTO is a read-only snapshot. Anything that mutates a bubble (playback prep, media URI, status) runs inside the owner, on the instance the timeline holds, before the DTO is built. Never on `ToBubble(dto)`.
+
+**Stays Core-shaped:** load/timeline APIs, `Ensure*Available`, inbound wire appliers (`AcceptIncoming*`, `ApplyIncoming*`), receipt/status apply, persist, other façades’ list/projection helpers.
+
+**Reopening it** means a UI-owned bubble model fed by client change events (not DTO copies), then the flip. That is a redesign; plan it first, do not slice it mechanically.
 
 | Now (C/D) | Later (E) |
 |---|---|
