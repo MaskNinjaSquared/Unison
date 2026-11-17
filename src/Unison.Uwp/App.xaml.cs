@@ -27,6 +27,7 @@ using Unison.Core.Services;
 using Unison.Core.Diagnostics;
 using Unison.Core.Factories;
 using Unison.Core.Helpers;
+using Unison.Core.Helpers.Calls;
 using Unison.Core.Helpers.Messages;
 using Unison.Core.Mappers;
 using Unison.WhatsAppClient.Mappers;
@@ -39,6 +40,7 @@ using Unison.Socket.Signal;
 using Unison.Uwp.Client;
 using Unison.Uwp.Data;
 using Unison.Uwp.Services;
+using Unison.Uwp.Services.Calls;
 using Unison.Uwp.Services.Desktop;
 using Unison.Uwp.Services.Network;
 using Unison.Uwp.Services.Socket;
@@ -1303,11 +1305,46 @@ namespace Unison.Uwp
                 sp.GetRequiredService<IDispatcher>(),
                 sp.GetRequiredService<IStringResources>(),
                 sp.GetService<IContactService>()));
-            services.AddSingleton<ICallScreenPresenter>(sp => new Unison.Uwp.Services.Calls.CallScreenPresenter(
+            services.AddSingleton<ICallScreenPresenter>(sp => new CallScreenPresenter(
                 sp.GetRequiredService<CallScreenViewModel>(),
                 jid => sp.GetRequiredService<ShellViewModel>().QueueOpenChatFromActivation(
                     "chat=" + Uri.EscapeDataString(jid),
                     delayChatListUntilConversationReady: false)));
+            services.AddSingleton<IVoipSystemCallHost, UwpVoipSystemCallHost>();
+            services.AddSingleton(sp => new VoipIncomingCallWakeBridge(
+                sp.GetRequiredService<ICallService>(),
+                sp.GetRequiredService<IVoipSystemCallHost>(),
+                sp.GetRequiredService<IAppVisibility>(),
+                sp.GetRequiredService<IDispatcher>(),
+                call =>
+                {
+                    if (call == null)
+                    {
+                        return null;
+                    }
+
+                    ChatItem chat = sp.GetRequiredService<ChatStateStore>().FindChat(call.PeerJid);
+                    if (!string.IsNullOrWhiteSpace(chat?.Name))
+                    {
+                        return chat.Name;
+                    }
+
+                    IContactService contacts = sp.GetService<IContactService>();
+                    string resolved = contacts?.ResolveDisplayName(call.PeerJid, "voip-wake");
+                    return string.IsNullOrWhiteSpace(resolved) ? call.PeerJid : resolved;
+                },
+                () =>
+                {
+                    try
+                    {
+                        Window.Current?.Activate();
+                    }
+                    catch
+                    {
+                    }
+                },
+                ensureProcessKeepAlive: () =>
+                    sp.GetRequiredService<ILocationKeepAliveService>().ApplyConfigAsync()));
             services.AddSingleton<IAppActivationRouter>(sp => new AppActivationRouter(
                 sp.GetRequiredService<ShellViewModel>(),
                 sp.GetRequiredService<IChatService>(),
@@ -1350,6 +1387,7 @@ namespace Unison.Uwp
             // Call Recents survive process restarts (unison.db call_log).
             _ = Services.GetRequiredService<ICallLogService>().InitializeAsync();
             Services.GetRequiredService<ICallScreenPresenter>().Start();
+            Services.GetRequiredService<VoipIncomingCallWakeBridge>().Start();
 #if DEBUG
             Services.GetRequiredService<IDebugSendService>().Start();
 #endif
@@ -1422,6 +1460,25 @@ namespace Unison.Uwp
             if (args is ProtocolActivatedEventArgs protocolArgs)
             {
                 string scheme = protocolArgs.Uri?.Scheme;
+                if (string.Equals(scheme, UwpVoipSystemCallHost.SystemProtocolScheme, StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(scheme, UwpVoipSystemCallHost.ProtocolScheme, StringComparison.OrdinalIgnoreCase))
+                {
+                    // ms-voip-call (system / Unigram) or unison-call: bring the call screen forward.
+                    NotificationService.Instance.Initialize();
+                    LiveTilesService.Instance.Initialize();
+                    EnsureWindowVisibilityTracking();
+                    ActivateWithRouter(args.PreviousExecutionState, null, null);
+                    try
+                    {
+                        Window.Current?.Activate();
+                    }
+                    catch
+                    {
+                    }
+
+                    return;
+                }
+
                 if (string.Equals(scheme, PeopleProfileScheme, StringComparison.OrdinalIgnoreCase))
                 {
                     // People "Open profile": ms-contact-profile:?ContactRemoteIds=…
@@ -2203,9 +2260,28 @@ namespace Unison.Uwp
         }
 
         /// <summary>Null when the socket may go to the broker; otherwise the journal reason.</summary>
+        private static bool HasActiveIncomingCall()
+        {
+            try
+            {
+                ActiveCallSnapshot call = Services?.GetService<ICallService>()?.ActiveCall;
+                return call != null &&
+                       call.IsInbound &&
+                       call.Phase == ActiveCallPhase.Ringing;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine("[App] HasActiveIncomingCall: " + ex.Message);
+                return false;
+            }
+        }
+
         private static string ReasonToKeepSocketInProcess()
         {
-            return BrokerHandoffHold.ReasonToKeepSocket(KeepsSocketInProcess(), IsInitialSyncActive());
+            return BrokerHandoffHold.ReasonToKeepSocket(
+                KeepsSocketInProcess(),
+                IsInitialSyncActive(),
+                HasActiveIncomingCall());
         }
 
         private void OnLeavingBackground(object sender, LeavingBackgroundEventArgs e)

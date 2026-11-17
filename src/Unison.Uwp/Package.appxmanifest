@@ -1,6 +1,6 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <Package xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10" xmlns:mp="http://schemas.microsoft.com/appx/2014/phone/manifest" xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10" xmlns:uap4="http://schemas.microsoft.com/appx/manifest/uap/windows10/4" xmlns:uap5="http://schemas.microsoft.com/appx/manifest/uap/windows10/5" IgnorableNamespaces="uap uap4 uap5 mp">
-    <Identity Name="Unison.UWPApp" Publisher="CN=UniDev" Version="2.5.35.0" />
+    <Identity Name="Unison.UWPApp" Publisher="CN=UniDev" Version="2.5.36.0" />
   <mp:PhoneIdentity PhoneProductId="a1b2c3d4-e5f6-7890-abcd-ef1234567890" PhonePublisherId="00000000-0000-0000-0000-000000000000" />
   <Properties>
     <DisplayName>Unison</DisplayName>
@@ -42,6 +42,8 @@
         </uap:InitialRotationPreference>
       </uap:VisualElements>
       <Extensions>
+        <!-- Declares the app as a VoIP client (Unigram RS2 / system Calls stack). -->
+        <uap:Extension Category="windows.voipCall" />
         <!-- People ContactPanel / "Open profile" (same shape as Unigram). -->
         <uap4:Extension Category="windows.contactPanel" />
         <uap:Extension Category="windows.protocol">
@@ -52,6 +54,18 @@
         <uap:Extension Category="windows.protocol">
           <uap:Protocol Name="ms-contact-profile">
             <uap:DisplayName>Unison</uap:DisplayName>
+          </uap:Protocol>
+        </uap:Extension>
+        <!-- System VoIP scheme (Unigram RS2); RequestNewIncomingCall context uses this. -->
+        <uap:Extension Category="windows.protocol">
+          <uap:Protocol Name="ms-voip-call">
+            <uap:DisplayName>Unison Call</uap:DisplayName>
+          </uap:Protocol>
+        </uap:Extension>
+        <!-- App-owned VoIP deep link (Answer / OnActivated fallback). -->
+        <uap:Extension Category="windows.protocol">
+          <uap:Protocol Name="unison-call">
+            <uap:DisplayName>Unison Call</uap:DisplayName>
           </uap:Protocol>
         </uap:Extension>
         <uap:Extension Category="windows.shareTarget">
@@ -81,6 +95,12 @@
         <Extension Category="windows.backgroundTasks" EntryPoint="Unison.Background.WhatsAppSocketActivityTask">
           <BackgroundTasks>
             <Task Type="systemEvent" />
+          </BackgroundTasks>
+        </Extension>
+        <!-- VoipCallCoordinator.ReserveCallResourcesAsync entry point. -->
+        <Extension Category="windows.backgroundTasks" EntryPoint="Unison.Background.VoipCallResourceTask">
+          <BackgroundTasks>
+            <Task Type="general" />
           </BackgroundTasks>
         </Extension>
         <!-- "Start with Windows" (Desktop, 1709+). TaskId must match StartupLaunchService.TaskId. -->

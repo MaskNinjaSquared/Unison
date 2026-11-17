@@ -123,6 +123,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="WhatsAppSocketActivityTask.cs" />
+    <Compile Include="VoipCallResourceTask.cs" />
     <Compile Include="Broker\SocketBrokerConstants.cs" />
     <Compile Include="Broker\BrokerFrameJournal.cs" />
     <Compile Include="Broker\BrokerInterprocessLock.cs" />

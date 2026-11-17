@@ -52,10 +52,33 @@ namespace Unison.Core.Tests.Helpers
         }
 
         [Fact]
+        public void An_inbound_ring_keeps_the_socket_in_process()
+        {
+            Assert.Equal(
+                BrokerHandoffHold.ActiveIncomingCall,
+                BrokerHandoffHold.ReasonToKeepSocket(
+                    keepsSocketInProcess: false,
+                    isInitialSyncActive: false,
+                    hasActiveIncomingCall: true));
+        }
+
+        [Fact]
+        public void Background_mode_outranks_an_inbound_ring()
+        {
+            Assert.Equal(
+                BrokerHandoffHold.LocationKeepAlive,
+                BrokerHandoffHold.ReasonToKeepSocket(
+                    keepsSocketInProcess: true,
+                    isInitialSyncActive: false,
+                    hasActiveIncomingCall: true));
+        }
+
+        [Fact]
         public void The_reasons_read_as_the_diagnostics_journal_already_spells_them()
         {
             Assert.Equal("location-keepalive", BrokerHandoffHold.LocationKeepAlive);
             Assert.Equal("initial-sync", BrokerHandoffHold.InitialSync);
+            Assert.Equal("active-incoming-call", BrokerHandoffHold.ActiveIncomingCall);
         }
     }
 }

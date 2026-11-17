@@ -18,12 +18,26 @@ namespace Unison.WhatsAppClient.Helpers
         /// <summary>The first sync after login is still arriving in bulk.</summary>
         public const string InitialSync = "initial-sync";
 
+        /// <summary>
+        /// Inbound ring / system VoIP UI is up — keep the WA socket in-process so CallFacade
+        /// still receives statuses (Unigram RS2 stayed alive via Location EE for the same reason).
+        /// </summary>
+        public const string ActiveIncomingCall = "active-incoming-call";
+
         /// <summary>The reason to keep the socket in process, or null when it may go to the broker.</summary>
-        public static string ReasonToKeepSocket(bool keepsSocketInProcess, bool isInitialSyncActive)
+        public static string ReasonToKeepSocket(
+            bool keepsSocketInProcess,
+            bool isInitialSyncActive,
+            bool hasActiveIncomingCall = false)
         {
             if (keepsSocketInProcess)
             {
                 return LocationKeepAlive;
+            }
+
+            if (hasActiveIncomingCall)
+            {
+                return ActiveIncomingCall;
             }
 
             return isInitialSyncActive ? InitialSync : null;

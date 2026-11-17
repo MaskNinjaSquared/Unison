@@ -84,6 +84,16 @@ namespace Unison.Uwp.Services.Calls
             Fit();
             Window.Current.SizeChanged += OnWindowSizeChanged;
             _popup.IsOpen = true;
+
+            // Best-effort when the process is still alive; Mobile Start/lock still needs
+            // VoipCallCoordinator (see VoipIncomingCallWakeBridge).
+            try
+            {
+                Window.Current.Activate();
+            }
+            catch
+            {
+            }
         }
 
         private void Hide()
