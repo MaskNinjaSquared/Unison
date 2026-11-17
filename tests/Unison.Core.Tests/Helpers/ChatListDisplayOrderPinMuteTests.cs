@@ -63,5 +63,32 @@ namespace Unison.Core.Tests.Helpers
             Assert.Single(result);
             Assert.Equal(99, result[0].MutedUntil);
         }
+
+        [Fact]
+        public void Newer_tip_without_link_keeps_LinkedParent_from_the_older_row()
+        {
+            const string parent = "120363111111111111@g.us";
+            var linked = new ChatItem
+            {
+                JID = "120363222222222222@g.us",
+                LinkedParentJid = parent,
+                IsCommunityAnnounce = true,
+                LastMessageTimestampUtc = DateTime.UtcNow.AddMinutes(-10)
+            };
+            var newer = new ChatItem
+            {
+                JID = "120363222222222222@g.us",
+                LastMessageTimestampUtc = DateTime.UtcNow
+            };
+
+            List<ChatItem> result = ChatListDisplayOrder.DeduplicateByCanonicalJid(
+                new[] { linked, newer },
+                jid => jid);
+
+            Assert.Single(result);
+            Assert.Same(newer, result[0]);
+            Assert.Equal(parent, result[0].LinkedParentJid);
+            Assert.True(result[0].IsCommunityAnnounce);
+        }
     }
 }

@@ -28,6 +28,7 @@ namespace Unison.Core.Helpers.Chats
         /// <summary>
         /// After enrichment clears: empty list needs a full refresh (deferred cold attach);
         /// a painted list only needs reorder / optional rebuild when order is dirty.
+        /// Linked community children on the root are pruned in place — not a full refresh.
         /// </summary>
         public static bool RequiresFullRefreshAfterEnrichment(int visibleCount, bool orderDirty) =>
             orderDirty && visibleCount <= 0;

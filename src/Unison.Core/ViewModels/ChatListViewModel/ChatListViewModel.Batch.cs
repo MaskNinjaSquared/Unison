@@ -171,7 +171,9 @@ namespace Unison.Core.ViewModels
             // pinned rows are not released mid-list and only "jump up" after opening a chat.
             ApplyLocalChatFieldsToScopedChats();
 
-            int scopedCount = _chatState.Chats.Count(MatchesScope);
+            // Same membership as the release source: linked subgroups are not flat rows.
+            int scopedCount = _chatState.Chats.Count(c =>
+                MatchesScope(c) && string.IsNullOrWhiteSpace(c?.LinkedParentJid));
             if (!_batchCompleted && VisibleChats.Count >= scopedCount)
             {
                 // Tips keep updating while the list is already full; still keep pin order.
@@ -200,7 +202,9 @@ namespace Unison.Core.ViewModels
             var scoped = _chatState.Chats.Where(c =>
                 c != null &&
                 !string.IsNullOrWhiteSpace(c.JID) &&
-                MatchesScope(c));
+                MatchesScope(c) &&
+                // Linked subgroups belong under the hub; flat release painted them as root copies.
+                string.IsNullOrWhiteSpace(c.LinkedParentJid));
             var source = _chatService != null
                 ? _chatService.SortChatsForDisplay(scoped)
                 : scoped.ToList();
@@ -289,6 +293,7 @@ namespace Unison.Core.ViewModels
             }
 
             int uniqueSourceCount = source
+                .Where(c => c != null && string.IsNullOrWhiteSpace(c.LinkedParentJid))
                 .Select(c => GetCanonical(c.JID))
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .Count();

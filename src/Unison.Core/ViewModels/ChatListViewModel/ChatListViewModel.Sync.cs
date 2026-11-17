@@ -273,6 +273,9 @@ namespace Unison.Core.ViewModels
                 if (_refreshDeferredForEnrichment && !_chatService.MatchesListEnrichmentPhase(message))
                 {
                     _refreshDeferredForEnrichment = false;
+                    // LinkedParent often lands during groups enrichment while refresh was deferred.
+                    // Prune those subgroups under their hub — do not rebuild the whole catalogue.
+                    PruneLinkedCommunityChildrenFromRoot();
                     if (_visibleOrderDirty)
                     {
                         // Cold reattach deferred mid-enrichment: VisibleChats is still empty —
@@ -287,9 +290,11 @@ namespace Unison.Core.ViewModels
                         // re-ran BuildVisibleRefreshSource (~10s on ARM with hubs) for pin/tip dirt.
                         // But a single hop of 250+ Moves leaves ListView layout running after Exit
                         // (cfb6fa4f: ~380s ui-stall active=none after SyncStatus hide).
-                        else if (PreferFrugalUi &&
-                            string.IsNullOrWhiteSpace(SearchQuery) &&
-                            _activeFilter == ChatListFilter.All)
+                        else if (VisibleMoveMissPolicy.PreferInPlaceReorder(
+                            PreferFrugalUi,
+                            VisibleChats.Count,
+                            filterIsAll: _activeFilter == ChatListFilter.All,
+                            searchEmpty: string.IsNullOrWhiteSpace(SearchQuery)))
                         {
                             if (VisibleChatReorderPolicy.PreferAsyncDrain(
                                     PreferFrugalUi,
@@ -866,6 +871,7 @@ namespace Unison.Core.ViewModels
                     !IsListHeldForSync &&
                     !IsInSafeMode)
                 {
+                    PruneLinkedCommunityChildrenFromRoot();
                     if (VisibleMoveMissPolicy.PreferInPlaceReorder(
                             PreferFrugalUi,
                             VisibleChats.Count,
@@ -1071,6 +1077,18 @@ namespace Unison.Core.ViewModels
                 return;
             }
 
+            // Metadata often stamps LinkedParent here — prune root copies first.
+            if (PruneLinkedCommunityChildrenFromRoot() > 0 &&
+                VisibleMoveMissPolicy.PreferInPlaceReorder(
+                    PreferFrugalUi,
+                    VisibleChats.Count,
+                    filterIsAll: _activeFilter == ChatListFilter.All,
+                    searchEmpty: string.IsNullOrWhiteSpace(SearchQuery)))
+            {
+                ReorderVisibleChatsInPlace();
+                return;
+            }
+
             ScheduleRefreshVisibleChats(
                 PreferFrugalUi ? MoveMissRefreshDebounceFrugal : (TimeSpan?)null,
                 coalesceIfArmed: true);
@@ -1205,6 +1223,7 @@ namespace Unison.Core.ViewModels
                             filterIsAll: _activeFilter == ChatListFilter.All,
                             searchEmpty: string.IsNullOrWhiteSpace(SearchQuery)))
                     {
+                        PruneLinkedCommunityChildrenFromRoot();
                         // Rebuild here was the 1520 stall (buildMs/Continue). Painted All list:
                         // drain Moves in place like enrichment-end.
                         if (VisibleChatReorderPolicy.PreferAsyncDrain(
@@ -1257,6 +1276,7 @@ namespace Unison.Core.ViewModels
                     filterIsAll: _activeFilter == ChatListFilter.All,
                     searchEmpty: string.IsNullOrWhiteSpace(SearchQuery)))
             {
+                PruneLinkedCommunityChildrenFromRoot();
                 if (VisibleChatReorderPolicy.PreferAsyncDrain(PreferFrugalUi, VisibleChats.Count))
                 {
                     _ = DrainFrugalVisibleReorderAsync();
@@ -1373,14 +1393,21 @@ namespace Unison.Core.ViewModels
                     return;
                 }
 
-                // LinkedParent / IsCommunityParent change list membership under hubs. Frugal
-                // PreferInPlaceReorder only Moves painted rows and left subgroups on the main
-                // list after background-groups painted the link (hub open still showed them).
+                // LinkedParent / IsCommunityParent: prune linked rows off the root under their
+                // hub. Frugal PreferInPlaceReorder only Moves and used to leave root copies.
                 if (_chatService.RequiresCommunityProjection(e.PropertyName))
                 {
-                    _ = _dispatcher.RunAsync(() => ScheduleRefreshVisibleChats(
-                        PreferFrugalUi ? MoveMissRefreshDebounceFrugal : (TimeSpan?)null,
-                        coalesceIfArmed: true));
+                    _ = _dispatcher.RunAsync(() =>
+                    {
+                        if (PruneLinkedCommunityChildrenFromRoot() > 0)
+                        {
+                            return;
+                        }
+
+                        ScheduleRefreshVisibleChats(
+                            PreferFrugalUi ? MoveMissRefreshDebounceFrugal : (TimeSpan?)null,
+                            coalesceIfArmed: true);
+                    });
                     return;
                 }
 

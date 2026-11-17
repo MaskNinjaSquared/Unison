@@ -1,4 +1,6 @@
+using System.Collections.Generic;
 using Unison.Core.Helpers.Chats;
+using Unison.Core.Models;
 using Xunit;
 
 namespace Unison.Core.Tests.Helpers
@@ -26,6 +28,20 @@ namespace Unison.Core.Tests.Helpers
                     visibleCount,
                     filterIsAll,
                     searchEmpty));
+        }
+
+        [Fact]
+        public void HasLinkedChildrenOnRoot_detects_subgroup_still_painted_flat()
+        {
+            var visible = new List<ChatItem>
+            {
+                new ChatItem { JID = "hub@g.us", IsCommunityParent = true },
+                new ChatItem { JID = "child@g.us", LinkedParentJid = "hub@g.us" }
+            };
+
+            Assert.True(VisibleMoveMissPolicy.HasLinkedChildrenOnRoot(visible));
+            Assert.False(VisibleMoveMissPolicy.HasLinkedChildrenOnRoot(
+                new List<ChatItem> { visible[0] }));
         }
     }
 }

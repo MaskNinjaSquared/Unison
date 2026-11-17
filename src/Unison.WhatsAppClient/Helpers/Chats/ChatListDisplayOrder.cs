@@ -93,11 +93,44 @@ namespace Unison.WhatsAppClient.Helpers
                         item.MutedUntil = existing.MutedUntil;
                     }
 
+                    CarryCommunityLinkFlags(existing, item);
                     deduped[existingIndex] = item;
+                }
+                else
+                {
+                    CarryCommunityLinkFlags(item, existing);
                 }
             }
 
             return deduped;
+        }
+
+        /// <summary>
+        /// History tips often omit <c>linked_parent</c> / announce flags that metadata already
+        /// stamped. Losing them on PN/LID tip swap leaves subgroups painted on the root.
+        /// </summary>
+        private static void CarryCommunityLinkFlags(ChatItem from, ChatItem to)
+        {
+            if (from == null || to == null)
+            {
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(to.LinkedParentJid) &&
+                !string.IsNullOrWhiteSpace(from.LinkedParentJid))
+            {
+                to.LinkedParentJid = from.LinkedParentJid;
+            }
+
+            if (from.IsCommunityParent)
+            {
+                to.IsCommunityParent = true;
+            }
+
+            if (from.IsCommunityAnnounce)
+            {
+                to.IsCommunityAnnounce = true;
+            }
         }
 
         public static List<ChatItem> SortForDisplay(IEnumerable<ChatItem> source)

@@ -13,6 +13,7 @@ using Unison.Core.Contracts;
 using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Factories;
 using Unison.Core.Helpers;
+using Unison.Core.Helpers.Chats;
 using Unison.Core.Models;
 using Unison.Core.State;
 
@@ -293,6 +294,32 @@ namespace Unison.Core.ViewModels
             hub.ReplaceCommunityJoinableGroups(remaining);
         }
 
+        /// <summary>
+        /// Removes linked subgroups still painted on the root and attaches them under their hub.
+        /// Cheap alternative to <c>CommunityListProjector</c> when only membership changed.
+        /// </summary>
+        /// <returns>How many root rows were removed.</returns>
+        private int PruneLinkedCommunityChildrenFromRoot()
+        {
+            if (VisibleChats == null ||
+                VisibleChats.Count == 0 ||
+                !ChatListCatalogAccess.NeedsCommunityProjection(_scope))
+            {
+                return 0;
+            }
+
+            if (!VisibleMoveMissPolicy.HasLinkedChildrenOnRoot(VisibleChats))
+            {
+                return 0;
+            }
+
+            return CommunityRootPrune.RemoveLinkedChildrenFromRoot(
+                VisibleChats,
+                GetCanonical,
+                parentJid => ResolveCatalogByJid(parentJid) ?? GetOrCreateSyntheticCommunity(parentJid),
+                _strings);
+        }
+
         private ChatItem FindCommunityHub(string parentKey)
         {
             if (string.IsNullOrWhiteSpace(parentKey))
@@ -338,18 +365,8 @@ namespace Unison.Core.ViewModels
                 CommunityHubPresentation.ApplyMemberAvatarFallback(hub);
 
                 // Opening a catalog/synthetic hub can attach members that are still painted on
-                // the main list (frugal in-place never re-projected). Force one coalesce rebuild.
-                for (int i = 0; i < members.Count; i++)
-                {
-                    ChatItem member = members[i];
-                    if (member != null && VisibleChats.Contains(member))
-                    {
-                        ScheduleRefreshVisibleChats(
-                            PreferFrugalUi ? MoveMissRefreshDebounceFrugal : (TimeSpan?)null,
-                            coalesceIfArmed: true);
-                        break;
-                    }
-                }
+                // the main list — prune those root copies under the hub instead of rebuilding.
+                PruneLinkedCommunityChildrenFromRoot();
             }
 
             return hub;
