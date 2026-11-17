@@ -132,43 +132,8 @@ namespace Unison.Uwp.Services.WhatsApp
         void IPublishConnectionUpdateHost.RaiseConnectionUpdate(string status) =>
             _events.RaiseConnectionUpdate(status);
 
-        void IPublishConnectionUpdateHost.SyncOfflineSyncedWatchdog(string status)
-        {
-            if (string.Equals(status, "open", StringComparison.Ordinal))
-            {
-                // Connect prepare already resets the latch for a new socket. If pending
-                // notifications arrived before this open event, HasReleased is true — do not
-                // clear it or arm a watchdog that would force a second release.
-                if (_offlineReplayLatch.HasReleased)
-                {
-                    return;
-                }
-
-                _offlineReplayLatch.ResetForNewOpen();
-                _offlineSyncedWatchdog?.Arm();
-                return;
-            }
-
-            if (string.Equals(status, "synced", StringComparison.Ordinal) ||
-                string.Equals(status, "close", StringComparison.Ordinal) ||
-                string.Equals(status, "closed", StringComparison.Ordinal) ||
-                string.Equals(status, "reconnecting", StringComparison.Ordinal) ||
-                string.Equals(status, "connecting", StringComparison.Ordinal) ||
-                string.Equals(status, "background", StringComparison.Ordinal) ||
-                string.Equals(status, "suspended", StringComparison.Ordinal))
-            {
-                _offlineSyncedWatchdog?.Cancel(status);
-            }
-        }
-
-        private bool IsOfflineSyncedWatchdogTransportReady()
-        {
-            var socket = _socketSlot.Current;
-            return ConnectionTransportReady.IsReady(
-                socket != null,
-                socket != null && socket.IsConnected,
-                socket != null && socket.IsHandshakeComplete);
-        }
+        void IPublishConnectionUpdateHost.SyncOfflineSyncedWatchdog(string status) =>
+            _offlineReplayWire.SyncWatchdogWithStatus(status);
 
         /// <summary>
         /// Writes the suppress flag used by the background toast presenter (winmd cannot
@@ -1137,7 +1102,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 }
 
             _syncWork.SetReplayDrainPending(auth.Registered);
-            _offlineReplayLatch.ResetForNewOpen();
+            _offlineReplayWire.ResetForNewOpen();
             if (!_sessionFlags.FatalSessionEnded)
             {
                 _sessionFlags.SuppressReconnect = false;

@@ -26,8 +26,11 @@ namespace Unison.Uwp.Services.WhatsApp
             HistoryCatchUpHost historyCatchUp,
             ConnectionSessionHost connectionSession,
             ChatCatalogPersistenceHost catalogPersistence,
-            StartupMaintenanceHost startupMaintenance)
+            StartupMaintenanceHost startupMaintenance,
+            OfflineReplayWireHost offlineReplayWire)
         {
+            OfflineReplayWire = offlineReplayWire
+                ?? throw new ArgumentNullException(nameof(offlineReplayWire));
             CatalogPersistence = catalogPersistence
                 ?? throw new ArgumentNullException(nameof(catalogPersistence));
             Reconnect = reconnect ?? throw new ArgumentNullException(nameof(reconnect));
@@ -59,6 +62,8 @@ namespace Unison.Uwp.Services.WhatsApp
         public ConnectionSessionHost ConnectionSession { get; }
 
         public StartupMaintenanceHost StartupMaintenance { get; }
+
+        public OfflineReplayWireHost OfflineReplayWire { get; }
 
         public ChatCatalogPersistenceHost CatalogPersistence { get; }
 

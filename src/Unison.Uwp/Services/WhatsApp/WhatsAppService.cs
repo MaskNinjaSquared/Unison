@@ -263,9 +263,7 @@ namespace Unison.Uwp.Services.WhatsApp
         private readonly StartupMaintenanceHost _startupHost;
 
         private readonly SyncWorkGate _syncWork;
-        private readonly OfflineReplayFirstReleaseLatch _offlineReplayLatch =
-            new OfflineReplayFirstReleaseLatch();
-        private OfflineSyncedWatchdog _offlineSyncedWatchdog;
+        private readonly OfflineReplayWireHost _offlineReplayWire;
         private readonly LiveMessagePersist _liveMessages;
         private PersistedMessageLookup _persistedLookup;
         private ActiveChatCacheSideEffects _activeChatSideEffects;
@@ -286,8 +284,6 @@ namespace Unison.Uwp.Services.WhatsApp
         private readonly SocketFacadeWireOwner _socketFacadeWire;
         private readonly InboundWireNodeOwner _inboundWireNode;
         private readonly DecryptedMessageWireOwner _decryptedMessageWire;
-        private readonly HistorySyncWireOwner _historySyncWire;
-        private readonly OfflineReplayReleaseOwner _offlineReplayRelease;
         private IKeyStore _pendingClearSessionKeyStore;
         private int _enrichmentAwaitingListPaint;
         private ChatListInitialPaintGate _listPaintGate;

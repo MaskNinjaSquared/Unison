@@ -502,7 +502,19 @@ namespace Unison.Uwp
                 sp.GetRequiredService<HistoryCatchUpHost>(),
                 sp.GetRequiredService<ConnectionSessionHost>(),
                 sp.GetRequiredService<ChatCatalogPersistenceHost>(),
-                sp.GetRequiredService<StartupMaintenanceHost>()));
+                sp.GetRequiredService<StartupMaintenanceHost>(),
+                sp.GetRequiredService<OfflineReplayWireHost>()));
+            services.AddSingleton(sp => new OfflineReplayWireHost(
+                () => sp.GetRequiredService<IHistoryWireIngress>(),
+                () => sp.GetRequiredService<IMessageWireIngress>(),
+                sp.GetRequiredService<IConnectionSocketControl>(),
+                sp.GetRequiredService<ConnectionSessionFlags>(),
+                sp.GetRequiredService<ConnectionSlot<AuthState>>(),
+                sp.GetRequiredService<SyncWorkGate>(),
+                sp.GetRequiredService<ChatCatalogPersistenceHost>(),
+                sp.GetRequiredService<StartupMaintenanceHost>(),
+                sp.GetRequiredService<HistoryCatchUpHost>(),
+                sp.GetRequiredService<IRuntimeDiagnostics>()));
             services.AddSingleton(sp => new ChatCatalogPersistenceHost(
                 sp.GetRequiredService<ChatStateStore>(),
                 sp.GetRequiredService<JidAliasTable>(),

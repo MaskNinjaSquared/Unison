@@ -127,6 +127,7 @@ namespace Unison.Uwp.Services.WhatsApp
             _historyCatchUp = wire.HistoryCatchUp;
             _connectionSession = wire.ConnectionSession;
             _startupHost = wire.StartupMaintenance;
+            _offlineReplayWire = wire.OfflineReplayWire;
             _reconnectHost = wire.Reconnect;
             _softReconnect = _reconnectHost.Coordinator;
             _healthMonitors = new ConnectionHealthMonitorOwner(this);
@@ -332,69 +333,6 @@ namespace Unison.Uwp.Services.WhatsApp
                             ex.Message);
                     }
                 });
-            _historySyncWire = new HistorySyncWireOwner(
-                () => _sessionFlags.FatalSessionEnded,
-                () => _authSlot.Current != null,
-                (conversations, syncType) =>
-                    _diagnostics.Write(
-                        "history",
-                        "sync-apply-begin",
-                        "conversations=" + conversations + "; type=" + syncType),
-                (conversations, elapsedMs) =>
-                    _diagnostics.Write(
-                        "history",
-                        "sync-apply-end",
-                        "conversations=" + conversations + "; elapsedMs=" + elapsedMs),
-                ApplyHistorySyncFromWireAsync);
-            _offlineSyncedWatchdog = new OfflineSyncedWatchdog(
-                IsOfflineSyncedWatchdogTransportReady,
-                () => _offlineReplayLatch.HasReleased,
-                generation =>
-                {
-                    _diagnostics.Write(
-                        "connection",
-                        "offline-synced-watchdog",
-                        "fired|generation=" + generation);
-                    _ = OfflineReplayReleaseWire.RunAsync(0);
-                },
-                detail => _diagnostics.Write(
-                    "connection",
-                    "offline-synced-watchdog",
-                    detail));
-            _offlineReplayRelease = new OfflineReplayReleaseOwner(
-                () => _offlineReplayLatch.TryMarkFirstRelease(),
-                (offlineCount, firstRelease) =>
-                {
-                    Debug.WriteLine(
-                        "[WhatsAppService] Received pending-notification replay release (" +
-                        offlineCount + " messages); first=" + firstRelease);
-                    _diagnostics.Write(
-                        "connection",
-                        "offline-replay-release",
-                        "count=" + offlineCount + "; first=" + firstRelease);
-                    _offlineSyncedWatchdog?.Cancel("offline-replay-release");
-                },
-                () => _syncWork.SetReplayDrainPending(false),
-                FlushOfflineReplayFromWireAsync,
-                () =>
-                {
-                    var socket = _socketSlot.Current;
-                    return ConnectionTransportReady.IsReady(
-                        socket != null,
-                        socket != null && socket.IsConnected,
-                        socket != null && socket.IsHandshakeComplete);
-                },
-                offlineCount =>
-                    _diagnostics.Write(
-                        "connection",
-                        "offline-replay-synced-skipped",
-                        "reason=not-connected; count=" + offlineCount +
-                        "; socketConnected=" + (_socketSlot.Current != null && _socketSlot.Current.IsConnected) +
-                        "; handshake=" + (_socketSlot.Current != null && _socketSlot.Current.IsHandshakeComplete)),
-                NotifyOfflineReplayMessagesReleasedAsync,
-                _startupHost.SchedulePostReplay,
-                IsHistoryCatchUpActive,
-                offlineCount => _ = _historyCatchUp.PostOfflineFreshness.RunAsync(offlineCount));
             _chatState.Chats.CollectionChanged += (s, e) => _chatRows.Invalidate();
 
             Debug.WriteLine(

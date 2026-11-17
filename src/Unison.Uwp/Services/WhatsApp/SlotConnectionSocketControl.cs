@@ -29,6 +29,24 @@ namespace Unison.Uwp.Services.WhatsApp
             }
         }
 
+        public bool IsTransportOpen
+        {
+            get
+            {
+                IWhatsAppSocket socket = _socketSlot.Current;
+                return socket != null && socket.IsConnected;
+            }
+        }
+
+        public bool IsHandshakeComplete
+        {
+            get
+            {
+                IWhatsAppSocket socket = _socketSlot.Current;
+                return socket != null && socket.IsHandshakeComplete;
+            }
+        }
+
         public bool Holds(object socket) => _socketSlot.Holds(socket as IWhatsAppSocket);
 
         public object AuthOf(object socket) => (socket as IWhatsAppSocket)?.Auth;

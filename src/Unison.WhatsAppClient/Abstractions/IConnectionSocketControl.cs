@@ -16,6 +16,12 @@ namespace Unison.WhatsAppClient.Abstractions
         /// <summary>A socket is in the slot, its transport is open and the Noise handshake is done.</summary>
         bool IsConnected { get; }
 
+        /// <summary>A socket is in the slot and its transport is open (handshake not implied).</summary>
+        bool IsTransportOpen { get; }
+
+        /// <summary>A socket is in the slot and its Noise handshake is done.</summary>
+        bool IsHandshakeComplete { get; }
+
         /// <summary>True when <paramref name="socket"/> is non-null and still the one in the slot.</summary>
         bool Holds(object socket);
 

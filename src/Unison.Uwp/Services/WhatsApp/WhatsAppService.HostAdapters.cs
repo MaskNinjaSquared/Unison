@@ -343,61 +343,9 @@ namespace Unison.Uwp.Services.WhatsApp
 
         internal DecryptedMessageWireOwner DecryptedMessageWire => _decryptedMessageWire;
 
-        internal HistorySyncWireOwner HistorySyncWire => _historySyncWire;
+        internal HistorySyncWireOwner HistorySyncWire => _offlineReplayWire.HistorySyncWire;
 
-        internal OfflineReplayReleaseOwner OfflineReplayReleaseWire => _offlineReplayRelease;
-
-        private Task ApplyHistorySyncFromWireAsync(HistorySync sync)
-        {
-            if (History == null)
-            {
-                throw new InvalidOperationException(
-                    "IHistoryService must resolve before history sync apply.");
-            }
-
-            return History.ApplyHistorySyncAsync(sync);
-        }
-
-        private async Task FlushOfflineReplayFromWireAsync(string reason)
-            {
-                try
-                {
-                await _offlineReplayFlush.FlushOfflineReplayAsync(reason).ConfigureAwait(false);
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine(
-                    "[WhatsAppService] Non-fatal offline replay message flush failure after offline drain: " +
-                    ex.Message);
-            }
-        }
-
-        private async Task NotifyOfflineReplayMessagesReleasedAsync(
-            int offlineCount,
-            bool firstRelease,
-            bool transportReady)
-        {
-            try
-            {
-                if (Messages != null)
-                {
-                    await Messages.NotifyOfflineReplayReleasedAsync(
-                        offlineCount,
-                        firstRelease,
-                        transportReady).ConfigureAwait(false);
-                }
-                else
-                {
-                    Debug.WriteLine(
-                        "[WhatsAppService] Offline settle skipped: MessageFacade not attached.");
-                }
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine(
-                    "[WhatsAppService] Non-fatal offline replay settle failure: " + ex.Message);
-            }
-        }
+        internal OfflineReplayReleaseOwner OfflineReplayReleaseWire => _offlineReplayWire.OfflineReplayRelease;
 
     }
 }
