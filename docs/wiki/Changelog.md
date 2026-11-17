@@ -2,6 +2,10 @@
 
 Newest first.
 
+## Phase E stage 1 — send I/O envelopes (text + media)
+
+`IMessageTextIo` / `IMessageMediaIo` + request DTOs / `ChatMessageDto` live in `Unison.WhatsAppClient/Io/Messages`. `OutgoingTextSend` and `OutgoingMediaSend` speak only that surface; `MessageFacade` adapts Core `IMessageService` send methods ↔ client I/O. ViewModels unchanged; no Core→WhatsAppClient csproj flip. Timeline/persist still hold Core `ChatMessage` internally.
+
 ## Phase D stage 4 — `ChatCatalogPersistenceHost` (netstandard)
 
 `ChatCatalogPersistenceHost` (`Unison.WhatsAppClient/Helpers/Chats`) owns the persist scheduler, both debounce timers (`ChatCatalogDebounceTimer` moved with it), the row buffer, `ChatCatalogDiskPersistence` and `OfflineReplayFlush`, and implements `IChatCatalogPersistence`, `IChatCatalogPersistHost` and `IOfflineReplayFlushIoHost`. DI resolves `IChatCatalogPersistence` and `OfflineReplayFlush` from it, so neither builds `WhatsAppService` any more. Debug prefix is `[ChatCatalogPersistenceHost]`. Move-only.

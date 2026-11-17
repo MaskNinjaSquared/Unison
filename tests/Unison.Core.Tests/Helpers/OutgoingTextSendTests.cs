@@ -6,9 +6,10 @@ using Unison.Core.Contracts;
 using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Helpers;
 using Unison.Core.Models;
-using Unison.WhatsAppClient.Helpers;
-using Xunit;
 using Unison.WhatsAppClient.Abstractions;
+using Unison.WhatsAppClient.Helpers;
+using Unison.WhatsAppClient.Io.Messages;
+using Xunit;
 
 namespace Unison.Core.Tests.Helpers
 {
@@ -54,6 +55,9 @@ namespace Unison.Core.Tests.Helpers
             () => At,
             d => { _delays.Add(d); return Task.CompletedTask; });
 
+        private static SendTextRequest Text(string jid, string text) =>
+            new SendTextRequest { ChatJid = jid, Text = text };
+
         [Theory]
         [InlineData(null, "hi")]
         [InlineData(" ", "hi")]
@@ -61,7 +65,7 @@ namespace Unison.Core.Tests.Helpers
         [InlineData("555@s.whatsapp.net", "  ")]
         public async Task Blank_destination_or_text_is_rejected_before_anything_happens(string jid, string text)
         {
-            await Assert.ThrowsAsync<ArgumentException>(() => Create().SendAsync(jid, text));
+            await Assert.ThrowsAsync<ArgumentException>(() => Create().SendAsync(Text(jid, text)));
 
             Assert.Empty(_host.Log);
         }
@@ -71,7 +75,7 @@ namespace Unison.Core.Tests.Helpers
         {
             _host.Outcomes.Enqueue(Accepted());
 
-            ChatMessage sent = await Create().SendAsync("555@s.whatsapp.net", "hello");
+            ChatMessageDto sent = await Create().SendAsync(Text("555@s.whatsapp.net", "hello"));
 
             Assert.Equal(
                 new[]
@@ -90,7 +94,7 @@ namespace Unison.Core.Tests.Helpers
                 _host.Log);
             Assert.Equal(ChatMessage.StatusSent, sent.Status);
             Assert.Equal("3EB0ID", sent.Id);
-            Assert.Equal(At, sent.Timestamp);
+            Assert.Equal(At, sent.TimestampUtc);
             Assert.Equal("111@s.whatsapp.net", sent.ParticipantJid);
         }
 
@@ -100,7 +104,7 @@ namespace Unison.Core.Tests.Helpers
             _jids.Canonical["999@lid"] = "555@s.whatsapp.net";
             _host.Outcomes.Enqueue(Accepted());
 
-            ChatMessage sent = await Create().SendAsync("999@lid", "hello");
+            ChatMessageDto sent = await Create().SendAsync(Text("999@lid", "hello"));
 
             Assert.Equal("555@s.whatsapp.net", sent.RemoteJid);
             Assert.Equal("555@s.whatsapp.net", _host.Requests[0].ChatJid);
@@ -112,7 +116,7 @@ namespace Unison.Core.Tests.Helpers
             _jids.SelfLinked.Add("111@s.whatsapp.net");
             _host.Outcomes.Enqueue(Accepted());
 
-            ChatMessage sent = await Create().SendAsync("111@s.whatsapp.net", "note to self");
+            ChatMessageDto sent = await Create().SendAsync(Text("111@s.whatsapp.net", "note to self"));
 
             Assert.Equal(ChatMessage.StatusRead, sent.Status);
         }
@@ -123,7 +127,7 @@ namespace Unison.Core.Tests.Helpers
             _host.StatusAppliedOnAccept = ChatMessage.StatusDelivered;
             _host.Outcomes.Enqueue(Accepted());
 
-            ChatMessage sent = await Create().SendAsync("555@s.whatsapp.net", "hello");
+            ChatMessageDto sent = await Create().SendAsync(Text("555@s.whatsapp.net", "hello"));
 
             Assert.Equal(ChatMessage.StatusDelivered, sent.Status);
         }
@@ -140,7 +144,7 @@ namespace Unison.Core.Tests.Helpers
             });
             _host.Outcomes.Enqueue(Accepted());
 
-            ChatMessage sent = await Create().SendAsync("555@s.whatsapp.net", "hello");
+            ChatMessageDto sent = await Create().SendAsync(Text("555@s.whatsapp.net", "hello"));
 
             Assert.Equal(ChatMessage.StatusSent, sent.Status);
             Assert.Same(deadSocket, _host.Invalidated[0].Token);
@@ -164,7 +168,7 @@ namespace Unison.Core.Tests.Helpers
                 Error = refusal
             });
 
-            ChatMessage sent = await Create().SendAsync("555@s.whatsapp.net", "hello");
+            ChatMessageDto sent = await Create().SendAsync(Text("555@s.whatsapp.net", "hello"));
 
             Assert.Equal(ChatMessage.StatusFailed, sent.Status);
             Assert.Single(_host.Requests);
@@ -183,7 +187,7 @@ namespace Unison.Core.Tests.Helpers
             _host.Outcomes.Enqueue(new OutgoingSendAttempt { Outcome = OutgoingSendAttemptOutcome.SocketNotReady, Error = notReady });
             _host.Outcomes.Enqueue(new OutgoingSendAttempt { Outcome = OutgoingSendAttemptOutcome.SocketNotReady, Error = notReady });
 
-            ChatMessage sent = await Create().SendAsync("555@s.whatsapp.net", "hello");
+            ChatMessageDto sent = await Create().SendAsync(Text("555@s.whatsapp.net", "hello"));
 
             Assert.Equal(ChatMessage.StatusFailed, sent.Status);
             Assert.Equal(2, _host.Requests.Count);
@@ -196,7 +200,7 @@ namespace Unison.Core.Tests.Helpers
         {
             _host.Outcomes.Enqueue(new OutgoingSendAttempt { Outcome = OutgoingSendAttemptOutcome.MessageRefused });
 
-            ChatMessage sent = await Create().SendAsync("555@s.whatsapp.net", "hello");
+            ChatMessageDto sent = await Create().SendAsync(Text("555@s.whatsapp.net", "hello"));
 
             Assert.Equal(ChatMessage.StatusFailed, sent.Status);
             Assert.IsType<InvalidOperationException>(_host.Errors[0]);
@@ -215,7 +219,7 @@ namespace Unison.Core.Tests.Helpers
             });
             _host.Outcomes.Enqueue(Accepted());
 
-            ChatMessage sent = await Create().SendAsync("555@s.whatsapp.net", "hello");
+            ChatMessageDto sent = await Create().SendAsync(Text("555@s.whatsapp.net", "hello"));
 
             Assert.Equal(ChatMessage.StatusSent, sent.Status);
             Assert.Equal(2, _host.Requests.Count);

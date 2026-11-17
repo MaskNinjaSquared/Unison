@@ -5,7 +5,8 @@
 // outbox before the transport is touched, then one bounded reconnect-and-retry
 // with the same id, then the bubble is settled as sent or failed and queued for
 // the normal flush. A send never throws for a transport problem; the failure is
-// the bubble's status.
+// the bubble's status. The I/O boundary returns ChatMessageDto; the timeline
+// still holds Core ChatMessage until a later Phase E cut.
 // =============================================================================
 using System;
 using System.Threading.Tasks;
@@ -13,8 +14,9 @@ using Unison.Baileys.Crypto;
 using Unison.Core.Contracts;
 using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Helpers;
-using Unison.Core.Models;
+using Unison.Core.Models;
 using Unison.WhatsAppClient.Abstractions;
+using Unison.WhatsAppClient.Io.Messages;
 
 namespace Unison.WhatsAppClient.Helpers
 {
@@ -54,24 +56,26 @@ namespace Unison.WhatsAppClient.Helpers
 
         // No ConfigureAwait(false) anywhere below: the host mutates the in-memory timeline,
         // which is only safe from the thread the caller (the UI) started on.
-        public Task<ChatMessage> SendAsync(string jid, string text)
+        public async Task<ChatMessageDto> SendAsync(SendTextRequest request)
         {
-            return SendAsync(jid, new OutgoingTextMentions { Text = text });
-        }
+            if (request == null)
+            {
+                throw new ArgumentNullException(nameof(request));
+            }
 
-        public async Task<ChatMessage> SendAsync(string jid, OutgoingTextMentions message)
-        {
-            string text = message != null ? message.Text : null;
+            string jid = request.ChatJid;
+            string text = request.Text;
             if (string.IsNullOrWhiteSpace(jid))
             {
-                throw new ArgumentException("A destination JID is required", nameof(jid));
+                throw new ArgumentException("A destination JID is required", nameof(request));
             }
 
             if (string.IsNullOrWhiteSpace(text))
             {
-                throw new ArgumentException("Message text is empty", nameof(text));
+                throw new ArgumentException("Message text is empty", nameof(request));
             }
 
+            OutgoingQuote quote = SendTextRequestMapper.ToCoreQuote(request.Quote);
             string chatJid = _jids.GetCanonicalJid(JidHelper.Normalize(jid));
             string messageId = _newMessageId();
             _host.RecordSendAttempt(messageId);
@@ -86,10 +90,10 @@ namespace Unison.WhatsAppClient.Helpers
                     Status = ChatMessage.StatusPending
                 },
                 text,
-                message.Mentions,
-                message.MentionAll,
-                message.Quote);
-            if (message.MarkAsForwarded)
+                request.Mentions,
+                request.MentionAll,
+                quote);
+            if (request.MarkAsForwarded)
             {
                 bubble.IsForwarded = true;
             }
@@ -99,7 +103,7 @@ namespace Unison.WhatsAppClient.Helpers
             _notifyChatChanged(chatJid);
             await _host.PersistLiveAsync(chatJid, bubble);
 
-            Exception failure = await SendWithRetryAsync(chatJid, message, messageId);
+            Exception failure = await SendWithRetryAsync(chatJid, request, quote, messageId);
             if (failure == null)
             {
                 if (OutgoingSendSettlement.ShouldPromoteAfterTransportAccept(bubble.Status))
@@ -121,11 +125,15 @@ namespace Unison.WhatsAppClient.Helpers
             await _host.PersistLiveAsync(chatJid, bubble);
             _host.QueueForPersist(chatJid, bubble);
             _notifyChatChanged(chatJid);
-            return bubble;
+            return ChatMessageDtoMapper.FromBubble(bubble);
         }
 
         /// <summary>Null when the server took the message; otherwise the last error seen.</summary>
-        private async Task<Exception> SendWithRetryAsync(string chatJid, OutgoingTextMentions message, string messageId)
+        private async Task<Exception> SendWithRetryAsync(
+            string chatJid,
+            SendTextRequest request,
+            OutgoingQuote quote,
+            string messageId)
         {
             Exception lastError = null;
             for (int attempt = 1; attempt <= OutgoingTextSendRetry.MaxAttempts; attempt++)
@@ -133,12 +141,12 @@ namespace Unison.WhatsAppClient.Helpers
                 OutgoingSendAttempt result = await _host.TrySendTextOnceAsync(new OutgoingTextAttempt
                 {
                     ChatJid = chatJid,
-                    Text = message.Text,
-                    Mentions = message.Mentions,
-                    MentionAll = message.MentionAll,
-                    Quote = message.Quote,
-                    MarkAsForwarded = message.MarkAsForwarded,
-                    ForwardingScore = message.ForwardingScore,
+                    Text = request.Text,
+                    Mentions = request.Mentions,
+                    MentionAll = request.MentionAll,
+                    Quote = quote,
+                    MarkAsForwarded = request.MarkAsForwarded,
+                    ForwardingScore = request.ForwardingScore,
                     MessageId = messageId,
                     Attempt = attempt,
                     ConnectTimeout = OutgoingTextSendRetry.ConnectTimeout(attempt),

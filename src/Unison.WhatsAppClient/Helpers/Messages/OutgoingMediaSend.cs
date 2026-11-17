@@ -5,6 +5,7 @@
 // front so the bubble (and the cached file named after it) goes on screen as
 // pending before the upload, then settles as sent or failed. There is no retry,
 // and a transport failure never throws: the failure is the bubble's status.
+// I/O boundary returns ChatMessageDto; timeline still holds Core ChatMessage.
 // =============================================================================
 using System;
 using System.Collections.Generic;
@@ -13,8 +14,9 @@ using Unison.Baileys.Crypto;
 using Unison.Core.Contracts;
 using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Helpers;
-using Unison.Core.Models;
+using Unison.Core.Models;
 using Unison.WhatsAppClient.Abstractions;
+using Unison.WhatsAppClient.Io.Messages;
 
 namespace Unison.WhatsAppClient.Helpers
 {
@@ -57,12 +59,23 @@ namespace Unison.WhatsAppClient.Helpers
 
         // No ConfigureAwait(false) anywhere below: the host mutates the in-memory timeline,
         // which is only safe from the thread the caller (the UI) started on.
-        public Task<ChatMessage> SendImageAsync(string jid, byte[] imageBytes, string caption)
+        public Task<ChatMessageDto> SendImageAsync(SendImageRequest request)
         {
-            return SendImageAsync(jid, imageBytes, caption, null, 0, 0);
+            if (request == null)
+            {
+                throw new ArgumentNullException(nameof(request));
+            }
+
+            return SendImageAsync(
+                request.ChatJid,
+                request.ImageBytes,
+                request.Caption,
+                null,
+                0,
+                0);
         }
 
-        private async Task<ChatMessage> SendImageAsync(
+        private async Task<ChatMessageDto> SendImageAsync(
             string jid,
             byte[] imageBytes,
             string caption,
@@ -93,39 +106,42 @@ namespace Unison.WhatsAppClient.Helpers
                 message,
                 ChatPreviewKind.Image,
                 () => _host.SendImageAsync(jid, imageBytes, caption, messageId));
-            return message;
+            return ChatMessageDtoMapper.FromBubble(message);
         }
 
         /// <summary>
         /// Sends a selected image batch in picker order. Each image has its own WhatsApp
         /// message and upload, so the caption is deliberately attached only to the first one.
         /// </summary>
-        public async Task<IReadOnlyList<ChatMessage>> SendImagesAsync(
-            string jid,
-            IReadOnlyList<byte[]> imageBytes,
-            string caption)
+        public async Task<IReadOnlyList<ChatMessageDto>> SendImagesAsync(SendImagesRequest request)
         {
+            if (request == null)
+            {
+                throw new ArgumentNullException(nameof(request));
+            }
+
+            IReadOnlyList<byte[]> imageBytes = request.ImageBytes;
             if (imageBytes == null || imageBytes.Count == 0)
             {
-                throw new ArgumentException("At least one image is required", nameof(imageBytes));
+                throw new ArgumentException("At least one image is required", nameof(request));
             }
 
             for (int i = 0; i < imageBytes.Count; i++)
             {
                 if (imageBytes[i] == null || imageBytes[i].Length == 0)
                 {
-                    throw new ArgumentException("Image payload is empty", nameof(imageBytes));
+                    throw new ArgumentException("Image payload is empty", nameof(request));
                 }
             }
 
-            var messages = new List<ChatMessage>(imageBytes.Count);
+            var messages = new List<ChatMessageDto>(imageBytes.Count);
             string localMediaBatchId = imageBytes.Count > 1 ? Guid.NewGuid().ToString("N") : null;
             for (int i = 0; i < imageBytes.Count; i++)
             {
                 messages.Add(await SendImageAsync(
-                    jid,
+                    request.ChatJid,
                     imageBytes[i],
-                    i == 0 ? caption : null,
+                    i == 0 ? request.Caption : null,
                     localMediaBatchId,
                     i,
                     imageBytes.Count));
@@ -134,14 +150,28 @@ namespace Unison.WhatsAppClient.Helpers
             return messages;
         }
 
-        public async Task<ChatMessage> SendAudioAsync(string jid, OutgoingAudio audio)
+        public async Task<ChatMessageDto> SendAudioAsync(SendAudioRequest request)
         {
-            if (audio?.Bytes == null || audio.Bytes.Length == 0)
+            if (request == null)
             {
-                throw new ArgumentException("Audio payload is empty", nameof(audio));
+                throw new ArgumentNullException(nameof(request));
             }
 
-            string chatJid = _jids.GetCanonicalJid(JidHelper.Normalize(jid));
+            if (request.AudioBytes == null || request.AudioBytes.Length == 0)
+            {
+                throw new ArgumentException("Audio payload is empty", nameof(request));
+            }
+
+            var audio = new OutgoingAudio
+            {
+                Bytes = request.AudioBytes,
+                MimeType = request.MimeType,
+                DurationSeconds = request.DurationSeconds,
+                IsVoiceMessage = request.IsVoiceMessage,
+                ViewOnce = request.ViewOnce
+            };
+
+            string chatJid = _jids.GetCanonicalJid(JidHelper.Normalize(request.ChatJid));
             string messageId = _newMessageId();
             string localUri = await _mediaCache.SaveAsync(
                 MediaCacheKind.Audio,
@@ -160,26 +190,39 @@ namespace Unison.WhatsAppClient.Helpers
                 chatJid,
                 message,
                 ChatPreviewKind.Voice,
-                () => _host.SendAudioAsync(jid, audio, messageId));
-            return message;
+                () => _host.SendAudioAsync(request.ChatJid, audio, messageId));
+            return ChatMessageDtoMapper.FromBubble(message);
         }
 
-        public async Task<ChatMessage> SendDocumentAsync(string jid, OutgoingDocument document)
+        public async Task<ChatMessageDto> SendDocumentAsync(SendDocumentRequest request)
         {
-            if (document?.Bytes == null || document.Bytes.Length == 0)
+            if (request == null)
             {
-                throw new ArgumentException("Document payload is empty", nameof(document));
+                throw new ArgumentNullException(nameof(request));
             }
 
-            if (!OutgoingDocumentKinds.IsAllowedMime(document.MimeType))
+            if (request.DocumentBytes == null || request.DocumentBytes.Length == 0)
             {
-                throw new ArgumentException("Document MIME type is not allowed", nameof(document));
+                throw new ArgumentException("Document payload is empty", nameof(request));
             }
+
+            if (!OutgoingDocumentKinds.IsAllowedMime(request.MimeType))
+            {
+                throw new ArgumentException("Document MIME type is not allowed", nameof(request));
+            }
+
+            var document = new OutgoingDocument
+            {
+                Bytes = request.DocumentBytes,
+                MimeType = request.MimeType,
+                FileName = request.FileName,
+                Caption = request.Caption
+            };
 
             string fileName = string.IsNullOrWhiteSpace(document.FileName)
                 ? "document"
                 : document.FileName.Trim();
-            string chatJid = _jids.GetCanonicalJid(JidHelper.Normalize(jid));
+            string chatJid = _jids.GetCanonicalJid(JidHelper.Normalize(request.ChatJid));
             string messageId = _newMessageId();
             string localUri = await _mediaCache.SaveAsync(
                 MediaCacheKind.Document,
@@ -199,8 +242,8 @@ namespace Unison.WhatsAppClient.Helpers
                 chatJid,
                 message,
                 ChatPreviewKind.Document,
-                () => _host.SendDocumentAsync(jid, document, messageId));
-            return message;
+                () => _host.SendDocumentAsync(request.ChatJid, document, messageId));
+            return ChatMessageDtoMapper.FromBubble(message);
         }
 
         private OutgoingMessageStamp PendingStamp(string messageId, string chatJid)

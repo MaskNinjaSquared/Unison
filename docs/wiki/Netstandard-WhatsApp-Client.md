@@ -657,11 +657,21 @@ Move-only: owner bodies, construction order and every threshold are unchanged; D
 
 Next step, when scheduled: a startup cluster that owns `InitializeConnectionStateAsync` + persisted UI load + deferred maintenance, with the connection init behind a port.
 
-### Phase E (future) — client-owned public I/O
+### Phase E — client-owned public I/O
 
-**Not** Phase C/D work. Long-term goal: `Unison.WhatsAppClient` publishable / reusable without dragging Unison UI models — a portable WhatsApp **policy** library whose **entry and exit** types live on the client (or a thin contracts package next to it), not on Unison.Core ViewModel-shaped models.
+Long-term goal: `Unison.WhatsAppClient` publishable / reusable without dragging Unison UI models — a portable WhatsApp **policy** library whose **entry and exit** types live on the client (or a thin contracts package next to it), not on Unison.Core ViewModel-shaped models.
 
-Until E ships, façades **keep** returning Core `Models` / `Contracts` (dependency arrow `WhatsAppClient` → `Core` stays). That is portable vs WinRT; it is **not** yet portable vs Unison’s app domain.
+Until the csproj flip, façades **keep** exposing Core `I*` contracts to ViewModels (dependency arrow `WhatsAppClient` → `Core` stays). That is portable vs WinRT; it is **not** yet portable vs Unison’s app domain.
+
+#### Phase E stage 1 — send I/O (text + media)
+
+Done. Client owns under `WhatsAppClient/Io/Messages`:
+
+- Text: `IMessageTextIo` / `SendTextRequest` / `OutgoingQuoteRequest`
+- Media: `IMessageMediaIo` / `SendImageRequest` / `SendImagesRequest` / `SendAudioRequest` / `SendDocumentRequest`
+- Shared: `ChatMessageDto` (+ media URI / batch fields)
+
+`OutgoingTextSend` and `OutgoingMediaSend` take requests and return DTOs; timeline/persist still use Core `ChatMessage`. `MessageFacade` adapts Core `IMessageService` send methods ↔ these I/O ports (both registered in DI). Kind fields on the envelope are **strings**, not mirrored enums. Still Core-shaped (not Auto): load/timeline APIs, Ensure*Available, react, and the csproj dependency flip.
 
 | Now (C/D) | Later (E) |
 |---|---|

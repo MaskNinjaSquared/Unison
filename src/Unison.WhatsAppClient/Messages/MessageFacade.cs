@@ -19,6 +19,7 @@ using Unison.Core.State;
 using Unison.WhatsAppClient.Abstractions;
 using Unison.WhatsAppClient.Groups;
 using Unison.WhatsAppClient.Helpers;
+using Unison.WhatsAppClient.Io.Messages;
 using Unison.WhatsAppClient.Status;
 
 namespace Unison.WhatsAppClient.Messages
@@ -27,9 +28,14 @@ namespace Unison.WhatsAppClient.Messages
     /// Message facade: Person upsert, domain <see cref="ChatMessage"/> construction, then WA transport.
     /// Prefer growing APIs here (e.g. <see cref="GetChatMessage"/>) instead of in WhatsAppService.
     /// Owns the missing-message ledger and placeholder-resend dispatch; the host only exposes
-    /// <see cref="IPlaceholderResendSocket"/>.
+    /// <see cref="IPlaceholderResendSocket"/>. Text send crosses the Phase E I/O boundary
+    /// (<see cref="IMessageTextIo"/>) and adapts back to Core for <see cref="IMessageService"/>.
     /// </summary>
-    public sealed class MessageFacade : IMessageWireIngress, IMissingMessageChatHost
+    public sealed class MessageFacade :
+        IMessageWireIngress,
+        IMissingMessageChatHost,
+        IMessageTextIo,
+        IMessageMediaIo
     {
         private readonly IPersonStore _personStore;
         private readonly IChatMessagePayloadMapper _chatMessageMapper;
@@ -1474,15 +1480,21 @@ namespace Unison.WhatsAppClient.Messages
         /// Shows the bubble at once, then sends with one bounded reconnect. A transport failure
         /// is the returned message's <see cref="ChatMessage.StatusFailed"/>, not an exception.
         /// </summary>
-        public Task<ChatMessage> SendTextMessageAsync(string jid, string text)
+        public async Task<ChatMessage> SendTextMessageAsync(string jid, string text)
         {
-            return _textSend.SendAsync(jid, text);
+            ChatMessageDto dto = await SendTextAsync(SendTextRequestMapper.FromCore(jid, text));
+            return ChatMessageDtoMapper.ToBubble(dto);
         }
 
-        public Task<ChatMessage> SendTextMessageAsync(string jid, OutgoingTextMentions message)
+        public async Task<ChatMessage> SendTextMessageAsync(string jid, OutgoingTextMentions message)
         {
-            return _textSend.SendAsync(jid, message);
+            ChatMessageDto dto = await SendTextAsync(SendTextRequestMapper.FromCore(jid, message));
+            return ChatMessageDtoMapper.ToBubble(dto);
         }
+
+        /// <inheritdoc />
+        public Task<ChatMessageDto> SendTextAsync(SendTextRequest request) =>
+            _textSend.SendAsync(request);
 
         /// <inheritdoc />
         public async Task<ChatMessage> ForwardMessageAsync(
@@ -1527,14 +1539,16 @@ namespace Unison.WhatsAppClient.Messages
                 "; to=" + targetJid +
                 "; score=" + score);
 
-            return await _textSend.SendAsync(
-                targetJid,
-                new OutgoingTextMentions
-                {
-                    Text = body,
-                    MarkAsForwarded = true,
-                    ForwardingScore = score
-                }).ConfigureAwait(false);
+            ChatMessageDto forwarded = await SendTextAsync(
+                SendTextRequestMapper.FromCore(
+                    targetJid,
+                    new OutgoingTextMentions
+                    {
+                        Text = body,
+                        MarkAsForwarded = true,
+                        ForwardingScore = score
+                    })).ConfigureAwait(false);
+            return ChatMessageDtoMapper.ToBubble(forwarded);
         }
 
         private ChatMessage FindLiveMessage(string chatJid, string messageId)
@@ -1591,17 +1605,32 @@ namespace Unison.WhatsAppClient.Messages
             return null;
         }
 
-        public Task SendImageAsync(string jid, byte[] imageBytes, string caption)
-        {
-            return _mediaSend.SendImageAsync(jid, imageBytes, caption);
-        }
+        public Task SendImageAsync(string jid, byte[] imageBytes, string caption) =>
+            SendImageAsync(new SendImageRequest
+            {
+                ChatJid = jid,
+                ImageBytes = imageBytes,
+                Caption = caption
+            });
 
-        public Task<IReadOnlyList<ChatMessage>> SendImagesAsync(
+        public async Task<IReadOnlyList<ChatMessage>> SendImagesAsync(
             string jid,
             IReadOnlyList<byte[]> imageBytes,
             string caption)
         {
-            return _mediaSend.SendImagesAsync(jid, imageBytes, caption);
+            IReadOnlyList<ChatMessageDto> dtos = await SendImagesAsync(new SendImagesRequest
+            {
+                ChatJid = jid,
+                ImageBytes = imageBytes,
+                Caption = caption
+            });
+            var bubbles = new List<ChatMessage>(dtos.Count);
+            for (int i = 0; i < dtos.Count; i++)
+            {
+                bubbles.Add(ChatMessageDtoMapper.ToBubble(dtos[i]));
+            }
+
+            return bubbles;
         }
 
         public async Task<ChatMessage> SendAudioMessageAsync(
@@ -1612,33 +1641,53 @@ namespace Unison.WhatsAppClient.Messages
             bool isVoiceMessage = false,
             bool viewOnce = false)
         {
-            ChatMessage message = await _mediaSend.SendAudioAsync(jid, new OutgoingAudio
+            ChatMessageDto dto = await SendAudioAsync(new SendAudioRequest
             {
-                Bytes = audioBytes,
+                ChatJid = jid,
+                AudioBytes = audioBytes,
                 MimeType = mimeType,
                 DurationSeconds = durationSeconds,
                 IsVoiceMessage = isVoiceMessage,
                 ViewOnce = viewOnce
             });
+            ChatMessage message = ChatMessageDtoMapper.ToBubble(dto);
             _availability.PrepareLocalPlaybackInBackground(message);
             return message;
         }
 
-        public Task<ChatMessage> SendDocumentAsync(
+        public async Task<ChatMessage> SendDocumentAsync(
             string jid,
             byte[] documentBytes,
             string mimeType,
             string fileName,
             string caption = null)
         {
-            return _mediaSend.SendDocumentAsync(jid, new OutgoingDocument
+            ChatMessageDto dto = await SendDocumentAsync(new SendDocumentRequest
             {
-                Bytes = documentBytes,
+                ChatJid = jid,
+                DocumentBytes = documentBytes,
                 MimeType = mimeType,
                 FileName = fileName,
                 Caption = caption
             });
+            return ChatMessageDtoMapper.ToBubble(dto);
         }
+
+        /// <inheritdoc />
+        public Task<ChatMessageDto> SendImageAsync(SendImageRequest request) =>
+            _mediaSend.SendImageAsync(request);
+
+        /// <inheritdoc />
+        public Task<IReadOnlyList<ChatMessageDto>> SendImagesAsync(SendImagesRequest request) =>
+            _mediaSend.SendImagesAsync(request);
+
+        /// <inheritdoc />
+        public Task<ChatMessageDto> SendAudioAsync(SendAudioRequest request) =>
+            _mediaSend.SendAudioAsync(request);
+
+        /// <inheritdoc />
+        public Task<ChatMessageDto> SendDocumentAsync(SendDocumentRequest request) =>
+            _mediaSend.SendDocumentAsync(request);
 
         public Task<string> EnsureAudioAvailableAsync(ChatMessage message)
         {

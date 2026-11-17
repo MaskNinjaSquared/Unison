@@ -59,6 +59,7 @@ using Unison.Uwp.Services.WhatsApp.Status;
 using Unison.WhatsAppClient.Contacts;
 using Unison.WhatsAppClient.Groups;
 using Unison.WhatsAppClient.History;
+using Unison.WhatsAppClient.Io.Messages;
 using Unison.WhatsAppClient.Messages;
 using Unison.WhatsAppClient.Status;
 using AppSessionProvider = Unison.WhatsAppClient.Abstractions.IWhatsAppSessionProvider;
@@ -864,6 +865,8 @@ namespace Unison.Uwp
                 sp => sp.GetRequiredService<OfflineReplayFlush>());
             services.AddSingleton<IMessageService>(sp => sp.GetRequiredService<MessageFacade>());
             services.AddSingleton<IMessageWireIngress>(sp => sp.GetRequiredService<MessageFacade>());
+            services.AddSingleton<IMessageTextIo>(sp => sp.GetRequiredService<MessageFacade>());
+            services.AddSingleton<IMessageMediaIo>(sp => sp.GetRequiredService<MessageFacade>());
             services.AddSingleton(sp => new MessageFacade(
                 sp.GetRequiredService<IPersonStore>(),
                 sp.GetRequiredService<IChatMessagePayloadMapper>(),

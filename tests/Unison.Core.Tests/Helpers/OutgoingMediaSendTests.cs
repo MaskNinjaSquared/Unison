@@ -7,7 +7,8 @@ using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Helpers;
 using Unison.Core.Models;
 using Unison.WhatsAppClient.Helpers;
-using Xunit;
+using Unison.WhatsAppClient.Io.Messages;
+using Xunit;
 using Unison.WhatsAppClient.Abstractions;
 
 namespace Unison.Core.Tests.Helpers
@@ -43,7 +44,7 @@ namespace Unison.Core.Tests.Helpers
         [Fact]
         public async Task Empty_image_is_rejected_without_reconnecting()
         {
-            await Assert.ThrowsAsync<ArgumentException>(() => Create().SendImageAsync("555@s.whatsapp.net", new byte[0], null));
+            await Assert.ThrowsAsync<ArgumentException>(() => Create().SendImageAsync(new SendImageRequest { ChatJid = "555@s.whatsapp.net", ImageBytes = new byte[0] }));
 
             Assert.Empty(_host.Log);
         }
@@ -51,7 +52,7 @@ namespace Unison.Core.Tests.Helpers
         [Fact]
         public async Task Image_bubble_shows_as_pending_before_the_upload_then_settles_as_sent()
         {
-            ChatMessage m = await Create().SendImageAsync("555@s.whatsapp.net", Bytes, "look");
+            ChatMessageDto m = await Create().SendImageAsync(new SendImageRequest { ChatJid = "555@s.whatsapp.net", ImageBytes = Bytes, Caption = "look" });
 
             Assert.Equal(
                 new[]
@@ -69,12 +70,12 @@ namespace Unison.Core.Tests.Helpers
                 _host.Log);
             Assert.Equal("IMG1", m.Id);
             Assert.Equal(ChatMessage.StatusSent, m.Status);
-            Assert.Equal(ChatMessageKind.Image, m.Kind);
+            Assert.Equal(ChatMessageKind.Image, (ChatMessageKind)Enum.Parse(typeof(ChatMessageKind), m.Kind));
             Assert.Equal("look", m.Caption);
             Assert.Equal("cache://Image/IMG1_out" + MediaFileExtensions.ForImage("image/jpeg"), m.ImageUri);
             Assert.True(_cache.Saves[0].ReuseExisting);
             Assert.Same(Bytes, _cache.Saves[0].Bytes);
-            Assert.Equal(At, m.Timestamp);
+            Assert.Equal(At, m.TimestampUtc);
             Assert.Equal("111@s.whatsapp.net", m.ParticipantJid);
         }
 
@@ -84,7 +85,7 @@ namespace Unison.Core.Tests.Helpers
             var error = new InvalidOperationException("upload failed");
             _host.SendError = error;
 
-            ChatMessage m = await Create().SendImageAsync("555@s.whatsapp.net", Bytes, null);
+            ChatMessageDto m = await Create().SendImageAsync(new SendImageRequest { ChatJid = "555@s.whatsapp.net", ImageBytes = Bytes });
 
             Assert.Equal(ChatMessage.StatusFailed, m.Status);
             Assert.Contains("persist:555@s.whatsapp.net:failed", _host.Log);
@@ -98,7 +99,7 @@ namespace Unison.Core.Tests.Helpers
         {
             _host.ConnectError = new TimeoutException("offline");
 
-            ChatMessage m = await Create().SendImageAsync("555@s.whatsapp.net", Bytes, null);
+            ChatMessageDto m = await Create().SendImageAsync(new SendImageRequest { ChatJid = "555@s.whatsapp.net", ImageBytes = Bytes });
 
             Assert.Equal(ChatMessage.StatusFailed, m.Status);
             Assert.DoesNotContain(_host.Log, e => e.StartsWith("send-image:", StringComparison.Ordinal));
@@ -109,7 +110,7 @@ namespace Unison.Core.Tests.Helpers
         {
             _host.OnSend = message => message.Status = ChatMessage.StatusDelivered;
 
-            ChatMessage m = await Create().SendImageAsync("555@s.whatsapp.net", Bytes, null);
+            ChatMessageDto m = await Create().SendImageAsync(new SendImageRequest { ChatJid = "555@s.whatsapp.net", ImageBytes = Bytes });
 
             Assert.Equal(ChatMessage.StatusDelivered, m.Status);
         }
@@ -119,7 +120,7 @@ namespace Unison.Core.Tests.Helpers
         {
             _jids.Canonical["999@lid"] = "555@s.whatsapp.net";
 
-            ChatMessage m = await Create().SendImageAsync("999@lid", Bytes, null);
+            ChatMessageDto m = await Create().SendImageAsync(new SendImageRequest { ChatJid = "999@lid", ImageBytes = Bytes });
 
             Assert.Equal("999@lid", m.RemoteJid);
         }
@@ -129,7 +130,7 @@ namespace Unison.Core.Tests.Helpers
         {
             _jids.SelfLinked.Add("111@s.whatsapp.net");
 
-            ChatMessage m = await Create().SendImageAsync("111@s.whatsapp.net", Bytes, null);
+            ChatMessageDto m = await Create().SendImageAsync(new SendImageRequest { ChatJid = "111@s.whatsapp.net", ImageBytes = Bytes });
 
             Assert.Equal(ChatMessage.StatusRead, m.Status);
         }
@@ -156,10 +157,12 @@ namespace Unison.Core.Tests.Helpers
                 () => At,
                 () => "IMG" + ++sequence);
 
-            IReadOnlyList<ChatMessage> messages = await sender.SendImagesAsync(
-                "555@s.whatsapp.net",
-                new[] { Bytes, new byte[] { 4, 5, 6 } },
-                "look");
+            IReadOnlyList<ChatMessageDto> messages = await sender.SendImagesAsync(new SendImagesRequest
+            {
+                ChatJid = "555@s.whatsapp.net",
+                ImageBytes = new[] { Bytes, new byte[] { 4, 5, 6 } },
+                Caption = "look"
+            });
 
             Assert.Equal(new[] { "IMG1", "IMG2" }, messages.Select(message => message.Id));
             Assert.Equal(new[] { "look", string.Empty }, messages.Select(message => message.Caption));
@@ -188,10 +191,11 @@ namespace Unison.Core.Tests.Helpers
                 () => At,
                 () => "IMG" + ++sequence);
 
-            IReadOnlyList<ChatMessage> messages = await sender.SendImagesAsync(
-                "555@s.whatsapp.net",
-                new[] { Bytes, new byte[] { 4, 5, 6 }, new byte[] { 7, 8, 9 } },
-                null);
+            IReadOnlyList<ChatMessageDto> messages = await sender.SendImagesAsync(new SendImagesRequest
+            {
+                ChatJid = "555@s.whatsapp.net",
+                ImageBytes = new[] { Bytes, new byte[] { 4, 5, 6 }, new byte[] { 7, 8, 9 } }
+            });
 
             Assert.All(messages, message => Assert.False(string.IsNullOrWhiteSpace(message.LocalMediaBatchId)));
             Assert.Single(messages.Select(message => message.LocalMediaBatchId).Distinct());
@@ -203,10 +207,12 @@ namespace Unison.Core.Tests.Helpers
         public async Task Image_batch_rejects_an_empty_item_before_sending_any_image()
         {
             await Assert.ThrowsAsync<ArgumentException>(
-                () => Create().SendImagesAsync(
-                    "555@s.whatsapp.net",
-                    new[] { Bytes, new byte[0] },
-                    "look"));
+                () => Create().SendImagesAsync(new SendImagesRequest
+                {
+                    ChatJid = "555@s.whatsapp.net",
+                    ImageBytes = new[] { Bytes, new byte[0] },
+                    Caption = "look"
+                }));
 
             Assert.Empty(_host.Log);
             Assert.Empty(_cache.Saves);
@@ -215,7 +221,7 @@ namespace Unison.Core.Tests.Helpers
         [Fact]
         public async Task Empty_audio_is_rejected_without_reconnecting()
         {
-            await Assert.ThrowsAsync<ArgumentException>(() => Create().SendAudioAsync("555@s.whatsapp.net", Audio(new byte[0], true)));
+            await Assert.ThrowsAsync<ArgumentException>(() => Create().SendAudioAsync(AudioReq("555@s.whatsapp.net", new byte[0], true)));
 
             Assert.Empty(_host.Log);
         }
@@ -225,7 +231,7 @@ namespace Unison.Core.Tests.Helpers
         {
             _jids.Canonical["999@lid"] = "555@s.whatsapp.net";
 
-            ChatMessage m = await Create("AUD1").SendAudioAsync("999@lid", Audio(Bytes, true));
+            ChatMessageDto m = await Create("AUD1").SendAudioAsync(AudioReq("999@lid", Bytes, true));
 
             Assert.Equal(
                 new[]
@@ -242,7 +248,7 @@ namespace Unison.Core.Tests.Helpers
                 },
                 _host.Log);
             Assert.Equal("555@s.whatsapp.net", m.RemoteJid);
-            Assert.Equal(ChatMessageKind.Voice, m.Kind);
+            Assert.Equal(ChatMessageKind.Voice, (ChatMessageKind)Enum.Parse(typeof(ChatMessageKind), m.Kind));
             Assert.Equal(9u, m.AudioDurationSeconds);
             Assert.Equal("cache://Audio/AUD1_out" + MediaFileExtensions.ForAudio("audio/ogg; codecs=opus"), m.AudioUri);
             Assert.False(_cache.Saves[0].ReuseExisting);
@@ -251,9 +257,9 @@ namespace Unison.Core.Tests.Helpers
         [Fact]
         public async Task Plain_audio_still_previews_as_voice()
         {
-            ChatMessage m = await Create("AUD1").SendAudioAsync("555@s.whatsapp.net", Audio(Bytes, false));
+            ChatMessageDto m = await Create("AUD1").SendAudioAsync(AudioReq("555@s.whatsapp.net", Bytes, false));
 
-            Assert.Equal(ChatMessageKind.Audio, m.Kind);
+            Assert.Equal(ChatMessageKind.Audio, (ChatMessageKind)Enum.Parse(typeof(ChatMessageKind), m.Kind));
             Assert.Contains("preview:555@s.whatsapp.net:Voice", _host.Log);
         }
 
@@ -262,7 +268,7 @@ namespace Unison.Core.Tests.Helpers
         {
             _host.SendError = new InvalidOperationException("upload failed");
 
-            ChatMessage m = await Create("AUD1").SendAudioAsync("555@s.whatsapp.net", Audio(Bytes, true));
+            ChatMessageDto m = await Create("AUD1").SendAudioAsync(AudioReq("555@s.whatsapp.net", Bytes, true));
 
             Assert.Equal(ChatMessage.StatusFailed, m.Status);
             Assert.Equal("cache://Audio/AUD1_out" + MediaFileExtensions.ForAudio("audio/ogg; codecs=opus"), m.AudioUri);
@@ -272,7 +278,7 @@ namespace Unison.Core.Tests.Helpers
         public async Task Empty_document_is_rejected_without_reconnecting()
         {
             await Assert.ThrowsAsync<ArgumentException>(
-                () => Create().SendDocumentAsync("555@s.whatsapp.net", Document(new byte[0])));
+                () => Create().SendDocumentAsync(DocReq("555@s.whatsapp.net", new byte[0])));
 
             Assert.Empty(_host.Log);
         }
@@ -282,8 +288,7 @@ namespace Unison.Core.Tests.Helpers
         {
             await Assert.ThrowsAsync<ArgumentException>(
                 () => Create().SendDocumentAsync(
-                    "555@s.whatsapp.net",
-                    Document(Bytes, "photo.jpg", "image/jpeg")));
+                    DocReq("555@s.whatsapp.net", Bytes, "photo.jpg", "image/jpeg")));
 
             Assert.Empty(_host.Log);
         }
@@ -293,7 +298,7 @@ namespace Unison.Core.Tests.Helpers
         {
             _jids.Canonical["999@lid"] = "555@s.whatsapp.net";
 
-            ChatMessage m = await Create("DOC1").SendDocumentAsync("999@lid", Document(Bytes));
+            ChatMessageDto m = await Create("DOC1").SendDocumentAsync(DocReq("999@lid", Bytes));
 
             Assert.Equal(
                 new[]
@@ -310,7 +315,7 @@ namespace Unison.Core.Tests.Helpers
                 },
                 _host.Log);
             Assert.Equal("555@s.whatsapp.net", m.RemoteJid);
-            Assert.Equal(ChatMessageKind.Document, m.Kind);
+            Assert.Equal(ChatMessageKind.Document, (ChatMessageKind)Enum.Parse(typeof(ChatMessageKind), m.Kind));
             Assert.Equal("contract.pdf", m.DocumentFileName);
             Assert.Equal("application/pdf", m.DocumentMimeType);
             Assert.Equal(3L, m.DocumentFileLengthBytes);
@@ -325,27 +330,30 @@ namespace Unison.Core.Tests.Helpers
         {
             _host.SendError = new InvalidOperationException("upload failed");
 
-            ChatMessage m = await Create("DOC1").SendDocumentAsync("555@s.whatsapp.net", Document(Bytes));
+            ChatMessageDto m = await Create("DOC1").SendDocumentAsync(DocReq("555@s.whatsapp.net", Bytes));
 
             Assert.Equal(ChatMessage.StatusFailed, m.Status);
             Assert.Contains("persist:555@s.whatsapp.net:failed", _host.Log);
             Assert.Same(_host.SendError, _host.ReportedError);
         }
 
-        private static OutgoingAudio Audio(byte[] bytes, bool isVoice) => new OutgoingAudio
+        private static SendAudioRequest AudioReq(string jid, byte[] bytes, bool isVoice) => new SendAudioRequest
         {
-            Bytes = bytes,
+            ChatJid = jid,
+            AudioBytes = bytes,
             MimeType = "audio/ogg; codecs=opus",
             DurationSeconds = 9,
             IsVoiceMessage = isVoice
         };
 
-        private static OutgoingDocument Document(
+        private static SendDocumentRequest DocReq(
+            string jid,
             byte[] bytes,
             string fileName = "contract.pdf",
-            string mime = "application/pdf") => new OutgoingDocument
+            string mime = "application/pdf") => new SendDocumentRequest
         {
-            Bytes = bytes,
+            ChatJid = jid,
+            DocumentBytes = bytes,
             FileName = fileName,
             MimeType = mime
         };
