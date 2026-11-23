@@ -35,6 +35,9 @@ Solution: `Unison.slnx`. Docs: [`docs/wiki/`](docs/wiki/Home.md) (architecture) 
 
 <img width="2314" height="1136" alt="image" src="https://github.com/user-attachments/assets/6869747d-5ef8-47fb-9c04-bb2d3f81f2ca" />
 
+## Download on Microsoft Store
+https://apps.microsoft.com/detail/9ppqdlgk2ghc
+
 
 ## Build & deploy
 
